@@ -328,7 +328,12 @@ function event(phase: string, headline: string, body: string): ConflictEvent {
       bloc: "europe_relief",
       bystander: "abstain",
     },
-    outcomes,
+    outcomes: outcomes.map((outcome) =>
+      (phase === "settlement" || phase === "reconstruction") &&
+      outcome.outcomeId === "negotiated_restructuring"
+        ? { ...outcome, nextConflictStatus: "settled" }
+        : outcome
+    ),
     defaultOutcomeId: "fractured_response",
   };
   return {
@@ -396,6 +401,19 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
     },
   ],
   transitions: [
+    // The same settlement standard applies before war: diplomacy must not
+    // require entering armed conflict to reach implementation and return.
+    ...["federal_crisis", "declarations"].map((fromPhase) => ({
+      key: `${fromPhase}_peaceful_settlement`,
+      fromPhase,
+      toPhase: "settlement",
+      toStatus: "settled" as const,
+      priority: 90,
+      conditions: [
+        { track: "settlementMomentum", min: 70 },
+        { track: "violence", max: 25 },
+      ],
+    })),
     {
       key: "declarations_begin",
       fromPhase: "federal_crisis",
@@ -430,6 +448,8 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
       conditions: [
         { track: "violence", min: 72 },
         { track: "displacement", min: 35 },
+        // Earned by the coalition response, not by civilian suffering alone.
+        { track: "intervention", min: 18 },
       ],
     },
     {
@@ -466,6 +486,14 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
     {
       key: "settlement_relapse",
       fromPhase: "settlement",
+      toPhase: "armed_conflict",
+      toStatus: "active",
+      priority: 100,
+      conditions: [{ track: "violence", min: 65 }],
+    },
+    {
+      key: "reconstruction_relapse",
+      fromPhase: "reconstruction",
       toPhase: "armed_conflict",
       toStatus: "active",
       priority: 100,

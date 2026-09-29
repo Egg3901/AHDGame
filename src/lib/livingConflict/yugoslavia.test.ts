@@ -77,6 +77,35 @@ describe("Yugoslav dissolution living conflict", () => {
     expect(result.state.status).toBe("negotiating");
   });
 
+  it.each(["federal_crisis", "declarations"])(
+    "allows a peaceful agreement to resolve %s without first requiring war",
+    (phaseKey) => {
+      let state = stateAt(phaseKey);
+      for (let response = 0; response < 8; response += 1) {
+        state = applyConflictOutcome(YUGOSLAVIA_DEF, state, outcome("negotiated_restructuring"));
+        state = evaluateConflictTransitions(YUGOSLAVIA_DEF, state, 1994).state;
+        if (state.status === "settled") break;
+      }
+
+      expect(state.status).toBe("settled");
+      expect(state.phaseLevel).toBe(5);
+      expect(state.tracks?.violence).toBe(0);
+    }
+  );
+
+  it("does not create an intervention coalition from violence and displacement alone", () => {
+    const war = stateAt("armed_conflict", { violence: 90, displacement: 50 });
+    const unsupported = evaluateConflictTransitions(YUGOSLAVIA_DEF, war, 1993);
+    expect(unsupported.state.phaseLevel).toBe(3);
+
+    const supported = applyConflictOutcome(
+      YUGOSLAVIA_DEF,
+      war,
+      outcome("international_intervention")
+    );
+    expect(evaluateConflictTransitions(YUGOSLAVIA_DEF, supported, 1993).state.phaseLevel).toBe(4);
+  });
+
   it("allows coercion and arming to turn declarations into war", () => {
     const declarations = stateAt("declarations", { violence: 30 });
     const firstEscalation = applyConflictOutcome(
@@ -131,6 +160,27 @@ describe("Yugoslav dissolution living conflict", () => {
     expect(relapse.state.phaseLevel).toBe(3);
     expect(relapse.state.status).toBe("active");
   });
+
+  it.each(["settlement", "reconstruction"])(
+    "keeps peaceful implementation settled in %s and allows renewed violence to reopen war",
+    (phaseKey) => {
+      const phase = YUGOSLAVIA_DEF.phases.find((candidate) => candidate.key === phaseKey);
+      const peaceful = phase?.events[0].response?.outcomes.find(
+        (candidate) => candidate.outcomeId === "negotiated_restructuring"
+      );
+      if (!peaceful) throw new Error(`Missing peaceful response for ${phaseKey}`);
+      const settled = { ...stateAt(phaseKey, { violence: 0 }), status: "settled" as const };
+      expect(applyConflictOutcome(YUGOSLAVIA_DEF, settled, peaceful).status).toBe("settled");
+
+      const relapse = evaluateConflictTransitions(
+        YUGOSLAVIA_DEF,
+        stateAt(phaseKey, { violence: 70 }),
+        1998
+      );
+      expect(relapse.state.phaseLevel).toBe(3);
+      expect(relapse.state.status).toBe("active");
+    }
+  );
 
   it("substitutes surviving powers when historical actors do not exist", () => {
     const participants = resolveConflictParticipants(
