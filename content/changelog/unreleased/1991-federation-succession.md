@@ -14,3 +14,5 @@ areas: [backend]
 - Allocate public financial assets and debt responsibility without changing creditor contracts.
 - Preserve every accounting minor unit and reject incomplete negotiated shares.
 - Assign existing territories without inventing new population or economic output.
+
+- Bind territorial and financial plans to the approved revision, deriving default shares from the population actually transferred.
