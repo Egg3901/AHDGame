@@ -40,7 +40,7 @@ describe("federation physical custody", () => {
       ["army-u", "UKR", "aggregate-background"],
       ["strategic-u", "RU", "retain-detailed"],
     ]);
-    expect(plan.reduce((sum, row) => sum + row.valueMinor, 0)).toBe(24);
+    expect(plan.reduce((sum, row) => sum + (row.valueMinor ?? 0), 0)).toBe(24);
   });
 
   it("refuses silent strategic assignment, unknown regions and duplicate assets", () => {
