@@ -164,27 +164,23 @@ export async function vacateUKRegionalExecutives(
       { $set: { status: "cancelled", updatedAt: now } }
     );
     if (characters.length)
-      await db
-        .collection("characters")
-        .updateMany(
-          {
-            _id: { $in: characters },
-            "currentOffice.type": "governor",
-            "currentOffice.state": { $in: [...inactive] },
-          },
-          { $set: { currentOffice: null, updatedAt: now } }
-        );
+      await db.collection("characters").updateMany(
+        {
+          _id: { $in: characters },
+          "currentOffice.type": "governor",
+          "currentOffice.state": { $in: [...inactive] },
+        },
+        { $set: { currentOffice: null, updatedAt: now } }
+      );
     if (npps.length)
-      await db
-        .collection("npps")
-        .updateMany(
-          {
-            _id: { $in: npps },
-            "currentOffice.type": "governor",
-            "currentOffice.state": { $in: [...inactive] },
-          },
-          { $set: { currentOffice: null, updatedAt: now } }
-        );
+      await db.collection("npps").updateMany(
+        {
+          _id: { $in: npps },
+          "currentOffice.type": "governor",
+          "currentOffice.state": { $in: [...inactive] },
+        },
+        { $set: { currentOffice: null, updatedAt: now } }
+      );
     await db.collection<ElectedOfficial>("electedOfficials").updateMany(filter, {
       $set: {
         characterId: null,
