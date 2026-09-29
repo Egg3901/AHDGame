@@ -176,7 +176,7 @@ async function main() {
       enactedLaws: countryFilter,
       governmentApprovals: { _id: { $in: ["UK", "IE"] } },
       ukDevolution: { _id: "UK" },
-      politicalParties: { countryId: "UK", abbreviation: { $in: ["UUP", "SDLP"] } },
+      politicalParties: { countryId: "UK", abbreviation: { $in: ["UUP", "SF"] } },
       countryGameStates: { _id: { $in: ["UK", "IE"] } },
     };
     const saved = await Promise.all(
@@ -218,7 +218,7 @@ async function main() {
       );
       for (const [key, abbreviation] of [
         ["unionist", "UUP"],
-        ["nationalist", "SDLP"],
+        ["nationalist", "SF"],
       ])
         await db
           .collection("politicalParties")
