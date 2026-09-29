@@ -17,4 +17,6 @@ areas: [backend]
 
 - Bind territorial and financial plans to the approved revision, deriving default shares from the population actually transferred.
 
+- Pin all 15 Soviet republic populations and economic shares to the World Bank's pre-start source table, with a complete partition conservation check.
+
 - Model a legacy settlement administration for a vanished parent issuer. Successors fund its contractual payment by agreed shares; budget shortfalls create contribution arrears and actual cash limits creditor payment. Continuing states keep their own debt service. Runtime transfer and collection remain gated.
