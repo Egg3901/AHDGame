@@ -106,4 +106,19 @@ describe("live federation inventory", () => {
       "region hierarchy has a missing parent"
     );
   });
+
+  it("requires negotiated custody for a public corporation without a physical site", async () => {
+    const mem = createInMemoryDb();
+    const corporationId = new ObjectId("000000000000000000000009");
+    mem.seed("states", [{ _id: "CEN", countryId: "RU", population: 10, gdp: 100 }]);
+    mem.seed("corporations", [{ _id: corporationId, countryId: "RU", countryOwnerId: "RU" }]);
+    const inventory = await loadLiveSuccessionInventory(mem as unknown as Db, "RU");
+    expect(inventory.custodyAssets).toEqual([
+      {
+        assetId: `enterprise-shell:${corporationId}`,
+        kind: "public-enterprise",
+        homeRegionId: null,
+      },
+    ]);
+  });
 });

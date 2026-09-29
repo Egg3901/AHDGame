@@ -88,6 +88,7 @@ export async function loadLiveSuccessionInventory(
         .find({ corporationId: { $in: publicCorporationIds } }, { session })
         .toArray()
     : [];
+  const corporationsWithSites = new Set(sectors.map((sector) => sector.corporationId.toString()));
   const units = await db
     .collection<MilitaryUnit>("militaryUnits")
     .find({ countryId: sourceCountryId }, { session })
@@ -101,6 +102,13 @@ export async function loadLiveSuccessionInventory(
       }))
       .sort((a, b) => a.regionId.localeCompare(b.regionId)),
     custodyAssets: [
+      ...publicCorporationIds
+        .filter((id) => !corporationsWithSites.has(id.toString()))
+        .map((id) => ({
+          assetId: `enterprise-shell:${id.toString()}`,
+          kind: "public-enterprise" as const,
+          homeRegionId: null,
+        })),
       ...sectors.map((sector) => ({
         assetId: `enterprise:${sector._id.toString()}`,
         kind: "public-enterprise" as const,
