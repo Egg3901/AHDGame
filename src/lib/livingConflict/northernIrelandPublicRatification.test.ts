@@ -28,6 +28,12 @@ function agreement() {
     },
   });
 }
+type ReferendumQuery = {
+  _id?: ObjectId;
+  "result.passed"?: boolean;
+  status?: { $in: Referendum["status"][] };
+};
+
 function setup() {
   const mock = createMockDb();
   const bills = [
@@ -37,7 +43,7 @@ function setup() {
   mock.collection("bills").find().toArray.mockResolvedValue(bills);
   const rows: Referendum[] = [];
   const refs = mock.collection("referendums");
-  refs.findOne.mockImplementation(async (filter) => {
+  refs.findOne.mockImplementation(async (filter: ReferendumQuery) => {
     if (filter._id) return rows.find((r) => String(r._id) === String(filter._id)) ?? null;
     if (filter["result.passed"] === false)
       return (
@@ -47,11 +53,13 @@ function setup() {
       );
     return rows.find((r) => filter.status?.$in.includes(r.status)) ?? null;
   });
-  refs.updateOne.mockImplementation(async (filter, update) => {
-    if (!rows.some((r) => String(r._id) === String(filter._id)))
-      rows.push({ ...update.$setOnInsert });
-    return { upsertedCount: 1 };
-  });
+  refs.updateOne.mockImplementation(
+    async (filter: ReferendumQuery, update: { $setOnInsert: Referendum }) => {
+      if (!rows.some((r) => String(r._id) === String(filter._id)))
+        rows.push({ ...update.$setOnInsert });
+      return { upsertedCount: 1 };
+    }
+  );
   return { mock, db: mock as unknown as Db, bills, rows, refs };
 }
 
@@ -136,7 +144,7 @@ describe("Northern Ireland public ratification", () => {
 
   it("does not replace a live border poll", async () => {
     const { db, refs } = setup();
-    refs.findOne.mockImplementation(async (query) =>
+    refs.findOne.mockImplementation(async (query: ReferendumQuery) =>
       query.status ? { _id: new ObjectId() } : null
     );
     await reconcileNorthernIrelandRatification(db, def, agreement(), 1998, 20);

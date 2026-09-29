@@ -49,7 +49,8 @@ export async function reconcileNorthernIrelandRatification(
   const freshAuthorization =
     !previousRejection ||
     [uk, ie].every(
-      (bill) => bill != null && bill.proposedTurn > (previousRejection.result?.resolvedTurn ?? -1)
+      (bill) =>
+        bill != null && (bill.proposedTurn ?? -1) > (previousRejection.result?.resolvedTurn ?? -1)
     );
   const authorized =
     freshAuthorization && uk?._id && ie?._id && SUCCESS.has(uk.status) && SUCCESS.has(ie.status);
@@ -139,6 +140,9 @@ export async function reconcileNorthernIrelandRatification(
     return state;
   }
   let tracked = applyTrackDeltas(def, state, plan.deltas);
+  if (plan.deltas.referendumRatification > 0) {
+    tracked = { ...tracked, emitPhaseEntryNextTurn: true };
+  }
   if (plan.newlyRejected) {
     tracked = {
       ...tracked,

@@ -137,6 +137,8 @@ export interface EventTrigger {
   onPhaseEnter?: boolean;
   /** Fires every N turns the conflict has run (deterministic cadence). */
   everyTurns?: number;
+  /** Every named-track condition must hold for either timing path. */
+  trackConditions?: ConflictTrackCondition[];
   /** Restrict this beat to campaign stages. Omitted keeps legacy behavior. */
   campaignStages?: CampaignStage[];
 }

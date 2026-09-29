@@ -288,12 +288,94 @@ const negotiationEvent: ConflictEvent = {
   negotiation: { windowTurns: 8, decisionTree: negotiationTree() },
 };
 
+const implementationEvent: ConflictEvent = {
+  key: "agreement_implementation",
+  kind: "authored",
+  severity: "major",
+  affects: ["belligerent"],
+  trigger: {
+    onPhaseEnter: true,
+    everyTurns: 24,
+    trackConditions: [{ track: "referendumRatification", min: 1 }],
+  },
+  headline: "Northern Ireland's parties must implement the public mandate",
+  body: "The ballot authorized the settlement. Unionist and nationalist parties must now commit to institutions and decommissioning before an executive can form.",
+  negotiation: {
+    windowTurns: 8,
+    decisionTree: [
+      {
+        nodeId: "unionist_implementation",
+        type: "choice",
+        title: "Unionist institutional commitment",
+        description:
+          "Unionist leaders decide whether to prepare power-sharing institutions under the publicly ratified agreement.",
+        requiredRoles: ["partyLeader"],
+        requiredCountryIds: ["UK"],
+        requiredPartyAbbreviations: ["DUP", "UUP"],
+        timeLimitMinutes: 24 * 60,
+        options: [
+          trajectory(
+            "unionist_withhold_implementation",
+            "Withhold the institutional commitment",
+            "Keep unionist participation outside the proposed executive until the terms are acceptable.",
+            { institutionalStability: -4, settlementMomentum: -2 },
+            "nationalist_implementation"
+          ),
+          trajectory(
+            "unionist_implement_agreement",
+            "Prepare the power-sharing institutions",
+            "Commit party participants to the assembly, executive procedures, and cross-community safeguards.",
+            { institutionalStability: 12, settlementMomentum: 2 },
+            "nationalist_implementation"
+          ),
+        ],
+      },
+      {
+        nodeId: "nationalist_implementation",
+        type: "choice",
+        title: "Nationalist implementation and decommissioning",
+        description:
+          "Nationalist leaders decide whether to commit to devolved participation and verifiable decommissioning under the public mandate.",
+        requiredRoles: ["partyLeader"],
+        requiredCountryIds: ["UK"],
+        requiredPartyAbbreviations: ["SF", "SDLP"],
+        timeLimitMinutes: 24 * 60,
+        options: [
+          trajectory(
+            "nationalist_withhold_implementation",
+            "Withhold implementation",
+            "Leave participation and decommissioning unresolved while seeking different terms.",
+            { institutionalStability: -4, settlementMomentum: -2, violence: 2 },
+            null
+          ),
+          trajectory(
+            "nationalist_implement_agreement",
+            "Commit to institutions and decommissioning",
+            "Prepare party participation in the devolved institutions and back verified weapons decommissioning.",
+            {
+              institutionalStability: 12,
+              decommissioning: 12,
+              settlementMomentum: 2,
+              violence: -2,
+            },
+            null
+          ),
+        ],
+      },
+    ],
+  },
+};
+
 const ratificationEvent: ConflictEvent = {
   key: "agreement_ratification",
   kind: "authored",
   severity: "major",
   affects: ["belligerent"],
-  trigger: { onPhaseEnter: true, everyTurns: 24 },
+  trigger: {
+    onPhaseEnter: true,
+    everyTurns: 24,
+    trackConditions: [{ track: "referendumRatification", max: 0 }],
+  },
   headline: "The Northern Ireland settlement faces ratification",
   body: "The negotiated text requires authorization in Westminster and the Dáil, then a public Northern Ireland referendum.",
   negotiation: { windowTurns: 8, decisionTree: ratificationTree() },
@@ -541,7 +623,7 @@ export const NORTHERN_IRELAND_DEF: LivingConflictDef = {
       advancePressure: 100,
       decisionTrees: {},
       passiveEffects: passive,
-      events: [ratificationEvent],
+      events: [ratificationEvent, implementationEvent],
     },
     {
       level: 6,

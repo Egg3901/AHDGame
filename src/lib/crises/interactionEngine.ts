@@ -241,6 +241,9 @@ export function isMultiResponderNode(
   node: CrisisDecisionNode
 ): boolean {
   if (node.type !== "choice") return false;
+  // Authored negotiations address one government at each successive node.
+  // Their crisis spans both countries, but one response advances the sequence.
+  if (node.requiredCountryIds?.length === 1) return false;
   if (crisis.scope === "global") return true;
   // A country-scoped crisis addressed to MORE THAN ONE nation is also answered
   // per country: the chained Vietnam rungs put the same question to both
