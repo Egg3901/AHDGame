@@ -60,7 +60,7 @@ async function main() {
   );
   const targetName = `ahd_sim_campaign_price_replay_${Date.now()}`;
   const target = client.db(targetName);
-  process.env.NODE_ENV = "test";
+  Object.assign(process.env, { NODE_ENV: "test" });
   process.env.MONGODB_URI = uri;
   process.env.MONGODB_DB = targetName;
   global._mongoClientPromise = Promise.resolve(client);
@@ -76,7 +76,7 @@ async function main() {
   let replyBytes = 0;
   const bytes: Record<string, number[]> = { nppFunds: [], campaigns: [] };
   client.on("commandSucceeded", (e) => {
-    if (phase) replyBytes += BSON.calculateObjectSize(e.reply);
+    if (phase) replyBytes += BSON.calculateObjectSize(e.reply as Record<string, unknown>);
   });
   try {
     for (const { era, priceLevel, enabled } of [

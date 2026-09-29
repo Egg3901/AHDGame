@@ -1,4 +1,5 @@
 ---
+date: 2026-09-29
 title: Campaign prices match the world's era
 badges: [patch]
 areas: [fullstack, engine]
