@@ -47,6 +47,7 @@ import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independen
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
 import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
+import { apportionSeats as apportionCandidateSeats } from "@/lib/country/seatApportionment";
 import type { ElectionNewsOutcome } from "./electionNotifications";
 import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
 import {
@@ -76,7 +77,8 @@ export async function resolveOneGeneralElection(
   tally: ElectionVoteTally | null | undefined,
   currentTurn: number,
   now: Date,
-  bgEligibleParties: ReadonlySet<string> | null = null
+  bgEligibleParties: ReadonlySet<string> | null = null,
+  huMixedCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
   if (
     election.countryId === "BG" &&
@@ -540,9 +542,46 @@ export async function resolveOneGeneralElection(
             };
           })()
         : null;
+    const huAllocation = huMixedCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = Object.fromEntries(
+            ranked.map((candidate) => [candidate.id, 0])
+          );
+          const wantedByParty: Record<string, number> = {};
+          for (const [candidateId, seats] of Object.entries(huMixedCandidateSeats)) {
+            const party =
+              candidateMap.get(candidateId)?.party ?? tally.candidateParties[candidateId];
+            if (!party) throw new Error("Hungary mixed mandate has no party");
+            wantedByParty[party] = (wantedByParty[party] ?? 0) + seats;
+          }
+          for (const [party, seats] of Object.entries(wantedByParty)) {
+            const eligible = ranked.filter((candidate) => candidate.party === party);
+            if (eligible.length === 0) continue; // a vacant bloc, never seat an ineligible holder
+            const shares = apportionCandidateSeats(
+              Object.fromEntries(eligible.map((candidate) => [candidate.id, candidate.votes])),
+              seats
+            );
+            for (const [candidateId, count] of Object.entries(shares))
+              seatsEstimate[candidateId] = count;
+          }
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
     const { isMultiSeat, seatsEstimate, winners, losers } =
       districted ??
       bgAllocation ??
+      huAllocation ??
       allocateSeats(
         election.electionType,
         election.state,

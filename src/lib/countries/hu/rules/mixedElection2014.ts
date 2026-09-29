@@ -24,6 +24,7 @@ export interface MinorityListBallot {
 
 export interface HungaryMixedResult {
   constituencySeats: Record<string, number>;
+  constituencyWinners: Record<string, string | null>;
   listSeats: Record<string, number>;
   totalSeats: Record<string, number>;
   compensationVotes: Record<string, number>;
@@ -48,6 +49,7 @@ export function allocateHungaryMixed2014(
   }
   const ids = new Set<string>();
   const constituencySeats: Record<string, number> = {};
+  const constituencyWinners: Record<string, string | null> = {};
   const compensationVotes: Record<string, number> = {};
   for (const constituency of constituencies) {
     if (!constituency.id || ids.has(constituency.id) || constituency.votes.length === 0) {
@@ -73,12 +75,14 @@ export function allocateHungaryMixed2014(
     // A tied plurality elects nobody. Every ballot becomes a wasted vote and
     // the mandate waits for a constituency by-election (Act CCIII §§15, 19).
     if (ranked[1]?.votes === ranked[0].votes) {
+      constituencyWinners[constituency.id] = null;
       for (const vote of ranked) {
         compensationVotes[vote.partyId] = (compensationVotes[vote.partyId] ?? 0) + vote.votes;
       }
       continue;
     }
     const winner = ranked[0];
+    constituencyWinners[constituency.id] = winner.partyId;
     constituencySeats[winner.partyId] = (constituencySeats[winner.partyId] ?? 0) + 1;
     // One vote more than the runner-up is needed to win; the rest is surplus.
     compensationVotes[winner.partyId] =
@@ -185,5 +189,12 @@ export function allocateHungaryMixed2014(
   for (const [minorityId, seats] of Object.entries(minoritySeats)) {
     totalSeats[minorityId] = (totalSeats[minorityId] ?? 0) + seats;
   }
-  return { constituencySeats, listSeats, totalSeats, compensationVotes, minoritySeats };
+  return {
+    constituencySeats,
+    constituencyWinners,
+    listSeats,
+    totalSeats,
+    compensationVotes,
+    minoritySeats,
+  };
 }

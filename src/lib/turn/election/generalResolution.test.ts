@@ -245,6 +245,46 @@ describe("resolveOneGeneralElection", () => {
     ]);
   });
 
+  it("seats the Hungarian mixed mandate plan instead of regional largest remainder", async () => {
+    const election = makeElection({
+      countryId: "HU",
+      electionType: "nationalAssembly",
+      state: "HU_BUD",
+      cycle: 6,
+      electionYear: 2014,
+      totalSeats: 8,
+      status: "completed",
+    });
+    const ids = [new ObjectId(), new ObjectId()];
+    const candidates = ids.map((id, index) => {
+      const candidate = makeCandidate(election._id, {
+        characterId: id,
+        party: index === 0 ? "A" : "B",
+      });
+      candidate._id = id;
+      return candidate;
+    });
+    const tally = makeTally(election._id, {
+      [ids[0].toString()]: 100,
+      [ids[1].toString()]: 100,
+    });
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+    );
+    await resolveBulgarianElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW, null, {
+      [ids[0].toString()]: 7,
+      [ids[1].toString()]: 1,
+    });
+    const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+      (call) => call[0] as { party: string; seatsHeld: number }
+    );
+    expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+      ["A", 7],
+      ["B", 1],
+    ]);
+  });
+
   // ── Edge case: already-finalized tally ──────────────────────────────────────
 
   it("recovers gracefully when tally is already finalized — marks election resolved without re-writing officials", async () => {
