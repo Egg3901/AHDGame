@@ -109,3 +109,11 @@ SIM_MONGODB_URI="$SANDBOX_MONGODB_URI" npx tsx scripts/sim/fundSavedWorldReplay.
 Use the completed source world's actual database name for `ahd_sim_saved_world`.
 The target must not already contain collections. The runner permits only the
 dedicated loopback sandbox endpoint on port 27018.
+
+### Changes after the replay pin
+
+The NAV and cash-buffer helpers were moved unchanged from `fundCron.ts` into
+`fundNav.ts` to satisfy the architecture size gate. Existing exports remain
+available from `fundCron.ts`. The replay command-monitor reply received an
+explicit TypeScript shape. These changes do not alter the executed settlement
+logic, formulas, or evidence, so no additional simulation is required.

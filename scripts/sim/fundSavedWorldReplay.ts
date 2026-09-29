@@ -142,7 +142,10 @@ async function main() {
   client.on("commandSucceeded", (event) => {
     if (!measuring) return;
     phaseRoundTrips++;
-    const batches = event.reply?.cursor?.firstBatch ?? event.reply?.cursor?.nextBatch ?? [];
+    const reply = event.reply as {
+      cursor?: { firstBatch?: Record<string, unknown>[]; nextBatch?: Record<string, unknown>[] };
+    };
+    const batches = reply?.cursor?.firstBatch ?? reply?.cursor?.nextBatch ?? [];
     for (const row of batches) phaseReadBytes += BSON.calculateObjectSize(row);
   });
   global._mongoClientPromise = Promise.resolve(client);
