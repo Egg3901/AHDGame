@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
+  loadCampaignPriceLevel,
   anchorToLocal,
   loadCampaignFxRate,
   getCampaignCurrency,
@@ -92,4 +93,26 @@ describe("world-specific fixed currency basis", () => {
       { projection: { currencyCode: 1, baseRate: 1 } }
     );
   });
+});
+
+describe("world campaign price basis", () => {
+  it.each(["1953", "1979", "1991", "1999", "2007", "2019", "2023", "2027"])(
+    "resolves %s from configuration without cross-world caching",
+    async (era) => {
+      const { ERA_PRICE_LEVEL } = await import("./rules/priceLevel");
+      const db = createMockDb();
+      db.collection("gameConfig").findOne.mockResolvedValue({ campaignEraPriceLevelEnabled: true });
+      db.collection("gameState").findOne.mockResolvedValue({
+        preset: `${era}-default`,
+        campaignEraPriceLevelEnabled: false,
+      });
+      expect(await loadCampaignPriceLevel(db as unknown as Db)).toBe(
+        ERA_PRICE_LEVEL[era as keyof typeof ERA_PRICE_LEVEL]
+      );
+      db.collection("gameConfig").findOne.mockResolvedValue({
+        campaignEraPriceLevelEnabled: false,
+      });
+      expect(await loadCampaignPriceLevel(db as unknown as Db)).toBe(1);
+    }
+  );
 });

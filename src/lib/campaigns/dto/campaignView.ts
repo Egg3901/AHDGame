@@ -73,6 +73,8 @@ export interface CampaignData {
    * Lets the client localize anchor-formula previews (e.g. campaign-strength cost).
    */
   fxRate: number;
+  /** Era price basis for generated campaign money and costs; legacy clients use 1. */
+  priceLevel?: number;
 
   funds?: number;
   actions?: number;

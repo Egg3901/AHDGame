@@ -6,6 +6,7 @@
  * treasury. Mirrors the existing `nationalTaxRate` / `stateTaxRate` flows
  * already running in the turn loop, just scoped to caucus membership.
  */
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 
@@ -41,6 +42,7 @@ export async function processCaucusTax(
 ): Promise<CaucusTaxResult> {
   const db = await getDb();
   const campaignRates = await loadCampaignCurrencyRates(db);
+  const priceLevel = await loadCampaignPriceLevel(db);
   // GDP-baseline era for income math: the world's reset preset, so historical
   // worlds tax against their own denomination (issue #798).
   const preset = await getGameStatePresetOrDefault(db);
@@ -114,6 +116,7 @@ export async function processCaucusTax(
               countryId: c.countryId,
               politicalInfluence: c.politicalInfluence ?? 0,
               preset,
+              priceLevel,
             })
           : 0;
         // Generation constants are anchor (₳); campaign funds are stored LOCAL
@@ -186,14 +189,18 @@ export async function processCaucusTax(
         const state = stateMap.get(n.homeState);
         if (!state || funds <= 0) continue;
         const localRate = campaignLocalRate(n.countryId ?? "US", campaignRates);
-        const currentFundsAnchor = localRate > 0 ? funds / localRate : funds;
+        const currentFundsAnchor = funds / (localRate * priceLevel);
         const incomeAnchor = projectNppGeneration({
           population: state.population,
           donorBaseLevel: n.donorBaseLevel ?? 0,
           currentFundsLocal: currentFundsAnchor,
           nppEconomyEnabled: config?.nppEconomyEnabled !== false,
         });
-        const incomeLocal = campaignAnchorToLocal(incomeAnchor, n.countryId ?? "US", campaignRates);
+        const incomeLocal = campaignAnchorToLocal(
+          incomeAnchor * priceLevel,
+          n.countryId ?? "US",
+          campaignRates
+        );
         const tax = Math.floor((incomeLocal * caucus.taxRate) / 100);
         if (tax <= 0) continue;
         nppDebits.push({ npp: n, tax });

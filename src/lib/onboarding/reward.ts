@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import type { Db } from "mongodb";
 import type { Character, ExchangeRate, GameConfig } from "@/lib/db/types";
 import {
@@ -58,7 +59,9 @@ export async function grantOnboardingReward(
       .findOne({ _id: "default" }, { projection: { startingFunds: 1 } }),
     isForexEnabled(),
   ]);
-  const amount = onboardingRewardAmount(gameConfig?.startingFunds);
+  const amount = Math.round(
+    onboardingRewardAmount(gameConfig?.startingFunds) * (await loadCampaignPriceLevel(db))
+  );
 
   const homeCurrency = (COUNTRY_CURRENCY_MAP[character.countryId as CountryId] ??
     "USD") as CurrencyCode;

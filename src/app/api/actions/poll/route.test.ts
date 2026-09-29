@@ -130,6 +130,14 @@ describe("commissioning a campaign-aware poll", () => {
     expect(write[1].$inc).toEqual({ actions: -2, funds: -21186 });
   });
 
+  it("charges the 1991 poll quote when era pricing is enabled", async () => {
+    db.collection("gameConfig").findOne.mockResolvedValue({ campaignEraPriceLevelEnabled: true });
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    expect(db.collection("characters").updateOne.mock.calls[0][1].$inc.funds).toBe(-8952);
+  });
+
   it("rejects a character with no allocated intellect before charging", async () => {
     const character = makeCharacter({ funds: 100_000, actions: 10, stats: undefined });
     db.collection("characters").findOne.mockResolvedValue(character);
