@@ -487,9 +487,9 @@ describe("era-aware monetary baselines (current in-game year)", () => {
 
   it("GRADUATION: baselines re-key as a world's clock advances through the eras", () => {
     // A 1953-default world later in its life:
-    expect(resolveMonetaryBaseline("IT", 1955).targetInflation).toBe(2.5); // 1953 era
-    expect(resolveMonetaryBaseline("IT", 1985).targetInflation).toBe(15.0); // 1979 era
-    expect(resolveMonetaryBaseline("IT", 1995).targetInflation).toBe(5.5); // 1991 era
+    expect(resolveMonetaryBaseline("IT", 1955).targetInflation).toBeCloseTo(2.5 + 6.5 / 9);
+    expect(resolveMonetaryBaseline("IT", 1985).targetInflation).toBeCloseTo(10.25);
+    expect(resolveMonetaryBaseline("IT", 1995).targetInflation).toBeCloseTo(10.25);
     expect(resolveMonetaryBaseline("IT", 2020).targetInflation).toBe(15.0); // modern
     // The live 1991-default world at in-game ~2015 is judged against the
     // MODERN baselines — identical to its pre-era-table FX behavior.

@@ -82,18 +82,18 @@ describe("snapshotInterestRateHistory era-aware growth fallback", () => {
   });
 
   it("graduates the trend as the world's clock advances (1953 world at later years)", async () => {
-    // Same 1953-seeded world, later in-game years: 1955 still the 1953 span…
+    // Fallback growth blends between authored dates.
     let mock = buildDbMock({ currentYear: 1955, banks: [ruBank] });
     await snapshotInterestRateHistory(mock.db, 10);
-    expect(pushedGdpRate(mock.bulkWrite)).toBe(6.0);
-    // …1979-1990 the Brezhnev-stagnation 1979 anchor…
+    expect(pushedGdpRate(mock.bulkWrite)).toBeCloseTo(17 / 3);
+    // Halfway from the 1979 to the 1991 point.
     mock = buildDbMock({ currentYear: 1985, banks: [ruBank] });
     await snapshotInterestRateHistory(mock.db, 10);
-    expect(pushedGdpRate(mock.bulkWrite)).toBe(2.5);
-    // …1991-1998 the post-Soviet-collapse 1991 anchor…
+    expect(pushedGdpRate(mock.bulkWrite)).toBeCloseTo(-1.25);
+    // Halfway from the 1991 point to the modern fallback.
     mock = buildDbMock({ currentYear: 1995, banks: [ruBank] });
     await snapshotInterestRateHistory(mock.db, 10);
-    expect(pushedGdpRate(mock.bulkWrite)).toBe(-5.0);
+    expect(pushedGdpRate(mock.bulkWrite)).toBeCloseTo(-1.25);
     // …and the legacy 2.5 fallback from 1999 on.
     mock = buildDbMock({ currentYear: 2020, banks: [ruBank] });
     await snapshotInterestRateHistory(mock.db, 10);
@@ -144,6 +144,6 @@ describe("snapshotInterestRateHistory regional growth for countries without a na
       macroMetrics: [{ _id: "RU_X", countryId: "RU", economic: { gdpGrowth: { value: 9 } } }],
     });
     await snapshotInterestRateHistory(db, 10);
-    expect(pushedGdpRate(bulkWrite)).toBe(6.0);
+    expect(pushedGdpRate(bulkWrite)).toBeCloseTo(17 / 3);
   });
 });
