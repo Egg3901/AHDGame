@@ -115,10 +115,14 @@ function mockDb({
       )?.countryId) as string[] | undefined;
     return unions.filter((u) => u.suspended || countryIds?.includes(u.countryId)).map((u) => u._id);
   });
-  const federalBudgetFind = vi.fn().mockReturnValue({
+  const federalBudgetFind = vi.fn().mockImplementation((filter: Record<string, unknown>) => ({
     toArray: () =>
-      Promise.resolve(bannedCountryIds.map((countryId) => ({ countryId, unionsBanned: true }))),
-  });
+      Promise.resolve(
+        filter.unionEnforcementPosture === "crackdown"
+          ? []
+          : bannedCountryIds.map((countryId) => ({ countryId, unionsBanned: true }))
+      ),
+  }));
   const organizersUpdateMany = vi.fn().mockResolvedValue({});
   const organizersFind = vi.fn().mockReturnValue({ toArray: () => Promise.resolve(organizers) });
   const charactersUpdateMany = vi.fn().mockResolvedValue({});

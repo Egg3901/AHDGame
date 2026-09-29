@@ -235,6 +235,8 @@ export interface Character {
   actions: number;
   /** Last turn this character ran any underground union drive, across all unions. */
   lastUndergroundDriveTurn?: number | null;
+  /** Per-country turn claim for the labor-archetype cost of an active union crackdown. */
+  lastUnionCrackdownApprovalTurn?: Partial<Record<CountryId, number>>;
   /**
    * RPG stat block (Fallout-SPECIAL style). Each value is a float clamped to
    * [1, 10]. Absent on characters created before the stat system shipped —
