@@ -207,6 +207,23 @@ export interface RoleContext {
   blocMembers: string[];
 }
 
+/** A local faction retains its identity even without a playable government. */
+export interface ConflictActorDefinition {
+  id: string;
+  name: string;
+  representsCountryId: string;
+  countryCandidates: string[];
+  regionIds: string[];
+}
+
+export interface ConflictActor {
+  id: string;
+  name: string;
+  representsCountryId: string;
+  countryId?: string;
+  regionIds: string[];
+}
+
 /** A full living-conflict definition. Authored once; drives every world. */
 export interface LivingConflictDef {
   key: string;
@@ -232,9 +249,12 @@ export interface LivingConflictDef {
     neighbors: string[];
     blocMembers: string[];
     bystanders: string[];
+    representedActors?: ConflictActor[];
   };
   /** Ordered substitutes for historical participants absent from this world. */
   participantFallbacks?: Record<string, string[]>;
+  /** Local parties to a conflict, independent of whether their state is playable. */
+  actors?: ConflictActorDefinition[];
   /** Optional named progress tracks. Absent keeps legacy ladder behavior. */
   tracks?: Record<string, ConflictTrackDefinition>;
   /** Optional declarative phase transitions. Absent keeps legacy pressure behavior. */
@@ -274,6 +294,7 @@ export interface LivingConflictState {
   emitPhaseEntryNextTurn?: boolean;
   /** Persistent multi-window campaign depth. Absent legacy rows normalize on read. */
   campaign?: LivingCampaignState;
+  representedActors?: ConflictActor[];
   updatedAt: Date;
 }
 

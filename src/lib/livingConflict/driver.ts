@@ -1,6 +1,12 @@
 import type { Db } from "mongodb";
 import { hasRequiredBelligerents } from "./rules/participants";
-import type { ConflictRole, FiredEvent, LivingConflictDef, LivingConflictState } from "./types";
+import type {
+  ConflictActor,
+  ConflictRole,
+  FiredEvent,
+  LivingConflictDef,
+  LivingConflictState,
+} from "./types";
 import {
   applyCommitment,
   applyTrackDeltas,
@@ -37,6 +43,7 @@ export interface ConflictParticipants {
   neighbors: string[];
   blocMembers: string[];
   bystanders?: string[];
+  representedActors?: ConflictActor[];
 }
 
 /** Every nation named in the conflict, for "all"-affecting events. */
@@ -118,6 +125,8 @@ export async function driveConflictTurn(
   let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
   if (state.status === "closed") return { state, events: [] };
+  if (participants.representedActors)
+    state = { ...state, representedActors: participants.representedActors };
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
