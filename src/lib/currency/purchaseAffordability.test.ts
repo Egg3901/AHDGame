@@ -194,3 +194,25 @@ it("quotes the same fee-free euro settlement as purchase execution", () => {
     })?.canAfford
   ).toBe(false);
 });
+
+it("ignores stale member external quotes in purchase estimates", () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const input = {
+    requiredAmount: 1000,
+    fromCurrency: "GBP" as const,
+    toCurrency: "USD" as const,
+    availableBalance: 2000,
+    union,
+  };
+  expect(estimateExplicitPayCoverage({ ...input, rates: { EUR: 1.6, GBP: 99, USD: 1 } })).toEqual(
+    estimateExplicitPayCoverage({ ...input, rates: { EUR: 1.6, GBP: 1.2, USD: 1 } })
+  );
+  expect(estimateExplicitPayCoverage({ ...input, rates: { GBP: 99, USD: 1 } })).toBeNull();
+});

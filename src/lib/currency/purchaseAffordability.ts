@@ -1,4 +1,5 @@
 import {
+  euroCurrencyRate,
   euroLedgerCrossRate,
   euroLedgerSpendForTarget,
   type EuroMonetaryUnion,
@@ -40,8 +41,8 @@ function getCrossRate(
   if (fromCurrency === toCurrency) return 1;
   const fixedRate = euroLedgerCrossRate(union, fromCurrency, toCurrency);
   if (fixedRate != null) return fixedRate;
-  const fromRate = rates[fromCurrency];
-  const toRate = rates[toCurrency];
+  const fromRate = euroCurrencyRate(union, fromCurrency, rates);
+  const toRate = euroCurrencyRate(union, toCurrency, rates);
   if (!fromRate || !toRate) return null;
   return toRate / fromRate;
 }

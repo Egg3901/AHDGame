@@ -424,3 +424,52 @@ it("converts euro ledger denominations at their locked quote without FX fees or 
   expect(result.toAmount * (0.6 / 0.8)).toBeLessThanOrEqual(1000);
   expect(db.collectionMocks.centralBanks?.updateOne).toBeUndefined();
 });
+
+it.each([true, false])(
+  "uses the common external quote and fee, or rejects a missing anchor (%s)",
+  async (anchorAvailable) => {
+    const { planEuroSettlement } = await import("./euro/rules");
+    const { MARKET_MAKER_SPREAD } = await import("@/lib/constants/currencies");
+    const { calculateSpreadFee } = await import("./spreadFees");
+    const union = planEuroSettlement({
+      year: 1999,
+      turn: 385,
+      preset: "1991-default",
+      europeanMembers: ["DE", "IE", "UK"],
+      consentedCountries: ["DE", "IE", "UK"],
+      rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+    }).union;
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+    db.collection("characters").findOne.mockResolvedValue({
+      currencyBalances: { personal: { GBP: 10000 } },
+    });
+    db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("exchangeRates").findOne.mockImplementation(async ({ _id }: { _id: string }) => {
+      if (_id === "DE")
+        return anchorAvailable
+          ? { _id, currencyCode: "EUR", rate: 1.6, forexSpreadStrength: 1.5 }
+          : null;
+      return {
+        _id,
+        currencyCode: _id === "UK" ? "GBP" : "USD",
+        rate: _id === "UK" ? 99 : 1,
+        forexSpreadStrength: 0.5,
+      };
+    });
+    const result = await executeMarketMakerTrade(db as unknown as Db, {
+      characterId: new ObjectId(),
+      countryId: "UK",
+      fromCurrency: "GBP",
+      toCurrency: "USD",
+      amount: 1000,
+      turn: 386,
+    });
+    expect(result.success).toBe(anchorAvailable);
+    if (anchorAvailable) {
+      const fee = calculateSpreadFee(1000, MARKET_MAKER_SPREAD * 1.5);
+      expect(result.spreadCharged).toBe(fee);
+      expect(result.toAmount).toBe(Math.round((1000 - fee) / 1.2));
+    } else expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  }
+);

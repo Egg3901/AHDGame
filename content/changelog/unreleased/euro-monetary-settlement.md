@@ -19,3 +19,5 @@ areas: [engine]
 - Use locked conversion terms without FX fees for personal and corporate euro ledger exchanges.
 - Consolidate external euro trading pressure and retain pre-accession trade attribution.
 - Preserve outstanding order conditions and make interrupted expiry refunds recoverable.
+
+- Apply the common spread policy and anchor quotation to external member conversions.

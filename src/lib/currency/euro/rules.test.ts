@@ -1,4 +1,4 @@
-import { aggregateEuroPolicyIndicators } from "./rules";
+import { aggregateEuroPolicyIndicators, euroCurrencyRate } from "./rules";
 import { describe, expect, it } from "vitest";
 import {
   euroAdoptionRefusal,
@@ -187,4 +187,13 @@ it("keeps euro authorization pending while Maastricht is unratified", () => {
       consentedCountries: ["DE", "IE", "UK"],
     })
   ).toMatchObject({ union: existing, addedCountries: [], pending: true });
+});
+
+it("derives external member quotes from the anchor and fails closed without it", () => {
+  const union = founded();
+  expect(euroCurrencyRate(union, "IEP", { EUR: 1.7, IEP: 99 })).toBeCloseTo(1.4);
+  expect(euroCurrencyRate(union, "IEP", { IEP: 99 })).toBeUndefined();
+  expect(euroCurrencyRate(union, "USD", { USD: 1 })).toBe(1);
+  expect(euroCurrencyRate(undefined, "GBP", { GBP: 0.6 })).toBe(0.6);
+  expect(euroCurrencyRate(union, "IEP", { EUR: Number.NaN })).toBeUndefined();
 });

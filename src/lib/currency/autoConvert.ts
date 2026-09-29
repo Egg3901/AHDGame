@@ -1,3 +1,8 @@
+/**
+ * Automatic purchase conversion estimates required currency and trades available
+ * balances. Euro settlement fixes internal rates and uses common external quotes.
+ */
+import { resolveEuroConversionQuotes } from "./euro/quotes";
 import { euroLedgerCrossRate, euroLedgerSpendForTarget } from "./euro/rules";
 import { loadEuroMonetaryUnion } from "./euro/service";
 // src/lib/currency/autoConvert.ts
@@ -165,10 +170,16 @@ export async function topUpPersonalBalanceInCurrency(
       const toCountryId = getCountryForCurrency(targetCurrency);
       if (!fromCountryId || !toCountryId) continue;
 
-      const [fromExRate, toExRate] = await Promise.all([
+      const [rawFromExRate, rawToExRate] = await Promise.all([
         db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
         db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
       ]);
+      const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
+        db,
+        rawFromExRate,
+        rawToExRate,
+        union
+      );
       if (!fromExRate || !toExRate) {
         return {
           success: false,
@@ -341,12 +352,18 @@ export async function autoConvertForPurchase(
     };
   }
 
-  const [fromExRate, toExRate, union] = await Promise.all([
+  const [rawFromExRate, rawToExRate, union] = await Promise.all([
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
     loadEuroMonetaryUnion(db),
   ]);
 
+  const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
+    db,
+    rawFromExRate,
+    rawToExRate,
+    union
+  );
   if (!fromExRate || !toExRate) {
     return {
       needed: true,
@@ -465,12 +482,18 @@ export async function convertForExplicitPay(
     };
   }
 
-  const [fromExRate, toExRate, union] = await Promise.all([
+  const [rawFromExRate, rawToExRate, union] = await Promise.all([
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
     loadEuroMonetaryUnion(db),
   ]);
 
+  const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
+    db,
+    rawFromExRate,
+    rawToExRate,
+    union
+  );
   if (!fromExRate || !toExRate) {
     return {
       needed: true,

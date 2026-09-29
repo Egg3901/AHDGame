@@ -1,6 +1,10 @@
+/**
+ * Market-maker conversion exchanges balances at live quotes with a spread fee.
+ * executeMarketMakerTrade uses fixed, fee-free settlement within the euro area.
+ */
+import { resolveEuroConversionQuotes } from "./euro/quotes";
 import { euroLedgerCrossRate } from "./euro/rules";
 import { loadEuroMonetaryUnion } from "./euro/service";
-// src/lib/currency/marketMaker.ts
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -249,12 +253,18 @@ export async function executeMarketMakerTrade(
   }
   const spendAmount = spendResolution.spend;
 
-  const [fromExRate, toExRate, union] = await Promise.all([
+  const [rawFromExRate, rawToExRate, union] = await Promise.all([
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
     db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
     loadEuroMonetaryUnion(db),
   ]);
 
+  const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
+    db,
+    rawFromExRate,
+    rawToExRate,
+    union
+  );
   if (!fromExRate || !toExRate) {
     return {
       success: false,

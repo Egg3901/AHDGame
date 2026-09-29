@@ -275,7 +275,7 @@ export async function loadCountryCentralBankDetail(params: {
       Record<CurrencyCode, number>
     >;
     // Spread strength lives on the currency's anchor exchangeRates doc.
-    const anchorId = getCountryIdForCurrency(nationalCurrency);
+    const anchorId = getCountryIdForCurrency(policyCurrency ?? nationalCurrency);
     const myRateDoc = rateDocs.find((r) => r._id === anchorId);
     if (myRateDoc) {
       forexSpreadStrength = clampForexSpreadStrength(myRateDoc.forexSpreadStrength);

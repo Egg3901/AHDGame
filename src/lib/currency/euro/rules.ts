@@ -316,3 +316,18 @@ export function euroLedgerSpendForTarget(targetAmount: number, crossRate: number
     ? spend
     : spend + Math.max(Number.MIN_VALUE, Math.abs(spend) * Number.EPSILON);
 }
+
+/** Member ledger quotes follow the common anchor, even while quote caches lag. */
+export function euroCurrencyRate(
+  union: EuroMonetaryUnion | undefined,
+  currency: CurrencyCode,
+  rates: Partial<Record<CurrencyCode, number>>
+): number | undefined {
+  const member =
+    union && Object.values(union.members).find((entry) => entry?.ledgerCurrency === currency);
+  const rate =
+    member && union
+      ? (rates[union.anchorCurrency] ?? Number.NaN) * member.ledgerUnitsPerAnchorUnit
+      : rates[currency];
+  return positiveRate(rate) ? rate : undefined;
+}
