@@ -886,7 +886,7 @@ describe("European government decisions", () => {
         pmNppId: player ? null : npp._id,
         pmCharacterId: player ? new ObjectId() : null,
       },
-      electedOfficials: [official],
+      electedOfficials: [{ ...official }],
     });
     const ctx = makeCtx(db, [official], new Map([[String(npp._id), npp]]));
     expect(await processNppBillSponsorship(ctx)).toBe(expected);

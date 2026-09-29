@@ -61,19 +61,17 @@ export async function resolveEuroConversionQuotes(
     existingAnchor ??
     (preloaded
       ? preloaded.get(union.anchorCurrency)
-      : await db
-          .collection<ExchangeRate>("exchangeRates")
-          .findOne(
-            { _id: union.anchorCountryId },
-            {
-              projection: {
-                currencyCode: 1,
-                rate: 1,
-                forexSpreadStrength: 1,
-                forexSpreadStrengthLastChangedTurn: 1,
-              },
-            }
-          ));
+      : await db.collection<ExchangeRate>("exchangeRates").findOne(
+          { _id: union.anchorCountryId },
+          {
+            projection: {
+              currencyCode: 1,
+              rate: 1,
+              forexSpreadStrength: 1,
+              forexSpreadStrengthLastChangedTurn: 1,
+            },
+          }
+        ));
   const resolve = (quote: ConversionQuote): ConversionQuote | null => {
     if (!isMember(quote)) return quote;
     const rate = euroCurrencyRate(union, quote.currencyCode, {

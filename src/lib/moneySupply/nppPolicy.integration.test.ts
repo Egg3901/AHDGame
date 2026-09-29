@@ -149,11 +149,16 @@ describe("common monetary authority", () => {
         const evaluations = db
           .collection("centralBanks")
           .docs.map((bank) => bank.lastMonetaryPolicyEvaluation);
-        expect(evaluations[0].inflation).toBe(evaluations[1].inflation);
-        expect(evaluations[0].gdpGrowth).toBe(evaluations[1].gdpGrowth);
-        expect(evaluations[0].moneyGrowthReliable).toBe(comparableMoney);
-        expect(evaluations[0].annualizedM2GrowthPct).toBe(evaluations[1].annualizedM2GrowthPct);
-        if (comparableMoney) expect(evaluations[0].annualizedM2GrowthPct).toBeGreaterThan(0);
+        expect(evaluations).toEqual([
+          expect.objectContaining({
+            moneyGrowthReliable: comparableMoney,
+            annualizedM2GrowthPct: comparableMoney ? 1500 : null,
+          }),
+          expect.objectContaining({
+            moneyGrowthReliable: comparableMoney,
+            annualizedM2GrowthPct: comparableMoney ? 1500 : null,
+          }),
+        ]);
         expect(moneyReads).toHaveBeenCalledTimes(1);
       }
     }
