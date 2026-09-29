@@ -131,6 +131,7 @@ interface SimJob {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  nppFundRedemptionEnabled?: boolean;
   sovereignIssuanceConsolidationEnabled?: boolean;
   domesticSovereignBondCoverageEnabled?: boolean;
   equityLiquidityFacilityEnabled?: boolean;

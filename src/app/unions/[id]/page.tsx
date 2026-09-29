@@ -76,9 +76,9 @@ interface UnionDetail {
    * never leaves the server: `heatText` is the vague bracket the UI renders.
    */
   underground: {
-    strength: number;
-    status: "dark" | "suspected" | "exposed";
-    heatText: "cold" | "warm" | "hot";
+    strength: number | null;
+    status: "dark" | "suspected" | "exposed" | null;
+    heatText: "cold" | "warm" | "hot" | null;
     exposedUntilTurn: number | null;
     actionCost: number;
     quietGain: number;
@@ -600,6 +600,11 @@ export default function UnionDashboardPage({ params }: PageProps) {
           result={organizeResult}
           onDrive={(mode) => runAction("organize-underground", { mode })}
         />
+      ) : suspended ? (
+        <section className="rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
+          Underground cell details are available to characters in {union.countryName}. Legal
+          organizing remains suspended while the ban holds.
+        </section>
       ) : (
         <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
           <div className="flex items-center gap-3">
@@ -1322,6 +1327,7 @@ function describeUndergroundResult(data: {
   strengthGain?: unknown;
   heatText?: unknown;
   status?: unknown;
+  crisisExtended?: unknown;
 }): string {
   const gain = typeof data.strengthGain === "number" ? data.strengthGain : null;
   const heat =
@@ -1332,9 +1338,11 @@ function describeUndergroundResult(data: {
     gain != null
       ? `Cell work done: +${gain} underground strength. Running ${heat}.`
       : `Cell work done. Running ${heat}.`;
-  return data.status === "exposed"
-    ? `${base} Exposed: gains run at half pace until the cell goes dark.`
-    : base;
+  const exposure =
+    data.status === "exposed" ? " Exposed: gains run at half pace until the cell goes dark." : "";
+  const resistance =
+    data.crisisExtended === true ? " The wildcat strike gained one turn of resistance." : "";
+  return `${base}${exposure}${resistance}`;
 }
 
 const UNDERGROUND_STATUS_COPY: Record<
@@ -1374,7 +1382,7 @@ function UndergroundOrganizePanel({
   result: { ok: boolean; text: string } | null;
   onDrive: (mode: "quiet" | "mass") => void;
 }) {
-  const status = UNDERGROUND_STATUS_COPY[underground.status];
+  const status = underground.status ? UNDERGROUND_STATUS_COPY[underground.status] : null;
   const exposed = underground.status === "exposed";
   const quietGain = exposed ? underground.quietGain / 2 : underground.quietGain;
   const massGain = exposed ? underground.massGain / 2 : underground.massGain;
@@ -1397,17 +1405,24 @@ function UndergroundOrganizePanel({
         The ban froze this union&apos;s treasury and leadership, but the cells kept meeting. Anyone
         in {countryName} can run quiet cell work or a loud mass drive. Both build hidden strength
         that converts to legal strength at half if the ban is ever repealed. Noise brings attention:
-        loud stretches get noticed, and an exposed cell builds at half pace.
+        loud stretches get noticed, and an exposed cell builds at half pace. Strong mass drives can
+        prolong a live wildcat crisis by one turn per drive.
       </p>
 
       <div className="flex flex-wrap gap-4 text-sm">
         <div>
           <span className="text-muted">Built underground:</span>{" "}
-          <span className="font-semibold tabular-nums">{Math.round(underground.strength)}</span>
+          <span className="font-semibold tabular-nums">
+            {underground.strength == null
+              ? "Hidden until you organize"
+              : Math.round(underground.strength)}
+          </span>
         </div>
         <div>
           <span className="text-muted">Status:</span>{" "}
-          <span className={`font-semibold ${status.toneClass}`}>{status.label}</span>
+          <span className={`font-semibold ${status?.toneClass ?? ""}`}>
+            {status?.label ?? "Unknown"}
+          </span>
           {exposedTurnsLeft > 0 && (
             <span className="text-muted"> · {exposedTurnsLeft} turns left</span>
           )}
@@ -1416,7 +1431,11 @@ function UndergroundOrganizePanel({
 
       {/* Heat is vague by design: the server never sends the number, only the bracket. */}
       <div className="space-y-1">
-        <div className="flex gap-1" role="img" aria-label={`Heat: ${underground.heatText}`}>
+        <div
+          className="flex gap-1"
+          role="img"
+          aria-label={`Heat: ${underground.heatText ?? "unknown"}`}
+        >
           {(Object.keys(UNDERGROUND_HEAT_COPY) as ("cold" | "warm" | "hot")[]).map((level) => {
             const active = underground.heatText === level;
             const tone =

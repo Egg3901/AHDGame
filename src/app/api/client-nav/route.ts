@@ -196,6 +196,7 @@ export async function GET() {
           projection: {
             notificationPreferences: 1,
             role: 1,
+            createdAt: 1,
             isAdmin: 1,
             activeCharacterId: 1,
             activeCharacterType: 1,
@@ -663,6 +664,9 @@ export async function GET() {
       {
         user: {
           id: userId,
+          ...(user.createdAt instanceof Date
+            ? { signupDate: user.createdAt.toISOString().slice(0, 10) }
+            : {}),
           username: isSingleplayer() ? user.displayName || "Admin" : authUser.username,
           singleplayer: isSingleplayer(),
           singleplayerMode: isSingleplayer() ? (gameState?.singleplayerConfig?.mode ?? null) : null,

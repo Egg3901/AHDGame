@@ -186,7 +186,7 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
 
   // ── Country-scoped windows (gate ONLY the listed countries) ────────────────
   devolutionSatisfaction: {
-    from: 1999,
+    from: 1979,
     countries: ["UK"],
     news: {
       title: "The Devolution Debate",

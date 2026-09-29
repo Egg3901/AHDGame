@@ -1525,6 +1525,9 @@ export async function runIndexFundCron(
     const quoteFunds = (await listActiveFunds(db)).filter(
       (fund) => !queuedUnitsByFundId.has(fund._id.toString())
     );
+    const quoteBondValueByFundId = equityLiquidityEnabled
+      ? await sumFundBondHoldingsByFundId(db, quoteFunds, exchangeRates)
+      : undefined;
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
         .filter(([, rate]) => typeof rate === "number" && rate > 0)
@@ -1554,6 +1557,7 @@ export async function runIndexFundCron(
       turn: currentTurn,
       enabled: equityLiquidityEnabled,
       funds: quoteFunds,
+      bondValueByFundId: quoteBondValueByFundId,
       listings: quoteListings,
       totalListings: candidateCorps.length,
     });

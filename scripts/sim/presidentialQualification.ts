@@ -31,6 +31,8 @@ export interface PresidentialRaceQualification {
   winnerParty: string | null;
   winnerIsNPP: boolean | null;
   contingent: boolean;
+  actorMix: "npp-only" | "player-only" | "mixed" | "unknown";
+  electionTimeApportionment: Record<string, number> | null;
   reconciliation: string[];
 }
 
@@ -53,6 +55,16 @@ export function qualifyPresidentialRace(
     tally?.contingentResult?.presidentWinnerId ??
     (ev.length && snapshot?.evNeeded && ev[0][1] >= snapshot.evNeeded ? ev[0][0] : null);
   const winner = snapshot?.candidates.find((candidate) => candidate.id === winnerId);
+  const actorMix = !snapshot?.candidates.length
+    ? "unknown"
+    : snapshot.candidates.every((candidate) => candidate.isNPP)
+      ? "npp-only"
+      : snapshot.candidates.every((candidate) => !candidate.isNPP)
+        ? "player-only"
+        : "mixed";
+  const electionTimeApportionment = snapshot
+    ? Object.fromEntries(snapshot.units.map((unit) => [unit.id, unit.weight]))
+    : null;
 
   if (snapshot && tally) {
     for (const candidate of snapshot.candidates) {
@@ -60,6 +72,10 @@ export function qualifyPresidentialRace(
         errors.push(`national votes differ for ${candidate.id}`);
       if (candidate.electoralVotes !== (tally.electoralVotesByCandidate?.[candidate.id] ?? 0))
         errors.push(`electoral votes differ for ${candidate.id}`);
+    }
+    for (const candidateId of Object.keys(tally.totalVotes)) {
+      if (!snapshot.candidates.some((candidate) => candidate.id === candidateId))
+        errors.push(`candidate ${candidateId} missing from election-time result`);
     }
     if (snapshot.summary.totalVotes !== totalVotes) errors.push("national vote total differs");
     const unitWeight = snapshot.units.reduce((sum, unit) => sum + unit.weight, 0);
@@ -69,6 +85,10 @@ export function qualifyPresidentialRace(
     if (snapshot.totalEv !== undefined && assignedEv !== snapshot.totalEv)
       errors.push("assigned EV differs from election-time total");
     const byUnit = tally.totalVotesByUnit ?? {};
+    for (const unitId of Object.keys(byUnit)) {
+      if (!snapshot.units.some((unit) => unit.id === unitId))
+        errors.push(`stored unit ${unitId} missing from election-time result`);
+    }
     for (const unit of snapshot.units) {
       const stored = byUnit[unit.id];
       if (!stored) {
@@ -78,6 +98,10 @@ export function qualifyPresidentialRace(
       for (const candidate of unit.candidates) {
         if (candidate.votes !== (stored[candidate.candidateId] ?? 0))
           errors.push(`unit votes differ for ${unit.id}/${candidate.candidateId}`);
+      }
+      for (const candidateId of Object.keys(stored)) {
+        if (!unit.candidates.some((candidate) => candidate.candidateId === candidateId))
+          errors.push(`stored vote ${unit.id}/${candidateId} missing from election-time result`);
       }
     }
   }
@@ -90,6 +114,8 @@ export function qualifyPresidentialRace(
     winnerIsNPP: winner?.isNPP ?? null,
     contingent:
       tally?.resolutionMode === "contingent" || tally?.resolutionMode === "contingent_deadlock",
+    actorMix,
+    electionTimeApportionment,
     reconciliation: errors,
   };
 }

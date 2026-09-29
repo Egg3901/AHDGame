@@ -34,6 +34,7 @@ import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoS
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { processUndergroundTurn } from "./undergroundTurn";
+import { processCrackdownLabourApprovalTurn } from "@/lib/unions/crackdownLabourApproval";
 import { getBannedUnionCountryIds } from "@/lib/labour/unionLaws";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -168,6 +169,7 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
   }
 
   const currentTurn = turn ?? (await getCurrentTurn(db));
+  await processCrackdownLabourApprovalTurn(db, currentTurn);
   const labourRelations = await processLabourRelationsTurn(db, currentTurn);
 
   // Safety net: at "full" the roster must be COMPLETE, one union per

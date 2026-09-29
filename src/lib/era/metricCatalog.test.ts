@@ -29,8 +29,8 @@ describe("isMetricActive", () => {
   });
 
   it("countries-scoped windows gate only listed countries", () => {
-    expect(isMetricActive("devolutionSatisfaction", "UK", 1998)).toBe(false);
-    expect(isMetricActive("devolutionSatisfaction", "UK", 1999)).toBe(true);
+    expect(isMetricActive("devolutionSatisfaction", "UK", 1978)).toBe(false);
+    expect(isMetricActive("devolutionSatisfaction", "UK", 1979)).toBe(true);
     expect(isMetricActive("devolutionSatisfaction", "DE", 1953)).toBe(true);
   });
 

@@ -6,6 +6,7 @@ type CongressBillFilterInput = {
   status: string;
   myVote: CongressBillVote;
   myOtherChamberVote: CongressBillVote;
+  myOverrideVote?: Exclude<CongressBillVote, "abstain">;
 };
 
 const CONGRESS_VOTING_STATUSES = new Set([
@@ -13,6 +14,7 @@ const CONGRESS_VOTING_STATUSES = new Set([
   "active_other",
   // Both chambers voting at once still reads as "Active" in list views.
   "active_both",
+  "veto_override",
   // JP Shūgiin override is a fresh active vote (uses main votes/votingEndsAt
   // fields) so list views with the "Active" filter need to surface it.
   "override_shugiin",
@@ -28,6 +30,7 @@ export function matchesCongressBillStatusFilter(
 }
 
 export function getCurrentCongressBillVote(bill: CongressBillFilterInput): CongressBillVote {
+  if (bill.status === "veto_override") return bill.myOverrideVote ?? null;
   // On a concurrent bill the viewer sits in exactly one chamber, so whichever of the two
   // votes they actually cast is theirs — prefer the upper one when present rather than
   // reporting "not voted" to every senator.

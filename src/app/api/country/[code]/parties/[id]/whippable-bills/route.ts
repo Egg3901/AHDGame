@@ -10,6 +10,7 @@ import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameState } from "@/lib/gameState";
 import type { Bill, BillWhip, ElectedOfficial } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
 import {
   summarizePlayerWhips,
   type PlayerWhipSummaryEntry,
@@ -189,7 +190,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Group whips by (bill, chamber, audience). Legacy rows without audience are "npp".
     const nppWhips = new Map<string, BillWhip[]>();
     const charWhips = new Map<string, BillWhip[]>();
+    const activeBillsById = new Map(activeBills.map((bill) => [bill._id.toString(), bill]));
     for (const w of existingWhips) {
+      const bill = activeBillsById.get(w.targetId.toString());
+      if (bill && !isBillWhipInCurrentPhase(bill, w)) continue;
       const key = `${w.targetId}_${w.chamber}`;
       const target = w.audience === "character" ? charWhips : nppWhips;
       if (!target.has(key)) target.set(key, []);

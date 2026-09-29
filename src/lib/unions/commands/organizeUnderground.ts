@@ -6,6 +6,7 @@ import { isSameCountry } from "@/lib/api/sameCountry";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { unionApproval } from "@/lib/unions/unionDues";
 import { isUnionsBanned } from "@/lib/labour/unionLaws";
+import { extendUnionBanStrikeFromUnderground } from "@/lib/crises/unionBanStrike";
 import {
   UNDERGROUND_ACTION_COST,
   isUnionExposed,
@@ -27,6 +28,7 @@ export type OrganizeUndergroundResult =
       heatText: UndergroundHeatText;
       strengthGain: number;
       actionsSpent: number;
+      crisisExtended: boolean;
     }
   | { ok: false; status: number; error: string };
 
@@ -50,8 +52,8 @@ function isDuplicateKeyError(error: unknown): boolean {
  * cost, into the shadow pool instead of legal strength, and with heat.
  *
  * Treasury is never touched: the frozen treasury is the point of the ban.
- * One drive per character per turn (the existing action-point Sybil
- * throttle, plus an explicit rate limit so a single actor cannot burst
+ * One drive per character per turn across all unions (the existing action-point
+ * Sybil throttle, plus an atomic character claim so a single actor cannot burst
  * heat past decay in one turn). Writes use `$inc` throughout, same
  * contention reasoning as the legal drive; heat is clamped on read and by
  * the turn step.
@@ -83,6 +85,19 @@ export async function organizeUnderground(
 
   const currentTurn = await getCurrentTurn(db);
   const organizers = db.collection<UnionOrganizer>("unionOrganizers");
+  // Prosecution follows the character across unions, not only the cell that
+  // the government caught. The organizer row remains the authoritative bar.
+  const prosecuted = await organizers.findOne({
+    characterId: character._id,
+    barredUntilTurn: { $gte: currentTurn },
+  });
+  if (prosecuted) {
+    return {
+      ok: false,
+      status: 403,
+      error: "You are barred from underground organizing by prosecution.",
+    };
+  }
   const existing = await organizers.findOne({
     unionId: union._id,
     characterId: character._id,
@@ -112,17 +127,22 @@ export async function organizeUnderground(
   }
 
   const now = new Date();
-  const spend = await db
-    .collection<Character>("characters")
-    .updateOne(
-      { _id: character._id, actions: { $gte: UNDERGROUND_ACTION_COST } },
-      { $inc: { actions: -UNDERGROUND_ACTION_COST }, $set: { updatedAt: now } }
-    );
+  const spend = await db.collection<Character>("characters").updateOne(
+    {
+      _id: character._id,
+      actions: { $gte: UNDERGROUND_ACTION_COST },
+      lastUndergroundDriveTurn: { $ne: currentTurn },
+    },
+    {
+      $inc: { actions: -UNDERGROUND_ACTION_COST },
+      $set: { lastUndergroundDriveTurn: currentTurn, updatedAt: now },
+    }
+  );
   if (spend.modifiedCount === 0) {
     return {
       ok: false,
       status: 409,
-      error: "Your available actions changed. Please try again.",
+      error: "Your available actions changed, or you already ran an underground drive this turn.",
     };
   }
 
@@ -133,10 +153,9 @@ export async function organizeUnderground(
     exposed,
   });
 
-  // The unique organizer index makes this conditional upsert a single-turn
-  // claim. Two concurrent requests may both spend successfully, but only one
-  // can claim the organizer row for this turn; the loser is refunded below and
-  // never changes the union.
+  // The character write claims this turn across all unions. Keep the unique
+  // organizer claim as a second guard against stale or older callers, and
+  // refund the character claim if that guard loses.
   let organizer: UnionOrganizer | null;
   try {
     organizer = await organizers.findOneAndUpdate(
@@ -169,9 +188,13 @@ export async function organizeUnderground(
   }
 
   if (!organizer) {
-    await db
-      .collection<Character>("characters")
-      .updateOne({ _id: character._id }, { $inc: { actions: UNDERGROUND_ACTION_COST } });
+    await db.collection<Character>("characters").updateOne(
+      { _id: character._id, lastUndergroundDriveTurn: currentTurn },
+      {
+        $inc: { actions: UNDERGROUND_ACTION_COST },
+        $set: { lastUndergroundDriveTurn: character.lastUndergroundDriveTurn ?? null },
+      }
+    );
     return {
       ok: false,
       status: 409,
@@ -181,17 +204,34 @@ export async function organizeUnderground(
 
   const updatedUnion = await db.collection<Union>("unions").findOneAndUpdate(
     { _id: union._id },
-    {
-      $inc: { undergroundStrength: strengthGain, heat },
-      $set: { lastUndergroundDriveTurn: currentTurn, updatedAt: now },
-    },
+    [
+      {
+        $set: {
+          undergroundStrength: { $add: [{ $ifNull: ["$undergroundStrength", 0] }, strengthGain] },
+          // Clamp inside the atomic write. Multiple actors can drive one cell
+          // concurrently, so a later turn pass is too late to enforce 0-100.
+          heat: {
+            $min: [100, { $max: [0, { $add: [{ $ifNull: ["$heat", 0] }, heat] }] }],
+          },
+          recentUndergroundDriveCount: {
+            $add: [{ $ifNull: ["$recentUndergroundDriveCount", 0] }, 1],
+          },
+          lastUndergroundDriveTurn: currentTurn,
+          updatedAt: now,
+        },
+      },
+    ],
     { returnDocument: "after" }
   );
   if (!updatedUnion) {
     // Refund: the union vanished between the read and the write.
-    await db
-      .collection<Character>("characters")
-      .updateOne({ _id: character._id }, { $inc: { actions: UNDERGROUND_ACTION_COST } });
+    await db.collection<Character>("characters").updateOne(
+      { _id: character._id, lastUndergroundDriveTurn: currentTurn },
+      {
+        $inc: { actions: UNDERGROUND_ACTION_COST },
+        $set: { lastUndergroundDriveTurn: character.lastUndergroundDriveTurn ?? null },
+      }
+    );
     if (existing) {
       await organizers.updateOne(
         { _id: organizer._id, lastUndergroundDriveTurn: currentTurn },
@@ -206,6 +246,11 @@ export async function organizeUnderground(
     return { ok: false, status: 404, error: "Union not found." };
   }
 
+  const crisisExtended =
+    mode === "mass" && undergroundStrength(updatedUnion) >= 15
+      ? await extendUnionBanStrikeFromUnderground(db, union.countryId as CountryId, currentTurn)
+      : false;
+
   return {
     ok: true,
     status: 200,
@@ -214,5 +259,6 @@ export async function organizeUnderground(
     heatText: undergroundHeatText(updatedUnion),
     strengthGain,
     actionsSpent: UNDERGROUND_ACTION_COST,
+    crisisExtended,
   };
 }

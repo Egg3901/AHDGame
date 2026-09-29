@@ -83,7 +83,7 @@ import { ConstituencySelector } from "./components/ConstituencySelector";
 import { CeoCorporationCard } from "./components/CeoCorporationCard";
 import { NewPlayerBanner } from "./components/OnboardingCard";
 import { ReplayTutorialButton } from "@/components/tutorial/ReplayTutorialButton";
-import { OnboardingChecklist } from "./components/OnboardingChecklist";
+import { OnboardingFlaggedCard } from "./components/OnboardingFlaggedCard";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
 import { isOnboardingDismissed, loadOnboardingChecklist } from "@/lib/onboarding/checklist";
 import { onboardingRewardAmount } from "@/lib/onboarding/reward";
@@ -739,17 +739,14 @@ export default async function ProfilePage() {
         <ConstituencySelector />
 
         {/* New player onboarding: checklist when the flag is on, legacy banner otherwise */}
-        {onboardingChecklistEnabled
-          ? onboardingChecklist && (
-              <OnboardingChecklist
-                steps={onboardingChecklist.steps}
-                completedCount={onboardingChecklist.completedCount}
-                total={onboardingChecklist.total}
-                rewardAmount={onboardingChecklist.rewardAmount}
-                rewardSymbol={onboardingChecklist.rewardSymbol}
-              />
-            )
-          : !character.onboardingDismissed && <NewPlayerBanner />}
+        {onboardingChecklistEnabled ? (
+          <OnboardingFlaggedCard
+            checklist={onboardingChecklist}
+            bannerDismissed={!!character.onboardingDismissed}
+          />
+        ) : (
+          !character.onboardingDismissed && <NewPlayerBanner />
+        )}
 
         <div className="flex justify-end">
           <ReplayTutorialButton />

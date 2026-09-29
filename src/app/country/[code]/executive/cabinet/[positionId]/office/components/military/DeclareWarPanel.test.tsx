@@ -3,6 +3,10 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { DeclareWarPanel } from "./DeclareWarPanel";
 
+vi.mock("@/contexts/AuthDataContext", () => ({
+  useAuthMe: () => ({ user: { id: "stable-account-id" } }),
+}));
+
 // The picker reads runtime-enabled countries; pin the list so the test does not
 // depend on which countries an admin has switched on.
 vi.mock("@/lib/hooks/useEnabledCountryIds", () => ({

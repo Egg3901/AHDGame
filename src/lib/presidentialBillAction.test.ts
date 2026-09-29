@@ -81,14 +81,17 @@ describe("executePresidentialBillAction", () => {
       sponsorId,
       sponsorName: "Bob",
     };
+    const deleteBillWhips = vi.fn().mockResolvedValue({ deletedCount: 3 });
+    const billsUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "bills") {
           return {
             findOne: vi.fn().mockResolvedValue(bill),
-            updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+            updateOne: billsUpdateOne,
           };
         }
+        if (name === "billWhips") return { deleteMany: deleteBillWhips };
         if (name === "characters") {
           return {
             findOne: vi.fn().mockImplementation((q: { _id?: ObjectId }) => {
@@ -125,6 +128,23 @@ describe("executePresidentialBillAction", () => {
     );
 
     expect(result.success).toBe(true);
+    expect(billsUpdateOne).toHaveBeenCalledWith(
+      { _id: billId, status: "enrolled" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: "veto_override",
+          vetoOverrideVotes: {},
+          vetoOverrideWhippedFromVote: {},
+          vetoOverrideVotesFor: 0,
+          vetoOverrideVotesAgainst: 0,
+        }),
+      })
+    );
+    expect(deleteBillWhips).toHaveBeenCalledWith({
+      targetType: "bill",
+      targetId: billId,
+      $or: [{ createdAt: { $lt: expect.any(Date) } }, { createdAt: { $exists: false } }],
+    });
 
     const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);

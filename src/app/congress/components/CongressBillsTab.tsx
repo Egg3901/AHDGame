@@ -236,17 +236,34 @@ export function CongressBillsTab({
       : [];
 
   type ListItem =
-    | { type: "bill"; id: string; date: string }
-    | { type: "nomination"; id: string; date: string; kind: "cabinet" | "scotus" };
+    | { type: "bill"; id: string; date: string; priority: number }
+    | {
+        type: "nomination";
+        id: string;
+        date: string;
+        kind: "cabinet" | "scotus";
+        priority: number;
+      };
   const sortedItems: ListItem[] = [
-    ...voteFiltered.map((b) => ({ type: "bill" as const, id: b.id, date: b.proposedAt })),
+    ...voteFiltered.map((b) => ({
+      type: "bill" as const,
+      id: b.id,
+      date:
+        b.status === "veto_override" ? (b.overrideVotingStartedAt ?? b.proposedAt) : b.proposedAt,
+      // A veto is a fresh live phase, so it belongs above the ordinary
+      // proposal-date stream in both chamber tabs.
+      priority: b.status === "veto_override" ? 1 : 0,
+    })),
     ...filteredNominations.map((n) => ({
       type: "nomination" as const,
       id: n.id,
       date: n.proposedAt ?? "",
       kind: n.kind,
+      priority: 0,
     })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  ].sort(
+    (a, b) => b.priority - a.priority || new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
 
   const billMap = new Map(voteFiltered.map((b) => [b.id, b]));
   const nomMap = new Map(filteredNominations.map((n) => [`${n.kind}:${n.id}`, n]));

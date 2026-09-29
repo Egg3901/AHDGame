@@ -3,6 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ForeignAffairsTab } from "./ForeignAffairsTab";
 
+// The app layout provides this context in production. Keep the tab test's
+// focused render representative now that declaration telemetry reads account ID.
+vi.mock("@/contexts/AuthDataContext", () => ({
+  useAuthMe: () => ({ user: { id: "stable-account-id" } }),
+}));
+
 vi.mock("@/lib/hooks/useEnabledCountryIds", () => ({
   useEnabledCountryIds: () => ["US", "CN"],
 }));
