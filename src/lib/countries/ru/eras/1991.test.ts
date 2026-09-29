@@ -52,10 +52,16 @@ describe("Russian 1991 transitional institutions", () => {
 
   it("selects the presidential office only after the runtime marker", () => {
     const initial = getCountryConfigForRuntime("RU", "1991-default", null);
+    const successor = getCountryConfigForRuntime("RU", "1991-default", {
+      ruSovietSuccessionSinceTurn: 24,
+    });
     const elected = getCountryConfigForRuntime("RU", "1991-default", {
       ruPresidencySinceTurn: 25,
     });
     expect(initial.headOfStateTitle).toBe("President of the Soviet Union");
+    expect(successor.name).toBe("Russia");
+    expect(successor.headOfStateTitle).toBe("Chairman of the Supreme Soviet");
+    expect(successor.legislature.lowerChamber.seats).toBe(1_068);
     expect(elected.headOfStateTitle).toBe("President");
     expect(elected.headOfStateSelection).toBeUndefined();
     expect(elected.officeTypes.find((office) => office.isHeadOfState)?.key).toBe("president");
