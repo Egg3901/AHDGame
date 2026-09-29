@@ -47,6 +47,7 @@ export type EvidenceInput = {
   requestedCommit: string;
   executedCommit: string | null;
   collectorCommit: string | null;
+  evidenceCollectorCommit: string | null;
   requestedRedemptionFlag: boolean | null;
   initialRedemptionFlag: boolean | null;
   finalRedemptionFlag: boolean | null;
@@ -79,7 +80,9 @@ export function evaluateFundRoundTrip(input: EvidenceInput) {
     input.executedCommit !== input.requestedCommit ||
     input.collectorCommit !== input.requestedCommit
   )
-    fail("source pin or collector SHA mismatch");
+    fail("simulation or metrics collector source pin mismatch");
+  if (!input.evidenceCollectorCommit || !/^[0-9a-f]{40}$/.test(input.evidenceCollectorCommit))
+    fail("evidence collector commit is unproven");
   if (
     input.requestedRedemptionFlag !== true ||
     input.initialRedemptionFlag !== true ||
@@ -128,12 +131,14 @@ export function evaluateFundRoundTrip(input: EvidenceInput) {
     )
       fail(`NPP queue did not finish for fund ${id(row.fundId)}`);
   }
+  const paidQueuePairs = new Set(
+    nppQueued
+      .filter((row) => row.status === "paid")
+      .map((row) => `${id(row.fundId)}:${id(row.nppId!)}`)
+  );
   for (const tx of nppRedemptions) {
     const key = `${id(tx.fundId)}:${id(tx.nppId!)}`;
-    const paidRows = nppQueued.filter(
-      (row) => `${id(row.fundId)}:${id(row.nppId!)}` === key && row.status === "paid"
-    );
-    if (!paidRows.length) fail(`no paid queue row for NPP redemption ${key}`);
+    if (!paidQueuePairs.has(key)) fail(`no paid queue row for NPP redemption ${key}`);
   }
   for (const position of input.positions) {
     if (
@@ -191,14 +196,14 @@ export function evaluateFundRoundTrip(input: EvidenceInput) {
       !finiteNonnegative(assets) ||
       !finiteNonnegative(liability) ||
       !Number.isFinite(ratio) ||
-      ratio < 0.9 ||
+      ratio < 1 - 1e-6 ||
       (fund.backingRatio !== undefined && !near(ratio, fund.backingRatio))
     ) {
       fail(`fund backing unhealthy or inconsistent for ${key}`);
     }
     if (fund.kind !== "bond" && reserveShare < 0.25 - 1e-6)
       fail(`fund ${key} reserve below 25 percent`);
-    if (input.indexFundBondLiquidityEnabled === true && cashShare < 0.05 - 1e-6) {
+    if (cashShare < 0.05 - 1e-6) {
       fail(`fund ${key} cash buffer below 5 percent`);
     }
   }

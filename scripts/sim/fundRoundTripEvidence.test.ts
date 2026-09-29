@@ -3,6 +3,7 @@ import { assertSandboxTarget } from "./collectFundRoundTripEvidence";
 import { evaluateFundRoundTrip, type EvidenceInput } from "./fundRoundTripEvidence";
 
 const SHA = "a".repeat(40);
+const EXTRACTOR_SHA = "b".repeat(40);
 const oid = (value: string) => ({ toString: () => value });
 
 function fixture(): EvidenceInput {
@@ -10,6 +11,7 @@ function fixture(): EvidenceInput {
     requestedCommit: SHA,
     executedCommit: SHA,
     collectorCommit: SHA,
+    evidenceCollectorCommit: EXTRACTOR_SHA,
     requestedRedemptionFlag: true,
     initialRedemptionFlag: true,
     finalRedemptionFlag: true,
@@ -84,6 +86,14 @@ describe("#2120 sandbox evidence", () => {
     expect(report.backing[0]).toMatchObject({ ratio: 1, reserveShare: 0.25 });
   });
 
+  it("accepts a separately pinned evidence extractor without changing simulation provenance", () => {
+    const input = fixture();
+    expect(input.evidenceCollectorCommit).not.toBe(input.requestedCommit);
+    expect(evaluateFundRoundTrip(input).passed).toBe(true);
+    input.evidenceCollectorCommit = null;
+    expect(evaluateFundRoundTrip(input).failures.join(" ")).toMatch(/evidence collector commit/);
+  });
+
   it("fails provenance, disabled redemption, and missing NPP activity", () => {
     const input = fixture();
     input.collectorCommit = "b".repeat(40);
@@ -132,14 +142,23 @@ describe("#2120 sandbox evidence", () => {
     expect(report.unavailable.join(" ")).toMatch(/sell-flow fill is not proven/);
   });
 
-  it("checks the 5 percent cash buffer only for the enabled bond-liquidity arm", () => {
+  it("requires a 5 percent cash buffer even when bond liquidity is disabled", () => {
     const input = fixture();
-    input.indexFundBondLiquidityEnabled = true;
     input.funds[0]!.cashAnchor = 400;
     input.funds[0]!.holdings[0]!.lastValueAnchor = 7500;
     input.bondValueByFund.fund = 2100;
     input.funds[0]!.backingRatio = 1;
     expect(evaluateFundRoundTrip(input).failures.join(" ")).toMatch(/cash buffer below/);
+  });
+
+  it("rejects backing below full NAV with a small numeric tolerance", () => {
+    const input = fixture();
+    input.funds[0]!.cashAnchor = 2400;
+    input.funds[0]!.backingRatio = 0.99;
+    expect(evaluateFundRoundTrip(input).failures.join(" ")).toMatch(/backing unhealthy/);
+    input.funds[0]!.cashAnchor = 2500 - 0.0001;
+    input.funds[0]!.backingRatio = 1;
+    expect(evaluateFundRoundTrip(input).failures.join(" ")).not.toMatch(/backing unhealthy/);
   });
 });
 
