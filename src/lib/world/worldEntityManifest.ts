@@ -1453,7 +1453,7 @@ function defineRosterManifest(
   return defineWorldEntityPresetManifest(presetId, applyRosterAccess(presetId, entries));
 }
 
-/** These seven 1991 countries receive detailed regions and institutions at bootstrap. */
+/** These seven 1991 countries receive detailed region seeds at bootstrap. */
 function classify1991SeededCountries(
   entries: readonly WorldEntityManifestEntry[]
 ): WorldEntityManifestEntry[] {
