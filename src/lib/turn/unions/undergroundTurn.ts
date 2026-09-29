@@ -78,8 +78,8 @@ export async function processUndergroundTurn(
     if ((cell.undergroundProcessedTurn ?? -1) >= currentTurn) continue;
     const heat = undergroundHeat(cell);
     const droveThisTurn = cell.lastUndergroundDriveTurn === currentTurn;
-    // Clamp on write: the command `$inc`s heat without clamping (contention
-    // safety), so this is what caps runaway heat back to 100.
+    // Reads still clamp legacy or otherwise out-of-range heat before the
+    // detection roll. New drives persist the 0-100 cap in the command.
     const nextHeat = droveThisTurn ? heat : decayUndergroundHeat(heat);
     const set: Record<string, unknown> = {};
     const recentDriveCount =

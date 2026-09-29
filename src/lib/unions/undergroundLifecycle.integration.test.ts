@@ -56,7 +56,7 @@ describe("union ban lifecycle", () => {
       strength: 20,
       approval: 70,
       suspended: false,
-      lastUndergroundRaidTurn: null,
+      lastUndergroundRaidTurn: 39,
       lastCalledStrikeTurn: null,
       demandedWageLevel: null,
       createdAt: new Date(),
@@ -98,6 +98,14 @@ describe("union ban lifecycle", () => {
     await applyUnionLawProvision(db, "US", { type: "union_law", bias: 0, banAction: "ban" });
     expect(await isUnionsBanned(db, "US")).toBe(true);
     expect((await memory.collection("unions").findOne({ _id: unionId }))?.suspended).toBe(true);
+    expect(
+      (await memory.collection("unions").findOne({ _id: unionId }))?.lastUndergroundRaidTurn
+    ).toBeUndefined();
+    // Mongo matches an absent field against `{ field: null }`; this strict
+    // in-memory adapter needs the cleared legacy field restored as null.
+    await memory
+      .collection("unions")
+      .updateOne({ _id: unionId }, { $set: { lastUndergroundRaidTurn: null } });
 
     const bannedUnion = (await db.collection<Union>("unions").findOne({ _id: unionId }))!;
     const first = await organizeUnderground(db, leader, bannedUnion, "mass");
@@ -167,6 +175,8 @@ describe("union ban lifecycle", () => {
     expect(restored.suspended).toBe(false);
     expect(restored.strength).toBeGreaterThan(20);
     expect(restored.undergroundStrength).toBeUndefined();
+    expect(restored.undergroundProcessedTurn).toBeUndefined();
+    expect(restored.lastUndergroundRaidTurn).toBeUndefined();
     expect((await post({ action: "investigate", unionId: unionId.toString() })).status).toBe(409);
     expect((await organizeUnderground(db, leader, restored, "quiet")).status).toBe(403);
   });
