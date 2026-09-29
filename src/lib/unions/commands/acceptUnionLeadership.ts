@@ -5,6 +5,10 @@ import type { CountryId } from "@/lib/constants/countries";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
+import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
 
 export type AcceptUnionLeadershipResult =
   { ok: true; status: 200; unionId: ObjectId } | { ok: false; status: number; error: string };
@@ -19,6 +23,9 @@ export async function acceptUnionLeadership(
   character: Character,
   union: Union
 ): Promise<AcceptUnionLeadershipResult> {
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   if (!union.pendingLeaderCharacterId) {
     return { ok: false, status: 400, error: "No presidency offer is pending for this union." };
   }

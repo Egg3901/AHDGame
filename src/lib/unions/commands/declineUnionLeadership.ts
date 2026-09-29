@@ -1,6 +1,10 @@
 import type { Db } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
+import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
 
 export type DeclineUnionLeadershipResult =
   { ok: true; status: 200 } | { ok: false; status: number; error: string };
@@ -11,6 +15,9 @@ export async function declineUnionLeadership(
   character: Character,
   union: Union
 ): Promise<DeclineUnionLeadershipResult> {
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   if (!union.pendingLeaderCharacterId) {
     return { ok: false, status: 400, error: "No presidency offer is pending for this union." };
   }

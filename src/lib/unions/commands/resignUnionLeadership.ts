@@ -3,6 +3,10 @@ import { ObjectId } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
+import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
 
 export type ResignUnionLeadershipResult =
   { ok: true; status: 200 } | { ok: false; status: number; error: string };
@@ -21,6 +25,9 @@ export async function resignUnionLeadership(
   character: Character,
   unionId: string
 ): Promise<ResignUnionLeadershipResult> {
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   if (!ObjectId.isValid(unionId)) {
     return { ok: false, status: 400, error: "Invalid union ID" };
   }
