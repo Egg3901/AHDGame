@@ -204,10 +204,23 @@ export async function organizeUnderground(
 
   const updatedUnion = await db.collection<Union>("unions").findOneAndUpdate(
     { _id: union._id },
-    {
-      $inc: { undergroundStrength: strengthGain, heat, recentUndergroundDriveCount: 1 },
-      $set: { lastUndergroundDriveTurn: currentTurn, updatedAt: now },
-    },
+    [
+      {
+        $set: {
+          undergroundStrength: { $add: [{ $ifNull: ["$undergroundStrength", 0] }, strengthGain] },
+          // Clamp inside the atomic write. Multiple actors can drive one cell
+          // concurrently, so a later turn pass is too late to enforce 0-100.
+          heat: {
+            $min: [100, { $max: [0, { $add: [{ $ifNull: ["$heat", 0] }, heat] }] }],
+          },
+          recentUndergroundDriveCount: {
+            $add: [{ $ifNull: ["$recentUndergroundDriveCount", 0] }, 1],
+          },
+          lastUndergroundDriveTurn: currentTurn,
+          updatedAt: now,
+        },
+      },
+    ],
     { returnDocument: "after" }
   );
   if (!updatedUnion) {

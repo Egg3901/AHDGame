@@ -252,11 +252,25 @@ describe("organizeUnderground (command)", () => {
     expect(characterUpdate).toHaveBeenCalled();
     const [, unionWrite] = unionUpdate.mock.calls[0] as unknown as [
       unknown,
-      { $inc: Record<string, number> },
+      Array<{ $set: object }>,
     ];
-    expect(unionWrite.$inc.undergroundStrength).toBe(UNDERGROUND_QUIET_STRENGTH_GAIN);
-    expect(unionWrite.$inc).not.toHaveProperty("treasury");
-    expect(unionWrite.$inc).not.toHaveProperty("strength");
+    expect(unionWrite).toEqual([
+      {
+        $set: expect.objectContaining({
+          undergroundStrength: {
+            $add: [{ $ifNull: ["$undergroundStrength", 0] }, UNDERGROUND_QUIET_STRENGTH_GAIN],
+          },
+          heat: {
+            $min: [100, { $max: [0, { $add: [{ $ifNull: ["$heat", 0] }, 4] }] }],
+          },
+          recentUndergroundDriveCount: {
+            $add: [{ $ifNull: ["$recentUndergroundDriveCount", 0] }, 1],
+          },
+        }),
+      },
+    ]);
+    expect(unionWrite[0].$set).not.toHaveProperty("treasury");
+    expect(unionWrite[0].$set).not.toHaveProperty("strength");
     expect(organizerUpdate).toHaveBeenCalled();
   });
 
