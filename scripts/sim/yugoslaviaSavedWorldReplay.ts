@@ -41,6 +41,10 @@ if (
 )
   throw new Error("Only dedicated loopback sandbox MongoDB on port 27018 is allowed");
 
+const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const sourceDirty =
+  execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim().length > 0;
+
 async function main() {
   const client = await new MongoClient(uri!, { monitorCommands: true }).connect();
   let measuringMacro = false;
@@ -67,6 +71,11 @@ async function main() {
       .collection<MacroCountryState>("macroCountries")
       .find({ _id: { $in: ["YU", "BR", "AT"] } })
       .toArray();
+    const control = await source
+      .collection<MacroCountryState>("macroCountries")
+      .findOne({ _id: { $nin: ["YU", "AT", "IT", "GR"] }, retiredAt: null });
+    assert(control, "Saved unrelated macro economy required as control");
+    if (!countries.some((country) => country._id === control._id)) countries.push(control);
     assert(
       countries.some((c) => c._id === "YU"),
       "Saved Yugoslav macro economy required"
@@ -167,7 +176,8 @@ async function main() {
             minimumOutputRatio = Math.min(minimumOutputRatio, ratio);
             peakDisplacedShare = Math.max(peakDisplacedShare, exposure?.displacedShare ?? 0);
           }
-          if (country._id === "BR") assert.equal(ratio, 1, "Unrelated economy must be unchanged");
+          if (country._id === control._id)
+            assert.equal(ratio, 1, "Unrelated economy must be unchanged");
           peakHostingShare = Math.max(peakHostingShare, exposure?.hostingShare ?? 0);
         }
       }
@@ -205,9 +215,9 @@ async function main() {
         {
           scope:
             "saved sandbox state replay through real conflict and macro-country phases; peaceful choices every 24 turns; war branches explicitly perturbed",
-          sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-          sourceDirty:
-            execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim().length > 0,
+          sourceCommit,
+          sourceDirty,
+          controlEntityId: control._id,
           originalTurn: original.lastProcessedTurn,
           maxMacroRoundTrips,
           maxMacroReadBytes,
