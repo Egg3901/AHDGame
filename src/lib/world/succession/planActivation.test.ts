@@ -48,6 +48,7 @@ function input(continuing: boolean): SuccessionActivationInput {
       })),
     },
     source: entry(sourceId, "sovereign"),
+    continuingDisplayName: continuing ? "Russia" : undefined,
     successors: ids.filter((id) => id !== sourceId).map((id) => entry(id, "emergent", sourceId)),
     sourceRegions: territories.map((territory) => ({
       regionId: territory.regionIds[0],
@@ -90,6 +91,7 @@ describe("federation settlement activation", () => {
     proposal.successors = [entry("UKR", "dependent", "RU")];
     const result = planSuccessionActivation(proposal);
     expect(result.sourceEntity.status).toBe("sovereign");
+    expect(result.sourceEntity.displayName).toBe("Russia");
     expect(result.successorEntities).toMatchObject([
       { entityId: "UKR", status: "sovereign", parentEntityId: undefined },
     ]);
@@ -114,6 +116,12 @@ describe("federation settlement activation", () => {
     const proposal = input(false);
     proposal.successors = [entry("CZ2", "emergent", "YU"), proposal.successors[1]];
     expect(() => planSuccessionActivation(proposal)).toThrow("eligible background target");
+  });
+
+  it("requires an explicit new identity for a continuing state", () => {
+    const proposal = input(true);
+    proposal.continuingDisplayName = undefined;
+    expect(() => planSuccessionActivation(proposal)).toThrow("territory, targets");
   });
 
   it("rejects missing or extra financial allocations", () => {

@@ -9,6 +9,8 @@ export interface SuccessionActivationInput {
   settlementId: string;
   approval: SuccessionApprovalInput;
   source: WorldEntityManifestEntry;
+  /** The surviving state's approved post-federation name, when it continues. */
+  continuingDisplayName?: string;
   successors: readonly WorldEntityManifestEntry[];
   /** Live source regions read for this settlement, before any territory moves. */
   sourceRegions: readonly SuccessionRegion[];
@@ -28,6 +30,7 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     settlementId,
     approval,
     source,
+    continuingDisplayName,
     successors,
     sourceRegions,
     territories,
@@ -87,6 +90,8 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   const continuing = territoryById.has(source.entityId);
   const expectedTargets = territories.length - (continuing ? 1 : 0);
   if (
+    (continuing && !continuingDisplayName?.trim()) ||
+    (!continuing && continuingDisplayName !== undefined) ||
     approval.requiredParticipants.length !== territories.length ||
     approval.requiredParticipants.some((id) => !territoryById.has(id)) ||
     territoryById.size !== territories.length ||
@@ -151,7 +156,7 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   }
   return {
     sourceEntity: continuing
-      ? source
+      ? { ...source, displayName: continuingDisplayName!.trim() }
       : {
           ...source,
           status: "dissolved",
