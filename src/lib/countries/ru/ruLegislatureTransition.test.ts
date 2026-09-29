@@ -27,12 +27,22 @@ describe("Russian 1993 legislature transition", () => {
   it("retires Congress in September and opens the Assembly once in January", async () => {
     const writes: Array<[string, unknown]> = [];
     const markers: Record<string, number> = {};
+    let ratified = false;
     const regionIds = Object.keys(
       (await import("@/lib/countries/ru/data/ruPopulation1991")).RU_1991_ECONOMIC_REGION_POPULATION
     );
     const db = {
       collection: (name: string) => ({
-        findOne: async () => (name === "countryGameStates" ? { _id: "RU", ...markers } : null),
+        findOne: async () =>
+          name === "countryGameStates"
+            ? {
+                _id: "RU",
+                ...(ratified
+                  ? { ruSovietSuccessionSinceTurn: 48, ruFederalAssemblyMandateSinceTurn: 129 }
+                  : {}),
+                ...markers,
+              }
+            : null,
         find: () => ({ toArray: async () => regionIds.map((_id) => ({ _id })) }),
         deleteMany: async (filter: unknown) => {
           writes.push([name, filter]);
@@ -46,6 +56,11 @@ describe("Russian 1993 legislature transition", () => {
         },
       }),
     } as unknown as Db;
+    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 129, NOW)).toBe(
+      "none"
+    );
+    expect(writes).toHaveLength(0);
+    ratified = true;
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 129, NOW)).toBe(
       "dissolved"
     );

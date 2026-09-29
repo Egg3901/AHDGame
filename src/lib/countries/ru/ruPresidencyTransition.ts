@@ -3,10 +3,11 @@ import type { CountryGameState, ElectedOfficial, GameState } from "@/lib/db/type
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { ru1991PresidencyStage } from "@/lib/countries/ru/eras/1991";
+import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
-/** The first direct Russian presidential election took place on June 12, 1991;
- * the elected President took office on July 10. The game's month-level clock
- * makes July the first turn in which the presidential office is active.
+/** The first direct Russian presidential election took place on June 12, 1991.
+ * That date opens eligibility; only a ratified Soviet succession and a separate
+ * constitutional mandate create this office in the alternate-history campaign.
  * https://www.prlib.ru/section/2121879
  * https://www.prlib.ru/node/405940
  */
@@ -24,8 +25,25 @@ export async function processRuPresidencyTransition(
   if (ru1991PresidencyStage(calendar) !== "inaugurated") return false;
 
   const states = db.collection<CountryGameState>("countryGameStates");
-  const ru = await states.findOne({ _id: "RU" }, { projection: { ruPresidencySinceTurn: 1 } });
+  const ru = await states.findOne(
+    { _id: "RU" },
+    {
+      projection: {
+        ruSovietSuccessionSinceTurn: 1,
+        ruPresidencyMandateSinceTurn: 1,
+        ruPresidencySinceTurn: 1,
+      },
+    }
+  );
   if (!ru || ru.ruPresidencySinceTurn != null) return false;
+  if (
+    !hasAuthorizedPostSovietTransition(
+      currentTurn,
+      ru.ruSovietSuccessionSinceTurn,
+      ru.ruPresidencyMandateSinceTurn
+    )
+  )
+    return false;
 
   // The Chairman's head-of-state mandate ends. Keep Congress and its prime
   // minister intact; the 1993 dissolution is a separate transition. The
