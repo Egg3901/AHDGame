@@ -17,7 +17,7 @@ import { AnchoredDropdownPanel } from "@/components/navbar/AnchoredDropdownPanel
  * (classic-navbar organization).
  */
 export function navTabClassName(active: boolean): string {
-  return `relative flex shrink-0 items-center rounded-lg px-3 py-2 text-[13px] transition-colors hover:text-foreground ${
+  return `relative inline-flex shrink-0 items-center rounded-lg px-3 py-2 text-[13px] transition-colors hover:text-foreground ${
     active
       ? "font-medium text-foreground after:absolute after:inset-x-3 after:bottom-1 after:h-px after:rounded-full after:bg-primary after:opacity-70"
       : "text-muted"
