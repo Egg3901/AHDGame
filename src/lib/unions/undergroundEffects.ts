@@ -26,7 +26,10 @@ export async function loadUndergroundStrengthByCountrySector(
   const unions = await db
     .collection<Union>("unions")
     .find(
-      { countryId: { $in: Array.from(bannedCountryIds) }, undergroundStrength: { $gt: 0 } },
+      {
+        countryId: { $in: Array.from(bannedCountryIds) as CountryId[] },
+        undergroundStrength: { $gt: 0 },
+      },
       { projection: { countryId: 1, sectorType: 1, undergroundStrength: 1 } }
     )
     .toArray();
