@@ -52,9 +52,9 @@ it("keeps measuring climate while crisis spawning is paused", async () => {
     toArray: vi.fn().mockResolvedValue([{ _id: "S1", population: 10 }]),
   });
   db.collection("stateMetrics").find.mockReturnValue({
-    toArray: vi.fn().mockResolvedValue([
-      { _id: "S1", environment: { carbonEmissions: { value: 8 } } },
-    ]),
+    toArray: vi
+      .fn()
+      .mockResolvedValue([{ _id: "S1", environment: { carbonEmissions: { value: 8 } } }]),
   });
 
   await processAutoDisasterTurn(db as unknown as Db, 48, {

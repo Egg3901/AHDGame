@@ -1,21 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { processClimateFeedbackTurn } from "./climateTurn";
+import { processClimateFeedbackTurn, type ClimateFeedbackState } from "./climateTurn";
 
 describe("global climate feedback turn", () => {
   it("samples region emissions once per year and does not count a replay twice", async () => {
     const db = createMockDb();
-    let stored: {
-      _id: "world";
-      pressure: number;
-      globalTonsPerCapita: number;
-      lastMeasuredTurn: number;
-    } | null = null;
+    let stored: ClimateFeedbackState | null = null;
     db.collection("climateFeedbackState").findOne.mockImplementation(async () => stored);
-    db.collection("climateFeedbackState").updateOne.mockImplementation(async (_filter, update) => {
-      stored = { _id: "world", ...update.$set };
-    });
+    db.collection("climateFeedbackState").updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set: Omit<ClimateFeedbackState, "_id"> }) => {
+        stored = { _id: "world", ...update.$set };
+      }
+    );
     db.collection("states").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([
         { _id: "A", population: 10 },
@@ -33,7 +30,7 @@ describe("global climate feedback turn", () => {
 
     expect(await processClimateFeedbackTurn(db as unknown as Db, 47)).toBe(0);
     expect(await processClimateFeedbackTurn(db as unknown as Db, 48)).toBeCloseTo(0.024);
-    expect(stored?.globalTonsPerCapita).toBe(8);
+    expect((stored as { globalTonsPerCapita: number } | null)?.globalTonsPerCapita).toBe(8);
     expect(await processClimateFeedbackTurn(db as unknown as Db, 48)).toBeCloseTo(0.024);
     expect(db.collectionMocks.climateFeedbackState!.updateOne).toHaveBeenCalledTimes(1);
     expect(await processClimateFeedbackTurn(db as unknown as Db, 96)).toBeCloseTo(0.048);

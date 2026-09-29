@@ -172,13 +172,18 @@ describe("processAutoDisasterSpawn", () => {
     db.collection("federalBudget").findOne.mockResolvedValue({ gdp: 1_000_000_000 });
     const charged = new Set<string>();
     let balance = 1_000_000_000;
-    db.collection("federalBudget").updateOne.mockImplementation(async (filter, update) => {
-      const receipt = filter.disasterFiscalReceipts.$ne as string;
-      if (charged.has(receipt)) return { modifiedCount: 0 };
-      charged.add(receipt);
-      balance += update.$inc.treasuryBalance;
-      return { modifiedCount: 1 };
-    });
+    db.collection("federalBudget").updateOne.mockImplementation(
+      async (
+        filter: { disasterFiscalReceipts: { $ne: string } },
+        update: { $inc: { treasuryBalance: number } }
+      ) => {
+        const receipt = filter.disasterFiscalReceipts.$ne as string;
+        if (charged.has(receipt)) return { modifiedCount: 0 };
+        charged.add(receipt);
+        balance += update.$inc.treasuryBalance;
+        return { modifiedCount: 1 };
+      }
+    );
 
     await processAutoDisasterSpawn(db as unknown as Db, "BR", 144, {
       enabled: true,
