@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { isAutoDisastersEnabled } from "@/lib/crises/featureFlag";
 import { processAutoDisasterSpawn } from "@/lib/crises/autoDisasterSpawn";
+import { processClimateFeedbackTurn } from "@/lib/crises/climateTurn";
 import { getSimulatedCountryIds } from "@/lib/countryAccess";
 
 export async function processAutoDisasterTurn(
@@ -10,6 +11,7 @@ export async function processAutoDisasterTurn(
 ): Promise<void> {
   const enabled = await isAutoDisastersEnabled(preloadedGameState);
   if (!enabled) return;
+  const climatePressure = await processClimateFeedbackTurn(db, turn);
   // Temporary pause: stay enabled but spawn nothing new this turn.
   if (preloadedGameState?.autoCrisisPaused === true) return;
 
@@ -22,6 +24,6 @@ export async function processAutoDisasterTurn(
   // simulating, including countries deliberately closed to players.
   const countryIds = await getSimulatedCountryIds(db);
   for (const countryId of countryIds) {
-    await processAutoDisasterSpawn(db, countryId, turn, { enabled: true });
+    await processAutoDisasterSpawn(db, countryId, turn, { enabled: true, climatePressure });
   }
 }

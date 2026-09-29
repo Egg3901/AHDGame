@@ -479,6 +479,8 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
+  disasterFiscalReceipts?: string[];
   /**
    * Audit stamp written by `mergeNationalFisc` when this country dissolved into
    * another and its treasury, debt and bonds were assumed by the successor. The

@@ -1,0 +1,1 @@
+Weather disasters now respond gradually to global emissions and local resilience. Emissions raise the risk of weather events over years, while adaptation limits added costs. Geophysical disasters do not gain climate-driven early openings. A weather disaster also creates a bounded treasury expense, recorded once even if the turn is retried.
