@@ -89,6 +89,21 @@ const DISSOLVED_FROM: Readonly<Record<string, number>> = {
 
 const SUCCESSOR_DISSOLVED_FROM: Readonly<Record<string, number>> = { YF: 2007 };
 
+const SOVIET_1991_EMERGENT_IDS = new Set([
+  "AM",
+  "AZ",
+  "EE",
+  "GE",
+  "KZ",
+  "KG",
+  "LV",
+  "LT",
+  "MD",
+  "TJ",
+  "TM",
+  "UZ",
+]);
+
 const REGION_KEYS: Readonly<Record<WorldEntityRegion, ReadonlySet<string>>> = {
   europe: new Set([
     "AD",
@@ -278,17 +293,44 @@ export function expandManifestWithBackgroundCountries(
 
   for (const [entityId, displayName, starts, region, mapFeatureIds] of SUCCESSOR_POLITIES) {
     const dissolved = SUCCESSOR_DISSOLVED_FROM[entityId];
-    if (year < starts || (dissolved != null && year >= dissolved) || byId.has(entityId)) continue;
+    const sovietRepublicAtStart = year === 1991 && SOVIET_1991_EMERGENT_IDS.has(entityId);
+    if (
+      (year < starts && !sovietRepublicAtStart) ||
+      (dissolved != null && year >= dissolved) ||
+      byId.has(entityId)
+    )
+      continue;
+    const entry = backgroundEntry({
+      presetId: manifest.presetId,
+      entityId,
+      displayName,
+      region,
+      mapFeatureIds,
+    });
     byId.set(
       entityId,
-      backgroundEntry({
-        presetId: manifest.presetId,
-        entityId,
-        displayName,
-        region,
-        mapFeatureIds,
-      })
+      sovietRepublicAtStart
+        ? {
+            ...entry,
+            status: "emergent",
+            parentEntityId: "RU",
+            recognition: { status: "dependent" },
+            un: { state: "ineligible" },
+          }
+        : entry
     );
+  }
+  if (year === 1991) {
+    for (const entityId of ["UKR", "BLR", "BAL"]) {
+      const entry = byId.get(entityId);
+      if (!entry) throw new Error(`Missing Soviet republic ${entityId} in the 1991 manifest`);
+      byId.set(entityId, {
+        ...entry,
+        status: "dependent",
+        parentEntityId: "RU",
+        recognition: { status: "dependent" },
+      });
+    }
   }
   return [...byId.values()];
 }
