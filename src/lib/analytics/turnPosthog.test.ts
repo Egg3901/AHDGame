@@ -19,10 +19,10 @@ vi.mock("posthog-node", () => ({
 
 function fakeDb(): Db {
   const rows: Record<string, unknown[]> = {
-    federalBudgets: [
+    federalBudget: [
       { countryId: "US", treasuryBalance: 1000, economicFactors: { inflationRate: 2.5 } },
     ],
-    countryHistoryEvents: [{ eventType: "bill_enacted", countryId: "US" }],
+    countryHistory: [{ eventType: "bill_enacted", countryId: "US" }],
     elections: [{ countryId: "US" }],
   };
   return {

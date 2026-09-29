@@ -4,13 +4,13 @@ import type {
   FederalBudget,
   User,
   WealthListSnapshot,
-  CountryHistoryEvent,
   TurnPhaseTelemetryMap,
   Election,
 } from "@/lib/db/types";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { getCountryHistoryCollection } from "@/lib/db/collections/countryHistory";
 
 let client: PostHog | null = null;
 
@@ -40,13 +40,14 @@ export async function captureTurnPosthog(input: {
   if (!posthog) return;
   try {
     const { db, turn, durationMs, phaseStatuses, errorCount } = input;
+    const countryHistory = await getCountryHistoryCollection(db);
     const [playersActive, budgets, wealth, history, elections, wars, crises] = await Promise.all([
       db.collection<User>("users").countDocuments({
         lastActivity: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         isBanned: { $ne: true },
       }),
       db
-        .collection<FederalBudget>("federalBudgets")
+        .collection<FederalBudget>("federalBudget")
         .find(
           {},
           { projection: { countryId: 1, treasuryBalance: 1, "economicFactors.inflationRate": 1 } }
@@ -55,8 +56,7 @@ export async function captureTurnPosthog(input: {
       db
         .collection<WealthListSnapshot>("wealthListSnapshots")
         .findOne({ _id: "global", turn }, { projection: { entries: 1 } }),
-      db
-        .collection<CountryHistoryEvent>("countryHistoryEvents")
+      countryHistory
         .find({ turn, eventType: "bill_enacted" }, { projection: { eventType: 1, countryId: 1 } })
         .toArray(),
       db
