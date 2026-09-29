@@ -13,6 +13,7 @@ describe("live federation inventory", () => {
       { _id: "CEN", countryId: "RU", population: 10, gdp: 100 },
       { _id: "SU_UKR", countryId: "RU", population: 11, gdp: 101 },
       { _id: "CEN_SUB", countryId: "RU", parentRegionId: "CEN", population: 2, gdp: 20 },
+      { _id: "CEN_DISTRICT", countryId: "RU", parentRegionId: "CEN_SUB", population: 1, gdp: 10 },
       { _id: "BE", countryId: "DD", population: 12, gdp: 90 },
     ]);
     mem.seed("corporations", [
@@ -27,13 +28,19 @@ describe("live federation inventory", () => {
         countryId: "RU",
         stateId: "CEN",
       },
+      {
+        _id: new ObjectId("000000000000000000000008"),
+        corporationId: nationalId,
+        countryId: "RU",
+        stateId: "CEN_DISTRICT",
+      },
     ]);
     mem.seed("militaryUnits", [
       {
         _id: new ObjectId("000000000000000000000005"),
         countryId: "RU",
         domain: "ground",
-        station: "SU_UKR",
+        station: "CEN_SUB",
       },
       {
         _id: new ObjectId("000000000000000000000006"),
@@ -60,9 +67,14 @@ describe("live federation inventory", () => {
         homeRegionId: "SU_UKR",
       },
       {
+        assetId: "enterprise:000000000000000000000008",
+        kind: "public-enterprise",
+        homeRegionId: "CEN",
+      },
+      {
         assetId: "force:000000000000000000000005",
         kind: "conventional-force",
-        homeRegionId: "SU_UKR",
+        homeRegionId: "CEN",
       },
       {
         assetId: "force:000000000000000000000006",
@@ -81,6 +93,17 @@ describe("live federation inventory", () => {
     const mem = createInMemoryDb();
     await expect(loadLiveSuccessionInventory(mem as unknown as Db, "RU")).rejects.toThrow(
       "Live federation regions are missing"
+    );
+  });
+
+  it("rejects a broken source hierarchy before assigning physical custody", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("states", [
+      { _id: "CEN", countryId: "RU", population: 10, gdp: 100 },
+      { _id: "ORPHAN", countryId: "RU", parentRegionId: "MISSING", population: 1, gdp: 1 },
+    ]);
+    await expect(loadLiveSuccessionInventory(mem as unknown as Db, "RU")).rejects.toThrow(
+      "region hierarchy has a missing parent"
     );
   });
 });

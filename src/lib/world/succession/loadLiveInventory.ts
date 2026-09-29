@@ -42,6 +42,28 @@ export async function loadLiveSuccessionInventory(
   const regionIds = new Set(topLevel.map((state) => state._id));
   if (regionIds.size !== topLevel.length)
     throw new Error("Live federation contains duplicate region identities");
+  const stateById = new Map(states.map((state) => [state._id, state]));
+  if (stateById.size !== states.length)
+    throw new Error("Live federation contains duplicate region identities");
+  const topLevelFor = (stateId: string | null | undefined): string | null => {
+    if (!stateId) return null;
+    const visited = new Set<string>();
+    let current: string | undefined = stateId;
+    while (current) {
+      const state = stateById.get(current);
+      if (!state) return null;
+      if (visited.has(current))
+        throw new Error("Live federation region hierarchy contains a cycle");
+      visited.add(current);
+      if (!state.parentRegionId) return state._id;
+      current = state.parentRegionId;
+    }
+    return null;
+  };
+  for (const state of states) {
+    if (topLevelFor(state._id) === null)
+      throw new Error("Live federation region hierarchy has a missing parent");
+  }
 
   const corporations = await db
     .collection<Corporation>("corporations")
@@ -82,14 +104,14 @@ export async function loadLiveSuccessionInventory(
       ...sectors.map((sector) => ({
         assetId: `enterprise:${sector._id.toString()}`,
         kind: "public-enterprise" as const,
-        homeRegionId: regionIds.has(sector.stateId) ? sector.stateId : null,
+        homeRegionId: topLevelFor(sector.stateId),
       })),
       ...units.map((unit) => ({
         assetId: `force:${unit._id.toString()}`,
         kind: (unit.domain === "rocket" || unit.domain === "space"
           ? "strategic-force"
           : "conventional-force") as SuccessionCustodyAsset["kind"],
-        homeRegionId: unit.station && regionIds.has(unit.station) ? unit.station : null,
+        homeRegionId: topLevelFor(unit.station),
       })),
     ].sort((a, b) => a.assetId.localeCompare(b.assetId)),
   };
