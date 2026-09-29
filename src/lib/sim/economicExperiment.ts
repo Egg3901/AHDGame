@@ -5,6 +5,7 @@ export interface EconomicExperimentConfig {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  nppFundRedemptionEnabled?: boolean;
   sovereignIssuanceConsolidationEnabled?: boolean;
   domesticSovereignBondCoverageEnabled?: boolean;
   equityLiquidityFacilityEnabled?: boolean;
@@ -43,7 +44,7 @@ export function parseEquityLiquidityFacilityEnabled(
  * equity liquidity facility flag and its deprecated alias, plus the #1001
  * sovereign issuance consolidation and domestic coverage flags. */
 export function isGameplayOverrideArg(value: string): boolean {
-  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|sovereign-issuance-consolidation|domestic-sovereign-bond-coverage|equity-liquidity-facility|equity-liquidity|frontier-entry-experiment)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
+  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|npp-fund-redemption|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|sovereign-issuance-consolidation|domestic-sovereign-bond-coverage|equity-liquidity-facility|equity-liquidity|frontier-entry-experiment)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
     value
   );
 }
@@ -63,6 +64,9 @@ export function economicExperimentConfigSet(
       : {}),
     ...(config.indexFundBondLiquidityEnabled !== undefined
       ? { indexFundBondLiquidityEnabled: config.indexFundBondLiquidityEnabled }
+      : {}),
+    ...(config.nppFundRedemptionEnabled !== undefined
+      ? { nppFundRedemptionEnabled: config.nppFundRedemptionEnabled }
       : {}),
     ...(config.sovereignIssuanceConsolidationEnabled !== undefined
       ? { sovereignIssuanceConsolidationEnabled: config.sovereignIssuanceConsolidationEnabled }
@@ -143,6 +147,9 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
       : []),
     ...(set.indexFundBondLiquidityEnabled !== undefined
       ? [`--index-fund-bond-liquidity=${String(set.indexFundBondLiquidityEnabled)}`]
+      : []),
+    ...(set.nppFundRedemptionEnabled !== undefined
+      ? [`--npp-fund-redemption=${String(set.nppFundRedemptionEnabled)}`]
       : []),
     ...(set.sovereignIssuanceConsolidationEnabled !== undefined
       ? [`--sovereign-issuance-consolidation=${String(set.sovereignIssuanceConsolidationEnabled)}`]
