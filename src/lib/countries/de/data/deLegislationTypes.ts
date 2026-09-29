@@ -2891,7 +2891,7 @@ export const deLegislationTypes: LegislationType[] = [
     description:
       "Germany's European integration stance and associated domestic spending. Treaty ratification, membership and shared sovereign powers require separate decisions.",
     explanation:
-      "Sets Germany's negotiating priorities and domestic integration-policy spending. Use a Maastricht ratification bill for treaty consent and an organization withdrawal bill to leave the European organization. Shared taxation, debt and sovereignty require an agreement among the participating governments.",
+      "Sets Germany's negotiating priorities and domestic integration-policy spending. Maastricht treaty consent belongs in a separate treaty-ratification bill; an organization withdrawal bill decides membership. Shared taxation, debt and sovereignty require an agreement among the participating governments.",
     policyDomain: "foreign_policy",
     subCategory: "EU integration",
     budgetCategory: "other",
