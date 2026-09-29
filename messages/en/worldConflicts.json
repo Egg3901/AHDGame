@@ -7,6 +7,15 @@
       "warsLabel": "WARS",
       "warsDetail": "{active, plural, one {# active} other {# active}}, {nuclear, plural, one {# nuclear} other {# nuclear}}",
       "warsHelp": "Every active war on the Conflicts board pushes the floor by its intensity. Any war with nuclear-armed countries on opposing sides guarantees a crisis-grade floor. Other wars are weighted by intensity."
+    },
+    "livingCrises": {
+      "title": "Living crises",
+      "participants": "Participants",
+      "nextPhases": "Possible next phases",
+      "localActors": "Local parties",
+      "pressure": "Background pressure",
+      "decisions": "Open decisions",
+      "commitments": "Public commitments"
     }
   }
 }
