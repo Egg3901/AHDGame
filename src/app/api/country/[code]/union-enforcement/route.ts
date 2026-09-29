@@ -31,6 +31,7 @@ import {
   undergroundRaidFine,
   unionEnforcementDelegatePosition,
 } from "@/lib/unions/enforcementAuthority";
+import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("posture"), posture: z.enum(["tolerant", "normal", "crackdown"]) }),
@@ -100,6 +101,7 @@ export async function GET(_request: Request, { params }: Context) {
       {
         projection: {
           unionsBanned: 1,
+          gdp: 1,
           unionEnforcementPosture: 1,
           unionEnforcementPostureChangedTurn: 1,
         },
@@ -144,15 +146,21 @@ export async function GET(_request: Request, { params }: Context) {
     const names = new Map(
       characters.map((candidate) => [candidate._id.toString(), candidate.name])
     );
-    return NextResponse.json({
-      posture: budget.unionEnforcementPosture ?? "normal",
-      canChangePosture: budget.unionEnforcementPostureChangedTurn !== turn,
-      prosecutionTargets: organizers.map((organizer) => ({
-        unionId: organizer.unionId.toString(),
-        characterId: organizer.characterId.toString(),
-        name: names.get(organizer.characterId.toString()) ?? "Organizer",
-      })),
-    });
+    return NextResponse.json(
+      {
+        posture: budget.unionEnforcementPosture ?? "normal",
+        canChangePosture: budget.unionEnforcementPostureChangedTurn !== turn,
+        crackdownCostPerTurn: enforcementTreasuryCostPerTurn(budget.gdp ?? 0, true, "crackdown"),
+        crackdownApprovalPenalty: 2,
+        exposedUnionIds: exposed.map((union) => union._id.toString()),
+        prosecutionTargets: organizers.map((organizer) => ({
+          unionId: organizer.unionId.toString(),
+          characterId: organizer.characterId.toString(),
+          name: names.get(organizer.characterId.toString()) ?? "Organizer",
+        })),
+      },
+      { headers: { "Cache-Control": "private, no-store" } }
+    );
   } catch (error) {
     return handleRouteError(error);
   }
