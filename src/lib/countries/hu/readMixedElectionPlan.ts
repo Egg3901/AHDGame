@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally, State } from "@/lib/db/types";
-import { buildHuMixedPlan, type HuMixedPlan } from "./mixedElectionPlan";
+import { buildHuMixedPlan, type HuMixedPlan } from "./rules/mixedElectionPlan";
 
 /** Return null until every regional race has finished and has a valid tally. */
 export async function readHuMixedElectionPlan(db: Db, cycle: number): Promise<HuMixedPlan | null> {

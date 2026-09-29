@@ -15,7 +15,7 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
 import { readBgOrdinaryEligibleParties } from "@/lib/turn/election/bgOrdinaryEligibility";
-import { readHuMixedElectionPlan } from "@/lib/countries/hu/rules/readMixedElectionPlan";
+import { readHuMixedElectionPlan } from "@/lib/countries/hu/readMixedElectionPlan";
 import type { HuMixedPlan } from "@/lib/countries/hu/rules/mixedElectionPlan";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
