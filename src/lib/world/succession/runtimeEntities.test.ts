@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { getWorldEntityOrThrow } from "@/lib/world/worldEntityManifest";
 import { getWorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
-import { overlayRuntimeWorldEntities, type RuntimeWorldEntityState } from "./runtimeEntities";
+import {
+  overlayRuntimeWorldEntities,
+  validateAppliedEntityStates,
+  type FederationSettlementApplicationRecord,
+  type RuntimeWorldEntityState,
+} from "./runtimeEntities";
+
+function application(): FederationSettlementApplicationRecord {
+  return {
+    _id: "1991-default:soviet-revision-1:1",
+    presetId: "1991-default",
+    settlementId: "soviet-revision-1",
+    revision: 1,
+    sourceEntityId: "RU",
+    entityIds: ["RU", "EE"],
+    status: "applied",
+    appliedOnTurn: 44,
+    appliedAt: new Date("1991-12-01T00:00:00Z"),
+  };
+}
 
 function appliedEstonia(): RuntimeWorldEntityState {
   return {
@@ -34,6 +53,36 @@ describe("runtime world entity overlay", () => {
       status: "sovereign",
     });
     expect(getWorldEntityOrThrow("1991-default", "EE").status).toBe("emergent");
+  });
+
+  it("rejects an applied receipt missing a source or successor record", () => {
+    const successor = appliedEstonia();
+    const source: RuntimeWorldEntityState = {
+      ...successor,
+      _id: "1991-default:RU",
+      entityId: "RU",
+      entry: {
+        ...getWorldEntityOrThrow("1991-default", "RU"),
+        displayName: "Russia",
+      },
+    };
+    const receipt = application();
+    expect(validateAppliedEntityStates("1991-default", [receipt], [source, successor])).toEqual(
+      new Set([receipt._id])
+    );
+    expect(() => validateAppliedEntityStates("1991-default", [receipt], [successor])).toThrow(
+      "missing entity states"
+    );
+    expect(() =>
+      validateAppliedEntityStates("1991-default", [receipt], [source, successor, successor])
+    ).toThrow("mismatched entity states");
+    expect(() =>
+      validateAppliedEntityStates(
+        "1991-default",
+        [receipt],
+        [source, { ...successor, appliedOnTurn: 45 }]
+      )
+    ).toThrow("mismatched entity states");
   });
 
   it("rejects a stale preset, duplicate state or unknown target", () => {

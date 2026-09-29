@@ -13,6 +13,8 @@ export interface FederationSettlementApplicationRecord {
   settlementId: string;
   revision: number;
   sourceEntityId: string;
+  /** The complete source and successor set published by this application. */
+  entityIds: string[];
   status: "applied";
   appliedOnTurn: number;
   appliedAt: Date;
@@ -25,6 +27,62 @@ export interface RuntimeWorldEntityState {
   applicationId: string;
   appliedOnTurn: number;
   entry: WorldEntityManifestEntry;
+}
+
+/** An applied receipt must cover every state it claims, at one turn and revision. */
+export function validateAppliedEntityStates(
+  presetId: string,
+  applications: readonly FederationSettlementApplicationRecord[],
+  states: readonly RuntimeWorldEntityState[]
+): ReadonlySet<string> {
+  const byApplication = new Map<string, FederationSettlementApplicationRecord>();
+  const expected = new Set<string>();
+  for (const application of applications) {
+    if (
+      application.presetId !== presetId ||
+      typeof application.settlementId !== "string" ||
+      !application.settlementId.trim() ||
+      !Number.isSafeInteger(application.revision) ||
+      application.revision < 1 ||
+      application._id !== `${presetId}:${application.settlementId}:${application.revision}` ||
+      application.status !== "applied" ||
+      !Number.isSafeInteger(application.appliedOnTurn) ||
+      application.appliedOnTurn < 1 ||
+      !Array.isArray(application.entityIds) ||
+      application.entityIds.length < 2 ||
+      typeof application.sourceEntityId !== "string" ||
+      !application.entityIds.includes(application.sourceEntityId) ||
+      new Set(application.entityIds).size !== application.entityIds.length ||
+      byApplication.has(application._id)
+    )
+      throw new Error("Invalid applied federation settlement receipt");
+    byApplication.set(application._id, application);
+    for (const entityId of application.entityIds) {
+      if (
+        typeof entityId !== "string" ||
+        !entityId.trim() ||
+        expected.has(`${application._id}:${entityId}`)
+      )
+        throw new Error("Invalid applied federation settlement receipt");
+      expected.add(`${application._id}:${entityId}`);
+    }
+  }
+  const found = new Set<string>();
+  for (const state of states) {
+    const application = byApplication.get(state.applicationId);
+    const key = `${state.applicationId}:${state.entityId}`;
+    if (
+      !application ||
+      state.appliedOnTurn !== application.appliedOnTurn ||
+      !expected.has(key) ||
+      found.has(key)
+    )
+      throw new Error("Applied federation settlement has mismatched entity states");
+    found.add(key);
+  }
+  if (found.size !== expected.size)
+    throw new Error("Applied federation settlement is missing entity states");
+  return new Set(byApplication.keys());
 }
 
 /** A runtime state can replace only the matching entity in its opening preset. */
@@ -64,13 +122,31 @@ export async function loadRuntimeWorldEntities(
     .collection<FederationSettlementApplicationRecord>(
       FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
     )
-    .find({ presetId, status: "applied" }, { projection: { _id: 1 } })
+    .find(
+      { presetId, status: "applied" },
+      {
+        projection: {
+          _id: 1,
+          presetId: 1,
+          settlementId: 1,
+          revision: 1,
+          sourceEntityId: 1,
+          entityIds: 1,
+          status: 1,
+          appliedOnTurn: 1,
+        },
+      }
+    )
     .toArray();
   if (applications.length === 0) return overlayRuntimeWorldEntities(presetId, [], new Set());
-  const appliedIds = new Set(applications.map((application) => application._id));
+  const appliedIds = applications.map((application) => application._id);
   const states = await db
     .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
-    .find({ presetId, applicationId: { $in: [...appliedIds] } })
+    .find({ presetId, applicationId: { $in: appliedIds } })
     .toArray();
-  return overlayRuntimeWorldEntities(presetId, states, appliedIds);
+  return overlayRuntimeWorldEntities(
+    presetId,
+    states,
+    validateAppliedEntityStates(presetId, applications, states)
+  );
 }
