@@ -317,6 +317,8 @@ describe("processSoeOperations", () => {
   });
 
   it("loads the 2027 EUR treasury denomination once for two French SOEs", async () => {
+    const { loadFxRatesByCurrency } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(loadFxRatesByCurrency).mockResolvedValue(new Map([["EUR", 1.2]]));
     db.collectionMocks.corporations.find.mockReturnValue(
       cursor(
         [new ObjectId(), new ObjectId()].map((_id) => ({
@@ -344,5 +346,11 @@ describe("processSoeOperations", () => {
     expect(result.soeCorps).toBe(2);
     expect(db.collectionMocks.federalBudget.findOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledTimes(2);
+    const treasuryDebits = db.collectionMocks.federalBudget.updateOne.mock.calls.reduce(
+      (sum, call) => sum - call[1].$inc.treasuryBalance,
+      0
+    );
+    const corpCredits = result.backing.reduce((sum, row) => sum + row.coveredLocal, 0);
+    expect(treasuryDebits).toBe(corpCredits);
   });
 });
