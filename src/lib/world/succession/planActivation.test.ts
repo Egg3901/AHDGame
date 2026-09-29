@@ -136,6 +136,15 @@ describe("federation settlement activation", () => {
     const lostDebt = input(false);
     lostDebt.finances.debtResponsibility.SK -= 1;
     expect(() => planSuccessionActivation(lostDebt)).toThrow("Financial allocations");
+
+    const alteredWeights = input(false);
+    alteredWeights.finances.assetWeights.CZ2 += 1;
+    expect(() => planSuccessionActivation(alteredWeights)).toThrow("Financial allocations");
+
+    const shiftedResponsibility = input(false);
+    shiftedResponsibility.finances.debtResponsibility.CZ2 += 1;
+    shiftedResponsibility.finances.debtResponsibility.SK -= 1;
+    expect(() => planSuccessionActivation(shiftedResponsibility)).toThrow("Financial allocations");
   });
 
   it("does not activate before the parent mandate and all matching consents", () => {

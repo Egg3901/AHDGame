@@ -2,7 +2,10 @@ import type { WorldEntityManifestEntry } from "@/lib/world/worldEntityManifest";
 import type { MacroCountryState } from "@/lib/world/macro/types";
 import { buildSuccessorMacroCountry, type SuccessorMacroTerms } from "./buildSuccessorMacro";
 import { evaluateSuccessionApproval, type SuccessionApprovalInput } from "./rules/decision";
-import type { SuccessionFinancialPlan } from "./rules/financialSettlement";
+import {
+  allocateSuccessionAmount,
+  type SuccessionFinancialPlan,
+} from "./rules/financialSettlement";
 import type { SuccessionRegion, SuccessorTerritory } from "./rules/territory";
 
 export interface SuccessionActivationInput {
@@ -103,11 +106,24 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     throw new Error("Settlement territory, targets and servicing issuer disagree");
   }
   const targetIds = [...territoryById.keys()].filter((id) => id !== source.entityId).sort();
+  const participantIds = [...territoryById.keys()].sort();
+  const validWeights = (
+    weights: Record<string, number>,
+    basis: "population" | "negotiated"
+  ): boolean => {
+    if (basis !== "population" && basis !== "negotiated") return false;
+    if (Object.keys(weights).sort().join(",") !== participantIds.join(",")) return false;
+    if (Object.values(weights).some((weight) => !Number.isSafeInteger(weight) || weight < 0))
+      return false;
+    if (basis === "population")
+      return participantIds.every((id) => weights[id] === territoryById.get(id)?.population);
+    return Object.values(weights).reduce((sum, weight) => sum + weight, 0) === 10_000;
+  };
   if (
-    Object.keys(finances.assetAllocation).sort().join(",") !==
-      [...territoryById.keys()].sort().join(",") ||
-    Object.keys(finances.debtResponsibility).sort().join(",") !==
-      [...territoryById.keys()].sort().join(",") ||
+    Object.keys(finances.assetAllocation).sort().join(",") !== participantIds.join(",") ||
+    Object.keys(finances.debtResponsibility).sort().join(",") !== participantIds.join(",") ||
+    !validWeights(finances.assetWeights, finances.assetBasis) ||
+    !validWeights(finances.debtWeights, finances.debtBasis) ||
     !Number.isSafeInteger(finances.financialAssetsMinor) ||
     !Number.isSafeInteger(finances.creditorDebtMinor) ||
     finances.financialAssetsMinor < 0 ||
@@ -117,14 +133,23 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     ) ||
     Object.values(finances.debtResponsibility).some(
       (amount) => !Number.isSafeInteger(amount) || amount < 0
-    ) ||
-    Object.values(finances.assetAllocation).reduce((sum, amount) => sum + BigInt(amount), 0n) !==
-      BigInt(finances.financialAssetsMinor) ||
-    Object.values(finances.debtResponsibility).reduce((sum, amount) => sum + BigInt(amount), 0n) !==
-      BigInt(finances.creditorDebtMinor)
+    )
   ) {
     throw new Error("Financial allocations do not match the approved territory");
   }
+  const expectedAssets = allocateSuccessionAmount(
+    finances.financialAssetsMinor,
+    finances.assetWeights
+  );
+  const expectedDebt = allocateSuccessionAmount(finances.creditorDebtMinor, finances.debtWeights);
+  if (
+    participantIds.some(
+      (id) =>
+        finances.assetAllocation[id] !== expectedAssets[id] ||
+        finances.debtResponsibility[id] !== expectedDebt[id]
+    )
+  )
+    throw new Error("Financial allocations do not match the approved territory");
   const successorEntities: WorldEntityManifestEntry[] = [];
   const macroCountries: MacroCountryState[] = [];
   for (const entityId of targetIds) {
