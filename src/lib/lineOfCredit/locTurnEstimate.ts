@@ -25,6 +25,7 @@ import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { getGameState } from "@/lib/gameState";
 import {
   loadCentralBankPricingAdjustment,
   resolveCentralBankPricingAdjustment,
@@ -59,7 +60,8 @@ export async function estimateTurnsToPayOffLocIdealized(
     return primeByCountryId.get(cid) ?? DEFAULT_PRIME;
   };
 
-  const home = getHomeCurrency(character);
+  const gameState = await getGameState(db);
+  const home = getHomeCurrency(character, gameState?.preset);
 
   const {
     grossInternal,
@@ -70,7 +72,12 @@ export async function estimateTurnsToPayOffLocIdealized(
     grossInternal > 0 ? locDebtForScore / grossInternal : locDebtForScore > 0 ? 1 : 0;
   const nwScore = netWorthScoreFromInternal(netInternal);
 
-  const incomeGuess = await estimatePerTurnCurrencyIncomeHomeFace(db, character, rates);
+  const incomeGuess = await estimatePerTurnCurrencyIncomeHomeFace(
+    db,
+    character,
+    rates,
+    gameState ?? undefined
+  );
   const incomeScore = incomeScoreFromPerTurnCurrency(incomeGuess);
 
   const corp = await db
