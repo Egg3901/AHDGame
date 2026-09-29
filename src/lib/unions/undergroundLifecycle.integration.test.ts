@@ -78,8 +78,8 @@ describe("union ban lifecycle", () => {
     } as Character;
     memory.seed("gameState", [{ _id: "current", currentTurn: 42 }]);
     memory.seed("federalBudget", [{ _id: getNationalBudgetId("US"), countryId: "US" }]);
-    memory.seed("unions", [union]);
-    memory.seed("characters", [leader, ally, third, executive]);
+    memory.seed("unions", [{ ...union }]);
+    memory.seed("characters", [{ ...leader }, { ...ally }, { ...third }, { ...executive }]);
     memory.seed("crises", [
       {
         _id: new ObjectId(),
