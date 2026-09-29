@@ -40,4 +40,25 @@ describe("live 2014 Hungary mixed election plan", () => {
       "one completed race per region"
     );
   });
+
+  it("lets an independent contest one district without inventing a national list", () => {
+    const withIndependent = races.map((race, index) =>
+      index === 0
+        ? {
+            ...race,
+            candidates: [
+              ...race.candidates,
+              { candidateId: "independent-1", partyId: "independent", votes: 200_000 },
+            ],
+          }
+        : race
+    );
+    const plan = buildHuMixedPlan(regions, withIndependent);
+    expect(plan.result.listSeats.independent).toBeUndefined();
+    expect(plan.result.listSeats["independent@independent-1"]).toBeUndefined();
+    expect(plan.candidateSeatsByElection[races[0].electionId]["independent-1"]).toBeLessThanOrEqual(
+      1
+    );
+    expect(Object.values(plan.regionCapacity).reduce((a, b) => a + b, 0)).toBe(199);
+  });
 });

@@ -549,13 +549,19 @@ export async function resolveOneGeneralElection(
           );
           const wantedByParty: Record<string, number> = {};
           for (const [candidateId, seats] of Object.entries(huMixedCandidateSeats)) {
-            const party =
+            const rawParty =
               candidateMap.get(candidateId)?.party ?? tally.candidateParties[candidateId];
-            if (!party) throw new Error("Hungary mixed mandate has no party");
+            if (!rawParty) throw new Error("Hungary mixed mandate has no party");
+            const party = rawParty === "independent" ? `independent@${candidateId}` : rawParty;
             wantedByParty[party] = (wantedByParty[party] ?? 0) + seats;
           }
           for (const [party, seats] of Object.entries(wantedByParty)) {
-            const eligible = ranked.filter((candidate) => candidate.party === party);
+            const eligible = ranked.filter(
+              (candidate) =>
+                (candidate.party === "independent"
+                  ? `independent@${candidate.id}`
+                  : candidate.party) === party
+            );
             if (eligible.length === 0) continue; // a vacant bloc, never seat an ineligible holder
             const shares = apportionCandidateSeats(
               Object.fromEntries(eligible.map((candidate) => [candidate.id, candidate.votes])),

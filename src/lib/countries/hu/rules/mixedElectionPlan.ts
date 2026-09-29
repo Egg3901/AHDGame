@@ -28,10 +28,18 @@ function stableWeight(candidateId: string, districtId: string): number {
   return 80 + ((hash >>> 0) % 41);
 }
 
+function ballotParty(candidate: { candidateId: string; partyId: string }): string {
+  return candidate.partyId === "independent"
+    ? `independent@${candidate.candidateId}`
+    : candidate.partyId;
+}
+
 /**
  * Model 106 district tallies from the game's six regional candidate tallies.
- * Every candidate's regional vote count is conserved across its district
- * ballots; fixed geographic variation produces distinct district races. The
+ * Party candidates' regional vote count is conserved across district ballots;
+ * fixed geographic variation produces distinct district races. An independent
+ * candidate contests one deterministic district and receives that district's
+ * share of the regional tally. The
  * national-list ballot uses party support summed across the same campaign.
  * The game has no separate list campaign choice yet, so list and constituency
  * support have the same regional baseline, as in its German second-vote model.
@@ -82,21 +90,32 @@ export function buildHuMixedPlan(
         throw new Error("Invalid Hungarian election candidate tally");
       }
       candidateIds.add(candidate.candidateId);
-      candidateDistrictVotes[candidate.candidateId] = apportionRegions(
-        candidate.votes,
-        Object.fromEntries(districts.map((id) => [id, stableWeight(candidate.candidateId, id)]))
-      );
-      listVotes[candidate.partyId] = (listVotes[candidate.partyId] ?? 0) + candidate.votes;
-      partyRegionVotes[candidate.partyId] ??= {};
-      partyRegionVotes[candidate.partyId][region.id] =
-        (partyRegionVotes[candidate.partyId][region.id] ?? 0) + candidate.votes;
+      candidateDistrictVotes[candidate.candidateId] =
+        candidate.partyId === "independent"
+          ? {
+              [districts[stableWeight(candidate.candidateId, "assignment") % districts.length]]:
+                Math.round(candidate.votes / districts.length),
+            }
+          : apportionRegions(
+              candidate.votes,
+              Object.fromEntries(
+                districts.map((id) => [id, stableWeight(candidate.candidateId, id)])
+              )
+            );
+      if (candidate.partyId !== "independent") {
+        listVotes[candidate.partyId] = (listVotes[candidate.partyId] ?? 0) + candidate.votes;
+        partyRegionVotes[candidate.partyId] ??= {};
+        partyRegionVotes[candidate.partyId][region.id] =
+          (partyRegionVotes[candidate.partyId][region.id] ?? 0) + candidate.votes;
+      }
     }
     for (const districtId of districts) {
       const votesByParty: Record<string, number> = {};
       for (const candidate of race.candidates) {
-        votesByParty[candidate.partyId] =
-          (votesByParty[candidate.partyId] ?? 0) +
-          candidateDistrictVotes[candidate.candidateId][districtId];
+        const partyId = ballotParty(candidate);
+        votesByParty[partyId] =
+          (votesByParty[partyId] ?? 0) +
+          (candidateDistrictVotes[candidate.candidateId][districtId] ?? 0);
       }
       constituencyBallots.push({
         id: districtId,
@@ -130,7 +149,7 @@ export function buildHuMixedPlan(
       race.candidates.map((c) => [c.candidateId, 0])
     );
     for (const [partyId, total] of Object.entries(partySeatsByRegion[race.regionId] ?? {})) {
-      const candidates = race.candidates.filter((candidate) => candidate.partyId === partyId);
+      const candidates = race.candidates.filter((candidate) => ballotParty(candidate) === partyId);
       const shares = apportionCandidates(
         Object.fromEntries(candidates.map((c) => [c.candidateId, c.votes])),
         total
