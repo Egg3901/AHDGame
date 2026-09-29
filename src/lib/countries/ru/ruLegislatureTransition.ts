@@ -34,6 +34,7 @@ export async function processRuLegislatureTransition(
       projection: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
+        ruFederalAssemblyElectionCertifiedSinceTurn: 1,
         ruCongressDissolvedSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
       },
@@ -64,6 +65,12 @@ export async function processRuLegislatureTransition(
     if (stage !== "federalAssembly") return "dissolved";
   }
   if (stage !== "federalAssembly" || country.ruFederalAssemblySinceTurn != null) return "none";
+  if (
+    !Number.isSafeInteger(country.ruFederalAssemblyElectionCertifiedSinceTurn) ||
+    (country.ruFederalAssemblyElectionCertifiedSinceTurn ?? 0) <= 0 ||
+    (country.ruFederalAssemblyElectionCertifiedSinceTurn ?? Infinity) > currentTurn
+  )
+    return "none";
 
   // The ten game macroregions are not the 89 federal subjects. Apportion only
   // the Duma's 225 single-member tier by population; the other 225 are list

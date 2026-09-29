@@ -665,8 +665,12 @@ export interface CountryGameState {
   ruSovietSuccessionSinceTurn?: number;
   /** RU 1991: enacted authority to establish the post-Soviet presidential office. */
   ruPresidencyMandateSinceTurn?: number;
+  /** RU 1991: the first presidential election has a certified result. */
+  ruPresidencyElectionCertifiedSinceTurn?: number;
   /** RU 1991: enacted authority to replace Congress with the Federal Assembly. */
   ruFederalAssemblyMandateSinceTurn?: number;
+  /** RU 1991: the first Federal Assembly election has a certified result. */
+  ruFederalAssemblyElectionCertifiedSinceTurn?: number;
   /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */
   ruPresidencySinceTurn?: number;
   /** RU 1991 world: raw turn of the September 1993 Congress dissolution. */

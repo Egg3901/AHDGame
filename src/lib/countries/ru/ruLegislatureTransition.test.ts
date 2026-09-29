@@ -28,6 +28,7 @@ describe("Russian 1993 legislature transition", () => {
     const writes: Array<[string, unknown]> = [];
     const markers: Record<string, number> = {};
     let ratified = false;
+    let certified = false;
     const regionIds = Object.keys(
       (await import("@/lib/countries/ru/data/ruPopulation1991")).RU_1991_ECONOMIC_REGION_POPULATION
     );
@@ -40,6 +41,7 @@ describe("Russian 1993 legislature transition", () => {
                 ...(ratified
                   ? { ruSovietSuccessionSinceTurn: 48, ruFederalAssemblyMandateSinceTurn: 129 }
                   : {}),
+                ...(certified ? { ruFederalAssemblyElectionCertifiedSinceTurn: 141 } : {}),
                 ...markers,
               }
             : null,
@@ -70,6 +72,10 @@ describe("Russian 1993 legislature transition", () => {
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 141, NOW)).toBe(
       "none"
     );
+    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
+      "none"
+    );
+    certified = true;
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
       "federalAssembly"
     );

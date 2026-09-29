@@ -27,6 +27,7 @@ describe("Russian 1991 presidential office transition", () => {
     const writes: Array<[string, unknown]> = [];
     let marked = false;
     let ratified = false;
+    let certified = false;
     const db = {
       collection: (name: string) => ({
         findOne: async () =>
@@ -36,6 +37,7 @@ describe("Russian 1991 presidential office transition", () => {
                 ...(ratified
                   ? { ruSovietSuccessionSinceTurn: 24, ruPresidencyMandateSinceTurn: 25 }
                   : {}),
+                ...(certified ? { ruPresidencyElectionCertifiedSinceTurn: 25 } : {}),
                 ...(marked ? { ruPresidencySinceTurn: 25 } : {}),
               }
             : null,
@@ -57,6 +59,11 @@ describe("Russian 1991 presidential office transition", () => {
     );
     expect(writes).toHaveLength(0);
     ratified = true;
+    expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 25, now)).toBe(
+      false
+    );
+    expect(writes).toHaveLength(0);
+    certified = true;
     expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 25, now)).toBe(true);
     expect(await processRuPresidencyTransition(db, { preset: "1991-default" }, 26, now)).toBe(
       false

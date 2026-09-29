@@ -31,6 +31,7 @@ export async function processRuPresidencyTransition(
       projection: {
         ruSovietSuccessionSinceTurn: 1,
         ruPresidencyMandateSinceTurn: 1,
+        ruPresidencyElectionCertifiedSinceTurn: 1,
         ruPresidencySinceTurn: 1,
       },
     }
@@ -42,6 +43,12 @@ export async function processRuPresidencyTransition(
       ru.ruSovietSuccessionSinceTurn,
       ru.ruPresidencyMandateSinceTurn
     )
+  )
+    return false;
+  if (
+    !Number.isSafeInteger(ru.ruPresidencyElectionCertifiedSinceTurn) ||
+    (ru.ruPresidencyElectionCertifiedSinceTurn ?? 0) <= 0 ||
+    (ru.ruPresidencyElectionCertifiedSinceTurn ?? Infinity) > currentTurn
   )
     return false;
 
