@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { getCorporationSectorDetail } from "./sectorDetail";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn().mockResolvedValue(null) }));
@@ -41,7 +42,6 @@ describe("getCorporationSectorDetail", () => {
       revenue: 1_000_000,
     });
 
-    const { getCorporationSectorDetail } = await import("./sectorDetail");
     const response = await getCorporationSectorDetail(
       new Request(`http://localhost/api/corporations/7/sectors/${sectorId.toHexString()}`),
       { params: Promise.resolve({ id: "7", sectorId: sectorId.toHexString() }) }
@@ -96,7 +96,6 @@ describe("getCorporationSectorDetail", () => {
       avatarUrl: null,
     });
 
-    const { getCorporationSectorDetail } = await import("./sectorDetail");
     const response = await getCorporationSectorDetail(
       new Request(`http://localhost/api/corporations/8/sectors/${sectorId.toHexString()}`),
       { params: Promise.resolve({ id: "8", sectorId: sectorId.toHexString() }) }
@@ -156,7 +155,6 @@ describe("getCorporationSectorDetail", () => {
     db.collection("characters");
     db.collectionMocks.characters.findOne.mockResolvedValue(null);
 
-    const { getCorporationSectorDetail } = await import("./sectorDetail");
     const response = await getCorporationSectorDetail(
       new Request(`http://localhost/api/corporations/10/sectors/${sectorId.toHexString()}`),
       { params: Promise.resolve({ id: "10", sectorId: sectorId.toHexString() }) }
@@ -205,7 +203,6 @@ describe("getCorporationSectorDetail", () => {
       db.collection("characters");
       db.collectionMocks.characters.findOne.mockResolvedValue(null);
 
-      const { getCorporationSectorDetail } = await import("./sectorDetail");
       const response = await getCorporationSectorDetail(
         new Request(`http://localhost/api/corporations/11/sectors/${sectorId.toHexString()}`),
         { params: Promise.resolve({ id: "11", sectorId: sectorId.toHexString() }) }
@@ -260,7 +257,6 @@ describe("getCorporationSectorDetail", () => {
       demandedWageLevel: 1.3,
     });
 
-    const { getCorporationSectorDetail } = await import("./sectorDetail");
     const response = await getCorporationSectorDetail(
       new Request(`http://localhost/api/corporations/9/sectors/${sectorId.toHexString()}`),
       { params: Promise.resolve({ id: "9", sectorId: sectorId.toHexString() }) }
