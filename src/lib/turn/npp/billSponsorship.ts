@@ -1,7 +1,3 @@
-import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
-import { selectNationalEuropeanDecision } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
-import { euroConsentedCountries } from "@/lib/currency/euro/rules";
-import { proposeNppEuropeanBill } from "@/lib/nppAutonomy/proposeNppEuropeanBill";
 /**
  * NPP Autonomous Bill Sponsorship (SP2)
  *
@@ -13,7 +9,10 @@ import { proposeNppEuropeanBill } from "@/lib/nppAutonomy/proposeNppEuropeanBill
  * the largest opposition party runs a second, independently-throttled pass that
  * advances its own counter-agenda (V1.7 rival bills).
  */
-
+import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { selectNationalEuropeanDecision } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
+import { euroConsentedCountries } from "@/lib/currency/euro/rules";
+import { proposeNppEuropeanBill } from "@/lib/nppAutonomy/proposeNppEuropeanBill";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ElectedOfficial, LegislationType, StatePolicy } from "@/lib/db/types";

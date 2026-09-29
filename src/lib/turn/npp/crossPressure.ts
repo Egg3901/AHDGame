@@ -1,4 +1,3 @@
-import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
 /**
  * Cross-pressure resolver - pure functions that decide how an NPP votes on a
  * federal bill. No DB access, no random. Replaces the RNG-based ideology +
@@ -15,7 +14,7 @@ import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/eur
  * | district | Selected policy option's archetype approvals weighted by home-state |
  * | donors   | Donor base multiplied by the same policy alignment as ideology      |
  */
-
+import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
 import type {
   Bill,
   LegislationPolicyOption,
