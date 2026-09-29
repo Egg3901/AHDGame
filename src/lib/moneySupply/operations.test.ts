@@ -168,6 +168,55 @@ describe("non-QE monetary operations", () => {
     expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledTimes(1);
   });
 
+  it("records a 2027 euro treasury advance in the budget's EUR denomination", async () => {
+    db.collectionMocks.centralBanks.findOne.mockResolvedValue({ _id: "ECB", countryId: "DE" });
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      _id: "DE",
+      countryId: "DE",
+      currencyCode: "EUR",
+      treasuryBalance: 100,
+    });
+    db.collectionMocks.federalBudget.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ ledgerShadow: true });
+    db.collection("ledgerEntries");
+    db.collection("exchangeRates");
+    db.collectionMocks.exchangeRates.findOne.mockResolvedValue({ currencyCode: "EUR", rate: 1 });
+
+    await executeMonetaryOperation(db as unknown as Db, {
+      countryId: "DE",
+      type: "treasury_advance",
+      turn: 12,
+      actorName: "ECB chair",
+      amount: 25,
+    });
+
+    const entry = db.collectionMocks.ledgerEntries.insertMany.mock.calls[0]?.[0]?.[0];
+    expect(entry?.legs.map((leg: { currencyCode: string }) => leg.currencyCode)).toEqual([
+      "EUR",
+      "EUR",
+    ]);
+  });
+
+  it("lends into the persisted EUR bank-charter denomination", async () => {
+    db.collectionMocks.centralBanks.findOne.mockResolvedValue({ _id: "ECB", countryId: "DE" });
+    db.collection("exchangeRates");
+    db.collectionMocks.exchangeRates.findOne.mockResolvedValue({ currencyCode: "EUR" });
+    seatBanks([{ _id: "bankA", totalDeposits: 100 }]);
+
+    await executeMonetaryOperation(db as unknown as Db, {
+      countryId: "DE",
+      type: "liquidity_injection",
+      turn: 12,
+      actorName: "ECB chair",
+      amount: 100,
+    });
+
+    expect(db.collectionMocks.corporations.find).toHaveBeenCalledWith(
+      { "bankCharter.status": "active", "bankCharter.currency": "EUR" },
+      expect.anything()
+    );
+  });
+
   it("lends an injection to the chartered banks, pro rata by deposits", async () => {
     seatBanks([
       { _id: "bankA", totalDeposits: 900 },

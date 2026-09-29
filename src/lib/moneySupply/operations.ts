@@ -146,7 +146,13 @@ export async function executeMonetaryOperation(
       createdAt: now,
     };
     await persistBankOperation(db, bankId, record, { netMoneyCreatedLifetime: amount });
-    await emitTreasuryAdvanceLedgerEntry(db, input, amount, now);
+    await emitTreasuryAdvanceLedgerEntry(
+      db,
+      input,
+      amount,
+      now,
+      budget.currencyCode as CurrencyCode | undefined
+    );
     return record;
   }
 
@@ -213,7 +219,10 @@ async function advanceToPrivateBanks(
     .findOne({ _id: "default" }, { projection: { privateBankingEnabled: 1 } });
   if (!(await isPrivateBankingEnabled(config))) return { distributed: 0, banksCredited: 0 };
 
-  const currency = COUNTRY_CURRENCY_MAP[countryId];
+  const rate = await db
+    .collection<{ _id: string; currencyCode?: CurrencyCode }>("exchangeRates")
+    .findOne({ _id: countryId }, { projection: { currencyCode: 1 } });
+  const currency = rate?.currencyCode ?? COUNTRY_CURRENCY_MAP[countryId];
   const banks = await db
     .collection<Corporation>("corporations")
     .find(
@@ -284,13 +293,14 @@ async function emitTreasuryAdvanceLedgerEntry(
   db: Db,
   input: ExecuteMonetaryOperationInput,
   amount: number,
-  createdAt: Date
+  createdAt: Date,
+  budgetCurrency?: CurrencyCode
 ): Promise<void> {
   const config = await db
     .collection<GameConfig>("gameConfig")
     .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } });
   if (!isLedgerShadowEnabledFromConfig(config)) return;
-  const currency = (COUNTRY_CURRENCY_MAP[input.countryId] ?? "USD") as CurrencyCode;
+  const currency = budgetCurrency ?? COUNTRY_CURRENCY_MAP[input.countryId] ?? "USD";
   const exchangeRate = await db
     .collection<{ currencyCode: CurrencyCode; rate: number }>("exchangeRates")
     .findOne({ currencyCode: currency }, { projection: { rate: 1 } });
