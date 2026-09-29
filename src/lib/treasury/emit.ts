@@ -14,7 +14,11 @@ import type {
   TreasuryTransactionDirection,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  CURRENCY_ANCHOR_COUNTRY,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { recordAudit, recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
@@ -86,7 +90,9 @@ async function resolveBudgetCurrencies(
   return new Map(
     countries.flatMap((countryId) => {
       const code = byId.get(getNationalBudgetId(countryId));
-      return code ? [[countryId, code] as const] : [];
+      return code && code in CURRENCY_ANCHOR_COUNTRY
+        ? [[countryId, code as CurrencyCode] as const]
+        : [];
     })
   );
 }

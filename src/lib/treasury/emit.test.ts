@@ -217,6 +217,23 @@ describe("emitTreasuryTransaction", () => {
     expect(inserts[0].currencyCode).toBe("EUR");
   });
 
+  it("rejects an unknown persisted code and uses the historical fallback", async () => {
+    const { db, inserts } = makeDb({ budgetCurrencies: { FR: "UNKNOWN" } });
+    await emitTreasuryTransaction({
+      db,
+      countryId: "FR",
+      partyId: "1",
+      holderType: "party",
+      holderId: "1",
+      category: "transfers",
+      direction: "credit",
+      amount: 100,
+      memo: "legacy fallback",
+      turn: 42,
+    });
+    expect(inserts[0].currencyCode).toBe("FRF");
+  });
+
   it("does not throw after a transfer when the budget currency read fails", async () => {
     const inserts: InsertedDoc[] = [];
     const db = {
