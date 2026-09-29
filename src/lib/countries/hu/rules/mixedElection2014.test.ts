@@ -57,7 +57,7 @@ describe("Hungary's 2014 mixed parliamentary formula", () => {
     ).toThrow("106 constituency results");
   });
 
-  it("uses a stable party ID tie break for both plurality and D'Hondt", () => {
+  it("leaves tied constituency seats vacant and sends all ballots to compensation", () => {
     const constituencyTie = allocateHungaryMixed2014(
       districts([
         { partyId: "z", votes: 100 },
@@ -68,12 +68,28 @@ describe("Hungary's 2014 mixed parliamentary formula", () => {
         { partyId: "a", votes: 100 },
       ]
     );
-    expect(constituencyTie.constituencySeats).toEqual({ a: 106 });
+    expect(constituencyTie.constituencySeats).toEqual({});
+    expect(constituencyTie.compensationVotes).toEqual({ a: 10_600, z: 10_600 });
+    expect(Object.values(constituencyTie.totalSeats).reduce((a, b) => a + b, 0)).toBe(93);
+  });
+
+  it("uses a stable party ID tie break in the D'Hondt list", () => {
     const result = allocateHungaryMixed2014(districts([{ partyId: "a", votes: 1 }]), [
       { partyId: "z", votes: 100 },
       { partyId: "a", votes: 100 },
     ]);
     expect(result.constituencySeats).toEqual({ a: 106 });
     expect(result.listSeats.a).toBeGreaterThan(result.listSeats.z);
+  });
+
+  it("reserves a preferential minority mandate before allocating the remaining list seats", () => {
+    const result = allocateHungaryMixed2014(
+      districts([{ partyId: "a", votes: 1 }]),
+      [{ partyId: "a", votes: 10_000 }],
+      [{ minorityId: "minority", votes: 100 }]
+    );
+    expect(result.minoritySeats).toEqual({ minority: 1 });
+    expect(result.listSeats).toEqual({ a: 92 });
+    expect(result.totalSeats).toEqual({ a: 198, minority: 1 });
   });
 });

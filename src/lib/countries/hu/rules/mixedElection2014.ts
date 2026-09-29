@@ -14,24 +14,31 @@ export interface PartyListBallot {
   memberParties?: number;
 }
 
+export interface MinorityListBallot {
+  minorityId: string;
+  votes: number;
+}
+
 export interface HungaryMixedResult {
   constituencySeats: Record<string, number>;
   listSeats: Record<string, number>;
   totalSeats: Record<string, number>;
   compensationVotes: Record<string, number>;
+  minoritySeats: Record<string, number>;
 }
 
 /**
  * Allocate the party mandates from separate constituency and national-list
  * ballots. Losing candidates' votes and each winner's surplus over the runner
- * up flow into the national list before D'Hondt. National minority lists have
- * their own preferential rule and are outside this party-list calculation.
+ * up flow into the national list before D'Hondt. Minority lists first receive
+ * their statutory preferential seat and may then compete for further seats.
  *
- * https://www.valasztas.hu/en/altalanos-tajekoztato-az-orszaggyulesi-kepviselok-valasztasarol
+ * https://portal-api.valasztas.hu/files/6960fa637e5bb300028ca9df/2011-203-00-00.pdf
  */
 export function allocateHungaryMixed2014(
   constituencies: ReadonlyArray<ConstituencyBallot>,
-  partyLists: ReadonlyArray<PartyListBallot>
+  partyLists: ReadonlyArray<PartyListBallot>,
+  minorityLists: ReadonlyArray<MinorityListBallot> = []
 ): HungaryMixedResult {
   if (constituencies.length !== HU_CONSTITUENCY_SEATS) {
     throw new Error(`Hungary requires ${HU_CONSTITUENCY_SEATS} constituency results`);
@@ -60,6 +67,14 @@ export function allocateHungaryMixed2014(
       ballotParties.add(vote.partyId);
     }
     if (ranked[0].votes === 0) throw new Error("Hungarian constituency has no valid votes");
+    // A tied plurality elects nobody. Every ballot becomes a wasted vote and
+    // the mandate waits for a constituency by-election (Act CCIII §§15, 19).
+    if (ranked[1]?.votes === ranked[0].votes) {
+      for (const vote of ranked) {
+        compensationVotes[vote.partyId] = (compensationVotes[vote.partyId] ?? 0) + vote.votes;
+      }
+      continue;
+    }
     const winner = ranked[0];
     constituencySeats[winner.partyId] = (constituencySeats[winner.partyId] ?? 0) + 1;
     // One vote more than the runner-up is needed to win; the rest is surplus.
@@ -86,7 +101,22 @@ export function allocateHungaryMixed2014(
     listIds.add(list.partyId);
     return list;
   });
-  const totalListVotes = validLists.reduce((sum, list) => sum + list.votes, 0);
+  const minorityIds = new Set<string>();
+  for (const list of minorityLists) {
+    if (
+      !list.minorityId ||
+      listIds.has(list.minorityId) ||
+      minorityIds.has(list.minorityId) ||
+      !Number.isSafeInteger(list.votes) ||
+      list.votes < 0
+    ) {
+      throw new Error("Invalid Hungarian minority list vote");
+    }
+    minorityIds.add(list.minorityId);
+  }
+  const totalListVotes =
+    validLists.reduce((sum, list) => sum + list.votes, 0) +
+    minorityLists.reduce((sum, list) => sum + list.votes, 0);
   if (totalListVotes === 0) throw new Error("Hungarian national list has no valid votes");
   const eligible = validLists
     .filter((list) => {
@@ -103,11 +133,28 @@ export function allocateHungaryMixed2014(
       partyId: list.partyId,
       votes: list.votes + (compensationVotes[list.partyId] ?? 0),
     }));
-  if (eligible.length === 0) throw new Error("No Hungarian national list reached the threshold");
+  const adjustedPartyVotes = eligible.reduce((sum, list) => sum + list.votes, 0);
+  const preferentialQuota = Math.floor(
+    (adjustedPartyVotes + minorityLists.reduce((sum, list) => sum + list.votes, 0)) /
+      HU_LIST_SEATS /
+      4
+  );
+  const minoritySeats: Record<string, number> = {};
+  for (const list of minorityLists) {
+    if (list.votes > 0 && list.votes >= preferentialQuota) minoritySeats[list.minorityId] = 1;
+  }
+  const remainingSeats = HU_LIST_SEATS - Object.keys(minoritySeats).length;
+  const eligibleMinorities = minorityLists
+    .filter((list) => minoritySeats[list.minorityId] && list.votes / totalListVotes >= 0.05)
+    .map((list) => ({ partyId: list.minorityId, votes: list.votes - preferentialQuota }));
+  const divisorLists = [...eligible, ...eligibleMinorities];
+  if (remainingSeats > 0 && divisorLists.length === 0) {
+    throw new Error("No Hungarian national list reached the threshold");
+  }
 
   const listSeats: Record<string, number> = {};
-  for (let seat = 0; seat < HU_LIST_SEATS; seat++) {
-    const best = [...eligible].sort((a, b) => {
+  for (let seat = 0; seat < remainingSeats; seat++) {
+    const best = [...divisorLists].sort((a, b) => {
       // Cross multiply to avoid floating point quotient ties.
       const aQuotient = a.votes * ((listSeats[b.partyId] ?? 0) + 1);
       const bQuotient = b.votes * ((listSeats[a.partyId] ?? 0) + 1);
@@ -119,5 +166,8 @@ export function allocateHungaryMixed2014(
   for (const [partyId, seats] of Object.entries(listSeats)) {
     totalSeats[partyId] = (totalSeats[partyId] ?? 0) + seats;
   }
-  return { constituencySeats, listSeats, totalSeats, compensationVotes };
+  for (const [minorityId, seats] of Object.entries(minoritySeats)) {
+    totalSeats[minorityId] = (totalSeats[minorityId] ?? 0) + seats;
+  }
+  return { constituencySeats, listSeats, totalSeats, compensationVotes, minoritySeats };
 }
