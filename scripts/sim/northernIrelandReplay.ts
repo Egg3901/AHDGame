@@ -43,7 +43,7 @@ import { processTreasuryTurn } from "../../src/lib/turn/treasuryTurn";
 import { processPoliticalMetricsDynamics } from "../../src/lib/turn/politicalMetricsDynamics";
 import { TURNS_PER_YEAR } from "../../src/lib/constants/turnTime";
 import type { Bill, FederalBudget } from "../../src/lib/db/types";
-import type { Crisis, CrisisInteraction } from "../../src/lib/db/types/crisis";
+import type { CrisisInteraction } from "../../src/lib/db/types/crisis";
 import type { Referendum } from "../../src/lib/db/types/referendum";
 import type { LivingConflictState } from "../../src/lib/livingConflict/types";
 
@@ -56,7 +56,6 @@ const scenarios = [
   "public_rejection",
   "relapse",
 ] as const;
-type Scenario = (typeof scenarios)[number];
 type Actor = {
   _id: ObjectId;
   countryId: string;
@@ -186,7 +185,7 @@ async function main() {
       )
     );
     const nir = saved.find(([name]) => name === "states")![1].find((row) => row._id === "NIR");
-    assert(nir?.gdp > 0);
+    assert(nir && typeof nir.gdp === "number" && nir.gdp > 0);
     const participants = resolveConflictParticipants(def, new Set(["UK", "IE", "US"]));
     const results: Document[] = [];
     for (const scenario of selected) {
@@ -228,7 +227,7 @@ async function main() {
       ]);
       for (const actor of Object.values(actors))
         actor.roles = await resolveCharacterRoles(db, actor);
-      let state = original,
+      let state: LivingConflictState = original,
         settledTurn: number | null = null,
         suspendedTurn: number | null = null;
       let referendumRejectedTurn: number | null = null,
@@ -418,7 +417,12 @@ async function main() {
                   : node.nodeId.startsWith("nationalist_")
                     ? "nationalist"
                     : "regional";
-            const actor = actors[key];
+            const actor =
+              key === "uk" && windows % 2 === 0
+                ? actors.ni_secretary
+                : key === "ie" && windows % 2 === 0
+                  ? actors.foreign_minister
+                  : actors[key];
             if (node.nodeId === "unionist_position") {
               const before = await loadConflictState(db, def.key);
               await assert.rejects(
@@ -437,6 +441,16 @@ async function main() {
             if (node.nodeId === "uk_position") {
               assert(canCharacterInteract(node, actors.ni_secretary.roles!, "UK"));
               assert(!canCharacterInteract(node, actors.wrong_minister.roles!, "UK"));
+              await assert.rejects(
+                submitCrisisDecision(
+                  db,
+                  interaction._id,
+                  "uk_backchannel",
+                  actors.wrong_minister._id,
+                  "UK",
+                  actors.wrong_minister.roles
+                )
+              );
               assert(!canCharacterInteract(node, actors.ie.roles!, "IE"));
               authChecks += 3;
             }
