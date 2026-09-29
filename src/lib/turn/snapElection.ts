@@ -26,6 +26,7 @@
  */
 
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+import { getElectionMethod } from "@/lib/elections/electionMethod";
 
 import type { Db } from "mongodb";
 import {
@@ -279,6 +280,7 @@ export async function triggerSnapElection(
       countryId,
       electionType: snapElectionType,
       state: regionId,
+      allocationMethod: getElectionMethod(countryId, snapElectionType, gameState?.preset),
       seatId: getSeatIdFromElection({
         countryId,
         electionType: lowerChamberKey,

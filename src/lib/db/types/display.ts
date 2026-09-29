@@ -38,6 +38,7 @@ export interface ElectionDisplay {
     | (string & {});
   state: string;
   countryId: string;
+  allocationMethod?: import("@/lib/constants/countries").ElectionMethod;
   senateClass?: number;
   chamberClass?: number;
   cycle: number;

@@ -32,7 +32,7 @@ import {
   resolveGovExecutiveApproval,
 } from "./govCoattail";
 import { MULTI_SEAT_TYPES, officeKeyForElectionType } from "@/lib/utils/electionLabels";
-import { getMultiSeatMinShare } from "@/lib/turn/election/seatAllocation";
+import { getMultiSeatMinShare, sntvSeats } from "@/lib/turn/election/seatAllocation";
 import { turnVoteWeight, resolveTurnWindow } from "./voteCalculations";
 import { distributeVotesByGroupLevelAllocation } from "./voteDistribution";
 import { distributeVotesBySwingFlow } from "./voteDistributionSwingFlow";
@@ -736,6 +736,16 @@ export async function accumulateVoteTurn(
     // Only count active candidates' votes for seat allocation
     const totalVotesCast = enriched.reduce((s, ec) => s + (newTotals[ec.candidateId] ?? 0), 0);
     if (totalVotesCast === 0) return undefined;
+    if (election.allocationMethod === "sntv") {
+      return sntvSeats(
+        enriched.map((ec) => ({
+          id: ec.candidateId,
+          votes: newTotals[ec.candidateId] ?? 0,
+          isNPP: ec.isNPP,
+        })),
+        totalSeats
+      );
+    }
 
     // Filter to candidates whose PARTY aggregate share meets the minimum
     // threshold (mirrors allocateSeats). Per-candidate thresholds punished
@@ -832,6 +842,13 @@ export async function accumulateVoteTurn(
         totalVotes: newTotals,
         candidateNames: cleanedNames,
         candidateParties: cleanedParties,
+        ...(election.allocationMethod === "sntv"
+          ? {
+              candidateIsNPP: Object.fromEntries(
+                enriched.map((ec) => [ec.candidateId, Boolean(ec.isNPP)])
+              ),
+            }
+          : {}),
         ...(seatsEstimate ? { seatsEstimate } : {}),
         updatedAt: now,
       },
