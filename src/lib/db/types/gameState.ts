@@ -673,6 +673,10 @@ export interface CountryGameState {
   ruCongressDissolvedSinceTurn?: number;
   /** RU 1991 world: raw turn of the December 1993 first Federal Assembly. */
   ruFederalAssemblySinceTurn?: number;
+  /** YU 1991: enacted mandate to settle the federation's political succession. */
+  yuSuccessionMandateSinceTurn?: number;
+  /** YU 1991: successor sovereignty and obligations were applied before office retirement. */
+  yuSettlementAppliedSinceTurn?: number;
   currentTurn: number;
   currentYear: number;
   /** Turn on which the current electoral cycle began */

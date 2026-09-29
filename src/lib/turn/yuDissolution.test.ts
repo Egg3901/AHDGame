@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { yuDissolutionDue } from "@/lib/countries/yu/rules/succession";
+import {
+  yuDissolutionDue,
+  yuPoliticalRetirementAuthorized,
+} from "@/lib/countries/yu/rules/succession";
 import { processYuDissolution } from "./yuDissolution";
 
 describe("SFRY 1992 political retirement", () => {
@@ -12,9 +15,21 @@ describe("SFRY 1992 political retirement", () => {
     expect(yuDissolutionDue("2027-default", 64)).toBe(false);
   });
 
+  it("requires an enacted mandate and materialized successors", () => {
+    expect(yuPoliticalRetirementAuthorized(64, undefined, undefined)).toBe(false);
+    expect(yuPoliticalRetirementAuthorized(64, 64, undefined)).toBe(false);
+    expect(yuPoliticalRetirementAuthorized(64, undefined, 64)).toBe(false);
+    expect(yuPoliticalRetirementAuthorized(64, 64, 65)).toBe(false);
+    expect(yuPoliticalRetirementAuthorized(64, 64, 64)).toBe(true);
+  });
+
   it("retires elections and offices before setting the durable country marker", async () => {
     const db = createMockDb();
-    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "YU" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "YU",
+      yuSuccessionMandateSinceTurn: 64,
+      yuSettlementAppliedSinceTurn: 64,
+    });
     const writes: string[] = [];
     db.collection("elections").updateMany.mockImplementation(async () => {
       writes.push("elections");
@@ -62,6 +77,11 @@ describe("SFRY 1992 political retirement", () => {
     expect(db.collectionMocks.elections.updateMany).not.toHaveBeenCalled();
 
     expect(
+      await processYuDissolution(db as unknown as Db, { preset: "1991-default" }, 64, new Date())
+    ).toBe(false);
+    expect(db.collectionMocks.elections.updateMany).not.toHaveBeenCalled();
+
+    expect(
       await processYuDissolution(
         db as unknown as Db,
         { preset: "1991-default", preIterationTurns: 48 },
@@ -83,7 +103,11 @@ describe("SFRY 1992 political retirement", () => {
 
   it("retries when an earlier write fails and does not repeat after the marker", async () => {
     const db = createMockDb();
-    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "YU" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "YU",
+      yuSuccessionMandateSinceTurn: 64,
+      yuSettlementAppliedSinceTurn: 64,
+    });
     db.collection("governmentFormations").updateOne.mockRejectedValueOnce(new Error("interrupted"));
     await expect(
       processYuDissolution(db as unknown as Db, { preset: "1991-default" }, 64, new Date())
