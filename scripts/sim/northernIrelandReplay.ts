@@ -650,14 +650,12 @@ async function main() {
             "Suspension clears the seated synthetic executive's office"
           );
           assert.equal(
-            await db
-              .collection("electedOfficials")
-              .countDocuments({
-                countryId: "UK",
-                state: "NIR",
-                officeType: "governor",
-                $or: [{ characterId: { $ne: null } }, { nppId: { $ne: null } }],
-              }),
+            await db.collection("electedOfficials").countDocuments({
+              countryId: "UK",
+              state: "NIR",
+              officeType: "governor",
+              $or: [{ characterId: { $ne: null } }, { nppId: { $ne: null } }],
+            }),
             0
           );
           assert.equal(
