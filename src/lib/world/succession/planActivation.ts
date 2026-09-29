@@ -2,12 +2,14 @@ import type { WorldEntityManifestEntry } from "@/lib/world/worldEntityManifest";
 import type { MacroCountryState } from "@/lib/world/macro/types";
 import { buildSuccessorMacroCountry, type SuccessorMacroTerms } from "./buildSuccessorMacro";
 import type { SuccessionFinancialPlan } from "./rules/financialSettlement";
-import type { SuccessorTerritory } from "./rules/territory";
+import type { SuccessionRegion, SuccessorTerritory } from "./rules/territory";
 
 export interface SuccessionActivationInput {
   settlementId: string;
   source: WorldEntityManifestEntry;
   successors: readonly WorldEntityManifestEntry[];
+  /** Live source regions read for this settlement, before any territory moves. */
+  sourceRegions: readonly SuccessionRegion[];
   territories: readonly SuccessorTerritory[];
   finances: SuccessionFinancialPlan;
   macroTerms: Readonly<Record<string, Omit<SuccessorMacroTerms, "territory" | "displayName">>>;
@@ -20,7 +22,16 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   successorEntities: WorldEntityManifestEntry[];
   macroCountries: MacroCountryState[];
 } {
-  const { settlementId, source, successors, territories, finances, macroTerms, now } = input;
+  const {
+    settlementId,
+    source,
+    successors,
+    sourceRegions,
+    territories,
+    finances,
+    macroTerms,
+    now,
+  } = input;
   if (
     !settlementId.trim() ||
     finances.settlementId !== settlementId ||
@@ -32,6 +43,41 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   }
   const territoryById = new Map(territories.map((territory) => [territory.entityId, territory]));
   const successorById = new Map(successors.map((successor) => [successor.entityId, successor]));
+  const sourceByRegion = new Map(sourceRegions.map((region) => [region.regionId, region]));
+  const assigned = new Set<string>();
+  if (
+    sourceRegions.length === 0 ||
+    sourceByRegion.size !== sourceRegions.length ||
+    sourceRegions.some(
+      (region) =>
+        !region.regionId.trim() ||
+        !Number.isSafeInteger(region.population) ||
+        region.population < 0 ||
+        !Number.isFinite(region.annualGdpAnchor) ||
+        region.annualGdpAnchor < 0
+    )
+  )
+    throw new Error("Source territory is empty or contains duplicate regions");
+  for (const territory of territories) {
+    let population = 0;
+    let annualGdpAnchor = 0;
+    for (const regionId of territory.regionIds) {
+      const region = sourceByRegion.get(regionId);
+      if (!region || assigned.has(regionId))
+        throw new Error("Successor territory must partition live source regions exactly once");
+      assigned.add(regionId);
+      population += region.population;
+      annualGdpAnchor += region.annualGdpAnchor;
+    }
+    if (
+      territory.regionIds.length === 0 ||
+      population !== territory.population ||
+      Math.abs(annualGdpAnchor - territory.annualGdpAnchor) > 1e-8
+    )
+      throw new Error("Successor territory totals differ from live source regions");
+  }
+  if (assigned.size !== sourceByRegion.size)
+    throw new Error("Successor territory must partition live source regions exactly once");
   const continuing = territoryById.has(source.entityId);
   const expectedTargets = territories.length - (continuing ? 1 : 0);
   if (

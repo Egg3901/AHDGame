@@ -35,6 +35,11 @@ function input(continuing: boolean): SuccessionActivationInput {
     settlementId: "approved-1",
     source: entry(sourceId, "sovereign"),
     successors: ids.filter((id) => id !== sourceId).map((id) => entry(id, "emergent", sourceId)),
+    sourceRegions: territories.map((territory) => ({
+      regionId: territory.regionIds[0],
+      population: territory.population,
+      annualGdpAnchor: territory.annualGdpAnchor,
+    })),
     territories,
     finances: planSuccessionFinances({
       settlementId: "approved-1",
@@ -101,5 +106,22 @@ describe("federation settlement activation", () => {
     const proposal = input(false);
     delete proposal.finances.assetAllocation.SK;
     expect(() => planSuccessionActivation(proposal)).toThrow("Financial allocations");
+  });
+
+  it("refuses to activate only part of a federation or invent output", () => {
+    const missing = input(false);
+    missing.sourceRegions = [
+      ...missing.sourceRegions,
+      { regionId: "unassigned", population: 5, annualGdpAnchor: 50 },
+    ];
+    expect(() => planSuccessionActivation(missing)).toThrow("partition live source regions");
+
+    const invented = input(false);
+    invented.territories[0].annualGdpAnchor += 1;
+    expect(() => planSuccessionActivation(invented)).toThrow("totals differ");
+
+    const duplicated = input(false);
+    duplicated.territories[1].regionIds = [...duplicated.territories[0].regionIds];
+    expect(() => planSuccessionActivation(duplicated)).toThrow("partition live source regions");
   });
 });
