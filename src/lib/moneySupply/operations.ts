@@ -146,7 +146,13 @@ export async function executeMonetaryOperation(
       createdAt: now,
     };
     await persistBankOperation(db, bankId, record, { netMoneyCreatedLifetime: amount });
-    await emitTreasuryAdvanceLedgerEntry(db, input, amount, now, budget.currencyCode);
+    await emitTreasuryAdvanceLedgerEntry(
+      db,
+      input,
+      amount,
+      now,
+      budget.currencyCode as CurrencyCode | undefined
+    );
     return record;
   }
 
