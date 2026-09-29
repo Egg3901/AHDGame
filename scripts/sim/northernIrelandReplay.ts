@@ -406,7 +406,10 @@ async function main() {
               isRatification &&
               (await db
                 .collection("bills")
-                .countDocuments({ category: "northern_ireland_peace" })) > 0
+                .countDocuments({
+                  category: "northern_ireland_peace",
+                  countryId: node.requiredCountryIds?.[0],
+                })) > 0
             )
               break;
             if (node.nodeId === "regional_executive_position" && !regionalActive) break;
@@ -655,6 +658,18 @@ async function main() {
           referendumRejectedTurn = turn;
           assert.equal(state.phaseLevel, 4);
           assert.equal(state.tracks?.ratificationAuthorization, 0);
+        }
+        if (scenario === "historical" && turn === 20 * TURNS_PER_YEAR) {
+          assert(
+            settledTurn,
+            `Constructive path must settle before 2011: ${JSON.stringify(state.tracks)}`
+          );
+          assert.equal(
+            await db
+              .collection("bills")
+              .countDocuments({ category: "northern_ireland_peace", status: "signed" }),
+            2
+          );
         }
         const changed = lastPhase !== state.phaseLevel;
         if (changed) {
