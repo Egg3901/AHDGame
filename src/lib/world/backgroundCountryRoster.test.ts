@@ -85,4 +85,15 @@ describe("background country expansion", () => {
     expect(laterEstonia?.status).toBe("sovereign");
     expect(laterEstonia?.parentEntityId).toBeUndefined();
   });
+
+  it("does not aggregate countries that already receive detailed 1991 regions", () => {
+    const opening = getWorldEntityPresetManifest("1991-default").entries;
+    for (const entityId of ["RU", "PL", "CS", "HU", "RO", "BG", "YU"]) {
+      expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
+        status: "sovereign",
+        simulationTier: "full-autonomous",
+        legacyAccess: "hidden",
+      });
+    }
+  });
 });

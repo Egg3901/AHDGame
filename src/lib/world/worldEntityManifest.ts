@@ -1453,6 +1453,16 @@ function defineRosterManifest(
   return defineWorldEntityPresetManifest(presetId, applyRosterAccess(presetId, entries));
 }
 
+/** These seven 1991 countries receive detailed regions and institutions at bootstrap. */
+function classify1991SeededCountries(
+  entries: readonly WorldEntityManifestEntry[]
+): WorldEntityManifestEntry[] {
+  const seeded = new Set(["RU", "PL", "CS", "HU", "RO", "BG", "YU"]);
+  return entries.map((entry) =>
+    seeded.has(entry.entityId) ? { ...entry, simulationTier: "full-autonomous" as const } : entry
+  );
+}
+
 export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetManifest>> =
   Object.freeze({
     "1953-default": defineRosterManifest(
@@ -1489,13 +1499,15 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
     ),
     "1991-default": defineRosterManifest(
       "1991-default",
-      expandManifestWithBackgroundCountries({
-        presetId: "1991-default",
-        entries: entriesFromAccess(
-          "1991-default",
-          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
-        ),
-      })
+      classify1991SeededCountries(
+        expandManifestWithBackgroundCountries({
+          presetId: "1991-default",
+          entries: entriesFromAccess(
+            "1991-default",
+            accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+          ),
+        })
+      )
     ),
     "1999-default": defineRosterManifest(
       "1999-default",
