@@ -64,6 +64,8 @@ export interface Union {
   pendingLeaderCharacterId?: ObjectId | null;
   /** Spendable balance (home-country currency-equivalent, ₳-anchor), funds recruit/strike actions. Trickles up per turn proportional to `membershipPressure` (the "dues" analog). */
   treasury: number;
+  /** Cumulative frozen cash confiscated by underground raids and removed from circulation. */
+  undergroundFinesSeized?: number;
   /**
    * Uncapped organizing power, the sum of every organize drive any character
    * has ever run on this union, less decay. Distinct from `membershipPressure`:

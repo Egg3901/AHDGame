@@ -10,6 +10,8 @@ import { getDb } from "@/lib/mongodb";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { COUNTRY_CONFIGS, getOfficeTypeConfig, type CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { Character, Union } from "@/lib/db/types";
 import type { UnionOrganizer } from "@/lib/db/types/union";
@@ -25,6 +27,10 @@ import {
   PROSECUTION_BAR_TURNS,
   prosecutionStrengthLoss,
 } from "@/lib/unions/underground";
+import {
+  undergroundRaidFine,
+  unionEnforcementDelegatePosition,
+} from "@/lib/unions/enforcementAuthority";
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("posture"), posture: z.enum(["tolerant", "normal", "crackdown"]) }),
@@ -43,6 +49,34 @@ interface Context {
   params: Promise<{ code: string }>;
 }
 
+async function enforcementAccess(
+  db: Awaited<ReturnType<typeof getDb>>,
+  countryId: CountryId,
+  character: Character,
+  mutate: boolean
+): Promise<NextResponse | null> {
+  const office = character.currentOffice?.type;
+  const officeConfig = office ? getOfficeTypeConfig(countryId, office) : null;
+  if (character.countryId === countryId && officeConfig?.isExecutive && !officeConfig.isSubNational)
+    return null;
+
+  const positionId = unionEnforcementDelegatePosition(countryId);
+  const member = positionId
+    ? await getCabinetMembersCollection(db).findOne({ countryId, positionId })
+    : null;
+  if (
+    character.countryId !== countryId ||
+    !member?.characterId ||
+    String(member.characterId) !== String(character._id)
+  ) {
+    return NextResponse.json(
+      { error: "Only the country's executive or delegated minister may enforce a union ban." },
+      { status: 403 }
+    );
+  }
+  return mutate ? requireConfirmedSecretary(member, "stance") : null;
+}
+
 export async function GET(_request: Request, { params }: Context) {
   try {
     const auth = await requireAuthWithCharacter();
@@ -52,20 +86,15 @@ export async function GET(_request: Request, { params }: Context) {
     if (!COUNTRY_CONFIGS[countryId]) {
       return NextResponse.json({ error: "Invalid country" }, { status: 400 });
     }
-    const character = auth.user.character;
-    const office = character.currentOffice?.type;
-    const officeConfig = office ? getOfficeTypeConfig(countryId, office) : null;
-    if (
-      character.countryId !== countryId ||
-      !officeConfig?.isExecutive ||
-      officeConfig.isSubNational
-    ) {
+    if (auth.user.character.countryId !== countryId) {
       return NextResponse.json(
-        { error: "Only the country's executive may enforce a union ban." },
+        { error: "Only domestic officials may enforce a union ban." },
         { status: 403 }
       );
     }
     const db = await getDb();
+    const denied = await enforcementAccess(db, countryId, auth.user.character, false);
+    if (denied) return denied;
     const budget = await db.collection<FederalBudget>("federalBudget").findOne(
       { _id: getNationalBudgetId(countryId) },
       {
@@ -142,25 +171,21 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json({ error: "Invalid country" }, { status: 400 });
     }
     const character = auth.user.character;
-    const office = character.currentOffice?.type;
-    const officeConfig = office ? getOfficeTypeConfig(countryId, office) : null;
-    if (
-      character.countryId !== countryId ||
-      !officeConfig?.isExecutive ||
-      officeConfig.isSubNational
-    ) {
+    if (character.countryId !== countryId) {
       return NextResponse.json(
-        { error: "Only the country's executive may enforce a union ban." },
+        { error: "Only domestic officials may enforce a union ban." },
         { status: 403 }
       );
     }
+    const db = await getDb();
+    const denied = await enforcementAccess(db, countryId, character, true);
+    if (denied) return denied;
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const db = await getDb();
     const budgetId = getNationalBudgetId(countryId);
     const budgets = db.collection<FederalBudget>("federalBudget");
     const budget = await budgets.findOne({ _id: budgetId }, { projection: { unionsBanned: 1 } });
@@ -319,6 +344,7 @@ export async function POST(request: Request, { params }: Context) {
         undergroundStrength(union),
         Math.floor(Math.random() * 100) + 1
       );
+      const fineSeized = undergroundRaidFine(union.treasury);
       let changed;
       try {
         changed = await db.collection<Union>("unions").updateOne(
@@ -327,11 +353,17 @@ export async function POST(request: Request, { params }: Context) {
             countryId,
             suspended: true,
             undergroundStrength: union.undergroundStrength,
+            treasury: union.treasury,
             lastUndergroundRaidTurn: union.lastUndergroundRaidTurn ?? null,
             $or: [{ exposedUntilTurn: { $gte: turn } }, { heat: { $gte: RAID_HEAT_THRESHOLD } }],
           },
           {
-            $inc: { undergroundStrength: outcome.sympathyGain - loss },
+            $inc: {
+              undergroundStrength: outcome.sympathyGain - loss,
+              ...(fineSeized > 0
+                ? { treasury: -fineSeized, undergroundFinesSeized: fineSeized }
+                : {}),
+            },
             $set: { lastUndergroundRaidTurn: turn, updatedAt: now },
           }
         );
@@ -361,6 +393,7 @@ export async function POST(request: Request, { params }: Context) {
         unionId: union._id.toString(),
         strengthLoss: outcome.strengthLoss,
         sympathyGain: outcome.sympathyGain,
+        fineSeized,
         cooldownUntilTurn: turn + RAID_COOLDOWN_TURNS,
         actionsSpent: RAID_ACTION_COST,
       });
