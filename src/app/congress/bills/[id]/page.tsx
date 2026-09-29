@@ -291,6 +291,15 @@ function BillDetailContent() {
 
           <p className="text-sm text-muted leading-relaxed">{bill.summary}</p>
 
+          {bill.vetoMessage && (
+            <div className="rounded-lg border border-error/40 bg-error/5 px-4 py-3">
+              <h2 className="text-[10px] font-semibold uppercase tracking-widest text-error">
+                President&apos;s veto message
+              </h2>
+              <p className="mt-1 text-sm italic">&ldquo;{bill.vetoMessage}&rdquo;</p>
+            </div>
+          )}
+
           {/* Sponsor */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted pt-1 border-t border-card-border/40">
             <span>
@@ -411,194 +420,282 @@ function BillDetailContent() {
 
         <div className="grid min-w-0 gap-6 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-6">
-            {/* Vote module — seating-chart hero + tally bar + cast vote, unified */}
-            {(isCabinetReview ||
-              isActive ||
-              isConcurrent ||
-              isJpOverride ||
-              bill.votesFor + bill.votesAgainst + bill.votesAbstain > 0) && (
-              <div className="space-y-4 rounded-xl border border-card-border bg-card p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-                    {chamberLabel(bill.currentChamber)} · Floor Vote
-                  </h3>
-                  {(isActive || isConcurrent || isJpOverride || isCabinetReview) &&
-                    bill.votingEndsAt && (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-warning">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
-                        LIVE · <DeadlineCountdown deadline={bill.votingEndsAt} />
-                      </span>
-                    )}
-                </div>
-                {filibustered &&
-                  bill.filibusterInvocations &&
-                  bill.filibusterInvocations.length > 0 && (
-                    <div className="rounded-lg border border-error/40 bg-error/10 px-4 py-3">
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-base font-bold uppercase tracking-wide text-error">
-                          ⚑ Filibustered
-                        </span>
-                        <span className="text-xs text-error/80">
-                          {bill.filibusterInvocations.length}× · +
-                          {bill.filibusterInvocations.length * 12}h
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xs text-muted">
-                        by{" "}
-                        {bill.filibusterInvocations.map((inv, i) => (
-                          <span key={inv.characterId}>
-                            {i > 0 && <span className="text-muted">, </span>}
-                            <Link
-                              href={`/character/${inv.sequentialId ?? inv.characterId}`}
-                              className="text-error hover:underline"
-                            >
-                              {inv.characterName}
-                            </Link>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+            {/* A veto opens a fresh simultaneous ballot in both chambers. Keep
+                this in the primary vote position so the completed passage
+                tallies never masquerade as the live override vote. */}
+            {!isUnicameral && bill.status === "veto_override" && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h3 className="font-display text-base font-semibold text-amber-300">
+                      Congressional Veto Override
+                    </h3>
+                    <p className="text-xs text-muted mt-1">
+                      This is a new vote. A two-thirds supermajority of all seats in{" "}
+                      <strong className="text-foreground">both chambers</strong> is required to
+                      override the presidential veto.
+                    </p>
+                  </div>
+                  {bill.overrideVotingEndsAt && (
+                    <DeadlineCountdown deadline={bill.overrideVotingEndsAt} />
                   )}
-                {showSeatingHero && (
-                  <VoteSeatingChart
-                    style={legProcess.seatingStyle}
-                    votes={heroVotes}
-                    eligible={heroEligible}
-                    width={460}
-                    requiredPct={heroRequiredPct}
-                    requiredPctOfCast={heroRequiredPctOfCast}
-                  />
-                )}
-                <DispatchVoteBar votes={heroVotes} eligible={heroEligible} height={10} />
-                <div className="flex justify-center">
-                  <VoteLegend votes={heroVotes} eligible={heroEligible} />
                 </div>
-                {bill.myWhippedFrom && (
-                  <WhippedBadge
-                    originalVote={bill.myWhippedFrom}
-                    onRevert={async (v) => {
-                      if (v === "unvoted") return;
-                      await handleVote(false, v as "for" | "against" | "abstain");
-                    }}
+
+                <div className="space-y-3">
+                  <OverrideChamberBar
+                    label="House"
+                    votesFor={bill.overrideHouseFor ?? 0}
+                    total={bill.overrideHouseSeats ?? 0}
                   />
-                )}
-                {bill.canVoteOrigin && (
-                  <div className="space-y-2 border-t border-card-border/60 pt-3">
-                    <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                      Cast your vote
-                    </div>
-                    <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />
+                  <OverrideChamberBar
+                    label="Senate"
+                    votesFor={bill.overrideSenateFor ?? 0}
+                    total={bill.overrideSenateSeats ?? 0}
+                  />
+                </div>
+
+                {bill.canVetoOverride && (
+                  <div className="space-y-2">
+                    {bill.myOverrideVote && (
+                      <p className="text-xs text-muted">
+                        Your vote:{" "}
+                        <span className="font-medium text-foreground capitalize">
+                          {bill.myOverrideVote === "for" ? "Override" : "Sustain Veto"}
+                        </span>
+                        . You may change it.
+                      </p>
+                    )}
+                    {bill.myOverrideWhippedFrom && (
+                      <WhippedBadge
+                        originalVote={bill.myOverrideWhippedFrom}
+                        onRevert={async (v) => {
+                          if (v === "unvoted") return;
+                          await handleAction("veto_override_vote", { vote: v });
+                        }}
+                      />
+                    )}
                     <div className="flex gap-2">
-                      {(isCabinetReview
-                        ? (["for", "against"] as const)
-                        : (["for", "against", "abstain"] as const)
-                      ).map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          disabled={voting}
-                          onClick={() => handleVote(false, v)}
-                          className={`flex-1 rounded-lg border py-2.5 text-sm font-medium capitalize transition-colors disabled:opacity-50 ${
-                            bill.myVote === v
-                              ? v === "for"
-                                ? "border-success/50 bg-success/15 text-success"
-                                : v === "against"
-                                  ? "border-error/50 bg-error/15 text-error"
-                                  : "border-card-border bg-card-elevated text-foreground"
-                              : "border-card-border bg-card text-muted hover:border-foreground/20 hover:text-foreground"
-                          }`}
-                        >
-                          {v === "for" ? "Aye" : v === "against" ? "No" : "Abstain"}
-                        </button>
-                      ))}
+                      <button
+                        onClick={() => handleAction("veto_override_vote", { vote: "for" })}
+                        disabled={voting}
+                        className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                          bill.myOverrideVote === "for"
+                            ? "border-amber-500/60 bg-amber-500/25 text-amber-300"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                        }`}
+                      >
+                        ↑ Vote to Override
+                      </button>
+                      <button
+                        onClick={() => handleAction("veto_override_vote", { vote: "against" })}
+                        disabled={voting}
+                        className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                          bill.myOverrideVote === "against"
+                            ? "border-card-border/60 bg-card text-foreground"
+                            : "border-card-border bg-card/50 text-muted hover:text-foreground hover:bg-card"
+                        }`}
+                      >
+                        ↓ Sustain Veto
+                      </button>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Second chamber vote */}
-            {(isActiveOther ||
-              isConcurrent ||
-              bill.otherChamberVotesFor +
-                bill.otherChamberVotesAgainst +
-                bill.otherChamberVotesAbstain >
-                0) && (
-              <div className="space-y-2">
-                {bill.myOtherChamberWhippedFrom && (
-                  <WhippedBadge
-                    originalVote={bill.myOtherChamberWhippedFrom}
-                    onRevert={async (v) => {
-                      if (v === "unvoted") return;
-                      await handleVote(true, v as "for" | "against" | "abstain");
-                    }}
-                  />
-                )}
-                <VoteBar
-                  label={`${chamberLabel(otherChamberName)} Vote`}
-                  votesFor={bill.otherChamberVotesFor}
-                  votesAgainst={bill.otherChamberVotesAgainst}
-                  votesAbstain={bill.otherChamberVotesAbstain}
-                  deadline={isActiveOther || isConcurrent ? bill.otherChamberVotingEndsAt : null}
-                  myVote={bill.myOtherChamberVote}
-                  canVote={bill.canVoteOther && !voting}
-                  onVote={(v) => handleVote(true, v)}
-                  requiredPct={supermajorityPct ?? otherRequiredPct}
-                  requiredLabel={supermajorityLabel}
-                  shiftPreview={bill.voteShiftPreview}
-                />
-              </div>
-            )}
-
-            {/* Vote by Party */}
-            {((bill.voteByPartyOrigin?.length ?? 0) > 0 ||
-              (bill.voteByPartyOther?.length ?? 0) > 0) && (
-              <div className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-display text-lg font-semibold">Vote by Party</h3>
-                  {/* Chamber sub-tabs — bicameral only */}
-                  {!isUnicameral && (
-                    <div className="flex rounded-lg border border-card-border overflow-hidden text-sm">
-                      <button
-                        type="button"
-                        onClick={() => setVoteTableChamber("origin")}
-                        className={`px-3 py-1.5 font-medium transition-colors ${
-                          voteTableChamber === "origin"
-                            ? "bg-card-border text-foreground"
-                            : "bg-card text-muted hover:text-foreground"
-                        }`}
-                      >
-                        {chamberLabel(bill.originChamber)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setVoteTableChamber("other")}
-                        className={`px-3 py-1.5 font-medium transition-colors ${
-                          voteTableChamber === "other"
-                            ? "bg-card-border text-foreground"
-                            : "bg-card text-muted hover:text-foreground"
-                        }`}
-                      >
-                        {chamberLabel(otherChamberName)}
-                      </button>
+            {/* Vote module — seating-chart hero + tally bar + cast vote, unified */}
+            {bill.status !== "veto_override" &&
+              (isCabinetReview ||
+                isActive ||
+                isConcurrent ||
+                isJpOverride ||
+                bill.votesFor + bill.votesAgainst + bill.votesAbstain > 0) && (
+                <div className="space-y-4 rounded-xl border border-card-border bg-card p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                      {chamberLabel(bill.currentChamber)} · Floor Vote
+                    </h3>
+                    {(isActive || isConcurrent || isJpOverride || isCabinetReview) &&
+                      bill.votingEndsAt && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-warning">
+                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+                          LIVE · <DeadlineCountdown deadline={bill.votingEndsAt} />
+                        </span>
+                      )}
+                  </div>
+                  {filibustered &&
+                    bill.filibusterInvocations &&
+                    bill.filibusterInvocations.length > 0 && (
+                      <div className="rounded-lg border border-error/40 bg-error/10 px-4 py-3">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-base font-bold uppercase tracking-wide text-error">
+                            ⚑ Filibustered
+                          </span>
+                          <span className="text-xs text-error/80">
+                            {bill.filibusterInvocations.length}× · +
+                            {bill.filibusterInvocations.length * 12}h
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-muted">
+                          by{" "}
+                          {bill.filibusterInvocations.map((inv, i) => (
+                            <span key={inv.characterId}>
+                              {i > 0 && <span className="text-muted">, </span>}
+                              <Link
+                                href={`/character/${inv.sequentialId ?? inv.characterId}`}
+                                className="text-error hover:underline"
+                              >
+                                {inv.characterName}
+                              </Link>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  {showSeatingHero && (
+                    <VoteSeatingChart
+                      style={legProcess.seatingStyle}
+                      votes={heroVotes}
+                      eligible={heroEligible}
+                      width={460}
+                      requiredPct={heroRequiredPct}
+                      requiredPctOfCast={heroRequiredPctOfCast}
+                    />
+                  )}
+                  <DispatchVoteBar votes={heroVotes} eligible={heroEligible} height={10} />
+                  <div className="flex justify-center">
+                    <VoteLegend votes={heroVotes} eligible={heroEligible} />
+                  </div>
+                  {bill.myWhippedFrom && (
+                    <WhippedBadge
+                      originalVote={bill.myWhippedFrom}
+                      onRevert={async (v) => {
+                        if (v === "unvoted") return;
+                        await handleVote(false, v as "for" | "against" | "abstain");
+                      }}
+                    />
+                  )}
+                  {bill.canVoteOrigin && (
+                    <div className="space-y-2 border-t border-card-border/60 pt-3">
+                      <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                        Cast your vote
+                      </div>
+                      <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />
+                      <div className="flex gap-2">
+                        {(isCabinetReview
+                          ? (["for", "against"] as const)
+                          : (["for", "against", "abstain"] as const)
+                        ).map((v) => (
+                          <button
+                            key={v}
+                            type="button"
+                            disabled={voting}
+                            onClick={() => handleVote(false, v)}
+                            className={`flex-1 rounded-lg border py-2.5 text-sm font-medium capitalize transition-colors disabled:opacity-50 ${
+                              bill.myVote === v
+                                ? v === "for"
+                                  ? "border-success/50 bg-success/15 text-success"
+                                  : v === "against"
+                                    ? "border-error/50 bg-error/15 text-error"
+                                    : "border-card-border bg-card-elevated text-foreground"
+                                : "border-card-border bg-card text-muted hover:border-foreground/20 hover:text-foreground"
+                            }`}
+                          >
+                            {v === "for" ? "Aye" : v === "against" ? "No" : "Abstain"}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
-                {voteTableChamber === "origin" && bill.voteByPartyOrigin?.length ? (
-                  <VoteTallyTable
-                    voteByParty={bill.voteByPartyOrigin}
-                    chamberLabel={chamberLabel(bill.originChamber)}
+              )}
+
+            {/* Second chamber vote */}
+            {bill.status !== "veto_override" &&
+              (isActiveOther ||
+                isConcurrent ||
+                bill.otherChamberVotesFor +
+                  bill.otherChamberVotesAgainst +
+                  bill.otherChamberVotesAbstain >
+                  0) && (
+                <div className="space-y-2">
+                  {bill.myOtherChamberWhippedFrom && (
+                    <WhippedBadge
+                      originalVote={bill.myOtherChamberWhippedFrom}
+                      onRevert={async (v) => {
+                        if (v === "unvoted") return;
+                        await handleVote(true, v as "for" | "against" | "abstain");
+                      }}
+                    />
+                  )}
+                  <VoteBar
+                    label={`${chamberLabel(otherChamberName)} Vote`}
+                    votesFor={bill.otherChamberVotesFor}
+                    votesAgainst={bill.otherChamberVotesAgainst}
+                    votesAbstain={bill.otherChamberVotesAbstain}
+                    deadline={isActiveOther || isConcurrent ? bill.otherChamberVotingEndsAt : null}
+                    myVote={bill.myOtherChamberVote}
+                    canVote={bill.canVoteOther && !voting}
+                    onVote={(v) => handleVote(true, v)}
+                    requiredPct={supermajorityPct ?? otherRequiredPct}
+                    requiredLabel={supermajorityLabel}
+                    shiftPreview={bill.voteShiftPreview}
                   />
-                ) : voteTableChamber === "other" && bill.voteByPartyOther?.length ? (
-                  <VoteTallyTable
-                    voteByParty={bill.voteByPartyOther}
-                    chamberLabel={chamberLabel(otherChamberName)}
-                  />
-                ) : (
-                  <p className="text-xs text-muted py-2">No votes recorded for this chamber yet.</p>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+
+            {/* Vote by Party */}
+            {bill.status !== "veto_override" &&
+              ((bill.voteByPartyOrigin?.length ?? 0) > 0 ||
+                (bill.voteByPartyOther?.length ?? 0) > 0) && (
+                <div className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-display text-lg font-semibold">Vote by Party</h3>
+                    {/* Chamber sub-tabs — bicameral only */}
+                    {!isUnicameral && (
+                      <div className="flex rounded-lg border border-card-border overflow-hidden text-sm">
+                        <button
+                          type="button"
+                          onClick={() => setVoteTableChamber("origin")}
+                          className={`px-3 py-1.5 font-medium transition-colors ${
+                            voteTableChamber === "origin"
+                              ? "bg-card-border text-foreground"
+                              : "bg-card text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {chamberLabel(bill.originChamber)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVoteTableChamber("other")}
+                          className={`px-3 py-1.5 font-medium transition-colors ${
+                            voteTableChamber === "other"
+                              ? "bg-card-border text-foreground"
+                              : "bg-card text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {chamberLabel(otherChamberName)}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {voteTableChamber === "origin" && bill.voteByPartyOrigin?.length ? (
+                    <VoteTallyTable
+                      voteByParty={bill.voteByPartyOrigin}
+                      chamberLabel={chamberLabel(bill.originChamber)}
+                    />
+                  ) : voteTableChamber === "other" && bill.voteByPartyOther?.length ? (
+                    <VoteTallyTable
+                      voteByParty={bill.voteByPartyOther}
+                      chamberLabel={chamberLabel(otherChamberName)}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted py-2">
+                      No votes recorded for this chamber yet.
+                    </p>
+                  )}
+                </div>
+              )}
 
             {/* Discussions */}
             {id && (
@@ -610,6 +707,7 @@ function BillDetailContent() {
 
             {/* Member Vote History — searchable, filterable by party / Aye-No-Abstain */}
             {id &&
+              bill.status !== "veto_override" &&
               ((bill.voteByPartyOrigin?.length ?? 0) > 0 ||
                 (bill.voteByPartyOther?.length ?? 0) > 0) && (
                 <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
@@ -665,101 +763,6 @@ function BillDetailContent() {
                 <pre className="text-xs text-muted whitespace-pre-wrap leading-relaxed font-sans">
                   {bill.fullText}
                 </pre>
-              </div>
-            )}
-
-            {/* Veto message — visible whenever the President has vetoed (during
-                override voting or after the veto has been sustained/overridden). */}
-            {bill.vetoMessage && bill.presidentAction === "vetoed" && (
-              <div className="rounded-xl border border-error/40 bg-error/5 p-4">
-                <h3 className="text-[10px] uppercase tracking-widest text-error font-semibold">
-                  Veto message
-                </h3>
-                <p className="mt-1 text-sm italic">&ldquo;{bill.vetoMessage}&rdquo;</p>
-                <p className="mt-2 text-xs text-muted">— The President</p>
-              </div>
-            )}
-
-            {/* Veto Override Voting Panel — US only */}
-            {!isUnicameral && bill.status === "veto_override" && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <h3 className="font-display text-base font-semibold text-amber-300">
-                      Congressional Veto Override
-                    </h3>
-                    <p className="text-xs text-muted mt-1">
-                      A 2/3 supermajority in{" "}
-                      <strong className="text-foreground">both chambers</strong> is required to
-                      override the presidential veto.
-                    </p>
-                  </div>
-                  {bill.overrideVotingEndsAt && (
-                    <DeadlineCountdown deadline={bill.overrideVotingEndsAt} />
-                  )}
-                </div>
-
-                {/* Per-chamber seat-weighted tallies vs the 2/3-of-seats threshold. */}
-                <div className="space-y-3">
-                  <OverrideChamberBar
-                    label="House"
-                    votesFor={bill.overrideHouseFor ?? 0}
-                    total={bill.overrideHouseSeats ?? 0}
-                  />
-                  <OverrideChamberBar
-                    label="Senate"
-                    votesFor={bill.overrideSenateFor ?? 0}
-                    total={bill.overrideSenateSeats ?? 0}
-                  />
-                </div>
-
-                {/* Vote buttons */}
-                {bill.canVetoOverride && (
-                  <div className="space-y-2">
-                    {bill.myOverrideVote && (
-                      <p className="text-xs text-muted">
-                        Your vote:{" "}
-                        <span className="font-medium text-foreground capitalize">
-                          {bill.myOverrideVote === "for" ? "Override" : "Sustain Veto"}
-                        </span>{" "}
-                        — you may change it.
-                      </p>
-                    )}
-                    {bill.myOverrideWhippedFrom && (
-                      <WhippedBadge
-                        originalVote={bill.myOverrideWhippedFrom}
-                        onRevert={async (v) => {
-                          if (v === "unvoted") return;
-                          await handleAction("veto_override_vote", { vote: v });
-                        }}
-                      />
-                    )}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleAction("veto_override_vote", { vote: "for" })}
-                        disabled={voting}
-                        className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                          bill.myOverrideVote === "for"
-                            ? "border-amber-500/60 bg-amber-500/25 text-amber-300"
-                            : "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                        }`}
-                      >
-                        ↑ Vote to Override
-                      </button>
-                      <button
-                        onClick={() => handleAction("veto_override_vote", { vote: "against" })}
-                        disabled={voting}
-                        className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                          bill.myOverrideVote === "against"
-                            ? "border-card-border/60 bg-card text-foreground"
-                            : "border-card-border bg-card/50 text-muted hover:text-foreground hover:bg-card"
-                        }`}
-                      >
-                        ↓ Sustain Veto
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

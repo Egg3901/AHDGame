@@ -32,6 +32,7 @@ import {
 } from "@/lib/legislature/chamberOfficeType";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
+import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
 
 // ─── Context Types ─────────────────────────────────────────────────────────────
 
@@ -565,8 +566,11 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
 
   // Group whips by bill
   const billWhips = new Map<string, BillWhip[]>();
+  const activeBillsById = new Map(activeBills.map((bill) => [bill._id.toString(), bill]));
   for (const w of whips) {
     const bid = w.targetId.toString();
+    const bill = activeBillsById.get(bid);
+    if (bill && !isBillWhipInCurrentPhase(bill, w)) continue;
     if (!billWhips.has(bid)) {
       billWhips.set(bid, []);
     }

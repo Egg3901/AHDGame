@@ -25,6 +25,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
 import type { Impeachment } from "@/lib/db/types/impeachment";
+import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
 
 export interface WhipDefianceScope {
   countryId: CountryId;
@@ -297,6 +298,7 @@ async function loadBillTarget(
   ) {
     return null;
   }
+  if (!isBillWhipInCurrentPhase(bill, whip)) return null;
   // override_shugiin (JP Shūgiin override) reuses the main `votes` field, so
   // falls through to the default branch below with the active/cabinet bills.
   //
