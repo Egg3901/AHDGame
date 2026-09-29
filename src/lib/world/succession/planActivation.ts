@@ -102,7 +102,21 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     Object.keys(finances.assetAllocation).sort().join(",") !==
       [...territoryById.keys()].sort().join(",") ||
     Object.keys(finances.debtResponsibility).sort().join(",") !==
-      [...territoryById.keys()].sort().join(",")
+      [...territoryById.keys()].sort().join(",") ||
+    !Number.isSafeInteger(finances.financialAssetsMinor) ||
+    !Number.isSafeInteger(finances.creditorDebtMinor) ||
+    finances.financialAssetsMinor < 0 ||
+    finances.creditorDebtMinor < 0 ||
+    Object.values(finances.assetAllocation).some(
+      (amount) => !Number.isSafeInteger(amount) || amount < 0
+    ) ||
+    Object.values(finances.debtResponsibility).some(
+      (amount) => !Number.isSafeInteger(amount) || amount < 0
+    ) ||
+    Object.values(finances.assetAllocation).reduce((sum, amount) => sum + BigInt(amount), 0n) !==
+      BigInt(finances.financialAssetsMinor) ||
+    Object.values(finances.debtResponsibility).reduce((sum, amount) => sum + BigInt(amount), 0n) !==
+      BigInt(finances.creditorDebtMinor)
   ) {
     throw new Error("Financial allocations do not match the approved territory");
   }

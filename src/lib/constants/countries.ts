@@ -1337,6 +1337,9 @@ export const ERA_COUNTRY_NAMES: Record<string, Partial<Record<CountryId, string>
     DE: "West Germany",
     RU: "Soviet Union",
   },
+  "1991-default": {
+    RU: "Soviet Union",
+  },
 };
 
 /** Country name for display, honoring per-era overrides when a preset is known. */

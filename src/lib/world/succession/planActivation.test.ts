@@ -120,6 +120,14 @@ describe("federation settlement activation", () => {
     const proposal = input(false);
     delete proposal.finances.assetAllocation.SK;
     expect(() => planSuccessionActivation(proposal)).toThrow("Financial allocations");
+
+    const inventedAssets = input(false);
+    inventedAssets.finances.assetAllocation.CZ2 += 1;
+    expect(() => planSuccessionActivation(inventedAssets)).toThrow("Financial allocations");
+
+    const lostDebt = input(false);
+    lostDebt.finances.debtResponsibility.SK -= 1;
+    expect(() => planSuccessionActivation(lostDebt)).toThrow("Financial allocations");
   });
 
   it("does not activate before the parent mandate and all matching consents", () => {

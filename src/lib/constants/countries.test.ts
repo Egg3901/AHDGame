@@ -799,6 +799,11 @@ describe("getCountryDisplayName", () => {
     expect(getCountryDisplayName("US")).toBe("United States");
   });
 
+  it("opens 1991 with the Soviet issuer identity until a settlement renames it", () => {
+    expect(getCountryDisplayName("RU", "1991-default")).toBe("Soviet Union");
+    expect(getCountryDisplayName("RU", "2027-default")).toBe("Russia");
+  });
+
   it("does not throw when the id is missing from COUNTRY_CONFIGS (ticket #1115)", () => {
     // ShortageHeatMap calls this with "" on first paint of /stockmarket/global.
     expect(() => getCountryDisplayName("" as CountryId)).not.toThrow();
