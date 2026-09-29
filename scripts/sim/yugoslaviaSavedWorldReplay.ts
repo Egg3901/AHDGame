@@ -55,7 +55,10 @@ async function main() {
   client.on("commandSucceeded", (event) => {
     if (!measuringMacro) return;
     phaseCalls++;
-    for (const row of event.reply?.cursor?.firstBatch ?? event.reply?.cursor?.nextBatch ?? [])
+    const reply = event.reply as {
+      cursor?: { firstBatch?: Record<string, unknown>[]; nextBatch?: Record<string, unknown>[] };
+    };
+    for (const row of reply?.cursor?.firstBatch ?? reply?.cursor?.nextBatch ?? [])
       phaseBytes += BSON.calculateObjectSize(row);
   });
   try {
