@@ -6,8 +6,10 @@
  * is used. Output goes to stdout, and no database writes are performed.
  */
 import { MongoClient } from "mongodb";
+import { execFileSync } from "child_process";
 import { resolveCollectorCommit } from "./collectorSource";
 import { evaluateFundRoundTrip, type EvidenceInput } from "./fundRoundTripEvidence";
+import { assertEvidenceExtractorSource, assertFreshPinnedFundRun } from "./fundRoundTripProvenance";
 import { sumFundBondHoldingsByFundId } from "@/lib/bonds/fundBondHoldings";
 import type {
   IndexFund,
@@ -47,6 +49,7 @@ async function main() {
   const runId = flag("run-id");
   const dbName = flag("db");
   const requestedCommit = flag("source-commit");
+  const requestedExtractorCommit = flag("extractor-commit");
   const sandboxUri = process.env.SIM_MONGODB_URI;
   const opsUri = process.env.OPS_MONGODB_URI;
   assertSandboxTarget(sandboxUri, dbName);
@@ -58,8 +61,16 @@ async function main() {
     !opsUri ||
     opsUri === sandboxUri
   ) {
-    throw new Error("Run UUID, full source SHA, and separate OPS_MONGODB_URI are required");
+    throw new Error(
+      "Run UUID, full simulation and extractor SHAs, and separate OPS_MONGODB_URI are required"
+    );
   }
+  const extractorCommit = resolveCollectorCommit(process.cwd());
+  const dirtyStatus = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+  });
+  assertEvidenceExtractorSource(requestedExtractorCommit, extractorCommit, dirtyStatus);
   const sandboxClient = new MongoClient(sandboxUri!);
   const opsClient = new MongoClient(opsUri);
   try {
@@ -71,27 +82,8 @@ async function main() {
       .findOne({ _id: runId as never });
     const run = await db.collection("simRuns").findOne({ _id: runId as never });
     const runCount = await db.collection("simRuns").countDocuments({});
-    if (
-      !job ||
-      !run ||
-      job.status !== "completed" ||
-      job.dbName !== dbName ||
-      job.dbName !== `ahd_sim_${job.seed}` ||
-      runCount !== 1 ||
-      run.effectiveConfigInitial?.gameState?.currentTurn !== 0 ||
-      !job.sourceWorktree ||
-      run.source?.worktree !== job.sourceWorktree ||
-      job.metricsSource?.worktree !== job.sourceWorktree ||
-      job.sourceCommit !== requestedCommit ||
-      job.sourceCommitVerified !== requestedCommit ||
-      run.source?.requestedCommit !== requestedCommit ||
-      job.metricsSource?.requestedCommit !== requestedCommit ||
-      job.metricsSource?.simExecutedCommit !== requestedCommit
-    ) {
-      throw new Error(
-        "Fresh completed job, sandbox run, and metrics provenance do not match the requested source pin"
-      );
-    }
+    assertFreshPinnedFundRun(job, run, runCount, dbName, requestedCommit);
+    if (!job || !run) throw new Error("Missing pinned simulation records");
     const [
       config,
       funds,
@@ -130,6 +122,7 @@ async function main() {
       requestedCommit,
       executedCommit: run.source?.executedCommit ?? null,
       collectorCommit: job.metricsSource?.collectorCommit ?? null,
+      evidenceCollectorCommit: extractorCommit,
       requestedRedemptionFlag:
         typeof job.nppFundRedemptionEnabled === "boolean" ? job.nppFundRedemptionEnabled : null,
       initialRedemptionFlag:
@@ -154,12 +147,19 @@ async function main() {
       bondValueByFund: Object.fromEntries(bondValues),
     };
     const report = evaluateFundRoundTrip(input);
-    const extractorCommit = resolveCollectorCommit(process.cwd());
-    if (extractorCommit !== requestedCommit) {
-      throw new Error("Extractor checkout HEAD does not match requested source pin");
-    }
     console.log(
-      JSON.stringify({ runId, dbName, sourceCommit: requestedCommit, ...report }, null, 2)
+      JSON.stringify(
+        {
+          runId,
+          dbName,
+          sourceCommit: requestedCommit,
+          metricsCollectorCommit: job.metricsSource?.collectorCommit,
+          evidenceCollectorCommit: extractorCommit,
+          ...report,
+        },
+        null,
+        2
+      )
     );
     if (!report.passed) process.exitCode = 1;
   } finally {
