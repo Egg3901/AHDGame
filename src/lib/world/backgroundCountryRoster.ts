@@ -104,6 +104,16 @@ const SOVIET_1991_EMERGENT_IDS = new Set([
   "UZ",
 ]);
 
+const FEDERATION_1991_EMERGENT_PARENTS: Readonly<Record<string, string>> = {
+  SI: "YU",
+  HR: "YU",
+  BA: "YU",
+  MK: "YU",
+  YF: "YU",
+  CZ2: "CS",
+  SK: "CS",
+};
+
 const REGION_KEYS: Readonly<Record<WorldEntityRegion, ReadonlySet<string>>> = {
   europe: new Set([
     "AD",
@@ -293,9 +303,14 @@ export function expandManifestWithBackgroundCountries(
 
   for (const [entityId, displayName, starts, region, mapFeatureIds] of SUCCESSOR_POLITIES) {
     const dissolved = SUCCESSOR_DISSOLVED_FROM[entityId];
-    const sovietRepublicAtStart = year === 1991 && SOVIET_1991_EMERGENT_IDS.has(entityId);
+    const openingParent =
+      year === 1991
+        ? SOVIET_1991_EMERGENT_IDS.has(entityId)
+          ? "RU"
+          : FEDERATION_1991_EMERGENT_PARENTS[entityId]
+        : undefined;
     if (
-      (year < starts && !sovietRepublicAtStart) ||
+      (year < starts && !openingParent) ||
       (dissolved != null && year >= dissolved) ||
       byId.has(entityId)
     )
@@ -309,11 +324,11 @@ export function expandManifestWithBackgroundCountries(
     });
     byId.set(
       entityId,
-      sovietRepublicAtStart
+      openingParent
         ? {
             ...entry,
             status: "emergent",
-            parentEntityId: "RU",
+            parentEntityId: openingParent,
             recognition: { status: "dependent" },
             un: { state: "ineligible" },
           }

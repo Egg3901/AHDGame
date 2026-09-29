@@ -96,4 +96,23 @@ describe("background country expansion", () => {
       });
     }
   });
+
+  it("holds Czechoslovak and Yugoslav successors as proposed identities", () => {
+    const opening = getWorldEntityPresetManifest("1991-default").entries;
+    for (const [entityId, parentEntityId] of [
+      ["CZ2", "CS"],
+      ["SK", "CS"],
+      ["SI", "YU"],
+      ["HR", "YU"],
+      ["BA", "YU"],
+      ["MK", "YU"],
+      ["YF", "YU"],
+    ]) {
+      expect(opening.find((entry) => entry.entityId === entityId)).toMatchObject({
+        status: "emergent",
+        parentEntityId,
+        simulationTier: "background-macro",
+      });
+    }
+  });
 });
