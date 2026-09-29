@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
-import { ruRegions1991 } from "@/lib/countries/ru/data/ruRegions1991";
+import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 import { plRegions1991 } from "@/lib/countries/pl/data/plRegions1991";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
@@ -9,7 +9,7 @@ import { bgRegions1991 } from "@/lib/countries/bg/data/bgRegions1991";
 import { yuRegions1991 } from "@/lib/countries/yu/data/yuRegions1991";
 
 const BUNDLES = [
-  ruRegions1991,
+  sovietUnionRegions1991,
   plRegions1991,
   csRegions1991,
   huRegions1991,

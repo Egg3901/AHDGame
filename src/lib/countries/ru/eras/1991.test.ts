@@ -2,28 +2,34 @@ import { describe, expect, it } from "vitest";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { getParliamentaryCountryIds } from "@/lib/turn/parliamentaryGovernment";
 import { ruRegions1991 } from "../data/ruRegions1991";
+import { sovietUnionRegions1991 } from "../data/sovietUnionRegions1991";
 import { ru1991PresidencyStage, ru1993LegislatureStage } from "./1991";
 import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 
 describe("Russian 1991 transitional institutions", () => {
-  it("models the elected RSFSR Congress rather than the USSR Supreme Soviet", () => {
+  it("opens with the 2,250-member Soviet Union Congress", () => {
     const config = getCountryConfig("RU", "1991-default");
     expect(config.governmentType).toBe("parliamentaryRepublic");
     expect(config.rulingPartyId).toBeUndefined();
-    expect(config.legislature.name).toBe("Congress of People's Deputies");
+    expect(config.name).toBe("Soviet Union");
+    expect(config.legislature.name).toBe("Congress of People's Deputies of the Soviet Union");
     expect(config.legislature.bicameral).toBe(false);
     expect(config.legislature.lowerChamber).toMatchObject({
-      key: "congressOfPeoplesDeputies",
-      seats: 1_068,
+      key: "unionCongress",
+      seats: 2_250,
       elected: true,
     });
     expect(config.legislature.upperChamber).toBeUndefined();
-    expect(config.headOfStateTitle).toBe("Chairman of the Supreme Soviet");
+    expect(config.headOfStateTitle).toBe("President of the Soviet Union");
     expect(config.officeTypes.map((office) => office.key)).toEqual([
-      "primeMinister",
-      "chairmanOfSupremeSoviet",
-      "congressDeputy",
+      "chairmanOfCabinet",
+      "sovietPresident",
+      "unionCongressDeputy",
     ]);
+    expect(sovietUnionRegions1991).toHaveLength(24);
+    expect(sovietUnionRegions1991.reduce((total, region) => total + region.houseDistricts, 0)).toBe(
+      2_250
+    );
     expect(ruRegions1991.reduce((total, region) => total + region.houseDistricts, 0)).toBe(1_068);
     expect(ruRegions1991.every((region) => region.stateSenateSeats === 0)).toBe(true);
     expect(getParliamentaryCountryIds("1991-default")).toContain("RU");
@@ -49,11 +55,11 @@ describe("Russian 1991 transitional institutions", () => {
     const elected = getCountryConfigForRuntime("RU", "1991-default", {
       ruPresidencySinceTurn: 25,
     });
-    expect(initial.headOfStateTitle).toBe("Chairman of the Supreme Soviet");
+    expect(initial.headOfStateTitle).toBe("President of the Soviet Union");
     expect(elected.headOfStateTitle).toBe("President");
     expect(elected.headOfStateSelection).toBeUndefined();
     expect(elected.officeTypes.find((office) => office.isHeadOfState)?.key).toBe("president");
-    expect(elected.legislature).toEqual(initial.legislature);
+    expect(elected.legislature.lowerChamber.seats).toBe(1_068);
     expect(elected.officeTypes.some((office) => office.key === "primeMinister")).toBe(true);
     expect(getCountryConfigForRuntime("RU", "1979-default", { ruPresidencySinceTurn: 25 })).toEqual(
       getCountryConfig("RU", "1979-default")

@@ -2,7 +2,11 @@ import type { StateMetrics } from "@/lib/db/types";
 import { makeEasternBlocStateMetrics } from "@/lib/seeds/shared/easternBlocMetrics";
 import { SUCCESSOR_NOMINAL_GDP_1991 } from "./successorGdp1991";
 import { SUCCESSOR_REGION_POPULATION_1991 } from "./successorPopulation1991";
-import { ruRegions1991 } from "@/lib/countries/ru/data/ruRegions1991";
+import {
+  SOVIET_UNION_1991_GDP_MILLION_RUB,
+  SOVIET_UNION_1991_POPULATION,
+  sovietUnionRegions1991,
+} from "@/lib/countries/ru/data/sovietUnionRegions1991";
 import { plRegions1991 } from "@/lib/countries/pl/data/plRegions1991";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
@@ -101,7 +105,7 @@ const profiles = {
 } as const;
 
 const regions = {
-  RU: ruRegions1991,
+  RU: sovietUnionRegions1991,
   PL: plRegions1991,
   CS: csRegions1991,
   HU: huRegions1991,
@@ -122,11 +126,18 @@ export const SUCCESSOR_STATE_METRICS_1991: StateMetrics[] = (
 ).flatMap((countryId) => {
   const profile = profiles[countryId];
   const states = regions[countryId];
-  const population = Object.values(SUCCESSOR_REGION_POPULATION_1991[countryId]).reduce(
-    (sum, count) => sum + count,
-    0
-  );
-  const nationalGdpPerResident = SUCCESSOR_NOMINAL_GDP_1991[countryId] / population;
+  const population =
+    countryId === "RU"
+      ? SOVIET_UNION_1991_POPULATION
+      : Object.values(SUCCESSOR_REGION_POPULATION_1991[countryId]).reduce(
+          (sum, count) => sum + count,
+          0
+        );
+  const nationalGdp =
+    countryId === "RU"
+      ? SOVIET_UNION_1991_GDP_MILLION_RUB * 1_000_000
+      : SUCCESSOR_NOMINAL_GDP_1991[countryId];
+  const nationalGdpPerResident = nationalGdp / population;
   const overrides = Object.fromEntries(
     states.map((state) => {
       const relative = (state.gdp * 1_000_000) / state.population / nationalGdpPerResident;
