@@ -1,0 +1,24 @@
+name: PostHog production deployment annotation
+
+on:
+  deployment_status:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  annotate:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'A House Divided / production'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - name: Annotate production deploy
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          DEPLOYED_AT: ${{ github.event.deployment_status.created_at }}
+          DEPLOY_SHA: ${{ github.event.deployment.sha }}
+        run: node scripts/analytics/annotate-deploy.mjs

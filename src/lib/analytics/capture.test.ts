@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
     optIn: vi.fn(),
     optOut: vi.fn(),
     reset: vi.fn(),
+    identify: vi.fn(),
     setConfig: vi.fn(),
     on: vi.fn(),
   },
@@ -26,6 +27,7 @@ vi.mock("posthog-js", () => ({
     opt_out_capturing: state.posthog.optOut,
     has_opted_out_capturing: () => false,
     reset: state.posthog.reset,
+    identify: state.posthog.identify,
     set_config: state.posthog.setConfig,
     on: state.posthog.on,
   },
@@ -49,6 +51,12 @@ function stubWindow() {
   });
 }
 
+async function identifyPlayer() {
+  const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
+  const client = await getPostHogClient();
+  identifyPostHogUser(client!, "stable-account-id");
+}
+
 describe("analytics fan-out", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -62,6 +70,7 @@ describe("analytics fan-out", () => {
   it("sends one product event to both destinations", async () => {
     const { captureProductEvent } = await import("./capture");
     state.consent = "accepted";
+    await identifyPlayer();
     await captureProductEvent("character_created", { area: "profile" });
 
     expect(state.posthog.capture).toHaveBeenCalledWith("character_created", { area: "profile" });
@@ -80,6 +89,7 @@ describe("analytics fan-out", () => {
     state.consent = "accepted";
     const { getPostHogClient } = await import("./posthogClient");
     await getPostHogClient();
+    await identifyPlayer();
     const listener = state.posthog.on.mock.calls[0]?.[1] as
       ((event: { event: string; properties: Record<string, unknown> }) => void) | undefined;
     expect(listener).toBeDefined();
@@ -100,6 +110,7 @@ describe("analytics fan-out", () => {
     vi.resetModules();
     const fresh = await import("./capture");
     state.consent = "accepted";
+    await identifyPlayer();
     await fresh.captureProductEvent("message_sent");
 
     expect(state.posthog.capture).toHaveBeenCalledWith("message_sent");
@@ -115,5 +126,38 @@ describe("analytics fan-out", () => {
     expect(state.posthog.setConfig).toHaveBeenCalledWith({ disable_surveys: true });
     expect(state.posthog.optOut).toHaveBeenCalled();
     expect(state.amplitude.setOptOut).toHaveBeenCalledWith(true);
+  });
+
+  it("records a filed war only after its declaration bill creates a conflict", async () => {
+    const { capturePendingWarDeclaration } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    window.localStorage.setItem(
+      "ahd:pending-war-declaration",
+      JSON.stringify({
+        accountId: "stable-account-id",
+        billId: "bill-1",
+        declarer: "US",
+        defender: "CN",
+      })
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conflicts: [] }) })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ conflicts: [{ declaredByBillId: "bill-1" }] }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await capturePendingWarDeclaration("stable-account-id");
+    expect(state.posthog.capture).not.toHaveBeenCalledWith("war_declared", expect.anything());
+    await capturePendingWarDeclaration("stable-account-id", true);
+    await capturePendingWarDeclaration("stable-account-id");
+    expect(state.posthog.capture).toHaveBeenCalledWith("war_declared", {
+      attacker_nation: "US",
+      defender_nation: "CN",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
