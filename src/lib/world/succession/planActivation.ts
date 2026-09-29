@@ -8,6 +8,11 @@ import {
   type SuccessionFinancialPlan,
 } from "./rules/financialSettlement";
 import type { SuccessionRegion, SuccessorTerritory } from "./rules/territory";
+import {
+  planSuccessionCustody,
+  type SuccessionCustodyAsset,
+  type SuccessionCustodyAssignment,
+} from "./rules/custody";
 
 export interface SuccessionActivationInput {
   settlementId: string;
@@ -20,6 +25,9 @@ export interface SuccessionActivationInput {
   sourceRegions: readonly SuccessionRegion[];
   territories: readonly SuccessorTerritory[];
   finances: SuccessionFinancialPlan;
+  /** Complete live inventory of public enterprises and military units. */
+  custodyAssets: readonly SuccessionCustodyAsset[];
+  negotiatedCustodians: Readonly<Record<string, string>>;
   macroTerms: Readonly<Record<string, Omit<SuccessorMacroTerms, "territory" | "displayName">>>;
   now: Date;
 }
@@ -29,6 +37,7 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   sourceEntity: WorldEntityManifestEntry;
   successorEntities: WorldEntityManifestEntry[];
   macroCountries: MacroCountryState[];
+  custodyAssignments: SuccessionCustodyAssignment[];
 } {
   const {
     settlementId,
@@ -39,6 +48,8 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     sourceRegions,
     territories,
     finances,
+    custodyAssets,
+    negotiatedCustodians,
     macroTerms,
     now,
   } = input;
@@ -95,6 +106,12 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   }
   if (assigned.size !== sourceByRegion.size)
     throw new Error("Successor territory must partition live source regions exactly once");
+  const custodyAssignments = planSuccessionCustody({
+    sourceEntityId: source.entityId,
+    territories,
+    assets: custodyAssets,
+    negotiatedCustodians,
+  });
   const continuing = territoryById.has(source.entityId);
   const expectedTargets = territories.length - (continuing ? 1 : 0);
   if (
@@ -202,5 +219,6 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
         },
     successorEntities,
     macroCountries,
+    custodyAssignments,
   };
 }

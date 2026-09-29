@@ -63,6 +63,21 @@ function input(continuing: boolean): SuccessionActivationInput {
       financialAssetsMinor: 100,
       creditorDebtMinor: 200,
     }),
+    custodyAssets: [
+      {
+        assetId: "factory-0",
+        kind: "public-enterprise",
+        homeRegionId: "region-0",
+        valueMinor: 10,
+      },
+      {
+        assetId: "army-1",
+        kind: "conventional-force",
+        homeRegionId: "region-1",
+        valueMinor: 5,
+      },
+    ],
+    negotiatedCustodians: {},
     macroTerms: Object.fromEntries(
       ids
         .filter((id) => id !== sourceId)
@@ -98,6 +113,10 @@ describe("federation settlement activation", () => {
     expect(result.macroCountries).toMatchObject([
       { entityId: "UKR", population: 11, dataQuality: { provenance: "succession-derived" } },
     ]);
+    expect(result.custodyAssignments.map(({ custodianEntityId }) => custodianEntityId)).toEqual([
+      "RU",
+      "UKR",
+    ]);
   });
 
   it("retires a vanished federation while preserving its legacy creditor issuer", () => {
@@ -110,6 +129,9 @@ describe("federation settlement activation", () => {
     });
     expect(result.successorEntities.map((entity) => entity.entityId)).toEqual(["CZ2", "SK"]);
     expect(result.macroCountries.reduce((sum, country) => sum + country.population, 0)).toBe(21);
+    expect(
+      result.custodyAssignments.every((asset) => asset.disposition === "aggregate-background")
+    ).toBe(true);
   });
 
   it("rejects a target assigned to another federation", () => {
@@ -194,5 +216,25 @@ describe("federation settlement activation", () => {
     const duplicated = input(false);
     duplicated.territories[1].regionIds = [...duplicated.territories[0].regionIds];
     expect(() => planSuccessionActivation(duplicated)).toThrow("partition live source regions");
+  });
+
+  it("requires strategic custody terms before sovereignty can change", () => {
+    const proposal = input(true);
+    proposal.custodyAssets = [
+      ...proposal.custodyAssets,
+      {
+        assetId: "strategic-1",
+        kind: "strategic-force",
+        homeRegionId: "region-1",
+        valueMinor: 50,
+      },
+    ];
+    expect(() => planSuccessionActivation(proposal)).toThrow(
+      "Shared or strategic custody requires"
+    );
+    proposal.negotiatedCustodians = { "strategic-1": "RU" };
+    expect(planSuccessionActivation(proposal).custodyAssignments.at(-1)?.custodianEntityId).toBe(
+      "RU"
+    );
   });
 });
