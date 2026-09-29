@@ -1,5 +1,7 @@
 "use client";
 
+import { captureProductEvent } from "@/lib/analytics/capture";
+
 import { useEffect, useState } from "react";
 import { VoteShiftPreview } from "./VoteShiftPreview";
 import type { VoteShiftPreview as VoteShiftPreviewData } from "@/lib/legislature/voteShiftPreview";
@@ -56,6 +58,7 @@ export function BillVoteIndicator({
       });
       if (res.ok) {
         setCurrentVote(vote);
+        void captureProductEvent("bill_voted", { bill_id: billId, vote });
         onVoted?.(billId, vote);
       }
     } finally {

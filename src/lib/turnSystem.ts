@@ -59,6 +59,7 @@ import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants"
 import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
 import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
+import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -704,6 +705,16 @@ export async function processTurn(
         occurredAt: context.realNow.toISOString(),
         payload: { turn: context.newTurn, durationMs, warnings: warnings.length },
       });
+      // Analytics begins only after the committed turn and never holds up its caller.
+      if (config?.simSandbox !== true) {
+        void captureTurnPosthog({
+          db,
+          turn: context.newTurn,
+          durationMs,
+          phaseStatuses,
+          errorCount: lastHealth?.errorCount ?? 0,
+        }).catch((error) => console.warn("[PostHog] Turn telemetry failed", error));
+      }
     }
 
     return {

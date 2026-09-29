@@ -46,7 +46,7 @@ configured destination.
 
 PostHog loads only on the hosted multiplayer site after the existing optional analytics consent is accepted. Rejecting or resetting consent opts out and clears the PostHog identity. The Google consent message on ad content does not itself grant PostHog consent; those pages remain untracked unless the AHD analytics choice was accepted elsewhere.
 
-PostHog autocapture, automatic pageviews, session replay, and surveys are disabled. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email. Amplitude receives the same event set via the shared fan-out so retention and funnel questions can be answered without a second instrumentation pass.
+PostHog autocapture and automatic pageviews are disabled. Session replay is sampled at 10% with masked inputs and sensitive screens blocked. Surveys stay disabled until an authenticated account is identified. Named area events avoid raw URLs and player text; the SDK denies URL and referrer properties. Identification uses an opaque account ID without name or email. Amplitude receives the same event set via the shared fan-out so retention and funnel questions can be answered without a second instrumentation pass.
 
 OpenReplay session replay has been **removed** and is not part of the production stack. PostHog plus Amplitude are the whole of it. If replay is ever revisited, make that a deliberate decision on its own merits — do not restore the old provider.
 
@@ -62,6 +62,47 @@ OpenReplay session replay has been **removed** and is not part of the production
 | `election_entered`     | Successful entry into an election from its detail page    | None                                                                                                |
 
 The first-turn anchor is local to one browser. Older characters and players using another device are not reconstructed. OAuth signup is not yet included in `account_created`. Interrupted navigation may undercount browser events. Validate the funnel against first-party account and character counts before using it for decisions.
+
+## Game telemetry added on `feat/posthog-telemetry`
+
+The hourly multiplayer turn captures one `turn_processed`, one `economy_snapshot` per
+federal budget, and `world_event` rows for resolved elections, enacted national
+bills, new wars, new crises, and a new all-time player wealth high. It reuses
+`NEXT_PUBLIC_POSTHOG_KEY` on the server through `posthog-node`. There is no
+background event sampler, autocapture, or per-player turn fan-out. The batch is
+flushed after commit in a detached task; analytics errors cannot fail a turn.
+Singleplayer and sandbox simulations do not send turn events.
+
+Economy wealth comes from the already-computed global wealth list snapshot and
+is anchor-denominated. `players_active` counts non-banned accounts with activity
+in the prior 24 hours. Fixed world-event headlines contain no player text. The
+`analyticsRecords` runtime collection stores the wealth high-water mark and is
+cleared by a world reset.
+
+Client game events are consent-gated and buffered briefly until PostHog has the
+stable account ID. `turn_completed` includes the observed turn, nation, party,
+role, initiated action count, and minutes since this browser session began.
+Draft, vote, bill passage, election entry and win, office win, war declaration,
+and accepted peace events use opaque IDs or enum values only. A declaration
+proposal is tracked as `war_declared` only after its bill has created a live
+conflict. Passage and win milestones use browser-local deduplication, so a
+player who never opens the relevant result page can be undercounted.
+
+`onboarding-checklist` assigns the current checklist as `test` and the old
+banner as `control` within the existing server feature gate. The
+`turn-complete-celebration` assigns and tags the existing turn completion event;
+its UI treatment remains with the existing turn UI. Related client events carry
+`variant`. Both flags default to `control` when assignment is unavailable.
+`ask-upsell-placement` and Ask LLM calls belong to
+the separate Ask application at `ask.lakesidegames.net`; this repository has
+only its inbound notification webhook.
+
+Railway's successful `A House Divided / production` GitHub deployment status
+triggers `.github/workflows/posthog-deploy-annotation.yml`. Configure the
+repository secret `POSTHOG_PERSONAL_API_KEY` with `annotation:write` scope and
+repository variable `POSTHOG_PROJECT_ID`; neither value belongs in source.
+The job writes the deployment timestamp and package release tag through the
+PostHog annotations API.
 
 Sentry keeps browser, server, edge, API, and turn capture paths. The release is the commit SHA in all runtimes. Source-map upload requires the build-time token. Broad console-log shipping is disabled for the initial SaaS rollout while errors and sampled traces remain enabled.
 

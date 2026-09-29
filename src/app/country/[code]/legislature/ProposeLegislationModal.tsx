@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { Slider } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import {
   BILL_CATEGORIES,
   BILL_PROPOSE_ACTION_COST,
@@ -452,6 +453,7 @@ export function ProposeLegislationModal({
         showToast(data.error ?? "Failed to propose bill.", "error");
       } else {
         showToast("Bill proposed and opened for voting.", "success");
+        void captureProductEvent("bill_drafted");
         onSuccess();
       }
     } catch {
