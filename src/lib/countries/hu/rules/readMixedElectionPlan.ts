@@ -40,6 +40,7 @@ export async function readHuMixedElectionPlan(db: Db, cycle: number): Promise<Hu
       regionId: election.state,
       constituencyVotes: tally.huConstituencyVotes,
       listVotes: tally.huListVotes,
+      districtSlate: tally.huDistrictSlate,
       candidates: Object.entries(tally.totalVotes).map(([candidateId, votes]) => ({
         candidateId,
         partyId: tally.candidateParties[candidateId],

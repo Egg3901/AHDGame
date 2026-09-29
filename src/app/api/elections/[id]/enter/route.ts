@@ -239,6 +239,22 @@ export async function POST(request: Request, { params }: RouteParams) {
             { status: 400 }
           );
         }
+        const existingNominee = await db
+          .collection<ElectionCandidate>("electionCandidates")
+          .findOne({
+            electionId: election._id,
+            countryId: "HU",
+            party: character.party,
+            constituencyId: selected,
+            status: "active",
+          });
+        if (existingNominee) {
+          logRequest("POST", path, 409, Date.now() - start);
+          return NextResponse.json(
+            { error: "Your party already has a candidate in this constituency." },
+            { status: 409 }
+          );
+        }
         huConstituencyId = selected;
       }
     }
