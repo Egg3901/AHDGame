@@ -29,5 +29,7 @@ describe("Hungarian separate campaign ballots", () => {
     );
     expect(next.constituencyVotes[district].filed).toBe(20);
     expect(next.listVotes.a).toBe(462);
+    expect(next.constituencyVotes[district].legacy).toBeUndefined();
+    expect(next.listVotes.b).toBeUndefined();
   });
 });
