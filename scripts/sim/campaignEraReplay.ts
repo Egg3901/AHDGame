@@ -115,8 +115,8 @@ async function main() {
         funds: (i === 2 ? 0 : 100000) * priceLevel,
         actions: 10,
         fundraisingLevel: i === 2 ? 0 : i,
-        groundGameLevel: i === 2 ? 10 : i,
-        mediaSpendingLevel: i === 2 ? 10 : i,
+        groundGameLevel: i === 2 ? 5 : i,
+        mediaSpendingLevel: i === 2 ? 5 : i,
         oppositionResearchLevel: 0,
         totalFundsGenerated: 0,
         totalActionsGenerated: 0,
@@ -197,6 +197,37 @@ async function main() {
         ),
       });
     }
+    const modernRow = rows.find((r) => r.era === "2019")!;
+    const eraDrift = rows
+      .filter((r) => r.enabled)
+      .map((r) => {
+        const roundingFactor = 1 / r.priceLevel + 1;
+        const campaignBalanceDrift = r.normalizedCampaignFunds.map((funds: number, i: number) =>
+          Math.abs(funds - modernRow.normalizedCampaignFunds[i])
+        );
+        const campaignBalanceTolerance = 24 * roundingFactor;
+        const nppBalanceDrift = Math.abs(r.normalizedNppFunds - modernRow.normalizedNppFunds);
+        const nppBalanceTolerance = r.npps * 24 * 2.5 * roundingFactor;
+        const generatedDrift = Math.abs(r.generated / r.priceLevel - modernRow.generated);
+        const maintenanceDrift = Math.abs(r.maintenance / r.priceLevel - modernRow.maintenance);
+        const campaignFlowTolerance = 3 * 24 * 0.5 * roundingFactor;
+        return {
+          era: r.era,
+          campaignBalanceDrift,
+          campaignBalanceTolerance,
+          nppBalanceDrift,
+          nppBalanceTolerance,
+          generatedDrift,
+          maintenanceDrift,
+          campaignFlowTolerance,
+          passed:
+            campaignBalanceDrift.every((d: number) => d <= campaignBalanceTolerance) &&
+            nppBalanceDrift <= nppBalanceTolerance &&
+            generatedDrift <= campaignFlowTolerance &&
+            maintenanceDrift <= campaignFlowTolerance &&
+            r.downgraded === modernRow.downgraded,
+        };
+      });
     const report = {
       source: {
         runId: run.runId,
@@ -210,7 +241,7 @@ async function main() {
         turnsPerEra: 24,
         retainedCohort: "First eight active NPPs by identifier per country",
         syntheticCampaigns:
-          "Three US NPP campaigns per era: level zero, level one, and an insolvent zero-fund campaign with level-ten maintenance and no fundraising upgrades",
+          "Three US NPP campaigns per era: level zero, level one, and an insolvent zero-fund campaign with level-five maintenance and no fundraising upgrades",
         limitation:
           "Phase replay, not a new full world or historical macro validation. Prices vary while retained populations, currencies and actor distributions are held fixed.",
       },
@@ -226,6 +257,10 @@ async function main() {
           { min: Math.min(...values), max: Math.max(...values) },
         ])
       ),
+      rounding: {
+        note: "Bounds allow at most half a local unit per rounded income or maintenance leg; NPP income plus two floored party-tax legs allow 2.5 units per actor-turn. Both the era and reference rounding contribute. Cohort local-unit sums are used only as a fixed-currency parity diagnostic, not cross-country wealth.",
+        eraDrift,
+      },
       rows,
     };
     if (
@@ -237,7 +272,7 @@ async function main() {
           r.downgraded < 1
       )
     )
-      throw new Error("Replay invariant failed");
+      throw new Error(`Replay invariant failed: ${JSON.stringify(rows)}`);
     const legacy = rows.at(-1)!;
     const modern = rows.find((r) => r.era === "2019")!;
     if (
@@ -246,6 +281,8 @@ async function main() {
         JSON.stringify(modern.normalizedCampaignFunds)
     )
       throw new Error("Legacy flag-off parity failed");
+    if (eraDrift.some((r) => !r.passed))
+      throw new Error(`Era drift exceeded rounding bounds: ${JSON.stringify(eraDrift)}`);
     writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
   } finally {
     phase = "";
