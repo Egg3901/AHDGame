@@ -1045,24 +1045,33 @@ it.each([1, 2])(
         limit: vi.fn().mockReturnThis(),
       })
     );
-    db.collection("characters").bulkWrite.mockImplementation(async (operations) => {
-      for (const { updateOne } of operations) {
-        if (updateOne.update.$pull) {
-          stamps.delete(updateOne.update.$pull.forexExpiryRefunds);
-          continue;
+    db.collection("characters").bulkWrite.mockImplementation(
+      async (
+        operations: Array<{
+          updateOne: {
+            filter: { forexExpiryRefunds: { $ne: string } };
+            update: { $pull?: { forexExpiryRefunds: string }; $inc: Record<string, number> };
+          };
+        }>
+      ) => {
+        for (const { updateOne } of operations) {
+          if (updateOne.update.$pull) {
+            stamps.delete(updateOne.update.$pull.forexExpiryRefunds);
+            continue;
+          }
+          const stamp = updateOne.filter.forexExpiryRefunds.$ne;
+          if (!stamps.has(stamp)) {
+            balance += updateOne.update.$inc["currencyBalances.personal.USD"];
+            stamps.add(stamp);
+          }
         }
-        const stamp = updateOne.filter.forexExpiryRefunds.$ne as string;
-        if (!stamps.has(stamp)) {
-          balance += updateOne.update.$inc["currencyBalances.personal.USD"];
-          stamps.add(stamp);
+        walletWrites++;
+        if (walletWrites === crashAt) {
+          throw new Error("Connection lost after refund write");
         }
+        return { modifiedCount: 0 };
       }
-      walletWrites++;
-      if (walletWrites === crashAt) {
-        throw new Error("Connection lost after refund write");
-      }
-      return { modifiedCount: 0 };
-    });
+    );
     await expect(processForexTurn(db as unknown as Db, 50)).rejects.toThrow("Connection lost");
     expect(refundState).toBe(crashAt === 1 ? "pending" : "credited");
     expect(balance).toBe(800);
