@@ -90,12 +90,14 @@ describe("runMetricEngine — phase behavior", () => {
         _id: "current",
         livingConflictsEnabled: true,
       });
-      db.collection("livingConflicts");
-      db.collectionMocks.livingConflicts!.findOne.mockResolvedValue({
-        hasOpened: true,
-        status: "active",
-        tracks: { displacement, infrastructureDamage: damage, reconstruction },
-      });
+      setupCollection("livingConflicts", [
+        {
+          defKey: "yugoslav_wars",
+          hasOpened: true,
+          status: "active",
+          tracks: { displacement, infrastructureDamage: damage, reconstruction },
+        },
+      ]);
       const metrics: Record<string, Record<string, number>> = {};
       const states: Record<string, Record<string, number>> = {};
       type Op = {

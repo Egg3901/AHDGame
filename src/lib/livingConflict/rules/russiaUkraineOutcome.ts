@@ -27,6 +27,19 @@ export function russiaUkraineOutcome(
     tracks[key] = (tracks[key] ?? 0) + delta;
   return {
     ...base,
+    // Military posture alone must never make inferred campaign stages produce
+    // combat deaths. These stages follow the actually resolved security choice.
+    nextCampaignStage: ["proxy_conflict", "limited_incursion", "broad_invasion"].includes(
+      base.outcomeId
+    )
+      ? "operations"
+      : base.outcomeId === "negotiated_neutrality" || base.outcomeId === "deterrence_holds"
+        ? state.phaseLevel === 6
+          ? "aftermath"
+          : "settlement"
+        : state.phaseLevel === 3 || state.phaseLevel === 5
+          ? "operations"
+          : "posture",
     trackDeltas: tracks,
     campaignDelta: {
       ...base.campaignDelta,

@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { MongoClient, ObjectId, BSON, type Document } from "mongodb";
 import { RUSSIA_UKRAINE_DEF as def } from "../../src/lib/livingConflict/defs/russiaUkraine";
+import { TRANSNATIONAL_TERRORISM_DEF as overlapDef } from "../../src/lib/livingConflict/defs/transnationalTerrorism";
 import { driveConflictTurn, loadConflictState } from "../../src/lib/livingConflict/driver";
 import { resolveConflictParticipants } from "../../src/lib/livingConflict/rules/participants";
 import { materializeLivingConflictEvent } from "../../src/lib/livingConflict/processTurn";
@@ -19,7 +20,11 @@ import {
 import { processMacroCountryTurn } from "../../src/lib/world/macro/macroCountryTurn";
 import { computeMacroContribution } from "../../src/lib/world/macro/kernel";
 import type { MacroCountryState } from "../../src/lib/world/macro/types";
-import type { Crisis, CrisisInteraction } from "../../src/lib/db/types/crisis";
+import type {
+  Crisis,
+  CrisisInteraction,
+  CrisisDecisionOption,
+} from "../../src/lib/db/types/crisis";
 import type { FederalBudget } from "../../src/lib/db/types/budget";
 
 const arg = (key: string) =>
@@ -176,6 +181,8 @@ async function main() {
       const active =
         strategy === "counterfactual" ? countries.filter((c) => c !== "UKR") : countries;
       const participants = resolveConflictParticipants(def, new Set(active));
+      const overlapParticipants = resolveConflictParticipants(overlapDef, new Set(active));
+      const overlapping = process.argv.includes("--overlap");
       await db
         .collection("characters")
         .insertMany(leaders.filter((actor) => active.includes(actor.countryId)));
@@ -211,11 +218,14 @@ async function main() {
       const outcomes: Document[] = [],
         timeline: Document[] = [];
       let windows = 0,
+        overlapWindows = 0,
+        overlapResolved = 0,
         decisions = 0,
         retries = 0,
         totalPaid = 0,
         lastPhase = 0,
         minimumOutput = 1,
+        finalOutput = 1,
         peakDisplacement = 0,
         peakHosting = 0;
       for (let offset = 1; offset <= Number(arg("turns") ?? 720); offset++) {
@@ -232,6 +242,13 @@ async function main() {
           if (crisis.startTurn + (crisis.durationTurns ?? 24) > turn) continue;
           const result = await measure("resolve", () => resolveGlobalResponse(db, crisis._id));
           assert(result);
+          if (crisis.globalResponse?.conflictKey === overlapDef.key) {
+            overlapResolved++;
+            await db
+              .collection<Crisis>("crises")
+              .updateOne({ _id: crisis._id }, { $set: { status: "resolved" } });
+            continue;
+          }
           const state = await loadConflictState(db, def.key);
           outcomes.push({ turn, outcome: result.outcomeId, tracks: state.tracks });
           assert.deepEqual(await resolveGlobalResponse(db, crisis._id), result);
@@ -275,7 +292,8 @@ async function main() {
           for (const actor of leaders.filter((a) => active.includes(a.countryId))) {
             const role = crisis.globalResponse.roleByCountry[actor.countryId];
             if (!role) continue;
-            const options = interaction.decisionTree[0].optionsByRole?.[role] ?? [];
+            const options: CrisisDecisionOption[] =
+              interaction.decisionTree[0].optionsByRole?.[role] ?? [];
             let optionId = choice(strategy, actor.countryId, role, offset);
             const availability = await optionAvailabilityForGlobalResponder(
               db,
@@ -348,6 +366,29 @@ async function main() {
             decisions++;
           }
         }
+        if (overlapping) {
+          const beforeOverlap = await loadConflictState(db, def.key);
+          const other = await driveConflictTurn(db, overlapDef, overlapParticipants, turn, year);
+          for (const event of other.events) {
+            if (
+              (
+                await materializeLivingConflictEvent(
+                  db,
+                  overlapDef,
+                  overlapParticipants,
+                  event,
+                  turn
+                )
+              ).opened
+            )
+              overlapWindows++;
+          }
+          assert.deepEqual(
+            await loadConflictState(db, def.key),
+            beforeOverlap,
+            "Other crisis overwrote Ukraine state"
+          );
+        }
         await measure("macro", () => processMacroCountryTurn(db, turn));
         for (const row of await db
           .collection<MacroCountryState>("macroCountries")
@@ -356,8 +397,10 @@ async function main() {
           const ratio = output(row) / baseline.get(row.entityId)!;
           if (row.entityId === "CA" && row.lastMacroTickTurn! >= 1057)
             assert(Math.abs(ratio - 1) < 1e-12, "Unrelated control changes");
-          if (row.entityId === (strategy === "counterfactual" ? "PL" : "UKR"))
+          if (row.entityId === (strategy === "counterfactual" ? "PL" : "UKR")) {
             minimumOutput = Math.min(minimumOutput, ratio);
+            finalOutput = ratio;
+          }
           peakDisplacement = Math.max(
             peakDisplacement,
             row.livingConflictExposure?.displacedShare ?? 0
@@ -366,6 +409,8 @@ async function main() {
         }
       }
       const final = await loadConflictState(db, def.key);
+      if (overlapping)
+        assert(overlapWindows > 1 && overlapResolved > 0, "Both crisis families must execute");
       const embargoes = await db.collection("tradeEmbargoes").countDocuments();
       if (Number(arg("turns") ?? 720) >= 720) {
         assert(outcomes.length > 0, "Response windows must actually resolve");
@@ -377,6 +422,17 @@ async function main() {
           assert.equal(final.phaseLevel, 6);
           assert.equal(final.status, "ceasefire");
         }
+        if (["neutrality", "deterrence", "counterfactual"].includes(strategy))
+          assert.equal(
+            final.campaign?.consequences.casualties,
+            0,
+            "Peace cannot create combat deaths"
+          );
+        if (["limited", "frozen", "invasion_recovery"].includes(strategy))
+          assert(
+            finalOutput > minimumOutput,
+            "Real macro output must recover after fighting stops"
+          );
         if (strategy === "proxy") assert.equal(final.phaseLevel, 3);
         if (strategy === "prolonged") assert.equal(final.phaseLevel, 5);
         if (strategy === "invasion_recovery" || strategy === "prolonged")
@@ -392,6 +448,9 @@ async function main() {
       const result = {
         strategy,
         windows,
+        overlapWindows,
+        overlapResolved,
+        overlapFinal: overlapping ? await loadConflictState(db, overlapDef.key) : null,
         decisions,
         retries,
         totalPaid,
@@ -400,6 +459,7 @@ async function main() {
         final,
         embargoes,
         minimumOutput,
+        finalOutput,
         peakDisplacement,
         peakHosting,
       };
@@ -426,6 +486,8 @@ async function main() {
       )
     );
     assert.equal(hash(after), originalHash, "Saved source changed");
+    assert.equal(!!dirty(), development, "Qualification source changed during execution");
+    assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), revision);
     writeFileSync(
       out,
       JSON.stringify(
