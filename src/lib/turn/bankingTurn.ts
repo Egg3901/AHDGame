@@ -4,6 +4,7 @@
  * Discount-window interest remains due when proprietary trading is disabled.
  */
 import { ObjectId, type Db } from "mongodb";
+import { resumeReservePoolTransfers } from "@/lib/centralBank/reservePoolTransferCommands";
 import { resumeMonetaryOperations } from "@/lib/moneySupply/monetaryOperationJournal";
 import { resumeLiquidityAdvances } from "@/lib/moneySupply/liquidityAdvance";
 import { MONETARY_OPERATION_COOLDOWN_TURNS } from "@/lib/moneySupply/operations";
@@ -158,6 +159,7 @@ type DepositTaker = {
  * the turn explicitly for idempotency keys.
  */
 export async function processBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
+  await resumeReservePoolTransfers(db);
   await resumeMonetaryOperations(db, MONETARY_OPERATION_COOLDOWN_TURNS);
   await resumeLiquidityAdvances(db, MONETARY_OPERATION_COOLDOWN_TURNS);
   // One config read per turn. Every stage below decides from this snapshot,
