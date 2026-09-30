@@ -40,13 +40,11 @@ function world() {
 }
 function snapshot(memory: ReturnType<typeof world>) {
   return {
-    banks: memory
-      .collection("corporations")
-      .docs.map((row) => ({
-        ...row,
-        liquidCapital: row.liquidCapital,
-        bankCharter: row.bankCharter as BankCharter,
-      })),
+    banks: memory.collection("corporations").docs.map((row) => ({
+      ...row,
+      liquidCapital: row.liquidCapital,
+      bankCharter: row.bankCharter as BankCharter,
+    })),
     central: memory.collection("centralBanks").docs,
     logs: memory.collection("financialTxLog").docs,
   };
