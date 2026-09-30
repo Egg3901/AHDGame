@@ -1,5 +1,6 @@
 import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 import { loadLiveSuccessionFinances, type LiveSuccessionFinances } from "./loadLiveFinances";
 
@@ -94,7 +95,7 @@ export async function loadSuccessionExchangeRates(
   const currencies = [
     finances.budgetCurrencyCode,
     ...finances.creditorContracts.map((bond) => bond.currencyCode),
-  ].filter((code): code is NonNullable<typeof code> => code != null);
+  ].filter((code): code is CurrencyCode => code != null);
   const unique = [...new Set(currencies)];
   if (unique.length === 0) return {};
   const rows = await db
