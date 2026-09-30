@@ -30,6 +30,10 @@ const DEFAULT_TERRITORY = {
 
 export type DefaultFederationSource = keyof typeof DEFAULT_TERRITORY;
 
+export function defaultFederationParticipants(sourceCountryId: DefaultFederationSource): string[] {
+  return [...new Set(Object.values(DEFAULT_TERRITORY[sourceCountryId]))].sort();
+}
+
 /** Open the documented population-default settlement as an ordinary bill.
  * The zero financial amounts here are placeholders: a proposal binds the
  * allocation rule, while stage/verify value the live balance sheet later. */
@@ -46,7 +50,7 @@ export async function openDefaultFederationPoliticalProposal(input: {
   if (availableFromYear === null || currentYear < availableFromYear)
     throw new Error("Federation proposal is not yet available");
   const assignments: Record<string, string> = DEFAULT_TERRITORY[sourceCountryId];
-  const participants = [...new Set(Object.values(assignments))].sort();
+  const participants = defaultFederationParticipants(sourceCountryId);
   const inventory = await loadLiveSuccessionInventory(db, sourceCountryId);
   const territories = planSuccessionTerritories(inventory.sourceRegions, participants, assignments);
   const settlementId = `${sourceCountryId.toLowerCase()}-1991-default`;

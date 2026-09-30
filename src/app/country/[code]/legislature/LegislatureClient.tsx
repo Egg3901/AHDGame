@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
+import FederationDecisionPanel from "./FederationDecisionPanel";
 
 const LegislatureFallback = (_props: { name?: string }) => <LegislatureSkeleton />;
 
@@ -80,6 +81,10 @@ export default function LegislatureClient({ countryId, legislatureName, generic 
         <PageComponent countryId={countryId} />
       </Suspense>
     );
+  }
+
+  if (countryId === "CS" || countryId === "YU") {
+    return <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />;
   }
 
   // Countries without a dedicated legislature component
