@@ -114,7 +114,7 @@
     "negativeRecoveryCases": 0
   },
   "treatment": {
-    "sourceCommit": "186680f3e396083de862f223af96f56c8573f980",
+    "sourceCommit": "0b40ef17d774a5a5420c17f34ce69c7663b7c1f0",
     "mode": "treatment",
     "scope": "Synthetic isolated Mongo route and banking recovery; auth and rate-limit fixture only",
     "normal": {
@@ -202,19 +202,19 @@
     "performance": {
       "toLending": {
         "commands": 19,
-        "readBsonBytes": 3561
+        "readBsonBytes": 4010
       },
       "toForex": {
         "commands": 19,
-        "readBsonBytes": 3555
+        "readBsonBytes": 4004
       },
       "negativeLending": {
         "commands": 19,
-        "readBsonBytes": 3561
+        "readBsonBytes": 4010
       },
       "negativeForex": {
         "commands": 19,
-        "readBsonBytes": 3555
+        "readBsonBytes": 4004
       },
       "idleBankingPhase": {
         "commands": 4,
@@ -233,5 +233,19 @@
     "Synthetic isolated subsystem; no world simulation or production activation.",
     "Native route uses synthetic authenticated chair and a permissive rate-limit fixture; real route authorization has separate focused tests.",
     "Measurements are individual API commands and the idle private-banking-disabled phase, not a full monetary-policy sweep."
-  ]
+  ],
+  "admissionQualification": {
+    "sourceCommit": "0b40ef17d774a5a5420c17f34ce69c7663b7c1f0",
+    "scope": "Synthetic isolated subsystem using actual reserve and credit routes, original underwriting, and production recovery. Authentication and rate-limit fixtures are synthetic.",
+    "orderingCases": 2,
+    "interruptedAdmissionCases": 2,
+    "pendingOwnerPriorityCases": 1,
+    "allCasesPassed": true,
+    "allCompletedAdmissionsReleased": true,
+    "fixtureSha256": "2f02ad49f8b1cb9f8ee843730ffdb5209bec8c6b930d791002938cdf17036642"
+  },
+  "treatmentFixtureDependenciesSha256": {
+    "reserve-pool-auth.ts": "24a71a5ed13b60ffa599e60d34e779d3680afb21a71af21204730d079b647418",
+    "reserve-pool-rate-limit.ts": "8fb11b116e6077a943ee9d35b4078fe40ef8af15fcc399d460b900b04c1848f1"
+  }
 }
