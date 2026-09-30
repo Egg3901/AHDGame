@@ -236,3 +236,62 @@ describe("unmeasured query telemetry", () => {
     resetRoundTripProfiler();
   });
 });
+
+describe("phase sub-steps and top collections (#2689)", () => {
+  it("persists named sub-steps with their own round trips, and top collections above the threshold", async () => {
+    resetRoundTripProfiler();
+    const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
+    const { TOP_COLLECTIONS_MIN_ROUND_TRIPS } =
+      await import("@/simulation/engine/turnPhaseRuntime");
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("corporationTurn", async () => {
+      const steps = substepMarker();
+      for (let i = 0; i < TOP_COLLECTIONS_MIN_ROUND_TRIPS; i++) recordRoundTrip("corporations");
+      steps.mark("load");
+      recordRoundTrip("sectors");
+      recordRoundTrip("sectors");
+      steps.mark("write");
+      recordRoundTrip("sectors");
+      steps.mark("write");
+    });
+    await flushAsyncStatusWrites();
+    const status = phaseStatuses.corporationTurn;
+    expect(status.substeps?.load).toMatchObject({ roundTrips: 100, calls: 1 });
+    expect(status.substeps?.write).toMatchObject({ roundTrips: 3, calls: 2 });
+    expect(status.topCollections?.[0]).toEqual({ collection: "corporations", roundTrips: 100 });
+    expect(status.topCollections).toHaveLength(2);
+    resetRoundTripProfiler();
+  });
+
+  it("records nothing for small phases, outside a phase, or when a phase fails", async () => {
+    resetRoundTripProfiler();
+    const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
+    substepMarker().mark("outside");
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("small", async () => {
+      recordRoundTrip("npps");
+    });
+    await runtime.runPhase("broken", async () => {
+      substepMarker().mark("partial");
+      throw new Error("boom");
+    });
+    await runtime.runPhase("broken", async () => 1);
+    await flushAsyncStatusWrites();
+    expect(phaseStatuses.small).not.toHaveProperty("topCollections");
+    expect(phaseStatuses.small).not.toHaveProperty("substeps");
+    expect(phaseStatuses.broken).not.toHaveProperty("substeps");
+    resetRoundTripProfiler();
+  });
+});

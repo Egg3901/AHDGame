@@ -1,0 +1,274 @@
+{
+  "issue": 1328,
+  "baseline": {
+    "sourceCommit": "e2858e5c5007a19a1d9c5b7f5dde000b2a1c6efe",
+    "mode": "baseline",
+    "scope": "Synthetic isolated Mongo route and banking recovery; auth and rate-limit fixture only",
+    "normal": {
+      "toLending": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toLending",
+            "amount": 200,
+            "forexRevenueDelta": -200,
+            "reserveBalanceDelta": 200,
+            "maxToLending": 500,
+            "maxToForex": 400,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": 800,
+          "reserveBalance": 1000,
+          "lastTransfer": 100
+        }
+      },
+      "toForex": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toForex",
+            "amount": 200,
+            "forexRevenueDelta": 200,
+            "reserveBalanceDelta": -200,
+            "maxToLending": 500,
+            "maxToForex": 400,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": 1200,
+          "reserveBalance": 600,
+          "lastTransfer": 100
+        }
+      },
+      "negativeLending": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toLending",
+            "amount": 200,
+            "forexRevenueDelta": -200,
+            "reserveBalanceDelta": 200,
+            "maxToLending": 500,
+            "maxToForex": 0,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": 800,
+          "reserveBalance": -800,
+          "lastTransfer": 100
+        }
+      },
+      "negativeForex": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toForex",
+            "amount": 200,
+            "forexRevenueDelta": 200,
+            "reserveBalanceDelta": -200,
+            "maxToLending": 0,
+            "maxToForex": 400,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": -800,
+          "reserveBalance": 600,
+          "lastTransfer": 100
+        }
+      }
+    },
+    "performance": {
+      "toLending": {
+        "commands": 4,
+        "readBsonBytes": 193
+      },
+      "toForex": {
+        "commands": 4,
+        "readBsonBytes": 193
+      },
+      "negativeLending": {
+        "commands": 4,
+        "readBsonBytes": 193
+      },
+      "negativeForex": {
+        "commands": 4,
+        "readBsonBytes": 193
+      },
+      "idleBankingPhase": {
+        "commands": 3,
+        "readBsonBytes": 46
+      }
+    },
+    "financialRecoveryCases": 0,
+    "auditRecoveryCases": 0,
+    "concurrentCases": 0,
+    "negativeRecoveryCases": 0
+  },
+  "treatment": {
+    "sourceCommit": "c6ba13c5fa859976a0fc51bf2217abaee7c1d616",
+    "mode": "treatment",
+    "scope": "Synthetic isolated Mongo route and banking recovery; auth and rate-limit fixture only",
+    "normal": {
+      "toLending": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toLending",
+            "amount": 200,
+            "forexRevenueDelta": -200,
+            "reserveBalanceDelta": 200,
+            "maxToLending": 500,
+            "maxToForex": 400,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": 800,
+          "reserveBalance": 1000,
+          "lastTransfer": 100
+        }
+      },
+      "toForex": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toForex",
+            "amount": 200,
+            "forexRevenueDelta": 200,
+            "reserveBalanceDelta": -200,
+            "maxToLending": 500,
+            "maxToForex": 400,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": 1200,
+          "reserveBalance": 600,
+          "lastTransfer": 100
+        }
+      },
+      "negativeLending": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toLending",
+            "amount": 200,
+            "forexRevenueDelta": -200,
+            "reserveBalanceDelta": 200,
+            "maxToLending": 500,
+            "maxToForex": 0,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": 800,
+          "reserveBalance": -800,
+          "lastTransfer": 100
+        }
+      },
+      "negativeForex": {
+        "response": {
+          "status": 200,
+          "body": {
+            "success": true,
+            "direction": "toForex",
+            "amount": 200,
+            "forexRevenueDelta": 200,
+            "reserveBalanceDelta": -200,
+            "maxToLending": 0,
+            "maxToForex": 400,
+            "nextTransferTurn": 124
+          }
+        },
+        "state": {
+          "forexRevenue": -800,
+          "reserveBalance": 600,
+          "lastTransfer": 100
+        }
+      }
+    },
+    "performance": {
+      "toLending": {
+        "commands": 21,
+        "readBsonBytes": 5716
+      },
+      "toForex": {
+        "commands": 21,
+        "readBsonBytes": 5710
+      },
+      "negativeLending": {
+        "commands": 21,
+        "readBsonBytes": 5716
+      },
+      "negativeForex": {
+        "commands": 21,
+        "readBsonBytes": 5710
+      },
+      "idleBankingPhase": {
+        "commands": 4,
+        "readBsonBytes": 46
+      }
+    },
+    "financialRecoveryCases": 2,
+    "auditRecoveryCases": 2,
+    "concurrentCases": 2,
+    "negativeRecoveryCases": 1
+  },
+  "normalParity": true,
+  "baselineFixtureSha256": "dfea90911c8c777d342cd8cbb5ca23d78ac095a7c130d829960019ec283857e8",
+  "treatmentFixtureSha256": "ac7a37ad13256589a5a19fcc986a7f2298e86b919e279e7591cab92cacf9ae52",
+  "limitations": [
+    "Synthetic isolated subsystem; no world simulation or production activation.",
+    "Native route uses synthetic authenticated chair and a permissive rate-limit fixture; real route authorization has separate focused tests.",
+    "Measurements are individual API commands and the idle private-banking-disabled phase, not a full monetary-policy sweep.",
+    "Older unfinished atomic records without surviving target proof remain partial for explicit reconciliation; recovery does not infer an outcome."
+  ],
+  "admissionQualification": {
+    "sourceCommit": "c6ba13c5fa859976a0fc51bf2217abaee7c1d616",
+    "scope": "Synthetic isolated subsystem using actual reserve and credit routes, original underwriting, and production recovery. Authentication and rate-limit fixtures are synthetic.",
+    "orderingCases": 2,
+    "interruptedAdmissionCases": 2,
+    "pendingOwnerPriorityCases": 1,
+    "allCasesPassed": true,
+    "allCompletedAdmissionsReleased": true,
+    "fixtureSha256": "2f02ad49f8b1cb9f8ee843730ffdb5209bec8c6b930d791002938cdf17036642"
+  },
+  "treatmentFixtureDependenciesSha256": {
+    "reserve-pool-auth.ts": "24a71a5ed13b60ffa599e60d34e779d3680afb21a71af21204730d079b647418",
+    "reserve-pool-rate-limit.ts": "8fb11b116e6077a943ee9d35b4078fe40ef8af15fcc399d460b900b04c1848f1"
+  },
+  "postRunSourceChanges": {
+    "throughCommit": "89d4a2e6ef5bece0ea8f6ec7a8e8e3b8862c8722",
+    "scope": "LOC reports and concrete Mongo target type declarations only; emitted runtime game behavior unchanged from executed source"
+  },
+  "atomicQualification": {
+    "sourceCommit": "291a09e43c0527ba7243ade6cc54ff9b4a33dd29",
+    "scope": "Synthetic isolated Mongo using actual reserve command and production recovery; protected outcome, completion, release, legacy compatibility and pending-owner cases.",
+    "cases": 11,
+    "allCasesPassed": true,
+    "completedOrRefusedCases": 10,
+    "legacyAmbiguousCasesRetainedForReconciliation": 1,
+    "fixtureSha256": "ad904b506ca4befa6a352167e6d49d3b78c6d10af295ad77274c328a06c371ee",
+    "pendingOwnerPageCases": 1
+  },
+  "postRunIntegration": {
+    "commit": "b70394562dd9cd563840eaeef5f2b10734b0e50f",
+    "scope": "Merged treasury transfer implementation and additive recovery dispatch. Reserve and LOC command implementation unchanged. Published performance remains scoped to executed c6ba source, before the additional treasury pending lookup."
+  },
+  "atomicFollowup": {
+    "commit": "291a09e43c0527ba7243ade6cc54ff9b4a33dd29",
+    "scope": "Bounded recovery of the exact protected target owner outside the current pending page, plus compiler-only corrections. All eleven protected-outcome native cases passed at this clean source. Earlier parity and coordinated admission evidence remains scoped to c6ba."
+  }
+}

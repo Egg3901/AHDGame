@@ -22,6 +22,7 @@
  * entries rendered at the top of the report.
  */
 import { MongoClient } from "mongodb";
+import { collectElectionTurnoverReport } from "@/lib/sim/electionTurnover";
 import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
 import type { GameHealthSnapshot } from "@/lib/db/types/gameHealthSnapshot";
 import {
@@ -33,7 +34,11 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
 import { readFileSync, writeFileSync } from "node:fs";
-import { qualifyPresidentialRace } from "./presidentialQualification";
+import {
+  qualifyPresidentialRace,
+  presidentialPersonTurnover,
+  type PresidentialOfficeSnapshot,
+} from "./presidentialQualification";
 import type { ElectionResultSnapshot } from "@/lib/db/types/electionResultSnapshot";
 import type { ElectionVoteTally } from "@/lib/db/types/voteTally";
 
@@ -354,7 +359,7 @@ async function main(): Promise<void> {
   const label = (countryId: string, party: string): string =>
     partyName.get(`${countryId}|${party}`) ?? party;
   const seatRows = await db
-    .collection("parliamentSeatsHistory")
+    .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
     .find({ countryId: { $in: CONTROL_COUNTRIES } })
     .sort({ turn: 1 })
     .toArray();
@@ -616,6 +621,7 @@ async function main(): Promise<void> {
   );
   const presidentialQualification = {
     partyAlternations: presidentControl?.alternations ?? null,
+    ...presidentialPersonTurnover(seatRows),
     races: presidentialRaces,
     reconciled: presidentialRaces.filter((race) => race.reconciliation.length === 0).length,
     contingent: presidentialRaces.filter((race) => race.contingent).length,
@@ -1340,7 +1346,7 @@ async function main(): Promise<void> {
   // anyway.
   const SEAT_SHARE_OFFICES = ["house", "senate", "commons"];
   const seatShareSeatRows = await db
-    .collection("parliamentSeatsHistory")
+    .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
     .find({ countryId: { $in: CONTROL_COUNTRIES }, officeType: { $in: SEAT_SHARE_OFFICES } })
     .sort({ turn: 1 })
     .toArray();
@@ -1474,7 +1480,7 @@ async function main(): Promise<void> {
     maxTurn
   );
   const presidentialProvenance = {
-    telemetryVersion: 1,
+    telemetryVersion: 2,
     runId: simRunDoc?.runId ?? null,
     seed: simRunDoc?.seed ?? null,
     preset: simRunDoc?.preset ?? (presetId || null),
@@ -1520,7 +1526,9 @@ async function main(): Promise<void> {
     s.corpRevenue = keep(s.corpRevenue);
   }
 
+  const electionTurnover = await collectElectionTurnoverReport(db);
   const payload = {
+    electionTurnover,
     dbName,
     maxTurn,
     ordered,
@@ -3168,6 +3176,7 @@ function render() {
     }
     html += '<div class="note">Party alternations come from the per-turn office snapshot, including the seeded presidency. Race margins and reconciliation use stored election-time results and final tallies. Missing snapshots remain visible as gaps.</div>';
     html += '<div class="card">' + P.partyAlternations + ' party alternation(s); ' + P.reconciled + '/' + P.races.length + ' races reconcile; ' + P.playerWins + ' player wins; ' + P.nppWins + ' NPP wins; ' + P.contingent + ' contingent resolutions.</div>';
+    html += '<div class="note">Person turnover: ' + esc(P.personTurnover ?? 'unknown') + '; ' + P.knownTurns + ' holder snapshots, ' + P.unknownTurns + ' snapshots missing holder identity.</div>';
     html += '<div class="note">Actor mix: ' + P.actorMix['npp-only'] + ' NPP-only, ' + P.actorMix['player-only'] + ' player-only, ' + P.actorMix.mixed + ' mixed, ' + P.actorMix.unknown + ' unknown. Per-race election-time apportionment is included in the report data.</div>';
     html += '<div class="card scroll"><table><thead><tr><th>Year</th><th>Actors</th><th>Winner</th><th>Popular margin</th><th>EV margin</th><th>Resolution</th><th>Reconciliation</th></tr></thead><tbody>';
     for (const race of P.races) {
@@ -3180,6 +3189,18 @@ function render() {
         + '<td>' + (race.reconciliation.length ? esc(race.reconciliation.join('; ')) : 'matched') + '</td></tr>';
     }
     html += '</tbody></table></div>';
+  }
+  if (D.electionTurnover) {
+    const T = D.electionTurnover;
+    const rateText = (rate) => rate.per100 === null ? 'unknown (0 comparable)' : rate.per100.toFixed(1) + ' (' + rate.count + '/' + rate.comparableCycles + ')';
+    html += '<h2>Election turnover per 100 comparable cycles</h2><div class="note">' + esc(T.basis) + ' ' + esc(T.denominators) + ' ' + esc(T.legacyLimit) + '</div>';
+    html += '<div class="card scroll"><table><thead><tr><th>Family and outcome coverage</th><th>Resolved</th><th>Seat vector changed</th><th>Unique control flip</th><th>Tied cycles</th><th>Representative replaced</th><th>All incumbents held</th><th>Player win</th><th>NPP win</th><th>Executed resolver shares</th></tr></thead><tbody>';
+    for (const family of T.families) {
+      html += '<tr><td>' + esc(family.key) + '<br>' + esc(Object.entries(family.outcomeScopes).map(([scope, count]) => scope + ': ' + count).join('; ')) + '</td><td>' + family.resolvedCycles + '</td>';
+      for (const metric of ['partySeatVectorChange', 'uniqueControlFlips', 'tiedControlCycles', 'personReplacement', 'completeIncumbentHold', 'playerWinCycles', 'nppWinCycles']) html += '<td>' + esc(rateText(family[metric])) + '</td>';
+      html += '<td>' + esc(Object.entries(family.resolverPathShares).map(([name, rate]) => name + ': ' + rateText(rate)).join('; ')) + '</td></tr>';
+    }
+    html += '</tbody></table></div><div class="note">Representative identities count each actual character or NPP once, including representatives holding aggregate seatsHeld voting weight. They do not assert one individual per physical seat. Actor mix, missing evidence and excluded comparisons are preserved in the report data.</div>';
   }
   if (D.governors && D.governors.length) {
     html += '<h2>Governorships</h2><div class="card scroll"><table><thead><tr><th>country</th><th>party</th><th>governorships</th></tr></thead><tbody>';

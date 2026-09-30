@@ -7,6 +7,7 @@
  * retired the recruitment drive this file used to run for NPP leaders, see
  * the comment above the leadership loop below.
  */
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db, ObjectId } from "mongodb";
 import type {
   BargainingCampaign,
@@ -123,6 +124,7 @@ export async function processNppUnionBehavior(
   db: Db,
   currentTurn: number
 ): Promise<NppUnionBehaviorResult> {
+  const steps = substepMarker();
   const autonomy = await getNppAutonomyLevel(db);
   if (!nppAutonomyLevelAtLeast(autonomy, "v3")) return { ...EMPTY };
   if (!labourAtLeast(await getLabourSystemMode(), "full")) return { ...EMPTY };
@@ -201,6 +203,7 @@ export async function processNppUnionBehavior(
       union.ownerType === "npp" && union.ownerId != null
   );
 
+  steps.mark("vacancyElections");
   const leaders = await db
     .collection<NPP>("npps")
     .find(
@@ -245,6 +248,7 @@ export async function processNppUnionBehavior(
   }
   if (clearOps.length > 0) await db.collection<Union>("unions").bulkWrite(clearOps);
 
+  steps.mark("leadershipCleanup");
   const activeLed = led.filter((union) => !orphaned.some((id) => id.equals(union._id)));
   const [sectors, corporations, campaignSnapshot, activeAgreements] = await Promise.all([
     // Union behaviour needs the employer/scope key plus the worker-weighted
@@ -367,6 +371,7 @@ export async function processNppUnionBehavior(
     }
   }
 
+  steps.mark("loadAndOpenCampaigns");
   const unionById = new Map(unions.map((union) => [union._id.toHexString(), union]));
   for (const campaign of campaignSnapshot) {
     if (campaign.lastActionTurn >= currentTurn) continue;
@@ -480,5 +485,6 @@ export async function processNppUnionBehavior(
     }
   }
 
+  steps.mark("campaignResponses");
   return result;
 }

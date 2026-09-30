@@ -1,3 +1,5 @@
+import type { Filter } from "mongodb";
+import { northernIrelandAssemblySuspended } from "@/lib/countries/uk/northernIreland/service";
 import { getDb } from "@/lib/mongodb";
 import type { StateBill, State, ElectedOfficial, Character } from "@/lib/db/types";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
@@ -158,6 +160,9 @@ export async function processStateBillTimers(
   let billsProcessed = 0;
   const notificationInputs: NotificationInput[] = [];
   const { chamberVote, executiveAssent, override } = config.stages;
+  const authorityFilter: Filter<StateBill> = (await northernIrelandAssemblySuspended(db))
+    ? { $nor: [{ countryId: "UK", stateId: "NIR" }] }
+    : {};
 
   // 1. Close voting on bills where the voting deadline has passed.
   // Use findOneAndUpdate to atomically claim each bill before processing so
@@ -166,6 +171,7 @@ export async function processStateBillTimers(
   for (;;) {
     const claimed = await db.collection<StateBill>(config.collection).findOneAndUpdate(
       {
+        ...authorityFilter,
         status: chamberVote.status,
         $or: [
           { votingEndsOnTurn: { $lte: currentTurnGov } },
@@ -202,6 +208,7 @@ export async function processStateBillTimers(
   for (;;) {
     const claimed = await db.collection<StateBill>(config.collection).findOneAndUpdate(
       {
+        ...authorityFilter,
         status: executiveAssent.status,
         $or: [
           { governorActionDeadlineOnTurn: { $lte: currentTurnGov } },
@@ -234,6 +241,7 @@ export async function processStateBillTimers(
   for (;;) {
     const claimed = await db.collection<StateBill>(config.collection).findOneAndUpdate(
       {
+        ...authorityFilter,
         status: override.status,
         $or: [
           { overrideVotingEndsOnTurn: { $lte: currentTurnGov } },

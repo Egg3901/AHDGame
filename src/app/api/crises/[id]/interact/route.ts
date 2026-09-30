@@ -1,3 +1,5 @@
+import { visibleGlobalResponses } from "@/lib/livingConflict/globalResponse";
+import { crisisDecisionRegion } from "@/lib/crises/rules/authorization";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -82,11 +84,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           character._id,
           character.countryId,
           characterRoles,
-          character.homeState
+          crisisDecisionRegion(character)
         );
         return NextResponse.json({
           success: true,
-          interaction: declined.interaction,
+          interaction: {
+            ...declined.interaction,
+            leaderResponses: visibleGlobalResponses(
+              declined.interaction.leaderResponses ?? [],
+              character.countryId
+            ),
+          },
           nextNode: declined.nextNode,
           appliedEffects: declined.appliedEffects,
         });
@@ -127,12 +135,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       character._id,
       character.countryId,
       characterRoles,
-      character.homeState
+      crisisDecisionRegion(character)
     );
 
     return NextResponse.json({
       success: true,
-      interaction: result.interaction,
+      interaction: {
+        ...result.interaction,
+        leaderResponses: visibleGlobalResponses(
+          result.interaction.leaderResponses ?? [],
+          character.countryId
+        ),
+      },
       nextNode: result.nextNode,
       appliedEffects: result.appliedEffects,
     });

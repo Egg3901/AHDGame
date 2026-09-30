@@ -2889,9 +2889,9 @@ export const deLegislationTypes: LegislationType[] = [
     countryScope: "de",
     name: "European Integration Policy Act",
     description:
-      "Germany's posture on EU integration depth — Eurobonds, fiscal union, EU defense cooperation, NextGenerationEU joint borrowing, social-policy harmonization.",
+      "Germany's European integration stance and associated domestic spending. Treaty ratification, membership and shared sovereign powers require separate decisions.",
     explanation:
-      "(Europäische-Integrationspolitik-Rahmengesetz) — EU integration depth — Eurobonds, fiscal union, EU defense cooperation, joint borrowing (NextGenerationEU model), and the federalist-vs-intergovernmentalist debate. Carries the Eigenmittel contribution as the cost line.",
+      "Sets Germany's negotiating priorities and domestic integration-policy spending. Maastricht treaty consent belongs in a separate treaty-ratification bill; an organization withdrawal bill decides membership. Shared taxation, debt and sovereignty require an agreement among the participating governments.",
     policyDomain: "foreign_policy",
     subCategory: "EU integration",
     budgetCategory: "other",
@@ -2913,17 +2913,17 @@ export const deLegislationTypes: LegislationType[] = [
         "de_eu_integration",
         [
           {
-            name: "European Federation Act",
+            name: "European Federation Negotiating Mandate",
             explanation:
-              "(Europäische-Bundesstaats-Gesetz) — Convert the EU into a federal union with joint sovereignty over taxation, defense, and social policy; full Eurobonds; common Sozialstaat standards",
+              "Fund a domestic program supporting negotiations for a European federation and common social standards. Joint sovereignty, taxation and debt issuance require a separate agreement with participating governments.",
             stance: "left",
             economic: -5,
             social: -5,
           },
           {
-            name: "EU Fiscal Union Act",
+            name: "European Fiscal Union Negotiating Mandate",
             explanation:
-              "(EU-Fiskalunions-Gesetz) — Establish permanent Eurobonds, joint EU debt issuance, expanded NextGenerationEU successor programs, EU-level taxation authority",
+              "Prioritize negotiations for joint borrowing and fiscal coordination, with a larger domestic integration-policy budget. Common debt and taxation powers require a separate institutional agreement.",
             stance: "left",
             economic: -3,
             social: -3,
@@ -2931,7 +2931,7 @@ export const deLegislationTypes: LegislationType[] = [
           {
             name: "EU Integration Deepening Act",
             explanation:
-              "(EU-Integrationsvertiefungs-Gesetz) — Expand Germany's net EU contribution, support EU defense union deepening, broaden EU social-policy coordination",
+              "Expand domestic support for European defense and social-policy coordination. New treaty powers require separate ratification.",
             stance: "left",
             economic: -1,
             social: -1,
@@ -2939,7 +2939,7 @@ export const deLegislationTypes: LegislationType[] = [
           {
             name: "European Integration Policy Act",
             explanation:
-              "(Europäische-Integrationspolitik-Rahmengesetz) — Statutory Eigenmittel contribution, standing EU treaty obligations, and Bundesregierung EU coordination",
+              "Maintain Germany's integration-policy spending and intergovernmental coordination. Treaty consent and organization membership follow their separate legislative decisions.",
             stance: "center",
             economic: 0,
             social: 0,
@@ -2947,7 +2947,7 @@ export const deLegislationTypes: LegislationType[] = [
           {
             name: "EU Subsidiarity Restoration Act",
             explanation:
-              "(EU-Subsidiaritätsrestaurierungs-Gesetz) — Reduce Germany's net EU contribution, oppose new Eurobonds, restrict EU competence expansion",
+              "Reduce domestic integration-policy spending and favor national discretion in negotiations over new shared powers.",
             stance: "right",
             economic: 1,
             social: 1,
@@ -2955,15 +2955,15 @@ export const deLegislationTypes: LegislationType[] = [
           {
             name: "EU Withdrawal Preparation Act",
             explanation:
-              "(EU-Austrittsvorbereitungs-Gesetz) — Substantially cut Germany's EU contributions, oppose all integration deepening, prepare unilateral exit pathways",
+              "Reduce domestic integration-policy spending and prepare a political case for withdrawal. Submit an organization withdrawal bill to decide membership.",
             stance: "right",
             economic: 3,
             social: 3,
           },
           {
-            name: "EU Withdrawal Act",
+            name: "European Withdrawal Negotiating Mandate",
             explanation:
-              "(EU-Austritts-Gesetz) — Constitutional referendum on EU membership, exit Schengen and the Eurozone, end Eigenmittel contributions entirely",
+              "End this domestic integration-policy program and adopt a mandate to seek withdrawal. Organization membership changes through a withdrawal bill; monetary exit and other treaty changes require separate settlements.",
             stance: "right",
             economic: 5,
             social: 5,

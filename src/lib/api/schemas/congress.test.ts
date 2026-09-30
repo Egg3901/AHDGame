@@ -118,3 +118,17 @@ describe("stateBillProvisionSchema — strict governor-queue provisions (audit S
     expect(stateBillProvisionSchema.safeParse({ effectDirection: 1 }).success).toBe(false);
   });
 });
+
+describe("euro-adoption proposal schema", () => {
+  it("accepts a standalone adoption provision and preserves its discriminant", () => {
+    const result = proposeBillSchema.parse({
+      ...base,
+      category: "economy",
+      provisions: [{ type: "euro_adoption" }],
+    });
+    expect(result.provisions).toEqual([{ type: "euro_adoption" }]);
+  });
+  it("does not admit the national currency decision through a state bill", () => {
+    expect(stateBillProvisionSchema.safeParse({ type: "euro_adoption" }).success).toBe(false);
+  });
+});

@@ -419,3 +419,21 @@ describe("#2119 era/cost telemetry", () => {
     }
   });
 });
+
+it("quotes actual 1991 prices from gameConfig instead of a stale gameState flag", async () => {
+  const db = fakeDb({
+    gameState: [{ _id: "current", preset: "1991-default", campaignEraPriceLevelEnabled: false }],
+    gameConfig: [{ _id: "default", campaignEraPriceLevelEnabled: true }],
+  });
+  const t = await collectEconomyTelemetry(db);
+  expect(t.eraCosts.flags.campaignEraPriceLevelEnabled).toEqual({
+    requested: true,
+    available: true,
+  });
+  expect(t.eraCosts.referenceCosts.fundsAtNationalAverageGdp.campaign[0]).toBe(
+    Math.round(20000 * 0.35808)
+  );
+  expect(t.eraCosts.referenceCosts.fundsAtNationalAverageGdp.advertise).toBe(
+    Math.round(100000 * 0.35808)
+  );
+});

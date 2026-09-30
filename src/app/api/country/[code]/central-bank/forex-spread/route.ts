@@ -1,5 +1,5 @@
 // POST /api/country/[code]/central-bank/forex-spread
-// Central-bank chair sets the spread-fee strength (0.5–1.5×) for their currency.
+// Central-bank chair sets the spread-fee strength (0.5 to 1.5 times) for their currency.
 // Once per FOREX_SPREAD_STRENGTH_COOLDOWN_TURNS. Auth: chair or admin.
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -19,7 +19,7 @@ import {
   FOREX_SPREAD_STRENGTH_COOLDOWN_TURNS,
   FOREX_SPREAD_STRENGTH_DEFAULT,
 } from "@/lib/constants/currencies";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import type { CentralBank, Character, ExchangeRate, GameState } from "@/lib/db/types";
 
@@ -54,13 +54,17 @@ export async function POST(request: Request, context: RouteContext) {
     if (!myChar) throw forbidden("Character required");
 
     const db = await getDb();
-    const bankId = getBankId(countryId);
+    const scope = await getMonetaryPolicyScope(db, countryId);
+    const bankId = scope.bankId;
     const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
     if (!bank) throw notFound("Central bank not found");
 
     const isChair = !!bank.chairCharacterId && myChar._id.equals(bank.chairCharacterId);
-    if (isChair && !isSameCountry(myChar, { countryId })) {
-      throw forbidden("Chair must be a citizen of this country");
+    if (
+      isChair &&
+      !scope.memberCountries.some((member) => isSameCountry(myChar, { countryId: member }))
+    ) {
+      throw forbidden("Chair must be a citizen of a member country");
     }
     if (!isAdmin && !isChair) {
       throw forbidden("Only the current chair can adjust the forex spread strength");
@@ -70,7 +74,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     // The exchangeRates doc holding this currency lives at its anchor country.
-    const currency = COUNTRY_CURRENCY_MAP[countryId];
+    const currency = scope.currencyCode ?? COUNTRY_CURRENCY_MAP[countryId];
     if (!currency) throw badRequest("Country has no forex currency");
     const rateDocId = getCountryIdForCurrency(currency);
 

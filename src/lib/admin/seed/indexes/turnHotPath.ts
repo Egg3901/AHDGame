@@ -12,6 +12,11 @@ export const TURN_HOT_PATH_INDEXES: ReadonlyArray<{
   { collection: "portfolioHistory", key: { characterId: 1 }, name: "portfolioHistory_characterId" },
   { collection: "bondHistory", key: { bondId: 1 }, name: "bondHistory_bondId" },
   { collection: "shareOrders", key: { status: 1 }, name: "shareOrders_status" },
+  {
+    collection: "currencyOrders",
+    key: { status: 1, expiryRefundState: 1 },
+    name: "currencyOrders_expiry_refund",
+  },
 ];
 
 export async function seedTurnHotPathIndexes(db: Db, log: (msg: string) => void) {

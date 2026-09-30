@@ -19,6 +19,40 @@ describe("loadOrganizationSummaries — founding-year visibility", () => {
     db.collection("gameState").findOne.mockResolvedValue(gs);
   }
 
+  it("shows the Community until the actual treaty state changes, even after 1993", async () => {
+    const { loadOrganizationSummaries } = await import("./service");
+    gameState({
+      currentYear: 1995,
+      preset: "1991-default",
+      europeanIntegration: {
+        stage: "community",
+        source: "historical-seed",
+        establishedTurn: 1,
+        ratifications: {},
+      },
+    });
+    const community = (await loadOrganizationSummaries(db as unknown as Db)).find(
+      (org) => org.id === "EU"
+    );
+    expect(community?.def.name).toBe("European Economic Community");
+    gameState({
+      currentYear: 1995,
+      preset: "1991-default",
+      europeanIntegration: {
+        stage: "union",
+        source: "ratified-treaty",
+        establishedTurn: 1,
+        treatyEffectiveTurn: 150,
+        ratifications: {},
+      },
+    });
+    const union = (await loadOrganizationSummaries(db as unknown as Db)).find(
+      (org) => org.id === "EU"
+    );
+    expect(union?.def.name).toBe("European Union");
+    expect(union?.id).toBe(community?.id);
+  });
+
   it("hides the EU in a 1979 game before 1993 (Warsaw Pact still in its window)", async () => {
     gameState({ currentYear: 1980, preset: "1979-default" });
     const { loadOrganizationSummaries } = await import("./service");

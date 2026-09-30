@@ -16,7 +16,7 @@ import type {
 // OSCE monitoring mandate: https://www.osce.org/special-monitoring-mission-to-ukraine/117729
 
 function role(ctx: RoleContext): ConflictRole {
-  if (ctx.countryId === "UKR") return "belligerent";
+  if (ctx.belligerents.includes(ctx.countryId)) return "belligerent";
   if (ctx.countryId === ctx.backerA) return "backer_a";
   if (ctx.countryId === ctx.backerB) return "backer_b";
   if (ctx.neighbors.includes(ctx.countryId)) return "neighbor";
@@ -43,7 +43,7 @@ function trees(key: string): RoleDecisionTrees {
           "uk_neutral",
           "Offer armed neutrality",
           "Trade formal non-alignment for monitored sovereignty guarantees.",
-          { diplomacy: 4, neutrality: 4 }
+          { diplomacy: 4, neutrality: 4, sovereignConsent: 1 }
         ),
         responseOpt(
           "uk_mobilize",
@@ -51,7 +51,11 @@ function trees(key: string): RoleDecisionTrees {
           "Raise readiness and accept the fiscal and escalation cost.",
           { deterrence: 4, militaryAid: 2, escalation: 2 },
           [],
-          0.012
+          0.012,
+          {
+            campaignRequirement: { minMilitaryReadiness: 30, minLogistics: 25 },
+            campaignCommitment: { kind: "military", side: "b", scale: 12, warWearinessDelta: 3 },
+          }
         ),
       ]
     ),
@@ -64,19 +68,39 @@ function trees(key: string): RoleDecisionTrees {
           "ru_bargain",
           "Negotiate reciprocal limits",
           "Offer de-escalation tied to neutrality and monitored force limits.",
-          { diplomacy: 4, neutrality: 3, restraint: 2 }
+          { diplomacy: 4, neutrality: 3, restraint: 2, reciprocalConsent: 1 },
+          [],
+          undefined,
+          { campaignCommitment: { kind: "military", scale: -20, warWearinessDelta: -4 } }
         ),
         responseOpt(
           "ru_proxy",
           "Support separatist proxies",
           "Apply deniable military and political pressure.",
-          { proxy: 4, coercion: 3, escalation: 2 }
+          { proxy: 4, coercion: 3, escalation: 2 },
+          [],
+          0.003,
+          {
+            campaignRequirement: { minMilitaryReadiness: 30, minLogistics: 30 },
+            campaignCommitment: { kind: "covert", side: "a", scale: 10, warWearinessDelta: 2 },
+            responseVisibility: "covert",
+          }
         ),
         responseOpt(
           "ru_invade",
           "Prepare direct intervention",
           "Use overt force to impose a new territorial settlement.",
-          { coercion: 5, escalation: 5 }
+          { coercion: 5, escalation: 5 },
+          [],
+          0.012,
+          {
+            campaignRequirement: {
+              minMilitaryReadiness: 50,
+              minLogistics: 45,
+              minDomesticSupport: 35,
+            },
+            campaignCommitment: { kind: "military", side: "a", scale: 20, warWearinessDelta: 6 },
+          }
         ),
       ]
     ),
@@ -91,7 +115,11 @@ function trees(key: string): RoleDecisionTrees {
           "Supply training, equipment, and intelligence without entering the war directly.",
           { militaryAid: 4, deterrence: 4 },
           [],
-          0.006
+          0.006,
+          {
+            campaignRequirement: { minMilitaryReadiness: 35, minLogistics: 40 },
+            campaignCommitment: { kind: "military", side: "b", scale: 8, warWearinessDelta: 2 },
+          }
         ),
         responseOpt(
           "us_sanctions",
@@ -118,7 +146,14 @@ function trees(key: string): RoleDecisionTrees {
           "Fund shelter, services, and legal protection.",
           { aid: 4, cohesion: 2 },
           [cfx("tick", "metric", "economy", "gdpGrowth", -0.002, "Refugee support")],
-          0.003
+          0.003,
+          {
+            campaignCommitment: {
+              kind: "humanitarian",
+              scale: 12,
+              consequences: { civilianStrain: -3 },
+            },
+          }
         ),
         responseOpt(
           "transit_aid",
@@ -126,7 +161,11 @@ function trees(key: string): RoleDecisionTrees {
           "Move defensive assistance and relief across the frontier.",
           { militaryAid: 3, aid: 2, deterrence: 2 },
           [],
-          0.003
+          0.003,
+          {
+            campaignRequirement: { minMilitaryReadiness: 25, minLogistics: 35 },
+            campaignCommitment: { kind: "military", side: "b", scale: 5, warWearinessDelta: 1 },
+          }
         ),
         responseOpt(
           "mediate",
@@ -201,6 +240,8 @@ const outcomes: GlobalResponseOutcome[] = [
     conditions: [
       { axis: "diplomacy", min: 9 },
       { axis: "neutrality", min: 5 },
+      { axis: "sovereignConsent", min: 1 },
+      { axis: "reciprocalConsent", min: 1 },
     ],
     intensityDelta: -12,
     trackDeltas: {
@@ -208,8 +249,8 @@ const outcomes: GlobalResponseOutcome[] = [
       escalationRisk: -18,
       coercivePressure: -10,
       territorialControl: 4,
+      directIntervention: -100,
     },
-    nextConflictStatus: "negotiating",
     campaignDelta: { settlementMomentum: 18, civilianStrain: -6 },
     tensionDelta: -7,
     wireMessage:
@@ -257,13 +298,15 @@ const outcomes: GlobalResponseOutcome[] = [
     label: "Proxy conflict",
     description:
       "Deniable support produces a durable territorial confrontation below full invasion.",
-    priority: 50,
-    conditions: [{ axis: "proxy", min: 7 }],
+    priority: 65,
+    conditions: [{ axis: "proxy", min: 4 }],
     intensityDelta: 8,
     trackDeltas: {
       separatistCapacity: 16,
+      coercivePressure: 6,
       territorialControl: -10,
       displacement: 7,
+      infrastructureDamage: 4,
       escalationRisk: 8,
       settlementMomentum: -5,
     },
@@ -273,17 +316,42 @@ const outcomes: GlobalResponseOutcome[] = [
     wireMessage: "Proxy forces open a sustained territorial conflict in Ukraine.",
   },
   {
+    outcomeId: "limited_incursion",
+    label: "Limited direct fighting",
+    description: "Direct forces enter a limited confrontation before broader mobilization.",
+    priority: 39,
+    conditions: [{ axis: "limitedOperations", min: 1 }],
+    intensityDelta: 10,
+    trackDeltas: {
+      coercivePressure: 12,
+      separatistCapacity: 10,
+      directIntervention: 20,
+      territorialControl: -8,
+      displacement: 8,
+      infrastructureDamage: 6,
+      escalationRisk: 15,
+      warWeariness: 5,
+    },
+    nextConflictStatus: "active",
+    campaignDelta: { casualties: 5, refugees: 8, civilianStrain: 6, infrastructureDamage: 6 },
+    tensionDelta: 6,
+    wireMessage: "Limited direct fighting raises the risk of a wider European war.",
+  },
+  {
     outcomeId: "broad_invasion",
     label: "Broad invasion",
     description: "Direct intervention turns coercive pressure into interstate war.",
-    priority: 40,
+    priority: 66,
     conditions: [
-      { axis: "coercion", min: 8 },
-      { axis: "escalation", min: 8 },
+      { axis: "coercion", min: 5 },
+      { axis: "escalation", min: 5 },
     ],
     intensityDelta: 18,
     trackDeltas: {
       territorialControl: -18,
+      coercivePressure: 12,
+      separatistCapacity: 10,
+      directIntervention: 20,
       displacement: 18,
       infrastructureDamage: 16,
       escalationRisk: 15,
@@ -331,7 +399,18 @@ function event(phase: string): ConflictEvent {
       bloc: "eu_guarantees",
       bystander: "nonaligned",
     },
-    outcomes,
+    // A country's chosen trade restriction survives another country's winning
+    // military or diplomatic outcome. The shell requires actual consent and
+    // creates expiring embargoes; unsubmitted defaults cannot impose sanctions.
+    outcomes: outcomes.map((outcome): GlobalResponseOutcome => ({
+      ...outcome,
+      tradeSanction: {
+        targetRole: "backer_a",
+        participationAxis: "sanctions",
+        commodity: "oil",
+        durationTurns: 24,
+      },
+    })),
     defaultOutcomeId: "fragmented_response",
   };
   return {
@@ -368,6 +447,7 @@ export const RUSSIA_UKRAINE_DEF: LivingConflictDef = {
     ukrainianLegitimacy: { initial: 48 },
     territorialControl: { initial: 100 },
     coercivePressure: { initial: 35 },
+    directIntervention: { initial: 0 },
     separatistCapacity: { initial: 8 },
     deterrence: { initial: 30 },
     allianceCohesion: { initial: 45 },
@@ -415,6 +495,18 @@ export const RUSSIA_UKRAINE_DEF: LivingConflictDef = {
     },
   ],
   transitions: [
+    ...["alignment_crisis", "territorial_confrontation"].map((fromPhase) => ({
+      key: `early_deterrence_${fromPhase}`,
+      fromPhase,
+      toPhase: "armistice_reconstruction",
+      toStatus: "ceasefire" as const,
+      priority: 95,
+      conditions: [
+        { track: "deterrence", min: 70 },
+        { track: "allianceCohesion", min: 60 },
+        { track: "escalationRisk", max: 45 },
+      ],
+    })),
     {
       key: "territorial_crisis",
       fromPhase: "alignment_crisis",
@@ -459,6 +551,7 @@ export const RUSSIA_UKRAINE_DEF: LivingConflictDef = {
       conditions: [
         { track: "escalationRisk", min: 58 },
         { track: "coercivePressure", min: 55 },
+        { track: "directIntervention", min: 1 },
       ],
     },
     {
@@ -479,6 +572,7 @@ export const RUSSIA_UKRAINE_DEF: LivingConflictDef = {
       conditions: [
         { track: "escalationRisk", min: 78 },
         { track: "deterrence", max: 55 },
+        { track: "directIntervention", min: 1 },
       ],
     },
     {

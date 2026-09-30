@@ -23,7 +23,8 @@ import { getReserveRequirement } from "@/lib/banking/reserves";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { borrowingsFromCharter, totalBorrowings } from "@/lib/banking/rules/balanceSheet";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
-import { settleTransition } from "@/lib/banking/settlementJournal";
+import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import {
@@ -62,6 +63,31 @@ export async function loadSavingsMigrationInput(db: Db): Promise<MigrationInput>
       .toArray(),
   ]);
   const poolByBankId = new Map(banks.map((b) => [String(b._id), finite(b.externalBroadMoney)]));
+  const expectedMigrations = new Map(
+    rows.map((row) => [savingsMigrationKey(row.ownerId, row.currency), row])
+  );
+  const migrationRecords = await db
+    .collection<{
+      _id: string;
+      status: string;
+      projectionsCompletedAt?: Date;
+    }>(MONEY_MOVE_COLLECTION)
+    .find({ _id: { $in: [...expectedMigrations.keys()] }, kind: "savings_migration" })
+    .project<{ _id: string; status: string; projectionsCompletedAt?: Date }>({
+      status: 1,
+      projectionsCompletedAt: 1,
+    })
+    .toArray();
+  const completedAccountKeys = new Set<string>();
+  const pendingMigrations: Array<{ key: string; currency: string }> = [];
+  for (const record of migrationRecords) {
+    const row = expectedMigrations.get(record._id)!;
+    if (record.status === "applied" && record.projectionsCompletedAt != null) {
+      completedAccountKeys.add(`${row.ownerId}:${row.currency}`);
+    } else {
+      pendingMigrations.push({ key: record._id, currency: row.currency });
+    }
+  }
   const poolByCurrency = new Map<string, number>();
   const reserveRatioByCurrency = new Map<string, number>();
   for (const currency of FOREX_ACTIVE_CURRENCIES) {
@@ -90,6 +116,8 @@ export async function loadSavingsMigrationInput(db: Db): Promise<MigrationInput>
     poolByCurrency,
     reserveRatioByCurrency,
     existingAccountKeys: new Set(existing.map((a) => `${a.ownerId.toString()}:${a.currency}`)),
+    completedAccountKeys,
+    pendingMigrations,
   };
 }
 
@@ -323,7 +351,41 @@ export async function runSavingsMigration(
   turn: number,
   currencies?: string[]
 ): Promise<{ plan: SavingsMigrationPlan; batches: MigrationBatchResult[] }> {
-  const input = await loadSavingsMigrationInput(db);
+  let input = await loadSavingsMigrationInput(db);
+  const policy = await loadBankingPolicy(db);
+  const recovery = (input.pendingMigrations ?? []).filter(
+    (item) =>
+      policy.savingsAccounts === "authoritative" &&
+      !policy.savingsReadCurrencies.includes(item.currency) &&
+      (!currencies || currencies.includes(item.currency))
+  );
+  for (const item of recovery) {
+    try {
+      const settled = await resumeSettlement(db, item.key);
+      if (settled.error || settled.status === "partial" || settled.status === "rejected") {
+        throw new Error(settled.error ?? `migration recovery ${settled.status}`);
+      }
+    } catch (error) {
+      // Report the post-recovery state, but do not quote or start new transfers
+      // while an earlier accepted allocation is still incomplete.
+      input = await loadSavingsMigrationInput(db);
+      return {
+        plan: planSavingsMigration(input),
+        batches: [
+          {
+            currency: item.currency,
+            applied: 0,
+            replayed: 0,
+            failed: 1,
+            reconciled: false,
+            discrepancies: 0,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      };
+    }
+  }
+  if (recovery.length > 0) input = await loadSavingsMigrationInput(db);
   const plan = planSavingsMigration(input);
   const batches: MigrationBatchResult[] = [];
   if (!plan.ok) return { plan, batches };

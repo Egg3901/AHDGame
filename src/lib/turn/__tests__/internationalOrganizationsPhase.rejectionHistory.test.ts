@@ -161,3 +161,11 @@ describe("a chair election the members did not carry", () => {
     expect(loggedTitles().some((t) => /A Candidate/.test(t) && /not elected/i.test(t))).toBe(true);
   });
 });
+
+// Treaty persistence has its own integration suite; these fixtures isolate bloc ballot resolution.
+vi.mock("@/lib/internationalOrganizations/europeanIntegration/service", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/internationalOrganizations/europeanIntegration/service")
+  >()),
+  reconcileEuropeanTreatyLive: vi.fn().mockResolvedValue(false),
+}));

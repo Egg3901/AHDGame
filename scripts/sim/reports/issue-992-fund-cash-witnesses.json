@@ -1,0 +1,135 @@
+{
+  "scope": "Matched isolated saved-world financial subsystem continuation, not a whole-economy gate",
+  "treatment": {
+    "sourceCommit": "0bca53748ce744ba1d52f16e0f32103ebdf79b6d",
+    "development": false,
+    "baseline": false,
+    "source": {
+      "runId": "559d9701-e07f-48c8-ade1-294bc926820a",
+      "generatorCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+      "savedTurn": 13,
+      "sourceHash": "e324dd884a66bfb2588346cdfde205d887e36f2dce92042f01b696efa6dffd49",
+      "finalSourceHash": "e324dd884a66bfb2588346cdfde205d887e36f2dce92042f01b696efa6dffd49"
+    },
+    "historicalExplanation": {
+      "fundAccounts": 46,
+      "originalDivergent": 35,
+      "sourceBondRows": 1015,
+      "missingDividendWitness": 24832.664628596303,
+      "explainedCouponRounding": 0.1999999999929969,
+      "maxUnexplained": 1.801026883185841e-8
+    },
+    "fixture": {
+      "sourceDividendRows": 1204,
+      "reconstructedAccruals": 602,
+      "funds": 46,
+      "positions": 10355,
+      "isolatedSovereignBonds": 60
+    },
+    "steps": [
+      {
+        "phase": "dividends",
+        "turn": 14,
+        "performance": {
+          "commands": 114,
+          "readBsonBytes": 1815184
+        },
+        "accounts": 2792,
+        "changedAccounts": 33,
+        "cashHash": "5e8f6e86f56789b2d9683afc3a581cead53084b1fb6c841fd4cf8673d39ca20a",
+        "totalCashCredit": 24832.638471440878,
+        "inputGross": 24832.664628596318,
+        "grossRoundingResidual": -0.02615715544015984,
+        "ledgerEntries": 602,
+        "divergences": 0,
+        "trialBalance": "green",
+        "unattributed": 0
+      },
+      {
+        "phase": "fund_bonds",
+        "turn": 15,
+        "performance": {
+          "commands": 30,
+          "readBsonBytes": 135840
+        },
+        "accounts": 2792,
+        "changedAccounts": 44,
+        "cashHash": "c3e057b8f608dd2b7cd8059e8e24426c3dd8c954d38ae84fd8ff1b3546f592ec",
+        "totalCashCredit": 980534.4600000086,
+        "inputGross": null,
+        "grossRoundingResidual": null,
+        "ledgerEntries": 1043,
+        "divergences": 0,
+        "trialBalance": "green",
+        "unattributed": 0
+      }
+    ]
+  },
+  "control": {
+    "sourceCommit": "892c8b4da99ca9be23bfd142602914745cfc8038",
+    "development": false,
+    "baseline": true,
+    "source": {
+      "runId": "559d9701-e07f-48c8-ade1-294bc926820a",
+      "generatorCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+      "savedTurn": 13,
+      "sourceHash": "e324dd884a66bfb2588346cdfde205d887e36f2dce92042f01b696efa6dffd49",
+      "finalSourceHash": "e324dd884a66bfb2588346cdfde205d887e36f2dce92042f01b696efa6dffd49"
+    },
+    "historicalExplanation": {
+      "fundAccounts": 46,
+      "originalDivergent": 35,
+      "sourceBondRows": 1015,
+      "missingDividendWitness": 24832.664628596303,
+      "explainedCouponRounding": 0.1999999999929969,
+      "maxUnexplained": 1.801026883185841e-8
+    },
+    "fixture": {
+      "sourceDividendRows": 1204,
+      "reconstructedAccruals": 602,
+      "funds": 46,
+      "positions": 10355,
+      "isolatedSovereignBonds": 60
+    },
+    "steps": [
+      {
+        "phase": "dividends",
+        "turn": 14,
+        "performance": {
+          "commands": 103,
+          "readBsonBytes": 1710889
+        },
+        "accounts": 2792,
+        "changedAccounts": 33,
+        "cashHash": "5e8f6e86f56789b2d9683afc3a581cead53084b1fb6c841fd4cf8673d39ca20a",
+        "totalCashCredit": 24832.638471440878,
+        "inputGross": 24832.664628596318,
+        "grossRoundingResidual": -0.02615715544015984,
+        "ledgerEntries": 0,
+        "divergences": 33,
+        "trialBalance": "green",
+        "unattributed": 0
+      },
+      {
+        "phase": "fund_bonds",
+        "turn": 15,
+        "performance": {
+          "commands": 30,
+          "readBsonBytes": 132845
+        },
+        "accounts": 2792,
+        "changedAccounts": 44,
+        "cashHash": "c3e057b8f608dd2b7cd8059e8e24426c3dd8c954d38ae84fd8ff1b3546f592ec",
+        "totalCashCredit": 980534.4600000086,
+        "inputGross": null,
+        "grossRoundingResidual": null,
+        "ledgerEntries": 1043,
+        "divergences": 19,
+        "trialBalance": "green",
+        "unattributed": 0
+      }
+    ]
+  },
+  "controlRuntime": "a77fb81bcf3a0b2fba4d981af3a322f4b53be2e9",
+  "matchingCashHashes": true
+}

@@ -49,6 +49,8 @@ const checks = [
       /src[\\/]lib[\\/]auth\.ts$/,
       /src[\\/]app[\\/]api[\\/]auth[\\/]/,
       /src[\\/]proxy\.ts$/,
+      // Verifies Apple's id_token against Apple's JWKS, not a game session.
+      /src[\\/]lib[\\/]auth[\\/]apple\.ts$/,
     ],
     description:
       "Use requireAuth() helpers from @/lib/api/requireAuth instead of manual jwtVerify().",

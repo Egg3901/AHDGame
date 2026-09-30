@@ -29,6 +29,7 @@ beforeEach(() => {
       ok: true,
       units,
       costAnchor: units * 1_000,
+      markedValueAnchor: units * 1_000,
       bondId: issue._id,
     })
   );

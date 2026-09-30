@@ -80,6 +80,7 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
@@ -155,7 +156,6 @@ import {
   loadNppCorporationBondLookups,
   type NppCorporationDecisionPreload,
 } from "@/lib/turn/npp/nppCorporationBondLookups";
-
 export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
 
 export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
@@ -324,6 +324,7 @@ export async function processNppCorporationDecisions(
         {
           projection: {
             stateId: 1,
+            countryId: 1,
             sectorType: 1,
             revenue: 1,
             corporationId: 1,
@@ -373,6 +374,7 @@ export async function processNppCorporationDecisions(
         colByState.set(String(doc._id), value);
       }
     }
+    const nationalShareOf = buildNppNationalShareResolver(globalSectors);
     plants = {
       enabled: true,
       year: plantsYear,
@@ -380,6 +382,7 @@ export async function processNppCorporationDecisions(
       preset: resolvePresetIdFromGameState(gsPlants),
       primeRateOf: (cid) => primeByCountry.get(cid) ?? 0,
       costOfLivingOf: (sid) => colByState.get(sid) ?? null,
+      nationalShareOf,
     };
   }
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
@@ -631,6 +634,8 @@ export function makeNppCorpDecision(
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
   const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
   const capacityCohort = resolveCapacityCohort(corp);
+  const nationalShare = (countryId: string, sectorType: CorporationType) =>
+    plants?.nationalShareOf?.(corp._id, countryId, sectorType) ?? 0;
   const capacityObservations: CapacityDecisionObservation[] = [];
   // Which of the four operator decision legs bound this corp this turn (#2122);
   // sections below flag the branch they take and the resolver picks the first.
@@ -1261,26 +1266,24 @@ export function makeNppCorpDecision(
         plants.eraUnitScale
       );
       const starterUnits = foundingStarterUnits(foundingTarget.sectorType as CorporationType);
-      // Per-unit founding price. computeBuildCost is linear in units and, at a
-      // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
-      // one-unit quote scales exactly to any order size. The breakdown (not
-      // just the total) is kept for the capacity observation's price vocabulary.
+      // Per-unit founding price. computeBuildCost is linear in units, so a
+      // one-unit quote scales exactly while retaining its itemized breakdown.
       const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: foundingTarget.sectorType as CorporationType,
               units: 1,
-              // Greenfield entry: the sector does not exist yet and is founded
-              // on the sector-type default strategy.
+              // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
-              // No presence in this bucket yet — dominance is 1 by construction.
               marketSharePercent: 0,
+              nationalMarketSharePercent: nationalShare(
+                foundingTarget.countryId,
+                foundingTarget.sectorType as CorporationType
+              ),
               primeRate: plants.primeRateOf(foundingTarget.countryId),
-              // An NPP CEO is an NPP, not a Character, so it has no Business
-              // Acumen to read. Neutral is the honest value and matches what
-              // `computeBuildCost` assumes for a vacant seat.
+              // NPP CEOs have no Character Business Acumen; neutral is honest.
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(foundingTarget.stateId),
               founding: true,
@@ -1729,9 +1732,7 @@ export function makeNppCorpDecision(
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
         utilization >= NPP_GROWTH_MIN_UTILIZATION &&
         (sector.sectorType !== "extraction" || extractionHeadroom > 0);
-      // The plant already exists, so its build is tolled at its own dominance
-      // and pays the list price, not the founding discount — the same terms a
-      // player's `buildCapacity` pays.
+      // Existing plants pay the same dominance-tolled list price as players.
       const growthShare =
         capitalStock > 0
           ? Math.min(100, (100 * capitalStock) / (capitalStock + Math.max(0, headroomUnits)))
@@ -1745,6 +1746,7 @@ export function makeNppCorpDecision(
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
+              nationalMarketSharePercent: nationalShare(sectorCountryId, sector.sectorType),
               primeRate: plants.primeRateOf(sectorCountryId),
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(sector.stateId),
@@ -1820,15 +1822,12 @@ export function makeNppCorpDecision(
       if (placed >= NPP_REINVEST_MAX_SECTORS_PER_TURN) break;
       const { sector, units } = candidate;
 
-      // Dominance is priced off the corp's own footprint in this bucket: its
-      // capacity against that plus the headroom still unowned. A dominant
-      // incumbent pays more to add capacity, exactly as a player does.
+      // Price on the harsher of local footprint and national sector share.
       const capitalStock = sector.capitalStock ?? 0;
       const bucketTotal = capitalStock + candidate.headroomUnits;
       const marketSharePercent = bucketTotal > 0 ? (100 * capitalStock) / bucketTotal : 0;
 
-      // Breakdown (not just the total) is kept for the capacity observation's
-      // price vocabulary: unit price, charged dominance multiplier, headroom.
+      // Keep the breakdown for capacity-decision telemetry.
       const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
         units,
@@ -1836,6 +1835,10 @@ export function makeNppCorpDecision(
         year: plants.year,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
+        nationalMarketSharePercent: nationalShare(
+          sector.countryId ?? corp.countryId,
+          sector.sectorType
+        ),
         primeRate: plants.primeRateOf(sector.countryId ?? corp.countryId),
         // An NPP CEO is an NPP, not a Character — no Business Acumen to read.
         acumen: NEUTRAL_STAT,

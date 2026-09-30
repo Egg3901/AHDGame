@@ -129,4 +129,10 @@ export interface NppPlantsContext {
   preset: string | undefined;
   primeRateOf: (countryId: string) => number;
   costOfLivingOf: (stateId: string) => number | null;
+  /** Aggregate corporation share of one (country, sectorType) market. */
+  nationalShareOf?: (
+    corporationId: ObjectId,
+    countryId: string,
+    sectorType: CorporationType
+  ) => number;
 }

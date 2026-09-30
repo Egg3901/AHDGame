@@ -43,7 +43,8 @@ export const POSTURE_META: Record<AlertPosture, PostureMeta> = {
   },
   article5: {
     label: "Article 5",
-    blurb: "Collective defense — maximum readiness; civil-liberties and economic cost.",
+    blurb:
+      "Maximum readiness, at a civil-liberties and economic cost. Readiness only: it does not commit members to a war.",
     tone: "alarm",
   },
 };
@@ -68,6 +69,19 @@ export function postureEffect(posture: AlertPosture): Record<string, number> {
 
 export function isAlertPosture(value: string): value is AlertPosture {
   return (ALERT_POSTURES as string[]).includes(value);
+}
+
+/**
+ * How members actually enter a war, shown beside the posture so a player who sets
+ * "Article 5" is not left believing it is a mutual-defence clause. Posture only
+ * nudges metrics; war entry is decided by the category (see `treatyDefence.ts`
+ * and the `join_conflict` resolution, which only blocs may table).
+ */
+export function postureWarEntryNote(category: string): string {
+  if (category === "bloc") {
+    return "No posture brings members into a war. A bloc enters a war through a unanimous conflict-entry resolution; NATO and the Warsaw Pact in Cold War worlds also join automatically when a member is declared on.";
+  }
+  return "No posture brings members into a war. This organization has no mutual-defence clause, so each member enters a war only through its own declaration of war.";
 }
 
 /** The alliance defense-spending pledge target, as a percent of GDP (NATO's 2%). */

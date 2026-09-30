@@ -1,3 +1,6 @@
+import { yearOfTurn } from "@/lib/utils/gameDate";
+import { readUKDevolutionState } from "../devolution/service";
+import { executiveCycleAnchor } from "../devolution/rules";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -6,14 +9,13 @@ import { UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
 import { getUkCommonsSeats } from "@/lib/constants/states";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
-import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
 import {
   getUKRegionalCouncilCycle1EndTurn,
   getUKRegionalCouncilElectionYear,
 } from "@/lib/elections/ukRegionalCouncilStagger";
 import { snapElectionResolutionYear } from "@/lib/turn/rules/snapElection";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle, shiftedAnchorTurn } from "@/lib/elections/snapShift";
 import {
   endTimeToLarpTurn,
   getCurrentTurnAndCtx,
@@ -32,12 +34,12 @@ import {
  * Spawns anchor to the **canonical LARP schedule** via
  * {@link pickNextCanonicalCycle}. When the admin fast-forwards a regular
  * cycle via the "Modify Timers" PATCH, the next regular stays on calendar
- * (endTurn = anchors.ukCommons + (N - 1) x UK_COMMONS_CYCLE_PERIOD_HOURS). Snap elections still shift the schedule
- * for the immediate post-snap regular — the shared helper accepts
- * `priorEndTurn = snap.endTurn`, giving `endTurn = snap.endTurn + 240` per
- * docs/design/snap-elections.md. Subsequent regulars (past the first post-snap
- * cycle) fall back to canonical LARP, preserving the calendar against any
- * later admin acceleration.
+ * (endTurn = anchors.ukCommons + (N - 1) x UK_COMMONS_CYCLE_PERIOD_HOURS). A snap
+ * election resets the term clock: the post-snap regular ends at
+ * `snap.endTurn + 240`, and every later regular keeps counting from that
+ * shifted schedule (`shiftedScheduleEndTurn + 240`) until another snap moves
+ * it again. The stamp is the scheduled turn, so admin acceleration still
+ * cannot drag the calendar. See `planNextLowerChamberCycle`.
  *
  * 24h-primary / 24h-general gate: if currentTurn has eaten too deep into the
  * next canonical window, the spawner walks forward to the following cycle
@@ -103,20 +105,24 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
   }
 
   // Existing post-snap races can retain the old canonical cycle's year even
-  // though their deadline shifted. Repair only the label, preserving timers.
+  // though their deadline shifted, and races spawned before the shifted term
+  // clock was persisted lack the stamp their successor anchors to. Repair only
+  // those two fields, preserving timers.
   for (const live of liveElections) {
     const prev = lastCompleted(live.state);
-    if (
-      live.electionType !== "commons" ||
-      live.endTurn == null ||
-      !snapAnchorEndTime(prev, "snap_commons") ||
-      live.cycle !== (prev?.cycle ?? 0) + 1
-    )
-      continue;
+    if (live.electionType !== "commons" || live.endTurn == null) continue;
+    if (live.cycle !== (prev?.cycle ?? 0) + 1) continue;
+    const anchor = shiftedAnchorTurn(prev, "commons", "snap_commons", (endTime) =>
+      endTimeToLarpTurn(endTime, now, currentTurn)
+    );
+    if (anchor == null) continue;
     const electionYear = snapElectionResolutionYear(live.endTurn, ctx);
-    if (live.electionYear === electionYear) continue;
+    const $set: Partial<Election> = {};
+    if (live.electionYear !== electionYear) $set.electionYear = electionYear;
+    if (live.shiftedScheduleEndTurn == null) $set.shiftedScheduleEndTurn = live.endTurn;
+    if (Object.keys($set).length === 0) continue;
     seatHealOps.push({
-      updateOne: { filter: { _id: live._id }, update: { $set: { electionYear, updatedAt: now } } },
+      updateOne: { filter: { _id: live._id }, update: { $set: { ...$set, updatedAt: now } } },
     });
   }
   if (seatHealOps.length > 0) {
@@ -135,21 +141,18 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only the immediate post-snap regular inherits the snap's
-    // endTurn as its anchor, and only when the country called the snap itself.
-    // See `snapAnchorEndTime` for why a regular and an IMPOSED snap both yield
-    // null here.
-    const snapAnchor = snapAnchorEndTime(prev, "snap_commons");
-    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-    const spawn = pickNextCanonicalCycle({
+    // Snap shift: a called snap, and every regular spawned on its shifted
+    // term clock, anchors the next regular. See `planNextLowerChamberCycle`.
+    const plan = planNextLowerChamberCycle({
       electionType: "commons",
-      prevCycle: prev?.cycle ?? 0,
+      snapType: "snap_commons",
+      prev,
       currentTurn,
-      priorEndTurn,
       ctx,
+      endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
     });
-    if (!spawn) continue;
+    if (!plan) continue;
+    const { spawn } = plan;
 
     // Open the primary immediately: UK Commons' 5-year cycle (240 turns) far
     // exceeds its 48h `durationHours`, so the canonical `startTurn` would
@@ -168,10 +171,10 @@ export async function ensureUKElections(now: Date, inFlightTurn?: number): Promi
       state: regionId,
       seatId: getSeatIdFromElection({ countryId: "UK", electionType: "commons", state: regionId }),
       cycle: spawn.cycle,
-      electionYear:
-        priorEndTurn != null
-          ? snapElectionResolutionYear(spawn.endTurn, ctx)
-          : electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
+      electionYear: plan.electionYear,
+      ...(plan.shiftedScheduleEndTurn != null && {
+        shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+      }),
       status,
       totalSeats: commonsSeatsByRegion[regionId] ?? prev?.totalSeats ?? 1,
       startTime,
@@ -251,6 +254,7 @@ export async function ensureUKRegionalCouncilElections(
     .collection<State>("states")
     .find({ countryId: "UK" }, { projection: { _id: 1 } })
     .toArray();
+  const devolution = await readUKDevolutionState(db, ctx.startingYear);
   const regionIds = ukRegions.map((r) => r._id as string);
 
   if (regionIds.length === 0) return;
@@ -277,6 +281,19 @@ export async function ensureUKRegionalCouncilElections(
   const toInsert: Omit<Election, "_id">[] = [];
 
   for (const regionId of regionIds) {
+    const peace = regionId === "NIR" ? devolution.northernIrelandPeace : undefined;
+    if (peace && !devolution.regions.NIR.active) continue;
+    const peaceAnchor =
+      peace?.assemblyFirstElectionEndTurn === undefined
+        ? undefined
+        : executiveCycleAnchor(
+            {
+              active: true,
+              firstCycle: peace.assemblyFirstCycle ?? 1,
+              firstElectionEndTurn: peace.assemblyFirstElectionEndTurn,
+            },
+            dur
+          );
     if (liveCouncils.has(regionId)) continue;
 
     const prev = lastCompleted(regionId);
@@ -285,10 +302,10 @@ export async function ensureUKRegionalCouncilElections(
     // Spawn independently on the region's annual-cohort anchor.
     const spawn = pickNextCanonicalCycle({
       electionType: "regionalCouncil",
-      prevCycle: prev?.cycle ?? 0,
+      prevCycle: Math.max(prev?.cycle ?? 0, (peace?.assemblyFirstCycle ?? 1) - 1),
       currentTurn,
-      ctx,
-      customCycle1EndTurn: getUKRegionalCouncilCycle1EndTurn(regionId, ctx),
+      ctx: peaceAnchor === undefined ? ctx : { ...ctx, preIterationActive: false },
+      customCycle1EndTurn: peaceAnchor ?? getUKRegionalCouncilCycle1EndTurn(regionId, ctx),
     });
     if (!spawn) continue;
 
@@ -310,7 +327,12 @@ export async function ensureUKRegionalCouncilElections(
         state: regionId,
       }),
       cycle: spawn.cycle,
-      electionYear: getUKRegionalCouncilElectionYear(regionId, spawn.cycle, ctx),
+      electionYear:
+        peaceAnchor === undefined
+          ? getUKRegionalCouncilElectionYear(regionId, spawn.cycle, ctx)
+          : yearOfTurn(spawn.endTurn, ctx.startingYear, {
+              preIterationTurns: ctx.preIterationTurns,
+            }),
       status,
       totalSeats: prev?.totalSeats ?? UK_REGIONAL_COUNCIL_SEATS[regionId] ?? 1,
       startTime,

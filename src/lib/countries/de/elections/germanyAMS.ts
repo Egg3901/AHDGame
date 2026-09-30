@@ -39,6 +39,7 @@ import {
 } from "@/lib/turn/election/ticketSplitCrossover";
 import { buildDEPartySlugToSeqId } from "@/lib/seeds/de/deStatePartyOrgCalculations";
 import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { reconcileBundestagHolderOffices } from "./bundestagHolderOffices";
 
 const VOTE_THRESHOLD = 0.05;
 
@@ -533,6 +534,47 @@ export async function maybeReconcileBundestag(
 
   const result = await allocateBundestag(db, cycle);
   await persistBundestagResult(db, result, now);
+  const holders = await reconcileBundestagHolderOffices(db, now);
+  const elections = await db
+    .collection<Election>("elections")
+    .find(
+      {
+        countryId: "DE",
+        electionType: { $in: ["bundestag", "snap_bundestag"] },
+        cycle,
+        status: "resolved",
+      },
+      { projection: { _id: 1, state: 1 } }
+    )
+    .toArray();
+  if (elections.length)
+    await db.collection<ElectionVoteTally>("electionVoteTallies").bulkWrite(
+      elections.map((election) => {
+        const resolvedSeatHolders = holders
+          .filter((holder) => holder.state === election.state)
+          .map((holder) => ({
+            identity: `${holder.nppId ? "npp" : "player"}:${holder.nppId ?? holder.characterId}`,
+            party: holder.party ?? "independent",
+            seats: holder.seatsHeld ?? 0,
+            seatSource: holder.seatSource === "list" ? ("list" as const) : ("direct" as const),
+          }));
+        return {
+          updateOne: {
+            filter: { electionId: election._id, finalized: true },
+            update: {
+              $set: {
+                resolutionPath: "ams" as const,
+                resolvedSeatHolders,
+                resolvedTotalSeats: resolvedSeatHolders.reduce(
+                  (sum, holder) => sum + holder.seats,
+                  0
+                ),
+              },
+            },
+          },
+        };
+      })
+    );
   await db
     .collection<GameState>("gameState")
     .updateOne(

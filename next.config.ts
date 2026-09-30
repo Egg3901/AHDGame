@@ -72,6 +72,11 @@ const sentryOrg = process.env.SENTRY_ORG || "lakeside-games";
 const sentryProject = process.env.SENTRY_PROJECT || "a-house-divided";
 
 const nextConfig: NextConfig = {
+  // Browser qualification warms real routes without a production build. Keep
+  // those development entries available through the serial sandbox journey.
+  ...(process.env.NODE_ENV === "development" && process.env.AHD_BROWSER_JOURNEY === "1"
+    ? { onDemandEntries: { maxInactiveAge: 60 * 60 * 1000, pagesBufferLength: 64 } }
+    : {}),
   // Don't advertise the framework version via the x-powered-by header.
   poweredByHeader: false,
   // `output: "standalone"` was previously set for Vercel-era cold-start wins.

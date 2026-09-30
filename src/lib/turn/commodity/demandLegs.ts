@@ -180,6 +180,7 @@ export function collectHouseholdSignals(inputs: HouseholdSignalInputs): {
 }
 
 export interface HouseholdDemandInputs {
+  financialDemandByCountry?: ReadonlyMap<string, number>;
   eraUnitScale: number;
   plantsUnitScale: number;
   priorGlobalSupply?: Map<CommodityType, number>;
@@ -213,6 +214,7 @@ export function applyHouseholdDemand(
     metricsByState: inputs.metricsByState,
     priorGlobalPrice: inputs.priorGlobalPrice,
     perCapita: inputs.perCapita,
+    financialDemandByCountry: inputs.financialDemandByCountry,
   });
   for (const [commodity, units] of household.global) {
     const g = global.get(commodity);

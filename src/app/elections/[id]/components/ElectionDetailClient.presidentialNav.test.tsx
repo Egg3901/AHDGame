@@ -25,7 +25,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("cycle=3"),
 }));
 vi.mock("@/contexts/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock("@/hooks/useGameEvents", () => ({ useGameTurnStatus: () => null }));
+vi.mock("@/hooks/useGameEvents", () => ({
+  useGameTurnStatus: () => null,
+  useGameEvents: () => undefined,
+}));
 
 // The subject is the navigation, so every heavy block on the page renders
 // nothing. `ElectionNavigation` is deliberately NOT mocked — the assertions

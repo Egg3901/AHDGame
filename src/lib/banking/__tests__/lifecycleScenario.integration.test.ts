@@ -63,7 +63,7 @@ function world(): InMemoryDb {
       countryId: "US",
       primeRate: 4,
       inflationHistory: [{ turn: 1, rate: 0 }],
-      externalBroadMoney: 200_000,
+      externalBroadMoney: 170_000,
       householdSavingsLiability: 0,
       nationalSavingsBalance: 0,
       bankReserveRequirement: 0.1,
@@ -94,7 +94,8 @@ function world(): InMemoryDb {
         currency: "USD",
         charteredTurn: START - 10,
         postedCapital: 20_000,
-        cashReserves: 20_000,
+        // Posted capital plus the 30,000 actually deposited by households.
+        cashReserves: 50_000,
         npcDeposits: 30_000,
         totalDeposits: 30_000,
         totalLoans: 0,
@@ -296,7 +297,9 @@ describe("a bank's life on the in-memory adapter", () => {
       dead = stage === "resolved" || stage === "revoked";
     }
     expect(dead).toBe(true);
-    expect(stages).toContain("impaired");
+    // A realized balance-sheet loss may resolve in the first solvency pass;
+    // it no longer has to wait for a confidence-driven run to exhaust cash.
+    expect(stages).toContain("operating");
     // The stage path never goes backwards from dead, and never skips the claim.
     const firstDead = stages.findIndex((s) => s === "resolved" || s === "revoked");
     expect(stages.slice(firstDead).every((s) => s === "resolved" || s === "revoked")).toBe(true);

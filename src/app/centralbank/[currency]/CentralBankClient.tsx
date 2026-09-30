@@ -1,5 +1,7 @@
 "use client";
 
+import { MonetaryAuthorityNotice } from "./components/MonetaryAuthorityNotice";
+
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { InfoTooltip } from "@/components/InfoTooltip";
@@ -561,7 +563,9 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             countryId={countryId}
             data={data.moneySupply}
             canOperate={
-              data.isAdmin === true || (data.isChair === true && data.chairControlsLocked !== true)
+              data.isAdmin === true ||
+              ((data.isPolicyChair ?? data.isChair) === true &&
+                (data.policyChairControlsLocked ?? data.chairControlsLocked) !== true)
             }
             onChanged={fetchData}
           />
@@ -571,16 +575,18 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
         <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6">
           <CurrencyRegimePanel
             bankApiBasePath={bankApiBasePath}
-            isChair={data.isChair === true}
+            isChair={(data.isPolicyChair ?? data.isChair) === true}
             currentTurn={data.currentTurn ?? 0}
             onChanged={fetchData}
           />
           <CentralBankInterventionTab
             countryId={countryId}
             data={data.intervention}
-            isChair={data.isChair === true}
+            isChair={(data.isPolicyChair ?? data.isChair) === true}
             isAdmin={data.isAdmin === true}
-            chairControlsLocked={data.chairControlsLocked === true}
+            chairControlsLocked={
+              (data.policyChairControlsLocked ?? data.chairControlsLocked) === true
+            }
             currentTurn={data.currentTurn ?? 0}
             onChanged={fetchData}
           />
@@ -665,10 +671,15 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                   onChanged={fetchData}
                 />
               )}
+              {data.monetaryAuthority && data.monetaryAuthority.countryId !== countryId && (
+                <MonetaryAuthorityNotice name={data.monetaryAuthority.name} />
+              )}
               <PrimeRateCard
                 primeRate={data.primeRate}
-                isChair={data.isChair}
-                chairControlsLocked={data.chairControlsLocked ?? false}
+                isChair={data.isPolicyChair ?? data.isChair}
+                chairControlsLocked={
+                  data.policyChairControlsLocked ?? data.chairControlsLocked ?? false
+                }
                 governmentControlled={data.governmentControlled ?? false}
                 viewerSetsRate={data.viewerSetsRate ?? false}
                 committeeSeated={data.committeeSeated ?? false}

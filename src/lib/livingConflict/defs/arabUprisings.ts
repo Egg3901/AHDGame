@@ -1,5 +1,5 @@
-import type { GlobalResponseOutcome } from "@/lib/db/types/crisis";
-import { choiceNode, responseOpt } from "../authoring";
+import type { CrisisDecisionOption, GlobalResponseOutcome } from "@/lib/db/types/crisis";
+import { choiceNode, responseOpt as baseResponseOpt } from "../authoring";
 import { cfx } from "../effects";
 import type {
   ConflictEvent,
@@ -10,9 +10,45 @@ import type {
   RoleDecisionTrees,
 } from "../types";
 
+function responseOpt(...args: Parameters<typeof baseResponseOpt>): CrisisDecisionOption {
+  const option = baseResponseOpt(...args);
+  const military = ["protect", "support_state", "arm_opposition"].includes(option.optionId);
+  const aid = ["host_refugees", "share_refugees", "un_relief"].includes(option.optionId);
+  const diplomatic = ["transition", "mediate_west", "contact_group", "un_talks"].includes(
+    option.optionId
+  );
+  if (military) {
+    option.campaignRequirement = {
+      minMilitaryReadiness: 35,
+      minLogistics: 30,
+      ...(option.optionId === "arm_opposition" ? { minIntelligence: 40 } : {}),
+    };
+    option.campaignCommitment = {
+      kind: option.optionId === "arm_opposition" ? "covert" : "military",
+      scale: 12,
+      side: option.optionId === "support_state" ? "b" : "a",
+      warWearinessDelta: 2,
+      ...(option.optionId === "arm_opposition" ? { covertExposureRisk: 20 } : {}),
+    };
+    if (option.optionId === "support_state") option.treasuryCostPctGdp = 0.004;
+    if (option.optionId === "arm_opposition") option.responseVisibility = "covert";
+  } else if (aid)
+    option.campaignCommitment = { kind: "humanitarian", scale: 10, credibilityDelta: 1 };
+  else if (diplomatic)
+    option.campaignCommitment = { kind: "diplomatic", scale: 5, credibilityDelta: 1 };
+  else if (["sanction", "bloc_sanctions"].includes(option.optionId))
+    option.campaignCommitment = { kind: "sanctions", scale: 5 };
+  if (option.optionId === "reform")
+    option.effects = [cfx("flat", "approval", "", "", 0.01, "Political opening")];
+  if (option.optionId === "repress")
+    option.effects = [cfx("flat", "approval", "", "", -0.02, "Security crackdown")];
+  return option;
+}
+
 // Primary anchors: UNSC 1970 (Libya), https://docs.un.org/S/RES/1970(2011),
-// UNSC 2254 (Syria), https://docs.un.org/S/RES/2254(2015), and UNHCR Syria data,
-// https://data.unhcr.org/en/situations/syria. They bound pressures, not outcomes.
+// UNSC 2254 (18 December 2015), https://press.un.org/en/2015/sc12171.doc.htm,
+// and the 30 August 2012 humanitarian briefing, https://press.un.org/en/2012/sc10752.doc.htm.
+// Game thresholds are calibrated mechanics, not numbers prescribed by the UN.
 function role(ctx: RoleContext): ConflictRole {
   if (ctx.belligerents.includes(ctx.countryId)) return "belligerent";
   if (ctx.countryId === ctx.backerA) return "backer_a";
@@ -23,7 +59,7 @@ function role(ctx: RoleContext): ConflictRole {
 }
 
 function trees(key: string): RoleDecisionTrees {
-  return {
+  const result: RoleDecisionTrees = {
     belligerent: choiceNode(
       `${key}_government`,
       "A government faces mass mobilization",
@@ -59,7 +95,7 @@ function trees(key: string): RoleDecisionTrees {
         responseOpt(
           "sanction",
           "Coordinate targeted sanctions",
-          "Pressure perpetrators while preserving humanitarian trade.",
+          "Restrict economic activity around the most repressive, fragmented authority.",
           { sanctions: 4, diplomacy: 2 }
         ),
         responseOpt(
@@ -110,7 +146,7 @@ function trees(key: string): RoleDecisionTrees {
           "Keep humanitarian borders open",
           "Fund protection and host communities.",
           { aid: 5, legitimacy: 1 },
-          [cfx("tick", "metric", "economy", "gdpGrowth", -0.003, "Refugee reception")],
+          [],
           0.005
         ),
         responseOpt(
@@ -181,11 +217,22 @@ function trees(key: string): RoleDecisionTrees {
       ]
     ),
   };
+  for (const tree of Object.values(result))
+    tree?.options?.push(
+      baseResponseOpt(
+        "no_new_commitment",
+        "Maintain current policy",
+        "Make no new fiscal, military, or constitutional commitment in this response window.",
+        {}
+      )
+    );
+  return result;
 }
 
 const outcomes: GlobalResponseOutcome[] = [
   {
     outcomeId: "successful_reform",
+    nextCampaignStage: "aftermath",
     label: "Credible reform",
     description:
       "Economic relief and political opening reduce mobilization without regime collapse.",
@@ -208,6 +255,7 @@ const outcomes: GlobalResponseOutcome[] = [
   },
   {
     outcomeId: "negotiated_transition",
+    nextCampaignStage: "settlement",
     label: "Negotiated transition",
     description: "Domestic and international mediation produce an inclusive transition timetable.",
     priority: 70,
@@ -229,6 +277,7 @@ const outcomes: GlobalResponseOutcome[] = [
   },
   {
     outcomeId: "authoritarian_survival",
+    nextCampaignStage: "posture",
     label: "Authoritarian survival",
     description: "Cohesive security forces suppress mobilization but leave durable grievances.",
     priority: 60,
@@ -251,6 +300,7 @@ const outcomes: GlobalResponseOutcome[] = [
   },
   {
     outcomeId: "civil_war",
+    nextCampaignStage: "operations",
     label: "Civil war",
     description: "Repression, armed opposition, and outside backing fragment the state.",
     priority: 50,
@@ -280,6 +330,7 @@ const outcomes: GlobalResponseOutcome[] = [
   },
   {
     outcomeId: "protected_relief",
+    nextCampaignStage: "settlement",
     label: "Regional protection effort",
     description: "Shared hosting and humanitarian relief reduce displacement pressure.",
     priority: 40,
@@ -295,14 +346,15 @@ const outcomes: GlobalResponseOutcome[] = [
   },
   {
     outcomeId: "fragmented_response",
+    nextCampaignStage: "posture",
     label: "Fragmented response",
     description: "Inconsistent outside policies deepen uncertainty and regional diffusion.",
     priority: 0,
     conditions: [],
-    intensityDelta: 5,
+    intensityDelta: 0,
     trackDeltas: { protestMobilization: 5, civilianStrain: 4, displacement: 3, extremistSpace: 3 },
-    campaignDelta: { refugees: 3, regionalSpillover: 4 },
-    tensionDelta: 3,
+    campaignDelta: {},
+    tensionDelta: 0,
     wireMessage: "A divided international response leaves the regional uprising wave unresolved.",
   },
 ];
@@ -312,12 +364,12 @@ function event(phase: string): ConflictEvent {
     windowTurns: 24,
     decisionTrees: trees(phase),
     defaultOptionIdByRole: {
-      belligerent: "reform",
-      backer_a: "mediate_west",
-      backer_b: "contact_group",
-      neighbor: "host_refugees",
-      bloc: "share_refugees",
-      bystander: "un_relief",
+      belligerent: "no_new_commitment",
+      backer_a: "no_new_commitment",
+      backer_b: "no_new_commitment",
+      neighbor: "no_new_commitment",
+      bloc: "no_new_commitment",
+      bystander: "no_new_commitment",
     },
     outcomes,
     defaultOutcomeId: "fragmented_response",
@@ -342,14 +394,27 @@ export const ARAB_UPRISINGS_DEF: LivingConflictDef = {
   untilYear: 2027,
   autoOpen: true,
   participants: {
-    belligerents: ["SY"],
+    belligerents: ["TN", "EG", "LY", "SY", "YE"],
     backerA: "US",
     backerB: "RU",
-    neighbors: ["TR", "JO", "YE"],
+    neighbors: ["TR", "JO", "LB", "IQ"],
     blocMembers: ["UK", "FR", "DE", "IT"],
     bystanders: ["CN", "IN", "BR", "NG", "IE", "SE", "FI", "GR"],
   },
-  participantFallbacks: { SY: ["JO", "YE", "TR"], RU: ["CN"], US: ["UK", "FR"], JO: ["TR", "GR"] },
+  actors: [
+    ["TN", "Tunisian authorities"],
+    ["EG", "Egyptian authorities"],
+    ["LY", "Libyan authorities"],
+    ["SY", "Syrian authorities"],
+    ["YE", "Yemeni authorities"],
+  ].map(([id, name]) => ({
+    id: `${id}_authorities`,
+    name,
+    representsCountryId: id,
+    countryCandidates: [id],
+    regionIds: [],
+  })),
+  participantFallbacks: { RU: ["CN"], US: ["UK", "FR"] },
   roleResolver: role,
   tracks: {
     legitimacy: { initial: 38 },
@@ -363,36 +428,9 @@ export const ARAB_UPRISINGS_DEF: LivingConflictDef = {
     settlementMomentum: { initial: 8 },
     reconstruction: { initial: 0 },
   },
-  scheduledPressures: [
-    {
-      key: "food_jobs_legitimacy",
-      fromYear: 2010,
-      untilYear: 2013,
-      everyTurns: 12,
-      phaseKeys: ["structural_pressure", "protest_diffusion"],
-      trackDeltas: { legitimacy: -4, protestMobilization: 5, civilianStrain: 3 },
-    },
-    {
-      key: "regional_diffusion",
-      fromYear: 2011,
-      untilYear: 2015,
-      everyTurns: 12,
-      phaseKeys: ["protest_diffusion", "regime_choice"],
-      trackDeltas: { protestMobilization: 4, eliteCohesion: -2 },
-    },
-    {
-      key: "war_displacement",
-      everyTurns: 12,
-      phaseKeys: ["civil_war", "proxy_escalation"],
-      trackDeltas: { civilianStrain: 5, displacement: 5, extremistSpace: 3 },
-    },
-    {
-      key: "recovery",
-      everyTurns: 12,
-      phaseKeys: ["settlement_reconstruction"],
-      trackDeltas: { reconstruction: 4, displacement: -2, civilianStrain: -2 },
-    },
-  ],
+  // Regional shell samples live pressures every twelve turns. Calendar alone
+  // neither represses demonstrators nor creates refugees.
+  scheduledPressures: [],
   transitions: [
     {
       key: "protests_spread",

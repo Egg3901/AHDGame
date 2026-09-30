@@ -272,6 +272,12 @@ export interface InternationalOrganizationProvision {
   membershipProposalId?: ObjectId;
 }
 
+export interface EuropeanTreatyProvision {
+  type: "european_treaty";
+  treaty: "maastricht";
+  action: "ratify" | "reject";
+}
+
 export interface EuroAdoptionProvision {
   type: "euro_adoption";
 }
@@ -374,6 +380,7 @@ export type BillProvision =
   | EmbargoProvision
   | EndEmbargoProvision
   | InternationalOrganizationProvision
+  | EuropeanTreatyProvision
   | EuroAdoptionProvision
   | UnionLawProvision
   | ElectoralLawProvision
@@ -401,6 +408,7 @@ export function isPolicyProvision(p: BillProvision): p is PolicyProvision {
     // the two consumers write it into a policy record with an undefined
     // legislationTypeId and shift every voting legislator's own positions by it.
     p.type !== "join_conflict" &&
+    p.type !== "european_treaty" &&
     p.type !== "euro_adoption" &&
     p.type !== "union_law" &&
     p.type !== "electoral_law" &&

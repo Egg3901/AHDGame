@@ -14,6 +14,7 @@
  * only fires when every channel is full.
  */
 
+import { useTranslations } from "next-intl";
 import type { MetricModifiersInfo } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
 
 const DIRECTION_GLYPH: Record<MetricModifiersInfo["direction"], string> = {
@@ -132,6 +133,9 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
         {/* The strike and settlement channel. It moves every region's target,
             and until now showed on no surface at all, so a strike wave shifted
             politics with no traceable cause. */}
+        {(modifiers.livingConflict ?? 0) !== 0 && (
+          <ConflictModifier value={modifiers.livingConflict!} />
+        )}
         {modifiers.labour !== 0 && (
           <div className="flex items-baseline justify-between gap-3 text-body-sm">
             <span className="text-muted">Labour relations</span>
@@ -175,6 +179,19 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
         Laws and standing conditions set this target. Economic performance and service delivery bend
         it further each turn, and those are not included in the figure above.
       </p>
+    </div>
+  );
+}
+
+function ConflictModifier({ value }: { value: number }) {
+  const t = useTranslations("worldConflicts.livingCrises");
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-body-sm">
+      <span className="text-muted">{t("politicalEffect")}</span>
+      <span className={`shrink-0 tabular-nums ${value >= 0 ? "text-success" : "text-error"}`}>
+        {value >= 0 ? "+" : "−"}
+        {Math.abs(value).toLocaleString("en-US")}
+      </span>
     </div>
   );
 }

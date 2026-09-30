@@ -1,3 +1,5 @@
+import { loadFinancialExposure } from "./financialExposure";
+import { PANDEMIC_KEY, pandemicParticipants } from "./rules/pandemic";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type {
@@ -20,6 +22,7 @@ import { normalizeCampaignState } from "./campaign";
 import { migrateLegacyVietnamState } from "./vietnamCompat";
 import { vietnamWorldPressure } from "./worldPressure";
 import { resolveConflictParticipants } from "./engine";
+import { reconcileNorthernIrelandGovernance } from "@/lib/countries/uk/northernIreland/service";
 import { reconcileNorthernIrelandRatification } from "./northernIrelandRatification";
 import {
   allParticipants,
@@ -86,7 +89,7 @@ function eventTemplate(driven: DrivenEvent, countryIds: string[]): CrisisTemplat
   };
 }
 
-async function materializeEvent(
+export async function materializeLivingConflictEvent(
   db: Db,
   def: ReturnType<typeof allLivingConflictDefs>[number],
   participants: ConflictParticipants,
@@ -101,14 +104,14 @@ async function materializeEvent(
     .collection<Crisis>("crises")
     .findOne(
       { "globalResponse.conflictKey": def.key, status: "active" },
-      { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+      { projection: { _id: 1, startTurn: 1, durationTurns: 1 }, sort: { startTurn: -1 } }
     );
   const activeNegotiationWindow = driven.fired.event.negotiation
     ? await db
         .collection<Crisis>("crises")
         .findOne(
           { livingConflictEventId: { $regex: `^${def.key}:` }, status: "active" },
-          { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+          { projection: { _id: 1, startTurn: 1, durationTurns: 1 }, sort: { startTurn: -1 } }
         )
     : null;
   const activeWindow = activeGlobalWindow ?? activeNegotiationWindow;
@@ -133,9 +136,18 @@ async function materializeEvent(
     : [...new Set(negotiation!.decisionTree.flatMap((node) => node.requiredCountryIds ?? []))];
   if (countryIds.length === 0) return { opened: false, blockedByActiveWindow: false };
   const campaign = normalizeCampaignState((await loadConflictState(db, def.key)).campaign);
+  const template = eventTemplate(driven, countryIds);
+  if (participants.representedActors?.length) {
+    template.description += ` Local parties: ${participants.representedActors
+      .map(
+        (actor) =>
+          `${actor.name}${actor.countryId ? ` (${actor.countryId})` : " (represented conflict actor)"}`
+      )
+      .join(", ")}.`;
+  }
 
   await createCrisisFromTemplate(db, {
-    template: eventTemplate(driven, countryIds),
+    template,
     scope: "country",
     countryIds,
     regionIds: [],
@@ -227,15 +239,27 @@ export async function processLivingConflictsTurn(
       }
     }
     conflictsProcessed++;
-    const participants: ConflictParticipants = resolveConflictParticipants(
-      def,
-      availableCountryIds
-    );
+    let participants: ConflictParticipants = resolveConflictParticipants(def, availableCountryIds);
+    if (def.key === PANDEMIC_KEY) {
+      const previous = await loadConflictState(db, def.key);
+      participants = pandemicParticipants(
+        availableCountryIds,
+        previous.openedYear ?? currentYear ?? 2018,
+        previous.pandemicOriginCountryId ??
+          (previous.hasOpened ? participants.belligerents[0] : undefined)
+      );
+    }
     let externalPressure =
       def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0;
     let openingTrackDeltas: Record<string, number> = {};
+    let observedTrackValues: Record<string, number> = {};
     if (def.key === GLOBAL_FINANCIAL_CRISIS_KEY) {
-      const signal = await loadFinancialCrisisSignal(db, currentTurn);
+      const [signal, exposure] = await Promise.all([
+        loadFinancialCrisisSignal(db, currentTurn),
+        loadFinancialExposure(db, availableCountryIds),
+      ]);
+      participants = exposure.participants;
+      observedTrackValues = { euroSovereignExposure: exposure.euroExposure };
       externalPressure = signal.pressure;
       openingTrackDeltas = signal.openingTrackDeltas;
     }
@@ -246,19 +270,28 @@ export async function processLivingConflictsTurn(
       currentTurn,
       currentYear,
       externalPressure,
-      openingTrackDeltas
+      openingTrackDeltas,
+      observedTrackValues
     );
     if (def.key === "northern_ireland") {
       result.state = await reconcileNorthernIrelandRatification(
         db,
         def,
         result.state,
-        currentYear ?? undefined
+        currentYear ?? undefined,
+        currentTurn
       );
+      await reconcileNorthernIrelandGovernance(db, result.state, currentTurn);
     }
     let retryPhaseEntry = false;
     for (const event of result.events) {
-      const materialized = await materializeEvent(db, def, participants, event, currentTurn);
+      const materialized = await materializeLivingConflictEvent(
+        db,
+        def,
+        participants,
+        event,
+        currentTurn
+      );
       if (materialized.opened) eventsOpened++;
       if (materialized.blockedByActiveWindow && event.fired.event.trigger?.onPhaseEnter) {
         retryPhaseEntry = true;

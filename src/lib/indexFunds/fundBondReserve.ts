@@ -15,7 +15,10 @@ import { insertFundTransactionsBulk } from "@/lib/indexFunds/fundQueries";
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
 import { emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
-import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
+import {
+  computeFundAllocationBreakdown,
+  INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION,
+} from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
 import { getAllFundDefinitions, type BondFundUniverse } from "@/lib/indexFunds/fundDefinitions";
 import { CREDIT_RATINGS, type CreditRating } from "@/lib/db/types/centralBank";
@@ -38,6 +41,7 @@ export function resolveFundBondCountryId(
 
 export type DeployBondReserveResult = {
   deployedAnchor: number;
+  markedValueAnchor: number;
   unitsPurchased: number;
   countryId: CountryId;
 };
@@ -223,7 +227,12 @@ export async function deployBondReserveFromCash(
   );
 
   if (budgetAnchor <= 0) {
-    return { deployedAnchor: 0, unitsPurchased: 0, countryId: resolveFundBondCountryId(fund) };
+    return {
+      deployedAnchor: 0,
+      markedValueAnchor: 0,
+      unitsPurchased: 0,
+      countryId: resolveFundBondCountryId(fund),
+    };
   }
 
   const countryId = resolveFundBondCountryId(fund);
@@ -239,7 +248,7 @@ export async function deployBondReserveFromCash(
         (fund.countryId ? ({ issuerType: "sovereign", homeOnly: true } as const) : undefined))
       : undefined;
   if (fund.kind === "bond" && !bondUniverse) {
-    return { deployedAnchor: 0, unitsPurchased: 0, countryId };
+    return { deployedAnchor: 0, markedValueAnchor: 0, unitsPurchased: 0, countryId };
   }
   const globalDemandEnabled = options?.liquidityTargetEnabled === true && fund.scope === "global";
   const bondQuery = {
@@ -283,7 +292,7 @@ export async function deployBondReserveFromCash(
   }
 
   if (bonds.length === 0) {
-    return { deployedAnchor: 0, unitsPurchased: 0, countryId };
+    return { deployedAnchor: 0, markedValueAnchor: 0, unitsPurchased: 0, countryId };
   }
 
   const fxRates = await loadFxRatesRecord(db);
@@ -293,7 +302,10 @@ export async function deployBondReserveFromCash(
   const thresholds =
     options?.turn !== undefined ? (options?.thresholds ?? (await loadTxThresholds(db))) : undefined;
   let deployedAnchor = 0;
+  let markedValueAnchor = 0;
   let unitsPurchased = 0;
+  let liveCashAnchor = fund.cashAnchor;
+  let liveBackingAnchor = breakdown.totalBackingAnchor;
 
   const transactions: Omit<IndexFundTransaction, "_id">[] = [];
   const ledgerEntries: TxInput[] = [];
@@ -318,6 +330,12 @@ export async function deployBondReserveFromCash(
       const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, {
         bondPools,
         fxRates,
+        maxCostAnchor: issueBudgetAnchor,
+        cashFloor: {
+          cashAnchor: liveCashAnchor,
+          totalBackingAnchor: liveBackingAnchor,
+          fraction: INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION,
+        },
         txSink: transactions,
         ledgerSink: ledgerEntries,
         turn: options?.turn,
@@ -327,8 +345,11 @@ export async function deployBondReserveFromCash(
       if (!purchase.ok) continue;
 
       deployedAnchor += purchase.costAnchor;
+      markedValueAnchor += purchase.markedValueAnchor;
       unitsPurchased += purchase.units;
       budgetAnchor -= purchase.costAnchor;
+      liveCashAnchor -= purchase.costAnchor;
+      liveBackingAnchor += purchase.markedValueAnchor - purchase.costAnchor;
       // The purchase debits fund cash atomically; nothing below reads the
       // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
     }
@@ -342,5 +363,5 @@ export async function deployBondReserveFromCash(
     }
   }
 
-  return { deployedAnchor, unitsPurchased, countryId };
+  return { deployedAnchor, markedValueAnchor, unitsPurchased, countryId };
 }

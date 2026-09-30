@@ -31,6 +31,7 @@ import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import type { PlacementSignals } from "@/lib/turn/npp/marketSignals";
+import { getNationalDominanceGrowthCostMultiplier } from "@/lib/constants/corporations";
 
 const noPrices: CommodityPriceRatioFn = () => null;
 const noState = new Set<string>();
@@ -173,6 +174,24 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     // The growth leg is a real chunk of what the plant runs, not a token facility.
     expect(order.unitsOrdered - replacement).toBeGreaterThanOrEqual(
       foundingStarterUnits("manufacturing")
+    );
+  });
+
+  it("prices national dominance into NPP plant builds", () => {
+    const c = corp();
+    const s = sector();
+    const ordinary = decide(c, [s], [pool()]);
+    const nationallyDominant = decide(c, [s], [pool()], {
+      ...plantsCtx,
+      nationalShareOf: () => 60,
+    });
+    const ordinaryOrder = pushedOrder(queueWrites(ordinary)[0]);
+    const dominantOrder = pushedOrder(queueWrites(nationallyDominant)[0]);
+
+    expect(dominantOrder.unitsOrdered).toBeCloseTo(ordinaryOrder.unitsOrdered, 8);
+    expect(dominantOrder.costPaidAnchor / ordinaryOrder.costPaidAnchor).toBeCloseTo(
+      getNationalDominanceGrowthCostMultiplier(60),
+      8
     );
   });
 

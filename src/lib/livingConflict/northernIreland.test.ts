@@ -6,6 +6,7 @@ import {
   evaluateConflictTransitions,
   normalizeConflictState,
   phaseFor,
+  selectEvents,
 } from "./engine";
 
 function opened() {
@@ -65,7 +66,7 @@ describe("Northern Ireland peace process", () => {
       domesticConsent: 30,
     });
     expect(phaseFor(NORTHERN_IRELAND_DEF, state.phaseLevel)?.key).toBe("agreement");
-    expect(state.status).toBe("settled");
+    expect(state.status).toBe("negotiating");
   });
 
   it("can remain delayed when consent and momentum do not converge", () => {
@@ -89,12 +90,85 @@ describe("Northern Ireland peace process", () => {
     const settlement = applyConflictOutcome(NORTHERN_IRELAND_DEF, opened(), {
       nextConflictPhase: "power_sharing",
       nextConflictStatus: "settled",
-      trackDeltas: { institutionalStability: 10 },
+      trackDeltas: {
+        institutionalStability: 10,
+        violence: -30,
+        ratificationAuthorization: 2,
+        referendumRatification: 1,
+      },
     });
     const relapse = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, settlement, 2002).state;
     expect(phaseFor(NORTHERN_IRELAND_DEF, relapse.phaseLevel)?.key).toBe("fragile_settlement");
     const restored = advance(relapse, { institutionalStability: 50, domesticConsent: 30 });
     expect(phaseFor(NORTHERN_IRELAND_DEF, restored.phaseLevel)?.key).toBe("power_sharing");
     expect(restored.status).toBe("settled");
+  });
+});
+
+it("allows a counterfactual early ceasefire and a delayed agreement without a forced date", () => {
+  const ceasefire = applyConflictOutcome(NORTHERN_IRELAND_DEF, opened(), {
+    nextConflictPhase: "backchannels",
+    trackDeltas: { violence: -40, unionistConsent: 30, nationalistConsent: 30 },
+  });
+  const early = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, ceasefire, 1991).state;
+  expect(phaseFor(NORTHERN_IRELAND_DEF, early.phaseLevel)?.key).toBe("ceasefire");
+  const talks = applyConflictOutcome(NORTHERN_IRELAND_DEF, early, {
+    nextConflictPhase: "multiparty_talks",
+    trackDeltas: {
+      settlementMomentum: 100,
+      unionistConsent: 100,
+      nationalistConsent: 100,
+      domesticConsent: 100,
+    },
+  });
+  const delayed = evaluateConflictTransitions(NORTHERN_IRELAND_DEF, talks, 2010).state;
+  expect(phaseFor(NORTHERN_IRELAND_DEF, delayed.phaseLevel)?.key).toBe("agreement");
+  expect(delayed.status).toBe("negotiating");
+});
+
+it("forms institutions through separate party implementation after the public mandate without an existing executive", () => {
+  let state = normalizeConflictState(NORTHERN_IRELAND_DEF, {
+    ...opened(),
+    phaseLevel: 5,
+    tracks: {
+      ...opened().tracks,
+      unionistConsent: 64,
+      nationalistConsent: 64,
+      domesticConsent: 60,
+      settlementMomentum: 80,
+      violence: 20,
+      institutionalStability: 22,
+      decommissioning: 41,
+      ratificationAuthorization: 2,
+      referendumRatification: 0,
+    },
+  });
+  expect(selectEvents(NORTHERN_IRELAND_DEF, state, 100).map((event) => event.event.key)).toEqual([
+    "agreement_ratification",
+  ]);
+  state = { ...state, tracks: { ...state.tracks, referendumRatification: 1 } };
+  const events = selectEvents(NORTHERN_IRELAND_DEF, state, 100);
+  expect(events.map((event) => event.event.key)).toEqual(["agreement_implementation"]);
+  const nodes = events[0].event.negotiation!.decisionTree;
+  expect(nodes.map((node) => node.requiredRoles)).toEqual([["partyLeader"], ["partyLeader"]]);
+  expect(nodes.map((node) => node.requiredPartyAbbreviations)).toEqual([
+    ["DUP", "UUP"],
+    ["SF", "SDLP"],
+  ]);
+  for (const node of nodes) {
+    const action = node.options?.[1].action;
+    if (action?.kind !== "livingConflictTrajectory")
+      throw new Error("missing implementation action");
+    state = advance(state, action.trackDeltas ?? {});
+  }
+  expect(state).toMatchObject({
+    phaseLevel: 6,
+    status: "settled",
+    tracks: {
+      institutionalStability: 46,
+      decommissioning: 53,
+      unionistConsent: 64,
+      nationalistConsent: 64,
+    },
   });
 });

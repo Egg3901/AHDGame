@@ -914,3 +914,16 @@ describe("getCampaignDetail", () => {
     expect(detail.briefing).toBeUndefined();
   });
 });
+
+it("campaign-manager quotes scale generated amounts while retaining treasury face value", async () => {
+  const { db, campaignId, user } = await setUpOwnedCampaign();
+  const before = await getCampaignDetail(db as never, campaignId, user);
+  db.collection("gameConfig").findOne.mockResolvedValue({ campaignEraPriceLevelEnabled: true });
+  db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+  const after = await getCampaignDetail(db as never, campaignId, user);
+  expect(after.priceLevel).toBe(0.35808);
+  expect(after.funds).toBe(before.funds);
+  expect(after.nextUpgradeCosts?.fundraising?.funds).toBe(
+    Math.round((before.nextUpgradeCosts?.fundraising?.funds ?? 0) * 0.35808)
+  );
+});

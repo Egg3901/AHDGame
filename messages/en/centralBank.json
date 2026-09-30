@@ -25,6 +25,7 @@
       "estimatedSavings": "Estimated household savings (outside M1/M2)",
       "stockExplanation": "M1 counts spendable account balances. M2 adds savings, NPC bank deposits, external deposits, equity market cash, and QE balances parked in the bond market. Bond-market settlement cash moves through the dealer pool without a counterparty and is reported separately outside M2. Demographic household estimates are shown separately and do not enter either total.",
       "unavailable": "Unavailable"
-    }
+    },
+    "monetaryAuthority": "Monetary policy is set by {name}. The national governor manages national reserves and financial accounts."
   }
 }

@@ -407,7 +407,8 @@ export default function ActionsPage() {
     const fundraiseAmount = fundraiseYieldLocal(
       character,
       !!character.currencyBalances,
-      campaignRates
+      campaignRates,
+      worldFlags.campaignPriceLevel
     );
     // Same rules quote the server executes: level-scaled AP cost, GDP-scaled
     // fund cost with the fundraising discount, and the +1 level gain. When
@@ -430,7 +431,8 @@ export default function ActionsPage() {
             // without this a 1953-world card would quote modern-era costs.
             preset: worldFlags.preset,
           }
-        : undefined
+        : undefined,
+      worldFlags.campaignPriceLevel
     );
     const buildDonorBaseFundCost = buildDonorBaseQuote.ok ? buildDonorBaseQuote.fundCostAnchor : 0;
     const donorUpgradeCost = buildDonorBaseFundCost;
@@ -454,7 +456,8 @@ export default function ActionsPage() {
             // Same era baseline the server executes with (see executeAction).
             preset: worldFlags.preset,
           }
-        : undefined
+        : undefined,
+      worldFlags.campaignPriceLevel
     );
     // Same rules quote the server executes: tiered AP cost, GDP-scaled fund
     // cost and stat-scaled gain. When the quote rejects (unallocated stats or
@@ -475,7 +478,8 @@ export default function ActionsPage() {
             // Same era baseline the server executes with (see executeAction).
             preset: worldFlags.preset,
           }
-        : undefined
+        : undefined,
+      worldFlags.campaignPriceLevel
     );
     const campaignActionCost = campaignQuote.ok
       ? campaignQuote.apCost
@@ -502,7 +506,14 @@ export default function ActionsPage() {
       buildDonorBaseActionCost,
       buildDonorBaseFundCost,
     };
-  }, [character, influence, homeState, campaignRates, worldFlags.preset]);
+  }, [
+    character,
+    influence,
+    homeState,
+    campaignRates,
+    worldFlags.preset,
+    worldFlags.campaignPriceLevel,
+  ]);
 
   const forexEnabled = !!character?.currencyBalances;
   // LOCAL home-currency balance — canonical source of truth.

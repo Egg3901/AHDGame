@@ -15,6 +15,7 @@ vi.mock("@/lib/time/gameTime", () => ({
 
 import {
   appointCabinetMemberHandler,
+  duplicateAppointmentMessage,
   fireCabinetMemberHandler,
 } from "@/lib/countries/uk/cabinetApi";
 
@@ -771,5 +772,17 @@ describe("fireCabinetMemberHandler - UK dual ministry survivor (issue #2049)", (
       })
     );
     expect(db.collectionMocks.electedOfficials.findOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("duplicateAppointmentMessage (ticket 1368)", () => {
+  it("names a holder clash instead of reporting a race", () => {
+    const error = { code: 11000, keyPattern: { countryId: 1, characterId: 1 } };
+    expect(duplicateAppointmentMessage(error)).toMatch(/already holds a cabinet post/);
+  });
+
+  it("keeps the race message for a seat clash", () => {
+    const error = { code: 11000, keyPattern: { countryId: 1, positionId: 1 } };
+    expect(duplicateAppointmentMessage(error)).toMatch(/conflicting appointment was just made/);
   });
 });

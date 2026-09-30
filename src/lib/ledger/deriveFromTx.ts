@@ -61,6 +61,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   corp_tax_paid: "taxation",
   gov_tax_revenue: "taxation",
   corp_revenue: "sector_revenue",
+  corp_operating_loss: "corporate_operating_loss",
   // The buyer is the defence appropriation sub-account, which the stock-check ledger does
   // not yet model as a real account. Name the contra instead of reporting an unexplained mint.
   defence_contract_payment: "defence_procurement",
@@ -282,6 +283,27 @@ export function deriveLedgerEntry(
   tx: DerivableTx,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
+  // These marked rows describe tax-base or holder-service statistics. Their
+  // emitters never move treasury cash; the fiscal accrual owner witnesses that.
+  if (
+    (tx.type === "gov_tax_revenue" || tx.type === "gov_coupon_payment") &&
+    tx.meta?.treasuryCashMovement === false
+  )
+    return null;
+  // Securitizing historical principal changes its instrument, never treasury cash.
+  if (tx.type === "gov_bond_issuance" && tx.meta?.reconcile === true) return null;
+  // The settlement already owns a durable multi-leg witness for this receipt.
+  if (tx.type === "gov_bond_issuance" && tx.meta?.ledgerOwnedBySettlement === true) return null;
+  // Charter vaults are separate from corporate liquid capital. These marked
+  // receipts retain the native settlement without inventing a stock witness
+  // for an account the balance snapshot does not currently include.
+  if (
+    tx.meta?.bankVaultMovement === true &&
+    (tx.type === "bank_cb_advance" ||
+      tx.type === "bank_prop_trade_buy" ||
+      tx.type === "bank_prop_trade_sell")
+  )
+    return null;
   const anchor = tx.anchorAmount;
   // No anchor value → not derivable in ₳ terms; skip rather than guess a rate
   // (deriving anchor from the live FX table causes historical drift — plan §5).

@@ -499,6 +499,12 @@ const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  { name: "financialCrisisFiscalActions", category: "runtime" },
+  { name: "financialCrisisCreditHistory", category: "runtime" },
+  { name: "bankMoneyMoves", category: "runtime" },
+  { name: "bankLiquidityOperations", category: "runtime" },
+  { name: "monetaryOperationCommands", category: "runtime" },
+  { name: "reservePoolTransferCommands", category: "runtime" },
   {
     name: "savingsAccounts",
     category: "runtime",
@@ -880,6 +886,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },
   { name: "indexFundTransactions", category: "runtime" },
+  {
+    name: "indexFundCommands",
+    category: "runtime",
+    notes:
+      "Player order receipts and audit outboxes belong to the same world as fund cash, positions and transactions. Never expire within an active world.",
+  },
   {
     name: "pensionSchemes",
     category: "runtime",
@@ -1289,17 +1301,17 @@ export function getCollectionCategory(name: string): CollectionCategory | undefi
 
 /** Names of every runtime collection — the set wiped on reset. */
 export function getRuntimeCollectionNames(): string[] {
-  return RUNTIME.map((entry) => entry.name);
+  return getCollectionsByCategory("runtime").map((entry) => entry.name);
 }
 
 /** Names of every reference collection — the set seeded on bootstrap. */
 export function getReferenceCollectionNames(): string[] {
-  return REFERENCE.map((entry) => entry.name);
+  return getCollectionsByCategory("reference").map((entry) => entry.name);
 }
 
 /** Names of every preserved collection — the set that survives reset. */
 export function getPreservedCollectionNames(): string[] {
-  return PRESERVED.map((entry) => entry.name);
+  return getCollectionsByCategory("preserved").map((entry) => entry.name);
 }
 
 /**

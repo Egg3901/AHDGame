@@ -5,6 +5,7 @@
  * Uses 50% of player rate with diminishing returns, applies party taxes,
  * and grants 2 action points per turn (capped at 100).
  */
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 
 import type { Db, ObjectId } from "mongodb";
 import type {
@@ -80,6 +81,7 @@ export async function processNppFundGeneration(
   const difficulty = await loadSingleplayerDifficulty(db);
   const tuning = singleplayerNppTuning(difficulty);
   const campaignRates = await loadCampaignCurrencyRates(db);
+  const priceLevel = await loadCampaignPriceLevel(db);
 
   const stateMap =
     preloadedStateMap ??
@@ -148,7 +150,7 @@ export async function processNppFundGeneration(
       // curve the ANCHOR-EQUIVALENT balance (localFunds ÷ rate).
       const rate = campaignLocalRate(npp.countryId ?? "US", campaignRates);
       const currentFundsLocal = finite(npp.funds);
-      const currentFundsAnchor = rate > 0 ? currentFundsLocal / rate : currentFundsLocal;
+      const currentFundsAnchor = currentFundsLocal / (rate * priceLevel);
       const donorBaseLevel = finite(npp.donorBaseLevel);
       const grossAnchor = projectNppGeneration({
         population: state.population,
@@ -159,7 +161,7 @@ export async function processNppFundGeneration(
         nppEconomyEnabled: true,
       });
       const grossFundsLocal =
-        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US", campaignRates) *
+        campaignAnchorToLocal(grossAnchor * priceLevel, npp.countryId ?? "US", campaignRates) *
         tuning.fundMultiplier;
 
       const currentActions = finite(npp.actionPoints);

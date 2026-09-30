@@ -3,7 +3,11 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Db } from "mongodb";
 import { badRequest } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  campaignLocalRate,
+  loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
+} from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignAudience } from "./audience";
 import { decorateAdTargets } from "./adTargets";
 import {
@@ -35,7 +39,9 @@ export async function quoteAdAudience(
   if (!audience) throw badRequest("This region has no targetable electorate");
   const position = { economicLean: policies.economic, socialLean: policies.social };
   const forex = await isForexEnabled();
-  const rate = forex ? campaignLocalRate(countryId, await loadCampaignCurrencyRates(db)) : 1;
+  const rate =
+    (forex ? campaignLocalRate(countryId, await loadCampaignCurrencyRates(db)) : 1) *
+    (await loadCampaignPriceLevel(db));
   const unique = new Map<string, CampaignTarget>();
   for (const cell of audience.cells)
     for (const [dimension, bucket] of Object.entries(cell.buckets))

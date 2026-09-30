@@ -1290,7 +1290,7 @@ export const Navbar = React.memo(function Navbar({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={closeMobileMenu}
-                    className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
+                    className="store-purchase-cta flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                   >
                     {t("help.patreon")}
                   </a>
@@ -1299,7 +1299,7 @@ export const Navbar = React.memo(function Navbar({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={closeMobileMenu}
-                    className="flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
+                    className="store-purchase-cta flex items-center rounded-lg px-3 py-2 text-sm text-muted transition-colors hover:bg-white/5"
                   >
                     {t("help.supporterWall")}
                   </a>

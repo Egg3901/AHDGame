@@ -37,7 +37,7 @@ function amountToAnchor(
   return amount / rate;
 }
 
-async function loadAnchorRateMap(
+export async function loadAnchorRateMap(
   db: Db,
   entries: Pick<TxInput, "currencyCode" | "anchorAmount">[]
 ): Promise<Map<string, number>> {
@@ -137,6 +137,7 @@ const TX_TYPE_TO_AUDIT_ACTION: Partial<Record<FinancialTxType, string>> = {
 
   // Corp & shares
   corp_revenue: "corp.revenue",
+  corp_operating_loss: "corp.operating_loss",
   corp_dividend: "corp.dividends",
   corp_salary: "corp.salary",
   corp_tax_paid: "corp.tax_paid",
@@ -198,6 +199,7 @@ const TX_TYPE_TO_AUDIT_ACTION: Partial<Record<FinancialTxType, string>> = {
   caucus_tax_debit: "party.caucus_tax",
 
   // Government & subsidies
+  gov_fiscal_accrual: "gov.fiscal_accrual",
   gov_tax_revenue: "gov.tax_revenue",
   gov_bond_issuance: "gov.bond_issue",
   gov_coupon_payment: "gov.coupon_payment",
@@ -296,7 +298,7 @@ export async function emitTx(
   }
 }
 
-function buildTxDocs(
+export function buildTxDocs(
   entries: TxInput[],
   thresholds: TxThresholds,
   turnLengthMinutes: number,

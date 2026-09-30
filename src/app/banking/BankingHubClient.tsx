@@ -1193,6 +1193,8 @@ function YourSavingsSection({
       }
       showToast("Savings holder updated", "success");
       await onChanged();
+    } catch {
+      showToast("Could not move savings. Check your connection and try again.", "error");
     } finally {
       setBusy(null);
     }

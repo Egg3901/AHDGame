@@ -314,6 +314,8 @@ export const GET = withNoStore(async () => {
           googleEmail: user?.googleEmail ?? undefined,
           googleName: user?.googleName ?? undefined,
           googleAvatar: user?.googleAvatar ?? undefined,
+          appleId: user?.appleId ?? undefined,
+          appleEmail: user?.appleEmail ?? undefined,
           hasPassword: !!user?.password,
           character: character
             ? {

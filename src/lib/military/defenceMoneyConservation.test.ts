@@ -3,6 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { applyDefenceDeliveries } from "@/lib/turn/defenceDeliveryTurn";
 import { lotProductionCost, GRADE_PRICE_SCALE } from "@/lib/military/defenceLotEconomics";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 
@@ -51,7 +52,59 @@ function ledger(over: Partial<Ledger> = {}): Ledger {
   };
 }
 
+const moneyStores = new WeakMap<Ledger, ReturnType<typeof createInMemoryDb>>();
+
 function stubDb(l: Ledger): Db {
+  let money = moneyStores.get(l);
+  if (!money) {
+    money = createInMemoryDb();
+    money.seed("federalBudget", [
+      {
+        _id: "national-budget-us",
+        countryId: "US",
+        gdp: 387_000_000_000,
+        defenseAppropriation: {
+          balance: l.balance,
+          encumbered: l.encumbered,
+          accruedThroughTurn: 1,
+          arrearsRatio: 0,
+        },
+      },
+    ]);
+    money.seed("corporations", [
+      {
+        _id: CORP_ID,
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        unlockedTechNodeIds: [],
+        liquidCapital: l.corpCapital ?? 0,
+      },
+    ]);
+    const appropriation = money.collection("federalBudget").docs[0].defenseAppropriation as Record<
+      string,
+      number
+    >;
+    for (const field of ["balance", "encumbered"] as const) {
+      Object.defineProperty(l, field, {
+        get: () => appropriation[field],
+        set: (value: number) => {
+          appropriation[field] = value;
+        },
+        configurable: true,
+      });
+    }
+    const corporations = money.collection("corporations");
+    const write = corporations.updateOne.bind(corporations);
+    vi.spyOn(corporations, "updateOne").mockImplementation(async (filter, update, options) => {
+      const result = await write(filter, update, options);
+      if (result.modifiedCount && !Array.isArray(update)) {
+        l.corpCash += ((update.$inc ?? {}) as Record<string, number>).liquidCapital ?? 0;
+      }
+      return result;
+    });
+    moneyStores.set(l, money);
+  }
+  const moneyDb = money;
   return {
     collection: (name: string) => {
       if (name === "defenceContracts") {
@@ -85,23 +138,7 @@ function stubDb(l: Ledger): Db {
           bulkWrite: async (ops: unknown[]) => ({ modifiedCount: ops.length }),
         };
       }
-      if (name === "corporations") {
-        return {
-          findOne: async () => ({
-            _id: CORP_ID,
-            countryId: "US",
-            liquidCurrencyCode: "USD",
-            unlockedTechNodeIds: [],
-            // Read off the ledger: whether a supplier can fund a loss is now a real gate on
-            // delivery, so the fixture has to be able to say how much cash it has.
-            liquidCapital: l.corpCapital ?? 0,
-          }),
-          updateOne: async (_f: unknown, u: Record<string, unknown>) => {
-            l.corpCash += ((u.$inc ?? {}) as Record<string, number>).liquidCapital ?? 0;
-            return { matchedCount: 1, modifiedCount: 1 };
-          },
-        };
-      }
+      if (name === "corporations") return moneyDb.collection(name);
       if (name === "nationalArsenal") {
         return {
           findOne: async () => ({ countryId: "US", stock: l.stock, grade: {} }),
@@ -121,54 +158,11 @@ function stubDb(l: Ledger): Db {
           find: () => ({ toArray: async () => l.commodityPrices ?? [] }),
         };
       }
-      if (name === MONEY_MOVE_COLLECTION) {
-        // The shared money primitive's claim record. A unique `_id` insert is the only atomic
-        // guarantee it relies on, so the stub models exactly that and nothing else.
-        return {
-          findOne: async (f: { _id: string }) => l.claims.get(f._id) ?? null,
-          insertOne: async (doc: { _id: string }) => {
-            if (l.claims.has(doc._id)) {
-              throw Object.assign(new Error("duplicate key"), { code: 11000 });
-            }
-            // Full doc, as Mongo keeps it: completeMoneyMove maps over the claim's legs.
-            l.claims.set(doc._id, doc as unknown as Record<string, unknown>);
-            return { insertedId: doc._id };
-          },
-          updateOne: async () => ({ matchedCount: 1, modifiedCount: 1 }),
-          deleteOne: async (f: { _id: string }) => {
-            l.claims.delete(f._id);
-            return { deletedCount: 1 };
-          },
-        };
-      }
-      // federalBudget
-      return {
-        findOne: async () => ({
-          countryId: "US",
-          gdp: 387_000_000_000,
-          defenseAppropriation: {
-            balance: l.balance,
-            encumbered: l.encumbered,
-            accruedThroughTurn: 1,
-            arrearsRatio: 0,
-          },
-        }),
-        updateOne: async (f: Record<string, unknown>, u: Record<string, unknown>) => {
-          const expr = f.$expr as { $gte?: [unknown, number] } | undefined;
-          if (expr?.$gte && l.balance - l.encumbered < expr.$gte[1]) {
-            return { matchedCount: 0, modifiedCount: 0 };
-          }
-          const needB = (f["defenseAppropriation.balance"] as { $gte?: number } | undefined)?.$gte;
-          if (needB != null && l.balance < needB) return { matchedCount: 0, modifiedCount: 0 };
-          const needE = (f["defenseAppropriation.encumbered"] as { $gte?: number } | undefined)
-            ?.$gte;
-          if (needE != null && l.encumbered < needE) return { matchedCount: 0, modifiedCount: 0 };
-          const inc = (u.$inc ?? {}) as Record<string, number>;
-          l.balance += inc["defenseAppropriation.balance"] ?? 0;
-          l.encumbered += inc["defenseAppropriation.encumbered"] ?? 0;
-          return { matchedCount: 1, modifiedCount: 1 };
-        },
-      };
+      // Cash and journals need Mongo filters, receipts and acknowledgements,
+      // including stable document identities and guarded update results.
+      if (name === MONEY_MOVE_COLLECTION || name === "federalBudget")
+        return moneyDb.collection(name);
+      throw new Error(`Unexpected collection ${name}`);
     },
   } as unknown as Db;
 }

@@ -24,7 +24,7 @@ import {
   type CohortRow,
 } from "@/components/referendum/campaignsPanel/CohortBreakdown";
 import { leanFromUnits, effLean, effTurnout } from "@/lib/referendum/cohortEngine";
-import { referendumSideLabels } from "@/lib/referendum/sideLabels";
+import { referendumSideLabels, referendumKindLabel } from "@/lib/referendum/sideLabels";
 import { ViewingAsControl } from "@/components/referendum/campaignsPanel/ViewingAsControl";
 import { GG_TURNOUT_MOD_CAP, GG_LEAN_MOD_CAP } from "@/lib/constants/referendum";
 import { listReferendumWire } from "@/lib/referendum/wire";
@@ -57,6 +57,13 @@ function weightedTurnout(cohorts: { share: number; turnout: number }[]): number 
 /** Plain-language summary of a non-campaigning referendum's state. */
 function statusSummary(ref: Referendum, region: string): string {
   const yes = ref.result ? `${Math.round(ref.result.finalYesShare)}% Yes` : null;
+  if (ref.kind === "peace_agreement") {
+    if (ref.status === "completed")
+      return `${region} ratified the peace agreement${yes ? ` with ${yes}` : ""}. Power sharing still requires decommissioning and functioning institutions.`;
+    if (ref.status === "settled")
+      return `The peace agreement was rejected${yes ? ` with ${yes}` : ""}. Negotiations must produce a newly authorized agreement before another vote.`;
+    if (ref.status === "cancelled") return "The peace agreement ballot was cancelled.";
+  }
   switch (ref.status) {
     case "completed":
       return ref.kind === "reunification"
@@ -116,7 +123,7 @@ export default async function ReferendumDetailPage({
     getHeadOfGovernmentCharacterId(db, countryId),
   ]);
   const regionName = stateDoc?.name ?? regionId.toUpperCase();
-  const noun = ref.kind === "reunification" ? "Reunification" : "Independence";
+  const noun = referendumKindLabel(ref.kind);
   const labels = referendumSideLabels(ref.kind);
   const isAdmin = user?.isAdmin === true;
   const isPM = pmId != null && user?.character?._id != null && pmId.equals(user.character._id);
@@ -273,7 +280,7 @@ export default async function ReferendumDetailPage({
   // region actually converts). Westminster always; the Dáil bill too on a NI
   // reunification. Ordered Westminster-first to match the campaign masthead.
   let consentBills: ConsentBillView[] = [];
-  if (ref.status === "actuating") {
+  if (ref.status === "actuating" || ref.kind === "peace_agreement") {
     const orderedBillIds = [ref.westminsterBillId, ref.dailBillId].filter(
       (x): x is ObjectId => x != null
     );
@@ -289,7 +296,12 @@ export default async function ReferendumDetailPage({
 
   const emblemSeal = {
     line1: regionName.toUpperCase(),
-    line2: ref.kind === "reunification" ? "BORDER POLL" : "INDEPENDENCE POLL",
+    line2:
+      ref.kind === "peace_agreement"
+        ? "PEACE AGREEMENT"
+        : ref.kind === "reunification"
+          ? "BORDER POLL"
+          : "INDEPENDENCE POLL",
   };
 
   const turnsToVote = ref.campaignCloseTurn != null ? ref.campaignCloseTurn - currentTurn : null;

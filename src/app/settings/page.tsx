@@ -48,6 +48,7 @@ import {
   CHARACTER_SECTIONS,
   DISCORD_MESSAGES,
   GOOGLE_MESSAGES,
+  APPLE_MESSAGES,
   IMPERIAL_SECTIONS,
 } from "./components/sectionsConfig";
 import { RecommendationsBlurb } from "./components/RecommendationsBlurb";
@@ -91,6 +92,8 @@ export function SettingsPageContent() {
   const reason = searchParams.get("reason");
   const hasDiscordParams = discord === "linked" || (discord === "error" && reason);
   const hasGoogleParams = google === "linked" || (google === "error" && reason);
+  const apple = searchParams.get("apple");
+  const hasAppleParams = apple === "linked" || (apple === "error" && reason);
   const oauthBanner = (() => {
     if (oauthBannerDismissed) return null;
     if (hasDiscordParams) {
@@ -102,6 +105,11 @@ export function SettingsPageContent() {
       return google === "linked"
         ? GOOGLE_MESSAGES.linked
         : (GOOGLE_MESSAGES[reason ?? ""] ?? { key: "oauth.google.failed", ok: false });
+    }
+    if (hasAppleParams) {
+      return apple === "linked"
+        ? APPLE_MESSAGES.linked
+        : (APPLE_MESSAGES[reason ?? ""] ?? { key: "oauth.apple.failed", ok: false });
     }
     return null;
   })();
@@ -205,12 +213,15 @@ export function SettingsPageContent() {
   useEffect(() => {
     const discord = searchParams.get("discord");
     const google = searchParams.get("google");
+    const apple = searchParams.get("apple");
     const reason = searchParams.get("reason");
     if (
       discord === "linked" ||
       (discord === "error" && reason) ||
       google === "linked" ||
-      (google === "error" && reason)
+      (google === "error" && reason) ||
+      apple === "linked" ||
+      (apple === "error" && reason)
     ) {
       const t = setTimeout(() => {
         setOauthBannerDismissed(true);
@@ -241,6 +252,8 @@ export function SettingsPageContent() {
       googleEmail: rawUser.googleEmail,
       googleName: rawUser.googleName,
       googleAvatar: rawUser.googleAvatar,
+      appleId: rawUser.appleId,
+      appleEmail: rawUser.appleEmail,
     });
   }, [rawUser]);
 
@@ -274,6 +287,8 @@ export function SettingsPageContent() {
             c.googleEmail = rawUser.googleEmail;
             c.googleName = rawUser.googleName;
             c.googleAvatar = rawUser.googleAvatar;
+            c.appleId = rawUser.appleId;
+            c.appleEmail = rawUser.appleEmail;
           }
           setCharacter(c);
         }

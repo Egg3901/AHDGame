@@ -5,6 +5,7 @@ import { epsilonFor, isAnchorBalanced, nativeImbalance } from "@/lib/ledger/epsi
 import { LEDGER_ENTRIES_COLLECTION } from "@/lib/ledger/emit";
 import { loadBalanceSnapshot, loadPreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
 import type {
+  BalanceSnapshot,
   LedgerEntry,
   LedgerReconciliation,
   MoneySupplyFinding,
@@ -39,6 +40,9 @@ export interface ReconcileInput {
   openingAnchorRates?: Record<string, number>;
   preForexAnchorRates?: Record<string, number>;
   closingAnchorRates?: Record<string, number>;
+  openingAccountValuations?: BalanceSnapshot["accountValuations"];
+  preForexAccountValuations?: BalanceSnapshot["accountValuations"];
+  closingAccountValuations?: BalanceSnapshot["accountValuations"];
   /** Skip stock-vs-flow (e.g. a reset/reseed epoch legitimately rewrote balances). */
   skipStockVsFlow?: boolean;
 }
@@ -236,8 +240,12 @@ export function summarizeStockVsFlowByKind(findings: StockVsFlowFinding[]): Stoc
   return [...byKind.values()].sort((a, b) => b.absDivergence - a.absDivergence);
 }
 
-function rateForAccount(account: string, rates: Record<string, number> | undefined): number {
-  const rate = rates?.[accountCurrency(account)];
+function rateForAccount(
+  account: string,
+  rates: Record<string, number> | undefined,
+  valuations?: BalanceSnapshot["accountValuations"]
+): number {
+  const rate = valuations?.[account]?.anchorRate ?? rates?.[accountCurrency(account)];
   return rate && Number.isFinite(rate) && rate > 0 ? rate : 1;
 }
 
@@ -312,9 +320,21 @@ function cashMovementDelta(input: ReconcileInput, account: string): number {
     return (input.closingBalances[account] ?? 0) - (input.openingBalances[account] ?? 0);
   }
 
-  const openingRate = rateForAccount(account, input.openingAnchorRates);
-  const preForexRate = rateForAccount(account, input.preForexAnchorRates);
-  const closingRate = rateForAccount(account, input.closingAnchorRates);
+  const openingRate = rateForAccount(
+    account,
+    input.openingAnchorRates,
+    input.openingAccountValuations
+  );
+  const preForexRate = rateForAccount(
+    account,
+    input.preForexAnchorRates,
+    input.preForexAccountValuations
+  );
+  const closingRate = rateForAccount(
+    account,
+    input.closingAnchorRates,
+    input.closingAccountValuations
+  );
   const openingNative = (input.openingBalances[account] ?? 0) * openingRate;
   const preForexNative = (input.preForexBalances[account] ?? 0) * preForexRate;
   const closingNative = (input.closingBalances[account] ?? 0) * closingRate;
@@ -362,6 +382,9 @@ export async function reconcileTurn(
       openingAnchorRates: opening?.anchorRates,
       preForexAnchorRates: preForex?.anchorRates,
       closingAnchorRates: closing?.anchorRates,
+      openingAccountValuations: opening?.accountValuations,
+      preForexAccountValuations: preForex?.accountValuations,
+      closingAccountValuations: closing?.accountValuations,
       skipStockVsFlow,
     });
 

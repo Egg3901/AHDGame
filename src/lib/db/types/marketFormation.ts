@@ -113,6 +113,14 @@ export interface EmptyMarketCell {
   targetedRejectionReasons: NppMarketEntryReason[];
 }
 
+/** Full cell counts before example sampling; absent on older snapshots, never inferred as zero. */
+export interface CellDemandCoverage {
+  /** Cells with at least one finite calibrated demand observation for their outputs. */
+  observedCells: number;
+  positiveUseCells: number;
+  emptyPositiveUseCells: number;
+}
+
 export interface StateSectorCoverage {
   countryId: string;
   stateId: string;
@@ -128,6 +136,7 @@ export interface StateSectorCoverage {
   localProducerDemandValue: number;
   inboundSupplyValue: number;
   outputValue: number;
+  demandCoverage?: CellDemandCoverage;
 }
 
 export interface CountrySectorCoverage {
@@ -144,6 +153,7 @@ export interface CountrySectorCoverage {
   localProducerDemandValue: number;
   inboundSupplyValue: number;
   outputValue: number;
+  demandCoverage?: CellDemandCoverage;
 }
 
 export interface CommoditySupplyBreadth {

@@ -1,3 +1,5 @@
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -210,7 +212,10 @@ async function getCharacterData() {
       steps: checklist.steps,
       completedCount: checklist.completedCount,
       total: checklist.total,
-      rewardAmount: onboardingRewardAmount(gameConfig?.startingFunds),
+      rewardAmount: Math.round(
+        onboardingRewardAmount(gameConfig?.startingFunds) *
+          resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, gameState?.preset)
+      ),
     };
   }
 
@@ -228,7 +233,8 @@ async function getCharacterData() {
     homeState?.gdp,
     character.countryId,
     character.politicalInfluence ?? 0,
-    gameState?.preset
+    gameState?.preset,
+    resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, gameState?.preset)
   );
 
   // Determine character's country for country-specific NPI rankings
@@ -410,6 +416,7 @@ export default async function ProfilePage() {
     unionContributionIncomePerTurn(db, data.character._id),
   ]);
   const campaignRates = await loadCampaignCurrencyRates(await getDb());
+  const campaignPriceLevel = await loadCampaignPriceLevel(await getDb());
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const {
@@ -836,7 +843,12 @@ export default async function ProfilePage() {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled, campaignRates),
+                    fundraiseYield: fundraiseYieldLocal(
+                      character,
+                      forexEnabled,
+                      campaignRates,
+                      campaignPriceLevel
+                    ),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}

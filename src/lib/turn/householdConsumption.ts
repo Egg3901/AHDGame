@@ -193,6 +193,8 @@ export interface HouseholdConsumptionState {
 }
 
 export interface HouseholdConsumptionInput {
+  /** Country demand impulse from settled fiscal cash and observed bank credit. */
+  financialDemandByCountry?: ReadonlyMap<string, number>;
   states: HouseholdConsumptionState[];
   /** stateId → household signals (from `stateMetrics.economic`). */
   metricsByState: Map<string, HouseholdStateSignals>;
@@ -308,7 +310,9 @@ export function computeHouseholdConsumption(
         ? clamp(signals.medianIncome / countryAvgIncome, INCOME_CLAMP)
         : 1;
 
-    const budget = population * eraPerCapita * employmentMod * confidenceMod * incomeMod;
+    const financialMultiplier = input.financialDemandByCountry?.get(state.countryId ?? "") ?? 1;
+    const budget =
+      population * eraPerCapita * employmentMod * confidenceMod * incomeMod * financialMultiplier;
     if (!(budget > 0)) continue;
 
     // ── Wealth-tier (Engel) shift + renormalise the basket for this state ─────
