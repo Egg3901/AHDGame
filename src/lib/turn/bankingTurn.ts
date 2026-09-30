@@ -42,6 +42,7 @@ import {
   facilityInterestAmounts,
 } from "@/lib/banking/rules/facilityInterest";
 import { interbankServiceTransition } from "@/lib/banking/rules/interbankServicing";
+import { settleLegacyDepositInterest } from "@/lib/banking/legacyDepositInterest";
 import {
   settleTransition,
   recoverProjections,
@@ -65,12 +66,7 @@ import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/cha
 import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
-import {
-  claimMoneyMove,
-  completeMoneyMove,
-  turnMoveKey,
-  type MoneyTarget,
-} from "@/lib/banking/moneyMove";
+import { turnMoveKey, type MoneyTarget } from "@/lib/banking/moneyMove";
 import {
   DEFAULT_LENDING_PROFILE,
   bandOriginationTargets,
@@ -569,6 +565,7 @@ async function processOneBank(
   const npcInterestDue = perTurnInterest(npcDeposits, rates.depositRatePercent, currency);
   const totalInterestDue = playerInterestDue + npcInterestDue;
 
+  const interestShortfall = Math.max(0, totalInterestDue - cashReserves);
   let interestScale = 1;
   if (totalInterestDue > cashReserves && totalInterestDue > 0) {
     interestScale = cashReserves / totalInterestDue;
@@ -596,14 +593,13 @@ async function processOneBank(
       },
     });
   }
-  // Cash actually leaving the bank for a saver's own balance. Claimed before it
-  // moves, like every other money movement, but applied with a bulkWrite: the
-  // counterparty is every depositor at the bank with a different amount each,
-  // and one guarded write per player per bank per turn is a round trip the turn
-  // loop cannot afford. `claimMoneyMove` gives the idempotency and the net-zero
-  // check without the round trips.
+  // Persist the original allocation before paying any legacy saver. The shell
+  // keeps recipient writes batched and recovery verifies every target receipt.
   const interestMoveKey = turnMoveKey("deposit-interest", bankIdHex, turn);
   let playerInterestSettled = 0;
+  let legacyInterestDebit = 0;
+  let legacyNewCredits = new Map<string, number>();
+  let npcInterestPaid = roundSavingsAmount(npcInterestDue * interestScale, currency);
 
   if (
     playerInterestPaid > 0 &&
@@ -685,82 +681,46 @@ async function processOneBank(
     } else {
       result.depositInterestShortfall += playerInterestPaid;
     }
-  } else if (playerInterestPaid > 0 && creditOps.length > 0) {
-    const claim = await claimMoneyMove(db, {
+  } else if (policy.savingsAccounts !== "authoritative") {
+    const settled = await settleLegacyDepositInterest(db, {
       key: interestMoveKey,
-      kind: "deposit_interest",
+      bankId: corp._id,
+      bankName: corp.name,
+      currency,
+      charteredTurn: charter.charteredTurn,
       turn,
-      legs: [
-        {
-          kind: "debit",
-          amount: playerInterestPaid,
-          collection: "corporations",
-          filter: { _id: corp._id },
-          path: "bankCharter.cashReserves",
-          note: "deposit interest leaves the bank",
-        },
-        {
-          kind: "credit",
-          amount: playerInterestPaid,
-          note: "credited across every player depositor at this bank",
-        },
-      ],
+      npcInterestPaid,
+      ratePercent: playerRatePercent,
+      shortfall: interestShortfall,
+      credits: playerCredits
+        .map((pc) => ({
+          characterId: pc.characterId,
+          amount: roundSavingsAmount(pc.interest * interestScale, currency),
+          name: depositorNameById.get(pc.characterId.toString()) ?? "Depositor",
+        }))
+        .filter((credit) => credit.amount > 0),
     });
-
-    if (claim.status === "claimed") {
-      // The bank half is a guarded write for the same reason every debit is:
-      // it must be impossible to pay interest the vault cannot cover, however
-      // stale the figure this pass has been carrying.
-      const debited = await db.collection<Corporation>("corporations").updateOne(
-        { _id: corp._id, "bankCharter.cashReserves": { $gte: playerInterestPaid } },
+    playerInterestSettled = settled.paid;
+    legacyInterestDebit = settled.newlyDebited;
+    legacyNewCredits = settled.newlyCredited;
+    npcInterestPaid = settled.npcInterestPaid;
+    result.depositInterestShortfall += settled.shortfall - interestShortfall;
+    if (legacyInterestDebit > 0 || legacyNewCredits.size > 0)
+      emitBankingAuditEvent(
         {
-          $inc: { "bankCharter.cashReserves": -playerInterestPaid },
-          $set: { updatedAt: new Date() },
-        }
+          kind: "account.interest_paid",
+          command: "bank.turn.depositInterest",
+          turn,
+          outcome: "ok",
+          bankId: bankIdHex,
+          currency,
+          amount: settled.paid,
+          settlementId: interestMoveKey,
+        },
+        db
       );
-      if (debited.matchedCount !== 1) {
-        await completeMoneyMove(
-          db,
-          interestMoveKey,
-          [],
-          "the bank could not fund deposit interest"
-        );
-      } else {
-        await db.collection("characters").bulkWrite(creditOps);
-        await completeMoneyMove(db, interestMoveKey, [0, 1]);
-        playerInterestSettled = playerInterestPaid;
-
-        // Real cash leaving the bank's books for a depositor's savings, and
-        // until now the only record was the balance itself. Bulk, with
-        // thresholds loaded ONCE before the loop, per the emitTxBulk contract:
-        // this runs for every depositor of every bank every turn.
-        const thresholds = await loadTxThresholds(db);
-        await emitTxBulk(
-          db,
-          playerCredits
-            .map((pc) => ({ pc, paid: roundSavingsAmount(pc.interest * interestScale, currency) }))
-            .filter(({ paid }) => paid > 0)
-            .map(({ pc, paid }) => ({
-              type: "bank_deposit_interest" as const,
-              turn,
-              createdAt: new Date(),
-              subjectType: "character" as const,
-              subjectId: pc.characterId,
-              subjectName: depositorNameById.get(pc.characterId.toString()) ?? "Depositor",
-              amount: paid,
-              currencyCode: currency,
-              counterpartyType: "corporation" as const,
-              counterpartyId: corp._id,
-              counterpartyName: corp.name,
-              meta: { ratePercent: playerRatePercent },
-            })),
-          thresholds
-        );
-      }
-    }
   }
 
-  const npcInterestPaid = roundSavingsAmount(npcInterestDue * interestScale, currency);
   const totalInterestPaid = playerInterestSettled + npcInterestPaid;
   if (totalInterestPaid > 0) {
     // Only the PLAYER half leaves the building. A player's interest is credited
@@ -774,7 +734,7 @@ async function processOneBank(
     // the account model nothing left: the interest stayed in the vault as the
     // account's backing and the liability grew instead.
     if (policy.savingsAccounts !== "authoritative") {
-      cashReserves = Math.max(0, cashReserves - playerInterestSettled);
+      cashReserves = Math.max(0, cashReserves - legacyInterestDebit);
     }
     npcDeposits = Math.max(0, npcDeposits + npcInterestPaid);
     result.depositInterestPaid += totalInterestPaid;
@@ -791,7 +751,10 @@ async function processOneBank(
       (op.updateOne.update as { $inc?: Record<string, number> }).$inc?.[
         `currencyBalances.savings.${currency}`
       ] ?? 0;
-    paidByCharId.set(id, paid);
+    paidByCharId.set(
+      id,
+      policy.savingsAccounts === "authoritative" ? paid : (legacyNewCredits.get(id) ?? 0)
+    );
   }
   const postInterestBalances: number[] = [];
   for (const ch of depositors) {
