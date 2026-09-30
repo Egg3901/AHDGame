@@ -1,11 +1,14 @@
 /** Bounded Mongo replay of the durable founding marker; never writes its retained source. */
-import { MongoClient } from "mongodb";
+import { MongoClient, type Document } from "mongodb";
 import {
   appendApprovalTelemetry,
   appendMacroTelemetry,
   resolveLongHorizonContext,
 } from "@/lib/telemetry/longHorizon/telemetry";
 import { seedTelemetryIndexes } from "@/lib/admin/seed/indexes/telemetry";
+import type { GameState } from "@/lib/db/types/gameState";
+import type { State } from "@/lib/db/types/state";
+import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 
 const uri = process.env.SIM_MONGODB_URI ?? "mongodb://127.0.0.1:27018";
 const sourceName = "ahd_sim_campaign1-baseline-1953-20260918";
@@ -19,9 +22,11 @@ async function main() {
   await client.connect();
   const source = client.db(sourceName);
   const target = client.db(targetName);
-  const game = await source.collection("gameState").findOne({ _id: "current" });
-  const state = await source.collection("states").findOne({ countryId: "US" });
-  const approval = await source.collection("governmentApprovals").findOne({ _id: "US" });
+  const game = await source.collection<GameState>("gameState").findOne({ _id: "current" });
+  const state = await source.collection<State>("states").findOne({ countryId: "US" });
+  const approval = await source
+    .collection<GovernmentApproval>("governmentApprovals")
+    .findOne({ _id: "US" });
   if (!game || !state || !approval || game.preIterationTurns !== 48) {
     throw new Error("Retained 1953 founding fixture unavailable or changed");
   }
@@ -30,14 +35,14 @@ async function main() {
     throw new Error("Retained approval sample unavailable");
   }
   await target
-    .collection("gameState")
+    .collection<GameState>("gameState")
     .replaceOne(
       { _id: "current" },
       { ...game, currentTurn: 49, preIteration: { ...game.preIteration, active: false } },
       { upsert: true }
     );
-  await target.collection("states").replaceOne({ _id: state._id }, state, { upsert: true });
-  await target.collection("simRuns").replaceOne(
+  await target.collection<State>("states").replaceOne({ _id: state._id }, state, { upsert: true });
+  await target.collection<Document & { _id: string }>("simRuns").replaceOne(
     { _id: "founding-replay-1953" },
     {
       _id: "founding-replay-1953",
