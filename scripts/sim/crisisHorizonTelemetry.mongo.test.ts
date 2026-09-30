@@ -19,7 +19,7 @@ it.skipIf(process.env.AHD_CRISIS_HORIZON_REAL_MONGO !== "1")(
     try {
       await client.connect();
       await db
-        .collection("gameState")
+        .collection<{ _id: string; currentTurn: number; currentYear: number }>("gameState")
         .insertOne({ _id: "current", currentTurn: 2, currentYear: 1991 });
       await db.collection("livingConflicts").insertOne({
         defKey: "northern_ireland",
@@ -53,7 +53,7 @@ it.skipIf(process.env.AHD_CRISIS_HORIZON_REAL_MONGO !== "1")(
         )?.intensity
       ).toBe(35);
       await db
-        .collection("gameState")
+        .collection<{ _id: string; currentTurn: number; currentYear: number }>("gameState")
         .updateOne({ _id: "current" }, { $set: { currentTurn: 3, currentYear: 1991 } });
       const event = await db.collection("crises").insertOne({
         livingConflictEventId: "northern_ireland:talks:3:response",

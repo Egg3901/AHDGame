@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
+import type { CampaignConsequences } from "@/lib/db/types/livingConflictCampaign";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import type { CrisisDecisionNode } from "@/lib/db/types/crisis";
 
@@ -41,7 +42,7 @@ export interface CrisisHorizonPoint {
   tracks: Record<string, number> | null;
   campaignStage: string | null;
   campaignCycle: number | null;
-  consequences: Record<string, number> | null;
+  consequences: CampaignConsequences | null;
   /** Cumulative authored event and response counts as of this completed turn. */
   events: number;
   responses: number;
