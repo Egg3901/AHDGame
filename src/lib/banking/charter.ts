@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import type { BankCharter, BankCharterType } from "@/lib/db/types/bank";
+import type { BankCharter, BankCharterType, BankLoan } from "@/lib/db/types/bank";
 import type { Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -253,12 +253,15 @@ async function issueCharterInner(
   currency: CurrencyCode,
   options?: { skipFlagCheck?: boolean }
 ): Promise<IssueCharterResult & { settlementId?: string }> {
-  const corporation = await db.collection<Corporation>("corporations").findOne({
-    _id: corporationId,
-  });
+  const corporation = await db
+    .collection<Corporation & { settledKeys?: string[] }>("corporations")
+    .findOne({
+      _id: corporationId,
+    });
   if (!corporation) {
     return { ok: false, reasons: ["Corporation not found"] };
   }
+  const expectedSettledKeys = corporation.settledKeys ? [...corporation.settledKeys] : null;
 
   // skipFlagCheck is for SEED-TIME use only (NPC banks charter before the
   // world flag is on). Player routes must never pass it.
@@ -283,6 +286,23 @@ async function issueCharterInner(
   if (prior && prior.status !== "active") {
     await archiveCharter(db, corporationId, prior, charteredTurn, "recharter");
   }
+  // Servicing continues for these named loans and NPC tranches after renewal.
+  // Use the same current/arrears book as the turn, not a stale charter counter;
+  // pending requests and terminal defaults/repaid loans are not funded exposure.
+  const survivingLoans = await db
+    .collection<BankLoan>("bankLoans")
+    .find(
+      {
+        bankCorporationId: corporationId,
+        status: { $in: ["current", "arrears"] },
+      },
+      { projection: { outstanding: 1 } }
+    )
+    .toArray();
+  const totalLoans = survivingLoans.reduce(
+    (sum, loan) => sum + Math.max(0, loan.outstanding ?? 0),
+    0
+  );
 
   // Initial offsets must sit inside the era corridor; 0/0 is out of band in
   // historical worlds (deposit ceiling below prime, lending floor above it).
@@ -298,6 +318,7 @@ async function issueCharterInner(
     // Posted capital IS the bank's opening cash. It was debited from the
     // corporation a line below; this is where it lands.
     cashReserves: postedCapital,
+    totalLoans,
     depositOffset: initialOffsets.depositOffset,
     lendingOffset: initialOffsets.lendingOffset,
     blacklist: {},
@@ -342,7 +363,11 @@ async function issueCharterInner(
       ],
       event: { kind: "charter.issued", command: "bank.charter.issue" },
     },
-    { identity, guard: { bankCharter: prior === undefined ? { $exists: false } : prior } }
+    {
+      identity,
+      guard: { bankCharter: prior === undefined ? { $exists: false } : prior },
+      expectedSettledKeys,
+    }
   );
   if (settlement.status !== "applied" && settlement.status !== "replayed") {
     return {

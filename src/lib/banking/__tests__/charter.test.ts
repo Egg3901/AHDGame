@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
-import { resumeSettlement } from "../settlementJournal";
+import { resumeSettlement, settleTransition } from "../settlementJournal";
+import { oid } from "../rules/boundary";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
@@ -294,6 +295,17 @@ describe("banking charter", () => {
   });
 
   describe("issueCharter", () => {
+    const revoked = (): BankCharter => ({
+      type: "retail",
+      status: "revoked",
+      currency: "USD",
+      charteredTurn: 10,
+      postedCapital: 10_000_000,
+      cashReserves: 0,
+      totalLoans: 999,
+      depositOffset: 0,
+      lendingOffset: 0,
+    });
     function charterWorld(corp: Corporation) {
       const memory = createInMemoryDb();
       memory.seed("corporations", [{ ...corp }]);
@@ -306,6 +318,114 @@ describe("banking charter", () => {
       ]);
       return memory;
     }
+    it("carries surviving named and NPC exposure without funding pending or written-off claims", async () => {
+      const corp = makeCorp({ bankCharter: revoked() });
+      const memory = charterWorld(corp);
+      const rows = [
+        { borrowerType: "corporation", status: "current", outstanding: 400 },
+        { borrowerType: "character", status: "arrears", outstanding: 600 },
+        { borrowerType: "npcBulk", status: "current", outstanding: 200 },
+        { borrowerType: "corporation", status: "pending", outstanding: 900 },
+        { borrowerType: "corporation", status: "defaulted", outstanding: 800 },
+        { borrowerType: "npcBulk", status: "repaid", outstanding: 700 },
+        { borrowerType: "corporation", status: "rejected", outstanding: 500 },
+      ].map((loan) => ({ _id: new ObjectId(), bankCorporationId: corp._id, ...loan }));
+      memory.seed("bankLoans", rows);
+      const database = memory as unknown as Db;
+      const { issueCharter } = await importCharter();
+      const result = await issueCharter(database, corp._id, "retail", "USD");
+      expect(result).toMatchObject({ ok: true, charter: { totalLoans: 1200 } });
+      expect(memory.collection("bankLoans").docs).toEqual(rows);
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        liquidCapital: 50_000_000 - (result.ok ? result.postedCapital : 0),
+        bankCharter: { totalLoans: 1200 },
+      });
+    });
+    it("rejects a stale reissue quote when a competing issuance and loan land after the book read", async () => {
+      const corp = makeCorp({ bankCharter: revoked() });
+      const borrower = makeCorp({ liquidCapital: 0 });
+      const memory = charterWorld(corp);
+      memory.collection("corporations").docs.push({ ...borrower });
+      memory.seed("bankLoans", [
+        {
+          _id: new ObjectId(),
+          bankCorporationId: corp._id,
+          borrowerType: "corporation",
+          status: "current",
+          outstanding: 400,
+        },
+      ]);
+      const database = memory as unknown as Db;
+      const { issueCharter, getCharterCapitalRequirement } = await importCharter();
+      const requirement = await getCharterCapitalRequirement(database, "USD");
+      const collection = memory.collection("bankLoans");
+      const originalFind = collection.find.bind(collection);
+      vi.spyOn(collection, "find").mockImplementationOnce((filter) => {
+        const cursor = originalFind(filter);
+        return {
+          ...cursor,
+          toArray: async () => {
+            const quoted = await cursor.toArray();
+            expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(true);
+            const competing = await settleTransition(database, {
+              key: "concurrent-loan",
+              kind: "loan_origination",
+              turn: 42,
+              currency: "USD",
+              legs: [
+                {
+                  kind: "debit",
+                  amount: 100,
+                  collection: "corporations",
+                  filter: { _id: oid(corp._id.toHexString()), "bankCharter.status": "active" },
+                  path: "bankCharter.cashReserves",
+                  note: "loan vault debit",
+                },
+                {
+                  kind: "credit",
+                  amount: 100,
+                  collection: "corporations",
+                  filter: { _id: oid(borrower._id.toHexString()) },
+                  path: "liquidCapital",
+                  note: "borrower proceeds",
+                },
+              ],
+              projections: [
+                {
+                  collection: "bankLoans",
+                  insert: {
+                    _id: oid(new ObjectId().toHexString()),
+                    bankCorporationId: oid(corp._id.toHexString()),
+                    borrowerType: "corporation",
+                    status: "current",
+                    outstanding: 100,
+                  },
+                  note: "funded loan",
+                },
+                {
+                  collection: "corporations",
+                  filter: { _id: oid(corp._id.toHexString()) },
+                  update: { $inc: { "bankCharter.totalLoans": 100 } },
+                  note: "loan exposure",
+                },
+              ],
+              event: { kind: "loan.originated", command: "bank.loan.originate" },
+            });
+            expect(competing.status).toBe("applied");
+            return quoted;
+          },
+        };
+      });
+      expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(false);
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        liquidCapital: 50_000_000 - requirement,
+        bankCharter: { status: "active", totalLoans: 500, cashReserves: requirement - 100 },
+      });
+      expect(
+        await database.collection("corporations").findOne({ _id: borrower._id })
+      ).toMatchObject({ liquidCapital: 100 });
+      expect(memory.collection("bankLoans").docs).toHaveLength(2);
+    });
     it("journals both capital legs and publishes one fully funded charter, including retry", async () => {
       const corp = makeCorp({ liquidCapital: 50_000_000 });
       const memory = charterWorld(corp);
