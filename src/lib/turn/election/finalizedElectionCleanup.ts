@@ -30,16 +30,14 @@ export async function finishFinalizedElectionCleanup(
   const characterIds = winners.flatMap((c) => (!c.isNPP && c.characterId ? [c.characterId] : []));
   const nppIds = winners.flatMap((c) => (c.isNPP && c.nppId ? [c.nppId] : []));
   if (characterIds.length || nppIds.length)
-    await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .updateMany(
-        {
-          electionId: { $ne: election._id },
-          status: "active",
-          $or: [{ characterId: { $in: characterIds } }, { nppId: { $in: nppIds } }],
-        },
-        { $set: { status: "withdrawn", withdrawnAt: now } }
-      );
+    await db.collection<ElectionCandidate>("electionCandidates").updateMany(
+      {
+        electionId: { $ne: election._id },
+        status: "active",
+        $or: [{ characterId: { $in: characterIds } }, { nppId: { $in: nppIds } }],
+      },
+      { $set: { status: "withdrawn", withdrawnAt: now } }
+    );
   await db.collection("campaigns").deleteMany({ electionId: election._id });
   if (election.state) {
     for (const party of new Set(candidates.map((c) => c.party).filter(Boolean)))

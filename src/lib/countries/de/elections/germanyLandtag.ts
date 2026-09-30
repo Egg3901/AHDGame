@@ -684,6 +684,13 @@ export async function resolveDELandtagElection(
     {
       $set: {
         seatsEstimate: seatResolution.seatsEstimate,
+        resolvedSeatHolders: seatResolution.assignments.map(({ candidate, partyId, seats }) => ({
+          identity: `${candidate.isNPP ? "npp" : "player"}:${candidate.isNPP ? candidate.nppId : candidate.characterId}`,
+          party: partyId,
+          seats,
+          seatSource: "direct" as const,
+        })),
+        resolvedTotalSeats: seatResolution.seatsAllocated,
         updatedAt: now,
       },
     }

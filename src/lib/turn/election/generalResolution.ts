@@ -65,6 +65,28 @@ import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
 
 export type { OneElectionResult } from "./generalResolutionHelpers";
 
+/** A failed list/holder write must keep the finalized race eligible for retry. */
+async function reconcileGermanElection(db: Db, election: Election, now: Date): Promise<void> {
+  if (
+    getElectionMethod(election.countryId, election.electionType) !== "ams" ||
+    (election.electionType !== "bundestag" && election.electionType !== "snap_bundestag")
+  )
+    return;
+  try {
+    const reconciled = await maybeReconcileBundestag(db, election.cycle, now);
+    if (reconciled) {
+      const { triggerBundestagspraesidentElectionAfterReconcile } =
+        await import("@/lib/congress/bundestagspraesident/openElection");
+      await triggerBundestagspraesidentElectionAfterReconcile(db, now);
+    }
+  } catch (error) {
+    await db
+      .collection<Election>("elections")
+      .updateOne({ _id: election._id }, { $set: { status: "completed", updatedAt: now } });
+    throw error;
+  }
+}
+
 /**
  * Resolves a single completed election — determines winners, writes elected
  * officials, sends notifications, spawns the next cycle, and finalises the
@@ -109,18 +131,16 @@ export async function resolveOneGeneralElection(
         .updateOne({ _id: election._id }, { $set: { status: "resolved", updatedAt: now } });
       await voidDebateSessionsForElection(db, election._id, now);
       if (tally) {
-        await db
-          .collection<ElectionVoteTally>("electionVoteTallies")
-          .updateOne(
-            { _id: tally._id },
-            {
-              $set: {
-                finalized: true,
-                resolutionPath: "sainte_lague",
-                resolvedAtTurn: currentTurn,
-              },
-            }
-          );
+        await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+          { _id: tally._id },
+          {
+            $set: {
+              finalized: true,
+              resolutionPath: "sainte_lague",
+              resolvedAtTurn: currentTurn,
+            },
+          }
+        );
       }
       return { resolved: true, newsOutcomes };
     }
@@ -144,6 +164,7 @@ export async function resolveOneGeneralElection(
           { $set: { status: "resolved" satisfies ElectionStatus, updatedAt: now } }
         );
       await voidDebateSessionsForElection(db, election._id, now);
+      await reconcileGermanElection(db, election, now);
       console.log(
         `[Turn] Election ${election._id} (${election.electionType}/${election.state}) recovered — tally was already finalized`
       );
@@ -1055,30 +1076,38 @@ export async function resolveOneGeneralElection(
 
     await createNotifications(loserNotifInputs);
 
-    await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .updateOne(
-        { electionId: election._id },
-        {
-          $set: {
-            seatsEstimate,
-            finalized: true,
-            updatedAt: now,
-            resolvedAtTurn: currentTurn,
-            resolutionPath: districted
-              ? "districted_house"
-              : runtimeBlocQuota
-                ? "bloc_list"
-                : election.countryId === "DE" &&
-                    (election.electionType === "bundestag" ||
-                      election.electionType === "snap_bundestag")
-                  ? "ams_direct"
-                  : isMultiSeat
-                    ? "hare_quota"
-                    : "single_winner",
-          },
-        }
-      );
+    await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+      { electionId: election._id },
+      {
+        $set: {
+          seatsEstimate,
+          finalized: true,
+          updatedAt: now,
+          resolvedAtTurn: currentTurn,
+          resolvedSeatHolders: winners.map(([candidateId, seats]) => {
+            const candidate = candidateMap.get(candidateId)!;
+            return {
+              identity: `${candidate.isNPP ? "npp" : "player"}:${candidate.isNPP ? candidate.nppId : candidate.characterId}`,
+              party: candidate.party,
+              seats,
+              seatSource: "direct" as const,
+            };
+          }),
+          resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
+          resolutionPath: districted
+            ? "districted_house"
+            : runtimeBlocQuota
+              ? "bloc_list"
+              : election.countryId === "DE" &&
+                  (election.electionType === "bundestag" ||
+                    election.electionType === "snap_bundestag")
+                ? "ams_direct"
+                : isMultiSeat
+                  ? "hare_quota"
+                  : "single_winner",
+        },
+      }
+    );
 
     const winnerCandidateIds = new Set(winners.map(([id]) => id));
     const loserCandidateIds = new Set(losers);
@@ -1189,37 +1218,7 @@ export async function resolveOneGeneralElection(
       );
     await voidDebateSessionsForElection(db, election._id, now);
 
-    // ── German AMS reconciliation ─────────────────────────────────────────────
-    // After a Bundestag constituency resolves, check if all 299 constituencies
-    // for this cycle are complete. If so, compute federal Sainte-Laguë
-    // allocation, apply Zweitstimmendeckung overhang drops, and fill list seats
-    // from each party's Landesliste. No-op until the final constituency resolves.
-    // snap_bundestag elections inherit the same AMS allocation — a snap cycle is
-    // a complete Bundestag election for which list seats also need filling.
-    // AMS reconciliation is specific to the DE Bundestag's Landesliste tier.
-    // Dispatch on the configured method (`ams`), scoped to the bundestag chamber
-    // so other AMS chambers (SCO Holyrood, WAL Senedd) do NOT trigger the
-    // Bundestag-specific reconciler.
-    if (
-      getElectionMethod(election.countryId, election.electionType) === "ams" &&
-      (election.electionType === "bundestag" || election.electionType === "snap_bundestag")
-    ) {
-      try {
-        const reconciled = await maybeReconcileBundestag(db, election.cycle, now);
-        // `maybeReconcileBundestag` returns the BundestagElectionResult only
-        // on the resolution that actually completes the cycle (all 299
-        // constituencies resolved). When that happens, open a Bundestags-
-        // präsident election for the newly-seated chamber — parity with the
-        // US Speaker auto-open after a House cycle resolves.
-        if (reconciled) {
-          const { triggerBundestagspraesidentElectionAfterReconcile } =
-            await import("@/lib/congress/bundestagspraesident/openElection");
-          await triggerBundestagspraesidentElectionAfterReconcile(db, now);
-        }
-      } catch (err) {
-        logger.error("Turn", `Bundestag AMS reconciliation failed (cycle ${election.cycle})`, err);
-      }
-    }
+    await reconcileGermanElection(db, election, now);
 
     // ── CN NPC Standing Committee Chairman auto-open ──────────────────────────
     // The NPC is filled across multiple regional `npcDelegate` elections. Once

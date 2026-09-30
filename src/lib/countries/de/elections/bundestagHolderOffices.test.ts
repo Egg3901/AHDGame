@@ -83,13 +83,11 @@ describe("Bundestag direct and list holder offices", () => {
     const memory = createInMemoryDb(),
       db = memory as unknown as Db,
       nppId = new ObjectId();
-    await db
-      .collection("npps")
-      .insertOne({
-        _id: nppId,
-        countryId: "DE",
-        currentOffice: { type: "bundestag", state: "BY", seatsHeld: 3 },
-      });
+    await db.collection("npps").insertOne({
+      _id: nppId,
+      countryId: "DE",
+      currentOffice: { type: "bundestag", state: "BY", seatsHeld: 3 },
+    });
     await db.collection("electedOfficials").insertMany([
       { countryId: "DE", officeType: "bundestag", state: "BW", nppId, seatsHeld: 20 },
       { countryId: "DE", officeType: "bundestag", state: "BY", nppId, seatsHeld: 3 },

@@ -8,12 +8,15 @@ import type { Character, ElectedOfficial, NPP, OfficeType } from "@/lib/db/types
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { preserveExecutiveOffice } from "@/lib/turn/election/generalResolutionHelpers";
 
-export async function reconcileBundestagHolderOffices(db: Db, now: Date): Promise<void> {
+export async function reconcileBundestagHolderOffices(
+  db: Db,
+  now: Date
+): Promise<ElectedOfficial[]> {
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
     .find(
       { countryId: "DE", officeType: "bundestag" },
-      { projection: { characterId: 1, nppId: 1, state: 1, seatsHeld: 1, party: 1 } }
+      { projection: { characterId: 1, nppId: 1, state: 1, seatsHeld: 1, party: 1, seatSource: 1 } }
     )
     .toArray();
   const characterIds = officials.flatMap((o) => (o.characterId ? [o.characterId] : []));
@@ -83,4 +86,5 @@ export async function reconcileBundestagHolderOffices(db: Db, now: Date): Promis
       { countryId: "DE", "currentOffice.type": "bundestag", _id: { $nin: nppIds } },
       { $set: { currentOffice: null, updatedAt: now } }
     );
+  return officials;
 }

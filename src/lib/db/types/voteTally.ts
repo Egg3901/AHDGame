@@ -26,6 +26,14 @@ export interface PrimaryResults {
   recordedAt: Date;
 }
 
+/** Frozen holder identity and voting weight, including a completed AMS list tier. */
+export interface ResolvedSeatHolder {
+  identity: string;
+  party: string;
+  seats: number;
+  seatSource: "direct" | "list";
+}
+
 export interface ElectionVoteTally {
   _id: ObjectId;
   electionId: ObjectId;
@@ -46,6 +54,8 @@ export interface ElectionVoteTally {
     | "ams_direct"
     | "ams";
   resolvedAtTurn?: number;
+  resolvedSeatHolders?: ResolvedSeatHolder[];
+  resolvedTotalSeats?: number;
   /** Stored when primary resolves; used for wiki election history. */
   primaryResults?: PrimaryResults;
   /**

@@ -55,7 +55,8 @@ async function main() {
     if (measuring) commandCount++;
   });
   client.on("commandSucceeded", (event) => {
-    if (measuring) returnedBson += BSON.calculateObjectSize(event.reply);
+    if (measuring && event.reply && typeof event.reply === "object")
+      returnedBson += BSON.calculateObjectSize(event.reply);
   });
   global._mongoClientPromise = Promise.resolve(client);
   const results: Document[] = [];
@@ -226,7 +227,38 @@ async function main() {
           commandCount = 0;
           returnedBson = 0;
           measuring = true;
-          if (
+          if (process.argv.includes("--fault-ams-holder") && cycle === 1 && field === "npp_only") {
+            const original = db.collection.bind(db);
+            let failed = false;
+            db.collection = ((name: string, options?: CollectionOptions) => {
+              const coll = original(name, options);
+              if (name === "npps") {
+                const bulk = coll.bulkWrite.bind(coll);
+                coll.bulkWrite = async (operations, options) => {
+                  if (!failed) {
+                    failed = true;
+                    throw new Error("Injected AMS holder interruption");
+                  }
+                  return bulk(operations, options);
+                };
+              }
+              return coll;
+            }) as typeof db.collection;
+            await assert.rejects(
+              resolveOneGeneralElection(db, election, tally, 96 + cycle, now),
+              /Injected AMS holder interruption/
+            );
+            db.collection = original;
+            assert.equal(
+              (await db.collection("elections").findOne({ _id: election._id }))?.status,
+              "completed"
+            );
+            const interrupted = await db
+              .collection<ElectionVoteTally>("electionVoteTallies")
+              .findOne({ _id: tally._id });
+            assert(interrupted?.finalized);
+            await resolveOneGeneralElection(db, election, interrupted, 96 + cycle, now);
+          } else if (
             process.argv.includes("--fault-after-finalize") &&
             cycle === 1 &&
             field === "player_vs_npp"
@@ -317,6 +349,22 @@ async function main() {
           }
           const total = Object.values(partySeats).reduce((a, b) => a + b, 0);
           assert.equal(total, family.type === "bundestag" ? 630 : seats, "Complete chamber");
+          assert.equal(persisted.resolvedTotalSeats, total, "Frozen complete seat total");
+          const normalizeHolders = (
+            holders: { identity: string; party: string; seats: number; seatSource: string }[]
+          ) => holders.map((holder) => JSON.stringify(holder)).sort();
+          assert.deepEqual(
+            normalizeHolders(persisted.resolvedSeatHolders ?? []),
+            normalizeHolders(
+              officials.map((holder) => ({
+                identity: `${holder.nppId ? "npp" : "player"}:${holder.nppId ?? holder.characterId}`,
+                party: holder.party,
+                seats: holder.seatsHeld ?? 1,
+                seatSource: holder.seatSource === "list" ? "list" : "direct",
+              }))
+            ),
+            "Frozen receipts include every direct and list holder"
+          );
           const leader = Object.entries(partySeats).sort((a, b) => b[1] - a[1])[0][0];
           assert.equal(
             leader,
@@ -395,6 +443,8 @@ async function main() {
             repeatStable: true,
             performance,
             resolutionPath: persisted.resolutionPath,
+            resolvedSeatHolders: persisted.resolvedSeatHolders,
+            resolvedTotalSeats: persisted.resolvedTotalSeats,
           });
         }
         results.push({

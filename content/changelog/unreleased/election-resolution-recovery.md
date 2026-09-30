@@ -1,4 +1,5 @@
 ---
+date: 2026-09-30
 title: "Keep election holders and retries consistent"
 badges: [patch]
 areas: [engine]

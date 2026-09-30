@@ -534,7 +534,7 @@ export async function maybeReconcileBundestag(
 
   const result = await allocateBundestag(db, cycle);
   await persistBundestagResult(db, result, now);
-  await reconcileBundestagHolderOffices(db, now);
+  const holders = await reconcileBundestagHolderOffices(db, now);
   const elections = await db
     .collection<Election>("elections")
     .find(
@@ -544,14 +544,36 @@ export async function maybeReconcileBundestag(
         cycle,
         status: "resolved",
       },
-      { projection: { _id: 1 } }
+      { projection: { _id: 1, state: 1 } }
     )
     .toArray();
-  await db
-    .collection<ElectionVoteTally>("electionVoteTallies")
-    .updateMany(
-      { electionId: { $in: elections.map((election) => election._id) }, finalized: true },
-      { $set: { resolutionPath: "ams" } }
+  if (elections.length)
+    await db.collection<ElectionVoteTally>("electionVoteTallies").bulkWrite(
+      elections.map((election) => {
+        const resolvedSeatHolders = holders
+          .filter((holder) => holder.state === election.state)
+          .map((holder) => ({
+            identity: `${holder.nppId ? "npp" : "player"}:${holder.nppId ?? holder.characterId}`,
+            party: holder.party ?? "independent",
+            seats: holder.seatsHeld ?? 0,
+            seatSource: holder.seatSource === "list" ? ("list" as const) : ("direct" as const),
+          }));
+        return {
+          updateOne: {
+            filter: { electionId: election._id, finalized: true },
+            update: {
+              $set: {
+                resolutionPath: "ams" as const,
+                resolvedSeatHolders,
+                resolvedTotalSeats: resolvedSeatHolders.reduce(
+                  (sum, holder) => sum + holder.seats,
+                  0
+                ),
+              },
+            },
+          },
+        };
+      })
     );
   await db
     .collection<GameState>("gameState")
