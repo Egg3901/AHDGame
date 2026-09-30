@@ -155,9 +155,9 @@ describe("corporate operating cash stock-flow", () => {
       });
       const sector = makeSector(corp._id, { revenue });
       const lookups = baseLookups([corp], [sector]);
-      lookups.exchangeRatesByCurrency.set(currency, rate);
+      lookups.exchangeRatesByCurrency.set(currency as CurrencyCode, rate);
       const memory = createInMemoryDb();
-      memory.seed("corporations", [corp]);
+      memory.seed("corporations", [{ ...corp }]);
       memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
       memory.seed("exchangeRates", [{ _id: currency, currencyCode: currency, rate }]);
       const db = memory as unknown as Db;
