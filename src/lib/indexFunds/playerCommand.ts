@@ -81,20 +81,18 @@ export async function completeFundCommand(
   session?: ClientSession,
   audit?: FundCommandAudit
 ): Promise<void> {
-  await db
-    .collection<FundCommand>(COLLECTION)
-    .updateOne(
-      { _id: key, state: "pending" },
-      {
-        $set: {
-          state: "completed",
-          response: { status, body },
-          completedAt: new Date(),
-          ...(audit ? { audit } : {}),
-        },
+  await db.collection<FundCommand>(COLLECTION).updateOne(
+    { _id: key, state: "pending" },
+    {
+      $set: {
+        state: "completed",
+        response: { status, body },
+        completedAt: new Date(),
+        ...(audit ? { audit } : {}),
       },
-      session ? { session } : undefined
-    );
+    },
+    session ? { session } : undefined
+  );
 }
 
 /** Retain the accepted valuation before FX or fund writes for status reconciliation. */

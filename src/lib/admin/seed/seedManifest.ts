@@ -887,6 +887,12 @@ const RUNTIME: CollectionEntry[] = [
   { name: "indexFundSnapshots", category: "runtime" },
   { name: "indexFundTransactions", category: "runtime" },
   {
+    name: "indexFundCommands",
+    category: "runtime",
+    notes:
+      "Player order receipts and audit outboxes belong to the same world as fund cash, positions and transactions. Never expire within an active world.",
+  },
+  {
     name: "pensionSchemes",
     category: "runtime",
     notes:
