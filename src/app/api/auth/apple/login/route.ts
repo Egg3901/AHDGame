@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
-import { getAppleAuthorizeUrl, getAppleSignInConfig } from "@/lib/apple";
+import { getAppleAuthorizeUrl, getAppleSignInConfig } from "@/lib/auth/apple";
 import { getBaseUrl, getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getOAuthStateCookieOptions } from "@/lib/auth";

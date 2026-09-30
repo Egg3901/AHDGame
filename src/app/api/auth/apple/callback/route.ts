@@ -32,7 +32,7 @@ import {
   sealAppleRefreshToken,
   verifyAppleIdToken,
   type AppleIdentity,
-} from "@/lib/apple";
+} from "@/lib/auth/apple";
 import { createAdminLog } from "@/lib/adminLog";
 import { createNotification } from "@/lib/notifications";
 import { OAUTH_DEVICE_KEY_COOKIE, OAUTH_FINGERPRINT_COOKIE } from "@/lib/auth/oauthFingerprint";

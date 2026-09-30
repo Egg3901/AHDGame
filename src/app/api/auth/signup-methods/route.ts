@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
-import { isAppleSignInConfigured } from "@/lib/apple";
+import { isAppleSignInConfigured } from "@/lib/auth/apple";
 
 /**
  * Which ways of signing up actually work on THIS deployment.

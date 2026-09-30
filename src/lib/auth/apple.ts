@@ -217,7 +217,7 @@ function refreshTokenKey(): Buffer {
 
 export function sealAppleRefreshToken(token: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", refreshTokenKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", refreshTokenKey(), iv, { authTagLength: 16 });
   const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [REFRESH_ENVELOPE_VERSION, iv, ciphertext, tag]
@@ -233,7 +233,7 @@ export function openAppleRefreshToken(sealed: string | null | undefined): string
   try {
     const [, iv, ciphertext, tag] = parts.map((part) => Buffer.from(part, "base64url"));
     if (iv.length !== 12 || tag.length !== 16) return null;
-    const decipher = createDecipheriv("aes-256-gcm", refreshTokenKey(), iv);
+    const decipher = createDecipheriv("aes-256-gcm", refreshTokenKey(), iv, { authTagLength: 16 });
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   } catch {

@@ -15,7 +15,7 @@ import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
 import { logCharacterDeleted } from "@/lib/db/collections/activityLog";
-import { getAppleSignInConfig, openAppleRefreshToken, revokeAppleRefreshToken } from "@/lib/apple";
+import { getAppleSignInConfig, openAppleRefreshToken, revokeAppleRefreshToken } from "@/lib/auth/apple";
 
 // DELETE /api/auth/delete-account — Permanently deletes the authenticated user's account, character, and clears offices held.
 // Auth: requireBasicAuth

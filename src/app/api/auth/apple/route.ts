@@ -11,7 +11,7 @@ import {
   providerLinkContextCookieName,
   sealProviderLinkContext,
 } from "@/lib/auth/providerLinkContext";
-import { getAppleAuthorizeUrl, getAppleSignInConfig } from "@/lib/apple";
+import { getAppleAuthorizeUrl, getAppleSignInConfig } from "@/lib/auth/apple";
 import { getBaseUrl, getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { withNoStore } from "@/lib/api/withNoStore";
