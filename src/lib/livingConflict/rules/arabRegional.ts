@@ -35,7 +35,7 @@ export function advanceArabRegion(
   };
   for (const [id, population] of Object.entries(hostPopulations)) {
     if (population > 0 && ARAB_HOSTS.includes(id))
-      next.hosts[id] = { protection: 0, refugeePeople: 0, ...next.hosts[id], population };
+      next.hosts[id] = { ...(next.hosts[id] ?? { protection: 0, refugeePeople: 0 }), population };
   }
   const regionalMobilization = Math.max(
     0,
