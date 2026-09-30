@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
   getGameState: vi.fn(),
   executeMonetaryOperation: vi.fn(),
+  existingLiquidityAdvance: vi.fn(),
   snapshotMoneySupply: vi.fn(),
 }));
 
@@ -19,6 +20,10 @@ vi.mock("@/lib/moneySupply/operations", () => ({
   LIQUIDITY_INJECTION_GDP_CAP: 0.01,
   MONETARY_OPERATION_COOLDOWN_TURNS: 4,
   executeMonetaryOperation: mocks.executeMonetaryOperation,
+}));
+vi.mock("@/lib/moneySupply/liquidityAdvance", () => ({
+  existingLiquidityAdvance: mocks.existingLiquidityAdvance,
+  LiquidityAdvanceRejected: class extends Error {},
 }));
 vi.mock("@/lib/moneySupply/snapshot", () => ({
   snapshotMoneySupply: mocks.snapshotMoneySupply,
@@ -95,6 +100,7 @@ beforeEach(() => {
     actorName: "Chair One",
   });
   mocks.snapshotMoneySupply.mockResolvedValue({});
+  mocks.existingLiquidityAdvance.mockResolvedValue(false);
 });
 
 describe("POST /api/country/[code]/central-bank/monetary-operation", () => {
@@ -160,6 +166,28 @@ describe("POST /api/country/[code]/central-bank/monetary-operation", () => {
   });
 });
 
+it("allows an authorized exact command replay after its cooldown stamp", async () => {
+  const db = configureDb({ lastMonetaryOperationTurn: 20 });
+  mocks.existingLiquidityAdvance.mockResolvedValue(true);
+  const response = await POST(
+    request({ type: "liquidity_injection", amount: 500, operationId: "original-operation" }),
+    context()
+  );
+  expect(response.status).toBe(200);
+  expect(mocks.executeMonetaryOperation).toHaveBeenCalledWith(
+    db,
+    expect.objectContaining({ operationId: "original-operation", bypassCooldown: false })
+  );
+});
+it("keeps a fresh command subject to the existing cooldown", async () => {
+  configureDb({ lastMonetaryOperationTurn: 20 });
+  const response = await POST(
+    request({ type: "liquidity_injection", amount: 500, operationId: "fresh-operation" }),
+    context()
+  );
+  expect(response.status).toBe(409);
+  expect(mocks.executeMonetaryOperation).not.toHaveBeenCalled();
+});
 describe("euro monetary-operation authority", () => {
   it.each([false, true])(
     "requires the common chair while retaining UK accounting (common chair: %s)",
