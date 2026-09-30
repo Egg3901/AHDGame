@@ -288,5 +288,55 @@
         }
       ]
     }
+  },
+  "selectorCompatibility": {
+    "source": "1e638f6a43ccc95b28df992035ceccc9e364d82f",
+    "cases": [
+      {
+        "mode": "mutable",
+        "status": "applied",
+        "balances": [
+          {
+            "_id": "national-budget-us",
+            "balance": 990
+          },
+          {
+            "_id": "national-budget-ie",
+            "balance": 110
+          }
+        ],
+        "combined": 1100
+      },
+      {
+        "mode": "missing",
+        "status": "rejected",
+        "balances": [
+          {
+            "_id": "national-budget-us",
+            "balance": 1000
+          },
+          {
+            "_id": "national-budget-ie",
+            "balance": 100
+          }
+        ],
+        "combined": 1100
+      },
+      {
+        "mode": "missing_lost_claim",
+        "status": "rejected",
+        "balances": [
+          {
+            "_id": "national-budget-us",
+            "balance": 1000
+          },
+          {
+            "_id": "national-budget-ie",
+            "balance": 100
+          }
+        ],
+        "combined": 1100
+      }
+    ]
   }
 }

@@ -13,6 +13,15 @@ Runtime source: `d0ad45d30542d00536ca1a102e097a47123e1bc0`. Comparison source: `
 - A separate native operator-reconciliation comparison passed at `5a2d39434cc72b61e6bfc31f03bc10794d92759a`. After explicit reconciliation closes a legacy journal, recovery preserves its terminal disposition and the already-reconciled990/110 cash positions.
 - Target lookup uses the stable document id independently of mutable eligibility fields. Legacy pending legs with no surviving delivery evidence remain partial for explicit reconciliation.
 
+## Selector compatibility
+
+Compatibility source: `1e638f6a43ccc95b28df992035ceccc9e364d82f`.
+
+- All 70 focused tests passed across generic delivery, journal interruption, banking-turn audit, defence conservation and the two financial-crisis response suites. Scoped lint passed for all changed implementation and regression files.
+- Three additional native Mongo cases passed: a mutable country selector freezes its document identity before cash moves and replays after its state changes; a missing destination refuses before debit; and losing the refusal claim acknowledgement still refuses during recovery after the destination becomes available. Combined cash remains1,100 in every case.
+- Financial-crisis bank rescues, household stimulus, sovereign grants, austerity projections and guarantee refunds now carry their actual treasury document identities. Treasury ids in the regression fixtures deliberately differ from country ids.
+- Crash regressions select the intended financial projection write independently of cash receipt cleanup. Defence conservation uses stateful Mongo filters and journal acknowledgements.
+
 Sanitized native results are in [the accompanying JSON](./issue-1328-durable-money-delivery.json).
 
 ## Measured cost
