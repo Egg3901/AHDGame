@@ -27,7 +27,7 @@ The narrowly scoped atomic mode permits a credit to improve an existing negative
 
 Five additional native cases use the actual reserve and LOC draw routes, existing underwriting, and production pending recovery. They cover both command orderings, two interrupted admission/publication points and pending-owner recovery priority. All finish with obligations covered, one original cash/debt result and no orphan admission. Fixtures supply authentication and rate-limit admission; no production actor or data is used.
 
-Ten additional native cases qualify protected atomic outcomes, terminal journal acknowledgement, receipt release, refusal, legacy compatibility and a waiting command. Completed or refused commands release only their own target receipt. A legacy unfinished record without surviving target proof remains partial for explicit reconciliation, preserving its cash and withholding an unsupported completion event. The repair does not infer old outcomes from missing evidence.
+Eleven additional native cases at `291a09e43c0527ba7243ade6cc54ff9b4a33dd29` qualify protected atomic outcomes, terminal journal acknowledgement, receipt release, refusal, legacy compatibility and a waiting command. An actual bounded recovery queue also completes its protected owner when that owner falls outside the selected page. The owner lookup is exact and further owner traversal is disabled. Completed or refused commands release only their own target receipt. A legacy unfinished record without surviving target proof remains partial for explicit reconciliation, preserving its cash and withholding an unsupported completion event. The repair does not infer old outcomes from missing evidence.
 
 ## Focused checks
 
@@ -36,7 +36,7 @@ Ten additional native cases qualify protected atomic outcomes, terminal journal 
 - 11 reserve command tests and 8 unchanged pure limit/cooldown tests. The command cases include original deposit/revision changes and pending admission.
 - 5 route tests using persisted cash, cooldown and receipts. Their aggregate read retains a fixture stub because the in-memory adapter does not evaluate nested expressions inside `$sum`.
 - 1 specific Financials-tab test verifies request identity through network failure, success and a subsequent deliberate action.
-- Scoped lint passed. Full final-head CI remains required.
+- Scoped lint passed before the bounded owner follow-up. One additional focused owner test accompanies that follow-up; its final-head result is supplied by CI or the subsequent focused check. Full final-head CI remains required.
 
 ## Performance
 
