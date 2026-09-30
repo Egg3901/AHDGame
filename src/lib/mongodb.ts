@@ -91,8 +91,9 @@ export async function getDb(): Promise<Db> {
  * multiple cross-collection writes must commit atomically (e.g. corp HQ
  * relocation's currency conversion touching `corporations` + `corporateSectors`).
  *
- * Transactions require a replica set. Production (Atlas) always runs one;
- * standalone dev mongods do not — callers should handle the
+ * Transactions require a replica set or sharded cluster. Use the topology
+ * probe to establish support for the target deployment. Standalone mongods
+ * do not support transactions; callers should handle the
  * `TransactionNotSupported` (code 20) MongoServerError gracefully (fall back
  * to sequential writes or surface as an unrecoverable error depending on the
  * correctness requirement).
