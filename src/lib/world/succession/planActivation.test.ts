@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { tier3Entry } from "@/lib/world/registry/builders";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { planSuccessionFinances } from "./rules/financialSettlement";
@@ -251,10 +251,62 @@ describe("federation settlement activation", () => {
       { _id: "region-0", countryId: "RU", population: 10, gdp: 100 },
       { _id: "region-1", countryId: "RU", population: 11, gdp: 101 },
     ]);
+    mem.seed("federalBudget", [
+      { _id: "RU", countryId: "RU", treasuryBalance: 1, debt: { principal: 2 } },
+    ]);
+    mem.seed("bonds", [
+      {
+        _id: new ObjectId("000000000000000000000121"),
+        issuerType: "sovereign",
+        countryId: "RU",
+        totalIssued: 2,
+        maturityTurn: 240,
+        matured: false,
+        defaulted: false,
+      },
+    ]);
     const { sourceRegions: _ignoredRegions, custodyAssets: _ignoredAssets, ...approved } = proposal;
     const plan = await planLiveSuccessionActivation(mem as unknown as Db, "RU", approved);
     expect(plan.macroCountries[0].population).toBe(11);
     expect(plan.custodyAssignments).toEqual([]);
+
+    await mem
+      .collection("federalBudget")
+      .updateOne({ _id: "RU" }, { $set: { treasuryBalance: 2 } });
+    await expect(
+      planLiveSuccessionActivation(mem as unknown as Db, "RU", approved)
+    ).rejects.toThrow("finance terms do not match");
+    await mem
+      .collection("federalBudget")
+      .updateOne({ _id: "RU" }, { $set: { treasuryBalance: 1 } });
+
+    await mem
+      .collection("federalBudget")
+      .updateOne({ _id: "RU" }, { $set: { treasuryBalance: -1 } });
+    await expect(
+      planLiveSuccessionActivation(mem as unknown as Db, "RU", approved)
+    ).rejects.toThrow("finance terms do not match");
+    const approvedDeficit = {
+      ...approved,
+      finances: planSuccessionFinances({
+        settlementId: "approved-1",
+        sourceEntityId: "RU",
+        participants: approved.territories.map(({ entityId, population }) => ({
+          entityId,
+          population,
+        })),
+        financialAssetsMinor: 0,
+        creditorDebtMinor: 200,
+        cashDeficitMinor: 100,
+      }),
+    };
+    expect(
+      (await planLiveSuccessionActivation(mem as unknown as Db, "RU", approvedDeficit))
+        .macroCountries[0].population
+    ).toBe(11);
+    await mem
+      .collection("federalBudget")
+      .updateOne({ _id: "RU" }, { $set: { treasuryBalance: 1 } });
 
     await mem.collection("states").updateOne({ _id: "region-1" }, { $set: { population: 12 } });
     await expect(

@@ -25,6 +25,7 @@ describe("negotiated succession finances", () => {
     expect(plan.servicingIssuerId).toBe("CS");
     expect(plan.servicingEntityKind).toBe("legacy-administration");
     expect(plan.creditorDebtMinor).toBe(1000);
+    expect(plan.cashDeficitResponsibility).toEqual({ CZ2: 0, SK: 0 });
     expect(plan.assetBasis).toBe("population");
   });
   it("keeps a continuing parent as its own issuer", () => {
@@ -38,6 +39,16 @@ describe("negotiated succession finances", () => {
     });
     expect(plan.servicingEntityKind).toBe("continuing-state");
     expect(plan.servicingIssuerId).toBe("RU");
+  });
+  it("allocates a negative cash position separately from creditor bonds", () => {
+    const plan = planSuccessionFinances({
+      ...terms,
+      financialAssetsMinor: 0,
+      cashDeficitMinor: 101,
+    });
+    expect(plan.cashDeficitResponsibility).toEqual({ CZ2: 67, SK: 34 });
+    expect(plan.debtResponsibility).toEqual({ CZ2: 667, SK: 333 });
+    expect(plan.financialAssetsMinor).toBe(0);
   });
   it("allows different negotiated asset and debt shares including a zero share", () => {
     const plan = planSuccessionFinances({

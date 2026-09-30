@@ -25,8 +25,8 @@ export interface LiveSuccessionFinances {
 }
 
 /** Capture actual cash and creditor contracts without redenominating or moving
- * any holder. The eventual settlement writer must read this in its transaction
- * and reconcile its approved shared-accounting allocations at that snapshot. */
+ * any holder. A settlement writer must reconcile approved shared-accounting
+ * allocations against this guarded snapshot before keyed application steps. */
 export async function loadLiveSuccessionFinances(
   db: Db,
   sourceCountryId: CountryId,

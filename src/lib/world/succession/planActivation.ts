@@ -11,6 +11,8 @@ import {
 } from "./rules/financialSettlement";
 import type { SuccessionRegion, SuccessorTerritory } from "./rules/territory";
 import { loadLiveSuccessionInventory } from "./loadLiveInventory";
+import { loadLiveSuccessionAccountingSnapshot } from "./normalizeLiveFinances";
+import type { SuccessionAccountingSnapshot } from "./normalizeLiveFinances";
 import {
   planSuccessionCustody,
   type SuccessionCustodyAsset,
@@ -147,16 +149,22 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   if (
     Object.keys(finances.assetAllocation).sort().join(",") !== participantIds.join(",") ||
     Object.keys(finances.debtResponsibility).sort().join(",") !== participantIds.join(",") ||
+    Object.keys(finances.cashDeficitResponsibility).sort().join(",") !== participantIds.join(",") ||
     !validWeights(finances.assetWeights, finances.assetBasis) ||
     !validWeights(finances.debtWeights, finances.debtBasis) ||
     !Number.isSafeInteger(finances.financialAssetsMinor) ||
     !Number.isSafeInteger(finances.creditorDebtMinor) ||
+    !Number.isSafeInteger(finances.cashDeficitMinor) ||
     finances.financialAssetsMinor < 0 ||
     finances.creditorDebtMinor < 0 ||
+    finances.cashDeficitMinor < 0 ||
     Object.values(finances.assetAllocation).some(
       (amount) => !Number.isSafeInteger(amount) || amount < 0
     ) ||
     Object.values(finances.debtResponsibility).some(
+      (amount) => !Number.isSafeInteger(amount) || amount < 0
+    ) ||
+    Object.values(finances.cashDeficitResponsibility).some(
       (amount) => !Number.isSafeInteger(amount) || amount < 0
     )
   ) {
@@ -167,11 +175,13 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
     finances.assetWeights
   );
   const expectedDebt = allocateSuccessionAmount(finances.creditorDebtMinor, finances.debtWeights);
+  const expectedDeficit = allocateSuccessionAmount(finances.cashDeficitMinor, finances.debtWeights);
   if (
     participantIds.some(
       (id) =>
         finances.assetAllocation[id] !== expectedAssets[id] ||
-        finances.debtResponsibility[id] !== expectedDebt[id]
+        finances.debtResponsibility[id] !== expectedDebt[id] ||
+        finances.cashDeficitResponsibility[id] !== expectedDeficit[id]
     )
   )
     throw new Error("Financial allocations do not match the approved territory");
@@ -226,17 +236,26 @@ export function planSuccessionActivation(input: SuccessionActivationInput): {
   };
 }
 
-/** Build the same preflight from the current detailed world under one snapshot.
- * The eventual application must pass its transaction session here before any
- * writes, then publish the receipt inside that transaction. */
+/** Build the preflight from the current detailed world and locked finance rates.
+ * Application must guard this source snapshot against concurrent mutations and
+ * publish only after its keyed settlement steps have reconciled. */
 export async function planLiveSuccessionActivation(
   db: Db,
   sourceCountryId: CountryId,
   input: Omit<SuccessionActivationInput, "sourceRegions" | "custodyAssets">,
   session?: ClientSession
-): Promise<ReturnType<typeof planSuccessionActivation>> {
+): Promise<
+  ReturnType<typeof planSuccessionActivation> & { accounting: SuccessionAccountingSnapshot }
+> {
   if (input.source.entityId !== sourceCountryId)
     throw new Error("Live inventory source does not match the approved federation");
   const inventory = await loadLiveSuccessionInventory(db, sourceCountryId, session);
-  return planSuccessionActivation({ ...input, ...inventory });
+  const accounting = await loadLiveSuccessionAccountingSnapshot(db, sourceCountryId, session);
+  if (
+    input.finances.financialAssetsMinor !== accounting.financialAssetsMinor ||
+    input.finances.creditorDebtMinor !== accounting.creditorDebtMinor ||
+    input.finances.cashDeficitMinor !== accounting.cashDeficitMinor
+  )
+    throw new Error("Approved finance terms do not match the live federation balance sheet");
+  return { ...planSuccessionActivation({ ...input, ...inventory }), accounting };
 }
