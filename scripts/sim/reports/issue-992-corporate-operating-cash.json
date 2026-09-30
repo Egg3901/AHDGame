@@ -1,0 +1,633 @@
+{
+  "treatment": {
+    "sourceCommit": "453c4873faae1994f6b5a19fc72e6096224c5f6b",
+    "development": false,
+    "baseline": false,
+    "retainedRunId": "559d9701-e07f-48c8-ade1-294bc926820a",
+    "retainedExecutedCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+    "retainedSavedTurn": 13,
+    "sourceHash": "1f5b661e5fd5eef9df6526d123e6747db70fc61500333eb4b66cd8320f598929",
+    "sourcePreserved": true,
+    "cohortSelection": "Corporations with negative saved income on the retained final turn; all their sectors",
+    "currencies": ["ESP", "NGN", "USD"],
+    "copiedCollections": [
+      {
+        "name": "corporations",
+        "count": 41
+      },
+      {
+        "name": "corporateSectors",
+        "count": 59
+      },
+      {
+        "name": "gameState",
+        "count": 1
+      },
+      {
+        "name": "exchangeRates",
+        "count": 18
+      },
+      {
+        "name": "centralBanks",
+        "count": 16
+      },
+      {
+        "name": "federalBudget",
+        "count": 23
+      },
+      {
+        "name": "stateBudgets",
+        "count": 218
+      },
+      {
+        "name": "states",
+        "count": 218
+      },
+      {
+        "name": "politicalMetrics",
+        "count": 218
+      },
+      {
+        "name": "regionRuntimeMetrics",
+        "count": 0
+      },
+      {
+        "name": "commodityPrices",
+        "count": 28
+      },
+      {
+        "name": "stateResourceCapacity",
+        "count": 218
+      },
+      {
+        "name": "tariffs",
+        "count": 4
+      },
+      {
+        "name": "subsidies",
+        "count": 0
+      },
+      {
+        "name": "unownedSectors",
+        "count": 3706
+      },
+      {
+        "name": "organizationMemberships",
+        "count": 33
+      },
+      {
+        "name": "tradeEmbargoes",
+        "count": 0
+      },
+      {
+        "name": "extractionContracts",
+        "count": 0
+      },
+      {
+        "name": "resourceDepletion",
+        "count": 0
+      },
+      {
+        "name": "crises",
+        "count": 14
+      },
+      {
+        "name": "bonds",
+        "count": 87
+      },
+      {
+        "name": "imfFacilities",
+        "count": 0
+      },
+      {
+        "name": "tradeFlowSnapshots",
+        "count": 1
+      }
+    ],
+    "scope": "Real lookup builder, sector cash operations and transaction emitter; legacy sector host defaults; retained external context fixed. Character, government, market-clearing and other full-turn phases excluded from corporate account reconciliation.",
+    "rows": [
+      {
+        "turn": 14,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 20,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 45,
+          "readBsonBytes": 2677530
+        },
+        "openingTotalAnchor": 9042270236.760225,
+        "closingTotalAnchor": 9038586712.006662,
+        "closingCorporateCashHash": "da226c2d723bffb4e1eca05cf67df70d0ee503a1b2a96b34723bb407a3db6902"
+      },
+      {
+        "turn": 15,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 20,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 48,
+          "readBsonBytes": 2681431
+        },
+        "openingTotalAnchor": 9038586712.006662,
+        "closingTotalAnchor": 9034907447.837788,
+        "closingCorporateCashHash": "eb4633490a4c89a9867ed42d2b0c5d54faa37289d1f0a69f4df56628342d2e96"
+      },
+      {
+        "turn": 16,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681403
+        },
+        "openingTotalAnchor": 9034907447.837788,
+        "closingTotalAnchor": 9031233723.787617,
+        "closingCorporateCashHash": "c3ed7065ad63a62a0a1958e4482427d2da13ed6b3874bb59cb53501c0398ff30"
+      },
+      {
+        "turn": 17,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681375
+        },
+        "openingTotalAnchor": 9031233723.787617,
+        "closingTotalAnchor": 9027564561.783588,
+        "closingCorporateCashHash": "196fe184f05e070d9514ba5a72812c16448a9e3645a3ceeb1e3b3a18b0a7ff8f"
+      },
+      {
+        "turn": 18,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681331
+        },
+        "openingTotalAnchor": 9027564561.783588,
+        "closingTotalAnchor": 9023898596.228233,
+        "closingCorporateCashHash": "5eb46bfba42852e38c98a82ebd1ea2b3470c6a025fcb392d4c312c212e88b7dc"
+      },
+      {
+        "turn": 19,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681327
+        },
+        "openingTotalAnchor": 9023898596.228233,
+        "closingTotalAnchor": 9020235840.773066,
+        "closingCorporateCashHash": "6745f9d8fda59701e04343854971cb19c57a8e9a1e36cfd9a85b1f4e1b079f72"
+      },
+      {
+        "turn": 20,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681331
+        },
+        "openingTotalAnchor": 9020235840.773066,
+        "closingTotalAnchor": 9016576310.29162,
+        "closingCorporateCashHash": "4557c1b82bc607a5913a4e3aac79dd81db49ed2ec1dcf331406261bb5b114636"
+      },
+      {
+        "turn": 21,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681339
+        },
+        "openingTotalAnchor": 9016576310.29162,
+        "closingTotalAnchor": 9012922469.440872,
+        "closingCorporateCashHash": "13bd9dd8351c5a9f9bc6141aad4a2d5f2ce913c09423cb78288c464b00bbda65"
+      },
+      {
+        "turn": 22,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681296
+        },
+        "openingTotalAnchor": 9012922469.440872,
+        "closingTotalAnchor": 9009271831.468029,
+        "closingCorporateCashHash": "1689bb024fb670edae90b235cec6c9a8b983e95499e214949b5b180d28e6dae3"
+      },
+      {
+        "turn": 23,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 18,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681304
+        },
+        "openingTotalAnchor": 9009271831.468029,
+        "closingTotalAnchor": 9005624421.175741,
+        "closingCorporateCashHash": "24e276722b767a24b7760199e8be3c23f2f859de364ab1bcbc87b2183fcc53e6"
+      },
+      {
+        "turn": 24,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 18,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681300
+        },
+        "openingTotalAnchor": 9005624421.175741,
+        "closingTotalAnchor": 9001981644.165405,
+        "closingCorporateCashHash": "fe39ed6ac2f8ce14ec2253a092a326fb9a22498d2298c20cc2cbab02027ccbec"
+      },
+      {
+        "turn": 25,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 18,
+        "divergentCount": 0,
+        "absDivergence": 0,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681272
+        },
+        "openingTotalAnchor": 9001981644.165405,
+        "closingTotalAnchor": 8998342148.515707,
+        "closingCorporateCashHash": "e27c729f325a52bd65db44b3068b6382f35862b501a4d70036f5fce1a2ac012e"
+      }
+    ]
+  },
+  "baseline": {
+    "sourceCommit": "d10ea1f52517bda451f41b6454c294e246f8e084",
+    "development": false,
+    "baseline": true,
+    "retainedRunId": "559d9701-e07f-48c8-ade1-294bc926820a",
+    "retainedExecutedCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+    "retainedSavedTurn": 13,
+    "sourceHash": "1f5b661e5fd5eef9df6526d123e6747db70fc61500333eb4b66cd8320f598929",
+    "sourcePreserved": true,
+    "cohortSelection": "Corporations with negative saved income on the retained final turn; all their sectors",
+    "currencies": ["ESP", "NGN", "USD"],
+    "copiedCollections": [
+      {
+        "name": "corporations",
+        "count": 41
+      },
+      {
+        "name": "corporateSectors",
+        "count": 59
+      },
+      {
+        "name": "gameState",
+        "count": 1
+      },
+      {
+        "name": "exchangeRates",
+        "count": 18
+      },
+      {
+        "name": "centralBanks",
+        "count": 16
+      },
+      {
+        "name": "federalBudget",
+        "count": 23
+      },
+      {
+        "name": "stateBudgets",
+        "count": 218
+      },
+      {
+        "name": "states",
+        "count": 218
+      },
+      {
+        "name": "politicalMetrics",
+        "count": 218
+      },
+      {
+        "name": "regionRuntimeMetrics",
+        "count": 0
+      },
+      {
+        "name": "commodityPrices",
+        "count": 28
+      },
+      {
+        "name": "stateResourceCapacity",
+        "count": 218
+      },
+      {
+        "name": "tariffs",
+        "count": 4
+      },
+      {
+        "name": "subsidies",
+        "count": 0
+      },
+      {
+        "name": "unownedSectors",
+        "count": 3706
+      },
+      {
+        "name": "organizationMemberships",
+        "count": 33
+      },
+      {
+        "name": "tradeEmbargoes",
+        "count": 0
+      },
+      {
+        "name": "extractionContracts",
+        "count": 0
+      },
+      {
+        "name": "resourceDepletion",
+        "count": 0
+      },
+      {
+        "name": "crises",
+        "count": 14
+      },
+      {
+        "name": "bonds",
+        "count": 87
+      },
+      {
+        "name": "imfFacilities",
+        "count": 0
+      },
+      {
+        "name": "tradeFlowSnapshots",
+        "count": 1
+      }
+    ],
+    "scope": "Real lookup builder, sector cash operations and transaction emitter; legacy sector host defaults; retained external context fixed. Character, government, market-clearing and other full-turn phases excluded from corporate account reconciliation.",
+    "rows": [
+      {
+        "turn": 14,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 20,
+        "divergentCount": 39,
+        "absDivergence": 210444.18042112153,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 45,
+          "readBsonBytes": 2677530
+        },
+        "openingTotalAnchor": 9042270236.760225,
+        "closingTotalAnchor": 9038586712.006662,
+        "closingCorporateCashHash": "da226c2d723bffb4e1eca05cf67df70d0ee503a1b2a96b34723bb407a3db6902"
+      },
+      {
+        "turn": 15,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 20,
+        "divergentCount": 35,
+        "absDivergence": 206104.17806223218,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 48,
+          "readBsonBytes": 2681431
+        },
+        "openingTotalAnchor": 9038586712.006662,
+        "closingTotalAnchor": 9034907447.837788,
+        "closingCorporateCashHash": "eb4633490a4c89a9867ed42d2b0c5d54faa37289d1f0a69f4df56628342d2e96"
+      },
+      {
+        "turn": 16,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 37,
+        "absDivergence": 201495.72664168276,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681403
+        },
+        "openingTotalAnchor": 9034907447.837788,
+        "closingTotalAnchor": 9031233723.787617,
+        "closingCorporateCashHash": "c3ed7065ad63a62a0a1958e4482427d2da13ed6b3874bb59cb53501c0398ff30"
+      },
+      {
+        "turn": 17,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 38,
+        "absDivergence": 199009.06309316395,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681375
+        },
+        "openingTotalAnchor": 9031233723.787617,
+        "closingTotalAnchor": 9027564561.783588,
+        "closingCorporateCashHash": "196fe184f05e070d9514ba5a72812c16448a9e3645a3ceeb1e3b3a18b0a7ff8f"
+      },
+      {
+        "turn": 18,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 35,
+        "absDivergence": 196592.35177352262,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681331
+        },
+        "openingTotalAnchor": 9027564561.783588,
+        "closingTotalAnchor": 9023898596.228233,
+        "closingCorporateCashHash": "5eb46bfba42852e38c98a82ebd1ea2b3470c6a025fcb392d4c312c212e88b7dc"
+      },
+      {
+        "turn": 19,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 35,
+        "absDivergence": 194166.21586459753,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681327
+        },
+        "openingTotalAnchor": 9023898596.228233,
+        "closingTotalAnchor": 9020235840.773066,
+        "closingCorporateCashHash": "6745f9d8fda59701e04343854971cb19c57a8e9a1e36cfd9a85b1f4e1b079f72"
+      },
+      {
+        "turn": 20,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 35,
+        "absDivergence": 191733.06230351116,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681331
+        },
+        "openingTotalAnchor": 9020235840.773066,
+        "closingTotalAnchor": 9016576310.29162,
+        "closingCorporateCashHash": "4557c1b82bc607a5913a4e3aac79dd81db49ed2ec1dcf331406261bb5b114636"
+      },
+      {
+        "turn": 21,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 38,
+        "absDivergence": 189290.77926062368,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681339
+        },
+        "openingTotalAnchor": 9016576310.29162,
+        "closingTotalAnchor": 9012922469.440872,
+        "closingCorporateCashHash": "13bd9dd8351c5a9f9bc6141aad4a2d5f2ce913c09423cb78288c464b00bbda65"
+      },
+      {
+        "turn": 22,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 19,
+        "divergentCount": 33,
+        "absDivergence": 186840.16236498777,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681296
+        },
+        "openingTotalAnchor": 9012922469.440872,
+        "closingTotalAnchor": 9009271831.468029,
+        "closingCorporateCashHash": "1689bb024fb670edae90b235cec6c9a8b983e95499e214949b5b180d28e6dae3"
+      },
+      {
+        "turn": 23,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 18,
+        "divergentCount": 38,
+        "absDivergence": 184446.0418381575,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681304
+        },
+        "openingTotalAnchor": 9009271831.468029,
+        "closingTotalAnchor": 9005624421.175741,
+        "closingCorporateCashHash": "24e276722b767a24b7760199e8be3c23f2f859de364ab1bcbc87b2183fcc53e6"
+      },
+      {
+        "turn": 24,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 18,
+        "divergentCount": 38,
+        "absDivergence": 182120.72918004522,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681300
+        },
+        "openingTotalAnchor": 9005624421.175741,
+        "closingTotalAnchor": 9001981644.165405,
+        "closingCorporateCashHash": "fe39ed6ac2f8ce14ec2253a092a326fb9a22498d2298c20cc2cbab02027ccbec"
+      },
+      {
+        "turn": 25,
+        "corporations": 41,
+        "sectors": 59,
+        "lossCount": 18,
+        "divergentCount": 38,
+        "absDivergence": 179788.20820741192,
+        "trialBalance": "green",
+        "unattributed": [],
+        "perf": {
+          "commands": 47,
+          "readBsonBytes": 2681272
+        },
+        "openingTotalAnchor": 9001981644.165405,
+        "closingTotalAnchor": 8998342148.515707,
+        "closingCorporateCashHash": "e27c729f325a52bd65db44b3068b6382f35862b501a4d70036f5fce1a2ac012e"
+      }
+    ]
+  },
+  "assertions": {
+    "identicalCorporateCashEveryTurn": true,
+    "sourceSelectionsPreserved": true,
+    "wholeEconomyAcceptance": false
+  }
+}
