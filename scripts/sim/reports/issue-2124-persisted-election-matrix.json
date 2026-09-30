@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d",
+  "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce",
   "development": false,
   "preset": "1991-default",
   "schemaVersion": 1,
@@ -32,9 +32,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3108
+            "returnedBson": 3144
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000003",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 2,
@@ -55,9 +64,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3465
+            "returnedBson": 3501
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000003",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 3,
@@ -78,9 +96,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 28,
-            "returnedBson": 3462
+            "returnedBson": 3498
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000004",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         }
       ]
     },
@@ -109,10 +136,19 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 35,
-            "returnedBson": 3743
+            "commandCount": 36,
+            "returnedBson": 4054
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000015",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 2,
@@ -133,9 +169,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 4295
+            "returnedBson": 4349
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000015",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 3,
@@ -156,9 +201,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 34,
-            "returnedBson": 4157
+            "returnedBson": 4202
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000016",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         }
       ]
     },
@@ -188,9 +242,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 3744
+            "returnedBson": 3792
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000027",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 2,
@@ -210,10 +273,19 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 34,
-            "returnedBson": 4243
+            "commandCount": 36,
+            "returnedBson": 5002
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000027",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 3,
@@ -234,9 +306,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 36,
-            "returnedBson": 4890
+            "returnedBson": 4938
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000028",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         }
       ]
     },
@@ -266,9 +347,18 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 36,
-            "returnedBson": 4501
+            "returnedBson": 4555
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000039",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 2,
@@ -288,10 +378,19 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 37,
-            "returnedBson": 5307
+            "commandCount": 38,
+            "returnedBson": 5856
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000039",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         },
         {
           "cycle": 3,
@@ -311,10 +410,19 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 37,
-            "returnedBson": 5863
+            "commandCount": 36,
+            "returnedBson": 5217
           },
-          "resolutionPath": "single_winner"
+          "resolutionPath": "single_winner",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000003a",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 1
         }
       ]
     },
@@ -351,9 +459,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 28,
-            "returnedBson": 3211
+            "returnedBson": 3244
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000050",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000051",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -381,9 +504,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 28,
-            "returnedBson": 3473
+            "returnedBson": 3506
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000050",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000051",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -411,9 +549,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 28,
-            "returnedBson": 3473
+            "returnedBson": 3506
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000051",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000050",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -450,9 +603,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 4225
+            "returnedBson": 4282
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000062",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000063",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -480,9 +648,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 5084
+            "returnedBson": 5141
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000062",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000063",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -510,9 +693,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 5557
+            "returnedBson": 5614
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000063",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000062",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -548,10 +746,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 41,
-            "returnedBson": 4641
+            "commandCount": 35,
+            "returnedBson": 3859
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000074",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000075",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -579,9 +792,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 5332
+            "returnedBson": 5389
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000074",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000075",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -608,10 +836,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 38,
-            "returnedBson": 6031
+            "commandCount": 39,
+            "returnedBson": 6123
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000075",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000074",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -654,9 +897,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 40,
-            "returnedBson": 5060
+            "returnedBson": 5097
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000086",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000087",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000088",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -689,10 +953,31 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 40,
-            "returnedBson": 6050
+            "commandCount": 38,
+            "returnedBson": 5351
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000087",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000086",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000088",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -726,9 +1011,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 40,
-            "returnedBson": 6523
+            "returnedBson": 6580
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000087",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000086",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000088",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -765,9 +1071,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 76,
-            "returnedBson": 9349
+            "returnedBson": 9475
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000009d",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000009e",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 2,
@@ -795,9 +1116,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 55,
-            "returnedBson": 9048
+            "returnedBson": 9147
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000009d",
+              "party": "1",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000009e",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 3,
@@ -825,9 +1161,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 55,
-            "returnedBson": 9048
+            "returnedBson": 9147
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000009e",
+              "party": "2",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000009d",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         }
       ]
     },
@@ -864,9 +1215,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 83,
-            "returnedBson": 10080
+            "returnedBson": 10224
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000b4",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000b5",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 2,
@@ -894,9 +1260,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 65,
-            "returnedBson": 10595
+            "returnedBson": 10718
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000b4",
+              "party": "1",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000b5",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 3,
@@ -924,9 +1305,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 65,
-            "returnedBson": 11050
+            "returnedBson": 11173
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000000b5",
+              "party": "2",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000000b4",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         }
       ]
     },
@@ -963,9 +1359,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 86,
-            "returnedBson": 10516
+            "returnedBson": 10666
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000cb",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000000cc",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 2,
@@ -993,9 +1404,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 68,
-            "returnedBson": 11609
+            "returnedBson": 11738
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000cb",
+              "party": "1",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000000cc",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 3,
@@ -1023,9 +1449,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 68,
-            "returnedBson": 12519
+            "returnedBson": 12648
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000cc",
+              "party": "2",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000000cb",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         }
       ]
     },
@@ -1067,10 +1508,31 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 85,
-            "returnedBson": 11189
+            "commandCount": 88,
+            "returnedBson": 11622
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000e2",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000e4",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000e3",
+              "party": "2",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 2,
@@ -1104,9 +1566,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 67,
-            "returnedBson": 11823
+            "returnedBson": 11992
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000000e2",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000e4",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000e3",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         },
         {
           "cycle": 3,
@@ -1140,9 +1623,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 67,
-            "returnedBson": 12278
+            "returnedBson": 12447
           },
-          "resolutionPath": "districted_house"
+          "resolutionPath": "districted_house",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000000e3",
+              "party": "2",
+              "seats": 3,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000000e2",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000e4",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 5
         }
       ]
     },
@@ -1179,9 +1683,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 31,
-            "returnedBson": 3600
+            "returnedBson": 3639
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000000fe",
+              "party": "1",
+              "seats": 57,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000ff",
+              "party": "2",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 2,
@@ -1209,9 +1728,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 29,
-            "returnedBson": 3895
+            "returnedBson": 3931
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000000fe",
+              "party": "1",
+              "seats": 49,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000ff",
+              "party": "2",
+              "seats": 32,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 3,
@@ -1239,9 +1773,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 29,
-            "returnedBson": 3895
+            "returnedBson": 3931
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000000ff",
+              "party": "2",
+              "seats": 57,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000000fe",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         }
       ]
     },
@@ -1277,10 +1826,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 39,
-            "returnedBson": 4420
+            "commandCount": 38,
+            "returnedBson": 4349
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000110",
+              "party": "1",
+              "seats": 57,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000111",
+              "party": "2",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 2,
@@ -1308,9 +1872,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5321
+            "returnedBson": 5375
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000110",
+              "party": "1",
+              "seats": 49,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000111",
+              "party": "2",
+              "seats": 32,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 3,
@@ -1338,9 +1917,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5803
+            "returnedBson": 5857
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000111",
+              "party": "2",
+              "seats": 57,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000110",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         }
       ]
     },
@@ -1377,9 +1971,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 42,
-            "returnedBson": 4848
+            "returnedBson": 4911
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000122",
+              "party": "1",
+              "seats": 57,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000123",
+              "party": "2",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 2,
@@ -1406,10 +2015,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 38,
-            "returnedBson": 5605
+            "commandCount": 40,
+            "returnedBson": 6380
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000122",
+              "party": "1",
+              "seats": 49,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000123",
+              "party": "2",
+              "seats": 32,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 3,
@@ -1436,10 +2060,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 40,
-            "returnedBson": 7284
+            "commandCount": 38,
+            "returnedBson": 6376
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000123",
+              "party": "2",
+              "seats": 57,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000122",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         }
       ]
     },
@@ -1482,9 +2121,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 41,
-            "returnedBson": 5216
+            "returnedBson": 5273
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000134",
+              "party": "1",
+              "seats": 39,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000136",
+              "party": "1",
+              "seats": 26,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000135",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 2,
@@ -1518,9 +2178,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 39,
-            "returnedBson": 6189
+            "returnedBson": 6243
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000134",
+              "party": "1",
+              "seats": 34,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000135",
+              "party": "2",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000136",
+              "party": "1",
+              "seats": 23,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         },
         {
           "cycle": 3,
@@ -1554,9 +2235,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 39,
-            "returnedBson": 6671
+            "returnedBson": 6725
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000135",
+              "party": "2",
+              "seats": 65,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000134",
+              "party": "1",
+              "seats": 10,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000136",
+              "party": "1",
+              "seats": 6,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 81
         }
       ]
     },
@@ -1593,9 +2295,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3043
+            "returnedBson": 3073
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000014b",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000014c",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -1623,9 +2340,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3181
+            "returnedBson": 3211
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000014b",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000014c",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -1653,9 +2385,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3181
+            "returnedBson": 3211
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000014c",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000014b",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -1691,10 +2438,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 35,
-            "returnedBson": 3843
+            "commandCount": 34,
+            "returnedBson": 3783
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000015d",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000015e",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -1721,10 +2483,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 35,
-            "returnedBson": 4591
+            "commandCount": 34,
+            "returnedBson": 4142
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000015d",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000015e",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -1752,9 +2529,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 5022
+            "returnedBson": 5105
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000015e",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000015d",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -1791,9 +2583,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 4291
+            "returnedBson": 4345
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000016f",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000170",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -1820,10 +2627,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 37,
-            "returnedBson": 5115
+            "commandCount": 38,
+            "returnedBson": 5663
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000016f",
+              "party": "1",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000170",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -1850,10 +2672,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 34,
-            "returnedBson": 4809
+            "commandCount": 37,
+            "returnedBson": 5853
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000170",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000016f",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -1895,10 +2732,31 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 37,
-            "returnedBson": 4639
+            "commandCount": 36,
+            "returnedBson": 4579
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000181",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000182",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000183",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 2,
@@ -1932,9 +2790,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5456
+            "returnedBson": 5469
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000182",
+              "party": "2",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000181",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000183",
+              "party": "1",
+              "seats": 2,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         },
         {
           "cycle": 3,
@@ -1968,9 +2847,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5887
+            "returnedBson": 5970
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000182",
+              "party": "2",
+              "seats": 4,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000181",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000183",
+              "party": "1",
+              "seats": 1,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 6
         }
       ]
     },
@@ -2007,9 +2907,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 28,
-            "returnedBson": 3391
+            "returnedBson": 3424
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000198",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000199",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2037,9 +2952,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3207
+            "returnedBson": 3237
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000198",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000199",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2067,9 +2997,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3207
+            "returnedBson": 3237
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000199",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000198",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2106,9 +3051,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 36,
-            "returnedBson": 4211
+            "returnedBson": 4262
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001aa",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001ab",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2136,9 +3096,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 4624
+            "returnedBson": 4637
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001aa",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001ab",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2166,9 +3141,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 5097
+            "returnedBson": 5145
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001ab",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001aa",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2204,10 +3194,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 37,
-            "returnedBson": 4260
+            "commandCount": 39,
+            "returnedBson": 4676
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001bc",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001bd",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2234,10 +3239,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 38,
-            "returnedBson": 5649
+            "commandCount": 37,
+            "returnedBson": 5196
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001bc",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001bd",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2264,10 +3284,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 35,
-            "returnedBson": 5547
+            "commandCount": 38,
+            "returnedBson": 6649
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001bd",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001bc",
+              "party": "1",
+              "seats": 83,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2310,9 +3345,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 4987
+            "returnedBson": 5058
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001ce",
+              "party": "1",
+              "seats": 50,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001cf",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001d0",
+              "party": "1",
+              "seats": 33,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2346,9 +3402,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5502
+            "returnedBson": 5550
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001cf",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001ce",
+              "party": "1",
+              "seats": 50,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001d0",
+              "party": "1",
+              "seats": 33,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2382,9 +3459,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5975
+            "returnedBson": 6023
           },
-          "resolutionPath": "bloc_list"
+          "resolutionPath": "bloc_list",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001cf",
+              "party": "2",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001ce",
+              "party": "1",
+              "seats": 50,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001d0",
+              "party": "1",
+              "seats": 33,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2421,9 +3519,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 28,
-            "returnedBson": 3399
+            "returnedBson": 3432
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001e5",
+              "party": "1",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001e6",
+              "party": "2",
+              "seats": 30,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2451,9 +3564,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3207
+            "returnedBson": 3237
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001e5",
+              "party": "1",
+              "seats": 60,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001e6",
+              "party": "2",
+              "seats": 40,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2481,9 +3609,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 27,
-            "returnedBson": 3207
+            "returnedBson": 3237
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001e6",
+              "party": "2",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001e5",
+              "party": "1",
+              "seats": 30,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2520,9 +3663,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 36,
-            "returnedBson": 4199
+            "returnedBson": 4270
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001f7",
+              "party": "1",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001f8",
+              "party": "2",
+              "seats": 30,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2550,9 +3708,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 4624
+            "returnedBson": 4672
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000001f7",
+              "party": "1",
+              "seats": 60,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000001f8",
+              "party": "2",
+              "seats": 40,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2580,9 +3753,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 35,
-            "returnedBson": 5097
+            "returnedBson": 5145
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000001f8",
+              "party": "2",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000001f7",
+              "party": "1",
+              "seats": 30,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2618,10 +3806,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 37,
-            "returnedBson": 4268
+            "commandCount": 39,
+            "returnedBson": 4704
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000209",
+              "party": "1",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000020a",
+              "party": "2",
+              "seats": 30,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2648,10 +3851,25 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 34,
-            "returnedBson": 4387
+            "commandCount": 38,
+            "returnedBson": 5703
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000209",
+              "party": "1",
+              "seats": 60,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000020a",
+              "party": "2",
+              "seats": 40,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2679,9 +3897,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 36,
-            "returnedBson": 5582
+            "returnedBson": 5630
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000020a",
+              "party": "2",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000209",
+              "party": "1",
+              "seats": 30,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2724,9 +3957,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 38,
-            "returnedBson": 5015
+            "returnedBson": 5066
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000021b",
+              "party": "1",
+              "seats": 42,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000021c",
+              "party": "2",
+              "seats": 30,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000021d",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 2,
@@ -2760,9 +4014,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5502
+            "returnedBson": 5550
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000021c",
+              "party": "2",
+              "seats": 40,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000021b",
+              "party": "1",
+              "seats": 36,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000021d",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         },
         {
           "cycle": 3,
@@ -2796,9 +4071,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 37,
-            "returnedBson": 5975
+            "returnedBson": 6023
           },
-          "resolutionPath": "hare_quota"
+          "resolutionPath": "hare_quota",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000021c",
+              "party": "2",
+              "seats": 70,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000021b",
+              "party": "1",
+              "seats": 18,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000021d",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 100
         }
       ]
     },
@@ -2835,9 +4131,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 16,
-            "returnedBson": 1710
+            "returnedBson": 1719
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000232",
+              "party": "1",
+              "seats": 84,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000233",
+              "party": "2",
+              "seats": 36,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 2,
@@ -2865,9 +4176,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 16,
-            "returnedBson": 1710
+            "returnedBson": 1719
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000232",
+              "party": "1",
+              "seats": 72,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000233",
+              "party": "2",
+              "seats": 48,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 3,
@@ -2895,9 +4221,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 16,
-            "returnedBson": 1710
+            "returnedBson": 1719
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000232",
+              "party": "1",
+              "seats": 36,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000233",
+              "party": "2",
+              "seats": 84,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         }
       ]
     },
@@ -2934,9 +4275,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 17,
-            "returnedBson": 1812
+            "returnedBson": 1824
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000244",
+              "party": "1",
+              "seats": 84,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000245",
+              "party": "2",
+              "seats": 36,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 2,
@@ -2964,9 +4320,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 17,
-            "returnedBson": 1812
+            "returnedBson": 1824
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000244",
+              "party": "1",
+              "seats": 72,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000245",
+              "party": "2",
+              "seats": 48,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 3,
@@ -2994,9 +4365,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 17,
-            "returnedBson": 1812
+            "returnedBson": 1824
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000244",
+              "party": "1",
+              "seats": 36,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000245",
+              "party": "2",
+              "seats": 84,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         }
       ]
     },
@@ -3033,9 +4419,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 17,
-            "returnedBson": 1818
+            "returnedBson": 1830
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000256",
+              "party": "1",
+              "seats": 84,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000257",
+              "party": "2",
+              "seats": 36,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 2,
@@ -3063,9 +4464,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 17,
-            "returnedBson": 1818
+            "returnedBson": 1830
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000256",
+              "party": "1",
+              "seats": 72,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000257",
+              "party": "2",
+              "seats": 48,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 3,
@@ -3093,9 +4509,24 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 17,
-            "returnedBson": 1818
+            "returnedBson": 1830
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000256",
+              "party": "1",
+              "seats": 36,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000257",
+              "party": "2",
+              "seats": 84,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         }
       ]
     },
@@ -3138,9 +4569,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 18,
-            "returnedBson": 2237
+            "returnedBson": 2249
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000268",
+              "party": "1",
+              "seats": 50,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000026a",
+              "party": "1",
+              "seats": 34,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000269",
+              "party": "2",
+              "seats": 36,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 2,
@@ -3174,9 +4626,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 18,
-            "returnedBson": 2237
+            "returnedBson": 2249
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000268",
+              "party": "1",
+              "seats": 43,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000026a",
+              "party": "1",
+              "seats": 29,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000269",
+              "party": "2",
+              "seats": 48,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         },
         {
           "cycle": 3,
@@ -3210,9 +4683,30 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 18,
-            "returnedBson": 2237
+            "returnedBson": 2249
           },
-          "resolutionPath": "sainte_lague"
+          "resolutionPath": "sainte_lague",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000268",
+              "party": "1",
+              "seats": 22,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000026a",
+              "party": "1",
+              "seats": 14,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000269",
+              "party": "2",
+              "seats": 84,
+              "seatSource": "direct"
+            }
+          ],
+          "resolvedTotalSeats": 120
         }
       ]
     },
@@ -3261,9 +4755,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 60,
-            "returnedBson": 9459
+            "returnedBson": 9857
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000027f",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000280",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000027f",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:000000000000000000000280",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -3303,9 +4824,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 51,
-            "returnedBson": 7534
+            "returnedBson": 7914
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000027f",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000280",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000027f",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:000000000000000000000280",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -3345,9 +4893,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 51,
-            "returnedBson": 7534
+            "returnedBson": 7914
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000280",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000027f",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000027f",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:000000000000000000000280",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -3396,9 +4971,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 66,
-            "returnedBson": 10032
+            "returnedBson": 10445
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000291",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000292",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000291",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:000000000000000000000292",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -3438,9 +5040,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 60,
-            "returnedBson": 8960
+            "returnedBson": 9361
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:000000000000000000000291",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000292",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000291",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:000000000000000000000292",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -3480,9 +5109,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 60,
-            "returnedBson": 9433
+            "returnedBson": 9834
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:000000000000000000000292",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000291",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000291",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:000000000000000000000292",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -3531,9 +5187,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 68,
-            "returnedBson": 10426
+            "returnedBson": 10848
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002a3",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002a4",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002a3",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002a4",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -3573,9 +5256,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 62,
-            "returnedBson": 9951
+            "returnedBson": 10361
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002a3",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002a4",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002a3",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002a4",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -3615,9 +5325,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 62,
-            "returnedBson": 10897
+            "returnedBson": 11307
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002a4",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002a3",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002a3",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002a4",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -3672,9 +5409,42 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 68,
-            "returnedBson": 11733
+            "returnedBson": 12244
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002b5",
+              "party": "1",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b6",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b7",
+              "party": "1",
+              "seats": 11,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b7",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:0000000000000000000002b6",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -3720,9 +5490,42 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 62,
-            "returnedBson": 10456
+            "returnedBson": 10955
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000002b6",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002b5",
+              "party": "1",
+              "seats": 14,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b7",
+              "party": "1",
+              "seats": 10,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b7",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:0000000000000000000002b6",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -3767,10 +5570,43 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 62,
-            "returnedBson": 10929
+            "commandCount": 65,
+            "returnedBson": 11717
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000002b6",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002b5",
+              "party": "1",
+              "seats": 7,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b7",
+              "party": "1",
+              "seats": 5,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002b7",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "npp:0000000000000000000002b6",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -3819,9 +5655,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 57,
-            "returnedBson": 9567
+            "returnedBson": 9956
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000002cc",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002cd",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002ce",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002cf",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -3861,9 +5724,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 51,
-            "returnedBson": 7898
+            "returnedBson": 8275
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000002cc",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002cd",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002ce",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002cf",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -3903,9 +5793,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 51,
-            "returnedBson": 7898
+            "returnedBson": 8275
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000002cd",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002cc",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002ce",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002cf",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -3954,9 +5871,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 65,
-            "returnedBson": 10388
+            "returnedBson": 10798
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002e2",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002e3",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002e4",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002e5",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -3996,9 +5940,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 59,
-            "returnedBson": 9316
+            "returnedBson": 9714
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002e2",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:0000000000000000000002e3",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002e4",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002e5",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -4037,10 +6008,37 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 62,
-            "returnedBson": 10072
+            "commandCount": 59,
+            "returnedBson": 10187
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:0000000000000000000002e3",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002e2",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002e4",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002e5",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -4089,9 +6087,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 67,
-            "returnedBson": 10782
+            "returnedBson": 11201
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002f8",
+              "party": "1",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002f9",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002fa",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002fb",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -4130,10 +6155,37 @@
           ],
           "repeatStable": true,
           "performance": {
-            "commandCount": 61,
-            "returnedBson": 10307
+            "commandCount": 64,
+            "returnedBson": 11003
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002f8",
+              "party": "1",
+              "seats": 24,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002f9",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002fa",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002fb",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -4173,9 +6225,36 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 61,
-            "returnedBson": 11253
+            "returnedBson": 11687
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:0000000000000000000002f9",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002f8",
+              "party": "1",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:0000000000000000000002fa",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:0000000000000000000002fb",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     },
@@ -4230,9 +6309,42 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 67,
-            "returnedBson": 12089
+            "returnedBson": 12597
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "player:00000000000000000000030e",
+              "party": "1",
+              "seats": 17,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:00000000000000000000030f",
+              "party": "2",
+              "seats": 12,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000310",
+              "party": "1",
+              "seats": 11,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000311",
+              "party": "1",
+              "seats": 413,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:000000000000000000000312",
+              "party": "2",
+              "seats": 177,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 2,
@@ -4278,9 +6390,42 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 61,
-            "returnedBson": 10812
+            "returnedBson": 11308
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000030f",
+              "party": "2",
+              "seats": 16,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000030e",
+              "party": "1",
+              "seats": 14,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000310",
+              "party": "1",
+              "seats": 10,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000311",
+              "party": "1",
+              "seats": 354,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:000000000000000000000312",
+              "party": "2",
+              "seats": 236,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         },
         {
           "cycle": 3,
@@ -4326,15 +6471,48 @@
           "repeatStable": true,
           "performance": {
             "commandCount": 61,
-            "returnedBson": 11285
+            "returnedBson": 11781
           },
-          "resolutionPath": "ams"
+          "resolutionPath": "ams",
+          "resolvedSeatHolders": [
+            {
+              "identity": "npp:00000000000000000000030f",
+              "party": "2",
+              "seats": 28,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:00000000000000000000030e",
+              "party": "1",
+              "seats": 7,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "npp:000000000000000000000310",
+              "party": "1",
+              "seats": 5,
+              "seatSource": "direct"
+            },
+            {
+              "identity": "player:000000000000000000000311",
+              "party": "1",
+              "seats": 177,
+              "seatSource": "list"
+            },
+            {
+              "identity": "player:000000000000000000000312",
+              "party": "2",
+              "seats": 413,
+              "seatSource": "list"
+            }
+          ],
+          "resolvedTotalSeats": 630
         }
       ]
     }
   ],
   "cleanupRecovery": {
-    "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d",
+    "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce",
     "development": false,
     "preset": "1991-default",
     "schemaVersion": 1,
@@ -4367,9 +6545,18 @@
             "repeatStable": true,
             "performance": {
               "commandCount": 27,
-              "returnedBson": 3096
+              "returnedBson": 3228
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 2,
@@ -4389,10 +6576,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 26,
-              "returnedBson": 2799
+              "commandCount": 27,
+              "returnedBson": 3585
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 3,
@@ -4413,9 +6609,18 @@
             "repeatStable": true,
             "performance": {
               "commandCount": 28,
-              "returnedBson": 3450
+              "returnedBson": 3582
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           }
         ]
       },
@@ -4445,9 +6650,18 @@
             "repeatStable": true,
             "performance": {
               "commandCount": 41,
-              "returnedBson": 5354
+              "returnedBson": 5747
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 2,
@@ -4467,10 +6681,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 36,
-              "returnedBson": 4530
+              "commandCount": 35,
+              "returnedBson": 4475
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 3,
@@ -4490,10 +6713,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 34,
-              "returnedBson": 4142
+              "commandCount": 36,
+              "returnedBson": 5275
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           }
         ]
       },
@@ -4522,10 +6754,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 34,
-              "returnedBson": 3475
+              "commandCount": 32,
+              "returnedBson": 3002
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 2,
@@ -4545,10 +6786,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 34,
-              "returnedBson": 4228
+              "commandCount": 39,
+              "returnedBson": 5920
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 3,
@@ -4568,10 +6818,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 39,
-              "returnedBson": 5855
+              "commandCount": 36,
+              "returnedBson": 5050
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           }
         ]
       },
@@ -4600,10 +6859,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 38,
-              "returnedBson": 4840
+              "commandCount": 36,
+              "returnedBson": 4681
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000039",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 2,
@@ -4623,10 +6891,19 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 37,
-              "returnedBson": 5288
+              "commandCount": 36,
+              "returnedBson": 5233
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000039",
+                "party": "1",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
           },
           {
             "cycle": 3,
@@ -4646,17 +6923,936 @@
             ],
             "repeatStable": true,
             "performance": {
-              "commandCount": 35,
-              "returnedBson": 4900
+              "commandCount": 37,
+              "returnedBson": 6033
             },
-            "resolutionPath": "single_winner"
+            "resolutionPath": "single_winner",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 1,
+                "seatSource": "direct"
+              }
+            ],
+            "resolvedTotalSeats": 1
+          }
+        ]
+      }
+    ]
+  },
+  "amsRecovery": {
+    "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce",
+    "development": false,
+    "preset": "1991-default",
+    "schemaVersion": 1,
+    "syntheticActorsAndVotes": true,
+    "fullCampaignAccumulation": false,
+    "results": [
+      {
+        "family": "german_ams",
+        "country": "DE",
+        "electionType": "bundestag",
+        "configuredMethod": "ams",
+        "field": "npp_only",
+        "cycles": [
+          {
+            "cycle": 1,
+            "votesParty1": 0.7,
+            "leader": "1",
+            "partySeats": {
+              "1": 441,
+              "2": 189
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 28,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 413,
+                "npp": true,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 12,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 177,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 99,
+              "returnedBson": 17772
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 413,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 177,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 2,
+            "votesParty1": 0.6,
+            "leader": "1",
+            "partySeats": {
+              "1": 378,
+              "2": 252
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 24,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 354,
+                "npp": true,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 16,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 236,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 51,
+              "returnedBson": 7992
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 24,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 16,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 354,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 236,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 3,
+            "votesParty1": 0.3,
+            "leader": "2",
+            "partySeats": {
+              "1": 189,
+              "2": 441
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 12,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 177,
+                "npp": true,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 28,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 413,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 51,
+              "returnedBson": 7992
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000003",
+                "party": "1",
+                "seats": 177,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:000000000000000000000004",
+                "party": "2",
+                "seats": 413,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          }
+        ]
+      },
+      {
+        "family": "german_ams",
+        "country": "DE",
+        "electionType": "bundestag",
+        "configuredMethod": "ams",
+        "field": "player_vs_npp",
+        "cycles": [
+          {
+            "cycle": 1,
+            "votesParty1": 0.7,
+            "leader": "1",
+            "partySeats": {
+              "1": 441,
+              "2": 189
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 28,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 413,
+                "npp": false,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 12,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 177,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 66,
+              "returnedBson": 10533
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 413,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 177,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 2,
+            "votesParty1": 0.6,
+            "leader": "1",
+            "partySeats": {
+              "1": 378,
+              "2": 252
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 24,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 354,
+                "npp": false,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 16,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 236,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 60,
+              "returnedBson": 9457
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 24,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 16,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 354,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 236,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 3,
+            "votesParty1": 0.3,
+            "leader": "2",
+            "partySeats": {
+              "1": 189,
+              "2": 441
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 12,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 177,
+                "npp": false,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 28,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 413,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 60,
+              "returnedBson": 9930
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000015",
+                "party": "1",
+                "seats": 177,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:000000000000000000000016",
+                "party": "2",
+                "seats": 413,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          }
+        ]
+      },
+      {
+        "family": "german_ams",
+        "country": "DE",
+        "electionType": "bundestag",
+        "configuredMethod": "ams",
+        "field": "opposing_players",
+        "cycles": [
+          {
+            "cycle": 1,
+            "votesParty1": 0.7,
+            "leader": "1",
+            "partySeats": {
+              "1": 441,
+              "2": 189
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 28,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 413,
+                "npp": false,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 12,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 177,
+                "npp": false,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 68,
+              "returnedBson": 10962
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 413,
+                "seatSource": "list"
+              },
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 177,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 2,
+            "votesParty1": 0.6,
+            "leader": "1",
+            "partySeats": {
+              "1": 378,
+              "2": 252
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 24,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 354,
+                "npp": false,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 16,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 236,
+                "npp": false,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 65,
+              "returnedBson": 10758
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 24,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 16,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 354,
+                "seatSource": "list"
+              },
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 236,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 3,
+            "votesParty1": 0.3,
+            "leader": "2",
+            "partySeats": {
+              "1": 189,
+              "2": 441
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 12,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 177,
+                "npp": false,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 28,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 413,
+                "npp": false,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 62,
+              "returnedBson": 11436
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000027",
+                "party": "1",
+                "seats": 177,
+                "seatSource": "list"
+              },
+              {
+                "identity": "player:000000000000000000000028",
+                "party": "2",
+                "seats": 413,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          }
+        ]
+      },
+      {
+        "family": "german_ams",
+        "country": "DE",
+        "electionType": "bundestag",
+        "configuredMethod": "ams",
+        "field": "mixed_same_party",
+        "cycles": [
+          {
+            "cycle": 1,
+            "votesParty1": 0.7,
+            "leader": "1",
+            "partySeats": {
+              "1": 441,
+              "2": 189
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 17,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 11,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 413,
+                "npp": true,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 12,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 177,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 68,
+              "returnedBson": 12352
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "player:000000000000000000000039",
+                "party": "1",
+                "seats": 17,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 12,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003b",
+                "party": "1",
+                "seats": 11,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003b",
+                "party": "1",
+                "seats": 413,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 177,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 2,
+            "votesParty1": 0.6,
+            "leader": "1",
+            "partySeats": {
+              "1": 378,
+              "2": 252
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 14,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 10,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 354,
+                "npp": true,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 16,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 236,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 62,
+              "returnedBson": 11051
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 16,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000039",
+                "party": "1",
+                "seats": 14,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003b",
+                "party": "1",
+                "seats": 10,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003b",
+                "party": "1",
+                "seats": 354,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 236,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
+          },
+          {
+            "cycle": 3,
+            "votesParty1": 0.3,
+            "leader": "2",
+            "partySeats": {
+              "1": 189,
+              "2": 441
+            },
+            "total": 630,
+            "officials": [
+              {
+                "party": "1",
+                "seats": 7,
+                "npp": false,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 5,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "1",
+                "seats": 177,
+                "npp": true,
+                "source": "list"
+              },
+              {
+                "party": "2",
+                "seats": 28,
+                "npp": true,
+                "source": "direct"
+              },
+              {
+                "party": "2",
+                "seats": 413,
+                "npp": true,
+                "source": "list"
+              }
+            ],
+            "repeatStable": true,
+            "performance": {
+              "commandCount": 62,
+              "returnedBson": 11524
+            },
+            "resolutionPath": "ams",
+            "resolvedSeatHolders": [
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 28,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "player:000000000000000000000039",
+                "party": "1",
+                "seats": 7,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003b",
+                "party": "1",
+                "seats": 5,
+                "seatSource": "direct"
+              },
+              {
+                "identity": "npp:00000000000000000000003b",
+                "party": "1",
+                "seats": 177,
+                "seatSource": "list"
+              },
+              {
+                "identity": "npp:00000000000000000000003a",
+                "party": "2",
+                "seats": 413,
+                "seatSource": "list"
+              }
+            ],
+            "resolvedTotalSeats": 630
           }
         ]
       }
     ]
   },
   "presidentialDispatcher": {
-    "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d",
+    "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce",
     "development": false,
     "generalDispatcher": true,
     "outboundRequests": 0,
@@ -4747,7 +7943,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -4835,7 +8031,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -4923,7 +8119,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5011,7 +8207,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5099,7 +8295,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5187,7 +8383,7 @@
         "partyAlternations": 0,
         "partyTerms": 3,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5275,7 +8471,7 @@
         "partyAlternations": 0,
         "partyTerms": 3,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5363,7 +8559,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5451,7 +8647,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": true,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "1991-default",
@@ -5539,7 +8735,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": true,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -5630,7 +8826,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -5721,7 +8917,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -5812,7 +9008,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -5903,7 +9099,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -5994,7 +9190,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -6085,7 +9281,7 @@
         "partyAlternations": 0,
         "partyTerms": 3,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -6176,7 +9372,7 @@
         "partyAlternations": 0,
         "partyTerms": 3,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -6267,7 +9463,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": false,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -6358,7 +9554,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": true,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       },
       {
         "preset": "2027-default",
@@ -6449,7 +9645,7 @@
         "partyAlternations": 1,
         "partyTerms": 1,
         "faultInjected": true,
-        "sourceCommit": "71c44d21821d479444bb077c4bcf840185b4a00d"
+        "sourceCommit": "d49c8c3ce932f7e8b72a0ee33d235f0158e047ce"
       }
     ]
   },

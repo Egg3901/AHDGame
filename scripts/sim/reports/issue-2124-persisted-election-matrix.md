@@ -4,7 +4,7 @@ Related issues: #2124, #2161 and #2159.
 
 ## Provenance and scope
 
-Clean executed runtime: `71c44d21821d479444bb077c4bcf840185b4a00d`. The [general runner](../generalElectionMatrixReplay.ts) uses the real resolver, actual Mongo writes and deterministic synthetic actors and vote totals. The [measured JSON](issue-2124-persisted-election-matrix.json) includes all results, the separate cleanup interruption replay, the presidential dispatcher replay and the earlier AMS profile.
+Clean executed runtime: `d49c8c3ce932f7e8b72a0ee33d235f0158e047ce`. The [general runner](../generalElectionMatrixReplay.ts) uses the real resolver, actual Mongo writes and deterministic synthetic actors and vote totals. The [measured JSON](issue-2124-persisted-election-matrix.json) includes all results, the separate cleanup interruption replay, the presidential dispatcher replay and the earlier AMS profile.
 
 This is selected `1991-default` resolver qualification at a 1993 fixture clock. It is not a bootstrapped historical world, a full campaign-accumulation test or the final release candidate. Regional magnitudes and the one-Land AMS electorate are explicit fixtures. The 630-seat AMS total is the current configured total, not a separate claim of historical seed fidelity. The East German quota and converted-regime fixtures are counterfactual control tests on that clock.
 
@@ -33,7 +33,7 @@ The separate-list fixture adds two synthetic player list candidates to every dir
 
 Every cycle checks finalized tally, withdrawn candidates, seat conservation, named existing holders, current-office agreement and repeat stability. District cases also check exactly one correctly typed player/NPP holder per district. Multi-seat holders' office counts match their persisted mandates. A second resolution changes none of the officials, characters, NPPs, candidates, notifications, district holders or local politician history. AMS reconciliation also refuses a second application of the same cycle.
 
-Each new tally stores the route that actually ran and its resolution turn. Historical rows are not backfilled from current configuration. AMS direct results are only upgraded to `ams` after list persistence and holder reconciliation succeed.
+Each new tally stores the route that actually ran, its resolution turn, and immutable holder identities, party, seat weight and direct/list source. The replay verifies that every archived holder and total matches the persisted chamber, including list-only representatives. Historical rows are not backfilled from current configuration. AMS direct results are only upgraded to `ams` after list persistence and holder reconciliation succeed.
 
 Two original issue labels describe obsolete or unimplemented behavior: the historical Commons winner bonus was removed in #2222, and Ireland's documented allocator is a Hare-quota approximation. Ranked STV transfer rounds are not implemented or claimed by this matrix.
 
@@ -43,14 +43,18 @@ Two original issue labels describe obsolete or unimplemented behavior: the histo
 2. **Incomplete finalized-result recovery.** The runner throws at the real candidate-cleanup write after the result is finalized. Previously retry marked the race resolved with two stale active candidates. The repaired retry completes candidate/campaign cleanup, concurrent winner-candidacy withdrawal, party presence and local history without seating again. The separate 12-resolution governor replay passes, including the injected failure.
 3. **Presidential dispatcher bypass.** The general finalized-result shortcut could bypass `executiveSeatingPending`. The dispatcher now returns those cases to the presidential resolver. The existing 20-case presidential matrix passes through the real general dispatcher, including both actual seating interruptions and lost acknowledgments after the tenure receipt, for 1991 and 2027. The earlier direct-resolver evidence remains valid; it alone did not cover this wrapper defect.
 
+4. **Interrupted AMS reconciliation.** A real injected holder-write failure previously left the election resolved and swallowed the error. The resolver now returns that race to completed status, propagates the failure and retries reconciliation from its finalized direct tally. A separate 12-resolution AMS replay passes after the interruption, with complete direct/list receipts and stable repeat resolution.
+
 The fixes do not change election weights, thresholds or seat-allocation formulas. Schema additions are optional receipts; existing worlds need no data rewrite and legacy reports must treat absent receipts as unknown.
 
 ## Verification and performance
 
-63 focused tests pass across general resolution, AMS and holder reconciliation. Scoped ESLint and Prettier pass. Full repository CI remains an independent merge gate.
+104 focused tests pass across general resolution, AMS, Landtag, holder reconciliation and changelog validation. Scoped ESLint and Prettier pass. Full repository CI remains an independent merge gate.
 
-A matching two-party NPP AMS fixture measured 51 Mongo commands and 8,409 returned BSON bytes before, versus 60 commands and 9,459 bytes after. The added holder queries and writes are batched rather than per holder. This measures one reconciliation, not a worldwide phase or full-load budget pass.
+A matching two-party NPP AMS fixture measured 51 Mongo commands and 8,409 returned BSON bytes before, versus 60 commands and 9,857 bytes after. The added holder queries and writes are batched rather than per holder. This measures one reconciliation, not a worldwide phase or full-load budget pass.
 
 ## Remaining acceptance
 
-#2124 and #2161 remain open. This report does not claim full vote generation or player-presence weighting, all active-world candidate invariants, overlapping upper/lower candidate scheduling, a frozen release manifest or the standing per-family turnover report. The standing report must distinguish holder replacement, party seat changes, unique control changes, tied control, retention and player/NPP outcomes; this controlled matrix is not a natural-world turnover-rate estimate.
+#2124 and #2161 remain open pending qualification on the selected release SHA and immutable configuration. The standing per-family report is delivered separately in #2620. It distinguishes holder replacement, party seat changes, unique control changes, tied control, retention and player/NPP outcomes; this controlled matrix is not a natural-world turnover-rate estimate.
+
+The child issues explicitly request deterministic scripted-vote fixtures. Full campaign accumulation, active-world candidate validity and overlapping upper/lower candidacy scheduling remain separate #2159 requirements; they are not added as new child acceptance gates here. This report does not claim those whole-world requirements or a frozen release manifest.
