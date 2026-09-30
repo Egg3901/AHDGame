@@ -35,7 +35,10 @@ export interface FederationSettlementIntentRecord {
 export interface LiveSettlementSnapshot {
   payload: Record<string, unknown>;
   payloadHash: string;
+  activationPlan: Awaited<ReturnType<typeof planLiveSuccessionActivation>>;
+  residencePlans: ReturnType<typeof planSuccessionResidency>;
   privateFirmPlans: ReturnType<typeof planPrivateFirmSuccession>;
+  fiscalShares: ReturnType<typeof planSuccessionFiscalShares>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -126,7 +129,14 @@ export async function buildLiveFederationSettlementSnapshot(input: {
     privateFirmPlans,
     fiscalShares,
   }) as Record<string, unknown>;
-  return { payload, payloadHash: hashSettlementPayload(payload), privateFirmPlans };
+  return {
+    payload,
+    payloadHash: hashSettlementPayload(payload),
+    activationPlan: plan,
+    residencePlans,
+    privateFirmPlans,
+    fiscalShares,
+  };
 }
 
 /** A settlement application must call this with the same Mongo session used
@@ -137,7 +147,7 @@ export async function verifyLiveFederationSettlementIntent(input: {
   sourceCountryId: CountryId;
   appliedOnTurn: number;
   session?: ClientSession;
-}): Promise<FederationSettlementIntentRecord> {
+}): Promise<{ intent: FederationSettlementIntentRecord; snapshot: LiveSettlementSnapshot }> {
   const { db, intentId, sourceCountryId, appliedOnTurn, session } = input;
   const intent = await db
     .collection<FederationSettlementIntentRecord>(FEDERATION_SETTLEMENT_INTENTS_COLLECTION)
@@ -184,7 +194,7 @@ export async function verifyLiveFederationSettlementIntent(input: {
   });
   if (fresh.payloadHash !== intent.payloadHash)
     throw new Error("Federation source changed since settlement approval");
-  return intent;
+  return { intent, snapshot: fresh };
 }
 
 /** Freeze an approved, live-derived settlement as a contingent intent. This

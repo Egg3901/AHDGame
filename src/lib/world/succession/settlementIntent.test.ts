@@ -207,7 +207,13 @@ describe("live federation settlement intent", () => {
         sourceCountryId: "RU",
         appliedOnTurn: 97,
       });
-    await expect(verify()).resolves.toEqual(intent);
+    const verified = await verify();
+    expect(verified.intent).toEqual(intent);
+    expect(verified.snapshot.payloadHash).toBe(intent.payloadHash);
+    expect(verified.snapshot.activationPlan.successorEntities[0].status).toBe("sovereign");
+    expect(verified.snapshot.residencePlans[0].status).toBe("pending-choice");
+    expect(verified.snapshot.privateFirmPlans[0].status).toBe("pending-headquarters");
+    expect(verified.snapshot.fiscalShares).toHaveLength(2);
     await expect(
       verifyLiveFederationSettlementIntent({
         db: args.db,
