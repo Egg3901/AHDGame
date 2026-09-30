@@ -12,6 +12,10 @@ import { bgRegions1991 } from "@/lib/countries/bg/data/bgRegions1991";
  * https://api.worldbank.org/v2/country/RUS;POL;HUN;ROU;BGR/indicator/SP.POP.TOTL?date=2019&format=json
  * https://api.worldbank.org/v2/country/RUS;POL;HUN;ROU;BGR/indicator/NY.GDP.MKTP.CN?date=2019&format=json
  *
+ * Bulgaria's GDP uses Eurostat's 2019 BGN 120,395 million national-account
+ * total; the previously transcribed 61,194 million figure was euro-scale and
+ * would halve every lev-denominated regional and fiscal amount.
+ * https://ec.europa.eu/eurostat/documents/2995521/11563331/2-21102021-AP-EN.pdf/257365fa-8a66-cab8-f60c-06ca9c916a7a
  * The project has game macroregions, not official 2019 GDP series for each.
  * Their within-country shares use the nearest existing democratic region
  * layout and are rescaled to these observed national totals. These shares are
@@ -22,7 +26,7 @@ export const MODERN_2019_NATIONALS = {
   PL: { population: 37_965_475, gdp: 2_313_929_000_000 },
   HU: { population: 9_694_824, gdp: 47_940_496_000_000 },
   RO: { population: 19_371_648, gdp: 1_059_822_100_000 },
-  BG: { population: 6_616_726, gdp: 61_194_422_000 },
+  BG: { population: 6_616_726, gdp: 120_395_000_000 },
 } as const;
 
 export type Modern2019CountryId = keyof typeof MODERN_2019_NATIONALS;
@@ -56,14 +60,28 @@ function allocate(total: number, weights: number[]): number[] {
 export function modernRegions2019(countryId: Modern2019CountryId): State[] {
   const base = BASE_REGIONS[countryId];
   const national = MODERN_2019_NATIONALS[countryId];
-  const population = allocate(national.population, base.map((region) => region.population ?? 0));
+  const population = allocate(
+    national.population,
+    base.map((region) => region.population ?? 0)
+  );
   const gdpMillions = allocate(
     Math.round(national.gdp / 1_000_000),
     base.map((region) => region.gdp ?? 0)
   );
-  const houseSeats = countryId === "RU" ? 450 : countryId === "PL" ? 460 : countryId === "HU" ? 199 : countryId === "RO" ? 329 : 240;
+  const houseSeats =
+    countryId === "RU"
+      ? 450
+      : countryId === "PL"
+        ? 460
+        : countryId === "HU"
+          ? 199
+          : countryId === "RO"
+            ? 329
+            : 240;
   const senateSeats = countryId === "PL" ? 100 : countryId === "RO" ? 136 : 0;
-  const weights = Object.fromEntries(base.map((region, index) => [String(region._id), population[index]!]));
+  const weights = Object.fromEntries(
+    base.map((region, index) => [String(region._id), population[index]!])
+  );
   const house = apportionSeats(houseSeats, weights);
   const senate = senateSeats > 0 ? apportionSeats(senateSeats, weights) : {};
   return base.map((region, index) => ({

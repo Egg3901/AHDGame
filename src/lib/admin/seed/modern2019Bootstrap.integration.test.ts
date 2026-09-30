@@ -21,9 +21,23 @@ it("builds the five 2019 transition countries before region-derived stages", asy
     expect(await db.collection("stateDemographics").countDocuments({ countryId })).toBe(
       regionCount
     );
-    expect(await db.collection("politicalParties").countDocuments({ countryId })).toBeGreaterThan(0);
+    expect(await db.collection("politicalParties").countDocuments({ countryId })).toBeGreaterThan(
+      0
+    );
     expect(await db.collection("unownedSectors").countDocuments({ countryId })).toBeGreaterThan(0);
+    expect(await db.collection("federalBudget").countDocuments({ countryId })).toBe(1);
+    expect(await db.collection("stateBudgets").countDocuments({ countryId })).toBe(regionCount);
   }
+  expect(
+    await db
+      .collection("corporations")
+      .findOne({ countryOwnerId: "RU", isPrimaryNationalCorporation: true })
+  ).toMatchObject({ name: "Russian Federation", liquidCurrencyCode: "RUB" });
+  expect(
+    await db
+      .collection("corporateSectors")
+      .countDocuments({ countryId: "RU", corporationId: { $exists: true } })
+  ).toBe(0);
   const { runConformanceChecks } = await import("@/lib/admin/seedDiagnostic/conformance");
   const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
   const critical = checks.filter((check) => check.severity === "critical");

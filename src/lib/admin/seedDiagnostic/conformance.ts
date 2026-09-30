@@ -42,6 +42,7 @@ import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTi
 import {
   COUNTRY_CURRENCY_MAP,
   getInitialRates,
+  getSeedCurrencyCode,
   type CurrencyCode,
 } from "@/lib/constants/currencies";
 import {
@@ -661,7 +662,7 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
     const expectedCurrency = currencyForCountryAtYear(
       countryId,
       year,
-      COUNTRY_CURRENCY_MAP[countryId]
+      getSeedCurrencyCode(countryId, expect.preset)
     );
     const expectedRate =
       expectedCurrency === "EUR" ? expect.forexRates.DE : expect.forexRates[countryId];
