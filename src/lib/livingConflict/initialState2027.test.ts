@@ -95,13 +95,17 @@ describe("fresh 2027 crisis opening", () => {
     const db = createMockDb();
     const live = new Map<string, LivingConflictState>();
     const collection = db.collection("livingConflicts");
-    collection.findOne.mockImplementation(async (filter) => live.get(filter.defKey));
-    collection.updateOne.mockImplementation(async (filter, update) => {
-      live.set(filter.defKey, {
-        ...live.get(filter.defKey),
-        ...update.$set,
-      } as LivingConflictState);
-    });
+    collection.findOne.mockImplementation(async (filter: { defKey: string }) =>
+      live.get(filter.defKey)
+    );
+    collection.updateOne.mockImplementation(
+      async (filter: { defKey: string }, update: { $set: LivingConflictState }) => {
+        live.set(filter.defKey, {
+          ...live.get(filter.defKey),
+          ...update.$set,
+        } as LivingConflictState);
+      }
+    );
     live.set(def.key, build2027ConflictOpening(def, context));
     const absent = await driveConflictTurn(
       db as unknown as Db,
@@ -135,13 +139,17 @@ describe("fresh 2027 crisis opening", () => {
     const db = createMockDb();
     const stored = new Map<string, LivingConflictState>();
     const collection = db.collection("livingConflicts");
-    collection.findOne.mockImplementation(async (filter) => stored.get(filter.defKey));
-    collection.updateOne.mockImplementation(async (filter, update) => {
-      stored.set(filter.defKey, {
-        ...stored.get(filter.defKey),
-        ...update.$set,
-      } as LivingConflictState);
-    });
+    collection.findOne.mockImplementation(async (filter: { defKey: string }) =>
+      stored.get(filter.defKey)
+    );
+    collection.updateOne.mockImplementation(
+      async (filter: { defKey: string }, update: { $set: LivingConflictState }) => {
+        stored.set(filter.defKey, {
+          ...stored.get(filter.defKey),
+          ...update.$set,
+        } as LivingConflictState);
+      }
+    );
     for (const def of allLivingConflictDefs().filter((item) =>
       AUTHORED_2027_FAMILIES.includes(item.key)
     )) {
