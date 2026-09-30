@@ -499,6 +499,9 @@ const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  { name: "financialCrisisFiscalActions", category: "runtime" },
+  { name: "financialCrisisCreditHistory", category: "runtime" },
+  { name: "bankMoneyMoves", category: "runtime" },
   {
     name: "savingsAccounts",
     category: "runtime",
