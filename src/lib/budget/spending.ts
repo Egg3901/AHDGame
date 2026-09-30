@@ -6,6 +6,11 @@
  * performs same-currency arithmetic only; cross-country aggregation does not
  * happen here. No FX conversion is required.
  */
+import { loadTerrorismSignal } from "@/lib/livingConflict/terrorismSignal";
+import {
+  terrorismAnnualCost,
+  TERRORISM_SPENDING_KEY,
+} from "@/lib/livingConflict/rules/transnationalTerrorism";
 import { usesUKDevolution } from "@/lib/countries/uk/devolution/rules";
 import { loadNorthernIrelandSignal } from "@/lib/countries/uk/northernIreland/service";
 import {
@@ -337,6 +342,14 @@ export async function calculateFederalSpending(
       );
     }
   }
+
+  const terrorism = await loadTerrorismSignal(db);
+  const terrorismCost = terrorismAnnualCost(
+    terrorism,
+    budgetCountryId,
+    budget.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : budget.gdp
+  );
+  if (terrorismCost > 0) byCategory[TERRORISM_SPENDING_KEY] = terrorismCost;
 
   return normalizeFederalSpending({
     byCategory,

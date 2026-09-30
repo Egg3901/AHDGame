@@ -5,6 +5,15 @@ import {
   normalizeConflictState,
   scheduledPressureDeltas,
 } from "./engine";
+import {
+  terrorismOutcomeId,
+  terrorismOptionRefusal,
+  terrorismAnnualCost,
+  terrorismEmergencyPowers,
+  terrorismPoliticalEffects,
+  terrorismAttackOutcome,
+} from "./rules/transnationalTerrorism";
+import { emptyCountryMemory } from "./campaign";
 import { TRANSNATIONAL_TERRORISM_DEF } from "./defs/transnationalTerrorism";
 
 function stateAt(phaseKey: string, tracks: Record<string, number> = {}) {
@@ -67,7 +76,7 @@ describe("transnational terrorism living conflict", () => {
     );
     const result = evaluateConflictTransitions(TRANSNATIONAL_TERRORISM_DEF, warning, 2004);
 
-    expect(result.appliedTransitionKey).toBe("major_attack");
+    expect(result.appliedTransitionKey).toBeNull();
     expect(result.state.phaseLevel).toBe(3);
   });
 
@@ -106,5 +115,96 @@ describe("transnational terrorism living conflict", () => {
     expect(normalized.state.status).toBe("settled");
     expect(relapse.appliedTransitionKey).toBe("renewed_threat");
     expect(relapse.state.status).toBe("active");
+  });
+});
+
+describe("counterterrorism response rules", () => {
+  it("keeps an immature plot unresolved without manufacturing an attack", () => {
+    expect(terrorismOutcomeId(stateAt("network_formation"), {})).toBe("threat_persists");
+    expect(terrorismOutcomeId(stateAt("normalization", { plotReadiness: 20 }), {})).toBe(
+      "threat_persists"
+    );
+  });
+  it("distinguishes limited and catastrophic breakthroughs from actual coverage", () => {
+    expect(
+      terrorismOutcomeId(
+        stateAt("warning", { plotReadiness: 75, intelligenceCoverage: 50, threatCapability: 70 }),
+        {}
+      )
+    ).toBe("limited_attack");
+    expect(
+      terrorismOutcomeId(
+        stateAt("warning", { plotReadiness: 75, intelligenceCoverage: 20, threatCapability: 70 }),
+        {}
+      )
+    ).toBe("attack_breakthrough");
+    expect(
+      terrorismOutcomeId(stateAt("warning", { plotReadiness: 90, intelligenceCoverage: 100 }), {})
+    ).toBe("limited_attack");
+  });
+  it("lets active cooperation disrupt a ready plot and civilian policing degrade it", () => {
+    const state = stateAt("warning", { plotReadiness: 90 });
+    expect(terrorismOutcomeId(state, { intelligence: 8, policing: 5 })).toBe("plot_disrupted");
+    expect(terrorismOutcomeId(state, { policing: 7, restraint: 3 })).toBe("policing_campaign");
+  });
+  it("gates military response and resolution on attribution", () => {
+    const option =
+      TRANSNATIONAL_TERRORISM_DEF.phases[0].events[0].response!.decisionTrees.belligerent!.options!.find(
+        (o) => o.optionId === "military_response"
+      )!;
+    expect(
+      terrorismOptionRefusal(stateAt("major_attack", { attributionConfidence: 44 }), option)
+    ).toContain("45");
+    expect(
+      terrorismOptionRefusal(stateAt("major_attack", { attributionConfidence: 45 }), option)
+    ).toBeNull();
+    expect(
+      terrorismOutcomeId(stateAt("major_attack", { attributionConfidence: 44 }), {
+        intervention: 20,
+        alliance: 20,
+      })
+    ).toBe("threat_persists");
+  });
+  it("charges only independently committed countries and keeps emergency authority until repeal", () => {
+    const state = stateAt("military_campaign", { "emergencyPowers:US": 40, insurgency: 80 });
+    state.campaign!.countryMemory.US = { ...emptyCountryMemory(), militaryCommitment: 30 };
+    expect(terrorismAnnualCost(state, "US", 1_000_000)).toBe(3800);
+    expect(terrorismAnnualCost(state, "DE", 1_000_000)).toBe(0);
+    expect(terrorismPoliticalEffects(state, "US")["order.dueProcess"]).toBe(-3.2);
+    expect(terrorismPoliticalEffects(state, "DE")).toEqual({});
+    expect(terrorismEmergencyPowers(40, "defer_response")).toBe(40);
+    expect(terrorismEmergencyPowers(40, "restore_law")).toBe(15);
+  });
+  it("displaces harm toward less prepared participating governments", () => {
+    expect(
+      terrorismAttackOutcome(outcome("limited_attack"), ["US", "UK"], { US: 7, UK: 0 }).target
+    ).toBe("UK");
+    expect(
+      terrorismAttackOutcome(outcome("limited_attack"), ["US", "UK"], { US: 0, UK: 7 }).target
+    ).toBe("US");
+  });
+  it("drawdown reduces insurgency and weariness rather than locking intervention at maximum", () => {
+    const state = applyConflictOutcome(
+      TRANSNATIONAL_TERRORISM_DEF,
+      stateAt("insurgency", { insurgency: 90, warWeariness: 80, interventionCommitment: 90 }),
+      outcome("drawdown")
+    );
+    expect(state.tracks).toMatchObject({
+      insurgency: 78,
+      warWeariness: 72,
+      interventionCommitment: 75,
+    });
+  });
+  it("silent governments add no free cooperation or military commitment", () => {
+    const response = TRANSNATIONAL_TERRORISM_DEF.phases[0].events[0].response!;
+    for (const [role, node] of Object.entries(response.decisionTrees)) {
+      const option = node!.options!.find(
+        (o) =>
+          o.optionId ===
+          response.defaultOptionIdByRole[role as keyof typeof response.defaultOptionIdByRole]
+      );
+      expect(option?.responseScores).toEqual({});
+      expect(option?.campaignCommitment?.scale).toBe(0);
+    }
   });
 });
