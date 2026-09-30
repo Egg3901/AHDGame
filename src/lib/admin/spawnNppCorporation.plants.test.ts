@@ -268,7 +268,7 @@ describe("spawnNppCorporation — plants", () => {
       })
     ).rejects.toThrow("No unowned manufacturing capacity remains");
     const grantedUnits = db.collectionMocks.corporateSectors!.insertOne.mock.calls.reduce(
-      (sum: number, [sector]: [{ capitalStock: number }]) => sum + sector.capitalStock,
+      (sum: number, call) => sum + (call[0] as { capitalStock: number }).capitalStock,
       0
     );
     expect(grantedUnits).toBeCloseTo(initialUnits, 6);
