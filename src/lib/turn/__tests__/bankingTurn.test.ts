@@ -400,12 +400,10 @@ describe("processBankingTurn", () => {
         characterState.holder = value;
       },
     });
-    persisted
-      .collection("characters")
-      .docs.push({
-        _id: characterState._id,
-        currencyBalances: { savings, personal, savingsHolder: holder },
-      });
+    persisted.collection("characters").docs.push({
+      _id: characterState._id,
+      currencyBalances: { savings, personal, savingsHolder: holder },
+    });
     for (const name of ["bankMoneyMoves", "financialTxLog"]) {
       db.collection(name);
       const backing = persisted.collection(name);
