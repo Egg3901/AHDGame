@@ -29,6 +29,8 @@ export type ResetRunStatus = "succeeded" | "partial" | "failed";
 export interface ResetRunRecord {
   runId: string;
   failures: ResetRunFailure[];
+  /** Record an observed readiness failure without aborting completed seeding. */
+  recordFailure(phase: string, name: string, error: unknown): void;
   /**
    * Run `fn`, containing any throw. Returns `null` instead of throwing, so a
    * recoverable seeder cannot abort a reset that is otherwise fine.
@@ -55,18 +57,22 @@ export interface ResetRunRecord {
  */
 export function createResetRunRecord(log?: (msg: string) => void): ResetRunRecord {
   const failures: ResetRunFailure[] = [];
+  const recordFailure = (phase: string, name: string, error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    failures.push({ phase, name, error: message });
+    log?.(`⚠ ${phase}/${name} FAILED and was contained: ${message}`);
+  };
   return {
     // Not timestamp-derived: two resets may legitimately start in the same
     // second, and the concurrency lock (B1) was declined.
     runId: new ObjectId().toHexString(),
     failures,
+    recordFailure,
     async step<T>(phase: string, name: string, fn: () => Promise<T>): Promise<T | null> {
       try {
         return await fn();
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        failures.push({ phase, name, error: message });
-        log?.(`⚠ ${phase}/${name} FAILED and was contained: ${message}`);
+        recordFailure(phase, name, error);
         return null;
       }
     },

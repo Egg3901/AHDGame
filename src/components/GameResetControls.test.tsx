@@ -25,11 +25,13 @@ const presets = [
     countries: [],
   },
 ];
+let doneData: Record<string, unknown> = {};
 const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
 
 describe("1991 no starting parties picker", () => {
   beforeEach(() => {
     requests.length = 0;
+    doneData = { details: {} };
     vi.stubGlobal(
       "confirm",
       vi.fn(() => true)
@@ -43,7 +45,7 @@ describe("1991 no starting parties picker", () => {
       vi.fn(async (url: string, init?: RequestInit) => {
         if (init?.method === "POST") {
           requests.push({ url, body: JSON.parse(String(init.body)) });
-          return new Response('data: {"type":"done","data":{"details":{}}}\n\n', {
+          return new Response(`data: ${JSON.stringify({ type: "done", data: doneData })}\n\n`, {
             headers: { "content-type": "text/event-stream" },
           });
         }
@@ -97,5 +99,21 @@ describe("1991 no starting parties picker", () => {
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain("preset=2019-no-parties");
     expect(requests[0].body.startingParties).toBeUndefined();
+  });
+  it("shows blocked readiness and critical checks instead of a green completion message", async () => {
+    doneData = {
+      resetStatus: "partial",
+      readiness: {
+        status: "blocked",
+        baselineCaptured: false,
+        criticalChecks: [{ id: "partyRoster.RU", metric: "parties", note: "missing roster" }],
+      },
+    };
+    await pick1991();
+    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical" }));
+    const message = await screen.findByText(/Reset completed with blocked readiness/);
+    expect(message.textContent).toContain("partyRoster.RU: missing roster");
+    expect(message.className).toContain("text-red-400");
+    expect(message.textContent).toContain("Maintenance remains enabled");
   });
 });
