@@ -343,14 +343,18 @@ export function decideSavingsCommand(
           "The account's holder changed. Reload and try again."
         );
       }
-      const amount = positive(command.amount);
-      if (amount === null) return refuse({ code: "invalid_amount" }, "Invalid amount");
-      if (amount > account.balance + 1e-9) {
+      const requested = positive(command.amount);
+      if (requested === null) return refuse({ code: "invalid_amount" }, "Invalid amount");
+      if (requested > account.balance + 1e-9) {
         return refuse(
           { code: "insufficient_funds", available: account.balance },
           "Insufficient savings balance"
         );
       }
+      // Tolerate representational dust in the request, but never settle more
+      // than the actual claim. Every cash leg and liability uses this amount.
+      const amount = Math.min(requested, Math.max(0, account.balance));
+      if (amount === 0) return refuse({ code: "invalid_amount" }, "Invalid amount");
       if (isBankHolder(account.holder) && amount > command.holder.cash + 1e-9) {
         return refuse(
           { code: "holder_cannot_pay", available: Math.max(0, command.holder.cash) },
@@ -530,6 +534,12 @@ export function decideSavingsCommand(
     }
 
     case "credit_interest": {
+      if (account.status !== "open") {
+        return refuse(
+          { code: "account_status", status: account.status },
+          "This savings account cannot receive interest right now."
+        );
+      }
       const amount = account.accruedInterest;
       if (!(amount > 0)) return refuse({ code: "invalid_amount" }, "nothing accrued");
       if (command.holder.holder !== account.holder) {
