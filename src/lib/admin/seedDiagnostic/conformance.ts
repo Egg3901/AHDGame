@@ -789,7 +789,7 @@ export async function checkSectors(
   const config = await db
     .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
     .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
-  const budgetYears = new Map(
+  const budgetYears = new Map<string, number>(
     getNationalBudgetSeedConfigsForPreset(expect.preset).map((budget) => [
       budget.countryId,
       budget.fiscalYear,

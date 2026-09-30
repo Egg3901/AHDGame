@@ -41,7 +41,11 @@ function fixture(missingRuSoe = false): Db {
         return false;
       if ("corporationId" in filter) {
         const ids = (filter.corporationId as { $in: ObjectId[] }).$in;
-        return "corporationId" in row && ids.some((id) => id.equals(row.corporationId));
+        return (
+          "corporationId" in row &&
+          row.corporationId instanceof ObjectId &&
+          ids.some((id) => id.equals(row.corporationId))
+        );
       }
       return true;
     });
