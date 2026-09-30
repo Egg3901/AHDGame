@@ -60,10 +60,11 @@ export async function qualifyTreasuryPanel(db: Db, page: Page, base: string) {
     const response = await page.context().request.get(`${base}${path}`, { timeout: 180000 });
     assert(response.status() < 500, path);
   }
-  await page.goto(`${base}/country/us/executive/cabinet/secretary_of_treasury/office#treasury`, {
+  await page.goto(`${base}/country/us/executive/cabinet/secretary_of_treasury/office#flagship`, {
     waitUntil: "domcontentloaded",
     timeout: 300000,
   });
+  await page.getByRole("button", { name: "Debt & FX", exact: true }).click({ timeout: 180000 });
   const panel = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "FX Reserve Transfer", exact: true }) });

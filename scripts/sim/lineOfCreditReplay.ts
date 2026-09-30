@@ -119,7 +119,19 @@ function failAfter(db: Db, collection: string) {
                 if (prop === "updateOne")
                   return async (...args: Parameters<typeof coll.updateOne>) => {
                     const result = await coll.updateOne(...args);
-                    if (!fired) {
+                    const update = args[1];
+                    const increments =
+                      !Array.isArray(update) && "$inc" in update ? update.$inc : undefined;
+                    const valuePublication =
+                      collection === "characters"
+                        ? increments &&
+                          Object.keys(increments).some((path) =>
+                            path.startsWith("currencyBalances.")
+                          )
+                        : collection === "centralBanks"
+                          ? !!increments?.reserveBalance
+                          : true;
+                    if (!fired && valuePublication) {
                       fired = true;
                       throw new Error("Injected acknowledgement loss");
                     }

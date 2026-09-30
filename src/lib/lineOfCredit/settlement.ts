@@ -6,7 +6,7 @@ import type { Character } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { MONEY_MOVE_COLLECTION, SETTLED_KEYS_CAP } from "@/lib/banking/moneyMove";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import type { SettlementResult } from "@/lib/banking/settlementJournal";
 import type { LocLedgerEntry } from "@/lib/db/types/locLedger";
 import type { TxInput } from "@/lib/financialTxLog/emit";
@@ -15,6 +15,7 @@ import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
 import { checkBalancedTransfer, type ValueLeg } from "@/lib/banking/rules/invariants";
+import { publishLocTarget } from "./targetPublication";
 import { prepareServiceEffect } from "./serviceSettlement";
 import {
   acquireLocBookAdmission,
@@ -137,6 +138,7 @@ export async function settleLocPlan(db: Db, key: string, turn: number, plan: Loc
         turn,
         status: "partial",
         locSettlement: plan,
+        locSettlementVersion: 2,
         legs: plan.effect.flows.map((flow) => ({ ...flow, applied: false })),
         createdAt: plan.createdAt,
       });
@@ -184,87 +186,79 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
   }
   const plan = record.locSettlement,
     receipt = `${key}:character`;
-  const chars = db.collection<
-    Character & { lineOfCreditRevision?: number; settledKeys?: string[] }
-  >("characters");
   await acquireLocBookAdmission(db, key, plan);
   const reject = async (error: string) => {
-    await journal.updateOne({ _id: key }, { $set: { locAdmissionRejected: error } });
+    await journal.updateOne(
+      { _id: key, status: "partial" },
+      { $set: { locAdmissionRejected: error } }
+    );
     await releaseLocBookAdmission(db, key, plan);
-    await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
+    await journal.updateOne(
+      { _id: key, status: "partial" },
+      { $set: { status: "rejected", error } }
+    );
     return { ...result, error };
   };
   if (record.locAdmissionRejected) return reject(record.locAdmissionRejected);
-  let delivered = !!(await chars.findOne(
-    { _id: plan.characterId, settledKeys: receipt },
-    { projection: { _id: 1 } }
-  ));
-  if (!delivered) {
-    if (plan.drawAdmission) {
-      let decision = (await loadLocSettlement(db, key))?.locAdmissionDecision;
-      if (!decision) {
-        const error = await validateLocDrawAdmission(db, plan);
-        await journal.updateOne(
-          { _id: key, locAdmissionDecision: { $exists: false } },
-          { $set: { locAdmissionDecision: { error } } }
-        );
-        decision = (await loadLocSettlement(db, key))?.locAdmissionDecision;
-      }
-      if (!decision) throw new Error("Credit admission decision remains pending");
-      if (decision.error) return reject(decision.error);
+  if (plan.drawAdmission) {
+    let decision = (await loadLocSettlement(db, key))?.locAdmissionDecision;
+    if (!decision) {
+      const error = await validateLocDrawAdmission(db, plan);
+      await journal.updateOne(
+        { _id: key, locAdmissionDecision: { $exists: false } },
+        { $set: { locAdmissionDecision: { error } } }
+      );
+      decision = (await loadLocSettlement(db, key))?.locAdmissionDecision;
     }
-    const guard: Record<string, unknown> = { _id: plan.characterId, settledKeys: { $ne: receipt } };
-    if (plan.expectedLoc !== undefined) {
-      guard.lineOfCredit = plan.expectedLoc;
-      guard.lineOfCreditRevision = plan.expectedRevision ?? { $exists: false };
-    }
-    for (const [path, delta] of Object.entries(plan.effect.walletInc))
-      if (delta < 0) guard[path] = { $gte: -delta };
-    const write = await chars.updateOne(guard, {
-      $inc: {
-        ...plan.effect.walletInc,
-        ...(plan.effect.locAfter ? { lineOfCreditRevision: 1 } : {}),
-      },
-      $set: {
-        ...(plan.effect.locAfter ? { lineOfCredit: plan.effect.locAfter } : {}),
-        updatedAt: plan.createdAt,
-      },
-      $push: { settledKeys: { $each: [receipt], $slice: -SETTLED_KEYS_CAP } },
-    });
-    delivered =
-      write.matchedCount === 1 ||
-      !!(await chars.findOne(
-        { _id: plan.characterId, settledKeys: receipt },
-        { projection: { _id: 1 } }
-      ));
-    if (!delivered) {
-      const error = "Your line of credit or wallet changed before credit settlement";
-      return reject(error);
-    }
+    if (!decision) throw new Error("Credit admission decision remains pending");
+    if (decision.error) return reject(decision.error);
   }
+  const guard: Document = {};
+  if (plan.expectedLoc !== undefined) {
+    guard.lineOfCredit = plan.expectedLoc;
+    guard.lineOfCreditRevision = plan.expectedRevision ?? { $exists: false };
+  }
+  for (const [path, delta] of Object.entries(plan.effect.walletInc))
+    if (delta < 0) guard[path] = { $gte: -delta };
+  const published = await publishLocTarget(db, key, {
+    token: "character",
+    collection: "characters",
+    id: plan.characterId,
+    revision: "locSettlementRevision",
+    marker: "pendingLocSettlement",
+    guard,
+    increments: {
+      ...plan.effect.walletInc,
+      ...(plan.effect.locAfter ? { lineOfCreditRevision: 1 } : {}),
+    },
+    set: {
+      ...(plan.effect.locAfter ? { lineOfCredit: plan.effect.locAfter } : {}),
+      updatedAt: plan.createdAt,
+    },
+    receipt,
+  });
+  if (published.status === "rejected") return reject(published.error!);
   for (const [i, credit] of plan.effect.reserves.entries()) {
-    const stamp = `${key}:reserve:${i}`;
-    const banks = db.collection<{ _id: string; settledKeys?: string[] }>("centralBanks");
     if (credit.createIfMissing)
-      await banks.updateOne(
-        { _id: credit.bankId },
-        { $setOnInsert: { _id: credit.bankId } },
-        { upsert: true }
-      );
-    const write = await banks.updateOne(
-      { _id: credit.bankId, settledKeys: { $ne: stamp } },
-      {
-        $inc: credit.increments,
-        $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
-      }
-    );
-    if (
-      write.matchedCount !== 1 &&
-      !(await banks.findOne({ _id: credit.bankId, settledKeys: stamp }))
-    )
-      throw new Error(
-        "LOC interest reserve destination is unavailable; settlement remains pending"
-      );
+      await db
+        .collection("centralBanks")
+        .updateOne(
+          { _id: credit.bankId as never },
+          { $setOnInsert: { _id: credit.bankId as never } },
+          { upsert: true }
+        );
+    const reserve = await publishLocTarget(db, key, {
+      token: `reserve${i}`,
+      collection: "centralBanks",
+      id: credit.bankId,
+      revision: "locReserveCreditRevision",
+      marker: "pendingLocReserveCredit",
+      guard: {},
+      increments: credit.increments,
+      set: {},
+      receipt: `${key}:reserve:${i}`,
+    });
+    if (reserve.status !== "delivered") throw new Error("LOC reserve credit remains pending");
   }
   for (const row of plan.records ?? []) {
     const target = db.collection(row.collection);
@@ -324,19 +318,49 @@ export function locInterestCredits(amounts: Partial<Record<CurrencyCode, number>
 /** Prioritize durable bank owners, then the indexed queue, within one fixed budget. */
 export async function recoverPendingLoc(db: Db, turn: number) {
   const journal = db.collection<LocRecord>(MONEY_MOVE_COLLECTION);
-  const owners = await db
-    .collection<{ _id: string; pendingLocBookMutationId?: string }>("centralBanks")
-    .find(
-      { pendingLocBookMutationId: { $exists: true } },
-      { projection: { pendingLocBookMutationId: 1 } }
-    )
-    .limit(50)
-    .toArray();
+  const [banks, characters] = await Promise.all([
+    db
+      .collection<{
+        _id: string;
+        pendingLocBookMutationId?: string;
+        pendingLocReserveCredit?: { key: string };
+      }>("centralBanks")
+      .find(
+        {
+          $or: [
+            { pendingLocBookMutationId: { $exists: true } },
+            { pendingLocReserveCredit: { $exists: true } },
+          ],
+        },
+        { projection: { pendingLocBookMutationId: 1, "pendingLocReserveCredit.key": 1 } }
+      )
+      .limit(50)
+      .toArray(),
+    db
+      .collection("characters")
+      .find(
+        { "pendingLocSettlement.key": { $exists: true } },
+        { projection: { "pendingLocSettlement.key": 1 } }
+      )
+      .limit(50)
+      .toArray(),
+  ]);
+  const owners = [
+    ...new Set(
+      [
+        ...banks.flatMap((bank) => [
+          bank.pendingLocBookMutationId,
+          bank.pendingLocReserveCredit?.key,
+        ]),
+        ...characters.map((character) => character.pendingLocSettlement?.key as string | undefined),
+      ].filter((key): key is string => typeof key === "string")
+    ),
+  ];
   const owned = owners.length
     ? await journal
         .find(
           {
-            _id: { $in: owners.map((bank) => bank.pendingLocBookMutationId!) },
+            _id: { $in: owners },
             status: "partial",
             kind: "line_of_credit",
           },

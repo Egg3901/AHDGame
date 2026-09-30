@@ -398,6 +398,15 @@ export interface Character {
   /** Multi-currency LOC — gated by gameConfig.lineOfCreditEnabled */
   /** Monotonic receipt generation for atomic LOC debt and wallet settlements. */
   lineOfCreditRevision?: number;
+  /** Protected LOC cash outcome until its original journal acknowledges delivery. */
+  locSettlementRevision?: number;
+  pendingLocSettlement?: {
+    key: string;
+    token: string;
+    generation: number;
+    status: "claimed" | "delivered" | "rejected";
+    error?: string;
+  };
   lineOfCredit?: LineOfCreditState;
   /**
    * Set when the character joins a party; unset when they leave or go
