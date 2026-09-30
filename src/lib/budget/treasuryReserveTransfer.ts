@@ -244,6 +244,7 @@ async function prepare(db: Db, command: Command): Promise<void> {
           amount: command.amount,
           currency,
         }),
+        currencyCode: currency,
         actor: { kind: command.isAdmin ? "admin" : "player", characterId: command.actorId },
         seq: context?.nextSeq(),
       },

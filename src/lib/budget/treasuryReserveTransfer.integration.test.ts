@@ -109,7 +109,7 @@ describe("treasury reserve settlement", () => {
       let fired = false;
       const fault = vi.spyOn(target, "updateOne").mockImplementation(async (...args) => {
         const result = await original(...args);
-        if (!fired && args[1].$inc) {
+        if (!fired && !Array.isArray(args[1]) && args[1].$inc) {
           fired = true;
           throw new Error("lost cash acknowledgement");
         }
@@ -136,7 +136,7 @@ describe("treasury reserve settlement", () => {
       let fired = false;
       const fault = vi.spyOn(target, "updateOne").mockImplementation(async (...args) => {
         const out = await original(...args);
-        if (!fired && args[1].$inc) {
+        if (!fired && !Array.isArray(args[1]) && args[1].$inc) {
           fired = true;
           throw new Error("lost acknowledgement");
         }
