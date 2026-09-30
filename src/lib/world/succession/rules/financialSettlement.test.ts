@@ -49,6 +49,9 @@ describe("negotiated succession finances", () => {
     expect(plan.cashDeficitResponsibility).toEqual({ CZ2: 67, SK: 34 });
     expect(plan.debtResponsibility).toEqual({ CZ2: 667, SK: 333 });
     expect(plan.financialAssetsMinor).toBe(0);
+    expect(() => planSuccessionFinances({ ...terms, cashDeficitMinor: 1 })).toThrow(
+      "cannot contain cash assets and a cash deficit"
+    );
   });
   it("allows different negotiated asset and debt shares including a zero share", () => {
     const plan = planSuccessionFinances({

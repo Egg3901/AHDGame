@@ -123,6 +123,8 @@ export function planSuccessionFinances(terms: SuccessionFinancialTerms): Success
   const debtWeights = agreedWeights(populations, terms.debtSharesBps);
   const cashDeficitMinor = terms.cashDeficitMinor ?? 0;
   assertWholeAmount(cashDeficitMinor, "Treasury cash deficit");
+  if (cashDeficitMinor > 0 && terms.financialAssetsMinor > 0)
+    throw new Error("One source treasury cannot contain cash assets and a cash deficit");
   return {
     settlementId: terms.settlementId,
     servicingIssuerId: terms.sourceEntityId,
