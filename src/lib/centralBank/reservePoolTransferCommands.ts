@@ -159,6 +159,7 @@ async function prepare(
       pendingLocBookMutationId: { $exists: false },
       forexRevenue: exactField(bank, "forexRevenue"),
       reserveBalance: exactField(bank, "reserveBalance"),
+      nationalSavingsBalance: exactField(bank, "nationalSavingsBalance"),
       lastReservePoolTransferTurn: exactField(bank, "lastReservePoolTransferTurn"),
     },
     transition: {

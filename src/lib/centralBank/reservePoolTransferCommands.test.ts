@@ -105,21 +105,24 @@ describe("journaled reserve-pool commands", () => {
     expect(f.bank().reserveBalance).toBe(800);
     expect(f.memory.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
-  it("refuses a changed liability revision instead of publishing an old reserve quote", async () => {
-    const f = fixture(),
-      commands = f.memory.collection("reservePoolTransferCommands");
-    const original = commands.insertOne.bind(commands);
-    vi.spyOn(commands, "insertOne").mockImplementation(async (...args) => {
-      const result = await original(...args);
-      await f.memory
-        .collection("centralBanks")
-        .updateOne({ _id: "US" }, { $inc: { locBookRevision: 1 } });
-      return result;
-    });
-    await expect(f.run()).rejects.toThrow();
-    expect(f.bank().reserveBalance).toBe(800);
-    expect(f.bank().forexRevenue).toBe(1000);
-  });
+  it.each(["locBookRevision", "nationalSavingsBalance"])(
+    "refuses a changed %s instead of publishing an old reserve quote",
+    async (field) => {
+      const f = fixture(),
+        commands = f.memory.collection("reservePoolTransferCommands");
+      const original = commands.insertOne.bind(commands);
+      vi.spyOn(commands, "insertOne").mockImplementation(async (...args) => {
+        const result = await original(...args);
+        await f.memory
+          .collection("centralBanks")
+          .updateOne({ _id: "US" }, { $inc: { [field]: 1 } });
+        return result;
+      });
+      await expect(f.run()).rejects.toThrow();
+      expect(f.bank().reserveBalance).toBe(800);
+      expect(f.bank().forexRevenue).toBe(1000);
+    }
+  );
   it("recovers audit acknowledgement without repeating cash or actor", async () => {
     const f = fixture(),
       col = f.memory.collection("actionAuditLog"),
