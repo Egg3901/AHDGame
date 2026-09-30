@@ -38,6 +38,18 @@ vi.mock("@/lib/nppAutonomy/autonomousWarCommands", () => ({
   },
 }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn().mockRejectedValue(new Error("no db in test")) }));
+const newsSpy = vi.fn();
+vi.mock("@/lib/news", () => ({
+  createSystemNewsPost: (...a: unknown[]) => {
+    newsSpy(...a);
+    return Promise.resolve();
+  },
+}));
+vi.mock("@/lib/discordWebhooks", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/discordWebhooks")>("@/lib/discordWebhooks");
+  return { DISCORD_COLORS: actual.DISCORD_COLORS, sendNewsEvent: () => Promise.resolve(undefined) };
+});
 
 const notifySpy = vi.fn();
 const orgHistorySpy = vi.fn();
@@ -387,8 +399,18 @@ describe("declareWar treaty defence", () => {
     expect(orgHistorySpy).toHaveBeenCalled();
   });
 
+  it("puts a pact entry at declaration on the World News wire", async () => {
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
+    await declareWar(stubDb(), pactDefender);
+    expect(newsSpy).toHaveBeenCalledTimes(1);
+    const [, , options] = newsSpy.mock.calls[0] as [string, string, { title: string }];
+    expect(options.title).toContain("Warsaw Pact");
+    expect(options.title).toContain("Russia");
+  });
+
   it("sends nothing when no ally was pulled in", async () => {
     await declareWar(stubDb(), input);
     expect(notifySpy).not.toHaveBeenCalled();
+    expect(newsSpy).not.toHaveBeenCalled();
   });
 });

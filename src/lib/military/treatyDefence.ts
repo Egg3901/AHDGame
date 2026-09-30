@@ -164,6 +164,26 @@ export async function loadMutualDefenceContext(db: Db): Promise<MutualDefenceCon
 }
 
 /**
+ * Whether one alliance is bound to defend `defender` against `attackers`: the
+ * defender was a member when the attack began, and no attacker is a member.
+ * Shared by `selectTreatyDefenders` (who marches) and `pactEntryWarnings` (what an
+ * applicant is told), so the warning can never promise a war the engine would not
+ * start, or stay silent about one it would.
+ */
+export function pactFiresFor(params: {
+  pact: Pick<DefencePact, "memberJoinedTurn">;
+  defender: string;
+  attackers: readonly string[];
+  attackedOnTurn?: number;
+}): boolean {
+  const { pact, defender, attackers, attackedOnTurn } = params;
+  const defenderJoined = pact.memberJoinedTurn.get(defender);
+  if (defenderJoined == null) return false;
+  if (attackedOnTurn != null && defenderJoined > attackedOnTurn) return false;
+  return !attackers.some((attacker) => pact.memberJoinedTurn.has(attacker));
+}
+
+/**
  * THE eligibility rule: which countries an attack on `defender` brings in, and under
  * which alliance. Pure, so every rule below is tested without a database; the two
  * checks that need one (truce, and an existing war with an attacker) are applied by
@@ -214,10 +234,7 @@ export function selectTreatyDefenders(params: {
   const out: TreatyDefender[] = [];
   const seen = new Set<string>();
   for (const pact of context.pacts) {
-    const defenderJoined = pact.memberJoinedTurn.get(defender);
-    if (defenderJoined == null) continue;
-    if (attackedOnTurn != null && defenderJoined > attackedOnTurn) continue;
-    if (attackerPacts.includes(pact)) continue;
+    if (!pactFiresFor({ pact, defender, attackers, attackedOnTurn })) continue;
 
     for (const countryId of pact.memberJoinedTurn.keys()) {
       if (excluded.has(countryId) || seen.has(countryId)) continue;
@@ -329,6 +346,119 @@ export function attackedOnTurnOf(
   return latest;
 }
 
+/** One live declared war, seen from the side that was declared on. */
+export interface DeclaredWarFront {
+  conflict: ConflictDoc;
+  /** The host's roster: the side allies join. */
+  side: "A" | "B";
+  /** Host entities on that roster: the members a pact can be called to defend. */
+  hosts: CountryId[];
+  /** The opposing roster, modelled countries only. */
+  attackers: CountryId[];
+  attackedOnTurn: number;
+}
+
+/**
+ * Every live war a declaration opened, with its defended hosts and attackers. The
+ * single scope both the reconciliation and the admission warning read: wars a
+ * declaration opened (`createdBy: "player"`), interstate, not concluded, with the
+ * host on a roster and at least one modelled attacker.
+ */
+export async function loadDeclaredWarFronts(db: Db): Promise<DeclaredWarFront[]> {
+  const conflicts = (await getConflictsCollection(db)
+    .find({
+      createdBy: "player",
+      type: "interstate",
+      status: { $nin: ["resolved", "terms_pending"] },
+    })
+    .toArray()) as ConflictDoc[];
+  const fronts: DeclaredWarFront[] = [];
+  for (const conflict of conflicts) {
+    if (isConflictConcluded(conflict.status)) continue;
+    const side = hostSideOf(conflict);
+    if (!side) continue;
+    const roster = (side === "A" ? conflict.sideA.countries : conflict.sideB.countries) as string[];
+    const attackers = (side === "A" ? conflict.sideB.countries : conflict.sideA.countries).filter(
+      (id): id is CountryId => id in COUNTRY_CONFIGS
+    );
+    if (attackers.length === 0) continue;
+    const hosts = (conflict.hostEntities ?? [conflict.hostCountry]).filter((id): id is CountryId =>
+      roster.includes(id)
+    );
+    if (hosts.length === 0) continue;
+    fronts.push({
+      conflict,
+      side,
+      hosts,
+      attackers,
+      attackedOnTurn: attackedOnTurnOf(conflict, attackers),
+    });
+  }
+  return fronts;
+}
+
+/** A war a binding alliance is defending right now, as an applicant should hear it. */
+export interface PactEntryWarning {
+  organizationId: string;
+  conflictId: string;
+  /** Public number, for the /world/conflicts/<n> link. */
+  conflictNumber?: number;
+  conflictName: string;
+  defendingCountryId: CountryId;
+}
+
+/**
+ * For each binding alliance, the live declared wars in which one of its members is
+ * the declared-on host and the alliance fires (`pactFiresFor`). A country that joins
+ * such an alliance is enrolled in that war by the next reconciliation, so the
+ * application and the admission vote must say so.
+ *
+ * Applicant-agnostic on purpose: the payload is world-wide, and the per-country bars
+ * (truce, a shared bloc or alliance with the attacker) are stated in the copy rather
+ * than computed for every possible applicant.
+ */
+export function pactEntryWarnings(
+  context: Pick<MutualDefenceContext, "pacts">,
+  fronts: DeclaredWarFront[]
+): Map<string, PactEntryWarning[]> {
+  const out = new Map<string, PactEntryWarning[]>();
+  for (const pact of context.pacts) {
+    const warnings: PactEntryWarning[] = [];
+    for (const front of fronts) {
+      for (const defender of front.hosts) {
+        if (
+          !pactFiresFor({
+            pact,
+            defender,
+            attackers: front.attackers,
+            attackedOnTurn: front.attackedOnTurn,
+          })
+        ) {
+          continue;
+        }
+        warnings.push({
+          organizationId: pact.organizationId,
+          conflictId: front.conflict._id,
+          ...(front.conflict.conflictId != null
+            ? { conflictNumber: front.conflict.conflictId }
+            : {}),
+          conflictName: front.conflict.name,
+          defendingCountryId: defender,
+        });
+      }
+    }
+    if (warnings.length > 0) out.set(pact.organizationId, warnings);
+  }
+  return out;
+}
+
+/** Read side of `pactEntryWarnings`: one context read, one conflicts read. */
+export async function loadPactEntryWarnings(db: Db): Promise<Map<string, PactEntryWarning[]>> {
+  const context = await loadMutualDefenceContext(db);
+  if (!context || context.pacts.length === 0) return new Map();
+  return pactEntryWarnings(context, await loadDeclaredWarFronts(db));
+}
+
 export interface MutualDefenceReconcileResult {
   conflictsChecked: number;
   entered: number;
@@ -364,33 +494,14 @@ export async function reconcileMutualDefence(
   const context = await loadMutualDefenceContext(db);
   if (!context || context.pacts.length === 0) return { conflictsChecked: 0, entered: 0 };
 
-  const conflicts = (await getConflictsCollection(db)
-    .find({
-      createdBy: "player",
-      type: "interstate",
-      status: { $nin: ["resolved", "terms_pending"] },
-    })
-    .toArray()) as ConflictDoc[];
+  const fronts = await loadDeclaredWarFronts(db);
 
   let entered = 0;
-  for (const conflict of conflicts) {
-    if (isConflictConcluded(conflict.status)) continue;
-    const side = hostSideOf(conflict);
-    if (!side) continue;
-    const roster = (side === "A" ? conflict.sideA.countries : conflict.sideB.countries) as string[];
-    const attackers = (side === "A" ? conflict.sideB.countries : conflict.sideA.countries).filter(
-      (id): id is CountryId => id in COUNTRY_CONFIGS
-    );
-    if (attackers.length === 0) continue;
-
-    const hosts = (conflict.hostEntities ?? [conflict.hostCountry]).filter((id): id is CountryId =>
-      roster.includes(id)
-    );
+  for (const { conflict, side, hosts, attackers, attackedOnTurn } of fronts) {
     const everIn = new Set<string>([
       ...(conflict.joinTurns ?? []).map((entry) => entry.countryId),
       ...(conflict.treatyEntries ?? []).map((entry) => entry.countryId),
     ]);
-    const attackedOnTurn = attackedOnTurnOf(conflict, attackers);
 
     const entries: TreatyEntry[] = [];
     for (const defender of hosts) {
@@ -423,5 +534,5 @@ export async function reconcileMutualDefence(
     entered += entries.length;
     await announceTreatyEntries(db, entries, conflict.name, currentTurn);
   }
-  return { conflictsChecked: conflicts.length, entered };
+  return { conflictsChecked: fronts.length, entered };
 }

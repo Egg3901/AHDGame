@@ -7,6 +7,10 @@
  * the term that was taken with it. A white peace posts too, because a war ending
  * with nobody paying anything is news about the world as much as a reparation is.
  *
+ * The one other post is a country entering a war under a mutual-defence pact
+ * (`buildTreatyEntryDispatch`). Nobody in that country voted for the war, so the
+ * world hears it from the wire or not at all.
+ *
  * PURE BUILDERS. Every function here takes a document and returns copy. The database
  * writes and the stamping live in `emitWarWire`, which keeps the copy testable
  * without a database and the stamping testable without asserting on prose. Same
@@ -212,6 +216,55 @@ export function buildSettledDispatch(
       description: body,
       color: DISCORD_COLORS.warEscalation,
       fields,
+      footer: { text: DESK },
+    },
+  };
+}
+
+/** Join names as prose: "A", "A and B", "A, B and C". */
+function proseList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The dispatch for countries a mutual-defence pact has just taken into a war.
+ *
+ * One dispatch per alliance and defended member, not per country: a pact that
+ * brings in a dozen members is one piece of news, and a dozen posts would bury it.
+ * Posted only at the moment of entry (the declaration or the reconciliation that
+ * enrolled them), never for an entry that already exists.
+ */
+export function buildTreatyEntryDispatch(input: {
+  conflictName: string;
+  organizationName: string;
+  defending: string;
+  entered: string[];
+}): WarDispatch {
+  const defended = name(input.defending);
+  const entered = input.entered.map(name);
+  const alliance = input.organizationName;
+  const title =
+    entered.length === 1
+      ? `${entered[0]} enters the ${input.conflictName} under the ${alliance}`
+      : `The ${alliance} enters the ${input.conflictName}`;
+  const verb = entered.length === 1 ? "has" : "have";
+  const body =
+    `${defended} was declared on, and the ${alliance} binds its members to defend it. ` +
+    `${proseList(entered)} ${verb} entered the ${input.conflictName} on its side.`;
+
+  return {
+    title,
+    body,
+    embed: {
+      title,
+      description: body,
+      color: DISCORD_COLORS.warEscalation,
+      fields: [
+        { name: "Alliance", value: alliance, inline: true },
+        { name: "Defending", value: defended, inline: true },
+        { name: "Entered", value: entered.join(", "), inline: true },
+      ],
       footer: { text: DESK },
     },
   };

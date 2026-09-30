@@ -8,6 +8,8 @@ import type { TreatyEntry } from "@/lib/db/types/conflict";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
+import { postWarWire } from "@/lib/military/emitWarWire";
+import { buildTreatyEntryDispatch } from "@/lib/military/warWire";
 
 /**
  * The alliance's display name for a treaty entry. The stored name first, because a
@@ -26,7 +28,8 @@ export function treatyEntryOrganizationName(
 }
 
 /**
- * Tell the countries a treaty just took to war, and log it on the alliance.
+ * Tell the countries a treaty just took to war, put it on the World News wire, and log
+ * it on the alliance.
  *
  * Shared by every path that writes a treaty entry (declaration-time enrolment and
  * the per-turn mutual-defence reconciliation) so a country pulled in on a later
@@ -64,6 +67,26 @@ async function announceTreatyEntriesUnguarded(
   conflictName: string,
   currentTurn: number
 ): Promise<void> {
+  // World News first, so a failed seat lookup below cannot swallow it. One dispatch
+  // per alliance and defended member. Only the entries this call was handed are
+  // posted, and every caller hands over only entries it has just written, so nothing
+  // already in a war is ever announced again. `postWarWire` never throws.
+  const groups = new Map<string, TreatyEntry[]>();
+  for (const e of entries) {
+    const key = `${e.organizationId}:${e.defending}`;
+    groups.set(key, [...(groups.get(key) ?? []), e]);
+  }
+  for (const group of groups.values()) {
+    await postWarWire(
+      buildTreatyEntryDispatch({
+        conflictName,
+        organizationName: treatyEntryOrganizationName(group[0]),
+        defending: group[0].defending,
+        entered: group.map((e) => e.countryId),
+      })
+    );
+  }
+
   const inputs: NotificationInput[] = [];
   for (const e of entries) {
     const org = treatyEntryOrganizationName(e);

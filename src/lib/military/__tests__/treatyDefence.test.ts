@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import {
+  loadPactEntryWarnings,
+  pactEntryWarnings,
   reconcileMutualDefence,
   resolveTreatyDefenders,
   selectTreatyDefenders,
@@ -69,6 +71,26 @@ vi.mock("@/lib/notifications", () => ({
     return Promise.resolve();
   },
 }));
+// World News: the in-game feed and the Discord news channel.
+const newsSpy = vi.fn();
+const discordNewsSpy = vi.fn();
+vi.mock("@/lib/news", () => ({
+  createSystemNewsPost: (...a: unknown[]) => {
+    newsSpy(...a);
+    return Promise.resolve();
+  },
+}));
+vi.mock("@/lib/discordWebhooks", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/discordWebhooks")>("@/lib/discordWebhooks");
+  return {
+    DISCORD_COLORS: actual.DISCORD_COLORS,
+    sendNewsEvent: (...a: unknown[]) => {
+      discordNewsSpy(...a);
+      return Promise.resolve(undefined);
+    },
+  };
+});
 vi.mock("@/lib/api/headOfGovernment", () => ({
   getHeadOfGovernmentCharacterId: () => Promise.resolve(null),
 }));
@@ -621,5 +643,88 @@ describe("reconcileMutualDefence: the per-turn sweep", () => {
   it("leaves a war awaiting terms alone", async () => {
     store.conflicts = [declaredWar({ status: "terms_pending" })];
     expect((await reconcileMutualDefence(fakeDb(), 1262)).entered).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("World News on pact entry", () => {
+  beforeEach(() => {
+    store.organizationPostures = [{ organizationId: "ndp", posture: "article5" }];
+    store.organizationMemberships = [membership("ndp", "DD", 1088), membership("ndp", "UK", 1163)];
+  });
+
+  it("posts one dispatch naming the country, the war and the alliance", async () => {
+    store.conflicts = [declaredWar()];
+    await reconcileMutualDefence(fakeDb(), 1262);
+    expect(newsSpy).toHaveBeenCalledTimes(1);
+    const [body, category, options] = newsSpy.mock.calls[0] as [string, string, { title: string }];
+    expect(category).toBe("general");
+    expect(options.title).toBe(
+      "United Kingdom enters the Russia-East Germany War under the Northern Defence Pact"
+    );
+    expect(body).toContain("Northern Defence Pact");
+    expect(body).toContain("United Kingdom");
+    expect(body).not.toMatch(/[\u2014\u2013]/);
+    expect(discordNewsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("posts nothing for an entry that already exists, on any later sweep", async () => {
+    // The ally is already on the roster with a treaty entry written before this
+    // feature: nothing new happens, so nothing is announced.
+    store.conflicts = [
+      declaredWar({
+        sideB: { label: "East Germany", countries: ["DD", "UK"], kind: "coalition" },
+        joinTurns: [{ countryId: "UK", turn: 1261 }],
+        treatyEntries: [
+          { countryId: "UK", organizationId: "ndp", defending: "DD", joinedTurn: 1261 },
+        ],
+      }),
+    ];
+    const result = await reconcileMutualDefence(fakeDb(), 1262);
+    expect(result.entered).toBe(0);
+    expect(newsSpy).not.toHaveBeenCalled();
+    expect(discordNewsSpy).not.toHaveBeenCalled();
+    expect(notifySpy).not.toHaveBeenCalled();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("pactEntryWarnings: what an applicant is told", () => {
+  it("lists each live declared war a binding alliance is defending", async () => {
+    store.organizationPostures = [{ organizationId: "ndp", posture: "article5" }];
+    store.organizationMemberships = [membership("ndp", "DD", 1088), membership("ndp", "UK", 1163)];
+    store.conflicts = [{ ...declaredWar(), conflictId: 12 }];
+    const byOrg = await loadPactEntryWarnings(fakeDb());
+    expect(byOrg.get("ndp")).toEqual([
+      {
+        organizationId: "ndp",
+        conflictId: "war_ru_dd",
+        conflictNumber: 12,
+        conflictName: "Russia-East Germany War",
+        defendingCountryId: "DD",
+      },
+    ]);
+  });
+
+  it("warns nobody when the alliance is below Article 5", async () => {
+    store.organizationPostures = [{ organizationId: "ndp", posture: "heightened" }];
+    store.organizationMemberships = [membership("ndp", "DD"), membership("ndp", "UK")];
+    store.conflicts = [declaredWar()];
+    expect((await loadPactEntryWarnings(fakeDb())).size).toBe(0);
+  });
+
+  it("uses the same firing rule as enrolment: no warning for an attacker-member or a late member", () => {
+    const front = {
+      conflict: declaredWar() as never,
+      side: "B" as const,
+      hosts: ["DD" as const],
+      attackers: ["RU" as const],
+      attackedOnTurn: 1256,
+    };
+    expect(pactEntryWarnings({ pacts: [pact("ndp", { DD: 0, RU: 0 })] }, [front]).size).toBe(0);
+    expect(pactEntryWarnings({ pacts: [pact("ndp", { DD: 1300 })] }, [front]).size).toBe(0);
+    expect(pactEntryWarnings({ pacts: [pact("ndp", { DD: 0 })] }, [front]).get("ndp")).toHaveLength(
+      1
+    );
   });
 });

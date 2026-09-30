@@ -24,6 +24,11 @@ areas: [engine, frontend]
   not take anyone out of a war already joined.
 - Allies pulled in by a pact send part of their ready reserve to the front and
   carry war weariness and approval effects like any other entrant.
+- When a pact brings a country into a war, World News reports it, naming the
+  country, the war and the alliance.
+- Applying to join an alliance that is defending a member in a war now shows a
+  notice: joining brings the new member into that war on the member's side the
+  next turn. Members voting on the admission see the same notice.
 - An ally stays out when it holds a truce with the attacker, is already fighting
   the attacker elsewhere, shares a bloc or a binding alliance with the attacker,
   or has already left that war. An alliance takes no side when the attacker is
