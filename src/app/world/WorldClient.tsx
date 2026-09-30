@@ -1,5 +1,7 @@
 "use client";
 
+import FederationFinances from "./components/FederationFinances";
+import type { LegacyServiceSnapshot } from "@/lib/world/succession/legacyServiceSnapshot";
 import Link from "next/link";
 import { type CountryId } from "@/lib/constants/countries";
 import { resolveCountryAvailability } from "@/lib/countryAvailability";
@@ -14,6 +16,7 @@ import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 import type { BlocMapData } from "@/lib/world/blocMembership";
 
 interface WorldClientProps {
+  legacyFinances?: LegacyServiceSnapshot[];
   countryAccess: CountryAccessMap;
   nationSnapshots: Record<CountryId, NationWorldSnapshot>;
   /** Gates the "Conflicts" hub card — mirrors the World navbar link. */
@@ -29,6 +32,7 @@ export default function WorldClient({
   conflictsEnabled,
   worldEntities,
   blocMapData,
+  legacyFinances = [],
 }: WorldClientProps) {
   // `countryAccess` is keyed by the runtime registered set (getAllCountryAccess →
   // COUNTRY_ORDER ∪ active countryGameStates), so its keys are the SSOT for which
@@ -86,6 +90,8 @@ export default function WorldClient({
               </div>
             </div>
           </section>
+
+          <FederationFinances snapshots={legacyFinances} />
 
           {/* Three grids: nations you can play, nations you can only browse, and
               nations that are not in the game yet. */}
