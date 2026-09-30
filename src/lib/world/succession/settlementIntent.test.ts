@@ -11,6 +11,7 @@ import {
   verifyLiveFederationSettlementIntent,
 } from "./settlementIntent";
 import type { SuccessionActivationInput } from "./planActivation";
+import type { FederationRatificationRecord } from "./ratificationStore";
 
 const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
@@ -286,7 +287,7 @@ describe("live federation settlement intent", () => {
       .collection("bills")
       .updateOne({ _id: mandateBillId }, { $set: { status: "signed" } });
     await args.db
-      .collection("federationRatifications")
+      .collection<FederationRatificationRecord>("federationRatifications")
       .updateOne({ _id: "1991-default:ussr-1:1:UKR" }, { $set: { choice: "reject" } });
     await expect(stageLiveFederationSettlementIntent(args)).rejects.toThrow("required approval");
   });
@@ -295,7 +296,7 @@ describe("live federation settlement intent", () => {
     const { args } = scenario();
     const staged = await stageLiveFederationSettlementIntent(args);
     await args.db
-      .collection("federationRatifications")
+      .collection<FederationRatificationRecord>("federationRatifications")
       .updateOne({ _id: "1991-default:ussr-1:1:UKR" }, { $set: { termsHash: "0".repeat(64) } });
     await expect(
       verifyLiveFederationSettlementIntent({
