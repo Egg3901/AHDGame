@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
+import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { modernRegions2019 } from "@/lib/seeds/reference/modernRegions2019";
 import { PARTY_ROSTERS_2019 } from "@/lib/seeds/partyRosters2019";
@@ -24,9 +25,11 @@ describe("2019 transition-country seed", () => {
       expect(await db.collection("statePartyOrg").countDocuments({ countryId })).toBe(
         count * PARTY_ROSTERS_2019[countryId]!.length
       );
-      expect(await db.collection("stateBaselines").countDocuments({
-        _id: { $in: modernRegions2019(countryId).map((region) => region._id) },
-      })).toBe(count);
+      expect(
+        await db.collection<StateMetricBaseline>("stateBaselines").countDocuments({
+          _id: { $in: modernRegions2019(countryId).map((region) => region._id) },
+        })
+      ).toBe(count);
     }
     expect(log.filter((message) => message.includes("2019 regions"))).toHaveLength(5);
   });
