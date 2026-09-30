@@ -43,6 +43,7 @@ import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { treasuryAdvanceMoneyDelta } from "./rules/assemble";
 import { planOpenMarketOperation, quotedQeMarketPrice } from "./quantitativeEasing";
 import type { ExecuteMonetaryOperationInput } from "./operations";
+import { releaseMonetaryCommandReservation } from "./commandReservation";
 
 const COLLECTION = "monetaryOperationCommands";
 export class MonetaryOperationRejected extends Error {}
@@ -92,6 +93,7 @@ export async function existingMonetaryOperation(
   if (!receipt) return false;
   sameCommand(receipt, input);
   if (receipt.status === "rejected") {
+    await releaseMonetaryCommandReservation(db, receipt.bankId, `monetary:${receipt._id}`);
     await publishAudit(db, receipt);
     throw new MonetaryOperationRejected(receipt.error ?? "Monetary operation was rejected");
   }
@@ -486,10 +488,12 @@ async function finish(
   cooldown: number
 ): Promise<MonetaryOperationRecord> {
   if (receipt.status === "applied") {
+    await releaseMonetaryCommandReservation(db, receipt.bankId, `monetary:${receipt._id}`);
     await publishAudit(db, receipt);
     return receipt.result;
   }
   if (receipt.status === "rejected") {
+    await releaseMonetaryCommandReservation(db, receipt.bankId, `monetary:${receipt._id}`);
     await publishAudit(db, receipt);
     throw new MonetaryOperationRejected(receipt.error ?? "Monetary operation was rejected");
   }
@@ -535,8 +539,10 @@ async function finish(
             { _id: receipt._id, status: "planning" },
             { $set: { status: "rejected", error, recoveryPending: !!receipt.audit } }
           );
-          await publishAudit(db, { ...receipt, status: "rejected", error });
-          throw new MonetaryOperationRejected(error);
+          const resolved = await receipts.findOne({ _id: receipt._id });
+          if (!resolved || resolved.status === "planning")
+            throw new Error("Monetary admission did not resolve");
+          return finish(db, resolved, cooldown);
         }
       }
     }
@@ -548,14 +554,8 @@ async function finish(
   // Re-read after admission: another retry may already have committed a refund or result.
   const current = await receipts.findOne({ _id: receipt._id });
   if (!current) throw new Error("Monetary command disappeared");
-  if (current.status === "applied") {
-    await publishAudit(db, current);
-    return current.result;
-  }
-  if (current.status === "rejected") {
-    await publishAudit(db, current);
-    throw new MonetaryOperationRejected(current.error ?? "Monetary operation was rejected");
-  }
+  if (current.status === "applied" || current.status === "rejected")
+    return finish(db, current, cooldown);
   receipt = current;
   if (receipt.status !== "refunding") {
     if (receipt.command.type === "qt") {

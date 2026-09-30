@@ -21,6 +21,7 @@ import {
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { allocateLiquidityAdvance } from "./rules/liquidityAdvance";
+import { releaseMonetaryCommandReservation } from "./commandReservation";
 
 const COLLECTION = "bankLiquidityOperations";
 export class LiquidityAdvanceRejected extends Error {}
@@ -172,9 +173,14 @@ async function finishLiquidityAdvance(
   cooldownTurns: number
 ): Promise<MonetaryOperationRecord> {
   const receipts = db.collection<Receipt>(COLLECTION);
-  if (receipt.status === "applied" && receipt.result) return receipt.result;
-  if (receipt.status === "rejected")
+  if (receipt.status === "applied" && receipt.result) {
+    await releaseMonetaryCommandReservation(db, receipt.bankId, receipt._id);
+    return receipt.result;
+  }
+  if (receipt.status === "rejected") {
+    await releaseMonetaryCommandReservation(db, receipt.bankId, receipt._id);
     throw new LiquidityAdvanceRejected(receipt.error ?? "Liquidity command was rejected");
+  }
   const { command, bankId, currency } = receipt;
   const banks = db.collection<
     Omit<CentralBank, "lastMonetaryOperationTurn"> & {
@@ -211,15 +217,17 @@ async function finishLiquidityAdvance(
         );
         if (!concurrent) {
           const latest = await receipts.findOne({ _id: receipt._id });
-          if (latest?.status === "applied" && latest.result) return latest.result;
-          if (latest?.status === "admitted")
+          if (latest && latest.status !== "planning")
             return finishLiquidityAdvance(db, latest, cooldownTurns);
           const error = "Monetary operation is on cooldown or another liquidity command is pending";
           await receipts.updateOne(
             { _id: receipt._id, status: "planning" },
             { $set: { status: "rejected", error } }
           );
-          throw new LiquidityAdvanceRejected(error);
+          const resolved = await receipts.findOne({ _id: receipt._id });
+          if (!resolved || resolved.status === "planning")
+            throw new Error("Liquidity admission did not resolve");
+          return finishLiquidityAdvance(db, resolved, cooldownTurns);
         }
       }
     }
@@ -228,6 +236,13 @@ async function finishLiquidityAdvance(
       { $set: { status: "admitted" } }
     );
   }
+  // Admission and rejection race on the original receipt. Only its persisted winner may deliver.
+  const current = await receipts.findOne({ _id: receipt._id });
+  if (!current) throw new Error("Liquidity command disappeared");
+  if (current.status === "applied" || current.status === "rejected")
+    return finishLiquidityAdvance(db, current, cooldownTurns);
+  if (current.status !== "admitted") throw new Error("Liquidity command was not admitted");
+  receipt = current;
   let distributed = 0,
     banksCredited = 0;
   for (const recipient of receipt.recipients) {
