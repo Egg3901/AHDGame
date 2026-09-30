@@ -479,19 +479,17 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       suspended: false,
     }));
     await db.collection("corporations").insertMany(firms);
-    await db
-      .collection("corporateSectors")
-      .insertMany(
-        firms.map((firm) => ({
-          _id: new ObjectId(),
-          corporationId: firm._id,
-          countryId: "CS",
-          stateId: "CS_SVK",
-          sectorType: "manufacturing",
-          capacityBookAnchor: 1000,
-          capitalStock: 10,
-        }))
-      );
+    await db.collection("corporateSectors").insertMany(
+      firms.map((firm) => ({
+        _id: new ObjectId(),
+        corporationId: firm._id,
+        countryId: "CS",
+        stateId: "CS_SVK",
+        sectorType: "manufacturing",
+        capacityBookAnchor: 1000,
+        capitalStock: 10,
+      }))
+    );
     commands = 0;
     expect(
       await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
@@ -499,12 +497,10 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     const activationCommands = commands;
     expect(activationCommands).toBeLessThanOrEqual(180);
     expect(
-      await db
-        .collection("corporations")
-        .countDocuments({
-          suspended: true,
-          federationPendingHeadquartersId: "1991-default:cs-1991-default:1",
-        })
+      await db.collection("corporations").countDocuments({
+        suspended: true,
+        federationPendingHeadquartersId: "1991-default:cs-1991-default:1",
+      })
     ).toBe(100);
     expect(await db.collection("federationPrivateFirmHolds").countDocuments({})).toBe(100);
     expect(
