@@ -85,10 +85,28 @@ export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Pr
       .collection<CountryGameState>("countryGameStates")
       .findOne(
         { _id: "RU" },
-        { projection: { ruCongressDissolvedSinceTurn: 1, ruFederalAssemblySinceTurn: 1 } }
+        {
+          projection: {
+            ruSovietSuccessionSinceTurn: 1,
+            ruProvisionalCongressSeats: 1,
+            ruCongressDissolvedSinceTurn: 1,
+            ruFederalAssemblySinceTurn: 1,
+          },
+        }
       );
     if (countryState?.ruFederalAssemblySinceTurn != null) return 450;
     if (countryState?.ruCongressDissolvedSinceTurn != null) return 0;
+    if (
+      countryState?.ruSovietSuccessionSinceTurn != null &&
+      countryState.ruProvisionalCongressSeats != null
+    ) {
+      if (
+        !Number.isSafeInteger(countryState.ruProvisionalCongressSeats) ||
+        countryState.ruProvisionalCongressSeats < 1
+      )
+        throw new Error("Provisional Russian Congress capacity must be a positive integer");
+      return countryState.ruProvisionalCongressSeats;
+    }
   }
   if (isListTierMethod(config.electionSystems.lowerChamber)) {
     return config.legislature.lowerChamber.seats;

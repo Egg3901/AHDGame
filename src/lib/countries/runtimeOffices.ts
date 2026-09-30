@@ -24,6 +24,7 @@ export async function loadRuntimeCountryOffices(
             session,
             projection: {
               ruSovietSuccessionSinceTurn: 1,
+              ruProvisionalCongressSeats: 1,
               ruPresidencySinceTurn: 1,
               ruCongressDissolvedSinceTurn: 1,
               ruFederalAssemblySinceTurn: 1,

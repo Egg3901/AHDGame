@@ -1304,6 +1304,7 @@ export function getCountryConfigForRuntime(
   preset: string | undefined,
   countryState?: {
     ruSovietSuccessionSinceTurn?: number;
+    ruProvisionalCongressSeats?: number;
     ruPresidencySinceTurn?: number;
     ruCongressDissolvedSinceTurn?: number;
     ruFederalAssemblySinceTurn?: number;
@@ -1321,12 +1322,34 @@ export function getCountryConfigForRuntime(
     countryState?.ruFederalAssemblySinceTurn != null
       ? { ...config, ...RU_RUSSIAN_1991.config }
       : config;
+  const provisionalSeats = countryState?.ruProvisionalCongressSeats;
+  if (
+    provisionalSeats != null &&
+    (!Number.isSafeInteger(provisionalSeats) || provisionalSeats < 1)
+  ) {
+    throw new Error("Provisional Russian Congress capacity must be a positive integer");
+  }
+  const effectiveCongress =
+    countryState?.ruSovietSuccessionSinceTurn != null && provisionalSeats != null
+      ? {
+          ...russian,
+          coalitionThreshold: Math.floor(provisionalSeats / 2) + 1,
+          legislature: {
+            ...russian.legislature,
+            lowerChamber: {
+              ...russian.legislature.lowerChamber,
+              seats: provisionalSeats,
+              description: `${provisionalSeats} seats retained from the negotiated Soviet territorial settlement; existing vacancies remain unfilled.`,
+            },
+          },
+        }
+      : russian;
   const presidential =
     countryState?.ruPresidencySinceTurn != null ||
     countryState?.ruCongressDissolvedSinceTurn != null ||
     countryState?.ruFederalAssemblySinceTurn != null
-      ? ru1991PresidentialConfig(russian)
-      : russian;
+      ? ru1991PresidentialConfig(effectiveCongress)
+      : effectiveCongress;
   if (countryState?.ruFederalAssemblySinceTurn != null) {
     return ru1993FederalAssemblyConfig(presidential);
   }

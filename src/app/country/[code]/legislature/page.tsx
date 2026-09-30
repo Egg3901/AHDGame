@@ -37,6 +37,8 @@ async function ruLegislaturePresentation(): Promise<{
     db
       .collection<{
         _id: string;
+        ruSovietSuccessionSinceTurn?: number;
+        ruProvisionalCongressSeats?: number;
         ruPresidencySinceTurn?: number;
         ruCongressDissolvedSinceTurn?: number;
         ruFederalAssemblySinceTurn?: number;

@@ -270,6 +270,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "federationPublicationPreparations", category: "runtime" },
   { name: "federationPreparedEffects", category: "runtime" },
   { name: "federationArchivedRegionRows", category: "runtime" },
+  { name: "federationArchivedPoliticalRows", category: "runtime" },
   { name: "federationCustodyRecords", category: "runtime" },
   { name: "federationArchivedPublicCorporations", category: "runtime" },
   { name: "federationPublicCorporationRebases", category: "runtime" },
