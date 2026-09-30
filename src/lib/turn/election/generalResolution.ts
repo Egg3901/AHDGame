@@ -747,7 +747,11 @@ export async function resolveOneGeneralElection(
           officeType = { type: "peoplesCongress", state: election.state, seatsHeld: seats };
           break;
         default:
-          officeType = { type: election.electionType, state: election.state, seatsHeld: seats };
+          officeType = {
+            type: officeKeyForElectionType(election.electionType, election.countryId),
+            state: election.state,
+            seatsHeld: seats,
+          };
       }
 
       if (candidate.isNPP && candidate.nppId) {
