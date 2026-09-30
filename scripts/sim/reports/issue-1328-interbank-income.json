@@ -1,0 +1,159 @@
+{
+  "issue": 1328,
+  "baseline": {
+    "sourceCommit": "78e5600d5e2c201054166fc04eb53de6c29e37b2",
+    "cohort": {
+      "syntheticBanks": 10,
+      "interbankLoans": 5,
+      "turn": 300
+    },
+    "phase": {
+      "commands": 78,
+      "readBsonBytes": 4934
+    },
+    "normalBalances": [
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      }
+    ],
+    "duplicateStable": true,
+    "recoveryCases": 0
+  },
+  "treatment": {
+    "sourceCommit": "92be3347279d23a1b6e4e5d49c30799ca5b13e57",
+    "cohort": {
+      "syntheticBanks": 10,
+      "interbankLoans": 5,
+      "turn": 300
+    },
+    "phase": {
+      "commands": 89,
+      "readBsonBytes": 4934
+    },
+    "normalBalances": [
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      },
+      {
+        "cash": 100,
+        "income": -100,
+        "paid": 100,
+        "received": 0
+      },
+      {
+        "cash": 100,
+        "income": 100,
+        "paid": 0,
+        "received": 100
+      }
+    ],
+    "duplicateStable": true,
+    "recoveryCases": 2
+  },
+  "normalCashAndIncomeEqual": true,
+  "runnerSha256": "09cd2abca2bdad82f8a7e2391538b06813d1e19613d09e133cd55373f90c6cbb",
+  "phaseBudget": 1000,
+  "scope": "Synthetic ten-bank, five-loan subsystem fixture with unrelated banking stages pre-stamped complete; no full-world or activation qualification"
+}
