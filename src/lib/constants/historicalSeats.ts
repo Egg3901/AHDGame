@@ -4144,7 +4144,13 @@ const SEAT_GROUPS_2020: SeatGroups = {
     ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
     ...CN_GOVERNORS_2020,
   ],
-  IE: [...IE_DAIL_2020, ...IE_SEANAD_2020],
+  // Michael D. Higgins began his second presidential term on 11 Nov 2018.
+  // https://president.ie/en/the-president/michaeldhiggins/
+  IE: [
+    ...IE_DAIL_2020,
+    ...IE_SEANAD_2020,
+    { state: "IE", officeType: "uachtaran", party: "ie_ind" },
+  ],
 };
 
 /**
@@ -4200,7 +4206,13 @@ const SEAT_GROUPS_1992: SeatGroups = {
     ...CN_GOVERNORS_1991,
   ],
   BR: [...BR_CHAMBER_1991, ...BR_SENATE_1991],
-  IE: [...IE_DAIL_1991, ...IE_SEANAD_1991],
+  // Mary Robinson was inaugurated on 3 Dec 1990 and held office at opening.
+  // https://www.president.ie/en/the-president/mary-robinson
+  IE: [
+    ...IE_DAIL_1991,
+    ...IE_SEANAD_1991,
+    { state: "IE", officeType: "uachtaran", party: "ie_ind" },
+  ],
 };
 
 const SEAT_GROUPS_1953: SeatGroups = mergeGroups(

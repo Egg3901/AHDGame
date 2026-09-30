@@ -1,6 +1,13 @@
 import type { RosterMap } from "../historicalRosters";
 
 export const ROSTER_1991_IE: RosterMap = {
+  // In office from 3 Dec 1990. https://www.president.ie/en/the-president/mary-robinson
+  "IE|uachtaran|IE|ie_ind|0": {
+    name: "Mary Robinson",
+    birthYear: 1944,
+    gender: "female",
+    ethnicity: "white",
+  },
   "IE|dail|COR|ie_ff|0": {
     name: "Micheal Martin",
     birthYear: 1960,
