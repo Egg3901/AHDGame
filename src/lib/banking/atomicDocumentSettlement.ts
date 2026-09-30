@@ -143,6 +143,7 @@ export async function settleAtomicDocumentTransition(
       return bad("Noncash bond exchanges may update only the permitted asset fields");
   }
   if (target.cashMode === "central_bank_reserve_pool") {
+    const increment = projection.update.$inc as Record<string, unknown> | undefined;
     const debit = realLegs.find((leg) => leg.kind === "debit");
     const credit = realLegs.find((leg) => leg.kind === "credit");
     const poolPaths = new Set(["forexRevenue", "reserveBalance"]);
@@ -161,8 +162,7 @@ export async function settleAtomicDocumentTransition(
       Object.keys(projection.update.$inc ?? {}).some(
         (path) => !poolPaths.has(path) && path !== "locBookRevision"
       ) ||
-      (projection.update.$inc?.locBookRevision !== undefined &&
-        projection.update.$inc.locBookRevision !== 1) ||
+      (increment?.locBookRevision !== undefined && increment.locBookRevision !== 1) ||
       Object.keys(projection.update.$set ?? {}).some(
         (path) => !["updatedAt", "lastReservePoolTransferTurn"].includes(path)
       )
@@ -273,7 +273,8 @@ export async function settleAtomicDocumentTransition(
 
 export async function resumeAtomicDocumentSettlement(
   db: Db,
-  key: string
+  key: string,
+  recoverPendingOwner = true
 ): Promise<SettlementResult> {
   const journal = db.collection<AtomicRecord>(MONEY_MOVE_COLLECTION);
   const record = await journal.findOne({ _id: key });
@@ -324,15 +325,22 @@ export async function resumeAtomicDocumentSettlement(
         ownerRecord?.atomicDocument &&
         ownerRecord.atomicDocument.collection === plan.collection &&
         same(ownerRecord.atomicDocument.identity, plan.identity) &&
-        ownerRecord.atomicDocument.receipt === owner.key &&
-        (isComplete(ownerRecord) ||
-          (ownerRecord.status === "rejected" && owner.outcome === "rejected"))
+        ownerRecord.atomicDocument.receipt === owner.key
       ) {
-        // A lost cleanup acknowledgement must not depend on the old API caller returning.
-        await collection.updateOne(
-          { ...plan.identity, [PROTECTED_RECEIPT]: owner },
-          { $unset: { [PROTECTED_RECEIPT]: "" } }
-        );
+        if (
+          isComplete(ownerRecord) ||
+          (ownerRecord.status === "rejected" && owner.outcome === "rejected")
+        ) {
+          // A lost cleanup acknowledgement must not depend on the old API caller returning.
+          await collection.updateOne(
+            { ...plan.identity, [PROTECTED_RECEIPT]: owner },
+            { $unset: { [PROTECTED_RECEIPT]: "" } }
+          );
+        } else if (recoverPendingOwner && ownerRecord.status === "partial") {
+          // Help only this validated target owner, even if it is outside the
+          // bounded recovery page. Disable further owner traversal in that call.
+          await resumeAtomicDocumentSettlement(db, owner.journalKey, false);
+        }
       }
     }
     return pending("Another atomic settlement owns this target; retry after its recovery");
