@@ -540,7 +540,7 @@ export async function resolvePresidentElection(
 
   if (!winnerCandidate.isNPP && winnerCandidate.characterId) {
     const popularVotes =
-      Object.keys(tally.totalVotes).length > 0
+      Object.keys(tally.totalVotes ?? {}).length > 0
         ? tally.totalVotes
         : Object.values(tally.totalVotesByUnit ?? {}).reduce<Record<string, number>>(
             (totals, unitVotes) => {
