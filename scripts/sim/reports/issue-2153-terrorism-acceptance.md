@@ -77,3 +77,11 @@ All measured functions fit the 500-command default or 600-command political-dyna
 - Independent coalition commitments: real country-specific commands and Germany's withheld deployment.
 - Prevention, limited/catastrophic harm, policing and intervention blowback: five real subsystem continuations plus focused rules/response tests.
 - No trivial disappearance or forced permanent maximum threat: unresolved inaction and successful recovery/normalization under changed policy.
+
+## Concurrent response follow-up
+
+Source `e6872d042a61d8c2505260ed86e1e5533f9aae11` replaces whole-conflict commitment writes with a projected read and compare-and-swap on the stored campaign. A collision retries from the winning campaign before adding shared consequences. The write changes only the campaign, timestamp, and submitting country's emergency-powers key. Sequential gameplay calculations are unchanged; the long-run results above retain their original source provenance.
+
+A clean-source isolated Mongo probe forced US and UK to read the same initial state before submitting together. One write collided and retried. Both countries retained deployment 12 and emergency powers 20; combined civilian strain was 6, with the unrelated threat track unchanged. Repeating both responses produced zero writes and exactly the same stored document. The complete probe made five reads and three write attempts, including one rejected attempt. Uncontended submissions still take one projected read and one write; a collision adds a read/write pair.
+
+The committed deterministic regression covers both populated campaign state and legacy rows without a campaign. All 29 distinct focused response/terrorism tests pass. These concurrency checks supplement the saved-world trajectories; they do not claim a new long-run replay.

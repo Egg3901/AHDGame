@@ -36141,5 +36141,20 @@
     "intervention": "00fc644f2af26b91b34af3d2e505ad8115d098d5"
   },
   "sourceDifference": "The corrected intervention index derives from actual national deployments. The other four cases have no military/drawdown outcomes, zero deployments and zero intervention index throughout. Their unchanged checkpoints are retained. A formatting-only signal-query reflow is also included.",
-  "performanceScope": "Complete corrected intervention execution only; the four other scenarios retain their original clean checkpoints."
+  "performanceScope": "Complete corrected intervention execution only; the four other scenarios retain their original clean checkpoints.",
+  "concurrencyValidation": {
+    "passed": true,
+    "reads": 5,
+    "writes": 3,
+    "collisions": 1,
+    "duplicateWrites": 0,
+    "countries": ["US", "UK"],
+    "militaryCommitmentEach": 12,
+    "emergencyPowersEach": 20,
+    "civilianStrain": 6,
+    "sourceCommit": "e6872d042a61d8c2505260ed86e1e5533f9aae11",
+    "sourceDirty": false,
+    "scope": "Two synthetic national commitments against real isolated sandbox Mongo, with a read barrier forcing both initial snapshots to collide. Existing long-run trajectories remain sequential evidence from their recorded source commits.",
+    "regression": "globalResponse.test.ts covers both existing campaign state and legacy rows without campaign state."
+  }
 }
