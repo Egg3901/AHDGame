@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 import type { MoneySupplyView } from "./centralBankTypes";
 import messages from "../../../../../messages/en/centralBank.json";
@@ -18,7 +18,10 @@ vi.mock("next-intl", () => ({
       ),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const data = {
   accountingVersion: MONEY_ACCOUNTING_VERSION,
@@ -135,3 +138,30 @@ it.each([undefined, 2, MONEY_ACCOUNTING_VERSION])(
     expect(screen.getByText("Equity market cash")).toBeTruthy();
   }
 );
+
+it("reuses a liquidity command after a network failure and renews it after success", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Network interrupted"))
+    .mockResolvedValue({ ok: true, json: async () => ({ operation: { amount: 400 } }) });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<CentralBankMoneySupplyTab countryId="US" data={data} canOperate onChanged={() => {}} />);
+  fireEvent.change(screen.getAllByRole("combobox")[0], {
+    target: { value: "liquidity_injection" },
+  });
+  fireEvent.change(screen.getByPlaceholderText("Amount (USD)"), { target: { value: "400" } });
+  fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
+  await screen.findByText("Network interrupted");
+  const firstBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+  expect(firstBody.operationId).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
+  await screen.findByText(/LIQUIDITY INJECTION completed/);
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body).operationId).toBe(firstBody.operationId);
+  fireEvent.change(screen.getByPlaceholderText("Amount (USD)"), { target: { value: "400" } });
+  fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body).operationId).not.toBe(firstBody.operationId);
+  await waitFor(() =>
+    expect((screen.getByPlaceholderText("Amount (USD)") as HTMLInputElement).value).toBe("")
+  );
+});

@@ -2,13 +2,11 @@ import { ObjectId, type Db } from "mongodb";
 import type {
   Bond,
   CentralBank,
-  Corporation,
   FederalBudget,
   GameConfig,
   MonetaryOperationRecord,
   MonetaryOperationType,
 } from "@/lib/db/types";
-import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -19,7 +17,7 @@ import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { treasuryAdvanceMoneyDelta } from "./rules/assemble";
 import { planOpenMarketOperation } from "./quantitativeEasing";
 import { bondPoolCurrency, creditBondPool, debitBondPoolGated } from "@/lib/bonds/marketPool";
-import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { executeLiquidityAdvance } from "./liquidityAdvance";
 
 export const MONETARY_OPERATION_COOLDOWN_TURNS = 6;
 export const DIRECT_ADVANCE_GDP_CAP = 0.01;
@@ -27,6 +25,8 @@ export const LIQUIDITY_INJECTION_GDP_CAP = 0.03;
 
 export interface ExecuteMonetaryOperationInput {
   countryId: CountryId;
+  operationId?: string;
+  bypassCooldown?: boolean;
   type: MonetaryOperationType;
   turn: number;
   actorName: string;
@@ -150,134 +150,19 @@ export async function executeMonetaryOperation(
     return record;
   }
 
-  // Liquidity injection: the control is labelled "lend more to banks", so it now
-  // lends to banks. Previously it only incremented the central bank's own
-  // `reserveBalance` with `moneySupplyDelta: 0`, which was a no-op for private
-  // credit — the chair could pull it all day and no bank could lend a penny more.
-  const advance = await advanceToPrivateBanks(db, input.countryId, amount, now, input.turn);
-  if (advance.banksCredited > 0) {
-    record = {
-      type: input.type,
+  return executeLiquidityAdvance(
+    db,
+    {
+      operationId: input.operationId ?? new ObjectId().toHexString(),
+      countryId: input.countryId,
+      amount,
       turn: input.turn,
-      amount: advance.distributed,
-      moneySupplyDelta: 0,
-      reserveDelta: 0,
       actorName: input.actorName,
       reason: input.reason,
-      createdAt: now,
-      banksCredited: advance.banksCredited,
-    };
-    await persistBankOperation(db, bankId, record, {
-      netMoneyCreatedLifetime: advance.distributed,
-    });
-    return record;
-  }
-
-  // No chartered bank can take the money (private banking off, or none seated in
-  // this currency). Fall back to the historical behaviour — the cash buffers the
-  // bank's own reserve pool — rather than failing the operation outright.
-  record = {
-    type: input.type,
-    turn: input.turn,
-    amount,
-    moneySupplyDelta: 0,
-    reserveDelta: amount,
-    actorName: input.actorName,
-    reason: input.reason,
-    createdAt: now,
-    banksCredited: 0,
-  };
-  await persistBankOperation(db, bankId, record, { reserveBalance: amount });
-  return record;
-}
-
-/**
- * Lend `amount` of newly created central-bank money to the chartered banks of
- * this country's currency, pro rata by deposits (equal split when no bank holds
- * any). The cash lands in each bank's reserves and is booked as CB advance
- * debt on the charter, so it repays through the existing margin-repay path and
- * is never free money.
- *
- * Returns what was actually distributed; a zero `banksCredited` means the caller
- * should fall back rather than pretend the money moved.
- */
-async function advanceToPrivateBanks(
-  db: Db,
-  countryId: CountryId,
-  amount: number,
-  now: Date,
-  turn: number
-): Promise<{ distributed: number; banksCredited: number }> {
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { privateBankingEnabled: 1 } });
-  if (!(await isPrivateBankingEnabled(config))) return { distributed: 0, banksCredited: 0 };
-
-  const currency = COUNTRY_CURRENCY_MAP[countryId];
-  const banks = await db
-    .collection<Corporation>("corporations")
-    .find(
-      { "bankCharter.status": "active", "bankCharter.currency": currency },
-      { projection: { _id: 1, name: 1, bankCharter: 1 } }
-    )
-    .toArray();
-  if (banks.length === 0) return { distributed: 0, banksCredited: 0 };
-
-  const weights = banks.map((b) => Math.max(0, b.bankCharter?.totalDeposits ?? 0));
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-  const shares = banks.map((_, i) =>
-    totalWeight > 0
-      ? Math.floor((amount * weights[i]) / totalWeight)
-      : Math.floor(amount / banks.length)
+      bypassCooldown: input.bypassCooldown,
+    },
+    MONETARY_OPERATION_COOLDOWN_TURNS
   );
-
-  const ops = banks
-    .map((bank, i) => ({ bank, share: shares[i] }))
-    .filter(({ share }) => share > 0)
-    .map(({ bank, share }) => ({
-      updateOne: {
-        filter: { _id: bank._id, "bankCharter.status": "active" },
-        update: {
-          $inc: { "bankCharter.cashReserves": share, "bankCharter.cbMarginDebt": share },
-          $set: { updatedAt: now },
-        },
-      },
-    }));
-  if (ops.length === 0) return { distributed: 0, banksCredited: 0 };
-
-  await db.collection<Corporation>("corporations").bulkWrite(ops);
-
-  // Newly created central-bank money landing in a private bank's cash. Mirrors
-  // the discount-window draw: a `government` counterparty is not derivable from
-  // a tx row (there is no countryId for the OTHER side), so the row resolves to
-  // a mint contra, which is exactly right for money the central bank just made.
-  const nameById = new Map(banks.map((b) => [b._id.toString(), b.name ?? "Bank"]));
-  const thresholds = await loadTxThresholds(db);
-  await emitTxBulk(
-    db,
-    ops.map((op) => ({
-      type: "bank_cb_advance" as const,
-      turn,
-      createdAt: now,
-      subjectType: "corporation" as const,
-      subjectId: op.updateOne.filter._id,
-      subjectName: nameById.get(op.updateOne.filter._id.toString()) ?? "Bank",
-      amount: op.updateOne.update.$inc["bankCharter.cashReserves"],
-      currencyCode: currency as CurrencyCode,
-      counterpartyType: "government" as const,
-      counterpartyName: `${countryId} central bank`,
-      meta: { kind: "liquidity_injection" },
-    })),
-    thresholds
-  );
-
-  return {
-    distributed: ops.reduce(
-      (sum, op) => sum + op.updateOne.update.$inc["bankCharter.cashReserves"],
-      0
-    ),
-    banksCredited: ops.length,
-  };
 }
 
 async function emitTreasuryAdvanceLedgerEntry(
