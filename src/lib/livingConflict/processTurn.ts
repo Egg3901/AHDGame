@@ -88,7 +88,7 @@ function eventTemplate(driven: DrivenEvent, countryIds: string[]): CrisisTemplat
   };
 }
 
-async function materializeEvent(
+export async function materializeLivingConflictEvent(
   db: Db,
   def: ReturnType<typeof allLivingConflictDefs>[number],
   participants: ConflictParticipants,
@@ -275,7 +275,13 @@ export async function processLivingConflictsTurn(
     }
     let retryPhaseEntry = false;
     for (const event of result.events) {
-      const materialized = await materializeEvent(db, def, participants, event, currentTurn);
+      const materialized = await materializeLivingConflictEvent(
+        db,
+        def,
+        participants,
+        event,
+        currentTurn
+      );
       if (materialized.opened) eventsOpened++;
       if (materialized.blockedByActiveWindow && event.fired.event.trigger?.onPhaseEnter) {
         retryPhaseEntry = true;
