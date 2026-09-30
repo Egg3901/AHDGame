@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { tier3Entry } from "@/lib/world/registry/builders";
@@ -16,6 +16,7 @@ import type { FederationRatificationRecord } from "./ratificationStore";
 import { buildFederationPublicationPlan } from "./publicationPlan";
 import {
   prepareFederationPublication,
+  verifyPreparedFederationPlan,
   verifyPreparedFederationPublication,
   type FederationPreparedEffect,
 } from "./preparePublication";
@@ -323,6 +324,26 @@ describe("live federation settlement intent", () => {
     ).toThrow("publication inventory");
     const prepared = await prepareFederationPublication(args.db, publication, new Date(2));
     expect(prepared.effectIds.length).toBeGreaterThan(4);
+    expect(
+      await verifyPreparedFederationPlan(args.db, publication, {} as ClientSession)
+    ).toHaveLength(prepared.effectIds.length);
+    await expect(
+      verifyPreparedFederationPlan(
+        args.db,
+        {
+          ...publication,
+          fiscalShares: publication.fiscalShares.map((share, index) =>
+            index === 0
+              ? {
+                  ...share,
+                  financialAssetEntitlementMinor: share.financialAssetEntitlementMinor + 1,
+                }
+              : share
+          ),
+        },
+        {} as ClientSession
+      )
+    ).rejects.toThrow("disagree with the live approved plan");
     expect(
       (await verifyPreparedFederationPublication(args.db, intent._id)).find(
         (effect) => effect.kind === "source-firm"

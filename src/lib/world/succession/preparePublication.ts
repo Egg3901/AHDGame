@@ -237,3 +237,27 @@ export async function verifyPreparedFederationPublication(
     throw new Error("Federation staged sovereign states are incomplete or altered");
   return effects;
 }
+
+/** Bind the prepared effect journal to the freshly rebuilt live plan. An
+ * internally consistent journal from another proposal is not sufficient to
+ * authorize the settlement transaction. */
+export async function verifyPreparedFederationPlan(
+  db: Db,
+  plan: FederationPublicationPlan,
+  session: ClientSession
+): Promise<FederationPreparedEffect[]> {
+  const stored = await verifyPreparedFederationPublication(db, plan.receipt._id, session);
+  const expected = enumerateEffects(plan, plan.receipt.appliedAt);
+  if (
+    stored.length !== expected.length ||
+    stored.some(
+      (effect, index) =>
+        effect._id !== expected[index]._id ||
+        effect.kind !== expected[index].kind ||
+        effect.key !== expected[index].key ||
+        effect.valueHash !== expected[index].valueHash
+    )
+  )
+    throw new Error("Federation prepared effects disagree with the live approved plan");
+  return stored;
+}
