@@ -35,6 +35,11 @@ import { HU_GEOGRAPHY } from "@/lib/countries/hu/geography";
 import { CS_GEOGRAPHY } from "@/lib/countries/cs/geography";
 import { PL_GEOGRAPHY } from "@/lib/countries/pl/geography";
 import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
+import {
+  MODERN_2019_NATIONALS,
+  modernRegions2019,
+  type Modern2019CountryId,
+} from "@/lib/seeds/reference/modernRegions2019";
 
 export const FULL_ERA_REGION_BUNDLES: Partial<
   Record<CountryId, Partial<Record<ResetPresetId, State[]>>>
@@ -67,6 +72,8 @@ export const FULL_ERA_REGION_BUNDLES: Partial<
  * modules and re-derive the preset mapping.
  */
 export function regionBundleFor(countryId: CountryId, preset: string): State[] | null {
+  if (preset === "2019-default" && countryId in MODERN_2019_NATIONALS)
+    return modernRegions2019(countryId as Modern2019CountryId);
   const maps = FULL_ERA_REGION_BUNDLES[countryId];
   if (!maps) return null;
   const resolvedPreset =
@@ -75,6 +82,8 @@ export function regionBundleFor(countryId: CountryId, preset: string): State[] |
 }
 
 export function expectedRegionCount(countryId: CountryId, preset: string): number | null {
+  if (preset === "2019-default" && countryId in MODERN_2019_NATIONALS)
+    return modernRegions2019(countryId as Modern2019CountryId).length;
   if (countryId === DEFAULT_LEGACY_COUNTRY_ID) {
     const bundle = selectStatesBundleForPreset(preset);
     return bundle.filter(

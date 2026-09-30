@@ -576,6 +576,11 @@ export async function seedAllCountryData(
       const { seedBG2027 } = await import("./seed/seedBG2027");
       await seedBG2027(db, resetReference, log, preset);
     })(),
+    pack(async (log) => {
+      if (preset !== "2019-default") return;
+      const { seedModern2019 } = await import("./seed/seedModern2019");
+      await seedModern2019(db, resetReference, log, preset);
+    })(),
   ]);
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);
