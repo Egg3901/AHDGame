@@ -6,6 +6,14 @@ import { MONEY_MOVE_COLLECTION } from "../moneyMove";
 import { oid, type BankingTransition } from "../rules/boundary";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
+type FixtureJournal = {
+  status: string;
+  projections: {
+    applied: boolean;
+    receiptProtocol?: string;
+    projection: BankingTransition["projections"][number] & { filter: Record<string, unknown> };
+  }[];
+};
 function setup() {
   const memory = createInMemoryDb();
   const id = new ObjectId();
@@ -32,7 +40,7 @@ function setup() {
     id,
     transition,
     target: () => memory.collection("corporations").docs[0],
-    journal: () => memory.collection(MONEY_MOVE_COLLECTION).docs[0],
+    journal: () => memory.collection(MONEY_MOVE_COLLECTION).docs[0] as FixtureJournal,
   };
 }
 function interruptAfterWrite(
@@ -96,7 +104,7 @@ describe("protected update projection", () => {
     });
     let first = true;
     vi.spyOn(c, "updateOne").mockImplementation(async (filter, update, options) => {
-      if (first && update.$inc?.total === 100) {
+      if (first && !Array.isArray(update) && (update.$inc as Document | undefined)?.total === 100) {
         first = false;
         paused();
         await gate;
@@ -118,7 +126,11 @@ describe("protected update projection", () => {
     const original = c.updateOne.bind(c);
     let first = true;
     vi.spyOn(c, "updateOne").mockImplementation(async (filter, update, options) => {
-      if (first && update.$set?.["projections.0.applied"] === true) {
+      if (
+        first &&
+        !Array.isArray(update) &&
+        (update.$set as Document | undefined)?.["projections.0.applied"] === true
+      ) {
         first = false;
         throw new Error("journal unavailable");
       }
@@ -133,10 +145,7 @@ describe("protected update projection", () => {
     const f = setup();
     f.transition.projections[0].filter = { status: "pending" };
     expect((await settleTransition(f.db, f.transition)).status).toBe("applied");
-    f.memory.seed("corporations", [
-      ...f.memory.collection("corporations").docs,
-      { _id: new ObjectId(), total: 0, status: "pending" },
-    ]);
+    f.memory.seed("corporations", [{ _id: new ObjectId(), total: 0, status: "pending" }]);
     expect((await settleTransition(f.db, f.transition)).status).toBe("replayed");
     expect(f.memory.collection("corporations").docs.map((row) => row.total)).toEqual([100, 0]);
     expect(f.journal().projections[0].projection.filter._id).toEqual(f.id);
