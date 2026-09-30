@@ -95,7 +95,7 @@ function trees(key: string): RoleDecisionTrees {
         responseOpt(
           "sanction",
           "Coordinate targeted sanctions",
-          "Pressure perpetrators while preserving humanitarian trade.",
+          "Restrict economic activity around the most repressive, fragmented authority.",
           { sanctions: 4, diplomacy: 2 }
         ),
         responseOpt(

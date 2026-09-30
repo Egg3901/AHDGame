@@ -1,5 +1,5 @@
 import { ARAB_UPRISINGS_KEY } from "./rules/arabOrigins";
-import { resolveArabRegion } from "./rules/arabRegional";
+import { resolveArabRegion, describeArabRegion } from "./rules/arabRegional";
 import { projectArabRegion } from "./rules/arabProjection";
 import { prepareFinancialFiscalResponse } from "@/lib/crises/financialCrisisFiscalResponse";
 import { prepareFinancialCrisisBankResponse } from "@/lib/crises/financialCrisisBankResponse";
@@ -616,6 +616,12 @@ export async function resolveGlobalResponse(
       outcome =
         crisis.globalResponse.outcomes.find((candidate) => candidate.outcomeId === outcomeId) ??
         outcome;
+      const regionalDescription = describeArabRegion(predicted);
+      outcome = {
+        ...outcome,
+        description: regionalDescription,
+        wireMessage: `Regional uprising outcomes: ${regionalDescription}`,
+      };
     }
   }
   if (crisis.globalResponse.conflictKey === "russia_ukraine_security") {

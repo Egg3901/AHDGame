@@ -188,3 +188,23 @@ export function arabExtremistSpillover(conflict: LivingConflictState | null): nu
     )
   );
 }
+
+/** Public resolution copy exposes separate origins through the existing crisis
+ * result and wire surfaces, without requiring a new administrative-only view. */
+export function describeArabRegion(state: ArabRegionalState): string {
+  const names = { TN: "Tunisia", EG: "Egypt", LY: "Libya", SY: "Syria", YE: "Yemen" };
+  const labels = {
+    pressure: "structural pressure",
+    protest: "protests",
+    reform: "reform",
+    transition: "negotiated transition",
+    authoritarian: "authoritarian control",
+    civil_war: "civil war",
+    frozen: "frozen settlement",
+  };
+  return (
+    ARAB_ORIGINS.filter((id) => state.origins[id])
+      .map((id) => `${names[id]}: ${labels[state.origins[id]!.trajectory]}`)
+      .join("; ") + "."
+  );
+}
