@@ -22,6 +22,7 @@
  * entries rendered at the top of the report.
  */
 import { MongoClient } from "mongodb";
+import { collectElectionTurnoverReport } from "@/lib/sim/electionTurnover";
 import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
 import type { GameHealthSnapshot } from "@/lib/db/types/gameHealthSnapshot";
 import {
@@ -1525,7 +1526,9 @@ async function main(): Promise<void> {
     s.corpRevenue = keep(s.corpRevenue);
   }
 
+  const electionTurnover = await collectElectionTurnoverReport(db);
   const payload = {
+    electionTurnover,
     dbName,
     maxTurn,
     ordered,
@@ -3186,6 +3189,18 @@ function render() {
         + '<td>' + (race.reconciliation.length ? esc(race.reconciliation.join('; ')) : 'matched') + '</td></tr>';
     }
     html += '</tbody></table></div>';
+  }
+  if (D.electionTurnover) {
+    const T = D.electionTurnover;
+    const rateText = (rate) => rate.per100 === null ? 'unknown (0 comparable)' : rate.per100.toFixed(1) + ' (' + rate.count + '/' + rate.comparableCycles + ')';
+    html += '<h2>Election turnover per 100 comparable cycles</h2><div class="note">' + esc(T.basis) + ' ' + esc(T.denominators) + ' ' + esc(T.legacyLimit) + '</div>';
+    html += '<div class="card scroll"><table><thead><tr><th>Family and outcome coverage</th><th>Resolved</th><th>Seat vector changed</th><th>Unique control flip</th><th>Tied cycles</th><th>Representative replaced</th><th>All incumbents held</th><th>Player win</th><th>NPP win</th><th>Executed resolver shares</th></tr></thead><tbody>';
+    for (const family of T.families) {
+      html += '<tr><td>' + esc(family.key) + '<br>' + esc(Object.entries(family.outcomeScopes).map(([scope, count]) => scope + ': ' + count).join('; ')) + '</td><td>' + family.resolvedCycles + '</td>';
+      for (const metric of ['partySeatVectorChange', 'uniqueControlFlips', 'tiedControlCycles', 'personReplacement', 'completeIncumbentHold', 'playerWinCycles', 'nppWinCycles']) html += '<td>' + esc(rateText(family[metric])) + '</td>';
+      html += '<td>' + esc(Object.entries(family.resolverPathShares).map(([name, rate]) => name + ': ' + rateText(rate)).join('; ')) + '</td></tr>';
+    }
+    html += '</tbody></table></div><div class="note">Representative identities count each actual character or NPP once, including representatives holding aggregate seatsHeld voting weight. They do not assert one individual per physical seat. Actor mix, missing evidence and excluded comparisons are preserved in the report data.</div>';
   }
   if (D.governors && D.governors.length) {
     html += '<h2>Governorships</h2><div class="card scroll"><table><thead><tr><th>country</th><th>party</th><th>governorships</th></tr></thead><tbody>';

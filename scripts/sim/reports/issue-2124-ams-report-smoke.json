@@ -1,0 +1,116 @@
+{
+  "reportSourceCommit": "a3bf8dcbbd117b0e06f8d3d0b7105956cf97a223",
+  "sandbox": "ahd_sim_2124_matrix_receipts",
+  "commands": 9,
+  "report": {
+    "basis": "All retained resolved elections at query time, independent of chart checkpoint cutoff. Actual resolved holder receipts, finalized stored seat allocations or frozen single-winner results; archived candidate rows identify people. Current offices never reconstruct history. Each character or NPP holding aggregate seatsHeld voting weight counts once in representative identity comparisons.",
+    "denominators": "Each rate carries its own comparableCycles. Seat/person metrics compare consecutive races with unchanged capacity in the same scope. Win and resolver shares count resolved outcome cycles. Player/NPP win-cycle rates can overlap in mixed multi-seat races.",
+    "legacyLimit": "Missing historical person identity, actor kind and executed resolver remain unknown. Present-day flags are context only.",
+    "selection": {
+      "timeBasis": "Scheduled election endTurn among currently resolved records; old finalization timestamps are unavailable. This is not an as-of database reconstruction.",
+      "firstScheduledEndTurn": null,
+      "lastScheduledEndTurn": null
+    },
+    "provenance": {
+      "run": null,
+      "bootstrapFeatureManifest": null
+    },
+    "currentContext": {
+      "gameState": {
+        "_id": "current",
+        "preset": "1991-default",
+        "currentYear": 1993,
+        "currentTurn": 96,
+        "redistrictingEnabled": false
+      },
+      "config": null
+    },
+    "resolvedCycles": 3,
+    "families": [
+      {
+        "key": "DE:bundestag",
+        "countryId": "DE",
+        "electionFamily": "bundestag",
+        "resolvedCycles": 3,
+        "possibleComparisons": 2,
+        "comparableCycles": 2,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 2,
+          "comparableCycles": 2,
+          "per100": 100
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 2,
+          "per100": 0
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 2,
+          "per100": 50
+        },
+        "uniqueControlHolds": {
+          "count": 1,
+          "comparableCycles": 2,
+          "per100": 50
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 2,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 3,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 2,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 2,
+          "comparableCycles": 2,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 2,
+          "comparableCycles": 2,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 3,
+          "comparableCycles": 3,
+          "per100": 100
+        },
+        "nppWinCycles": {
+          "count": 3,
+          "comparableCycles": 3,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "complete direct and list holder receipt": 3
+        },
+        "actorMix": {
+          "npp-only": 0,
+          "player-only": 0,
+          "mixed": 3,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "ams": {
+            "count": 3,
+            "comparableCycles": 3,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {},
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      }
+    ],
+    "officeHistoryCoverage": []
+  }
+}
