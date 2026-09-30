@@ -268,5 +268,25 @@
       "combined": 1100
     }
   ],
-  "scope": "Synthetic generic money-movement parity and recovery. No full-world or production rollout acceptance."
+  "scope": "Synthetic generic money-movement parity and recovery. No full-world or production rollout acceptance.",
+  "operatorReconciliationProof": {
+    "source": "5a2d39434cc72b61e6bfc31f03bc10794d92759a",
+    "result": {
+      "name": "fixed",
+      "result": {
+        "status": "applied",
+        "applied": []
+      },
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ]
+    }
+  }
 }

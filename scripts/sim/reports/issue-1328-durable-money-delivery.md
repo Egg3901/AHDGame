@@ -10,6 +10,7 @@ Runtime source: `d0ad45d30542d00536ca1a102e097a47123e1bc0`. Comparison source: `
 - 17 isolated native Mongo cases passed: two normal comparison cases, ten delivery/acknowledgement/cleanup interruption cases, two competing-writer cases, a refused command recovery, an owner/waiter recovery, and a mismatched-target receipt refusal.
 - Both implementations transfer10 from a synthetic source holding1000 to a recipient holding100, ending at990/110. Every accepted recovery retains the combined1100. A refused original command stays refused after eligibility changes; a new command can be considered separately.
 - Protected target receipts are released only after the matching journal leg acknowledges its original outcome. Target generations and a fresh journal read guard delayed workers.
+- A separate native operator-reconciliation comparison passed at `5a2d39434cc72b61e6bfc31f03bc10794d92759a`. After explicit reconciliation closes a legacy journal, recovery preserves its terminal disposition and the already-reconciled990/110 cash positions.
 - Target lookup uses the stable document id independently of mutable eligibility fields. Legacy pending legs with no surviving delivery evidence remain partial for explicit reconciliation.
 
 Sanitized native results are in [the accompanying JSON](./issue-1328-durable-money-delivery.json).
