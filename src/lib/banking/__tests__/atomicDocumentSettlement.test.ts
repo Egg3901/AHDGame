@@ -676,11 +676,38 @@ describe("protected atomic settlement outcomes", () => {
       if (afterEviction) expect(recovered.error).toContain("reconciliation required");
     }
   );
+  it("acknowledges a delivered owner outside the current recovery page", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+    });
+    await expect(settleAtomicDocumentTransition(fault.db, transition(), target)).rejects.toThrow();
+    fault.disarm();
+    await evict(memory);
+    const next = transition("older-waiter");
+    next.legs = [
+      { kind: "mint", amount: 5, note: "fixture funding" },
+      { ...next.legs[0], kind: "credit", amount: 5 },
+    ];
+    next.projections[0].update = { $inc: { liquidCapital: 5 } };
+    expect((await settleAtomicDocumentTransition(db, next, { identity })).status).toBe("partial");
+    expect(
+      memory.collection(MONEY_MOVE_COLLECTION).docs.find((row) => row._id === transition().key)
+        ?.status
+    ).toBe("applied");
+    expect((await state(db))?.[field]).toBeUndefined();
+    expect((await resumeSettlement(db, next.key)).status).toBe("applied");
+    expect((await state(db))?.liquidCapital).toBe(65);
+  });
   it("rejects caller changes to its protected field", async () => {
     const memory = world(),
       db = memory as unknown as Db;
     const altered = transition();
-    altered.projections[0].update!.$set![field] = { key: "forged", outcome: "applied" };
+    altered.projections[0].update!.$set = { [field]: { key: "forged", outcome: "applied" } };
     expect((await settleAtomicDocumentTransition(db, altered, target)).status).toBe("rejected");
     expect(
       (
