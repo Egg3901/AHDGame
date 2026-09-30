@@ -362,7 +362,7 @@ async function runIntegrityChecks(
   };
 }
 
-async function collectSeatIntegrity(
+export async function collectSeatIntegrity(
   db: Db
 ): Promise<{ orphanedOfficialCount: number; seatBackedSeatsWithoutOfficials: number }> {
   const [seats, officials] = await Promise.all([
