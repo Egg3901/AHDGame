@@ -531,7 +531,12 @@ export async function resumeTreasuryReserveTransfer(
   }
   if (!receipt.legs[1]?.applied) {
     const credit = await banks.updateOne(
-      { _id: plan.bankId, settledKeys: { $ne: creditStamp }, pendingTreasuryReserveKey: key },
+      {
+        _id: plan.bankId,
+        settledKeys: { $ne: creditStamp },
+        ...revisionGuard(plan.destinationRevision!),
+        pendingTreasuryReserveKey: key,
+      },
       {
         $inc: { reserveBalance: plan.command.amount, treasuryReserveRevision: 1 },
         $set: { updatedAt: new Date() },
