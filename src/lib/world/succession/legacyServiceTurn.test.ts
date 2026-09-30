@@ -134,6 +134,31 @@ describe("legacy federation service transaction", () => {
       successorArrearsMinor: { CZ2: 0, SK: 0 },
       bridgeOutstandingMinor: 0,
     });
+    await db
+      .collection("macroCountries")
+      .updateOne({ _id: "CZ2" as never }, { $set: { federationTreasuryMinor: -1000 } });
+    const laterShortfall = await materializeLegacyFederationServiceTurn({
+      db,
+      session,
+      applicationId,
+      turn: 93,
+      now: new Date(3000),
+    });
+    expect(laterShortfall.successorArrearsMinor).toEqual({ CZ2: 100, SK: 0 });
+    await db
+      .collection("macroCountries")
+      .updateOne({ _id: "CZ2" as never }, { $set: { federationTreasuryMinor: 1000 } });
+    const laterRecovery = await materializeLegacyFederationServiceTurn({
+      db,
+      session,
+      applicationId,
+      turn: 94,
+      now: new Date(4000),
+    });
+    expect(laterRecovery).toMatchObject({
+      successorContributionsMinor: { CZ2: 200, SK: 50 },
+      bridgeOutstandingMinor: 0,
+    });
   });
   it("funds the bond turn's frozen holder snapshot when later placements change live float", async () => {
     const { db, bondId } = scenario();

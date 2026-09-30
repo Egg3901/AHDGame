@@ -49,24 +49,45 @@ export async function processFederationRatifications(
   ]);
   const appliedSources = new Set(applications.map((application) => application.sourceEntityId));
   const billsById = new Map(bills.map((bill) => [bill._id.toString(), bill]));
+  const closed: { id: string; status: "rejected" | "withdrawn" }[] = [];
   let processed = 0;
   for (const proposal of proposals) {
     if (appliedSources.has(proposal.sourceEntityId)) continue;
     const bill = billsById.get(proposal.billId.toString());
+    if (bill?.federationSettlementMandate?.termsHash === proposal.termsHash) {
+      if (bill.status === "failed" || bill.status === "override_failed") {
+        closed.push({ id: proposal._id, status: "rejected" });
+        continue;
+      }
+      if (bill.status === "withdrawn") {
+        closed.push({ id: proposal._id, status: "withdrawn" });
+        continue;
+      }
+    }
     if (
       !bill ||
       !["signed", "veto_override"].includes(bill.status) ||
       bill.federationSettlementMandate?.termsHash !== proposal.termsHash
     )
       continue;
-    await recordFederationRatifications({
+    const votes = await recordFederationRatifications({
       db,
       sourceCountryId: proposal.sourceEntityId,
       settlementId: proposal.settlementId,
       revision: proposal.revision,
       currentTurn,
     });
+    if (votes.some((vote) => vote.choice === "reject"))
+      closed.push({ id: proposal._id, status: "rejected" });
     processed += 1;
   }
+  if (closed.length)
+    await db
+      .collection<FederationPoliticalProposalRecord>(FEDERATION_POLITICAL_PROPOSALS_COLLECTION)
+      .bulkWrite(
+        closed.map(({ id, status }) => ({
+          updateOne: { filter: { _id: id, status: "open" }, update: { $set: { status } } },
+        }))
+      );
   return processed;
 }
