@@ -1,4 +1,5 @@
 import { applyCrisisTradeSanctions } from "./sanctions/apply";
+import { russiaUkraineOutcome } from "./rules/russiaUkraineOutcome";
 import type { Db, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
@@ -468,11 +469,19 @@ export async function resolveGlobalResponse(
   }
 
   const scores = scoresForGlobalResponse(crisis, interaction);
-  const outcome = selectGlobalResponseOutcome(
+  let outcome = selectGlobalResponseOutcome(
     crisis.globalResponse.outcomes,
     crisis.globalResponse.defaultOutcomeId,
     scores
   );
+  if (crisis.globalResponse.conflictKey === "russia_ukraine_security") {
+    outcome = russiaUkraineOutcome(
+      await loadConflictState(db, "russia_ukraine_security"),
+      outcome,
+      crisis.globalResponse.outcomes,
+      scores
+    );
+  }
   if (!outcome) return null;
 
   const now = new Date();

@@ -237,14 +237,15 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   const eraYear = eraGameState?.eraSystemEnabled ? resolveGameYear(eraGameState) : null;
   // Macro-growth v1 (design §4): O2 convergence + O3 sector blend on potential.
   const macroGrowthEnabled = eraGameState?.macroGrowthV1 === true;
-  const yugoslavia = eraGameState?.livingConflictsEnabled
+  const armedConflicts = eraGameState?.livingConflictsEnabled
     ? await db
         .collection<LivingConflictState>("livingConflicts")
-        .findOne(
-          { defKey: "yugoslav_dissolution" },
-          { projection: { hasOpened: 1, status: 1, tracks: 1, representedActors: 1 } }
+        .find(
+          { defKey: { $in: ["yugoslav_dissolution", "russia_ukraine_security"] } },
+          { projection: { defKey: 1, hasOpened: 1, status: 1, tracks: 1, representedActors: 1 } }
         )
-    : null;
+        .toArray()
+    : [];
 
   // SP5: prev values live in TWO stores post-split — macroMetrics carries
   // economic/population (+ economicModel) for every country; stateMetrics
@@ -685,7 +686,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // the registry so it can be threaded to the gdpGrowth/unemployment nodes.
     const priorMetricDoc = prevDocById.get(state._id);
     const crisisExposure = crisisEconomicExposure(
-      yugoslavia,
+      armedConflicts,
       state,
       priorMetricDoc?.livingConflictExposure,
       turn

@@ -5,6 +5,9 @@ import {
   normalizeConflictState,
 } from "./engine";
 import { RUSSIA_UKRAINE_DEF } from "./defs/russiaUkraine";
+import { selectGlobalResponseOutcome } from "./globalResponse";
+import { resolveConflictParticipants } from "./rules/participants";
+import type { ConflictRole } from "./types";
 
 function stateAt(phaseKey: string, tracks: Record<string, number> = {}) {
   const phase = RUSSIA_UKRAINE_DEF.phases.find((candidate) => candidate.key === phaseKey);
@@ -27,6 +30,50 @@ function outcome(id: string) {
 }
 
 describe("Russia-Ukraine security crisis", () => {
+  function decision(choices: Array<[ConflictRole, string]>) {
+    const response = RUSSIA_UKRAINE_DEF.phases[0].events[0].response!;
+    const scores: Record<string, number> = {};
+    for (const [role, optionId] of choices) {
+      const option = response.decisionTrees[role]!.options!.find((o) => o.optionId === optionId)!;
+      for (const [axis, value] of Object.entries(option.responseScores ?? {})) {
+        scores[axis] = (scores[axis] ?? 0) + value;
+      }
+    }
+    return selectGlobalResponseOutcome(response.outcomes, response.defaultOutcomeId, scores);
+  }
+
+  it("makes proxy escalation reachable from the single government's actual choice", () => {
+    expect(decision([["backer_a", "ru_proxy"]]).outcomeId).toBe("proxy_conflict");
+  });
+
+  it("makes direct intervention reachable without requiring the victim to escalate", () => {
+    expect(decision([["backer_a", "ru_invade"]]).outcomeId).toBe("broad_invasion");
+  });
+
+  it("does not let bystanders negotiate neutrality over both principals' objections", () => {
+    expect(
+      decision([
+        ["backer_a", "ru_invade"],
+        ["belligerent", "uk_mobilize"],
+        ["backer_b", "us_talks"],
+        ["neighbor", "mediate"],
+        ["bloc", "eu_guarantees"],
+        ["bystander", "nonaligned"],
+        ["bystander", "nonaligned"],
+      ]).outcomeId
+    ).not.toBe("negotiated_neutrality");
+  });
+
+  it("gives a substituted principal its own decisions", () => {
+    const participants = resolveConflictParticipants(
+      RUSSIA_UKRAINE_DEF,
+      new Set(["RU", "PL", "US", "DE"])
+    );
+    expect(RUSSIA_UKRAINE_DEF.roleResolver({ countryId: "PL", ...participants })).toBe(
+      "belligerent"
+    );
+  });
+
   it("adapts absent principals through explicit fallbacks", () => {
     expect(RUSSIA_UKRAINE_DEF.participantFallbacks).toMatchObject({
       UKR: ["RU", "PL", "RO"],
