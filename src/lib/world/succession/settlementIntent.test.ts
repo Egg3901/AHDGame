@@ -101,6 +101,8 @@ function activation(): Omit<SuccessionActivationInput, "sourceRegions" | "custod
 
 function scenario() {
   const mem = createInMemoryDb();
+  mem.seed("countryGameStates", [{ _id: "RU" }]);
+  mem.seed("countryState", [{ _id: "RU", countryId: "RU", governmentType: "onePartyState" }]);
   const proposed = activation();
   const termsHash = hashFederationPoliticalTerms(proposed);
   mem.seed("federationPoliticalProposals", [
@@ -162,7 +164,7 @@ function scenario() {
     },
   ]);
   mem.seed("states", [
-    { _id: "RUSSIA", countryId: "RU", population: 10, gdp: 100 },
+    { _id: "RUSSIA", countryId: "RU", population: 10, gdp: 100, houseDistricts: 10 },
     { _id: "UKRAINE", countryId: "RU", population: 11, gdp: 101 },
   ]);
   mem.seed("federalBudget", [
@@ -238,6 +240,19 @@ describe("live federation settlement intent", () => {
       now: new Date(3),
     });
     expect(application._id).toBe(staged._id);
+    expect(
+      await args.db.collection("countryGameStates").findOne({ _id: "RU" as never })
+    ).toMatchObject({
+      ruSovietSuccessionSinceTurn: 97,
+      ruProvisionalCongressSeats: 10,
+    });
+    expect(
+      await args.db.collection("governmentFormations").findOne({ _id: "RU" as never })
+    ).toMatchObject({
+      status: "pending",
+      totalSeats: 10,
+      majorityThreshold: 6,
+    });
     expect(await args.db.collection("states").findOne({ _id: "UKRAINE" as never })).toBeNull();
     expect(
       await args.db.collection("macroCountries").findOne({ _id: "UKR" as never })

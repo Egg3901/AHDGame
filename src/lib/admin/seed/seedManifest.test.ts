@@ -25,6 +25,7 @@ describe("seed manifest classification coverage", () => {
       "federationPublicationPreparations",
       "federationPreparedEffects",
       "federationArchivedRegionRows",
+      "federationArchivedPoliticalRows",
       "federationCustodyRecords",
       "federationArchivedPublicCorporations",
       "federationPublicCorporationRebases",

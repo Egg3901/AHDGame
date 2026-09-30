@@ -11,6 +11,7 @@ import { materializeFederationResidentHolds } from "./materializeResidents";
 import { materializeFederationSuccessorMacros } from "./materializeSuccessorMacros";
 import { materializeFederationFiscalAccounts } from "./materializeFiscalAccounts";
 import { materializeFederationFederalRetirement } from "./materializeFederalRetirement";
+import { materializeProvisionalRussianCongress } from "./materializeRussianCongress";
 import { publishFederationRelocations } from "./relocationLedger";
 import {
   FEDERATION_POLITICAL_PROPOSALS_COLLECTION,
@@ -134,6 +135,15 @@ export async function applyPreparedFederationSettlement(input: {
       db,
       session,
       sourceCountryId,
+      appliedOnTurn,
+      now,
+    });
+  } else if (sourceCountryId === "RU") {
+    await materializeProvisionalRussianCongress({
+      db,
+      session,
+      applicationId,
+      transfers: plan.stateTransfers,
       appliedOnTurn,
       now,
     });
