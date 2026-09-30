@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { batchSpawnNppCorporations, NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 
@@ -16,7 +17,7 @@ export interface WorldsimCorporationBootstrapResult {
   spawnedByCountry: Record<string, number>;
   /** Planned economies skipped BEFORE any spawn attempt (zero attempts, zero noise). */
   skippedBlocked: string[];
-  /** Countries that already had NPP corps (idempotent retry path). */
+  /** Countries with all requested NPP sector slots already filled. */
   skippedExisting: string[];
   /** Countries with no seeded capital region (nothing to HQ). */
   skippedNoCapital: string[];
@@ -67,20 +68,45 @@ export async function bootstrapWorldsimCorporations(
       log(`  ${countryId}: skipping NPP corporation spawn (private enterprise blocked)`);
       continue;
     }
+    // Banking bootstrap can already have created two financial NPPs in every
+    // country. A country-wide existence check used to skip the entire 17-sector
+    // sweep in that case, leaving pure-NPP worlds without producers. Fill only
+    // the missing slots so a partial bootstrap and a retry are both safe.
     const existing = await db
-      .collection("corporations")
-      .countDocuments({ ceoType: "npp", countryId });
-    if (existing > 0) {
+      .collection<{ type: string }>("corporations")
+      .find({ ceoType: "npp", countryId })
+      .project<{ type: string }>({ type: 1 })
+      .toArray();
+    const existingByType = new Map<string, number>();
+    for (const corp of existing) {
+      existingByType.set(corp.type, (existingByType.get(corp.type) ?? 0) + 1);
+    }
+    const missing = CORPORATION_TYPES.map((type) => ({
+      type,
+      count: Math.max(0, options.perSectorCount - (existingByType.get(type) ?? 0)),
+    })).filter(({ count }) => count > 0);
+    if (missing.length === 0) {
       result.skippedExisting.push(countryId);
       continue;
     }
     try {
-      const spawned = await batchSpawnNppCorporations(db, countryId, {
-        perSectorCount: options.perSectorCount,
-      });
-      result.spawnedByCountry[countryId] = spawned.length;
-      if (spawned.length > 0) {
-        log(`  ${countryId}: spawned ${spawned.length} NPP corporations`);
+      let spawnedCount = 0;
+      const typesByCount = new Map<number, (typeof CORPORATION_TYPES)[number][]>();
+      for (const { type, count } of missing) {
+        const types = typesByCount.get(count) ?? [];
+        types.push(type);
+        typesByCount.set(count, types);
+      }
+      for (const [count, sectorTypes] of typesByCount) {
+        const spawned = await batchSpawnNppCorporations(db, countryId, {
+          sectorTypes,
+          perSectorCount: count,
+        });
+        spawnedCount += spawned.length;
+      }
+      result.spawnedByCountry[countryId] = spawnedCount;
+      if (spawnedCount > 0) {
+        log(`  ${countryId}: spawned ${spawnedCount} NPP corporations`);
         result.countriesSeeded++;
       }
     } catch (error) {
