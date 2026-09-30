@@ -94,7 +94,16 @@ describe("LOC original settlement", () => {
       let fired = false;
       vi.spyOn(target, "updateOne").mockImplementation(async (...args) => {
         const result = await update(...args);
-        if (!fired) {
+        const updateSpec = args[1];
+        const increments =
+          !Array.isArray(updateSpec) && "$inc" in updateSpec ? updateSpec.$inc : undefined;
+        const mutation =
+          point === "ledger" ||
+          (increments &&
+            Object.keys(increments).some(
+              (path) => path.startsWith("currencyBalances.") || path === "reserveBalance"
+            ));
+        if (!fired && mutation) {
           fired = true;
           throw new Error("lost acknowledgement");
         }
@@ -112,4 +121,93 @@ describe("LOC original settlement", () => {
       expect(db.collection("locLedger").docs).toHaveLength(1);
     }
   );
+  it.each(["characters", "centralBanks"])(
+    "survives %s receipt eviction before acknowledgement",
+    async (collection) => {
+      const db = fixture();
+      const target = db.collection(collection);
+      const update = target.updateOne.bind(target);
+      let fired = false;
+      vi.spyOn(target, "updateOne").mockImplementation(async (...args) => {
+        const result = await update(...args);
+        const spec = args[1];
+        const inc = !Array.isArray(spec) && "$inc" in spec ? spec.$inc : undefined;
+        if (
+          !fired &&
+          inc &&
+          Object.keys(inc).some(
+            (path) => path.startsWith("currencyBalances.") || path === "reserveBalance"
+          )
+        ) {
+          fired = true;
+          throw new Error("cash acknowledgement lost");
+        }
+        return result;
+      });
+      await expect(settleLocPlan(db as unknown as Db, "evicted", 5, quote())).rejects.toThrow(
+        "acknowledgement lost"
+      );
+      await target.updateOne(
+        { _id: collection === "characters" ? owner : "US" },
+        {
+          $set: {
+            settledKeys: Array.from({ length: 200 }, (_, i) => `unrelated-${i}`),
+          },
+        }
+      );
+      await Promise.all([
+        settleLocPlan(db as unknown as Db, "evicted", 5, quote()),
+        settleLocPlan(db as unknown as Db, "evicted", 5, quote()),
+      ]);
+      expect(db.collection("characters").docs[0]).toMatchObject({
+        currencyBalances: { personal: { USD: 150 } },
+        lineOfCredit: { balances: { USD: 60 } },
+      });
+      expect(db.collection("centralBanks").docs[0]).toMatchObject({ reserveBalance: 10 });
+      expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
+    }
+  );
+  it("a delayed original writer cannot repeat cash or reject a completed retry after receipt eviction", async () => {
+    const db = fixture();
+    const target = db.collection("characters");
+    const update = target.updateOne.bind(target);
+    let release!: () => void, reached!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const resume = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let held = false;
+    vi.spyOn(target, "updateOne").mockImplementation(async (...args) => {
+      const spec = args[1];
+      const inc = !Array.isArray(spec) && "$inc" in spec ? spec.$inc : undefined;
+      if (!held && inc && Object.keys(inc).some((path) => path.startsWith("currencyBalances."))) {
+        held = true;
+        reached();
+        await resume;
+      }
+      return update(...args);
+    });
+    const first = settleLocPlan(db as unknown as Db, "delayed", 5, quote());
+    await paused;
+    try {
+      expect(
+        (await settleLocPlan(db as unknown as Db, "delayed", 5, quote())).error
+      ).toBeUndefined();
+      const settledKeys = Array.from({ length: 200 }, (_, i) => `replacement-${i}`);
+      await target.updateOne({ _id: owner }, { $set: { settledKeys } });
+      await db.collection("centralBanks").updateOne({ _id: "US" }, { $set: { settledKeys } });
+    } finally {
+      release();
+    }
+    expect((await first).error).toBeUndefined();
+    expect(db.collection("bankMoneyMoves").docs[0]).toMatchObject({ status: "applied" });
+    expect(target.docs[0]).toMatchObject({
+      currencyBalances: { personal: { USD: 150 } },
+      lineOfCredit: { balances: { USD: 60 } },
+    });
+    expect(db.collection("centralBanks").docs[0]).toMatchObject({ reserveBalance: 10 });
+    expect(db.collection("locLedger").docs).toHaveLength(1);
+  });
 });

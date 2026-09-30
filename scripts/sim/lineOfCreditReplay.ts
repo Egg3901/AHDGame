@@ -119,7 +119,19 @@ function failAfter(db: Db, collection: string) {
                 if (prop === "updateOne")
                   return async (...args: Parameters<typeof coll.updateOne>) => {
                     const result = await coll.updateOne(...args);
-                    if (!fired) {
+                    const update = args[1];
+                    const increments =
+                      !Array.isArray(update) && "$inc" in update ? update.$inc : undefined;
+                    const valuePublication =
+                      collection === "characters"
+                        ? increments &&
+                          Object.keys(increments).some((path) =>
+                            path.startsWith("currencyBalances.")
+                          )
+                        : collection === "centralBanks"
+                          ? !!increments?.reserveBalance
+                          : true;
+                    if (!fired && valuePublication) {
                       fired = true;
                       throw new Error("Injected acknowledgement loss");
                     }
@@ -236,8 +248,15 @@ async function main() {
         ledgerCount,
       });
     }
-    for (const point of ["characters", "centralBanks", "locLedger"]) {
-      const db = select(`${prefix}_ack_${point}`);
+    for (const [point, evict] of [
+      ["characters", false],
+      ["centralBanks", false],
+      ["locLedger", false],
+      ["characters", true],
+      ["centralBanks", true],
+      ["locLedger", true],
+    ] as const) {
+      const db = select(`${prefix}_ack_${point}${evict ? "_evicted" : ""}`);
       await seed(db, "wallet");
       await db
         .collection("characters")
@@ -282,6 +301,13 @@ async function main() {
         /acknowledgement/
       );
       assert(fault.didFire());
+      if (evict) {
+        const settledKeys = Array.from({ length: 200 }, (_, i) => `unrelated-${i}`);
+        await db.collection("characters").updateOne({ _id: owner }, { $set: { settledKeys } });
+        await db
+          .collection("centralBanks")
+          .updateOne({ _id: "US" as never }, { $set: { settledKeys } });
+      }
       const resumes = await Promise.all([
         settleLocPlan(db, "loc-native-repay", 500, plan),
         settleLocPlan(db, "loc-native-repay", 500, plan),
@@ -292,7 +318,12 @@ async function main() {
       assert.equal(final.loc.balances.USD, 99910);
       assert.equal(final.banks.find((b) => b.bank === "US")!.reserves, 10);
       assert.equal(await db.collection("locLedger").countDocuments(), 1);
-      results.push({ case: `lost_${point}_ack`, final, concurrentRecoveryOnce: true });
+      results.push({
+        case: `lost_${point}_ack${evict ? "_receipt_eviction" : ""}`,
+        final,
+        concurrentRecoveryOnce: true,
+        boundedReceiptsEvicted: evict,
+      });
     }
     const db = select(`${prefix}_garnish`);
     await seed(db, "wallet");
