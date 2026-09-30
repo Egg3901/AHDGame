@@ -128,6 +128,7 @@ export interface MoneyMoveRecordLeg {
 }
 
 interface MoneyMoveRecord {
+  atomicDocument?: unknown;
   _id: string;
   kind: string;
   turn?: number;
@@ -418,6 +419,12 @@ export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveRes
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const record = await records.findOne({ _id: key });
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
+  if (record.atomicDocument)
+    return {
+      status: "rejected",
+      applied: [],
+      error: "Atomic document settlement requires journal recovery",
+    };
   const legs = record.legs ?? [];
   const already = legs.flatMap((leg, i) => (leg.applied ? [i] : []));
   const completionStatus = record.projections?.some(
