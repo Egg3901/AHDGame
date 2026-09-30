@@ -1,6 +1,6 @@
 /** Bounded fresh-world seeder/driver proof against the dedicated sandbox Mongo. */
 import assert from "node:assert/strict";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import {
   seedColdWarFoundations,
   nuclearProgramBaselines,
@@ -13,7 +13,11 @@ import {
 import { driveConflictTurn } from "../../src/lib/livingConflict/driver";
 import { materializeLivingConflictEvent } from "../../src/lib/livingConflict/processTurn";
 import { resolveGlobalResponse } from "../../src/lib/livingConflict/globalResponse";
-import { autoResolveCrisisInteraction } from "../../src/lib/crises/interactionEngine";
+import {
+  autoResolveCrisisInteraction,
+  resolveCharacterRoles,
+  submitCrisisDecision,
+} from "../../src/lib/crises/interactionEngine";
 import { resolveConflictParticipants } from "../../src/lib/livingConflict/rules/participants";
 import { reconcileNorthernIrelandRatification } from "../../src/lib/livingConflict/northernIrelandRatification";
 import type { LivingConflictState } from "../../src/lib/livingConflict/types";
@@ -34,6 +38,8 @@ async function main(): Promise<void> {
   });
   const client = new MongoClient(uri);
   await client.connect();
+  // Application helpers must use this same sandbox client and release it here.
+  global._mongoClientPromise = Promise.resolve(client);
   try {
     const db = client.db(dbName);
     const countryIds = ["US", "UK", "IE", "FR", "DE", "RU", "CN", "UKR", "PL", "RO", "TR"];
@@ -212,6 +218,34 @@ async function main(): Promise<void> {
     // The ordinary world lacks YU. Run the surviving federation in a separate
     // sandbox database at its actual 2027 start turn, without rewriting history.
     const counterfactualDb = client.db(`${dbName}_counterfactual`);
+    process.env.MONGODB_DB = counterfactualDb.databaseName;
+    await counterfactualDb.collection("gameState").insertOne({
+      _id: "current" as never,
+      currentTurn: 1249,
+      currentYear: 2027,
+      startingYear: 2027,
+      crisisInteractionEnabled: true,
+    });
+    const usLeader = {
+      _id: new ObjectId("000000000000000000002027"),
+      countryId: "US",
+      name: "Synthetic US executive",
+      currentOffice: { type: "president" },
+    };
+    const plLeader = {
+      _id: new ObjectId("000000000000000000002028"),
+      countryId: "PL",
+      name: "Synthetic PL executive",
+      currentOffice: { type: "president" },
+    };
+    await counterfactualDb.collection("characters").insertMany([usLeader, plLeader]);
+    await counterfactualDb.collection("electedOfficials").insertMany(
+      [usLeader, plLeader].map((actor) => ({
+        countryId: actor.countryId,
+        officeType: actor.currentOffice.type,
+        characterId: actor._id,
+      }))
+    );
     const survivingCountries = new Set([...available, "YU"]);
     const yugoslavDef = defs.find((def) => def.key === "yugoslav_dissolution")!;
     const yugoslavOpening = build2027ConflictOpening(yugoslavDef, {
@@ -233,6 +267,60 @@ async function main(): Promise<void> {
     assert.equal(yugoslavTurn.state.openedYear, 2027);
     assert.equal(yugoslavTurn.state.openingDisposition, "counterfactual");
     assert(yugoslavTurn.events.some((event) => event.fired.phaseKey === "federal_crisis"));
+    const yugoslavEvent = yugoslavTurn.events.find(
+      (event) => event.fired.phaseKey === "federal_crisis"
+    )!;
+    assert(
+      (
+        await materializeLivingConflictEvent(
+          counterfactualDb,
+          yugoslavDef,
+          yugoslavParticipants,
+          yugoslavEvent,
+          1249
+        )
+      ).opened
+    );
+    const yugoslavCrisis = await counterfactualDb.collection<Crisis>("crises").findOne({
+      livingConflictEventId: yugoslavEvent.fired.id,
+    });
+    assert(yugoslavCrisis);
+    const yugoslavInteraction = await counterfactualDb
+      .collection<CrisisInteraction>("crisisInteractions")
+      .findOne({ crisisId: yugoslavCrisis._id });
+    assert(yugoslavInteraction);
+    const usRoles = await resolveCharacterRoles(counterfactualDb, usLeader);
+    assert(usRoles.includes("headOfState"));
+    await assert.rejects(
+      submitCrisisDecision(
+        counterfactualDb,
+        yugoslavInteraction._id,
+        "west_mediate",
+        usLeader._id,
+        "US",
+        ["any"]
+      ),
+      /authorized/i
+    );
+    await submitCrisisDecision(
+      counterfactualDb,
+      yugoslavInteraction._id,
+      "west_mediate",
+      usLeader._id,
+      "US",
+      usRoles
+    );
+    await assert.rejects(
+      submitCrisisDecision(
+        counterfactualDb,
+        yugoslavInteraction._id,
+        "west_mediate",
+        usLeader._id,
+        "US",
+        usRoles
+      ),
+      /already responded/i
+    );
 
     // A present Russian primary actor retains its own role when Ukraine is
     // unavailable; the explicit fallback chooses Poland instead.
@@ -256,6 +344,99 @@ async function main(): Promise<void> {
     );
     assert.equal(securityTurn.state.representedActors?.[0]?.representsCountryId, "UKR");
     assert.equal(securityTurn.state.representedActors?.[0]?.countryId, "PL");
+    let securityEvent = securityTurn.events[0];
+    for (let turn = 1250; turn <= 1272 && !securityEvent; turn++) {
+      await counterfactualDb
+        .collection("gameState")
+        .updateOne({ _id: "current" as never }, { $set: { currentTurn: turn, currentYear: 2027 } });
+      securityEvent = (await driveConflictTurn(counterfactualDb, securityDef, fallback, turn, 2027))
+        .events[0];
+    }
+    assert(securityEvent, "Missing inherited-phase security window with fallback actor");
+    assert(
+      (
+        await materializeLivingConflictEvent(
+          counterfactualDb,
+          securityDef,
+          fallback,
+          securityEvent,
+          securityEvent.fired.turn
+        )
+      ).opened
+    );
+    const securityCrisis = await counterfactualDb.collection<Crisis>("crises").findOne({
+      livingConflictEventId: securityEvent.fired.id,
+    });
+    assert(securityCrisis);
+    assert.equal(securityCrisis.globalResponse?.roleByCountry.PL, "belligerent");
+    assert.equal(securityCrisis.globalResponse?.roleByCountry.RU, "backer_a");
+    const securityInteraction = await counterfactualDb
+      .collection<CrisisInteraction>("crisisInteractions")
+      .findOne({ crisisId: securityCrisis._id });
+    assert(securityInteraction);
+    const plRoles = await resolveCharacterRoles(counterfactualDb, plLeader);
+    assert(plRoles.includes("headOfState"));
+    await submitCrisisDecision(
+      counterfactualDb,
+      securityInteraction._id,
+      "uk_neutral",
+      plLeader._id,
+      "PL",
+      plRoles
+    );
+    await assert.rejects(
+      submitCrisisDecision(
+        counterfactualDb,
+        securityInteraction._id,
+        "uk_neutral",
+        plLeader._id,
+        "PL",
+        plRoles
+      ),
+      /already responded/i
+    );
+    const yugoslavExpiry = yugoslavCrisis.startTurn + (yugoslavCrisis.durationTurns ?? 24);
+    await counterfactualDb
+      .collection("gameState")
+      .updateOne(
+        { _id: "current" as never },
+        { $set: { currentTurn: yugoslavExpiry, currentYear: 2027 } }
+      );
+    const yugoslavResolution = await resolveGlobalResponse(counterfactualDb, yugoslavCrisis._id);
+    const securityExpiry = securityCrisis.startTurn + (securityCrisis.durationTurns ?? 24);
+    await counterfactualDb
+      .collection("gameState")
+      .updateOne(
+        { _id: "current" as never },
+        { $set: { currentTurn: securityExpiry, currentYear: 2028 } }
+      );
+    const securityResolution = await resolveGlobalResponse(counterfactualDb, securityCrisis._id);
+    assert(yugoslavResolution && securityResolution);
+    assert.equal(yugoslavResolution.respondedCountries, 1);
+    assert.equal(securityResolution.respondedCountries, 1);
+    assert.deepEqual(
+      await resolveGlobalResponse(counterfactualDb, yugoslavCrisis._id),
+      yugoslavResolution
+    );
+    assert.deepEqual(
+      await resolveGlobalResponse(counterfactualDb, securityCrisis._id),
+      securityResolution
+    );
+    for (const [crisis, expiry] of [
+      [yugoslavCrisis, yugoslavExpiry],
+      [securityCrisis, securityExpiry],
+    ] as const) {
+      await counterfactualDb
+        .collection<Crisis>("crises")
+        .updateOne(
+          { _id: crisis._id },
+          { $set: { status: "resolved", endTurn: expiry, resolvedAt: new Date() } }
+        );
+      assert.equal(
+        (await counterfactualDb.collection<Crisis>("crises").findOne({ _id: crisis._id }))?.status,
+        "resolved"
+      );
+    }
     console.log(
       JSON.stringify(
         {
@@ -268,8 +449,12 @@ async function main(): Promise<void> {
           counterfactual: {
             yugoslavOpeningYear: yugoslavTurn.state.openedYear,
             yugoslavEvents: yugoslavTurn.events.map((event) => event.fired.phaseKey),
+            yugoslavPublicResponse: "US:west_mediate",
+            yugoslavResolution: yugoslavResolution.outcomeId,
             missingUkraineBelligerents: fallback.belligerents,
             missingUkraineRepresentedActors: securityTurn.state.representedActors,
+            missingUkrainePublicResponse: "PL:uk_neutral",
+            missingUkraineResolution: securityResolution.outcomeId,
           },
         },
         null,
@@ -278,6 +463,7 @@ async function main(): Promise<void> {
     );
   } finally {
     await client.close();
+    global._mongoClientPromise = undefined;
   }
 }
 
