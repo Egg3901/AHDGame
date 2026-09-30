@@ -97,17 +97,37 @@ describe("fresh 2027 crisis opening", () => {
     const collection = db.collection("livingConflicts");
     collection.findOne.mockImplementation(async (filter) => live.get(filter.defKey));
     collection.updateOne.mockImplementation(async (filter, update) => {
-      live.set(filter.defKey, { ...live.get(filter.defKey), ...update.$set } as LivingConflictState);
+      live.set(filter.defKey, {
+        ...live.get(filter.defKey),
+        ...update.$set,
+      } as LivingConflictState);
     });
     live.set(def.key, build2027ConflictOpening(def, context));
-    const absent = await driveConflictTurn(db as unknown as Db, def, resolveConflictParticipants(def, countries), 1249, 2027);
+    const absent = await driveConflictTurn(
+      db as unknown as Db,
+      def,
+      resolveConflictParticipants(def, countries),
+      1249,
+      2027
+    );
     expect(absent.state.status).toBe("closed");
     expect(absent.events).toEqual([]);
 
     const surviving = new Set([...countries, "YU"]);
     live.set(def.key, build2027ConflictOpening(def, { ...context, countries: surviving }));
-    const reopened = await driveConflictTurn(db as unknown as Db, def, resolveConflictParticipants(def, surviving), 1249, 2027);
-    expect(reopened.state).toMatchObject({ hasOpened: true, phaseLevel: 1, openedYear: 2027, openingDisposition: "counterfactual" });
+    const reopened = await driveConflictTurn(
+      db as unknown as Db,
+      def,
+      resolveConflictParticipants(def, surviving),
+      1249,
+      2027
+    );
+    expect(reopened.state).toMatchObject({
+      hasOpened: true,
+      phaseLevel: 1,
+      openedYear: 2027,
+      openingDisposition: "counterfactual",
+    });
     expect(reopened.events.map((event) => event.fired.phaseKey)).toEqual(["federal_crisis"]);
   });
 

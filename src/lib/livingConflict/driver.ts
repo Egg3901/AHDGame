@@ -160,7 +160,10 @@ export async function driveConflictTurn(
       state.openingProvenance?.preset === "2027-default" &&
       state.openingDisposition === "counterfactual" &&
       year === 2027;
-    if ((!inWindow(def, year) && !survivingFederation) || !hasRequiredBelligerents(def, participants)) {
+    if (
+      (!inWindow(def, year) && !survivingFederation) ||
+      !hasRequiredBelligerents(def, participants)
+    ) {
       return { state, events: [] };
     }
     if (def.minimumOpeningPressure !== undefined && externalPressure < def.minimumOpeningPressure) {

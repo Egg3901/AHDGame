@@ -55,7 +55,8 @@ export async function reconcileNorthernIrelandRatification(
     state.phaseLevel >= 6 &&
     !(uk && ie) &&
     !previousRejection
-  ) return state;
+  )
+    return state;
   const freshAuthorization =
     !previousRejection ||
     [uk, ie].every(

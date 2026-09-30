@@ -78,7 +78,8 @@ const ARAB_OPENING: Record<ArabOriginId, Partial<ArabOriginState>> = {
     reconstruction: 35,
   },
   LY: {
-    openingSourceUrl: "https://unsmil.unmissions.org/en/news/unsmil-welcomes-agreement-on-next-steps-towards-national-elections",
+    openingSourceUrl:
+      "https://unsmil.unmissions.org/en/news/unsmil-welcomes-agreement-on-next-steps-towards-national-elections",
     openingEvidenceAsOf: AS_OF,
     policy: "transition",
     trajectory: "frozen",
@@ -111,7 +112,8 @@ const ARAB_OPENING: Record<ArabOriginId, Partial<ArabOriginState>> = {
     reconstruction: 32,
   },
   YE: {
-    openingSourceUrl: "https://dppa.un.org/en/speeches-and-statements/asg-khiaris-remarks-to-the-security-council-on-developments-in-yemen",
+    openingSourceUrl:
+      "https://dppa.un.org/en/speeches-and-statements/asg-khiaris-remarks-to-the-security-council-on-developments-in-yemen",
     openingEvidenceAsOf: AS_OF,
     policy: "unchanged",
     trajectory: "civil_war",
