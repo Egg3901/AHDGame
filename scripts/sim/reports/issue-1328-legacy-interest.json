@@ -108,5 +108,15 @@
     "recoveryCases": 4,
     "repeatedRecoveryStable": true,
     "focusedIntegrationTests": 29
+  },
+  "interbankIntegratedTreatment": {
+    "sourceCommit": "13fd90c86e9b1da1e65032dede36eb7a60a836f4",
+    "phase": {
+      "commands": 485,
+      "readBsonBytes": 67776
+    },
+    "normalBalancesEqual": true,
+    "recoveryCases": 4,
+    "repeatedRecoveryStable": true
   }
 }
