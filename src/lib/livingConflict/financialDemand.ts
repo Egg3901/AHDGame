@@ -1,5 +1,5 @@
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
-import type { Db } from "mongodb";
+import type { Db, AnyBulkWriteOperation } from "mongodb";
 import type { Corporation, FederalBudget } from "@/lib/db/types";
 import { GLOBAL_FINANCIAL_CRISIS_KEY } from "./financialCrisisKey";
 import {
@@ -46,6 +46,7 @@ export async function loadFinancialCrisisDemand(
       );
     }
   const multipliers = new Map<string, number>();
+  const historyWrites: AnyBulkWriteOperation<CreditHistory>[] = [];
   for (const budget of budgets) {
     const observations = (
       history.find((row) => row._id === budget.countryId)?.observations ?? []
@@ -64,15 +65,15 @@ export async function loadFinancialCrisisDemand(
         referenceCredit,
       })
     );
-    await db.collection<CreditHistory>("financialCrisisCreditHistory").updateOne(
-      { _id: budget.countryId },
-      {
-        $set: {
-          observations: [...observations, { turn, credit: currentCredit }],
-        },
+    historyWrites.push({
+      updateOne: {
+        filter: { _id: budget.countryId },
+        update: { $set: { observations: [...observations, { turn, credit: currentCredit }] } },
+        upsert: true,
       },
-      { upsert: true }
-    );
+    });
   }
+  if (historyWrites.length)
+    await db.collection<CreditHistory>("financialCrisisCreditHistory").bulkWrite(historyWrites);
   return multipliers;
 }
