@@ -5,6 +5,8 @@ import type { PlayableResidence } from "./rules/residency";
 import { planSuccessionResidency } from "./rules/residency";
 import { planPrivateFirmSuccession } from "./rules/privateFacilities";
 import { planSuccessionFiscalShares } from "./rules/fiscalShares";
+import type { SuccessionApprovalInput } from "./rules/decision";
+import { loadPersistedFederationApproval } from "./ratificationStore";
 import { stageFederationFacilityClaims } from "./facilityClaimLedger";
 import { loadLiveSuccessionResidents } from "./loadLiveResidents";
 import { loadLivePrivateSuccessionFirms } from "./loadLivePrivateFirms";
@@ -35,7 +37,10 @@ export interface FederationSettlementIntentRecord {
 export interface LiveSettlementSnapshot {
   payload: Record<string, unknown>;
   payloadHash: string;
+  activationPlan: Awaited<ReturnType<typeof planLiveSuccessionActivation>>;
+  residencePlans: ReturnType<typeof planSuccessionResidency>;
   privateFirmPlans: ReturnType<typeof planPrivateFirmSuccession>;
+  fiscalShares: ReturnType<typeof planSuccessionFiscalShares>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,6 +64,42 @@ export function hashSettlementPayload(value: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(canonical(value)))
     .digest("hex");
+}
+
+/** Terms requiring political consent, excluding live cash amounts that can
+ * change while the normal parliamentary vote is open. */
+export function hashFederationPoliticalTerms(activation: LiveActivationInput): string {
+  return hashSettlementPayload({
+    presetId: activation.source.presetId,
+    sourceEntityId: activation.source.entityId,
+    settlementId: activation.settlementId,
+    revision: activation.approval.revision,
+    participants: [...activation.approval.requiredParticipants].sort(),
+    territories: activation.territories
+      .map((territory) => ({
+        entityId: territory.entityId,
+        regionIds: [...territory.regionIds].sort(),
+      }))
+      .sort((a, b) => a.entityId.localeCompare(b.entityId)),
+    successors: activation.successors
+      .map((entry) => ({ entityId: entry.entityId, displayName: entry.displayName }))
+      .sort((a, b) => a.entityId.localeCompare(b.entityId)),
+    continuingDisplayName: activation.continuingDisplayName,
+    negotiatedCustodians: activation.negotiatedCustodians,
+    assetBasis: activation.finances.assetBasis,
+    debtBasis: activation.finances.debtBasis,
+    assetWeights: activation.finances.assetWeights,
+    debtWeights: activation.finances.debtWeights,
+  });
+}
+
+function sameApproval(a: SuccessionApprovalInput, b: SuccessionApprovalInput): boolean {
+  const normalized = (input: SuccessionApprovalInput) => ({
+    ...input,
+    requiredParticipants: [...input.requiredParticipants].sort(),
+    consents: [...input.consents].sort((x, y) => x.entityId.localeCompare(y.entityId)),
+  });
+  return hashSettlementPayload(normalized(a)) === hashSettlementPayload(normalized(b));
 }
 
 /** Rebuild the whole proposed settlement from one database snapshot. The
@@ -126,7 +167,14 @@ export async function buildLiveFederationSettlementSnapshot(input: {
     privateFirmPlans,
     fiscalShares,
   }) as Record<string, unknown>;
-  return { payload, payloadHash: hashSettlementPayload(payload), privateFirmPlans };
+  return {
+    payload,
+    payloadHash: hashSettlementPayload(payload),
+    activationPlan: plan,
+    residencePlans,
+    privateFirmPlans,
+    fiscalShares,
+  };
 }
 
 /** A settlement application must call this with the same Mongo session used
@@ -137,7 +185,7 @@ export async function verifyLiveFederationSettlementIntent(input: {
   sourceCountryId: CountryId;
   appliedOnTurn: number;
   session?: ClientSession;
-}): Promise<FederationSettlementIntentRecord> {
+}): Promise<{ intent: FederationSettlementIntentRecord; snapshot: LiveSettlementSnapshot }> {
   const { db, intentId, sourceCountryId, appliedOnTurn, session } = input;
   const intent = await db
     .collection<FederationSettlementIntentRecord>(FEDERATION_SETTLEMENT_INTENTS_COLLECTION)
@@ -170,6 +218,19 @@ export async function verifyLiveFederationSettlementIntent(input: {
     activation.approval.currentYear !== valuation.currentYear
   )
     throw new Error("Federation intent lacks reproducible approved terms");
+  const ratified = await loadPersistedFederationApproval({
+    db,
+    sourceEntityId: sourceCountryId,
+    approval: activation.approval as unknown as LiveActivationInput["approval"],
+    termsHash: hashFederationPoliticalTerms({
+      ...activation,
+      now: intent.createdAt,
+    } as unknown as LiveActivationInput),
+    appliedOnTurn,
+    session,
+  });
+  if (!sameApproval(ratified, activation.approval as unknown as SuccessionApprovalInput))
+    throw new Error("Federation intent approval differs from recorded votes");
   const fresh = await buildLiveFederationSettlementSnapshot({
     db,
     sourceCountryId,
@@ -184,7 +245,7 @@ export async function verifyLiveFederationSettlementIntent(input: {
   });
   if (fresh.payloadHash !== intent.payloadHash)
     throw new Error("Federation source changed since settlement approval");
-  return intent;
+  return { intent, snapshot: fresh };
 }
 
 /** Freeze an approved, live-derived settlement as a contingent intent. This
@@ -222,6 +283,16 @@ export async function stageLiveFederationSettlementIntent(input: {
     )
     .findOne({ presetId, sourceEntityId: sourceCountryId, status: "applied" });
   if (applied) throw new Error("Federation source already has an applied settlement");
+
+  const ratified = await loadPersistedFederationApproval({
+    db,
+    sourceEntityId: sourceCountryId,
+    approval: activation.approval,
+    termsHash: hashFederationPoliticalTerms(activation),
+    appliedOnTurn,
+  });
+  if (!sameApproval(ratified, activation.approval))
+    throw new Error("Federation proposal approval differs from recorded votes");
 
   const { payload, payloadHash, privateFirmPlans } = await buildLiveFederationSettlementSnapshot({
     ...input,
