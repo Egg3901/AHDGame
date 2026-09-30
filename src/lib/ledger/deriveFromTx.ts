@@ -282,6 +282,10 @@ export function deriveLedgerEntry(
   tx: DerivableTx,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
+  // Securitizing historical principal changes its instrument, never treasury cash.
+  if (tx.type === "gov_bond_issuance" && tx.meta?.reconcile === true) return null;
+  // The settlement already owns a durable multi-leg witness for this receipt.
+  if (tx.type === "gov_bond_issuance" && tx.meta?.ledgerOwnedBySettlement === true) return null;
   const anchor = tx.anchorAmount;
   // No anchor value → not derivable in ₳ terms; skip rather than guess a rate
   // (deriving anchor from the live FX table causes historical drift — plan §5).
