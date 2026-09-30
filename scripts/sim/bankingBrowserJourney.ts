@@ -226,7 +226,7 @@ async function main() {
     // Compile the real routes before browser actions. GET on command-only routes
     // returns 405 without calling the financial command, so no funds move here.
     const warmPaths = [
-      "/banking",
+      ...(!priorSteps ? ["/banking"] : []),
       "/corporation/132811?tab=bank",
       "/centralbank/usd?tab=committee",
       "/centralbank/iep",
@@ -251,21 +251,25 @@ async function main() {
       "/api/corporations/132811/bank/charter",
       "/api/corporations/132811/bank/recapitalize",
     ];
-    for (let index = 0; index < warmPaths.length; index += 4) {
-      const results = await Promise.allSettled(
-        warmPaths.slice(index, index + 4).map(async (path) => {
-          const started = performance.now();
-          const response = await context.request.get(`${base}${path}`, { timeout: 300_000 });
-          console.log(
-            "route readiness",
-            path,
-            response.status(),
-            Math.round(performance.now() - started)
-          );
-          assert(response.status() < 500, `Readiness failed: ${path}`);
-        })
+    // Next dev writes shared manifests during compilation. Warm serially so
+    // concurrent cold page requests cannot observe a partially written manifest.
+    for (const path of warmPaths) {
+      if (
+        priorSteps &&
+        (path.startsWith("/api/character/savings") ||
+          path === "/api/banking/hub" ||
+          path === "/api/banking/loans")
+      )
+        continue;
+      const started = performance.now();
+      const response = await context.request.get(`${base}${path}`, { timeout: 300_000 });
+      console.log(
+        "route readiness",
+        path,
+        response.status(),
+        Math.round(performance.now() - started)
       );
-      for (const result of results) if (result.status === "rejected") throw result.reason;
+      assert(response.status() < 500, `Readiness failed: ${path}`);
     }
     page = await context.newPage();
     const errors: string[] = [],

@@ -8,11 +8,13 @@ import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { CORPORATION_FOUNDING_COST } from "@/lib/constants/corporations";
 import { MONEY_MOVE_COLLECTION } from "../moneyMove";
+import { emitBankingAuditEvent } from "../auditEvents";
 import { CHARTER_CAPITAL_FOUNDING_MULTIPLE } from "../charter";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("../auditEvents", () => ({ emitBankingAuditEvent: vi.fn() }));
 
 function makeCorp(overrides: Partial<Corporation> = {}): Corporation {
   return {
@@ -326,6 +328,11 @@ describe("banking charter", () => {
       const receipt = await database
         .collection(MONEY_MOVE_COLLECTION)
         .findOne({ kind: "bank_charter_capital" });
+      expect(emitBankingAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "charter.issued", settlementId: receipt?._id }),
+        database
+      );
+      expect(Object.keys(result).sort()).toEqual(["charter", "ok", "postedCapital"]);
       expect(receipt).toMatchObject({
         status: "applied",
         legs: [

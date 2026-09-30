@@ -226,6 +226,7 @@ export async function issueCharter(
           bankId: corporationId.toString(),
           statusAfter: "active",
           amount: result.postedCapital,
+          settlementId: result.settlementId,
           meta: { charterType: requestedType },
         }
       : {
@@ -240,7 +241,9 @@ export async function issueCharter(
         },
     db
   );
-  return result;
+  return result.ok
+    ? { ok: true, charter: result.charter, postedCapital: result.postedCapital }
+    : result;
 }
 
 async function issueCharterInner(
@@ -249,7 +252,7 @@ async function issueCharterInner(
   requestedType: BankCharterType,
   currency: CurrencyCode,
   options?: { skipFlagCheck?: boolean }
-): Promise<IssueCharterResult> {
+): Promise<IssueCharterResult & { settlementId?: string }> {
   const corporation = await db.collection<Corporation>("corporations").findOne({
     _id: corporationId,
   });
@@ -352,6 +355,7 @@ async function issueCharterInner(
     ok: true,
     charter,
     postedCapital,
+    settlementId: settlement.key,
   };
 }
 
