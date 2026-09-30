@@ -23,7 +23,7 @@
  *    Publishing is the caller's job because the caller knows the actor.
  */
 
-import { ObjectId, type Db, type Document, type Filter, type UpdateFilter } from "mongodb";
+import { type Db, type Document, type Filter, type UpdateFilter } from "mongodb";
 import {
   MONEY_MOVE_COLLECTION,
   applyMoneyMove,
@@ -39,6 +39,10 @@ import type {
 } from "@/lib/banking/rules/boundary";
 import { checkBalancedTransfer } from "@/lib/banking/rules/invariants";
 import { countBankingEvent } from "@/lib/banking/telemetry";
+
+import { reviveObjectIds } from "./settlementEncoding";
+import { resumeAtomicDocumentSettlement } from "./atomicDocumentSettlement";
+export { reviveObjectIds } from "./settlementEncoding";
 
 export type SettlementStatus = "applied" | "replayed" | "rejected" | "partial";
 
@@ -90,6 +94,7 @@ function safeToRetryBlind(_projection: TransitionProjection): boolean {
  * collection, same `_id`, extra fields. One queue for operators, one index.
  */
 interface JournalExtension {
+  atomicDocument?: unknown;
   status?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
@@ -108,23 +113,6 @@ interface JournalExtension {
 
 export function projectionStamp(key: string, index: number): string {
   return `${key}#${index}`;
-}
-
-/** `{ $oid: hex }` markers become driver ObjectIds; everything else is copied. */
-export function reviveObjectIds<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((v) => reviveObjectIds(v)) as unknown as T;
-  if (value && typeof value === "object") {
-    if (value instanceof ObjectId || value instanceof Date) return value;
-    const record = value as Record<string, unknown>;
-    const keys = Object.keys(record);
-    if (keys.length === 1 && keys[0] === "$oid" && typeof record.$oid === "string") {
-      return new ObjectId(record.$oid) as unknown as T;
-    }
-    const out: Record<string, unknown> = {};
-    for (const [key, inner] of Object.entries(record)) out[key] = reviveObjectIds(inner);
-    return out as T;
-  }
-  return value;
 }
 
 function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
@@ -538,6 +526,10 @@ export async function resumeSettlement(
   key: string,
   options: FinishOptions = {}
 ): Promise<SettlementResult> {
+  const record = await db
+    .collection<{ _id: string; atomicDocument?: unknown }>(MONEY_MOVE_COLLECTION)
+    .findOne({ _id: key }, { projection: { atomicDocument: 1 } });
+  if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const moved = await resumeMoneyMove(db, key);
   if (moved.status !== "applied") {
     return {
@@ -567,6 +559,7 @@ export async function recoverProjections(
     MONEY_MOVE_COLLECTION
   );
   const record = await journal.findOne({ _id: key });
+  if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const result: SettlementResult = {
     status: "applied",
     key,
