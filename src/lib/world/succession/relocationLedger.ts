@@ -1,4 +1,4 @@
-import type { ClientSession, Db } from "mongodb";
+import type { AnyBulkWriteOperation, ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PlayableResidence, SuccessionResidencePlan } from "./rules/residency";
 import type { PrivateFirmSuccessionPlan } from "./rules/privateFacilities";
@@ -99,6 +99,23 @@ export async function publishFederationRelocations(input: {
   }
   if (new Set(records.map((record) => record._id)).size !== records.length)
     throw new Error("Federation relocation contains duplicate subjects");
+  const continuingClaims = firms
+    .filter((plan) => plan.status === "continuing")
+    .flatMap((plan) => {
+      const origin = firmOrigins[plan.corporationId];
+      if (
+        plan.claims.length &&
+        (!session?.inTransaction() ||
+          !origin ||
+          origin.countryId !== application.sourceEntityId ||
+          origin.entityId !== application.sourceEntityId ||
+          plan.claims.some((claim) => claim.creditorCountryId !== origin.countryId))
+      )
+        throw new Error(
+          "Continuing facility compensation requires retained headquarters and a transaction"
+        );
+      return plan.claims;
+    });
   const expectedClaims = firms.flatMap((plan) => plan.claims);
   if (expectedClaims.length) {
     const storedClaims = await db
@@ -119,6 +136,35 @@ export async function publishFederationRelocations(input: {
       })
     )
       throw new Error("Federation relocation has missing or changed facility claims");
+    const updates: AnyBulkWriteOperation<FederationFacilityClaimRecord>[] = [];
+    for (const claim of continuingClaims) {
+      const stored = byId.get(claim.claimId)!;
+      if (
+        stored.sectorId !== claim.sectorId ||
+        stored.creditorCountryId !== claim.creditorCountryId ||
+        !["contingent", "payable", "paid"].includes(stored.status)
+      )
+        throw new Error("Continuing facility compensation has a changed creditor or status");
+      if (stored.status === "contingent")
+        updates.push({
+          updateOne: {
+            filter: {
+              _id: stored._id,
+              applicationId,
+              status: "contingent",
+              creditorCountryId: claim.creditorCountryId,
+            },
+            update: { $set: { status: "payable" } },
+          },
+        });
+    }
+    if (updates.length) {
+      const changed = await db
+        .collection<FederationFacilityClaimRecord>(FEDERATION_FACILITY_CLAIMS_COLLECTION)
+        .bulkWrite(updates, { session });
+      if (changed.matchedCount !== updates.length)
+        throw new Error("Continuing facility compensation changed during activation");
+    }
   }
   const collection = db.collection<FederationRelocationRecord>(FEDERATION_RELOCATIONS_COLLECTION);
   if (records.length === 0) return [];
