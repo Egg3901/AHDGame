@@ -41,6 +41,9 @@ export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   approvalSnapshot: 1500,
   nppGovernmentPhases: 1000,
   bondTurn: 1000,
+  // At most three 1991 federation applications; real Mongo volume fixtures cap
+  // one application at 20 commands, with headroom for all three and cursors.
+  federationFacilityCompensation: 75,
   nppBillSponsorship: 800,
   nppBehavior: 800,
   fiscalBaseGrowth: 800,

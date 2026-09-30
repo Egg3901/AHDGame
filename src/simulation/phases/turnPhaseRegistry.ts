@@ -100,6 +100,7 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import { processFederationFacilityPaymentTurn } from "@/lib/world/succession/facilityPaymentTurn";
 import { processDefenceWindfallRecoveryTurn } from "@/lib/turn/defenceWindfallRecoveryTurn";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
@@ -521,6 +522,17 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("bondTurn", () => processBondTurn(newTurn)),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
+
+        // Creditor servicing takes priority over private facility compensation.
+        if (bondTurnResult !== null) {
+          const compensated = await runtime.runPhase("federationFacilityCompensation", () =>
+            processFederationFacilityPaymentTurn(context.db, newTurn, context.realNow)
+          );
+          if (compensated !== null)
+            (phaseResults as Record<string, unknown>).federationFacilityCompensation = {
+              applicationsServiced: compensated,
+            };
+        }
 
         // Collect a staged procurement-windfall assessment after bond coupons
         // and maturities land, while preserving the supplier's operating reserve.
