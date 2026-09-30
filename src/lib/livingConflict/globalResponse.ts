@@ -1,3 +1,4 @@
+import { PANDEMIC_KEY, pandemicResponseOutcome } from "./rules/pandemic";
 import {
   TERRORISM_KEY,
   terrorismOptionRefusal,
@@ -548,7 +549,10 @@ export async function resolveGlobalResponse(
     return interaction.globalResponseOutcome;
   }
 
-  const scores = scoresForGlobalResponse(crisis, interaction);
+  const scores =
+    crisis.globalResponse.conflictKey === PANDEMIC_KEY
+      ? scoresForResponses(interaction.leaderResponses ?? [])
+      : scoresForGlobalResponse(crisis, interaction);
   let outcome = selectGlobalResponseOutcome(
     crisis.globalResponse.outcomes,
     crisis.globalResponse.defaultOutcomeId,
@@ -573,6 +577,15 @@ export async function resolveGlobalResponse(
     ).target;
   }
   if (!outcome) return null;
+  if (crisis.globalResponse.conflictKey === PANDEMIC_KEY) {
+    outcome = pandemicResponseOutcome(
+      await loadConflictState(db, PANDEMIC_KEY),
+      scores,
+      Object.keys(crisis.globalResponse.roleByCountry).length,
+      outcome,
+      interaction.leaderResponses ?? []
+    );
+  }
 
   const now = new Date();
   const resolved: ResolvedGlobalResponse = {
