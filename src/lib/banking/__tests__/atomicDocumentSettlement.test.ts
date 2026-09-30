@@ -132,6 +132,24 @@ describe("atomic document settlement", () => {
       bankCharter: { cashReserves: 7, charteredTurn: 9 },
     });
   });
+  it("does not revive an unwritten intent after an intervening cycle restores the same guard values", async () => {
+    const memory = world();
+    const db = memory as unknown as Db;
+    const crash = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+    });
+    await expect(
+      settleAtomicDocumentTransition(crash.db, transition("old"), target)
+    ).rejects.toThrow();
+    await settleAtomicDocumentTransition(db, transition("new"), target);
+    await db
+      .collection("corporations")
+      .updateOne({ _id: id }, { $set: { bankCharter: null, liquidCapital: 100 } });
+    expect((await resumeSettlement(db, "old")).status).toBe("rejected");
+    expect(await state(db)).toMatchObject({ liquidCapital: 100, bankCharter: null });
+  });
   it("supports a mint and atomic cash/debt publication, then burn and cash retirement", async () => {
     const memory = world();
     const db = memory as unknown as Db;
