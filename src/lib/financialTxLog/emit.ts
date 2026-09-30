@@ -37,7 +37,7 @@ function amountToAnchor(
   return amount / rate;
 }
 
-async function loadAnchorRateMap(
+export async function loadAnchorRateMap(
   db: Db,
   entries: Pick<TxInput, "currencyCode" | "anchorAmount">[]
 ): Promise<Map<string, number>> {
@@ -298,7 +298,7 @@ export async function emitTx(
   }
 }
 
-function buildTxDocs(
+export function buildTxDocs(
   entries: TxInput[],
   thresholds: TxThresholds,
   turnLengthMinutes: number,
