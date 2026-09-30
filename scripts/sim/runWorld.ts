@@ -1293,8 +1293,8 @@ async function main() {
       }
       skippedSinceMs = null;
       lastTurn = result.turn;
-      if (investmentSnapshots) {
-        if (isCrashRecovery) throw new Error("Crashed turn invalidates the balance comparison");
+      if (investmentSnapshots || captureCrisisHorizonTurn) {
+        if (isCrashRecovery) throw new Error("Crashed turn invalidates durable turn evidence");
         const [checkedState, completedLog] = await Promise.all([
           db
             .collection<GameState>("gameState")
@@ -1307,7 +1307,7 @@ async function main() {
             ),
         ]);
         assertInvestmentTurnComplete(lastTurn, checkedState?.currentTurn, completedLog);
-        await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+        if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
       }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the
