@@ -401,11 +401,16 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
       const govAnchor =
         electionType === "governor" && customCycle1EndTurn !== undefined
           ? customCycle1EndTurn
-          : countryId === "RU" || countryId === "UKR" || countryId === "BLR" || countryId === "BAL"
-            ? anchors.ruRepublicSoviet
-            : countryId === "DD"
-              ? anchors.ddVolkskammer
-              : anchors.governorStateSenate;
+          : electionType === "governor" && countryId === "BR"
+            ? anchors.brChamber
+            : countryId === "RU" ||
+                countryId === "UKR" ||
+                countryId === "BLR" ||
+                countryId === "BAL"
+              ? anchors.ruRepublicSoviet
+              : countryId === "DD"
+                ? anchors.ddVolkskammer
+                : anchors.governorStateSenate;
       if (govAnchor == null) return null;
       const endTurn = cycle === 1 ? govAnchor : govAnchor + (cycle - 1) * dur.durationHours;
       return {
