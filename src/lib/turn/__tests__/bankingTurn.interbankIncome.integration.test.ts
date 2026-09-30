@@ -53,17 +53,49 @@ async function world(cash: number) {
 beforeEach(() => vi.clearAllMocks());
 describe("interbank realized income follows journal cash", () => {
   it.each([
-    { cash: 200, collection: "interbankLoans", onCall: 1, afterWrite: true },
-    { cash: 50, collection: "interbankLoans", onCall: 1, afterWrite: true },
-    { cash: 200, collection: "corporations", onCall: 3, afterWrite: false },
-    { cash: 200, collection: "corporations", onCall: 3, afterWrite: true },
-    { cash: 200, collection: "corporations", onCall: 4, afterWrite: false },
-    { cash: 200, collection: "corporations", onCall: 4, afterWrite: true },
+    { cash: 200, collection: "interbankLoans", field: "lastProcessedTurn", afterWrite: true },
+    { cash: 50, collection: "interbankLoans", field: "lastProcessedTurn", afterWrite: true },
+    {
+      cash: 200,
+      collection: "corporations",
+      field: "bankCharter.lastBankingInterbankInterestPaid",
+      afterWrite: false,
+    },
+    {
+      cash: 200,
+      collection: "corporations",
+      field: "bankCharter.lastBankingInterbankInterestPaid",
+      afterWrite: true,
+    },
+    {
+      cash: 200,
+      collection: "corporations",
+      field: "bankCharter.lastBankingInterbankInterestReceived",
+      afterWrite: false,
+    },
+    {
+      cash: 200,
+      collection: "corporations",
+      field: "bankCharter.lastBankingInterbankInterestReceived",
+      afterWrite: true,
+    },
   ])(
     "recovers original paid interest and both income projections: %j",
-    async ({ cash, collection, onCall, afterWrite }) => {
+    async ({ cash, collection, field, afterWrite }) => {
       const memory = await world(cash);
-      const fault = withInjectedCrash(memory, { collection, op: "updateOne", onCall, afterWrite });
+      const fault = withInjectedCrash(memory, {
+        collection,
+        op: "updateOne",
+        onCall: 1,
+        afterWrite,
+        matches: (args) => {
+          const update = args[1] as {
+            $inc?: Record<string, unknown>;
+            $set?: Record<string, unknown>;
+          };
+          return update.$inc?.[field] !== undefined || update.$set?.[field] !== undefined;
+        },
+      });
       await expect(processBankingTurn(fault.db, turn)).rejects.toThrow();
       fault.disarm();
       await processBankingTurn(memory as unknown as Db, turn);
