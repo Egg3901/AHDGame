@@ -10,7 +10,7 @@ import { recordFederationRatifications } from "@/lib/world/succession/recordRati
  * can trigger autonomous decisions, and replay preserves the first decision. */
 export async function processFederationRatifications(
   db: Db,
-  preset: string,
+  preset: string | undefined,
   currentTurn: number
 ): Promise<number> {
   if (preset !== "1991-default") return 0;
