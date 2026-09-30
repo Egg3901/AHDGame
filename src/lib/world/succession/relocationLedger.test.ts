@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
-import { publishFederationRelocations } from "./relocationLedger";
+import { publishFederationRelocations, type FederationRelocationRecord } from "./relocationLedger";
 import { stageFederationFacilityClaims } from "./facilityClaimLedger";
 
 const applicationId = "1991-default:split:1";
@@ -60,7 +60,7 @@ describe("federation protected relocation ledger", () => {
       ...input.residents[0],
       characterId: `person-${index}`,
     }));
-    const collection = db.collection("federationRelocations");
+    const collection = db.collection<FederationRelocationRecord>("federationRelocations");
     const bulk = vi.spyOn(collection, "bulkWrite");
     const find = vi.spyOn(collection, "find");
     const first = await publishFederationRelocations({
