@@ -4144,14 +4144,16 @@ const SEAT_GROUPS_2020: SeatGroups = {
     ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
     ...CN_GOVERNORS_2020,
   ],
-  // Michael D. Higgins began his second presidential term on 11 Nov 2018.
-  // https://president.ie/en/the-president/michaeldhiggins/
-  IE: [
-    ...IE_DAIL_2020,
-    ...IE_SEANAD_2020,
-    { state: "IE", officeType: "uachtaran", party: "ie_ind" },
-  ],
+  IE: [...IE_DAIL_2020, ...IE_SEANAD_2020],
 };
+
+// The older 1999/2007 presets also fall back to SEAT_GROUPS_2020. Keep the
+// source-backed 2019 incumbent out of those earlier opening-state rosters.
+// Michael D. Higgins began his second presidential term on 11 Nov 2018.
+// https://president.ie/en/the-president/michaeldhiggins/
+const SEAT_GROUPS_2019: SeatGroups = mergeGroups(SEAT_GROUPS_2020, {
+  IE: [{ state: "IE", officeType: "uachtaran", party: "ie_ind" }],
+});
 
 /**
  * The 2027 preset, re-expressed in the country-owned grouping.
@@ -4245,6 +4247,7 @@ const SEAT_GROUPS_1979: SeatGroups = mergeGroups(
  */
 /** Presets with their own seat groups; everything else takes the 2020 set. */
 const EXPLICIT_SEAT_PRESETS = new Set([
+  "2019-default",
   "1991-default",
   "1953-default",
   "1979-default",
@@ -4254,6 +4257,8 @@ const EXPLICIT_SEAT_PRESETS = new Set([
 
 export function seatGroupsFor(presetId: string): SeatGroups {
   switch (presetId) {
+    case "2019-default":
+      return SEAT_GROUPS_2019;
     case "1991-default":
       return SEAT_GROUPS_1992;
     case "1953-default":

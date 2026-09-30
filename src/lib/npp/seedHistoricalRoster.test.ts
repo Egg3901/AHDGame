@@ -173,4 +173,11 @@ describe("seedFromSeats historical roster", () => {
       seatBackedSeatsWithoutOfficials: 0,
     });
   });
+
+  it.each(["1999-default", "2007-default"])(
+    "does not back-project the 2019 presidential roster into %s",
+    (preset) => {
+      expect(seatGroupsFor(preset).IE!.some((seat) => seat.officeType === "uachtaran")).toBe(false);
+    }
+  );
 });
