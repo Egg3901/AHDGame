@@ -10,6 +10,8 @@
  * All data loaded upfront into shared context for consistency.
  */
 
+import { withNppAutonomySnapshot } from "@/lib/nppAutonomy/featureFlag";
+import { withCountryAccessSnapshot } from "@/lib/countryAccess";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { loadNPPContext } from "./npp/context";
 import { getDb } from "@/lib/mongodb";
@@ -22,7 +24,7 @@ import { processSlateResponses, syncPersistentSlateAssignments } from "./npp/sla
 
 // ─── Main Export ───────────────────────────────────────────────────────────────
 
-export async function processNPPTurn(
+async function runNppTurn(
   now: Date,
   options: {
     billDeadlineNow?: Date;
@@ -126,4 +128,20 @@ export async function processNPPTurn(
   const speakerVotes = 0;
 
   return { entered, votescast, speakerVotes, slateResponses, deaths: mortality.deaths };
+}
+
+/**
+ * NPP behavior phase. Runs under per-phase snapshots of the autonomy level and
+ * country access (#2690): the per-actor autonomy gates otherwise re-read the
+ * `gameState` and `countryGameStates` documents on every call. Nothing in this
+ * phase writes either, which is what makes the snapshots valid.
+ */
+export async function processNPPTurn(
+  now: Date,
+  options: Parameters<typeof runNppTurn>[1]
+): ReturnType<typeof runNppTurn> {
+  const db = await getDb();
+  return withNppAutonomySnapshot(db, () =>
+    withCountryAccessSnapshot(db, () => runNppTurn(now, options))
+  );
 }
