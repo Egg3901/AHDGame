@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { qualifyPresidentialRace } from "./presidentialQualification";
+import { qualifyPresidentialRace, presidentialPersonTurnover } from "./presidentialQualification";
 
 const snapshot = {
   candidates: [
@@ -112,4 +112,18 @@ describe("qualifyPresidentialRace", () => {
       ])
     );
   });
+});
+
+it("counts same-party person turnover from the seeded office and preserves missing history", () => {
+  const row = { countryId: "US", officeType: "president", seats: 1 };
+  expect(
+    presidentialPersonTurnover([
+      { ...row, turn: 1, executiveHolder: "npp:seed" },
+      { ...row, turn: 2, executiveHolder: "npp:seed" },
+      { ...row, turn: 3, executiveHolder: "player:winner" },
+      { ...row, turn: 4 },
+      { ...row, turn: 5, executiveHolder: "npp:later" },
+    ])
+  ).toEqual({ personTurnover: 1, knownTurns: 4, unknownTurns: 1 });
+  expect(presidentialPersonTurnover([{ ...row, turn: 1 }]).personTurnover).toBeNull();
 });

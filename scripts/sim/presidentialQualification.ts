@@ -119,3 +119,38 @@ export function qualifyPresidentialRace(
     reconciliation: errors,
   };
 }
+
+/** Retain the seeded administration and same-party person changes. Historical
+ * rows without holder telemetry remain unknown, never inferred from a party. */
+export function presidentialPersonTurnover(
+  rows: ReadonlyArray<{
+    countryId?: string;
+    officeType?: string;
+    turn?: number;
+    seats?: number;
+    executiveHolder?: string | null;
+  }>
+) {
+  const turns = new Map<number, (typeof rows)[number][]>();
+  for (const row of rows) {
+    if (row.countryId !== "US" || row.officeType !== "president" || row.turn === undefined)
+      continue;
+    turns.set(row.turn, [...(turns.get(row.turn) ?? []), row]);
+  }
+  let prior: string | null = null;
+  let changes = 0,
+    knownTurns = 0,
+    unknownTurns = 0;
+  for (const [, group] of [...turns].sort((a, b) => a[0] - b[0])) {
+    const holder = group.length === 1 && group[0].seats === 1 ? group[0].executiveHolder : null;
+    if (!holder) {
+      unknownTurns++;
+      prior = null;
+      continue;
+    }
+    knownTurns++;
+    if (prior && prior !== holder) changes++;
+    prior = holder;
+  }
+  return { personTurnover: knownTurns > 0 ? changes : null, knownTurns, unknownTurns };
+}
