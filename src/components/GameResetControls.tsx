@@ -198,7 +198,7 @@ export function GameResetControls() {
             title: "Reset + No Parties",
             warningLines: [
               ...RESET_CONFIG[type].warningLines.slice(0, 2),
-              "Starts with no political parties or political NPP officeholders. Offices are vacant for player elections.",
+              "Player countries start with no political parties or political NPP officeholders. Their offices are vacant for player elections; background countries keep their governments.",
             ],
             successPrefix: "Reset + no parties bootstrap completed",
           }
@@ -503,7 +503,7 @@ export function GameResetControls() {
         {selectedPresetData && (
           <p className="mt-3 text-xs text-muted">
             {noStartingParties
-              ? "1991 world data with no starting parties or political NPP officeholders. Offices start vacant for player-created parties and elections."
+              ? "1991 world data with no starting parties in player countries. Their political offices start vacant for player-created parties and elections. Background countries keep their modeled parties and governments."
               : selectedPresetData.description}
           </p>
         )}
@@ -659,7 +659,7 @@ export function GameResetControls() {
             </p>
             <p className="mt-1 text-sm text-muted">
               {noStartingParties
-                ? "Rebuilds the 1991 world with vacant political offices and no starting parties."
+                ? "Rebuilds the 1991 world with vacant political offices and no starting parties in player countries."
                 : RESET_CONFIG.resetAndBootstrap.description}
             </p>
           </div>

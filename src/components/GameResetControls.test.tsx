@@ -67,11 +67,15 @@ describe("1991 no starting parties picker", () => {
     expect(noParties).toHaveProperty("disabled", false);
     fireEvent.click(noParties);
     expect(noParties.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/Background countries keep their modeled parties and governments/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reset + No Parties", exact: true }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain("preset=1991-default");
     expect(requests[0].body.startingParties).toBe("none");
     expect(vi.mocked(confirm).mock.calls[0][0]).toContain("No starting parties");
+    expect(vi.mocked(confirm).mock.calls[0][0]).toContain(
+      "background countries keep their governments"
+    );
   });
 
   it("switches back to default parties without carrying over the empty-party choice", async () => {

@@ -52,7 +52,7 @@ describe("admin reset starting parties", () => {
         expect.objectContaining({
           preset: "1991-default",
           startingParties: "none",
-          mode: "vacant",
+          mode: "historical",
           seedOnly: false,
         })
       );

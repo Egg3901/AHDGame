@@ -98,8 +98,7 @@ export async function POST(request: Request) {
       );
     }
     const bootstrap = body.bootstrap === true || bootstrapFromQuery;
-    const mode: BootstrapMode =
-      body.startingParties === "none" || body.mode === "vacant" ? "vacant" : "historical";
+    const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
     const skipRegionalCouncil = body.skipRegionalCouncil === true;
     const iteration = body.iteration;
     const startDate = body.startDate;
@@ -161,8 +160,7 @@ async function handleStreamingReset(
   const preset = searchParams.get("preset") ?? DEFAULT_SEED_PRESET;
   const bootstrapFromQuery = searchParams.get("bootstrap") === "true";
   const bootstrap = body.bootstrap === true || bootstrapFromQuery;
-  const mode: BootstrapMode =
-    body.startingParties === "none" || body.mode === "vacant" ? "vacant" : "historical";
+  const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
   const skipRegionalCouncil = body.skipRegionalCouncil === true;
   const iteration = body.iteration;
   const startDate = body.startDate;

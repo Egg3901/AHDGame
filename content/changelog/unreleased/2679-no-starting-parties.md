@@ -11,7 +11,8 @@ areas: [fullstack, engine]
 
 ## What changed
 
-- Choose No Parties for a 1991 reset to begin with vacant political offices and no seeded political parties or NPP officeholders.
+- Choose No Parties for a 1991 reset to begin with vacant political offices and no seeded political parties or political NPP officeholders in countries enabled for players.
+- Background countries keep their modeled parties and governments.
 - Economic NPP owners and central-bank administrators remain independent so corporations and monetary institutions keep valid owners.
 - The reset API, command line and seed diagnostics record and honor the selected starting-party policy.
 - Returning to default starting conditions restores normal party seeding.
