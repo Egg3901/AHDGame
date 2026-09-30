@@ -92,7 +92,7 @@ describe("runMetricEngine — phase behavior", () => {
       });
       setupCollection("livingConflicts", [
         {
-          defKey: "yugoslav_wars",
+          defKey: "yugoslav_dissolution",
           hasOpened: true,
           status: "active",
           tracks: { displacement, infrastructureDamage: damage, reconstruction },
