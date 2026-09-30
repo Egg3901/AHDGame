@@ -30,6 +30,7 @@ async function main() {
   await client.connect();
   const db = client.db(target);
   assert.equal((await db.listCollections().toArray()).length, 0);
+  globalThis._mongoClientPromise = Promise.resolve(client);
   globalThis.fundCommandDb = db;
   globalThis.fundCommandActor = actor;
   globalThis.fundCommandClient = client;

@@ -52,7 +52,15 @@ try {
   const child = spawnSync(process.execPath, [outfile, target, out], {
     stdio: "inherit",
     timeout: 90000,
-    env: { ...process.env, NODE_ENV: "test", NODE_PATH: resolve("node_modules") },
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      NODE_PATH: resolve("node_modules"),
+      MONGODB_URI: "mongodb://127.0.0.1:27018/",
+      MONGO_URL: "mongodb://127.0.0.1:27018/",
+      MONGODB_DB: target,
+      MONGO_DB_NAME: target,
+    },
   });
   if (child.error) throw child.error;
   assert.equal(child.status, 0, "Native fund fixture failed");
