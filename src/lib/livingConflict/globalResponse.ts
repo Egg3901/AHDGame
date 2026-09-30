@@ -9,7 +9,7 @@ import {
 import type { LivingConflictState } from "./types";
 import { cfx } from "./effects";
 import { applyCrisisTradeSanctions } from "./sanctions/apply";
-import type { Db, ObjectId } from "mongodb";
+import type { Db, Filter, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -295,24 +295,41 @@ export async function recordGlobalResponseCommitment(
 ): Promise<void> {
   const definition = crisis.globalResponse;
   if (!definition || !option.campaignCommitment) return;
-  const state = await loadConflictState(db, definition.conflictKey);
-  const previousResponse = state.campaign?.countryMemory[countryId]?.lastResponseId;
-  state.campaign = recordCampaignCommitment(
-    state.campaign,
-    countryId,
-    `${crisis.livingConflictEventId ?? definition.eventKey}:${countryId}`,
-    turn,
-    option.campaignCommitment
-  );
-  if (
-    definition.conflictKey === TERRORISM_KEY &&
-    previousResponse !== state.campaign.countryMemory[countryId]?.lastResponseId
-  ) {
-    const key = `emergencyPowers:${countryId}`;
-    const powers = terrorismEmergencyPowers(state.tracks?.[key] ?? 0, option.optionId);
-    state.tracks = { ...state.tracks, [key]: powers };
+  const collection = db.collection<LivingConflictState>("livingConflicts");
+  const responseId = `${crisis.livingConflictEventId ?? definition.eventKey}:${countryId}`;
+  const powersKey = `emergencyPowers:${countryId}`;
+  const powersPath = `tracks.${powersKey}`;
+  // Different countries can submit together. Compare the raw stored campaign,
+  // then retry against the winner so shared consequences accumulate once. Only
+  // these fields change; a response must never replace the entire conflict.
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const stored = await collection.findOne(
+      { defKey: definition.conflictKey },
+      { projection: { campaign: 1, [powersPath]: 1 } }
+    );
+    if (!stored) throw new Error(`Missing living conflict: ${definition.conflictKey}`);
+    if (stored.campaign?.countryMemory?.[countryId]?.lastResponseId === responseId) return;
+    const campaign = recordCampaignCommitment(
+      stored.campaign,
+      countryId,
+      responseId,
+      turn,
+      option.campaignCommitment
+    );
+    const filter: Filter<LivingConflictState> = {
+      defKey: definition.conflictKey,
+      campaign: stored.campaign ?? { $exists: false },
+    };
+    const fields: Record<string, unknown> = { campaign, updatedAt: new Date() };
+    if (definition.conflictKey === TERRORISM_KEY) {
+      const previousPowers = stored.tracks?.[powersKey];
+      filter[powersPath] = previousPowers ?? { $exists: false };
+      fields[powersPath] = terrorismEmergencyPowers(previousPowers ?? 0, option.optionId);
+    }
+    const result = await collection.updateOne(filter, { $set: fields });
+    if (result.matchedCount > 0) return;
   }
-  await saveConflictState(db, state);
+  throw new Error(`Concurrent campaign responses did not settle: ${definition.conflictKey}`);
 }
 
 /** Redact covert choices from every country except the author until exposure. */
