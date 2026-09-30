@@ -12,3 +12,4 @@ areas: [engine]
 - Validate all affected residents before writing protected relocation holds.
 - Batch character holds, office vacancies and durable relocation records.
 - Preserve prior owner choices and reject conflicting relocation retries.
+- Keep transaction deadlines while correcting the pinned Mongo driver's ordinary cursor continuation commands.
