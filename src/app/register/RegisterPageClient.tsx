@@ -45,6 +45,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
   // server answers, so the buttons are never disabled on a slow network.
   const [discordSignup, setDiscordSignup] = useState<SocialAvailability | null>(null);
   const [googleSignup, setGoogleSignup] = useState<SocialAvailability | null>(null);
+  const [appleSignup, setAppleSignup] = useState<SocialAvailability | null>(null);
   const showAdminKey = searchParams.get("admin") === "1";
 
   // Scroll to error when it appears
@@ -92,6 +93,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           setTestMode(data.testMode ?? false);
           setDiscordSignup(data.discord ?? null);
           setGoogleSignup(data.google ?? null);
+          setAppleSignup(data.apple ?? null);
         }
       } catch {
         // silent
@@ -100,7 +102,10 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
     fetchSignupMethods();
   }, []);
 
-  const beginSocialRegistration = (provider: "discord" | "google", referralCode: string | null) => {
+  const beginSocialRegistration = (
+    provider: "discord" | "google" | "apple",
+    referralCode: string | null
+  ) => {
     const cookieSuffix = `; max-age=${OAUTH_FINGERPRINT_MAX_AGE_SECONDS}; path=/; samesite=lax${
       window.location.protocol === "https:" ? "; secure" : ""
     }`;
@@ -115,8 +120,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
       document.cookie = `${OAUTH_REFERRAL_CODE_COOKIE}=${encodeURIComponent(code)}${cookieSuffix}`;
       setFormData((prev) => ({ ...prev, referralCode: code }));
     }
-    window.location.href =
-      provider === "google" ? "/api/auth/google/login" : "/api/auth/discord/login";
+    window.location.href = `/api/auth/${provider}/login`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -365,6 +369,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
             testMode={testMode}
             discord={discordSignup}
             google={googleSignup}
+            apple={appleSignup}
             showAdminKey={showAdminKey}
             onSocialRegister={beginSocialRegistration}
             onChange={(updates) => setFormData((prev) => ({ ...prev, ...updates }))}

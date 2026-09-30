@@ -1,6 +1,6 @@
 import type { Db, IndexDescriptionInfo } from "mongodb";
 
-const PROVIDER_FIELDS = ["googleId", "discordId"] as const;
+const PROVIDER_FIELDS = ["googleId", "discordId", "appleId"] as const;
 
 function matchesProviderIndex(index: IndexDescriptionInfo, field: string): boolean {
   const filter = index.partialFilterExpression?.[field];
