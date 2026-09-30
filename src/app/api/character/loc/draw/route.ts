@@ -17,6 +17,8 @@ import { buildLocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
 import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import { DEFAULT_LOAN_FUNDING_SOURCE } from "@/lib/lineOfCredit/fundingSource";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getBankId } from "@/lib/centralBank/helpers";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
 import { getGameState } from "@/lib/gameState";
@@ -158,6 +160,11 @@ export async function POST(request: Request) {
       expectedRevision:
         (character as Character & { lineOfCreditRevision?: number }).lineOfCreditRevision ?? null,
       request: requestQuote,
+      drawAdmission: {
+        bankId: getBankId(getCountryIdForCurrency(getHomeCurrency(character))),
+        addInternal,
+        exchangeRate: rate,
+      },
       createdAt: now,
       effect: {
         locAfter,

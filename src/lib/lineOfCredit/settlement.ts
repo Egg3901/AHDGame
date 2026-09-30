@@ -16,6 +16,11 @@ import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
 import { checkBalancedTransfer, type ValueLeg } from "@/lib/banking/rules/invariants";
 import { prepareServiceEffect } from "./serviceSettlement";
+import {
+  acquireLocBookAdmission,
+  releaseLocBookAdmission,
+  validateLocDrawAdmission,
+} from "./bookAdmission";
 
 export interface LocEffect {
   locAfter?: Character["lineOfCredit"];
@@ -35,6 +40,8 @@ export interface LocPlan {
   characterId: ObjectId;
   expectedLoc?: Character["lineOfCredit"];
   expectedRevision: number | null;
+  /** Original FX quote; capacity is revalidated under the bank publication guard. */
+  drawAdmission?: { bankId: string; addInternal: number; exchangeRate: number };
   request: Record<string, unknown>;
   effect: LocEffect;
   createdAt: Date;
@@ -49,6 +56,8 @@ interface LocRecord extends Document {
   turn: number;
   status: string;
   locSettlement: LocPlan;
+  locAdmissionRejected?: string;
+  locAdmissionDecision?: { error: string | null };
 }
 export const locReceiptId = (key: string, suffix: string) =>
   new ObjectId(createHash("sha256").update(`${key}:${suffix}`).digest("hex").slice(0, 24));
@@ -178,11 +187,32 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
   const chars = db.collection<
     Character & { lineOfCreditRevision?: number; settledKeys?: string[] }
   >("characters");
+  await acquireLocBookAdmission(db, key, plan);
+  const reject = async (error: string) => {
+    await journal.updateOne({ _id: key }, { $set: { locAdmissionRejected: error } });
+    await releaseLocBookAdmission(db, key, plan);
+    await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
+    return { ...result, error };
+  };
+  if (record.locAdmissionRejected) return reject(record.locAdmissionRejected);
   let delivered = !!(await chars.findOne(
     { _id: plan.characterId, settledKeys: receipt },
     { projection: { _id: 1 } }
   ));
   if (!delivered) {
+    if (plan.drawAdmission) {
+      let decision = (await loadLocSettlement(db, key))?.locAdmissionDecision;
+      if (!decision) {
+        const error = await validateLocDrawAdmission(db, plan);
+        await journal.updateOne(
+          { _id: key, locAdmissionDecision: { $exists: false } },
+          { $set: { locAdmissionDecision: { error } } }
+        );
+        decision = (await loadLocSettlement(db, key))?.locAdmissionDecision;
+      }
+      if (!decision) throw new Error("Credit admission decision remains pending");
+      if (decision.error) return reject(decision.error);
+    }
     const guard: Record<string, unknown> = { _id: plan.characterId, settledKeys: { $ne: receipt } };
     if (plan.expectedLoc !== undefined) {
       guard.lineOfCredit = plan.expectedLoc;
@@ -209,8 +239,7 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
       ));
     if (!delivered) {
       const error = "Your line of credit or wallet changed before credit settlement";
-      await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
-      return { ...result, error };
+      return reject(error);
     }
   }
   for (const [i, credit] of plan.effect.reserves.entries()) {
@@ -267,6 +296,7 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
       });
     }
   }
+  await releaseLocBookAdmission(db, key, plan);
   await journal.updateOne(
     { _id: key },
     {
