@@ -6,7 +6,7 @@ summary: >-
   retain their original command on retry, and leave annual appropriations intact.
 tags: [banking, economy]
 badges: [patch]
-areas: [engine, web]
+areas: [engine, frontend]
 ---
 
 ## What changed
