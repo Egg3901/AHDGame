@@ -33,6 +33,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
 
   // ── Corp & shares ──────────────────────────────────────────────────────
   "corp_revenue",
+  "corp_operating_loss",
   "corp_dividend",
   "corp_salary",
   "corp_tax_paid",
@@ -157,6 +158,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   bond_dissolution_payout: "Bond Dissolution Payout",
 
   corp_revenue: "Corp Revenue",
+  corp_operating_loss: "Corp Operating Loss",
   corp_dividend: "Corp Dividend",
   corp_salary: "CEO Salary",
   corp_tax_paid: "Corp Tax Paid",
