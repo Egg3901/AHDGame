@@ -27,4 +27,4 @@ areas: [backend]
 
 - Model a legacy settlement administration for a vanished parent issuer. Successors fund its contractual payment by agreed shares; budget shortfalls create contribution arrears and actual cash limits creditor payment. Continuing states keep their own debt service. Runtime transfer and collection remain gated.
 
-- Let an unoccupied NPC federal legislature open a rejectable CS or YU settlement mandate after its decision date. Shared and strategic custody appears in the terms, and each successor still decides consent separately.
+- Seat the 1991 CS and YU federal delegations from the preset's regional party footprints, conserving both chamber totals and keeping republican parties local. An unoccupied NPC legislature can then open one rejectable settlement mandate after its decision date; shared and strategic custody appears in the terms, and each successor still decides consent separately.

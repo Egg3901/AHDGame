@@ -1105,6 +1105,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           `${ukRoster.nppsCreated} NPPs, ${ukRoster.officialsCreated} officials`
       );
     }
+    if (preset === "1991-default") {
+      const { seed1991FederationLegislatures } =
+        await import("./seed/seed1991FederationLegislatures");
+      await seed1991FederationLegislatures(db, preset, preIteration ? "priors" : "winners", log);
+    }
   }
 
   // Seed governorOfficeState rows for every regional executive seat so the
