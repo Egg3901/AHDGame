@@ -256,13 +256,15 @@ describe("settleTransition", () => {
 });
 
 describe("fresh settlement journal reads", () => {
-  it("does not reload records it has just exclusively claimed", async () => {
+  it("bounds delivery acknowledgement reads and still batches projection claims", async () => {
     const db = world();
     const journalReads = vi.spyOn(db.collection(MONEY_MOVE_COLLECTION), "findOne");
     const journalWrites = vi.spyOn(db.collection(MONEY_MOVE_COLLECTION), "updateOne");
     const result = await settleTransition(db as unknown as Db, loanTransition());
     expect(result.status).toBe("applied");
-    expect(journalReads).not.toHaveBeenCalled();
+    // Two guarded target publications need fresh journal outcomes before cash
+    // and verified acknowledgements before protected receipts are released.
+    expect(journalReads.mock.calls.length).toBeLessThanOrEqual(6);
     const projectionClaims = journalWrites.mock.calls.filter(
       ([, update]) =>
         !Array.isArray(update) &&
