@@ -105,6 +105,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   // ── Government & subsidies (gov_subsidy_paid / gov_grant_paid /
   //    gov_budget_transfer remain in the union as documented future slots
   //    pending the budget-flow rework — Phase 3 commit deferred them.)
+  "gov_fiscal_accrual",
   "gov_tax_revenue",
   "gov_bond_issuance",
   "gov_coupon_payment",
@@ -222,6 +223,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   party_dues_received: "Party Dues",
   caucus_tax_debit: "Caucus Tax",
 
+  gov_fiscal_accrual: "Govt Fiscal Accrual",
   gov_tax_revenue: "Govt Tax Revenue",
   gov_bond_issuance: "Govt Bond Issuance",
   gov_coupon_payment: "Govt Coupon Paid",

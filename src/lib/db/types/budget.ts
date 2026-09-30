@@ -406,7 +406,27 @@ export interface IntelligenceAppropriation {
   accruedThroughTurn: number;
 }
 
+/** Durable witness stored atomically with signed cash, recoverable on the next invocation. */
+export interface TreasuryAccrualReceipt {
+  turn: number;
+  openingCash: number;
+  cashDelta: number;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  anchorRate: number | null;
+  anchorRateSource?: "observed" | "authored_budget_only" | "unpriced";
+  anchorRatePreset?: string;
+  ledgerShadow: boolean;
+  components: {
+    revenue: number;
+    primarySpending: number;
+    debtService: number;
+    enforcement: number;
+    rounding: number;
+  };
+}
+
 export interface FederalBudget {
+  treasuryAccrual?: TreasuryAccrualReceipt;
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
