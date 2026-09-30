@@ -57,6 +57,11 @@ it.skipIf(!runRealMongo)(
     const dbName = `ahd_sim_issue2488_bg_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const client = await new MongoClient(sandboxUri).connect();
     const db = client.db(dbName);
+    const gameState = db.collection<Document & { _id: string }>("gameState");
+    const countryGameStates = db.collection<Document & { _id: string }>("countryGameStates");
+    const countryState = db.collection<Document & { _id: string }>("countryState");
+    const states = db.collection<Document & { _id: string }>("states");
+    const governmentFormations = db.collection<Document & { _id: string }>("governmentFormations");
     const previousUri = process.env.MONGODB_URI;
     const previousDb = process.env.MONGODB_DB;
     process.env.MONGODB_URI = `${sandboxUri}/${dbName}`;
@@ -69,13 +74,11 @@ it.skipIf(!runRealMongo)(
         import("@/lib/turn/lowerChamberSeats"),
         import("@/lib/turn/election/bgOrdinaryEligibility"),
       ]);
-      await db.collection("gameState").insertOne({ _id: "current", preset: "1991-default" });
-      await db.collection("countryGameStates").insertOne({ _id: "BG" });
-      await db
-        .collection("countryState")
-        .insertOne({ _id: "BG", governmentType: "parliamentaryRepublic" });
-      await db.collection("states").insertMany(bgRegions1991 as Document[]);
-      await db.collection("governmentFormations").insertOne({
+      await gameState.insertOne({ _id: "current", preset: "1991-default" });
+      await countryGameStates.insertOne({ _id: "BG" });
+      await countryState.insertOne({ _id: "BG", governmentType: "parliamentaryRepublic" });
+      await states.insertMany(bgRegions1991);
+      await governmentFormations.insertOne({
         _id: "BG",
         totalSeats: 400,
         majorityThreshold: 201,
@@ -167,7 +170,12 @@ it.skipIf(!runRealMongo)(
         totalSeats(initialRegions.map((region) => ({ seatsHeld: region.houseDistricts })))
       ).toBe(400);
       expect(
-        totalSeats(await db.collection("electedOfficials").find({ countryId: "BG" }).toArray())
+        totalSeats(
+          await db
+            .collection<{ seatsHeld?: number }>("electedOfficials")
+            .find({ countryId: "BG" })
+            .toArray()
+        )
       ).toBe(400);
       expect(await chamber.getLiveLowerChamberSeats(db, "BG")).toBe(400);
 
@@ -188,7 +196,10 @@ it.skipIf(!runRealMongo)(
       expect(
         await db.collection("elections").countDocuments({ countryId: "BG", status: "resolved" })
       ).toBe(5);
-      const officials = await db.collection("electedOfficials").find({ countryId: "BG" }).toArray();
+      const officials = await db
+        .collection<Document & { seatsHeld?: number }>("electedOfficials")
+        .find({ countryId: "BG" })
+        .toArray();
       expect(totalSeats(officials)).toBe(240);
       expect(officials.every((official) => official.nppId instanceof ObjectId)).toBe(true);
       expect(
@@ -218,13 +229,15 @@ it.skipIf(!runRealMongo)(
       expect(await transition.processBgAssemblyTransition(db, state, 40, now)).toBe(false);
       expect(await transition.processBgAssemblyTransition(db, state, 41, now)).toBe(true);
       // Replay an interrupted transition from the same 400-seat opening.
-      await db
-        .collection("countryGameStates")
-        .updateOne({ _id: "BG" }, { $unset: { bgOrdinaryAssemblySinceTurn: "" } });
-      await db
-        .collection("governmentFormations")
-        .updateOne({ _id: "BG" }, { $set: { totalSeats: 400, majorityThreshold: 201 } });
-      await db.collection("states").bulkWrite(
+      await countryGameStates.updateOne(
+        { _id: "BG" },
+        { $unset: { bgOrdinaryAssemblySinceTurn: "" } }
+      );
+      await governmentFormations.updateOne(
+        { _id: "BG" },
+        { $set: { totalSeats: 400, majorityThreshold: 201 } }
+      );
+      await states.bulkWrite(
         bgRegions1991.map((region) => ({
           updateOne: {
             filter: { _id: region._id },
@@ -236,7 +249,7 @@ it.skipIf(!runRealMongo)(
         .collection("states")
         .find({ countryId: "BG" }, { projection: { _id: 1, houseDistricts: 1 } })
         .toArray();
-      const foundingFormation = await db.collection("governmentFormations").findOne({ _id: "BG" });
+      const foundingFormation = await governmentFormations.findOne({ _id: "BG" });
       for (const preset of ["1953-default", "1979-default", "2027-default"]) {
         expect(await transition.processBgAssemblyTransition(db, { preset }, 41, now)).toBe(false);
       }
@@ -246,23 +259,17 @@ it.skipIf(!runRealMongo)(
           .find({ countryId: "BG" }, { projection: { _id: 1, houseDistricts: 1 } })
           .toArray()
       ).toEqual(foundingRegionSeats);
-      expect(await db.collection("governmentFormations").findOne({ _id: "BG" })).toEqual(
-        foundingFormation
-      );
+      expect(await governmentFormations.findOne({ _id: "BG" })).toEqual(foundingFormation);
       expect(
-        (await db.collection("countryGameStates").findOne({ _id: "BG" }))
-          ?.bgOrdinaryAssemblySinceTurn
+        (await countryGameStates.findOne({ _id: "BG" }))?.bgOrdinaryAssemblySinceTurn
       ).toBeUndefined();
       await expect(
         transition.processBgAssemblyTransition(failAfterTwoRegionWrites(db), state, 41, now)
       ).rejects.toThrow("injected crash");
       expect(
-        (await db.collection("countryGameStates").findOne({ _id: "BG" }))
-          ?.bgOrdinaryAssemblySinceTurn
+        (await countryGameStates.findOne({ _id: "BG" }))?.bgOrdinaryAssemblySinceTurn
       ).toBeUndefined();
-      expect((await db.collection("governmentFormations").findOne({ _id: "BG" }))?.totalSeats).toBe(
-        400
-      );
+      expect((await governmentFormations.findOne({ _id: "BG" }))?.totalSeats).toBe(400);
       expect(await transition.processBgAssemblyTransition(db, state, 41, now)).toBe(true);
       expect(await transition.processBgAssemblyTransition(db, state, 42, now)).toBe(false);
       const finalRegions = await db
@@ -272,16 +279,18 @@ it.skipIf(!runRealMongo)(
       expect(
         Object.fromEntries(finalRegions.map((region) => [region._id, region.houseDistricts]))
       ).toEqual(BG_ORDINARY_ASSEMBLY_SEATS);
-      expect(
-        (await db.collection("governmentFormations").findOne({ _id: "BG" }))?.majorityThreshold
-      ).toBe(121);
-      expect(
-        (await db.collection("countryGameStates").findOne({ _id: "BG" }))
-          ?.bgOrdinaryAssemblySinceTurn
-      ).toBe(41);
+      expect((await governmentFormations.findOne({ _id: "BG" }))?.majorityThreshold).toBe(121);
+      expect((await countryGameStates.findOne({ _id: "BG" }))?.bgOrdinaryAssemblySinceTurn).toBe(
+        41
+      );
       expect(await chamber.getLiveLowerChamberSeats(db, "BG")).toBe(240);
       expect(
-        totalSeats(await db.collection("electedOfficials").find({ countryId: "BG" }).toArray())
+        totalSeats(
+          await db
+            .collection<{ seatsHeld?: number }>("electedOfficials")
+            .find({ countryId: "BG" })
+            .toArray()
+        )
       ).toBe(240);
     } finally {
       await db.dropDatabase();
