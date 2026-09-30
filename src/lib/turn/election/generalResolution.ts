@@ -1208,17 +1208,21 @@ export async function resolveOneGeneralElection(
             };
           }),
           resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
-          resolutionPath: districted
-            ? "districted_house"
-            : runtimeBlocQuota
-              ? "bloc_list"
-              : election.countryId === "DE" &&
-                  (election.electionType === "bundestag" ||
-                    election.electionType === "snap_bundestag")
-                ? "ams_direct"
-                : isMultiSeat
-                  ? "hare_quota"
-                  : "single_winner",
+          resolutionPath: bgAllocation
+            ? "dhondt"
+            : huAllocation
+              ? "hu_mixed"
+              : districted
+                ? "districted_house"
+                : runtimeBlocQuota
+                  ? "bloc_list"
+                  : election.countryId === "DE" &&
+                      (election.electionType === "bundestag" ||
+                        election.electionType === "snap_bundestag")
+                    ? "ams_direct"
+                    : isMultiSeat
+                      ? "hare_quota"
+                      : "single_winner",
         },
       }
     );

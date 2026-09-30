@@ -201,6 +201,10 @@ describe("resolveOneGeneralElection", () => {
       ["A", 3],
       ["B", 2],
     ]);
+    expect(db.collectionMocks.electionVoteTallies!.updateOne).toHaveBeenCalledWith(
+      { electionId: election._id },
+      expect.objectContaining({ $set: expect.objectContaining({ resolutionPath: "dhondt" }) })
+    );
   });
 
   it("seats a 2027 Bulgarian regional race by proportional Hare allocation", async () => {
@@ -284,6 +288,10 @@ describe("resolveOneGeneralElection", () => {
       ["A", 7],
       ["B", 1],
     ]);
+    expect(db.collectionMocks.electionVoteTallies!.updateOne).toHaveBeenCalledWith(
+      { electionId: election._id },
+      expect.objectContaining({ $set: expect.objectContaining({ resolutionPath: "hu_mixed" }) })
+    );
   });
 
   // ── Edge case: already-finalized tally ──────────────────────────────────────

@@ -982,10 +982,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     const { db } = setupScheduledMocks({ budget });
     await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
 
-    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls[0][0] as Omit<
-      Bond,
-      "_id"
-    >[];
+    const bondDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.map(
+      ([doc]) => doc as Omit<Bond, "_id">
+    );
     expect(bondDocs.length).toBeGreaterThan(0);
     expect(bondDocs.every((bond) => bond.countryId === "IE" && bond.currencyCode === "EUR")).toBe(
       true

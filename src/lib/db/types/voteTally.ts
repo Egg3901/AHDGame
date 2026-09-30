@@ -48,6 +48,8 @@ export interface ElectionVoteTally {
   resolutionPath?:
     | "single_winner"
     | "hare_quota"
+    | "dhondt"
+    | "hu_mixed"
     | "districted_house"
     | "bloc_list"
     | "sainte_lague"
