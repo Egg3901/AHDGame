@@ -85,6 +85,20 @@ const TERRITORIAL_POSITIONS_BY_COUNTRY: Partial<Record<CountryId, string[]>> = {
 };
 
 /**
+ * Player-facing message for a cabinetMembers duplicate-key insert. A clash on
+ * the seat index is a lost race for the position; a clash on a holder index
+ * means the appointee already holds a seat that cannot pair with this one
+ * (player ticket 1368: this used to read as a race and misled the PM).
+ */
+export function duplicateAppointmentMessage(error: unknown): string {
+  const keyPattern = (error as { keyPattern?: Record<string, unknown> } | null)?.keyPattern;
+  if (keyPattern && "characterId" in keyPattern) {
+    return "This minister already holds a cabinet post that cannot be combined with this one. Refresh the cabinet and try again.";
+  }
+  return "A conflicting appointment was just made. Refresh the cabinet and try again.";
+}
+
+/**
  * Restore a departing minister's character office after they leave cabinet
  * (fire, resignation, reshuffle): back to their legislative seat so they keep
  * receiving MP action bonuses and NPI, or to private-citizen status when they
@@ -368,9 +382,7 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       } as never);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
-        throw conflict(
-          "A conflicting appointment was just made. Refresh the cabinet and try again."
-        );
+        throw conflict(duplicateAppointmentMessage(error));
       }
       throw error;
     }
@@ -1161,9 +1173,13 @@ export async function reshuffleCabinetHandler(request: Request, countryId: Count
       let appointed = 0;
       for (const { positionId, targetChar, lowerOfficial } of validated) {
         try {
+          const reshuffleSlot = roleSlotForPosition(countryId, positionId);
           await getCabinetMembersCollection(db).insertOne({
             countryId,
             positionId,
+            // Stamp the UK role slot like the single-seat flow, so reshuffled
+            // rows key the dual-ministry unique index the same way.
+            ...(reshuffleSlot ? { roleSlot: reshuffleSlot } : {}),
             characterId: targetChar._id,
             characterName: targetChar.name,
             party: lowerOfficial?.party ?? targetChar.party,
@@ -1176,9 +1192,7 @@ export async function reshuffleCabinetHandler(request: Request, countryId: Count
           } as never);
         } catch (error) {
           if (isDuplicateKeyError(error)) {
-            throw conflict(
-              "A conflicting appointment was just made. Refresh the cabinet and try again."
-            );
+            throw conflict(duplicateAppointmentMessage(error));
           }
           throw error;
         }
