@@ -11,6 +11,11 @@ vi.mock("@/lib/indexFunds/featureFlag", () => ({
   INDEX_FUNDS_PARTIAL_MESSAGE: "Index funds are in partial mode",
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn(async () => false) }));
+// Forex is disabled in these compensation tests; avoid importing its unrelated graph.
+vi.mock("@/lib/currency/autoConvert", () => ({
+  autoConvertForPurchase: vi.fn(),
+  convertForExplicitPay: vi.fn(),
+}));
 // Force the standalone/sequential path so the route's own compensation runs.
 vi.mock("@/lib/db/transactionWithRetry", () => ({
   runTransactionWithSessionRetry: vi.fn(
@@ -41,7 +46,7 @@ function makeRequest(units: number) {
   return new Request("http://localhost/api/investment-funds/test/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ units }),
+    body: JSON.stringify({ units, operationId: crypto.randomUUID() }),
   });
 }
 
@@ -111,7 +116,8 @@ describe("POST /api/investment-funds/[slug]/subscribe", () => {
 
     const response = await subscribe(10);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ pending: true });
     const debited = debitedCash();
     expect(debited).toBeGreaterThan(0);
     // Cash is put back exactly once; no units are minted and no fund cash moves.
@@ -132,7 +138,8 @@ describe("POST /api/investment-funds/[slug]/subscribe", () => {
 
     const response = await subscribe(10);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ pending: true });
     // Fund supply/cash incremented then reversed.
     expect(db.collectionMocks["indexFunds"]!.updateOne).toHaveBeenCalledTimes(2);
     const forward = db.collectionMocks["indexFunds"]!.updateOne.mock.calls[0]![1] as {
@@ -177,7 +184,8 @@ describe("POST /api/investment-funds/[slug]/subscribe", () => {
 
     const response = await subscribe(10);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ pending: true });
     expect(db.collectionMocks["indexFundPositions"]!.replaceOne).toHaveBeenCalledWith(
       { _id: prior._id },
       prior,

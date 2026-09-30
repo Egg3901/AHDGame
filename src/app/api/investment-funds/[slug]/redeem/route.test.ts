@@ -59,7 +59,7 @@ function makeRequest(units: number) {
   return new Request("http://localhost/api/investment-funds/test/redeem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ units }),
+    body: JSON.stringify({ units, operationId: crypto.randomUUID() }),
   });
 }
 
@@ -147,7 +147,8 @@ describe("POST /api/investment-funds/[slug]/redeem", () => {
 
     const response = await redeem(10);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ pending: true });
     // Fund cash debited then refunded; unit supply burned then restored.
     const fundEdits = db.collectionMocks["indexFunds"]!.updateOne.mock.calls.map(
       (c) => (c[1] as { $inc: Record<string, number> }).$inc
@@ -173,7 +174,8 @@ describe("POST /api/investment-funds/[slug]/redeem", () => {
 
     const response = await redeem(10);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ pending: true });
     // The cash debit is refunded and the burned supply restored.
     const fundEdits = db.collectionMocks["indexFunds"]!.updateOne.mock.calls.map(
       (c) => (c[1] as { $inc: Record<string, number> }).$inc
@@ -230,7 +232,8 @@ describe("POST /api/investment-funds/[slug]/redeem", () => {
 
     const response = await redeem(10);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ pending: true });
     expect(undoLiquidity).toHaveBeenCalledTimes(1);
   });
 });
