@@ -151,6 +151,8 @@ describe("protected update projection", () => {
     expect(f.target().total).toBe(0);
     f.transition.projections[0].filter = { _id: oid(f.id.toHexString()) };
     expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+    expect((await recoverProjections(f.db, f.transition.key)).status).toBe("rejected");
+    expect(f.journal().status).toBe("rejected");
   });
   it("does not manufacture a legacy outcome when original proof is missing", async () => {
     const f = setup();

@@ -641,6 +641,12 @@ export async function recoverProjections(
     appliedProjections: [],
     newlyAppliedProjections: [],
   };
+  if (record?.status === "rejected")
+    return {
+      ...result,
+      status: "rejected",
+      error: record.error ?? "Original settlement was rejected",
+    };
   if (!record || !record.projections) {
     return { ...result, status: "rejected", error: "no journal record with projections" };
   }
