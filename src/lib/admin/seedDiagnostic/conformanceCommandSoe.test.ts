@@ -32,7 +32,8 @@ function fixture(missingRuSoe = false): Db {
             ? owned
             : [];
     return source.filter((row) => {
-      if ("countryId" in filter && row.countryId !== filter.countryId) return false;
+      if ("countryId" in filter && !("countryId" in row && row.countryId === filter.countryId))
+        return false;
       if (
         "countryOwnerId" in filter &&
         !("countryOwnerId" in row && row.countryOwnerId === filter.countryOwnerId)
