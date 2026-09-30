@@ -1,329 +1,194 @@
-// Garnish income at source for distressed LOC borrowers.
-//
-// When a character has `lineOfCredit.drawFrozen === true` (i.e., they have
-// shortfalled at least one auto-payment and draws are frozen), this turn's
-// CEO salary, dividend, or bond-coupon income never lands in their wallet —
-// it is converted to internal units at the spot rate and applied directly to
-// their LOC obligation (arrears first, then principal, cross-currency).
-//
-// Hooked from `processCorporationTurn` (CEO salary + dividend payouts) and
-// `processBondTurn` (coupon payouts) BEFORE the personal-balance bulkWrite,
-// so the redirected portion never enters circulation. The existing
-// `processLineOfCreditTurn` auto-pay step still runs afterwards for any
-// non-distressed borrowers and for distressed borrowers' wallet-side payments
-// (which will be zero in the garnished currencies).
-
+/** Accepted income diversion and residual wallet payout share a character receipt. */
 import { ObjectId, type Db } from "mongodb";
-import type { Character, CentralBank } from "@/lib/db/types";
+import type { Character } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { FOREX_ACTIVE_CURRENCIES, getCountryIdForCurrency } from "@/lib/constants/currencies";
-import type { CountryId } from "@/lib/constants/countries";
-import { getBankId } from "@/lib/centralBank/helpers";
 import type { LocGarnishmentSource } from "@/lib/db/types/locLedger";
-import { isLineOfCreditEnabled } from "@/lib/lineOfCredit/featureFlag";
-import {
-  allocateInternalPaymentToLoc,
-  fromInternalUnits,
-  toInternalUnits,
-} from "@/lib/lineOfCredit/locMath";
-import { loadExchangeRatesMap } from "@/lib/lineOfCredit/netWorth";
-import { insertLocLedgerEntry } from "@/lib/lineOfCredit/ledger";
+import { isLineOfCreditEnabled } from "./featureFlag";
+import { allocateInternalPaymentToLoc, fromInternalUnits, toInternalUnits } from "./locMath";
+import { loadExchangeRatesMap } from "./netWorth";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
-import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
-import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { loadLocSettlement, locInterestCredits, settleLocPlan, type LocEffect } from "./settlement";
+import { isDeepStrictEqual } from "node:util";
 
 export interface GarnishmentResult {
   borrowersGarnished: number;
-  /** Total internal units redirected to LOC across all garnished borrowers. */
   totalInternalGarnished: number;
 }
+const faceMap = (map: Map<CurrencyCode, number> | undefined) =>
+  Object.fromEntries([...(map ?? [])].sort(([a], [b]) => a.localeCompare(b)));
 
 /**
- * Garnish in-flight income for distressed LOC borrowers. Mutates `charPayments`
- * in place: garnished currency entries are deleted (or reduced when income
- * exceeds the obligation) so the caller's subsequent `buildPersonalBalanceBulkOp`
- * loop skips them.
- *
- * Safe to call when LOC is disabled (returns zero result without touching DB or
- * the payment map).
+ * Once accepted, this helper owns the borrower's residual payout too. Caller
+ * maps are removed only after debt, cash, receipts and residual FX finish.
+ * A retry therefore cannot duplicate the residual in its following bulkWrite.
  */
 export async function garnishLocFromIncome(
   db: Db,
   charPayments: Map<string, Map<CurrencyCode, number>>,
   turn: number,
   source: LocGarnishmentSource,
-  options?: {
-    /**
-     * Additional payment maps that should be scaled identically to
-     * `charPayments` when a borrower is garnished. Use for downstream phases
-     * that iterate the original payments (e.g. dividend forex auto-convert):
-     * if a dividend entry was redirected to LOC, its forex trade must not
-     * fire.
-     */
-    auxiliaryPayments?: Map<string, Map<CurrencyCode, number>>[];
-  }
+  options?: { auxiliaryPayments?: Map<string, Map<CurrencyCode, number>>[] }
 ): Promise<GarnishmentResult> {
-  if (charPayments.size === 0) {
+  if (!charPayments.size || !(await isLineOfCreditEnabled()))
     return { borrowersGarnished: 0, totalInternalGarnished: 0 };
-  }
-  if (!(await isLineOfCreditEnabled())) {
-    return { borrowersGarnished: 0, totalInternalGarnished: 0 };
-  }
-
-  const rates = await loadExchangeRatesMap(db);
-
-  // Only consider characters who are receiving income this turn AND are
-  // distressed. The `drawFrozen` filter intentionally excludes healthy
-  // borrowers — auto-pay handles them via the wallet path.
-  const candidateObjectIds = [...charPayments.keys()]
-    .filter((id) => !id.startsWith("imperial:") && ObjectId.isValid(id))
-    .map((id) => new ObjectId(id));
-  if (candidateObjectIds.length === 0) {
-    return { borrowersGarnished: 0, totalInternalGarnished: 0 };
-  }
-
-  const distressed = await db
-    .collection<Character>("characters")
+  const ids = [...charPayments.keys()].filter((id) => ObjectId.isValid(id));
+  const chars = await db
+    .collection<Character & { lineOfCreditRevision?: number }>("characters")
     .find(
-      {
-        _id: { $in: candidateObjectIds },
-        "lineOfCredit.drawFrozen": true,
-      },
-      { projection: { _id: 1, name: 1, countryId: 1, lineOfCredit: 1 } }
+      { _id: { $in: ids.map((id) => new ObjectId(id)) } },
+      { projection: { _id: 1, name: 1, countryId: 1, lineOfCredit: 1, lineOfCreditRevision: 1 } }
     )
     .toArray();
-
-  if (distressed.length === 0) {
-    return { borrowersGarnished: 0, totalInternalGarnished: 0 };
-  }
-
-  const now = new Date();
-  const txEntries: Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">[] = [];
-  const thresholds = await loadTxThresholds(db);
-  const bankReserveInc = new Map<string, number>(); // countryId → face amount (currency of that country)
-  let borrowersGarnished = 0;
-  let totalInternalGarnished = 0;
-
-  const pendingLedgerEntries: Parameters<typeof insertLocLedgerEntry>[1][] = [];
-
-  for (const char of distressed) {
-    const charIdStr = char._id.toString();
-    const incoming = charPayments.get(charIdStr);
-    if (!incoming || incoming.size === 0) continue;
-
-    // Snapshot incoming income (face amounts) and convert to internal units.
-    const incomeFaceByCurrency: Partial<Record<CurrencyCode, number>> = {};
-    let incomeInternalTotal = 0;
-    for (const [c, amt] of incoming) {
-      if (!amt || amt <= 0) continue;
-      const rate = rates[c];
-      if (!rate || rate <= 0) continue;
-      incomeFaceByCurrency[c] = (incomeFaceByCurrency[c] ?? 0) + amt;
-      incomeInternalTotal += toInternalUnits(amt, rate);
-    }
-    if (incomeInternalTotal <= 0) continue;
-
-    const loc = char.lineOfCredit;
-    if (!loc) continue;
-    const balancesBefore: Partial<Record<CurrencyCode, number>> = { ...(loc.balances ?? {}) };
-    const arrearsBefore: Partial<Record<CurrencyCode, number>> = { ...(loc.arrears ?? {}) };
-
-    // Cross-currency allocation: arrears first (stable currency order), then principal.
-    const {
-      principal: balancesAfter,
-      arrears: arrearsAfter,
-      appliedInternal,
-    } = allocateInternalPaymentToLoc(incomeInternalTotal, balancesBefore, arrearsBefore, rates);
-
-    if (appliedInternal <= 0) {
-      // No outstanding obligation — leave income alone (will hit wallet normally).
-      continue;
-    }
-
-    const consumedFraction = Math.min(1, appliedInternal / incomeInternalTotal);
-
-    // Compute per-currency face deltas (interest = arrears reduction, principal = balance reduction).
-    const interestPortions: Partial<Record<CurrencyCode, number>> = {};
-    const principalPortions: Partial<Record<CurrencyCode, number>> = {};
-    for (const c of FOREX_ACTIVE_CURRENCIES) {
-      const arrDelta = roundSavingsAmount(
-        Math.max(0, (arrearsBefore[c] ?? 0) - (arrearsAfter[c] ?? 0)),
-        c
-      );
-      const balDelta = roundSavingsAmount(
-        Math.max(0, (balancesBefore[c] ?? 0) - (balancesAfter[c] ?? 0)),
-        c
-      );
-      if (arrDelta > 0) interestPortions[c] = arrDelta;
-      if (balDelta > 0) principalPortions[c] = balDelta;
-    }
-
-    // Persist new LOC state. Drop empty keys to keep the document tidy.
-    const newP: Partial<Record<CurrencyCode, number>> = {};
-    const newA: Partial<Record<CurrencyCode, number>> = {};
-    for (const c of FOREX_ACTIVE_CURRENCIES) {
-      const p = balancesAfter[c] ?? 0;
-      const a = arrearsAfter[c] ?? 0;
-      if (p > 0) newP[c] = p;
-      if (a > 0) newA[c] = a;
-    }
-
-    // Claim this exact LOC snapshot before suppressing any in-flight income.
-    // A concurrent draw or repayment makes the claim miss, leaving the income
-    // untouched for the caller to credit normally instead of overwriting debt.
-    const locUpdate = await db.collection<Character>("characters").updateOne(
-      { _id: char._id, lineOfCredit: loc },
-      {
-        $set: {
-          "lineOfCredit.balances": newP,
-          "lineOfCredit.arrears": newA,
-          updatedAt: now,
-        },
-      }
-    );
-    if (locUpdate.matchedCount === 0) {
-      console.warn(
-        `[line-of-credit] skipped stale ${source} garnishment for character ${charIdStr} on turn ${turn}`
-      );
-      continue;
-    }
-
-    // Reduce or remove the in-flight income map for this character. If the
-    // obligation only consumed a fraction of income, scale down each currency
-    // entry; if it consumed everything (typical), delete entries entirely.
-    // Auxiliary maps (e.g. dividendPayments for forex auto-convert) get the
-    // same treatment so downstream phases stay consistent.
-    const allMaps = [charPayments, ...(options?.auxiliaryPayments ?? [])];
-    if (consumedFraction >= 1 - 1e-9) {
-      for (const m of allMaps) m.delete(charIdStr);
+  const rates = await loadExchangeRatesMap(db);
+  let borrowersGarnished = 0,
+    totalInternalGarnished = 0;
+  for (const char of chars) {
+    const id = char._id.toHexString(),
+      key = `loc:garnish:${source}:${turn}:${id}`;
+    const income = faceMap(charPayments.get(id));
+    const auxiliary = (options?.auxiliaryPayments ?? []).map((map) => faceMap(map.get(id)));
+    const request = { operation: "garnish", source, turn, income, auxiliary };
+    const original = await loadLocSettlement(db, key);
+    let result: Record<string, unknown>;
+    if (original) {
+      if (!isDeepStrictEqual(original.locSettlement.request, request))
+        throw new Error("Accepted LOC income event changed; payout stopped for reconciliation");
+      const settled = await settleLocPlan(db, key, turn, original.locSettlement);
+      if (settled.error) throw new Error(settled.error);
+      result = settled.result;
     } else {
-      for (const m of allMaps) {
-        const cur = m.get(charIdStr);
-        if (!cur) continue;
-        const residualMap = new Map<CurrencyCode, number>();
-        for (const [c, amt] of cur) {
-          const residual = roundSavingsAmount(Math.max(0, amt * (1 - consumedFraction)), c);
-          if (residual > 0) residualMap.set(c, residual);
-        }
-        if (residualMap.size > 0) m.set(charIdStr, residualMap);
-        else m.delete(charIdStr);
+      const loc = char.lineOfCredit;
+      if (!loc?.drawFrozen) continue;
+      let incomeInternal = 0;
+      for (const [code, amount] of Object.entries(income)) {
+        const rate = rates[code as CurrencyCode];
+        if (amount > 0 && rate && rate > 0) incomeInternal += toInternalUnits(amount, rate);
       }
-    }
-
-    // Credit interest portion of arrears reduction to the lending bank's reserves
-    // (per the LOC currency). Mirrors the auto-pay flow in `processLineOfCreditTurn`.
-    for (const [c, amount] of Object.entries(interestPortions) as [CurrencyCode, number][]) {
-      if (amount <= 0) continue;
-      const cid = getCountryIdForCurrency(c);
-      bankReserveInc.set(cid, (bankReserveInc.get(cid) ?? 0) + amount);
-    }
-
-    // Per-LOC-currency ledger row (one per currency that actually paid down).
-    const obligationCurrencies = new Set<CurrencyCode>([
-      ...(Object.keys(interestPortions) as CurrencyCode[]),
-      ...(Object.keys(principalPortions) as CurrencyCode[]),
-    ]);
-
-    for (const c of obligationCurrencies) {
-      const interest = interestPortions[c] ?? 0;
-      const principal = principalPortions[c] ?? 0;
-      const total = roundSavingsAmount(interest + principal, c);
-      if (total <= 0) continue;
-      pendingLedgerEntries.push({
+      if (incomeInternal <= 0) continue;
+      const allocated = allocateInternalPaymentToLoc(
+        incomeInternal,
+        loc.balances ?? {},
+        loc.arrears ?? {},
+        rates
+      );
+      if (allocated.appliedInternal <= 0) continue;
+      const fraction = Math.min(1, allocated.appliedInternal / incomeInternal);
+      const principal: Partial<Record<CurrencyCode, number>> = {},
+        arrears: Partial<Record<CurrencyCode, number>> = {},
+        interest: Partial<Record<CurrencyCode, number>> = {},
+        principalPaid: Partial<Record<CurrencyCode, number>> = {};
+      for (const c of FOREX_ACTIVE_CURRENCIES) {
+        if ((allocated.principal[c] ?? 0) > 0) principal[c] = allocated.principal[c];
+        if ((allocated.arrears[c] ?? 0) > 0) arrears[c] = allocated.arrears[c];
+        interest[c] = roundSavingsAmount(
+          Math.max(0, (loc.arrears?.[c] ?? 0) - (allocated.arrears[c] ?? 0)),
+          c
+        );
+        principalPaid[c] = roundSavingsAmount(
+          Math.max(0, (loc.balances?.[c] ?? 0) - (allocated.principal[c] ?? 0)),
+          c
+        );
+      }
+      const residual = (amounts: Record<string, number>) =>
+        Object.fromEntries(
+          Object.entries(amounts).map(([code, amount]) => [
+            code,
+            fraction >= 1 - 1e-9
+              ? 0
+              : roundSavingsAmount(Math.max(0, amount * (1 - fraction)), code as CurrencyCode),
+          ])
+        );
+      const remaining = residual(income);
+      // Salary stays in its original currency. Only the dividend auxiliary map
+      // is converted for corporation income; bond income converts all residuals.
+      const conversions = source === "bond_coupon" ? remaining : residual(auxiliary[0] ?? {});
+      const ledger: LocEffect["ledger"] = [],
+        transactions: LocEffect["transactions"] = [];
+      for (const c of FOREX_ACTIVE_CURRENCIES) {
+        const i = interest[c] ?? 0,
+          p = principalPaid[c] ?? 0,
+          total = roundSavingsAmount(i + p, c);
+        if (total <= 0) continue;
+        const portions = { interestPortion: i, principalPortion: p };
+        ledger.push({
+          characterId: char._id,
+          countryId: getCountryIdForCurrency(c),
+          currencyCode: c,
+          type: "garnishment",
+          amount: total,
+          ...portions,
+          balanceAfter: principal[c] ?? 0,
+          arrearsAfter: arrears[c] ?? 0,
+          turn,
+          meta: {
+            garnishmentSource: source,
+            garnishedInternal: allocated.appliedInternal,
+            incomeInternalApplied: allocated.appliedInternal,
+            distress: true,
+          },
+        });
+        transactions.push({
+          type: "loc_garnishment",
+          turn,
+          subjectType: "character",
+          subjectId: char._id,
+          subjectName: char.name,
+          amount: -total,
+          currencyCode: c,
+          meta: { ...portions, garnishmentSource: source },
+        });
+      }
+      const flows: LocEffect["flows"] = Object.entries(income).map(([currency, amount]) => ({
+        currency,
+        kind: "source_income",
+        amount,
+        note: `Accepted ${source} income before wallet payout`,
+      }));
+      for (const c of FOREX_ACTIVE_CURRENCIES)
+        for (const [kind, amount, note] of [
+          ["credit", remaining[c] ?? 0, "Residual personal wallet payout"],
+          ["credit", interest[c] ?? 0, "Lender interest reserve"],
+          ["burn", principalPaid[c] ?? 0, "LOC principal retired"],
+        ] as const)
+          if (amount > 0) flows.push({ currency: c, kind, amount, note });
+      const settled = await settleLocPlan(db, key, turn, {
         characterId: char._id,
-        currencyCode: c,
-        type: "garnishment",
-        amount: total,
-        interestPortion: interest,
-        principalPortion: principal,
-        balanceAfter: newP[c] ?? 0,
-        arrearsAfter: newA[c] ?? 0,
-        turn,
-        meta: {
-          garnishmentSource: source,
-          garnishedInternal: appliedInternal,
-          incomeInternalApplied: appliedInternal,
-          distress: true,
+        expectedLoc: loc,
+        expectedRevision: char.lineOfCreditRevision ?? null,
+        request,
+        createdAt: new Date(),
+        effect: {
+          locAfter: { ...loc, balances: principal, arrears },
+          walletInc: Object.fromEntries(
+            Object.entries(remaining)
+              .filter(([, amount]) => amount > 0)
+              .map(([c, amount]) => [`currencyBalances.personal.${c}`, amount])
+          ),
+          reserves: locInterestCredits(interest),
+          ledger,
+          transactions,
+          flows,
+          result: {
+            appliedInternal: allocated.appliedInternal,
+            fraction,
+            remaining,
+            conversions,
+            home: getHomeCurrency(char),
+            countryId: char.countryId,
+            rates,
+          },
         },
       });
-
-      txEntries.push({
-        type: "loc_garnishment",
-        turn,
-        createdAt: now,
-        subjectType: "character",
-        subjectId: char._id,
-        subjectName: char.name,
-        amount: -total,
-        currencyCode: c,
-        meta: {
-          interestPortion: interest,
-          principalPortion: principal,
-          garnishmentSource: source,
-        },
-      });
+      if (settled.error) throw new Error(settled.error);
+      result = settled.result;
     }
-
+    charPayments.delete(id);
+    for (const map of options?.auxiliaryPayments ?? []) map.delete(id);
     borrowersGarnished += 1;
-    totalInternalGarnished += appliedInternal;
-
-    // Per-borrower log: source income breakdown → applied LOC reductions, with
-    // post-garnishment obligation snapshot for verification.
-    const incomeSummary = Object.entries(incomeFaceByCurrency)
-      .map(([c, amt]) => `${c} ${formatNumber(amt as number)}`)
-      .join(" + ");
-    const reductionSummary = [...obligationCurrencies]
-      .map((c) => {
-        const total = (interestPortions[c] ?? 0) + (principalPortions[c] ?? 0);
-        const post = (newP[c] ?? 0) + (newA[c] ?? 0);
-        return `${c} -${formatNumber(total)} (post=${formatNumber(post)})`;
-      })
-      .join(", ");
-    console.log(
-      `[loc-garnish/${source}] turn ${turn} ${char.name} (${char.countryId}, distressed): ` +
-        `income {${incomeSummary}} = ${formatNumber(appliedInternal)} internal → LOC [${reductionSummary}]` +
-        (consumedFraction < 1
-          ? ` (${(consumedFraction * 100).toFixed(1)}% of income consumed)`
-          : "")
-    );
+    totalInternalGarnished += Number(result.appliedInternal);
   }
-
-  if (pendingLedgerEntries.length > 0) {
-    await Promise.all(pendingLedgerEntries.map((entry) => insertLocLedgerEntry(db, entry)));
-  }
-
-  // Bulk-update bank reserves with garnished interest.
-  await Promise.all(
-    [...bankReserveInc]
-      .filter(([, inc]) => inc > 0)
-      .map(([cid, inc]) =>
-        db
-          .collection<CentralBank>("centralBanks")
-          .updateOne({ _id: getBankId(cid as CountryId) }, { $inc: { reserveBalance: inc } })
-      )
-  );
-
-  if (txEntries.length > 0) {
-    void emitTxBulk(db, txEntries, thresholds);
-  }
-
-  if (borrowersGarnished > 0) {
-    console.log(
-      `[loc-garnish/${source}] turn ${turn} summary: ${borrowersGarnished} borrower(s) garnished, ` +
-        `total ${formatNumber(totalInternalGarnished)} internal redirected to LOC`
-    );
-  }
-
   return { borrowersGarnished, totalInternalGarnished };
 }
-
-function formatNumber(n: number): string {
-  if (!Number.isFinite(n)) return String(n);
-  if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
-  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(2)}K`;
-  return n.toFixed(2);
-}
-
-// Re-export for callers needing to convert internal back to face for display.
 export { fromInternalUnits };

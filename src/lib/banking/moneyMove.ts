@@ -130,6 +130,7 @@ export interface MoneyMoveRecordLeg {
 interface MoneyMoveRecord {
   atomicDocument?: unknown;
   legacyInterestBatch?: unknown;
+  locSettlement?: unknown;
   _id: string;
   kind: string;
   turn?: number;
@@ -420,7 +421,7 @@ export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveRes
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const record = await records.findOne({ _id: key });
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
-  if (record.atomicDocument || record.legacyInterestBatch)
+  if (record.atomicDocument || record.legacyInterestBatch || record.locSettlement)
     return {
       status: "rejected",
       applied: [],

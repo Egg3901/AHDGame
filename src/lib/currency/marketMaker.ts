@@ -21,8 +21,15 @@ import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
+import {
+  replayMarketMakerReceipt,
+  settleMarketMakerReceipt,
+  recordMarketMakerRefusal,
+} from "./marketMakerReceipt";
 
 interface MarketMakerTradeParams {
+  /** Stable accepted income-event identity for garnished residual conversions. */
+  commandId?: string;
   characterId: ObjectId;
   countryId: CountryId;
   fromCurrency: CurrencyCode;
@@ -199,7 +206,7 @@ function resolveMarketMakerSpend(
  *   netAmount = amount - spreadFee
  *   toAmount = netAmount * crossRate
  */
-export async function executeMarketMakerTrade(
+async function executeMarketMakerTradeInner(
   db: Db,
   params: MarketMakerTradeParams
 ): Promise<MarketMakerTradeResult> {
@@ -351,6 +358,36 @@ export async function executeMarketMakerTrade(
       spreadCharged: 0,
     };
 
+  if (params.commandId) {
+    if (collection !== "characters")
+      throw new Error("Residual FX receipts require a regular character");
+    return (await settleMarketMakerReceipt(
+      db,
+      { ...params, commandId: params.commandId },
+      {
+        fromCountryId,
+        toCountryId,
+        spend: spendAmount,
+        received: toAmount,
+        rate: crossRate,
+        fee: spreadFee,
+        trade: {
+          buyerCharacterId: characterId,
+          sellerCharacterId: null,
+          fromCurrency,
+          toCurrency,
+          amount: spendAmount,
+          rate: crossRate,
+          spread: spreadFee,
+          turn,
+          createdAt: new Date(),
+          source: source ?? "manual",
+          ...(sourceRef ? { sourceRef } : {}),
+        },
+      }
+    )) as unknown as MarketMakerTradeResult;
+  }
+
   // Atomic balance update with race-condition guard:
   // The filter checks the character has sufficient fromCurrency before deducting.
   const deductInc = buildPersonalBalanceInc(-spendAmount, fromCurrency, true);
@@ -407,4 +444,21 @@ export async function executeMarketMakerTrade(
     spreadCharged: spreadFee,
     tradeHistoryId,
   };
+}
+
+/** Existing callers remain unchanged; a supplied identity freezes this conversion's quote. */
+export async function executeMarketMakerTrade(
+  db: Db,
+  params: MarketMakerTradeParams
+): Promise<MarketMakerTradeResult> {
+  if (!params.commandId) return executeMarketMakerTradeInner(db, params);
+  const request = { ...params, commandId: params.commandId };
+  const prior = await replayMarketMakerReceipt(db, request);
+  if (prior) return prior as unknown as MarketMakerTradeResult;
+  const result = await executeMarketMakerTradeInner(db, params);
+  if (!result.success)
+    return (await recordMarketMakerRefusal(db, request, {
+      ...result,
+    })) as unknown as MarketMakerTradeResult;
+  return result;
 }

@@ -20,14 +20,15 @@ import { DEFAULT_LOAN_FUNDING_SOURCE } from "@/lib/lineOfCredit/fundingSource";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
 import { getGameState } from "@/lib/gameState";
-import { insertLocLedgerEntry } from "@/lib/lineOfCredit/ledger";
-import { emitTx } from "@/lib/financialTxLog/emit";
-import { FOREX_ACTIVE_CURRENCIES, ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
+import { loadLocSettlement, settleLocPlan } from "@/lib/lineOfCredit/settlement";
+
+import { getCountryIdForCurrency, ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 const drawSchema = z.object({
   currency: z.enum(ZOD_ACTIVE_CURRENCY_ENUM),
   amount: z.number(),
+  commandId: z.string().uuid(),
 });
 
 function buildLocDrawLimitMessage(
@@ -55,31 +56,6 @@ function buildLocDrawLimitMessage(
     : "Exceeds your credit limit - borrowing is capped by your average recurring income over the last 48 turns.";
 }
 
-function buildLocOptimisticFilter(
-  character: Character,
-  currency: CurrencyCode
-): Record<string, unknown> {
-  const loc = character.lineOfCredit;
-  const balances = loc?.balances ?? {};
-  const arrears = loc?.arrears ?? {};
-  const filter: Record<string, unknown> = {
-    _id: character._id,
-    [`lineOfCredit.accountsOpened.${currency}`]: true,
-    "lineOfCredit.drawFrozen": { $ne: true },
-  };
-
-  for (const code of FOREX_ACTIVE_CURRENCIES) {
-    const expectedBalance = balances[code] ?? 0;
-    const expectedArrears = arrears[code] ?? 0;
-    filter[`lineOfCredit.balances.${code}`] =
-      expectedBalance > 0 ? expectedBalance : { $not: { $gt: 0 } };
-    filter[`lineOfCredit.arrears.${code}`] =
-      expectedArrears > 0 ? expectedArrears : { $not: { $gt: 0 } };
-  }
-
-  return filter;
-}
-
 export async function POST(request: Request) {
   try {
     const auth = await requireBasicAuth();
@@ -96,7 +72,7 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { currency, amount: rawAmount } = parsed.data;
+    const { currency, amount: rawAmount, commandId } = parsed.data;
     const c = currency as CurrencyCode;
 
     const normalized = normalizeSavingsMutationAmount(rawAmount, c);
@@ -118,6 +94,18 @@ export async function POST(request: Request) {
       return NextResponse.json(badRequest("Character not found").toJson(), { status: 400 });
     }
 
+    const key = `loc:draw:${character._id}:${commandId}`;
+    const requestQuote = { operation: "draw", currency: c, amount: normalized };
+    const accepted = await loadLocSettlement(db, key);
+    if (accepted) {
+      const replay = await settleLocPlan(db, key, accepted.turn, {
+        ...accepted.locSettlement,
+        request: requestQuote,
+      });
+      return NextResponse.json(replay.error ? { error: replay.error } : replay.result, {
+        status: replay.error ? 409 : 200,
+      });
+    }
     const loc = character.lineOfCredit;
     if (!loc?.accountsOpened?.[c]) {
       return NextResponse.json(badRequest("Open an LOC account for this currency first").toJson(), {
@@ -158,16 +146,54 @@ export async function POST(request: Request) {
     const personalInc = buildPersonalBalanceInc(normalized, c, true);
     const now = new Date();
 
-    const writeResult = await db
-      .collection<Character>("characters")
-      .updateOne(buildLocOptimisticFilter(character, c), {
-        $inc: { ...personalInc, [`lineOfCredit.balances.${c}`]: normalized },
-        $set: {
-          updatedAt: now,
-          [`lineOfCredit.fundingSource.${c}`]: fundingSource,
-        },
-      });
-    if (writeResult.matchedCount === 0) {
+    const turn = (await getGameState())?.currentTurn ?? 0;
+    const locAfter = {
+      ...loc,
+      balances: { ...loc.balances, [c]: (loc.balances?.[c] ?? 0) + normalized },
+      fundingSource: { ...loc.fundingSource, [c]: fundingSource },
+    };
+    const settled = await settleLocPlan(db, key, turn, {
+      characterId: character._id,
+      expectedLoc: loc,
+      expectedRevision:
+        (character as Character & { lineOfCreditRevision?: number }).lineOfCreditRevision ?? null,
+      request: requestQuote,
+      createdAt: now,
+      effect: {
+        locAfter,
+        walletInc: personalInc,
+        reserves: [],
+        ledger: [
+          {
+            characterId: character._id,
+            countryId: getCountryIdForCurrency(c),
+            currencyCode: c,
+            type: "draw",
+            amount: normalized,
+            balanceAfter: locAfter.balances[c]!,
+            arrearsAfter: loc.arrears?.[c] ?? 0,
+            turn,
+          },
+        ],
+        transactions: [
+          {
+            type: "loc_draw",
+            turn,
+            subjectType: "character",
+            subjectId: character._id,
+            subjectName: character.name,
+            amount: normalized,
+            currencyCode: c,
+          },
+        ],
+        flows: [
+          { kind: "mint", currency: c, amount: normalized, note: "LOC origination" },
+          { kind: "credit", currency: c, amount: normalized, note: "Borrower personal wallet" },
+        ],
+        result: { success: true, currency: c, amount: normalized },
+      },
+    });
+    if (settled.error) {
       const freshCharacter = await db
         .collection<Character>("characters")
         .findOne({ _id: character._id });
@@ -202,32 +228,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const gameState = await getGameState();
-    const turn = gameState?.currentTurn ?? 0;
-    const after = await db.collection<Character>("characters").findOne({ _id: character._id });
-    if (after?.lineOfCredit) {
-      await insertLocLedgerEntry(db, {
-        characterId: character._id,
-        currencyCode: c,
-        type: "draw",
-        amount: normalized,
-        balanceAfter: after.lineOfCredit.balances?.[c] ?? 0,
-        arrearsAfter: after.lineOfCredit.arrears?.[c] ?? 0,
-        turn,
-      });
-    }
-
-    void emitTx(db, {
-      type: "loc_draw",
-      turn,
-      createdAt: now,
-      subjectType: "character",
-      subjectId: character._id,
-      subjectName: character.name,
-      amount: normalized,
-      currencyCode: c,
-    });
 
     return NextResponse.json({ success: true, currency: c, amount: normalized });
   } catch (error) {
