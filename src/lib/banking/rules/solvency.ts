@@ -19,7 +19,8 @@ export const FLIGHT_RATE_BY_BAND: Readonly<Record<"amber" | "red", number>> = {
 export const CONTAGION_PANIC_TURNS = 4;
 
 /**
- * A deposit taker fails when it is already published red AND its cash has
+ * A deposit taker fails when marked liabilities exceed its assets, or when
+ * it is already published red AND its cash has
  * fallen below the run line, which is {@link RUN_FAILURE_COVER_FRACTION} of
  * the reserves it must hold against the cash-backed deposit base.
  */
@@ -27,10 +28,13 @@ export function depositTakerFails(input: {
   priorBand: ConfidenceBand | undefined;
   cashReserves: number;
   requiredLiquidity: number;
+  /** Freshly marked assets less all cash-backed claims; absent for legacy callers. */
+  netAssets?: number;
 }): boolean {
   return (
-    input.priorBand === "red" &&
-    input.cashReserves < RUN_FAILURE_COVER_FRACTION * Math.max(0, input.requiredLiquidity)
+    (input.netAssets !== undefined && input.netAssets < -0.01) ||
+    (input.priorBand === "red" &&
+      input.cashReserves < RUN_FAILURE_COVER_FRACTION * Math.max(0, input.requiredLiquidity))
   );
 }
 

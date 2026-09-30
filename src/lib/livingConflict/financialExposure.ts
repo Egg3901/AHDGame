@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { Corporation, Bond, FederalBudget, GameState } from "@/lib/db/types";
+import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { bankEquity, getCashReserves } from "@/lib/banking/rules/balanceSheet";
 import {
@@ -10,7 +11,7 @@ import {
 
 /** Current enacted euro membership and actual sovereign-bank positions. */
 export async function loadFinancialExposure(db: Db, availableCountries: Set<string>) {
-  const [gameState, budgets, banks, bonds] = await Promise.all([
+  const [gameState, budgets, banks, bonds, rates] = await Promise.all([
     db
       .collection<GameState>("gameState")
       .findOne({ _id: "current" }, { projection: { eurozoneEnabled: 1, euroAdoptedCountries: 1 } }),
@@ -41,9 +42,10 @@ export async function loadFinancialExposure(db: Db, availableCountries: Set<stri
       .collection<Bond>("bonds")
       .find(
         { issuerType: "sovereign", defaulted: false },
-        { projection: { countryId: 1, holders: 1, faceValue: 1, marketPrice: 1 } }
+        { projection: { countryId: 1, holders: 1, faceValue: 1, marketPrice: 1, currencyCode: 1 } }
       )
       .toArray(),
+    loadValuationFxRates(db),
   ]);
   const adopted = new Set<string>(gameState?.euroAdoptedCountries ?? []);
   const byCountry = new Map<string, FinancialCountryExposure>();
@@ -94,19 +96,19 @@ export async function loadFinancialExposure(db: Db, availableCountries: Set<stri
       const ledgerUnits = bond.holders
         .filter((holder) => holder.corporationId?.equals(bank._id))
         .reduce((sum, holder) => sum + Math.max(0, holder.units), 0);
-      const bookUnits = (charter.propBook ?? [])
-        .filter((position) => position.asset === "bond" && position.ref === bond._id.toHexString())
-        .reduce((sum, position) => sum + Math.max(0, position.units), 0);
-      // The prop book and holder ledger can describe the same position.
-      exposure += Math.max(ledgerUnits, bookUnits) * bond.faceValue * Math.max(0, bond.marketPrice);
+      // Only conserved holder-ledger units qualify. Legacy prop-book-only
+      // positions have no issued security behind them and cannot trigger contagion.
+      const rate = bond.currencyCode ? (rates.get(bond.currencyCode) ?? 1) : 1;
+      exposure += (ledgerUnits * bond.faceValue * Math.max(0, bond.marketPrice)) / rate;
     }
     row.euroSovereignExposure += exposure;
     if (exposure > 0)
       row.exposedBankAssets += Math.max(
         exposure,
-        getCashReserves(charter) +
+        (getCashReserves(charter) +
           Math.max(0, charter.totalLoans ?? 0) +
-          Math.max(0, charter.propBookMarkValue ?? 0)
+          Math.max(0, charter.propBookMarkValue ?? 0)) /
+          (rates.get(charter.currency) ?? 1)
       );
     if (bankEquity(charter) < 0) row.bankStress = Math.max(row.bankStress, 80);
   }
