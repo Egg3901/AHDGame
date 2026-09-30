@@ -61,12 +61,16 @@ describe("party seed registry", () => {
       expect(parties.length, countryId).toBeGreaterThan(0);
       expect(parties.every((party) => party.validForPresets?.includes("2019-default"))).toBe(true);
       expect(parties.every((party) => party.regimeStatus !== "ruling")).toBe(true);
+      expect(parties.every((party) => party.isDefault && party.memberCount === 0)).toBe(true);
     }
-    expect(partySeedsForPreset("RU", "2019-default").map((party) => party.abbreviation))
-      .toContain("ER");
-    expect(partySeedsForPreset("RU", "2019-default").map((party) => party.abbreviation))
-      .not.toContain("CPSU");
-    expect(partySeedsForPreset("PL", "2019-default").map((party) => party.abbreviation))
-      .not.toContain("TD");
+    expect(partySeedsForPreset("RU", "2019-default").map((party) => party.abbreviation)).toContain(
+      "ER"
+    );
+    expect(
+      partySeedsForPreset("RU", "2019-default").map((party) => party.abbreviation)
+    ).not.toContain("CPSU");
+    expect(
+      partySeedsForPreset("PL", "2019-default").map((party) => party.abbreviation)
+    ).not.toContain("TD");
   });
 });
