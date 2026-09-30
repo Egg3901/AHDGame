@@ -1,6 +1,5 @@
 import { connectDb, closeDb } from "../utils/db";
 import type { BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
-import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { resolveResetTarget } from "./resetTarget";
@@ -80,6 +79,7 @@ async function main() {
       );
     }
 
+    const { resetAndBootstrapGameWorld } = await import("@/lib/admin/resetAndBootstrapGameWorld");
     const { reset, bootstrap } = await resetAndBootstrapGameWorld({
       db,
       mode,
