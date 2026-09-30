@@ -786,7 +786,8 @@ export async function listSnapshotsForFunds(
     .collection<IndexFundSnapshot>(FUND_SNAPSHOT_COLLECTION)
     .aggregate<{ _id: ObjectId; snapshots: IndexFundSnapshot[] }>([
       { $match: { fundId: { $in: fundIds } } },
-      { $sort: { turn: -1 } },
+      // Group key first so the {fundId, turn} index supplies the order (#2693).
+      { $sort: { fundId: 1, turn: -1 } },
       {
         $group: {
           _id: "$fundId",

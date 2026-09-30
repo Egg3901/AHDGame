@@ -1301,17 +1301,17 @@ export function getCollectionCategory(name: string): CollectionCategory | undefi
 
 /** Names of every runtime collection — the set wiped on reset. */
 export function getRuntimeCollectionNames(): string[] {
-  return RUNTIME.map((entry) => entry.name);
+  return getCollectionsByCategory("runtime").map((entry) => entry.name);
 }
 
 /** Names of every reference collection — the set seeded on bootstrap. */
 export function getReferenceCollectionNames(): string[] {
-  return REFERENCE.map((entry) => entry.name);
+  return getCollectionsByCategory("reference").map((entry) => entry.name);
 }
 
 /** Names of every preserved collection — the set that survives reset. */
 export function getPreservedCollectionNames(): string[] {
-  return PRESERVED.map((entry) => entry.name);
+  return getCollectionsByCategory("preserved").map((entry) => entry.name);
 }
 
 /**

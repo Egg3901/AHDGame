@@ -42,6 +42,7 @@ import {
 import type { SeedDiagnosticCheck, SeedDiagnosticSeverity } from "./types";
 import { check, ok, warn, critical } from "./checkFactory";
 import { checkRegionDerivedCoverage } from "./regionDerivedCoverage";
+import { regionalMetricCoverage, seedTurnoutScopeFilter } from "./regionalCoverage";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getScotusPresetSeed } from "@/lib/scotus/presetData";
 import type { ScotusPresetSeed } from "@/lib/scotus/presetData/types";
@@ -774,49 +775,31 @@ async function checkRegions(db: Db, expect: SeedExpectations): Promise<SeedDiagn
       );
     }
 
-    // Metrics: countryId filter (era-agnostic). Expect ≈ region count when regions exist.
-    // Every country's regions carry a macroMetrics doc — the branch that counted
-    // `stateMetrics` for non-playables was reporting on a store nothing writes,
-    // so it read 0 and flagged every one of them as missing region metrics.
-    const metricsCount = await db.collection("macroMetrics").countDocuments({ countryId });
-    if (regionCount > 0) {
+    const states = await db
+      .collection<{ _id: string; population?: number }>("states")
+      .find({ countryId })
+      .project({ _id: 1, population: 1 })
+      .toArray();
+    const regionIds = states
+      .filter((state) => !NATIONAL_SCOPE_IDS.has(String(state._id)))
+      .map((state) => String(state._id));
+    if (regionIds.length > 0) {
+      const metrics = await db
+        .collection<{ _id: string }>("macroMetrics")
+        .find({ countryId })
+        .project({ _id: 1 })
+        .toArray();
       checks.push(
-        metricsCount === regionCount
-          ? ok(
-              `regions.${countryId}.metrics`,
-              countryId,
-              `macroMetrics.count`,
-              regionCount,
-              metricsCount,
-              "matches region count"
-            )
-          : metricsCount > 0
-            ? warn(
-                `regions.${countryId}.metrics`,
-                countryId,
-                `macroMetrics.count`,
-                regionCount,
-                metricsCount,
-                "metrics count ≠ region count"
-              )
-            : critical(
-                `regions.${countryId}.metrics`,
-                countryId,
-                `macroMetrics.count`,
-                regionCount,
-                metricsCount,
-                "no region metrics for seeded regions"
-              )
+        regionalMetricCoverage(
+          countryId,
+          regionIds,
+          metrics.map((row) => String(row._id))
+        )
       );
     }
 
     const cfg = expect.nationalBudgets.find((b) => b.countryId === countryId);
     if (cfg) {
-      const states = await db
-        .collection<{ _id: string; population?: number }>("states")
-        .find({ countryId })
-        .project({ _id: 1, population: 1 })
-        .toArray();
       const sum = states
         .filter((s) => !NATIONAL_SCOPE_IDS.has(String(s._id)))
         .reduce((acc, s) => acc + (Number(s.population) || 0), 0);
@@ -1013,8 +996,8 @@ async function checkDemographics(db: Db, expect: SeedExpectations): Promise<Seed
           )
     );
     const turnoutCount = await db
-      .collection("stateDemographicTurnout")
-      .countDocuments({ countryId });
+      .collection<{ _id: string; countryId?: string | null }>("stateDemographicTurnout")
+      .countDocuments(seedTurnoutScopeFilter(countryId));
     checks.push(
       turnoutCount > 0
         ? ok(

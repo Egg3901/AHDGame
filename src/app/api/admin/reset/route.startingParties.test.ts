@@ -78,6 +78,25 @@ describe("admin reset starting parties", () => {
       );
     });
 
+    it(`returns blocked readiness and failing checks (${stream ? "stream" : "JSON"})`, async () => {
+      const readiness = {
+        status: "blocked",
+        criticalChecks: [{ id: "partyRoster.RU" }],
+        baselineCaptured: false,
+      };
+      mocks.reset.mockResolvedValue({
+        reset: { success: true, details: {} },
+        logs: [],
+        status: "partial",
+        readiness,
+      });
+      const response = await POST(request("1991-default", stream, { bootstrap: true }));
+      const text = await response.text();
+      const payload = stream ? JSON.parse(text.trim().slice(6)).data : JSON.parse(text);
+      expect(payload.resetStatus).toBe("partial");
+      expect(payload.readiness).toEqual(readiness);
+    });
+
     it(`validates the starting-party value (${stream ? "stream" : "JSON"})`, async () => {
       const res = await POST(request("1991-default", stream, { startingParties: "anything" }));
       expect(res.status).toBe(400);
