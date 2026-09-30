@@ -97,7 +97,6 @@ describe("FundTradePanel currency display (ticket #1072)", () => {
         screen
           .getAllByRole("button", {
             name: mode === "subscribe" ? "Subscribe" : "Redeem units",
-            exact: true,
           })
           .at(-1)!;
       await waitFor(() => expect(submit().hasAttribute("disabled")).toBe(false));

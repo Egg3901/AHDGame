@@ -1,4 +1,5 @@
 import type { ClientSession, Db, Document, ObjectId } from "mongodb";
+import { resumeFundCommandAudit, type FundCommandAudit } from "./playerCommandAudit";
 
 export interface FundCommandRequest {
   fundId: string;
@@ -13,6 +14,7 @@ interface FundCommand extends Document {
   state: "pending" | "completed";
   createdAt: Date;
   response?: { status: number; body: Record<string, unknown> };
+  audit?: FundCommandAudit;
 }
 
 const COLLECTION = "indexFundCommands";
@@ -61,6 +63,7 @@ export async function claimFundCommand(
     };
   }
   if (existing.state === "completed" && existing.response) {
+    await resumeFundCommandAudit(db, key);
     return {
       key,
       response: Response.json(existing.response.body, { status: existing.response.status }),
@@ -75,13 +78,21 @@ export async function completeFundCommand(
   key: string,
   body: Record<string, unknown>,
   status = 200,
-  session?: ClientSession
+  session?: ClientSession,
+  audit?: FundCommandAudit
 ): Promise<void> {
   await db
     .collection<FundCommand>(COLLECTION)
     .updateOne(
       { _id: key, state: "pending" },
-      { $set: { state: "completed", response: { status, body }, completedAt: new Date() } },
+      {
+        $set: {
+          state: "completed",
+          response: { status, body },
+          completedAt: new Date(),
+          ...(audit ? { audit } : {}),
+        },
+      },
       session ? { session } : undefined
     );
 }

@@ -1,3 +1,4 @@
+import { resumeFundCommandAudit } from "@/lib/indexFunds/playerCommandAudit";
 import {
   claimFundCommand,
   recordFundCommandQuote,
@@ -34,7 +35,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { logIndexFundRedeem, logIndexFundRedeemActivity } from "@/lib/indexFunds/fundTxLog";
+import { logIndexFundRedeemActivity } from "@/lib/indexFunds/fundTxLog";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getQueuedRedemptionLiabilityAnchor } from "@/lib/indexFunds/fundValuation";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -75,13 +76,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const { units, operationId } = parsed.data;
+    claimedOperationId = operationId;
     const command = await claimFundCommand(db, characterId, operationId, {
       fundId: fund._id.toHexString(),
       kind: "redeem",
       units,
     });
     if (command.response) return command.response;
-    claimedOperationId = operationId;
     const execute = async () => {
       if (!(await isIndexFundsEnabled())) {
         return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
@@ -153,7 +154,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
               queuedAmountAnchor: number;
               status: "paid" | "partial" | "queued";
               sharesSoldForLiquidity?: number;
-              payoutLogs: Array<{ units: number; amountAnchor: number; navAnchor: number }>;
+              payoutLogs: Array<{
+                transactionId: ObjectId;
+                units: number;
+                amountAnchor: number;
+                navAnchor: number;
+              }>;
               finalNavAnchor: number;
               /** ₳ → fund-currency rate the payouts were credited at. */
               redeemFxRate: number;
@@ -262,7 +268,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           let totalRedeemedUnits = 0;
           let totalPaidAnchor = 0;
           let sharesSoldForLiquidity = 0;
-          const payoutLogs: Array<{ units: number; amountAnchor: number; navAnchor: number }> = [];
+          const payoutLogs: Array<{
+            transactionId: ObjectId;
+            units: number;
+            amountAnchor: number;
+            navAnchor: number;
+          }> = [];
 
           async function payRedeemableUnits(quote: typeof cashQuote): Promise<void> {
             if (quote.redeemableUnits <= 0) return;
@@ -353,6 +364,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             totalRedeemedUnits += quote.redeemableUnits;
             totalPaidAnchor += quote.paidAmountAnchor;
             payoutLogs.push({
+              transactionId: redemptionTxId,
               units: quote.redeemableUnits,
               amountAnchor: quote.paidAmountAnchor,
               navAnchor: fundState!.quotedNav,
@@ -504,7 +516,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             redeemFxRate: _fx,
             ...response
           } = result!;
-          await completeFundCommand(db, command.key, { success: true, ...response }, 200, sess);
+          await completeFundCommand(db, command.key, { success: true, ...response }, 200, sess, {
+            fundId: fund._id,
+            fundName: fund.name,
+            fundSlug: fund.slug,
+            fundTicker: fund.tickerSymbol,
+            currencyCode: fundCurrency,
+            holderId: characterId,
+            holderName: character.name,
+            turn: auditTurn,
+            entries: result!.payoutLogs.map((payout) => ({
+              transactionId: payout.transactionId,
+              amountNative: forexEnabled
+                ? payout.amountAnchor * result!.redeemFxRate
+                : payout.amountAnchor,
+            })),
+          });
         };
 
         try {
@@ -547,21 +574,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           }
         }
 
-        for (const payout of result!.payoutLogs) {
-          void logIndexFundRedeem(db, {
-            fund,
-            holder: holderContext,
-            units: payout.units,
-            navAnchor: payout.navAnchor,
-            amountAnchor: payout.amountAnchor,
-            amountNative: forexEnabled
-              ? payout.amountAnchor * result!.redeemFxRate
-              : payout.amountAnchor,
-            source: "player",
-            turn: auditTurn,
-          });
-        }
-
         logIndexFundRedeemActivity(db, {
           fund,
           holder: holderContext,
@@ -601,6 +613,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     };
     const response = await execute();
     await completeFundCommand(db, command.key, await response.clone().json(), response.status);
+    await resumeFundCommandAudit(db, command.key);
     return response;
   } catch (error) {
     const failure = handleRouteError(error);

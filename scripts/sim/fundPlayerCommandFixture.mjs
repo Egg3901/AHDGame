@@ -42,7 +42,8 @@ async function main() {
     indexFundsMode: "full",
     nppEconomyEnabled: false,
     indexFundsDomesticSovereignCoverageEnabled: false,
-    auditLog: false,
+    auditLog: true,
+    ledgerShadow: true,
   });
   await db
     .collection("gameState")
@@ -196,6 +197,69 @@ async function main() {
     recoveredStatus: recovered.status,
     committed,
   });
+  // Acknowledgement loss at each aftercare stage must repair the same rows once.
+  for (const collection of ["financialTxLog", "ledgerEntries", "actionAuditLog"]) {
+    let fault = false;
+    const orderId = id();
+    globalThis.fundCommandDb = new Proxy(db, {
+      get(target, key) {
+        if (key === "collection")
+          return (name) => {
+            const c = original(name);
+            if (name !== collection) return c;
+            return new Proxy(c, {
+              get(t, p) {
+                if (p === "updateOne")
+                  return async (...args) => {
+                    const result = await t.updateOne(...args);
+                    if (!fault && args[1]?.$setOnInsert) {
+                      fault = true;
+                      throw Error(`synthetic ${collection} acknowledgement lost`);
+                    }
+                    return result;
+                  };
+                const value = Reflect.get(t, p);
+                return typeof value === "function" ? value.bind(t) : value;
+              },
+            });
+          };
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const interrupted = await call("subscribe", orderId);
+    assert(fault);
+    assert.equal(interrupted.status, 409);
+    const cash = await state();
+    globalThis.fundCommandDb = db;
+    const repaired = await Promise.all([call("subscribe", orderId), call("subscribe", orderId)]);
+    assert(
+      repaired.every((result) => result.status === 200),
+      JSON.stringify(repaired)
+    );
+    assert.deepEqual(await state(), cash);
+    const receipt = await db
+      .collection("indexFundCommands")
+      .findOne({ _id: `fund:${actor}:${orderId}` });
+    assert(receipt.auditCompletedAt);
+    for (const row of receipt.auditPlan.rows) {
+      assert.equal(
+        await db.collection(row.collection).countDocuments({ _id: row.document._id }),
+        1
+      );
+    }
+    assert.equal(
+      await db.collection("financialTxLog").countDocuments({ "meta.commandId": receipt._id }),
+      1
+    );
+    cases.push({
+      case: `${collection}_lost_ack`,
+      concurrentReplay: true,
+      financialState: cash,
+      plannedRows: receipt.auditPlan.rows.length,
+      aftercareComplete: true,
+    });
+  }
   // A process failure before completion is explicitly unknown, not a replay lease.
   let stopped = false;
   globalThis.fundCommandDb = new Proxy(db, {
@@ -274,6 +338,24 @@ async function main() {
     .find({ subjectId: actor })
     .project({ type: 1, amount: 1, anchorAmount: 1, currencyCode: 1 })
     .toArray();
+  const completed = await db
+    .collection("indexFundCommands")
+    .find({ state: "completed", audit: { $exists: true } })
+    .toArray();
+  for (const receipt of completed) {
+    assert(receipt.auditCompletedAt);
+    for (const row of receipt.auditPlan.rows) {
+      assert.equal(
+        await db.collection(row.collection).countDocuments({ _id: row.document._id }),
+        1
+      );
+      if (row.collection === "ledgerEntries") assert.equal(row.document.balanced, true);
+    }
+  }
+  assert.equal(
+    financialRows.length,
+    completed.reduce((n, receipt) => n + receipt.audit.entries.length, 0)
+  );
   writeFileSync(
     out,
     JSON.stringify(

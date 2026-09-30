@@ -32,7 +32,7 @@ vi.mock("@/lib/api/rateLimit", () => ({
       })
   ),
 }));
-vi.mock("@/lib/indexFunds/fundTxLog", () => ({ logIndexFundSubscribe: vi.fn() }));
+vi.mock("@/lib/indexFunds/fundTxLog", () => ({ logIndexFundSubscribeActivity: vi.fn() }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn(async () => 1) }));
 vi.mock("@/lib/indexFunds/fundQueries", () => ({

@@ -1,3 +1,4 @@
+import { resumeFundCommandAudit } from "@/lib/indexFunds/playerCommandAudit";
 import {
   claimFundCommand,
   recordFundCommandQuote,
@@ -34,7 +35,7 @@ import { autoConvertForPurchase, convertForExplicitPay } from "@/lib/currency/au
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { GameState } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { logIndexFundSubscribe } from "@/lib/indexFunds/fundTxLog";
+import { logIndexFundSubscribeActivity } from "@/lib/indexFunds/fundTxLog";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { subscribeIndexFundSchema } from "@/lib/api/schemas/indexFunds";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -67,6 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const { units, operationId, payCurrency } = parsed.data;
+    claimedOperationId = operationId;
     const command = await claimFundCommand(db, characterId, operationId, {
       fundId: fund._id.toHexString(),
       kind: "subscribe",
@@ -74,7 +76,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       ...(payCurrency ? { payCurrency } : {}),
     });
     if (command.response) return command.response;
-    claimedOperationId = operationId;
     const execute = async () => {
       if (!(await isIndexFundsEnabled())) {
         return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
@@ -187,6 +188,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           return { error: debitResult.error };
         }
 
+        let transactionId: ObjectId;
         let positionCredited = false;
         let fundCredited = false;
         try {
@@ -214,7 +216,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           fundCredited = true;
 
           // Record the subscription transaction.
-          await insertFundTransaction(
+          transactionId = await insertFundTransaction(
             db,
             {
               fundId: fund._id,
@@ -293,7 +295,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             spreadPaid: Math.round(subscribeSpreadCharged * 100) / 100,
           },
           200,
-          session
+          session,
+          {
+            fundId: fund._id,
+            fundName: fund.name,
+            fundSlug: fund.slug,
+            fundTicker: fund.tickerSymbol,
+            currencyCode: fundCurrency,
+            holderId: characterId,
+            holderName: character.name,
+            turn: auditTurn,
+            entries: [
+              {
+                transactionId,
+                amountNative: -totalCostNative,
+                balanceAfter: debitResult.newBalance,
+              },
+            ],
+          }
         );
         return { result };
       };
@@ -328,7 +347,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           );
         }
 
-        void logIndexFundSubscribe(db, {
+        logIndexFundSubscribeActivity(db, {
           fund,
           holder: {
             holderKind: "character",
@@ -372,6 +391,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     };
     const response = await execute();
     await completeFundCommand(db, command.key, await response.clone().json(), response.status);
+    await resumeFundCommandAudit(db, command.key);
     return response;
   } catch (error) {
     const failure = handleRouteError(error);

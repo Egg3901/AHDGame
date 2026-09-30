@@ -130,6 +130,18 @@ async function main() {
       const response = await context.request.get(`${app.base}${path}`, { timeout: 120000 });
       assert(response.status() < 500, `${path}: ${response.status()}`);
     }
+    // Warm the actual page module too. A cold compiler may outlive the first
+    // transport deadline; keep this app alive for the following navigation.
+    try {
+      const warm = await context.request.get(`${app.base}/stockmarket/us/fund/fixture`, {
+        timeout: 120000,
+      });
+      assert(warm.status() < 500, `Fund page warmup: ${warm.status()}`);
+    } catch (error) {
+      if (!(error instanceof Error) || !/Timeout/.test(error.message)) throw error;
+      app.assertAlive();
+      console.log("Fund page warmup reached its transport deadline; retaining the compiling app");
+    }
     const page = await context.newPage();
     const diagnostics: unknown[] = [];
     page.on("pageerror", (error) => diagnostics.push({ pageError: error.message }));

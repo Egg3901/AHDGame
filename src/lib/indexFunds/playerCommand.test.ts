@@ -12,7 +12,7 @@ function fixture() {
     findOne: vi.fn(async (filter: Document) => records.get(filter._id) ?? null),
     updateOne: vi.fn(async (filter: Document, update: Document) => {
       const row = records.get(filter._id);
-      if (row?.state !== filter.state) return { matchedCount: 0 };
+      if (!row || row.state !== filter.state) return { matchedCount: 0 };
       Object.assign(row, update.$set);
       return { matchedCount: 1 };
     }),
