@@ -17,6 +17,8 @@ function activation(): Omit<SuccessionActivationInput, "sourceRegions" | "custod
     displayName: "Soviet Union",
     region: "europe",
     status: "sovereign",
+    recognition: { status: "widely-recognized" },
+    un: { state: "admitted" },
   });
   const successor = {
     ...tier3Entry("1991-default", {
@@ -25,6 +27,8 @@ function activation(): Omit<SuccessionActivationInput, "sourceRegions" | "custod
       region: "europe",
       status: "emergent",
       parentEntityId: "RU",
+      recognition: { status: "dependent" },
+      un: { state: "ineligible" },
     }),
     simulationTier: "background-macro" as const,
   };
@@ -160,7 +164,11 @@ describe("live federation settlement intent", () => {
       "RU"
     );
     expect(
-      (await args.db.collection("federalBudget").findOne({ _id: "RU" }))?.treasuryBalance
+      (
+        await args.db
+          .collection<{ _id: string; treasuryBalance: number }>("federalBudget")
+          .findOne({ _id: "RU" })
+      )?.treasuryBalance
     ).toBe(1);
     expect(await args.db.collection("worldEntityStates").find({}).toArray()).toHaveLength(0);
   });
@@ -194,7 +202,7 @@ describe("live federation settlement intent", () => {
   it("rejects a changed live treasury before writing an intent", async () => {
     const { args } = scenario();
     await args.db
-      .collection("federalBudget")
+      .collection<{ _id: string; treasuryBalance: number }>("federalBudget")
       .updateOne({ _id: "RU" }, { $set: { treasuryBalance: 2 } });
     await expect(stageLiveFederationSettlementIntent(args)).rejects.toThrow("finance terms");
     expect(await args.db.collection("federationSettlementIntents").find({}).toArray()).toHaveLength(
