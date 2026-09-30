@@ -67,6 +67,29 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
     return call![0] as Record<string, unknown>;
   }
 
+  it("persists an eligible euro adoption provision and charges its legislative cost", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999 });
+    db.collection("organizationMemberships").find.mockReturnValue({
+      toArray: async () => [{ countryId: "DE" }],
+    });
+    const { getEnabledCountryIds } = await import("@/lib/countryAccess");
+    vi.mocked(getEnabledCountryIds).mockResolvedValueOnce(["DE"]);
+    const { authUser } = seatDelegate({ countryId: "DE", officeType: "bundestag" });
+    const result = await proposeNationalBill(db as unknown as Db, "DE", authUser, {
+      title: "Euro Adoption Act",
+      summary: "Approve participation in euro adoption.",
+      chamber: "bundestag",
+      category: "economy",
+      provisions: [{ type: "euro_adoption" }],
+    });
+    expect(result.status).toBe(201);
+    expect(insertedBill().provisions).toEqual([{ type: "euro_adoption" }]);
+    const debit = db.collectionMocks.characters!.updateOne.mock.calls.find(
+      (call) => call[1]?.$inc?.nationalInfluence < 0
+    );
+    expect(debit).toBeDefined();
+  });
+
   it("stores a CN delegate's bill under chamber key 'npc', not office type 'npcDelegate'", async () => {
     const { authUser } = seatDelegate({ countryId: "CN", officeType: "npcDelegate" });
 

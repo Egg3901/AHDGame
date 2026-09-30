@@ -129,66 +129,75 @@ describe("Bond transactional routes — cross-currency regression (A19-A21, A25)
   });
 
   // ── BUY corp path (A19) ────────────────────────────────────────────────────
-  it("buy: JP corp buying USD-denominated bond deducts liquidCapital in JPY via ₳ route", async () => {
-    const corpId = new ObjectId();
-    const bondId = new ObjectId();
-    const issuerCorpId = new ObjectId();
+  it.each([1, 1.5])(
+    "buy: JP corporation pays the source currency spread strength %s",
+    async (strength) => {
+      db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+        makeCursor([
+          { currencyCode: "USD", rate: FX_USD },
+          { currencyCode: "JPY", rate: FX_JPY, forexSpreadStrength: strength },
+        ])
+      );
+      const corpId = new ObjectId();
+      const bondId = new ObjectId();
+      const issuerCorpId = new ObjectId();
 
-    db.collectionMocks["bonds"]!.findOne.mockResolvedValue({
-      _id: bondId,
-      currencyCode: "USD",
-      countryId: "US",
-      corporationId: issuerCorpId,
-      faceValue: 1000,
-      marketPrice: 1.0,
-      publicFloat: 10,
-      holders: [],
-      matured: false,
-      defaulted: false,
-    });
-    db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
-      _id: corpId,
-      userId: new ObjectId(userId),
-      liquidCurrencyCode: "JPY",
-      countryId: "JP",
-      // 2M JPY ≈ 17,562 ₳ ≈ 18,265 USD of buying power — well above 10,000 USD cost.
-      liquidCapital: 2_000_000,
-    });
-    // Atomic-debit guard simulation: corp has enough liquidCapital, return new balance.
-    db.collectionMocks["corporations"]!.findOneAndUpdate.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 905_200, // ~2M − 1.094M JPY deduction
-    });
+      db.collectionMocks["bonds"]!.findOne.mockResolvedValue({
+        _id: bondId,
+        currencyCode: "USD",
+        countryId: "US",
+        corporationId: issuerCorpId,
+        faceValue: 1000,
+        marketPrice: 1.0,
+        publicFloat: 10,
+        holders: [],
+        matured: false,
+        defaulted: false,
+      });
+      db.collectionMocks["corporations"]!.findOne.mockResolvedValue({
+        _id: corpId,
+        userId: new ObjectId(userId),
+        liquidCurrencyCode: "JPY",
+        countryId: "JP",
+        // 2M JPY ≈ 17,562 ₳ ≈ 18,265 USD of buying power — well above 10,000 USD cost.
+        liquidCapital: 2_000_000,
+      });
+      // Atomic-debit guard simulation: corp has enough liquidCapital, return new balance.
+      db.collectionMocks["corporations"]!.findOneAndUpdate.mockResolvedValue({
+        _id: corpId,
+        liquidCapital: 905_200, // ~2M − 1.094M JPY deduction
+      });
 
-    const url = `http://test.local/api/bonds/${bondId.toString()}/buy?corporationId=${corpId.toString()}`;
-    const req = new Request(url, {
-      method: "POST",
-      body: JSON.stringify({ units: 10 }),
-      headers: { "content-type": "application/json" },
-    });
+      const url = `http://test.local/api/bonds/${bondId.toString()}/buy?corporationId=${corpId.toString()}`;
+      const req = new Request(url, {
+        method: "POST",
+        body: JSON.stringify({ units: 10 }),
+        headers: { "content-type": "application/json" },
+      });
 
-    const { POST } = await import("../[bondId]/buy/route");
-    const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
-    expect(res.status).toBe(200);
+      const { POST } = await import("../[bondId]/buy/route");
+      const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
+      expect(res.status).toBe(200);
 
-    // Post-fix: costLocal (USD) = 10 × 1000 × 1.02 ask (mid 1.0 + 2% corporate half spread) = 10,200 USD.
-    //          costAnchor = 10,000 / 1.04 ≈ 9,615.38 ₳.
-    //          JPY deduction = 9,615.38 × 113.88 ≈ 1,094,799.90 JPY.
-    // Deduction now goes through findOneAndUpdate (atomic guard), not updateOne.
-    // Pre-fix (A19): anchorToCorpLiquidCapital(10000 LOCAL, JPY, 113.88) = 10000 × 113.88
-    //          = 1,138,800 JPY — wrong by ~44,000 JPY (the USD FX factor leaking through).
-    const guardCalls = db.collectionMocks["corporations"]!.findOneAndUpdate.mock.calls;
-    expect(guardCalls.length).toBeGreaterThanOrEqual(1);
-    const update = guardCalls[0][1] as { $inc: { liquidCapital: number } };
-    const actualDeduction = -update.$inc.liquidCapital;
-    const expectedDeduction = 10_200 / ((1 - MARKET_MAKER_SPREAD) * (FX_USD / FX_JPY));
-    expect(actualDeduction).toBeCloseTo(expectedDeduction, 0);
-    // Explicitly reject the pre-fix value (10,000 × 113.88 = 1,138,800).
-    expect(actualDeduction).not.toBeCloseTo(10_000 * FX_JPY, -1);
-    // Filter must include the $gte balance gate (atomicity guarantee).
-    const filter = guardCalls[0][0] as Record<string, unknown>;
-    expect(filter.liquidCapital).toEqual({ $gte: expect.any(Number) });
-  });
+      // Post-fix: costLocal (USD) = 10 × 1000 × 1.02 ask (mid 1.0 + 2% corporate half spread) = 10,200 USD.
+      //          costAnchor = 10,000 / 1.04 ≈ 9,615.38 ₳.
+      //          JPY deduction = 9,615.38 × 113.88 ≈ 1,094,799.90 JPY.
+      // Deduction now goes through findOneAndUpdate (atomic guard), not updateOne.
+      // Pre-fix (A19): anchorToCorpLiquidCapital(10000 LOCAL, JPY, 113.88) = 10000 × 113.88
+      //          = 1,138,800 JPY — wrong by ~44,000 JPY (the USD FX factor leaking through).
+      const guardCalls = db.collectionMocks["corporations"]!.findOneAndUpdate.mock.calls;
+      expect(guardCalls.length).toBeGreaterThanOrEqual(1);
+      const update = guardCalls[0][1] as { $inc: { liquidCapital: number } };
+      const actualDeduction = -update.$inc.liquidCapital;
+      const expectedDeduction = 10_200 / ((1 - MARKET_MAKER_SPREAD * strength) * (FX_USD / FX_JPY));
+      expect(actualDeduction).toBeCloseTo(expectedDeduction, 0);
+      // Explicitly reject the pre-fix value (10,000 × 113.88 = 1,138,800).
+      expect(actualDeduction).not.toBeCloseTo(10_000 * FX_JPY, -1);
+      // Filter must include the $gte balance gate (atomicity guarantee).
+      const filter = guardCalls[0][0] as Record<string, unknown>;
+      expect(filter.liquidCapital).toEqual({ $gte: expect.any(Number) });
+    }
+  );
 
   // ── CORP bond_purchase ledger row carries both currencies ──────────────────
   it("emit: corp bond_purchase row records bondAmount in bondCurrency alongside the corp's local-currency amount", async () => {

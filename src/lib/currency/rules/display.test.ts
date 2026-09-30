@@ -127,3 +127,25 @@ describe("1953 ledger calibration", () => {
     expect(adopted.rate).toBeCloseTo(4.2 / 1.95583);
   });
 });
+
+describe("explicit euro membership", () => {
+  it("displays the UK's home amounts in euros only after accession while pinned pounds remain pounds", () => {
+    const input = {
+      preference: "home" as const,
+      homeCurrency: "GBP" as const,
+      rates: { GBP: 0.6, EUR: 0.85 },
+      context: {
+        preset: "1991-default",
+        eurozoneEnabled: true,
+        euroMemberCurrencies: ["EUR", "IEP"] as const,
+      },
+    };
+    expect(displayQuote(input)).toEqual({ rate: 0.6, symbol: "£" });
+    const joined = {
+      ...input,
+      context: { ...input.context, euroMemberCurrencies: ["EUR", "IEP", "GBP"] as const },
+    };
+    expect(displayQuote(joined)).toEqual({ rate: 0.85, symbol: "€" });
+    expect(displayQuote({ ...joined, preference: "GBP" })).toEqual({ rate: 0.6, symbol: "£" });
+  });
+});

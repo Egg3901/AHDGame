@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -49,8 +50,16 @@ export function FundTradePanel({
   onSuccess: () => void;
   defaultMode?: Mode;
 }) {
-  const { formatFull, forexEnabled, forexRates, ratesLoading, toInternalFrom, formatPrice } =
-    useCurrency();
+  const {
+    formatFull,
+    forexEnabled,
+    forexRates,
+    forexSpreadStrengths,
+    ratesLoading,
+    toInternalFrom,
+    formatPrice,
+  } = useCurrency();
+  const { euroMonetaryUnion } = useWorldFlags();
   const fundCurrency = anchorCurrencyCode as CurrencyCode;
 
   const unitsInputId = useId();
@@ -155,6 +164,8 @@ export function FundTradePanel({
   const explicitPayEstimate =
     showPaymentControls && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCostNative,
           fromCurrency: selectedPayCurrency,
           toCurrency: fundCurrency,
@@ -166,6 +177,8 @@ export function FundTradePanel({
   const implicitAutoConvertEstimate =
     showPaymentControls && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCostNative,
           targetCurrency: fundCurrency,
           balances: personalBalances ?? {},
@@ -187,6 +200,8 @@ export function FundTradePanel({
         }
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: cost,
           fromCurrency: code,
           toCurrency: fundCurrency,

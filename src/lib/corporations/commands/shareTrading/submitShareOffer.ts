@@ -1,3 +1,9 @@
+/**
+ * Share offers reserve purchase funding while awaiting acceptance.
+ * submitShareOffer includes the source monetary authority spread in corporate escrow.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -213,6 +219,8 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       const placerFxRate = await getCorpFxRate(db, placerCorp);
       const fxRates = await loadFxRatesRecord(db);
       const escrowEstimate = estimateCorpWalletSpend({
+        union: await loadEuroMonetaryUnion(db),
+        spreadStrengths: await loadForexSpreadStrengths(db),
         requiredAmount: escrowAmount,
         availableBalance: placerCorp.liquidCapital ?? 0,
         fromCurrency: placerCurrency,
