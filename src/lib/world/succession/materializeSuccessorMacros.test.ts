@@ -30,7 +30,9 @@ describe("federation successor macro materialization", () => {
         countries: [country],
       })
     ).toBe(1);
-    expect(await db.collection("macroCountries").findOne({ _id: "UKR" })).toEqual(country);
+    expect(
+      await db.collection<MacroCountryState>("macroCountries").findOne({ _id: "UKR" })
+    ).toEqual(country);
     await expect(
       materializeFederationSuccessorMacros({
         db,
