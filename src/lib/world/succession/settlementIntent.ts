@@ -68,8 +68,8 @@ export function hashSettlementPayload(value: unknown): string {
 
 /** Terms requiring political consent, excluding live cash amounts that can
  * change while the normal parliamentary vote is open. */
-export function hashFederationPoliticalTerms(activation: LiveActivationInput): string {
-  return hashSettlementPayload({
+export function federationPoliticalTermsFromActivation(activation: LiveActivationInput) {
+  return {
     presetId: activation.source.presetId,
     sourceEntityId: activation.source.entityId,
     settlementId: activation.settlementId,
@@ -88,9 +88,19 @@ export function hashFederationPoliticalTerms(activation: LiveActivationInput): s
     negotiatedCustodians: activation.negotiatedCustodians,
     assetBasis: activation.finances.assetBasis,
     debtBasis: activation.finances.debtBasis,
-    assetWeights: activation.finances.assetWeights,
-    debtWeights: activation.finances.debtWeights,
-  });
+    // A population default is a rule, not a frozen census. Negotiated basis
+    // instead binds the exact basis-point shares approved by the participants.
+    assetWeights:
+      activation.finances.assetBasis === "population" ? {} : activation.finances.assetWeights,
+    debtWeights:
+      activation.finances.debtBasis === "population" ? {} : activation.finances.debtWeights,
+  };
+}
+
+export type FederationPoliticalTerms = ReturnType<typeof federationPoliticalTermsFromActivation>;
+
+export function hashFederationPoliticalTerms(activation: LiveActivationInput): string {
+  return hashSettlementPayload(federationPoliticalTermsFromActivation(activation));
 }
 
 function sameApproval(a: SuccessionApprovalInput, b: SuccessionApprovalInput): boolean {

@@ -5,6 +5,7 @@ import { tier3Entry } from "@/lib/world/registry/builders";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import {
   buildLiveFederationSettlementSnapshot,
+  federationPoliticalTermsFromActivation,
   hashFederationPoliticalTerms,
   hashSettlementPayload,
   stageLiveFederationSettlementIntent,
@@ -93,6 +94,21 @@ function scenario() {
   const mem = createInMemoryDb();
   const proposed = activation();
   const termsHash = hashFederationPoliticalTerms(proposed);
+  mem.seed("federationPoliticalProposals", [
+    {
+      _id: "1991-default:ussr-1:1",
+      presetId: "1991-default",
+      sourceEntityId: "RU",
+      settlementId: "ussr-1",
+      revision: 1,
+      termsHash,
+      terms: federationPoliticalTermsFromActivation(proposed),
+      billId: mandateBillId,
+      status: "open",
+      openedOnTurn: 96,
+      createdAt: new Date(0),
+    },
+  ]);
   mem.seed("bills", [
     {
       _id: mandateBillId,
@@ -331,7 +347,7 @@ describe("live federation settlement intent", () => {
     });
     await expect(
       stageLiveFederationSettlementIntent({ ...args, activation: changed })
-    ).rejects.toThrow("parent mandate");
+    ).rejects.toThrow("political proposal");
   });
 
   it("rejects a changed live treasury before writing an intent", async () => {
