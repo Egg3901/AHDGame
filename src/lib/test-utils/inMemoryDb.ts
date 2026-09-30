@@ -464,6 +464,7 @@ class InMemoryCollection {
       },
       skip: () => cursor,
       batchSize: () => cursor,
+      next: async () => rows.shift() ?? null,
       toArray: async () => rows,
       // Driver cursors are async-iterable, and seed code streams large
       // collections with `for await (const doc of col.find(...))` rather than

@@ -1,0 +1,3610 @@
+{
+  "reportSourceCommit": "a3bf8dcbbd117b0e06f8d3d0b7105956cf97a223",
+  "sandbox": "ahd_sim_audit-allflags-1991-r3",
+  "commands": 12,
+  "report": {
+    "basis": "All retained resolved elections at query time, independent of chart checkpoint cutoff. Actual resolved holder receipts, finalized stored seat allocations or frozen single-winner results; archived candidate rows identify people. Current offices never reconstruct history. Each character or NPP holding aggregate seatsHeld voting weight counts once in representative identity comparisons.",
+    "denominators": "Each rate carries its own comparableCycles. Seat/person metrics compare consecutive races with unchanged capacity in the same scope. Win and resolver shares count resolved outcome cycles. Player/NPP win-cycle rates can overlap in mixed multi-seat races.",
+    "legacyLimit": "Missing historical person identity, actor kind and executed resolver remain unknown. Present-day flags are context only.",
+    "selection": {
+      "timeBasis": "Scheduled election endTurn among currently resolved records; old finalization timestamps are unavailable. This is not an as-of database reconstruction.",
+      "firstScheduledEndTurn": 60,
+      "lastScheduledEndTurn": 480
+    },
+    "provenance": {
+      "run": {
+        "preset": "1991-default",
+        "runId": "4f55908e-1495-4a05-895c-369e285fae2d",
+        "seed": "audit-allflags-1991-r3",
+        "source": {
+          "requestedCommit": null,
+          "executedCommit": "a6cca21537b4119ad9ae358fe9999b738f0089f2"
+        }
+      },
+      "bootstrapFeatureManifest": null
+    },
+    "currentContext": {
+      "gameState": {
+        "_id": "current",
+        "currentTurn": 480,
+        "currentYear": 2000,
+        "preset": "1991-default",
+        "nppAutonomyLevel": "v5",
+        "nppAutonomyEnabled": true,
+        "redistrictingEnabled": true
+      },
+      "config": {
+        "_id": "default"
+      }
+    },
+    "resolvedCycles": 1153,
+    "families": [
+      {
+        "key": "AT:nationalrat",
+        "countryId": "AT",
+        "electionFamily": "nationalrat",
+        "resolvedCycles": 10,
+        "possibleComparisons": 5,
+        "comparableCycles": 5,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 3,
+          "comparableCycles": 5,
+          "per100": 60
+        },
+        "unchangedPartySeatVector": {
+          "count": 2,
+          "comparableCycles": 5,
+          "per100": 40
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 2,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 2,
+          "comparableCycles": 2,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 3,
+          "comparableCycles": 5,
+          "per100": 60
+        },
+        "tiedControlCycles": {
+          "count": 5,
+          "comparableCycles": 10,
+          "per100": 50
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 10,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 10,
+          "comparableCycles": 10,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 10
+        },
+        "actorMix": {
+          "npp-only": 10,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 10,
+            "comparableCycles": 10,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 10
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "BR:chamber",
+        "countryId": "BR",
+        "electionFamily": "chamber",
+        "resolvedCycles": 10,
+        "possibleComparisons": 5,
+        "comparableCycles": 5,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 1,
+          "comparableCycles": 5,
+          "per100": 20
+        },
+        "unchangedPartySeatVector": {
+          "count": 4,
+          "comparableCycles": 5,
+          "per100": 80
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 5,
+          "per100": 20
+        },
+        "uniqueControlHolds": {
+          "count": 4,
+          "comparableCycles": 5,
+          "per100": 80
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 10,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 2,
+          "comparableCycles": 5,
+          "per100": 40
+        },
+        "completeIncumbentHold": {
+          "count": 3,
+          "comparableCycles": 5,
+          "per100": 60
+        },
+        "anyIncumbentRetained": {
+          "count": 3,
+          "comparableCycles": 5,
+          "per100": 60
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 10,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 10,
+          "comparableCycles": 10,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 10
+        },
+        "actorMix": {
+          "npp-only": 10,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 10,
+            "comparableCycles": 10,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 10
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "BR:senate",
+        "countryId": "BR",
+        "electionFamily": "senate",
+        "resolvedCycles": 10,
+        "possibleComparisons": 5,
+        "comparableCycles": 5,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlHolds": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlComparison": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "tiedControlCycles": {
+          "count": 7,
+          "comparableCycles": 10,
+          "per100": 70
+        },
+        "personReplacement": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "completeIncumbentHold": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "anyIncumbentRetained": {
+          "count": 4,
+          "comparableCycles": 5,
+          "per100": 80
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 10,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 10,
+          "comparableCycles": 10,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 10
+        },
+        "actorMix": {
+          "npp-only": 10,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 10,
+            "comparableCycles": 10,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 10
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "CN:governor",
+        "countryId": "CN",
+        "electionFamily": "governor",
+        "resolvedCycles": 14,
+        "possibleComparisons": 7,
+        "comparableCycles": 7,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "unchangedPartySeatVector": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 1,
+          "comparableCycles": 7,
+          "per100": 14.285714285714286
+        },
+        "completeIncumbentHold": {
+          "count": 6,
+          "comparableCycles": 7,
+          "per100": 85.71428571428571
+        },
+        "anyIncumbentRetained": {
+          "count": 6,
+          "comparableCycles": 7,
+          "per100": 85.71428571428571
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 14,
+          "comparableCycles": 14,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 14
+        },
+        "actorMix": {
+          "npp-only": 14,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 14,
+            "comparableCycles": 14,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 14
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "CN:npcDelegate",
+        "countryId": "CN",
+        "electionFamily": "npcDelegate",
+        "resolvedCycles": 14,
+        "possibleComparisons": 7,
+        "comparableCycles": 7,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "unchangedPartySeatVector": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 5,
+          "comparableCycles": 7,
+          "per100": 71.42857142857143
+        },
+        "completeIncumbentHold": {
+          "count": 2,
+          "comparableCycles": 7,
+          "per100": 28.571428571428573
+        },
+        "anyIncumbentRetained": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 14,
+          "comparableCycles": 14,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 14
+        },
+        "actorMix": {
+          "npp-only": 14,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 14,
+            "comparableCycles": 14,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 14
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "CN:peoplesCongress",
+        "countryId": "CN",
+        "electionFamily": "peoplesCongress",
+        "resolvedCycles": 14,
+        "possibleComparisons": 7,
+        "comparableCycles": 7,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "unchangedPartySeatVector": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 3,
+          "comparableCycles": 7,
+          "per100": 42.857142857142854
+        },
+        "completeIncumbentHold": {
+          "count": 4,
+          "comparableCycles": 7,
+          "per100": 57.142857142857146
+        },
+        "anyIncumbentRetained": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 14,
+          "comparableCycles": 14,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 14
+        },
+        "actorMix": {
+          "npp-only": 14,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 14,
+            "comparableCycles": 14,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 14
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "DE:bundestag",
+        "countryId": "DE",
+        "electionFamily": "bundestag",
+        "resolvedCycles": 32,
+        "possibleComparisons": 16,
+        "comparableCycles": 16,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 5,
+          "comparableCycles": 16,
+          "per100": 31.25
+        },
+        "unchangedPartySeatVector": {
+          "count": 11,
+          "comparableCycles": 16,
+          "per100": 68.75
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 10,
+          "per100": 10
+        },
+        "uniqueControlHolds": {
+          "count": 9,
+          "comparableCycles": 10,
+          "per100": 90
+        },
+        "tiedControlComparison": {
+          "count": 6,
+          "comparableCycles": 16,
+          "per100": 37.5
+        },
+        "tiedControlCycles": {
+          "count": 10,
+          "comparableCycles": 32,
+          "per100": 31.25
+        },
+        "personReplacement": {
+          "count": 3,
+          "comparableCycles": 16,
+          "per100": 18.75
+        },
+        "completeIncumbentHold": {
+          "count": 13,
+          "comparableCycles": 16,
+          "per100": 81.25
+        },
+        "anyIncumbentRetained": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 32,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 32,
+          "comparableCycles": 32,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 32
+        },
+        "actorMix": {
+          "npp-only": 32,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 32,
+            "comparableCycles": 32,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 32
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "DE:landtag",
+        "countryId": "DE",
+        "electionFamily": "landtag",
+        "resolvedCycles": 29,
+        "possibleComparisons": 13,
+        "comparableCycles": 13,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 13,
+          "comparableCycles": 13,
+          "per100": 100
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 13,
+          "per100": 0
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 12,
+          "per100": 8.333333333333334
+        },
+        "uniqueControlHolds": {
+          "count": 11,
+          "comparableCycles": 12,
+          "per100": 91.66666666666667
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 13,
+          "per100": 7.6923076923076925
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 29,
+          "per100": 3.4482758620689653
+        },
+        "personReplacement": {
+          "count": 7,
+          "comparableCycles": 13,
+          "per100": 53.84615384615385
+        },
+        "completeIncumbentHold": {
+          "count": 6,
+          "comparableCycles": 13,
+          "per100": 46.15384615384615
+        },
+        "anyIncumbentRetained": {
+          "count": 13,
+          "comparableCycles": 13,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 29,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 29,
+          "comparableCycles": 29,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 29
+        },
+        "actorMix": {
+          "npp-only": 29,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 29,
+            "comparableCycles": 29,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 29
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "DE:ministerPresident",
+        "countryId": "DE",
+        "electionFamily": "ministerPresident",
+        "resolvedCycles": 29,
+        "possibleComparisons": 13,
+        "comparableCycles": 10,
+        "excludedComparisons": {
+          "missing stored outcome": 3
+        },
+        "partySeatVectorChange": {
+          "count": 3,
+          "comparableCycles": 10,
+          "per100": 30
+        },
+        "unchangedPartySeatVector": {
+          "count": 7,
+          "comparableCycles": 10,
+          "per100": 70
+        },
+        "uniqueControlFlips": {
+          "count": 3,
+          "comparableCycles": 10,
+          "per100": 30
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 10,
+          "per100": 70
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 10,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 3,
+          "comparableCycles": 10,
+          "per100": 30
+        },
+        "completeIncumbentHold": {
+          "count": 7,
+          "comparableCycles": 10,
+          "per100": 70
+        },
+        "anyIncumbentRetained": {
+          "count": 7,
+          "comparableCycles": 10,
+          "per100": 70
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 24,
+          "comparableCycles": 24,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 29
+        },
+        "actorMix": {
+          "npp-only": 24,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 5
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 29,
+            "comparableCycles": 29,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 29,
+          "final stored allocation unavailable": 5,
+          "winner person identity unavailable": 5,
+          "winner actor kind unavailable": 5
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 5
+      },
+      {
+        "key": "ES:congresoDiputados",
+        "countryId": "ES",
+        "electionFamily": "congresoDiputados",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "unchangedPartySeatVector": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 3,
+          "comparableCycles": 8,
+          "per100": 37.5
+        },
+        "tiedControlCycles": {
+          "count": 3,
+          "comparableCycles": 16,
+          "per100": 18.75
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "ES:senado",
+        "countryId": "ES",
+        "electionFamily": "senado",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "unchangedPartySeatVector": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 4,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 4,
+          "comparableCycles": 4,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "tiedControlCycles": {
+          "count": 6,
+          "comparableCycles": 16,
+          "per100": 37.5
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "FI:eduskunta",
+        "countryId": "FI",
+        "electionFamily": "eduskunta",
+        "resolvedCycles": 12,
+        "possibleComparisons": 6,
+        "comparableCycles": 6,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 5,
+          "comparableCycles": 6,
+          "per100": 83.33333333333333
+        },
+        "unchangedPartySeatVector": {
+          "count": 1,
+          "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 5,
+          "per100": 20
+        },
+        "uniqueControlHolds": {
+          "count": 4,
+          "comparableCycles": 5,
+          "per100": 80
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 12,
+          "per100": 8.333333333333334
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 6,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 12
+        },
+        "actorMix": {
+          "npp-only": 12,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 12,
+            "comparableCycles": 12,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 12
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "FR:assembleeNationale",
+        "countryId": "FR",
+        "electionFamily": "assembleeNationale",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "unchangedPartySeatVector": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "uniqueControlFlips": {
+          "count": 3,
+          "comparableCycles": 6,
+          "per100": 50
+        },
+        "uniqueControlHolds": {
+          "count": 3,
+          "comparableCycles": 6,
+          "per100": 50
+        },
+        "tiedControlComparison": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 16,
+          "per100": 12.5
+        },
+        "personReplacement": {
+          "count": 3,
+          "comparableCycles": 8,
+          "per100": 37.5
+        },
+        "completeIncumbentHold": {
+          "count": 5,
+          "comparableCycles": 8,
+          "per100": 62.5
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "FR:senat",
+        "countryId": "FR",
+        "electionFamily": "senat",
+        "resolvedCycles": 8,
+        "possibleComparisons": 0,
+        "comparableCycles": 0,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlHolds": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "completeIncumbentHold": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "anyIncumbentRetained": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 8
+        },
+        "actorMix": {
+          "npp-only": 8,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 8,
+            "comparableCycles": 8,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 8
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "GR:vouli",
+        "countryId": "GR",
+        "electionFamily": "vouli",
+        "resolvedCycles": 12,
+        "possibleComparisons": 6,
+        "comparableCycles": 6,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 4,
+          "comparableCycles": 6,
+          "per100": 66.66666666666667
+        },
+        "unchangedPartySeatVector": {
+          "count": 2,
+          "comparableCycles": 6,
+          "per100": 33.333333333333336
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 5,
+          "per100": 20
+        },
+        "uniqueControlHolds": {
+          "count": 4,
+          "comparableCycles": 5,
+          "per100": 80
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 12,
+          "per100": 16.666666666666668
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 6,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 12
+        },
+        "actorMix": {
+          "npp-only": 12,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 12,
+            "comparableCycles": 12,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 12
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "IE:dail",
+        "countryId": "IE",
+        "electionFamily": "dail",
+        "resolvedCycles": 24,
+        "possibleComparisons": 16,
+        "comparableCycles": 16,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 11,
+          "comparableCycles": 16,
+          "per100": 68.75
+        },
+        "unchangedPartySeatVector": {
+          "count": 5,
+          "comparableCycles": 16,
+          "per100": 31.25
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 4,
+          "comparableCycles": 16,
+          "per100": 25
+        },
+        "tiedControlCycles": {
+          "count": 3,
+          "comparableCycles": 24,
+          "per100": 12.5
+        },
+        "personReplacement": {
+          "count": 7,
+          "comparableCycles": 16,
+          "per100": 43.75
+        },
+        "completeIncumbentHold": {
+          "count": 9,
+          "comparableCycles": 16,
+          "per100": 56.25
+        },
+        "anyIncumbentRetained": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 24,
+          "comparableCycles": 24,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 24
+        },
+        "actorMix": {
+          "npp-only": 24,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 24,
+            "comparableCycles": 24,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 24
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "IE:governor",
+        "countryId": "IE",
+        "electionFamily": "governor",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "unchangedPartySeatVector": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "completeIncumbentHold": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "anyIncumbentRetained": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "IE:localCouncil",
+        "countryId": "IE",
+        "electionFamily": "localCouncil",
+        "resolvedCycles": 8,
+        "possibleComparisons": 0,
+        "comparableCycles": 0,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlHolds": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 4,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "completeIncumbentHold": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "anyIncumbentRetained": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 4,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 4,
+          "comparableCycles": 4,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 8
+        },
+        "actorMix": {
+          "npp-only": 4,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 4
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 8,
+            "comparableCycles": 8,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "final stored allocation unavailable": 4,
+          "winner person identity unavailable": 4,
+          "winner actor kind unavailable": 4,
+          "executed resolver unavailable": 8
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 4
+      },
+      {
+        "key": "IE:uachtaran",
+        "countryId": "IE",
+        "electionFamily": "uachtaran",
+        "resolvedCycles": 1,
+        "possibleComparisons": 0,
+        "comparableCycles": 0,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "uniqueControlHolds": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 1,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "completeIncumbentHold": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "anyIncumbentRetained": {
+          "count": 0,
+          "comparableCycles": 0,
+          "per100": null
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 1,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 1,
+          "comparableCycles": 1,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 1
+        },
+        "actorMix": {
+          "npp-only": 1,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 1,
+            "comparableCycles": 1,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 1
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "IT:cameraDeputati",
+        "countryId": "IT",
+        "electionFamily": "cameraDeputati",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 5,
+          "comparableCycles": 8,
+          "per100": 62.5
+        },
+        "unchangedPartySeatVector": {
+          "count": 3,
+          "comparableCycles": 8,
+          "per100": 37.5
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 7,
+          "per100": 14.285714285714286
+        },
+        "uniqueControlHolds": {
+          "count": 6,
+          "comparableCycles": 7,
+          "per100": 85.71428571428571
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 16,
+          "per100": 6.25
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "IT:senato",
+        "countryId": "IT",
+        "electionFamily": "senato",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "unchangedPartySeatVector": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 16,
+          "per100": 6.25
+        },
+        "personReplacement": {
+          "count": 3,
+          "comparableCycles": 8,
+          "per100": 37.5
+        },
+        "completeIncumbentHold": {
+          "count": 5,
+          "comparableCycles": 8,
+          "per100": 62.5
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "JP:governor",
+        "countryId": "JP",
+        "electionFamily": "governor",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "unchangedPartySeatVector": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "completeIncumbentHold": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "anyIncumbentRetained": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "JP:regionalCouncil",
+        "countryId": "JP",
+        "electionFamily": "regionalCouncil",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 5,
+          "comparableCycles": 8,
+          "per100": 62.5
+        },
+        "completeIncumbentHold": {
+          "count": 3,
+          "comparableCycles": 8,
+          "per100": 37.5
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "JP:sangiin",
+        "countryId": "JP",
+        "electionFamily": "sangiin",
+        "resolvedCycles": 24,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "unchangedPartySeatVector": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "uniqueControlFlips": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "uniqueControlHolds": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 24,
+          "per100": 8.333333333333334
+        },
+        "personReplacement": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "completeIncumbentHold": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "anyIncumbentRetained": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 24,
+          "comparableCycles": 24,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 24
+        },
+        "actorMix": {
+          "npp-only": 24,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 24,
+            "comparableCycles": 24,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 24
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "JP:shugiin",
+        "countryId": "JP",
+        "electionFamily": "shugiin",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "unchangedPartySeatVector": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 7,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 7,
+          "comparableCycles": 7,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 16,
+          "per100": 6.25
+        },
+        "personReplacement": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "completeIncumbentHold": {
+          "count": 4,
+          "comparableCycles": 8,
+          "per100": 50
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "NG:governor",
+        "countryId": "NG",
+        "electionFamily": "governor",
+        "resolvedCycles": 12,
+        "possibleComparisons": 6,
+        "comparableCycles": 6,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 3,
+          "comparableCycles": 6,
+          "per100": 50
+        },
+        "unchangedPartySeatVector": {
+          "count": 3,
+          "comparableCycles": 6,
+          "per100": 50
+        },
+        "uniqueControlFlips": {
+          "count": 3,
+          "comparableCycles": 6,
+          "per100": 50
+        },
+        "uniqueControlHolds": {
+          "count": 3,
+          "comparableCycles": 6,
+          "per100": 50
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 6,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 4,
+          "comparableCycles": 6,
+          "per100": 66.66666666666667
+        },
+        "completeIncumbentHold": {
+          "count": 2,
+          "comparableCycles": 6,
+          "per100": 33.333333333333336
+        },
+        "anyIncumbentRetained": {
+          "count": 2,
+          "comparableCycles": 6,
+          "per100": 33.333333333333336
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 12
+        },
+        "actorMix": {
+          "npp-only": 12,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 12,
+            "comparableCycles": 12,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 12
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "NG:house",
+        "countryId": "NG",
+        "electionFamily": "house",
+        "resolvedCycles": 24,
+        "possibleComparisons": 18,
+        "comparableCycles": 18,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 15,
+          "comparableCycles": 18,
+          "per100": 83.33333333333333
+        },
+        "unchangedPartySeatVector": {
+          "count": 3,
+          "comparableCycles": 18,
+          "per100": 16.666666666666668
+        },
+        "uniqueControlFlips": {
+          "count": 4,
+          "comparableCycles": 15,
+          "per100": 26.666666666666668
+        },
+        "uniqueControlHolds": {
+          "count": 11,
+          "comparableCycles": 15,
+          "per100": 73.33333333333333
+        },
+        "tiedControlComparison": {
+          "count": 3,
+          "comparableCycles": 18,
+          "per100": 16.666666666666668
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 24,
+          "per100": 8.333333333333334
+        },
+        "personReplacement": {
+          "count": 15,
+          "comparableCycles": 18,
+          "per100": 83.33333333333333
+        },
+        "completeIncumbentHold": {
+          "count": 3,
+          "comparableCycles": 18,
+          "per100": 16.666666666666668
+        },
+        "anyIncumbentRetained": {
+          "count": 13,
+          "comparableCycles": 18,
+          "per100": 72.22222222222223
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 24,
+          "comparableCycles": 24,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 24
+        },
+        "actorMix": {
+          "npp-only": 24,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 24,
+            "comparableCycles": 24,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 24
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "NG:regionalCouncil",
+        "countryId": "NG",
+        "electionFamily": "regionalCouncil",
+        "resolvedCycles": 12,
+        "possibleComparisons": 6,
+        "comparableCycles": 6,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 6,
+          "per100": 0
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "uniqueControlHolds": {
+          "count": 5,
+          "comparableCycles": 6,
+          "per100": 83.33333333333333
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 6,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 4,
+          "comparableCycles": 6,
+          "per100": 66.66666666666667
+        },
+        "completeIncumbentHold": {
+          "count": 2,
+          "comparableCycles": 6,
+          "per100": 33.333333333333336
+        },
+        "anyIncumbentRetained": {
+          "count": 5,
+          "comparableCycles": 6,
+          "per100": 83.33333333333333
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 12
+        },
+        "actorMix": {
+          "npp-only": 12,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 12,
+            "comparableCycles": 12,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 12
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "NG:senate",
+        "countryId": "NG",
+        "electionFamily": "senate",
+        "resolvedCycles": 12,
+        "possibleComparisons": 6,
+        "comparableCycles": 6,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 2,
+          "comparableCycles": 6,
+          "per100": 33.333333333333336
+        },
+        "unchangedPartySeatVector": {
+          "count": 4,
+          "comparableCycles": 6,
+          "per100": 66.66666666666667
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 1,
+          "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 12,
+          "per100": 16.666666666666668
+        },
+        "personReplacement": {
+          "count": 5,
+          "comparableCycles": 6,
+          "per100": 83.33333333333333
+        },
+        "completeIncumbentHold": {
+          "count": 1,
+          "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "anyIncumbentRetained": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 12
+        },
+        "actorMix": {
+          "npp-only": 12,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 12,
+            "comparableCycles": 12,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 12
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "SE:riksdag",
+        "countryId": "SE",
+        "electionFamily": "riksdag",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 6,
+          "comparableCycles": 8,
+          "per100": 75
+        },
+        "unchangedPartySeatVector": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 6,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 6,
+          "comparableCycles": 6,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 2,
+          "comparableCycles": 8,
+          "per100": 25
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 16,
+          "per100": 12.5
+        },
+        "personReplacement": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "completeIncumbentHold": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "TR:milletMeclisi",
+        "countryId": "TR",
+        "electionFamily": "milletMeclisi",
+        "resolvedCycles": 16,
+        "possibleComparisons": 8,
+        "comparableCycles": 8,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 7,
+          "comparableCycles": 8,
+          "per100": 87.5
+        },
+        "unchangedPartySeatVector": {
+          "count": 1,
+          "comparableCycles": 8,
+          "per100": 12.5
+        },
+        "uniqueControlFlips": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "uniqueControlHolds": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "tiedControlComparison": {
+          "count": 3,
+          "comparableCycles": 8,
+          "per100": 37.5
+        },
+        "tiedControlCycles": {
+          "count": 5,
+          "comparableCycles": 16,
+          "per100": 31.25
+        },
+        "personReplacement": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "completeIncumbentHold": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "anyIncumbentRetained": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 16,
+          "comparableCycles": 16,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 16
+        },
+        "actorMix": {
+          "npp-only": 16,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 16,
+            "comparableCycles": 16,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 16
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "UK:commons",
+        "countryId": "UK",
+        "electionFamily": "commons",
+        "resolvedCycles": 24,
+        "possibleComparisons": 12,
+        "comparableCycles": 12,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 11,
+          "comparableCycles": 12,
+          "per100": 91.66666666666667
+        },
+        "unchangedPartySeatVector": {
+          "count": 1,
+          "comparableCycles": 12,
+          "per100": 8.333333333333334
+        },
+        "uniqueControlFlips": {
+          "count": 4,
+          "comparableCycles": 12,
+          "per100": 33.333333333333336
+        },
+        "uniqueControlHolds": {
+          "count": 8,
+          "comparableCycles": 12,
+          "per100": 66.66666666666667
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 12,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 5,
+          "comparableCycles": 12,
+          "per100": 41.666666666666664
+        },
+        "completeIncumbentHold": {
+          "count": 7,
+          "comparableCycles": 12,
+          "per100": 58.333333333333336
+        },
+        "anyIncumbentRetained": {
+          "count": 12,
+          "comparableCycles": 12,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 24,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 24,
+          "comparableCycles": 24,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 24
+        },
+        "actorMix": {
+          "npp-only": 24,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 24,
+            "comparableCycles": 24,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 24
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "UK:governor",
+        "countryId": "UK",
+        "electionFamily": "governor",
+        "resolvedCycles": 8,
+        "possibleComparisons": 4,
+        "comparableCycles": 4,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 1,
+          "comparableCycles": 4,
+          "per100": 25
+        },
+        "unchangedPartySeatVector": {
+          "count": 3,
+          "comparableCycles": 4,
+          "per100": 75
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 4,
+          "per100": 25
+        },
+        "uniqueControlHolds": {
+          "count": 3,
+          "comparableCycles": 4,
+          "per100": 75
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 4,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 1,
+          "comparableCycles": 4,
+          "per100": 25
+        },
+        "completeIncumbentHold": {
+          "count": 3,
+          "comparableCycles": 4,
+          "per100": 75
+        },
+        "anyIncumbentRetained": {
+          "count": 3,
+          "comparableCycles": 4,
+          "per100": 75
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 8,
+          "comparableCycles": 8,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 8
+        },
+        "actorMix": {
+          "npp-only": 8,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 8,
+            "comparableCycles": 8,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 8
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "UK:regionalCouncil",
+        "countryId": "UK",
+        "electionFamily": "regionalCouncil",
+        "resolvedCycles": 17,
+        "possibleComparisons": 5,
+        "comparableCycles": 5,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "unchangedPartySeatVector": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "uniqueControlFlips": {
+          "count": 1,
+          "comparableCycles": 5,
+          "per100": 20
+        },
+        "uniqueControlHolds": {
+          "count": 4,
+          "comparableCycles": 5,
+          "per100": 80
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 5,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 17,
+          "per100": 5.882352941176471
+        },
+        "personReplacement": {
+          "count": 3,
+          "comparableCycles": 5,
+          "per100": 60
+        },
+        "completeIncumbentHold": {
+          "count": 2,
+          "comparableCycles": 5,
+          "per100": 40
+        },
+        "anyIncumbentRetained": {
+          "count": 5,
+          "comparableCycles": 5,
+          "per100": 100
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 17,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 17,
+          "comparableCycles": 17,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 17
+        },
+        "actorMix": {
+          "npp-only": 17,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 17,
+            "comparableCycles": 17,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 17
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "US:governor",
+        "countryId": "US",
+        "electionFamily": "governor",
+        "resolvedCycles": 100,
+        "possibleComparisons": 50,
+        "comparableCycles": 50,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 11,
+          "comparableCycles": 50,
+          "per100": 22
+        },
+        "unchangedPartySeatVector": {
+          "count": 39,
+          "comparableCycles": 50,
+          "per100": 78
+        },
+        "uniqueControlFlips": {
+          "count": 11,
+          "comparableCycles": 50,
+          "per100": 22
+        },
+        "uniqueControlHolds": {
+          "count": 39,
+          "comparableCycles": 50,
+          "per100": 78
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 50,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 100,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 17,
+          "comparableCycles": 50,
+          "per100": 34
+        },
+        "completeIncumbentHold": {
+          "count": 33,
+          "comparableCycles": 50,
+          "per100": 66
+        },
+        "anyIncumbentRetained": {
+          "count": 33,
+          "comparableCycles": 50,
+          "per100": 66
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 100,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 100,
+          "comparableCycles": 100,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 100
+        },
+        "actorMix": {
+          "npp-only": 100,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 100,
+            "comparableCycles": 100,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 100
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "US:house",
+        "countryId": "US",
+        "electionFamily": "house",
+        "resolvedCycles": 250,
+        "possibleComparisons": 200,
+        "comparableCycles": 172,
+        "excludedComparisons": {
+          "changed seat capacity": 21,
+          "missing stored outcome": 7
+        },
+        "partySeatVectorChange": {
+          "count": 49,
+          "comparableCycles": 172,
+          "per100": 28.488372093023255
+        },
+        "unchangedPartySeatVector": {
+          "count": 123,
+          "comparableCycles": 172,
+          "per100": 71.51162790697674
+        },
+        "uniqueControlFlips": {
+          "count": 14,
+          "comparableCycles": 134,
+          "per100": 10.447761194029852
+        },
+        "uniqueControlHolds": {
+          "count": 120,
+          "comparableCycles": 134,
+          "per100": 89.55223880597015
+        },
+        "tiedControlComparison": {
+          "count": 38,
+          "comparableCycles": 172,
+          "per100": 22.093023255813954
+        },
+        "tiedControlCycles": {
+          "count": 42,
+          "comparableCycles": 244,
+          "per100": 17.21311475409836
+        },
+        "personReplacement": {
+          "count": 31,
+          "comparableCycles": 172,
+          "per100": 18.023255813953487
+        },
+        "completeIncumbentHold": {
+          "count": 141,
+          "comparableCycles": 172,
+          "per100": 81.97674418604652
+        },
+        "anyIncumbentRetained": {
+          "count": 166,
+          "comparableCycles": 172,
+          "per100": 96.51162790697674
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 244,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 244,
+          "comparableCycles": 244,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 250
+        },
+        "actorMix": {
+          "npp-only": 244,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 6
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 250,
+            "comparableCycles": 250,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 250,
+          "final stored allocation unavailable": 6,
+          "winner person identity unavailable": 6,
+          "winner actor kind unavailable": 6
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 6
+      },
+      {
+        "key": "US:senate",
+        "countryId": "US",
+        "electionFamily": "senate",
+        "resolvedCycles": 167,
+        "possibleComparisons": 67,
+        "comparableCycles": 67,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 15,
+          "comparableCycles": 67,
+          "per100": 22.388059701492537
+        },
+        "unchangedPartySeatVector": {
+          "count": 52,
+          "comparableCycles": 67,
+          "per100": 77.61194029850746
+        },
+        "uniqueControlFlips": {
+          "count": 15,
+          "comparableCycles": 67,
+          "per100": 22.388059701492537
+        },
+        "uniqueControlHolds": {
+          "count": 52,
+          "comparableCycles": 67,
+          "per100": 77.61194029850746
+        },
+        "tiedControlComparison": {
+          "count": 0,
+          "comparableCycles": 67,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 167,
+          "per100": 0
+        },
+        "personReplacement": {
+          "count": 24,
+          "comparableCycles": 67,
+          "per100": 35.82089552238806
+        },
+        "completeIncumbentHold": {
+          "count": 43,
+          "comparableCycles": 67,
+          "per100": 64.17910447761194
+        },
+        "anyIncumbentRetained": {
+          "count": 43,
+          "comparableCycles": 67,
+          "per100": 64.17910447761194
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 167,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 167,
+          "comparableCycles": 167,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 167
+        },
+        "actorMix": {
+          "npp-only": 167,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 167,
+            "comparableCycles": 167,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 167
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      },
+      {
+        "key": "US:stateSenate",
+        "countryId": "US",
+        "electionFamily": "stateSenate",
+        "resolvedCycles": 100,
+        "possibleComparisons": 50,
+        "comparableCycles": 50,
+        "excludedComparisons": {},
+        "partySeatVectorChange": {
+          "count": 40,
+          "comparableCycles": 50,
+          "per100": 80
+        },
+        "unchangedPartySeatVector": {
+          "count": 10,
+          "comparableCycles": 50,
+          "per100": 20
+        },
+        "uniqueControlFlips": {
+          "count": 6,
+          "comparableCycles": 45,
+          "per100": 13.333333333333334
+        },
+        "uniqueControlHolds": {
+          "count": 39,
+          "comparableCycles": 45,
+          "per100": 86.66666666666667
+        },
+        "tiedControlComparison": {
+          "count": 5,
+          "comparableCycles": 50,
+          "per100": 10
+        },
+        "tiedControlCycles": {
+          "count": 5,
+          "comparableCycles": 100,
+          "per100": 5
+        },
+        "personReplacement": {
+          "count": 13,
+          "comparableCycles": 50,
+          "per100": 26
+        },
+        "completeIncumbentHold": {
+          "count": 37,
+          "comparableCycles": 50,
+          "per100": 74
+        },
+        "anyIncumbentRetained": {
+          "count": 48,
+          "comparableCycles": 50,
+          "per100": 96
+        },
+        "playerWinCycles": {
+          "count": 0,
+          "comparableCycles": 100,
+          "per100": 0
+        },
+        "nppWinCycles": {
+          "count": 100,
+          "comparableCycles": 100,
+          "per100": 100
+        },
+        "outcomeScopes": {
+          "stored candidate allocation; historical composite coverage unknown": 100
+        },
+        "actorMix": {
+          "npp-only": 100,
+          "player-only": 0,
+          "mixed": 0,
+          "unknown": 0
+        },
+        "resolverPathShares": {
+          "unknown": {
+            "count": 100,
+            "comparableCycles": 100,
+            "per100": 100
+          }
+        },
+        "missingEvidence": {
+          "executed resolver unavailable": 100
+        },
+        "unknownPersonComparisonCount": 0,
+        "unknownWinnerActorCycles": 0
+      }
+    ],
+    "officeHistoryCoverage": [
+      {
+        "countryId": "AT",
+        "officeType": "deputy",
+        "partyRows": 384,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "BR",
+        "officeType": "chamber",
+        "partyRows": 288,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "BR",
+        "officeType": "senate",
+        "partyRows": 960,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "CN",
+        "officeType": "governor",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "CN",
+        "officeType": "npcDelegate",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "CN",
+        "officeType": "peoplesCongress",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "DE",
+        "officeType": "bundestag",
+        "partyRows": 384,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "DE",
+        "officeType": "landtag",
+        "partyRows": 576,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "DE",
+        "officeType": "ministerPresident",
+        "partyRows": 526,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "ES",
+        "officeType": "deputy",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "ES",
+        "officeType": "senator",
+        "partyRows": 384,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "FI",
+        "officeType": "deputy",
+        "partyRows": 384,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "FR",
+        "officeType": "deputy",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "FR",
+        "officeType": "senator",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "GR",
+        "officeType": "deputy",
+        "partyRows": 288,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IE",
+        "officeType": "dail",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IE",
+        "officeType": "governor",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IE",
+        "officeType": "localCouncil",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IE",
+        "officeType": "seanad",
+        "partyRows": 479,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IE",
+        "officeType": "uachtaran",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IT",
+        "officeType": "deputy",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "IT",
+        "officeType": "senator",
+        "partyRows": 384,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "JP",
+        "officeType": "governor",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "JP",
+        "officeType": "regionalCouncil",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "JP",
+        "officeType": "sangiin",
+        "partyRows": 576,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "JP",
+        "officeType": "shugiin",
+        "partyRows": 288,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "NG",
+        "officeType": "governor",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "NG",
+        "officeType": "house",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "NG",
+        "officeType": "regionalCouncil",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "NG",
+        "officeType": "senate",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "SE",
+        "officeType": "member",
+        "partyRows": 672,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "TR",
+        "officeType": "deputy",
+        "partyRows": 480,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "TR",
+        "officeType": "senator",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "UK",
+        "officeType": "commons",
+        "partyRows": 672,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "UK",
+        "officeType": "governor",
+        "partyRows": 96,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "UK",
+        "officeType": "regionalCouncil",
+        "partyRows": 768,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "US",
+        "officeType": "governor",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "US",
+        "officeType": "house",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "US",
+        "officeType": "senate",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      },
+      {
+        "countryId": "US",
+        "officeType": "stateSenate",
+        "partyRows": 192,
+        "firstTurn": 385,
+        "lastTurn": 480,
+        "holderRows": 0
+      }
+    ]
+  }
+}

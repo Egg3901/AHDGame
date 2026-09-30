@@ -209,8 +209,19 @@ export async function seatPresidentialExecutive(
       electionId: election._id.toString(),
       date: now,
     };
-    await db.collection<Character>("characters").updateOne(
-      { _id: winnerCandidate.characterId },
+    const recorded = await db.collection<Character>("characters").updateOne(
+      {
+        _id: winnerCandidate.characterId,
+        careerHistory: {
+          $not: {
+            $elemMatch: {
+              type: "elected",
+              electionId: election._id.toString(),
+              "office.type": "president",
+            },
+          },
+        },
+      },
       {
         $set: {
           currentOffice: presidentOffice,
@@ -223,6 +234,15 @@ export async function seatPresidentialExecutive(
         $push: { careerHistory: presidentCareer },
       }
     );
+    // A partially completed seating can return here after the executive rows
+    // were cleared. Restore the office without recording a second term.
+    if (recorded.matchedCount === 0)
+      await db
+        .collection<Character>("characters")
+        .updateOne(
+          { _id: winnerCandidate.characterId },
+          { $set: { currentOffice: presidentOffice, updatedAt: now } }
+        );
   }
 
   if (vpCharId) {
@@ -257,13 +277,28 @@ export async function seatPresidentialExecutive(
         electionId: election._id.toString(),
         date: now,
       };
-      await db.collection<Character>("characters").updateOne(
-        { _id: vpCharId },
+      const recorded = await db.collection<Character>("characters").updateOne(
+        {
+          _id: vpCharId,
+          careerHistory: {
+            $not: {
+              $elemMatch: {
+                type: "elected",
+                electionId: election._id.toString(),
+                "office.type": "vicePresident",
+              },
+            },
+          },
+        },
         {
           $set: { currentOffice: vpOffice, updatedAt: now },
           $push: { careerHistory: vpCareer },
         }
       );
+      if (recorded.matchedCount === 0)
+        await db
+          .collection<Character>("characters")
+          .updateOne({ _id: vpCharId }, { $set: { currentOffice: vpOffice, updatedAt: now } });
     }
   }
 

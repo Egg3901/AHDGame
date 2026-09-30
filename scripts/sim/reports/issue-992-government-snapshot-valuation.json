@@ -1,0 +1,48 @@
+{
+  "treatment": {
+    "sourceCommit": "e8a400a8899af0a646c78ce2a14956087e7be844",
+    "baseline": false,
+    "source": {
+      "runId": "559d9701-e07f-48c8-ade1-294bc926820a",
+      "generatorCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+      "savedTurn": 13,
+      "sourceHash": "97fc6a209db62c4e624f5d10f29ba578e707a3d2db82f41924f138b3a743660f",
+      "finalSourceHash": "97fc6a209db62c4e624f5d10f29ba578e707a3d2db82f41924f138b3a743660f"
+    },
+    "budgets": 23,
+    "snapshotPerformance": {
+      "commands": 12,
+      "readBsonBytes": 2892
+    },
+    "openingNativeHash": "ba99ff45fd618b8d2424b973abf7c813985289003b03921cce8ca064d29a3442",
+    "closingNativeHash": "9a194523a76ca5513f6fe0a3c1c800523a94d78a25e9f98b2bb7e82f68ae0012",
+    "exchangeRatesUnchanged": true,
+    "divergences": 0,
+    "trialBalance": "green",
+    "unattributed": 0
+  },
+  "control": {
+    "sourceCommit": "9ecb98e3000c32e5c1bba375d48e9956a2c8e508",
+    "baseline": true,
+    "source": {
+      "runId": "559d9701-e07f-48c8-ade1-294bc926820a",
+      "generatorCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+      "savedTurn": 13,
+      "sourceHash": "97fc6a209db62c4e624f5d10f29ba578e707a3d2db82f41924f138b3a743660f",
+      "finalSourceHash": "97fc6a209db62c4e624f5d10f29ba578e707a3d2db82f41924f138b3a743660f"
+    },
+    "budgets": 23,
+    "snapshotPerformance": {
+      "commands": 11,
+      "readBsonBytes": 2845
+    },
+    "openingNativeHash": "ba99ff45fd618b8d2424b973abf7c813985289003b03921cce8ca064d29a3442",
+    "closingNativeHash": "9a194523a76ca5513f6fe0a3c1c800523a94d78a25e9f98b2bb7e82f68ae0012",
+    "exchangeRatesUnchanged": true,
+    "divergences": 6,
+    "trialBalance": "green",
+    "unattributed": 0
+  },
+  "controlRuntime": "da966e9fe3",
+  "nativeCashUnchanged": true
+}

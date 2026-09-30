@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyConflictOutcome,
+  applyCommitment,
   evaluateConflictTransitions,
   normalizeConflictState,
 } from "./engine";
@@ -32,11 +33,16 @@ describe("global financial crisis living conflict", () => {
     expect(GLOBAL_FINANCIAL_CRISIS_DEF.minimumOpeningPressure).toBe(60);
     const exposedOptions =
       GLOBAL_FINANCIAL_CRISIS_DEF.phases[0].events[0].response?.decisionTrees.belligerent?.options;
-    expect(exposedOptions?.map((option) => option.action)).toEqual([
-      { kind: "financialCrisisResponse", response: "recapitalize" },
-      { kind: "financialCrisisResponse", response: "guarantee" },
-      { kind: "financialCrisisResponse", response: "resolve" },
-    ]);
+    expect(exposedOptions?.map((option) => option.action)).toEqual(
+      expect.arrayContaining([
+        { kind: "financialCrisisResponse", response: "recapitalize" },
+        { kind: "financialCrisisResponse", response: "guarantee" },
+        { kind: "financialCrisisResponse", response: "resolve" },
+        { kind: "financialCrisisResponse", response: "stimulus" },
+        { kind: "financialCrisisResponse", response: "austerity" },
+        { kind: "financialCrisisResponse", response: "restructure" },
+      ])
+    );
   });
 
   it("allows early coordinated containment", () => {
@@ -91,6 +97,28 @@ describe("global financial crisis living conflict", () => {
     });
   });
 
+  it("does not escalate euro stress from narrative scores without bank exposure", () => {
+    const unexposed = evaluateConflictTransitions(
+      GLOBAL_FINANCIAL_CRISIS_DEF,
+      stateAt("recession", { sovereignSpreads: 80, bankSolvency: 20 }),
+      2011
+    );
+    const exposed = evaluateConflictTransitions(
+      GLOBAL_FINANCIAL_CRISIS_DEF,
+      stateAt("recession", { sovereignSpreads: 80, bankSolvency: 20, euroSovereignExposure: 20 }),
+      2011
+    );
+    expect(unexposed.appliedTransitionKey).toBeNull();
+    expect(exposed.state.phaseLevel).toBe(6);
+  });
+
+  it("cannot bypass euro exposure gates through the generic pressure ladder", () => {
+    const recession = stateAt("recession", { sovereignSpreads: 90, bankSolvency: 10 });
+    expect(applyCommitment(GLOBAL_FINANCIAL_CRISIS_DEF, recession, "a", 100, 2011).phaseLevel).toBe(
+      recession.phaseLevel
+    );
+  });
+
   it("supports sovereign stabilization and a later relapse", () => {
     const stabilized = evaluateConflictTransitions(
       GLOBAL_FINANCIAL_CRISIS_DEF,
@@ -103,7 +131,7 @@ describe("global financial crisis living conflict", () => {
     );
     const relapse = evaluateConflictTransitions(
       GLOBAL_FINANCIAL_CRISIS_DEF,
-      stateAt("stabilization", { sovereignSpreads: 65, contagion: 50 }),
+      stateAt("stabilization", { sovereignSpreads: 65, contagion: 50, euroSovereignExposure: 25 }),
       2015
     );
 

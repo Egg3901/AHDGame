@@ -50,7 +50,7 @@ export function qualifyPresidentialRace(
   const popularMarginPct =
     votes.length >= 2 && totalVotes > 0 ? (100 * (votes[0][1] - votes[1][1])) / totalVotes : null;
   const ev = Object.entries(tally?.electoralVotesByCandidate ?? {}).sort((a, b) => b[1] - a[1]);
-  const evMargin = ev.length >= 2 ? ev[0][1] - ev[1][1] : null;
+  const evMargin = ev.length >= 1 && votes.length >= 2 ? ev[0][1] - (ev[1]?.[1] ?? 0) : null;
   const winnerId =
     tally?.contingentResult?.presidentWinnerId ??
     (ev.length && snapshot?.evNeeded && ev[0][1] >= snapshot.evNeeded ? ev[0][0] : null);
@@ -118,4 +118,40 @@ export function qualifyPresidentialRace(
     electionTimeApportionment,
     reconciliation: errors,
   };
+}
+
+export interface PresidentialOfficeSnapshot {
+  countryId?: string;
+  officeType?: string;
+  party?: string;
+  turn?: number;
+  seats?: number;
+  executiveHolder?: string | null;
+}
+
+/** Retain the seeded administration and same-party person changes. Historical
+ * rows without holder telemetry remain unknown, never inferred from a party. */
+export function presidentialPersonTurnover(rows: readonly PresidentialOfficeSnapshot[]) {
+  const turns = new Map<number, (typeof rows)[number][]>();
+  for (const row of rows) {
+    if (row.countryId !== "US" || row.officeType !== "president" || row.turn === undefined)
+      continue;
+    turns.set(row.turn, [...(turns.get(row.turn) ?? []), row]);
+  }
+  let prior: string | null = null;
+  let changes = 0,
+    knownTurns = 0,
+    unknownTurns = 0;
+  for (const [, group] of [...turns].sort((a, b) => a[0] - b[0])) {
+    const holder = group.length === 1 && group[0].seats === 1 ? group[0].executiveHolder : null;
+    if (!holder) {
+      unknownTurns++;
+      prior = null;
+      continue;
+    }
+    knownTurns++;
+    if (prior && prior !== holder) changes++;
+    prior = holder;
+  }
+  return { personTurnover: knownTurns > 0 ? changes : null, knownTurns, unknownTurns };
 }

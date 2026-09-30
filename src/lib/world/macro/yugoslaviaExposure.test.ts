@@ -27,7 +27,7 @@ describe("Yugoslav crisis in the macro economy", () => {
       tracks: { displacement: 100, infrastructureDamage: 100, reconstruction: 0 },
     };
     db.collection("livingConflicts");
-    db.collectionMocks.livingConflicts!.findOne.mockResolvedValue(crisis);
+    db.collectionMocks.livingConflicts!.find.mockReturnValue({ toArray: async () => [crisis] });
     db.collectionMocks.macroCountries!.bulkWrite.mockImplementation(async (ops) => {
       Object.assign(country, ops[0].updateOne.update.$set);
       return { ok: 1 };

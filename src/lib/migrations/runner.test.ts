@@ -264,4 +264,52 @@ describe("runMigrations", () => {
       /--from/
     );
   });
+  it("rejects an unsafe forced selection before any migration writes", async () => {
+    const first = makeMigration("safe");
+    const unsafe = makeMigration("unsafe", { idempotent: false });
+    const { db, markers } = makeMockDb([{ _id: "unsafe", completedAt: new Date() }]);
+    const before = [...markers.entries()];
+    await expect(
+      runMigrations(db, {
+        migrations: [first, unsafe],
+        dryRun: false,
+        only: ["safe", "unsafe"],
+        force: true,
+      })
+    ).rejects.toThrow("Cannot force non-idempotent migration: unsafe");
+    expect(first.execute).not.toHaveBeenCalled();
+    expect(unsafe.execute).not.toHaveBeenCalled();
+    expect([...markers.entries()]).toEqual(before);
+  });
+
+  it.each([
+    { only: ["safe", "typo"] },
+    { only: [] },
+    { only: ["safe"], from: "safe" },
+    { force: true },
+  ])("rejects invalid selection before writes: %j", async (selection) => {
+    const migration = makeMigration("safe");
+    const { db, markers } = makeMockDb();
+    await expect(
+      runMigrations(db, {
+        migrations: [migration],
+        dryRun: false,
+        ...selection,
+      })
+    ).rejects.toThrow();
+    expect(migration.execute).not.toHaveBeenCalled();
+    expect(markers.size).toBe(0);
+  });
+
+  it("executes a repeated forced id only once", async () => {
+    const migration = makeMigration("safe");
+    const { db } = makeMockDb();
+    await runMigrations(db, {
+      migrations: [migration],
+      dryRun: false,
+      only: ["safe", "safe"],
+      force: true,
+    });
+    expect(migration.execute).toHaveBeenCalledTimes(1);
+  });
 });

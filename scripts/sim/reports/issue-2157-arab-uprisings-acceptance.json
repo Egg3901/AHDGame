@@ -1,0 +1,2774 @@
+{
+  "replayCommit": "8731bf008fa9eb4c0d7d1641da0b779f7a8ffa7b",
+  "dirty": false,
+  "sourceCommit": "47bb364e1f605c895d186e51f6a19b6ed4de5ff3",
+  "sourceRun": "a2b5adb8-dd9a-4480-8781-50befc0fd53d",
+  "scope": "Isolated 216-turn subsystem continuations of saved world stock; not a new full-world historical simulation",
+  "actorSetup": "Four synthetic foreign executives authorize public API choices; no origin offices or elected consents are created",
+  "summaries": [
+    {
+      "scenario": "capacity_refusal",
+      "observedOrigins": ["LY", "SY", "EG"],
+      "originalSyria": {
+        "population": 350000,
+        "stability": 0.40001136387000125,
+        "agriculture": {
+          "capacity": 7.83,
+          "productivity": 1,
+          "domesticDemand": 7.43
+        }
+      },
+      "setup": {
+        "USReadinessAndSupport": 0
+      },
+      "capacity": {
+        "treasuryPctGdp": -1,
+        "militaryReadiness": 0,
+        "logistics": 0,
+        "domesticSupport": 24.7,
+        "intelligence": 25,
+        "assessedAt": "2026-09-30T02:18:18.913Z"
+      },
+      "outputBefore": 15.639999999999999,
+      "windows": 1,
+      "decisions": 0,
+      "duplicateRejected": 0,
+      "capabilityRejected": 1,
+      "trajectories": ["pressure"],
+      "maxDisplacement": 0,
+      "maxOriginLoss": 0,
+      "maxOriginExposure": 0,
+      "maxTerrorismSpillover": 0,
+      "spending": {},
+      "maxHostExposure": 0,
+      "maxSpillover": 5,
+      "treasuryBefore": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalTreasuries": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalRegional": {
+        "origins": {
+          "EG": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113135785822,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 56.00045254314329,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "LY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113396672559,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 56.00045358669024,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "SY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          }
+        },
+        "hosts": {
+          "FR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 53300000
+          },
+          "IT": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 55900000
+          },
+          "SE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 8314449
+          },
+          "TR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 43761523
+          },
+          "GR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 9500000
+          },
+          "IQ": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "LB": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "JO": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "UK": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 69541839
+          },
+          "DE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 83447883
+          }
+        },
+        "resolutionIds": [],
+        "lastPressureTurn": 60
+      },
+      "snapshots": [
+        {
+          "turn": 60,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        }
+      ]
+    },
+    {
+      "scenario": "retained_neutral",
+      "observedOrigins": ["LY", "SY", "EG"],
+      "originalSyria": {
+        "population": 350000,
+        "stability": 0.40001136387000125,
+        "agriculture": {
+          "capacity": 7.83,
+          "productivity": 1,
+          "domesticDemand": 7.43
+        }
+      },
+      "setup": null,
+      "capacity": {
+        "treasuryPctGdp": -1,
+        "militaryReadiness": 77.3,
+        "logistics": 39.9,
+        "domesticSupport": 24.7,
+        "intelligence": 62,
+        "assessedAt": "2026-09-30T02:18:22.976Z"
+      },
+      "outputBefore": 15.639999999999999,
+      "windows": 9,
+      "decisions": 0,
+      "duplicateRejected": 0,
+      "capabilityRejected": 0,
+      "trajectories": ["pressure"],
+      "maxDisplacement": 0,
+      "maxOriginLoss": 0,
+      "maxOriginExposure": 0,
+      "maxTerrorismSpillover": 0,
+      "spending": {},
+      "maxHostExposure": 0,
+      "maxSpillover": 5,
+      "treasuryBefore": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalTreasuries": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalRegional": {
+        "origins": {
+          "EG": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113135785822,
+            "mobilization": 28.49807669164105,
+            "repression": 35,
+            "cohesion": 56.00045254314329,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "LY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113396672559,
+            "mobilization": 28.498072256566473,
+            "repression": 35,
+            "cohesion": 56.00045358669024,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "SY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 28.498068142099815,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          }
+        },
+        "hosts": {
+          "FR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 53300000
+          },
+          "IT": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 55900000
+          },
+          "SE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 8314449
+          },
+          "TR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 43761523
+          },
+          "GR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 9500000
+          },
+          "IQ": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "LB": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "JO": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "UK": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 69541839
+          },
+          "DE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 83447883
+          }
+        },
+        "resolutionIds": [
+          "arab_uprisings:structural_pressure:60:structural_pressure_response",
+          "arab_uprisings:structural_pressure:84:structural_pressure_response",
+          "arab_uprisings:structural_pressure:108:structural_pressure_response",
+          "arab_uprisings:structural_pressure:132:structural_pressure_response",
+          "arab_uprisings:structural_pressure:156:structural_pressure_response",
+          "arab_uprisings:structural_pressure:180:structural_pressure_response",
+          "arab_uprisings:structural_pressure:204:structural_pressure_response",
+          "arab_uprisings:structural_pressure:228:structural_pressure_response"
+        ],
+        "lastPressureTurn": 264
+      },
+      "snapshots": [
+        {
+          "turn": 60,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 84,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 20.999772722599978,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 108,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 21.999545445199956,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 132,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 22.999318167799935,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 156,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 23.999090890399913,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 180,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 24.99886361299989,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 204,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 25.99863633559987,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 228,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 26.998409058199847,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 252,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 27.998181780799825,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 275,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113638700012,
+            "mobilization": 28.498068142099815,
+            "repression": 35,
+            "cohesion": 56.00045455480005,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        }
+      ]
+    },
+    {
+      "scenario": "reform",
+      "observedOrigins": ["LY", "SY", "EG"],
+      "originalSyria": {
+        "population": 350000,
+        "stability": 0.40001136387000125,
+        "agriculture": {
+          "capacity": 7.83,
+          "productivity": 1,
+          "domesticDemand": 7.43
+        }
+      },
+      "setup": {
+        "stability": 0.7,
+        "foodDemandMultiplier": 3
+      },
+      "capacity": {
+        "treasuryPctGdp": -1,
+        "militaryReadiness": 77.3,
+        "logistics": 39.9,
+        "domesticSupport": 24.7,
+        "intelligence": 62,
+        "assessedAt": "2026-09-30T02:18:41.538Z"
+      },
+      "outputBefore": 15.639999999999999,
+      "windows": 9,
+      "decisions": 0,
+      "duplicateRejected": 0,
+      "capabilityRejected": 0,
+      "trajectories": ["pressure", "reform"],
+      "maxDisplacement": 0,
+      "maxOriginLoss": 0,
+      "maxOriginExposure": 0,
+      "maxTerrorismSpillover": 0,
+      "spending": {},
+      "maxHostExposure": 0,
+      "maxSpillover": 5,
+      "treasuryBefore": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalTreasuries": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalRegional": {
+        "origins": {
+          "EG": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113135785822,
+            "mobilization": 28.49807669164105,
+            "repression": 35,
+            "cohesion": 56.00045254314329,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "LY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113396672559,
+            "mobilization": 28.498072256566473,
+            "repression": 35,
+            "cohesion": 56.00045358669024,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "SY": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 73.73431396613312,
+            "mobilization": 0,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 42,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          }
+        },
+        "hosts": {
+          "FR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 53300000
+          },
+          "IT": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 55900000
+          },
+          "SE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 8314449
+          },
+          "TR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 43761523
+          },
+          "GR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 9500000
+          },
+          "IQ": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "LB": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "JO": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "UK": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 69541839
+          },
+          "DE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 83447883
+          }
+        },
+        "resolutionIds": [
+          "arab_uprisings:structural_pressure:60:structural_pressure_response",
+          "arab_uprisings:structural_pressure:84:structural_pressure_response",
+          "arab_uprisings:structural_pressure:108:structural_pressure_response",
+          "arab_uprisings:structural_pressure:132:structural_pressure_response",
+          "arab_uprisings:structural_pressure:156:structural_pressure_response",
+          "arab_uprisings:structural_pressure:180:structural_pressure_response",
+          "arab_uprisings:structural_pressure:204:structural_pressure_response",
+          "arab_uprisings:structural_pressure:228:structural_pressure_response"
+        ],
+        "lastPressureTurn": 264
+      },
+      "snapshots": [
+        {
+          "turn": 60,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 70,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 68,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 84,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 70,
+            "mobilization": 34,
+            "repression": 35,
+            "cohesion": 68,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 108,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 81.04,
+            "mobilization": 24,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 8,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 3,
+            "extremistSpace": 4,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 132,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 79.344256,
+            "mobilization": 14,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 4,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 9,
+            "extremistSpace": 2,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 156,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 77.9089782784,
+            "mobilization": 4,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 15,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 180,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 76.69415921483777,
+            "mobilization": 0,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 21,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 204,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 75.66593635943869,
+            "mobilization": 0,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 27,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 228,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 74.79564853462891,
+            "mobilization": 0,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 33,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 252,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 74.05903691970991,
+            "mobilization": 0,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 39,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        },
+        {
+          "turn": 275,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 73.73431396613312,
+            "mobilization": 0,
+            "repression": 29,
+            "cohesion": 70,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 42,
+            "extremistSpace": 0,
+            "trajectory": "reform",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "reform",
+              "legitimacy": 70,
+              "cohesion": 68
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 27.39
+        }
+      ]
+    },
+    {
+      "scenario": "transition",
+      "observedOrigins": ["LY", "SY", "EG"],
+      "originalSyria": {
+        "population": 350000,
+        "stability": 0.40001136387000125,
+        "agriculture": {
+          "capacity": 7.83,
+          "productivity": 1,
+          "domesticDemand": 7.43
+        }
+      },
+      "setup": {
+        "stability": 0.1,
+        "foodDemandMultiplier": 3
+      },
+      "capacity": {
+        "treasuryPctGdp": -1,
+        "militaryReadiness": 77.3,
+        "logistics": 39.9,
+        "domesticSupport": 24.7,
+        "intelligence": 62,
+        "assessedAt": "2026-09-30T02:19:01.720Z"
+      },
+      "outputBefore": 15.639999999999999,
+      "windows": 9,
+      "decisions": 0,
+      "duplicateRejected": 0,
+      "capabilityRejected": 0,
+      "trajectories": ["pressure", "protest", "transition"],
+      "maxDisplacement": 0,
+      "maxOriginLoss": 0,
+      "maxOriginExposure": 0,
+      "maxTerrorismSpillover": 0,
+      "spending": {},
+      "maxHostExposure": 0,
+      "maxSpillover": 5,
+      "treasuryBefore": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalTreasuries": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalRegional": {
+        "origins": {
+          "EG": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113135785822,
+            "mobilization": 38.99728474114026,
+            "repression": 35,
+            "cohesion": 56.00045254314329,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "LY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113396672559,
+            "mobilization": 38.99727847985855,
+            "repression": 35,
+            "cohesion": 56.00045358669024,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "SY": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 38.773687041227014,
+            "mobilization": 87,
+            "repression": 3,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 100,
+            "reconstruction": 30,
+            "extremistSpace": 0,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 264,
+              "policy": "transition",
+              "legitimacy": 32.773687041227014,
+              "cohesion": 44
+            }
+          }
+        },
+        "hosts": {
+          "FR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 53300000
+          },
+          "IT": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 55900000
+          },
+          "SE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 8314449
+          },
+          "TR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 43761523
+          },
+          "GR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 9500000
+          },
+          "IQ": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "LB": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "JO": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "UK": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 69541839
+          },
+          "DE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 83447883
+          }
+        },
+        "resolutionIds": [
+          "arab_uprisings:structural_pressure:60:structural_pressure_response",
+          "arab_uprisings:regime_choice:84:regime_choice_response",
+          "arab_uprisings:regime_choice:108:regime_choice_response",
+          "arab_uprisings:regime_choice:132:regime_choice_response",
+          "arab_uprisings:protest_diffusion:156:protest_diffusion_response",
+          "arab_uprisings:protest_diffusion:180:protest_diffusion_response",
+          "arab_uprisings:protest_diffusion:204:protest_diffusion_response",
+          "arab_uprisings:protest_diffusion:228:protest_diffusion_response"
+        ],
+        "lastPressureTurn": 264
+      },
+      "snapshots": [
+        {
+          "turn": 60,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 10,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 84,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 10,
+            "mobilization": 43,
+            "repression": 35,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "protest",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 108,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 15.52,
+            "mobilization": 54.25,
+            "repression": 31,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 18,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "transition",
+              "legitimacy": 10,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 132,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 20.192128,
+            "mobilization": 59.75,
+            "repression": 27,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 36,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 120,
+              "policy": "transition",
+              "legitimacy": 15.0784,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 156,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 24.1466171392,
+            "mobilization": 65.25,
+            "repression": 23,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 8,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 54,
+            "reconstruction": 3,
+            "extremistSpace": 4,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 144,
+              "policy": "transition",
+              "legitimacy": 19.37675776,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 180,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 27.49369674661888,
+            "mobilization": 70.75,
+            "repression": 19,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 4,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 72,
+            "reconstruction": 9,
+            "extremistSpace": 2,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 168,
+              "policy": "transition",
+              "legitimacy": 23.014887768064,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 204,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 30.32666492633822,
+            "mobilization": 76.25,
+            "repression": 15,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 90,
+            "reconstruction": 15,
+            "extremistSpace": 0,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 192,
+              "policy": "transition",
+              "legitimacy": 26.09420100688937,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 228,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 32.72448919365267,
+            "mobilization": 81.75,
+            "repression": 11,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 100,
+            "reconstruction": 21,
+            "extremistSpace": 0,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 216,
+              "policy": "transition",
+              "legitimacy": 28.700531732231163,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 252,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 34.75400765350762,
+            "mobilization": 87.25,
+            "repression": 7,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 100,
+            "reconstruction": 27,
+            "extremistSpace": 0,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 240,
+              "policy": "transition",
+              "legitimacy": 30.90653005816046,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        },
+        {
+          "turn": 275,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 38.773687041227014,
+            "mobilization": 87,
+            "repression": 3,
+            "cohesion": 44,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 100,
+            "reconstruction": 30,
+            "extremistSpace": 0,
+            "trajectory": "transition",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 264,
+              "policy": "transition",
+              "legitimacy": 32.773687041227014,
+              "cohesion": 44
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 3.89
+        }
+      ]
+    },
+    {
+      "scenario": "authoritarian",
+      "observedOrigins": ["LY", "SY", "EG"],
+      "originalSyria": {
+        "population": 350000,
+        "stability": 0.40001136387000125,
+        "agriculture": {
+          "capacity": 7.83,
+          "productivity": 1,
+          "domesticDemand": 7.43
+        }
+      },
+      "setup": {
+        "stability": 0.5,
+        "foodDemandMultiplier": 3
+      },
+      "capacity": {
+        "treasuryPctGdp": -1,
+        "militaryReadiness": 77.3,
+        "logistics": 39.9,
+        "domesticSupport": 24.7,
+        "intelligence": 62,
+        "assessedAt": "2026-09-30T02:19:19.192Z"
+      },
+      "outputBefore": 15.639999999999999,
+      "windows": 9,
+      "decisions": 0,
+      "duplicateRejected": 0,
+      "capabilityRejected": 0,
+      "trajectories": ["pressure", "protest", "authoritarian"],
+      "maxDisplacement": 0,
+      "maxOriginLoss": 0,
+      "maxOriginExposure": 0,
+      "maxTerrorismSpillover": 0.544,
+      "spending": {},
+      "maxHostExposure": 0,
+      "maxSpillover": 17,
+      "treasuryBefore": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalTreasuries": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalRegional": {
+        "origins": {
+          "EG": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113135785822,
+            "mobilization": 36.747454444819,
+            "repression": 35,
+            "cohesion": 56.00045254314329,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "LY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113396672559,
+            "mobilization": 36.74744857486739,
+            "repression": 35,
+            "cohesion": 56.00045358669024,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "SY": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 69.18821962777253,
+            "mobilization": 88,
+            "repression": 55,
+            "cohesion": 23,
+            "opposition": 16,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 72,
+            "reconstruction": 0,
+            "extremistSpace": 17,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 264,
+              "policy": "reform",
+              "legitimacy": 57.18821962777252,
+              "cohesion": 21
+            }
+          }
+        },
+        "hosts": {
+          "FR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 53300000
+          },
+          "IT": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 55900000
+          },
+          "SE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 8314449
+          },
+          "TR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 43761523
+          },
+          "GR": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 9500000
+          },
+          "IQ": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "LB": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "JO": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 350000
+          },
+          "UK": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 69541839
+          },
+          "DE": {
+            "protection": 0,
+            "refugeePeople": 0,
+            "population": 83447883
+          }
+        },
+        "resolutionIds": [
+          "arab_uprisings:structural_pressure:60:structural_pressure_response",
+          "arab_uprisings:protest_diffusion:84:protest_diffusion_response",
+          "arab_uprisings:regime_choice:108:regime_choice_response",
+          "arab_uprisings:authoritarian_restoration:132:authoritarian_restoration_response",
+          "arab_uprisings:regime_choice:156:regime_choice_response",
+          "arab_uprisings:regime_choice:180:regime_choice_response",
+          "arab_uprisings:regime_choice:204:regime_choice_response",
+          "arab_uprisings:regime_choice:228:regime_choice_response"
+        ],
+        "lastPressureTurn": 264
+      },
+      "snapshots": [
+        {
+          "turn": 60,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 50,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 60,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 84,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 50,
+            "mobilization": 35,
+            "repression": 35,
+            "cohesion": 60,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 108,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "repress",
+            "population": 350000,
+            "legitimacy": 42.64,
+            "mobilization": 42,
+            "repression": 49,
+            "cohesion": 55,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "repress",
+              "legitimacy": 50,
+              "cohesion": 60
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 132,
+          "regionalPhase": 4,
+          "syria": {
+            "policy": "repress",
+            "population": 350000,
+            "legitimacy": 36.410496,
+            "mobilization": 49,
+            "repression": 63,
+            "cohesion": 48,
+            "opposition": 3,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 6,
+            "trajectory": "authoritarian",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 120,
+              "policy": "repress",
+              "legitimacy": 43.2288,
+              "cohesion": 55
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 156,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "repress",
+            "population": 350000,
+            "legitimacy": 31.137843814400004,
+            "mobilization": 62,
+            "repression": 77,
+            "cohesion": 39,
+            "opposition": 9,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 8,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 144,
+              "policy": "repress",
+              "legitimacy": 37.497656320000004,
+              "cohesion": 46
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 180,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 39.555071004508164,
+            "mobilization": 77,
+            "repression": 73,
+            "cohesion": 35,
+            "opposition": 10,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 18,
+            "reconstruction": 0,
+            "extremistSpace": 10,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 168,
+              "policy": "transition",
+              "legitimacy": 32.646816309248,
+              "cohesion": 37
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 204,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 46.679412098215714,
+            "mobilization": 92,
+            "repression": 69,
+            "cohesion": 31,
+            "opposition": 11,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 36,
+            "reconstruction": 0,
+            "extremistSpace": 12,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 192,
+              "policy": "transition",
+              "legitimacy": 40.39066532414751,
+              "cohesion": 33
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 228,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 52.70945439992978,
+            "mobilization": 100,
+            "repression": 65,
+            "cohesion": 27,
+            "opposition": 12,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 54,
+            "reconstruction": 0,
+            "extremistSpace": 14,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 216,
+              "policy": "transition",
+              "legitimacy": 46.94505913035846,
+              "cohesion": 29
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 252,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 57.81328220410057,
+            "mobilization": 100,
+            "repression": 61,
+            "cohesion": 23,
+            "opposition": 13,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 72,
+            "reconstruction": 0,
+            "extremistSpace": 16,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 240,
+              "policy": "transition",
+              "legitimacy": 52.4926980479354,
+              "cohesion": 25
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        },
+        {
+          "turn": 275,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "reform",
+            "population": 350000,
+            "legitimacy": 69.18821962777253,
+            "mobilization": 88,
+            "repression": 55,
+            "cohesion": 23,
+            "opposition": 16,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 72,
+            "reconstruction": 0,
+            "extremistSpace": 17,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 264,
+              "policy": "reform",
+              "legitimacy": 57.18821962777252,
+              "cohesion": 21
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 19.6
+        }
+      ]
+    },
+    {
+      "scenario": "civil_war_recovery",
+      "observedOrigins": ["LY", "SY", "EG"],
+      "originalSyria": {
+        "population": 350000,
+        "stability": 0.40001136387000125,
+        "agriculture": {
+          "capacity": 7.83,
+          "productivity": 1,
+          "domesticDemand": 7.43
+        }
+      },
+      "setup": {
+        "stability": 0.35,
+        "foodDemandMultiplier": 3
+      },
+      "capacity": {
+        "treasuryPctGdp": -1,
+        "militaryReadiness": 77.3,
+        "logistics": 39.9,
+        "domesticSupport": 24.7,
+        "intelligence": 62,
+        "assessedAt": "2026-09-30T02:19:39.078Z"
+      },
+      "outputBefore": 15.639999999999999,
+      "windows": 9,
+      "decisions": 32,
+      "duplicateRejected": 32,
+      "capabilityRejected": 0,
+      "trajectories": ["pressure", "protest", "civil_war", "frozen"],
+      "maxDisplacement": 20,
+      "maxOriginLoss": 0.7900000000000027,
+      "maxOriginExposure": 0.02,
+      "maxTerrorismSpillover": 1.974,
+      "spending": {
+        "UK": 0,
+        "DE": 116576745570,
+        "US": 493504048926,
+        "TR": 72852089718
+      },
+      "maxHostExposure": 0.00003198868865345813,
+      "maxSpillover": 21,
+      "treasuryBefore": {
+        "US": -42168533017718,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1134209656667,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3660802519602,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalTreasuries": {
+        "US": -42662037066644,
+        "UK": -2320542921197,
+        "JP": -1262949567225131,
+        "DE": -1250786402237,
+        "BR": -4142306261989,
+        "CN": -22710565709095,
+        "FR": -8495959137966,
+        "IT": -2040377862132985,
+        "ES": -99766291381864,
+        "SE": -1530765824,
+        "TR": -3733654609320,
+        "GR": -9991110071552,
+        "AT": -2090924082760,
+        "FI": -289553793691,
+        "IE": -199260824377,
+        "NG": -30826988076586
+      },
+      "finalRegional": {
+        "origins": {
+          "EG": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113135785822,
+            "mobilization": 38.247341309033175,
+            "repression": 35,
+            "cohesion": 56.00045254314329,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "LY": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 40.00113396672559,
+            "mobilization": 38.24733517819483,
+            "repression": 35,
+            "cohesion": 56.00045358669024,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 0,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "SY": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 54.26965798690336,
+            "mobilization": 60,
+            "repression": 39,
+            "cohesion": 16,
+            "opposition": 28,
+            "outsideSupport": 37,
+            "sanctions": 23,
+            "civilianStrain": 0,
+            "displacement": 10,
+            "infrastructureDamage": 5,
+            "settlement": 100,
+            "reconstruction": 15,
+            "extremistSpace": 16,
+            "trajectory": "frozen",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 264,
+              "policy": "transition",
+              "legitimacy": 48.26965798690336,
+              "cohesion": 16
+            }
+          }
+        },
+        "hosts": {
+          "FR": {
+            "protection": 0,
+            "refugeePeople": 136.6196215548572,
+            "population": 53300000
+          },
+          "IT": {
+            "protection": 0,
+            "refugeePeople": 143.28399333802093,
+            "population": 55900000
+          },
+          "SE": {
+            "protection": 0,
+            "refugeePeople": 21.311761272366994,
+            "population": 8314449
+          },
+          "TR": {
+            "protection": 80,
+            "refugeePeople": 807.6269328077689,
+            "population": 43761523
+          },
+          "GR": {
+            "protection": 0,
+            "refugeePeople": 24.350589207713757,
+            "population": 9500000
+          },
+          "IQ": {
+            "protection": 0,
+            "refugeePeople": 3.588507883242027,
+            "population": 350000
+          },
+          "LB": {
+            "protection": 0,
+            "refugeePeople": 3.588507883242027,
+            "population": 350000
+          },
+          "JO": {
+            "protection": 0,
+            "refugeePeople": 3.588507883242027,
+            "population": 350000
+          },
+          "UK": {
+            "protection": 0,
+            "refugeePeople": 178.25102676189132,
+            "population": 69541839
+          },
+          "DE": {
+            "protection": 100,
+            "refugeePeople": 427.7905514076548,
+            "population": 83447883
+          }
+        },
+        "resolutionIds": [
+          "arab_uprisings:structural_pressure:60:structural_pressure_response",
+          "arab_uprisings:protest_diffusion:84:protest_diffusion_response",
+          "arab_uprisings:regime_choice:108:regime_choice_response",
+          "arab_uprisings:regime_choice:132:regime_choice_response",
+          "arab_uprisings:civil_war:156:civil_war_response",
+          "arab_uprisings:proxy_escalation:180:proxy_escalation_response",
+          "arab_uprisings:proxy_escalation:204:proxy_escalation_response",
+          "arab_uprisings:protest_diffusion:228:protest_diffusion_response"
+        ],
+        "lastPressureTurn": 264
+      },
+      "snapshots": [
+        {
+          "turn": 60,
+          "regionalPhase": 1,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 35,
+            "mobilization": 20,
+            "repression": 35,
+            "cohesion": 54,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 10,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 15.639999999999999
+        },
+        {
+          "turn": 84,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "unchanged",
+            "population": 350000,
+            "legitimacy": 35,
+            "mobilization": 38,
+            "repression": 35,
+            "cohesion": 54,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 8,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "pressure",
+            "signalBasis": "background"
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 13.71
+        },
+        {
+          "turn": 108,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "repress",
+            "population": 350000,
+            "legitimacy": 27.64,
+            "mobilization": 48,
+            "repression": 49,
+            "cohesion": 49,
+            "opposition": 0,
+            "outsideSupport": 0,
+            "sanctions": 0,
+            "civilianStrain": 6,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 5,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 96,
+              "policy": "repress",
+              "legitimacy": 35,
+              "cohesion": 54
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 13.71
+        },
+        {
+          "turn": 132,
+          "regionalPhase": 3,
+          "syria": {
+            "policy": "repress",
+            "population": 350000,
+            "legitimacy": 21.410496,
+            "mobilization": 64,
+            "repression": 63,
+            "cohesion": 34,
+            "opposition": 27,
+            "outsideSupport": 24,
+            "sanctions": 15,
+            "civilianStrain": 4,
+            "displacement": 0,
+            "infrastructureDamage": 0,
+            "settlement": 0,
+            "reconstruction": 0,
+            "extremistSpace": 6,
+            "trajectory": "protest",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 120,
+              "policy": "repress",
+              "legitimacy": 28.2288,
+              "cohesion": 49
+            }
+          },
+          "refugees": 0,
+          "hosts": 0,
+          "output": 13.71
+        },
+        {
+          "turn": 156,
+          "regionalPhase": 6,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 29.0178438144,
+            "mobilization": 72,
+            "repression": 59,
+            "cohesion": 22,
+            "opposition": 52,
+            "outsideSupport": 46,
+            "sanctions": 26,
+            "civilianStrain": 5,
+            "displacement": 4,
+            "infrastructureDamage": 2,
+            "settlement": 18,
+            "reconstruction": 0,
+            "extremistSpace": 10,
+            "trajectory": "civil_war",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 144,
+              "policy": "transition",
+              "legitimacy": 22.497656319999997,
+              "cohesion": 32
+            }
+          },
+          "refugees": 700,
+          "hosts": 700,
+          "output": 13.61
+        },
+        {
+          "turn": 180,
+          "regionalPhase": 6,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 35.45670300450816,
+            "mobilization": 70,
+            "repression": 55,
+            "cohesion": 18,
+            "opposition": 51,
+            "outsideSupport": 44,
+            "sanctions": 37,
+            "civilianStrain": 7,
+            "displacement": 12,
+            "infrastructureDamage": 6,
+            "settlement": 41,
+            "reconstruction": 0,
+            "extremistSpace": 16,
+            "trajectory": "civil_war",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 168,
+              "policy": "transition",
+              "legitimacy": 29.496416309247998,
+              "cohesion": 20
+            }
+          },
+          "refugees": 2100,
+          "hosts": 2100,
+          "output": 13.330000000000002,
+          "exposure": {
+            "turn": 179,
+            "displacedShare": 0.008,
+            "hostingShare": 0,
+            "infrastructureDamage": 0.04
+          }
+        },
+        {
+          "turn": 204,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 40.9065534230157,
+            "mobilization": 68,
+            "repression": 51,
+            "cohesion": 16,
+            "opposition": 47,
+            "outsideSupport": 42,
+            "sanctions": 33,
+            "civilianStrain": 9,
+            "displacement": 20,
+            "infrastructureDamage": 10,
+            "settlement": 64,
+            "reconstruction": 0,
+            "extremistSpace": 21,
+            "trajectory": "frozen",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 192,
+              "policy": "transition",
+              "legitimacy": 35.4201667641475,
+              "cohesion": 16
+            }
+          },
+          "refugees": 3500,
+          "hosts": 3500.0000000000005,
+          "output": 13.02,
+          "exposure": {
+            "turn": 203,
+            "displacedShare": 0.016,
+            "hostingShare": 0,
+            "infrastructureDamage": 0.08
+          }
+        },
+        {
+          "turn": 228,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 45.519306817240484,
+            "mobilization": 66,
+            "repression": 47,
+            "cohesion": 16,
+            "opposition": 40,
+            "outsideSupport": 40,
+            "sanctions": 29,
+            "civilianStrain": 1,
+            "displacement": 16,
+            "infrastructureDamage": 8,
+            "settlement": 87,
+            "reconstruction": 6,
+            "extremistSpace": 19,
+            "trajectory": "frozen",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 216,
+              "policy": "transition",
+              "legitimacy": 40.43402914917444,
+              "cohesion": 16
+            }
+          },
+          "refugees": 2800,
+          "hosts": 2799.9999999999995,
+          "output": 13,
+          "exposure": {
+            "turn": 227,
+            "displacedShare": 0.018,
+            "hostingShare": 0,
+            "infrastructureDamage": 0.09
+          }
+        },
+        {
+          "turn": 252,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 49.42354129011235,
+            "mobilization": 64,
+            "repression": 43,
+            "cohesion": 16,
+            "opposition": 33,
+            "outsideSupport": 38,
+            "sanctions": 25,
+            "civilianStrain": 0,
+            "displacement": 12,
+            "infrastructureDamage": 6,
+            "settlement": 100,
+            "reconstruction": 12,
+            "extremistSpace": 17,
+            "trajectory": "frozen",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 240,
+              "policy": "transition",
+              "legitimacy": 44.67776227186125,
+              "cohesion": 16
+            }
+          },
+          "refugees": 2100,
+          "hosts": 2100,
+          "output": 13.13,
+          "exposure": {
+            "turn": 251,
+            "displacedShare": 0.014,
+            "hostingShare": 0,
+            "infrastructureDamage": 0.07
+          }
+        },
+        {
+          "turn": 275,
+          "regionalPhase": 2,
+          "syria": {
+            "policy": "transition",
+            "population": 350000,
+            "legitimacy": 54.26965798690336,
+            "mobilization": 60,
+            "repression": 39,
+            "cohesion": 16,
+            "opposition": 28,
+            "outsideSupport": 37,
+            "sanctions": 23,
+            "civilianStrain": 0,
+            "displacement": 10,
+            "infrastructureDamage": 5,
+            "settlement": 100,
+            "reconstruction": 15,
+            "extremistSpace": 16,
+            "trajectory": "frozen",
+            "signalBasis": "background",
+            "npcPolicyReceipt": {
+              "turn": 264,
+              "policy": "transition",
+              "legitimacy": 48.26965798690336,
+              "cohesion": 16
+            }
+          },
+          "refugees": 1750,
+          "hosts": 1750,
+          "output": 13.280000000000001,
+          "exposure": {
+            "turn": 275,
+            "displacedShare": 0.01,
+            "hostingShare": 0,
+            "infrastructureDamage": 0.05
+          }
+        }
+      ]
+    }
+  ]
+}
