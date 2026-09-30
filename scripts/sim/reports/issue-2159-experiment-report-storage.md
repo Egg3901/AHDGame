@@ -31,7 +31,7 @@ The synthetic fixture exercises actual Mongo storage above the document limit. I
 
 The recovered world executed `ac37b0ee191089e1e1a0c501a29e691b45450211`, preset `1991-default`, ten normal turns ending at raw turn 11. Only its collector was rerun. The report preserves the original requested and executed runtime commits and separately records the collector commit and `collectionMode: recovery`.
 
-Recovery requires an explicitly completed job, matching retained sandbox destination, clean collector, and exact full runtime and collector commits. Ordinary collection still requires the collector to match the runtime source. The old job report error is cleared only after successful persistence and a matching completed-job compare-and-set.
+Recovery requires an explicitly completed job, matching retained sandbox destination, clean collector, and exact full runtime and collector commits. Ordinary collection still requires the collector to match the runtime source. The old job report error is cleared only after successful persistence and a matching completed-job compare-and-set. The follow-up hardening also validates the job source commit before persistence and rejects a zero-match completion update explicitly; 16 focused recovery tests passed. The executed recovery above already had matching job provenance and a verified completion marker.
 
 ## Reader delivery
 

@@ -21,9 +21,11 @@
 // ones (same issue hit earlier this session with runWorld.ts).
 export {};
 
-import type { Document } from "mongodb";
 import { SOVEREIGN_DEMAND_EXPERIMENT_FIELDS } from "./sovereignDemandExperimentFlags";
-import { assertExperimentReportRecovery } from "./experimentReportRecovery";
+import {
+  assertExperimentReportRecovery,
+  commitExperimentReportRecovery,
+} from "./experimentReportRecovery";
 import { writeExperimentReport } from "./experimentReportStorage";
 import {
   assertCollectorSourceMatch,
@@ -129,6 +131,7 @@ async function main() {
         simulationCommit: simSource?.executedCommit ?? null,
         collectorCommit,
         jobStatus: job?.status,
+        jobSourceCommit: job?.sourceCommit,
         dirty: provenance.gitDirty !== false,
         sandboxUri: SIM_MONGODB_URI ?? "",
         controlUri: OPS_MONGODB_URI ?? "",
@@ -229,24 +232,12 @@ async function main() {
       report as unknown as Record<string, unknown>
     );
     if (recoverySimulationCommit) {
-      await opsDb.collection<Document & { _id: string }>("simJobs").updateOne(
-        {
-          _id: runId as never,
-          status: "completed",
-          sourceCommit: recoverySimulationCommit,
-          dbName,
-        },
-        {
-          $unset: { experimentsReportError: "" },
-          $set: {
-            experimentsReportRecoveredAt: new Date(),
-            experimentsReportRecovery: {
-              simulationCommit: recoverySimulationCommit,
-              collectorCommit,
-            },
-          },
-        }
-      );
+      await commitExperimentReportRecovery(opsDb, {
+        runId: runId as string,
+        sourceDatabase: dbName as string,
+        simulationCommit: recoverySimulationCommit,
+        collectorCommit: collectorCommit as string,
+      });
     }
     console.log(
       `[experiments:${runId}] Report written (v${report.runConfig.appVersion}, seed=${report.runConfig.seed ?? "?"}, git=${report.runConfig.gitCommit ?? "?"}${report.runConfig.gitDirty ? "-dirty" : ""}).`
