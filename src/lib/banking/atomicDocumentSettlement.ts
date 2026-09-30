@@ -21,6 +21,7 @@ interface AtomicPlan {
   guard: Record<string, unknown>;
   update: AtomicUpdate;
   receipt: string;
+  receiptGuard: unknown;
 }
 interface AtomicRecord extends Document {
   _id: string;
@@ -107,12 +108,18 @@ export async function settleAtomicDocumentTransition(
     )
   )
     return bad("Atomic projection cannot change settlement receipts");
+  // Freeze the document generation before claiming. An old intent must not
+  // become eligible again after another journal operation restores the same values.
+  const original = await db
+    .collection(projection.collection)
+    .findOne(identity, { projection: { [SETTLED_KEYS_FIELD]: 1 } });
   const plan: AtomicPlan = {
     collection: projection.collection,
     identity,
     guard: reviveObjectIds(target.guard ?? {}),
     update: reviveObjectIds(projection.update) as AtomicUpdate,
     receipt: `${transition.key}:atomic`,
+    receiptGuard: original?.[SETTLED_KEYS_FIELD] ?? { $exists: false },
   };
   const claimed = await claimMoneyMove(db, {
     key: transition.key,
@@ -174,7 +181,11 @@ export async function resumeAtomicDocumentSettlement(
   if (!replayed) {
     if (record.status === "rejected")
       return { ...result, error: record.error ?? "Atomic settlement was rejected" };
-    const document = await collection.findOne({ ...plan.identity, ...plan.guard });
+    const document = await collection.findOne({
+      ...plan.identity,
+      ...plan.guard,
+      [SETTLED_KEYS_FIELD]: plan.receiptGuard,
+    });
     if (!document) {
       // A concurrent delivery may have changed the guarded state just now.
       replayed = !!(await collection.findOne(receiptFilter, { projection: { _id: 1 } }));
@@ -215,10 +226,13 @@ export async function resumeAtomicDocumentSettlement(
       }
       const changed = await collection.updateOne(
         {
-          ...plan.identity,
-          ...plan.guard,
-          ...balanceGuards,
-          [SETTLED_KEYS_FIELD]: { $ne: plan.receipt },
+          $and: [
+            plan.identity,
+            plan.guard,
+            balanceGuards,
+            { [SETTLED_KEYS_FIELD]: plan.receiptGuard },
+            { [SETTLED_KEYS_FIELD]: { $ne: plan.receipt } },
+          ],
         } as Filter<Document>,
         {
           ...plan.update,
