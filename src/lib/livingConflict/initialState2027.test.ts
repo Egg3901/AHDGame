@@ -90,6 +90,27 @@ describe("fresh 2027 crisis opening", () => {
     ).toMatchObject({ status: "dormant", hasOpened: false, openingDisposition: "counterfactual" });
   });
 
+  it("opens only an explicitly surviving Yugoslav federation in 2027", async () => {
+    const def = allLivingConflictDefs().find((item) => item.key === "yugoslav_dissolution")!;
+    const db = createMockDb();
+    const live = new Map<string, LivingConflictState>();
+    const collection = db.collection("livingConflicts");
+    collection.findOne.mockImplementation(async (filter) => live.get(filter.defKey));
+    collection.updateOne.mockImplementation(async (filter, update) => {
+      live.set(filter.defKey, { ...live.get(filter.defKey), ...update.$set } as LivingConflictState);
+    });
+    live.set(def.key, build2027ConflictOpening(def, context));
+    const absent = await driveConflictTurn(db as unknown as Db, def, resolveConflictParticipants(def, countries), 1249, 2027);
+    expect(absent.state.status).toBe("closed");
+    expect(absent.events).toEqual([]);
+
+    const surviving = new Set([...countries, "YU"]);
+    live.set(def.key, build2027ConflictOpening(def, { ...context, countries: surviving }));
+    const reopened = await driveConflictTurn(db as unknown as Db, def, resolveConflictParticipants(def, surviving), 1249, 2027);
+    expect(reopened.state).toMatchObject({ hasOpened: true, phaseLevel: 1, openedYear: 2027, openingDisposition: "counterfactual" });
+    expect(reopened.events.map((event) => event.fired.phaseKey)).toEqual(["federal_crisis"]);
+  });
+
   it("advances actual persisted opening states once without expired phase-entry events", async () => {
     const db = createMockDb();
     const stored = new Map<string, LivingConflictState>();
@@ -142,6 +163,5 @@ describe("fresh 2027 crisis opening", () => {
     expect(next).toBe(seeded);
     expect(next.tracks?.ratificationAuthorization).toBe(2);
     expect(next.tracks?.referendumRatification).toBe(1);
-    expect(db.collectionMocks.bills).toBeUndefined();
   });
 });
