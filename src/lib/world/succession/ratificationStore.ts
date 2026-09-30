@@ -1,6 +1,7 @@
 import type { ObjectId, ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Bill } from "@/lib/db/types/legislation";
+import type { FederationPoliticalProposalRecord } from "./politicalProposal";
 import {
   evaluateSuccessionApproval,
   type SuccessionApprovalInput,
@@ -42,6 +43,16 @@ export async function loadPersistedFederationApproval(input: {
     !approval.settlementId.trim()
   )
     throw new Error("Federation ratification has invalid settlement terms");
+  const proposal = await db
+    .collection<FederationPoliticalProposalRecord>("federationPoliticalProposals")
+    .findOne({ _id: `1991-default:${approval.settlementId}:${approval.revision}` }, { session });
+  if (
+    !proposal ||
+    proposal.status !== "open" ||
+    proposal.sourceEntityId !== sourceEntityId ||
+    proposal.termsHash !== termsHash
+  )
+    throw new Error("Federation vote has no matching open political proposal");
   const bills = await db
     .collection<Bill>("bills")
     .find(
@@ -67,6 +78,7 @@ export async function loadPersistedFederationApproval(input: {
   if (
     bills.length !== 1 ||
     bills[0].federationSettlementMandate?.sourceEntityId !== sourceEntityId ||
+    bills[0]._id.toString() !== proposal.billId.toString() ||
     !(bills[0].enactedAt instanceof Date) ||
     !Number.isFinite(bills[0].enactedAt.getTime())
   )
