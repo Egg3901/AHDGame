@@ -453,3 +453,243 @@ describe("explicit central-bank reserve pool exchange", () => {
     expect(memory.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
 });
+
+describe("protected atomic settlement outcomes", () => {
+  const field = "pendingAtomicSettlementReceipt";
+  const updateSet = (update: unknown): Record<string, unknown> => {
+    if (!update || typeof update !== "object" || !("$set" in update)) return {};
+    return (update.$set ?? {}) as Record<string, unknown>;
+  };
+  const barrier = () => {
+    let release!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { promise, release };
+  };
+  async function evict(memory: ReturnType<typeof world>) {
+    await memory.collection("corporations").updateOne(
+      { _id: id },
+      {
+        $push: {
+          settledKeys: {
+            $each: Array.from({ length: 200 }, (_, i) => `unrelated:${i}`),
+            $slice: -200,
+          },
+        },
+      }
+    );
+  }
+  it("retains cash publication through bounded receipt eviction", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+    });
+    await expect(settleAtomicDocumentTransition(fault.db, transition(), target)).rejects.toThrow();
+    fault.disarm();
+    await evict(memory);
+    expect((await resumeSettlement(db, transition().key)).status).toBe("replayed");
+    expect((await resumeSettlement(db, transition().key)).status).toBe("replayed");
+    expect(await state(db)).toMatchObject({ liquidCapital: 60, bankCharter: { cashReserves: 40 } });
+    expect((await state(db))?.[field]).toBeUndefined();
+    expect(memory.collection(MONEY_MOVE_COLLECTION).docs[0].status).toBe("applied");
+  });
+  it.each([false, true])(
+    "recovers journal completion acknowledgement afterWrite=%s and releases a waiting command",
+    async (afterWrite) => {
+      const memory = world(),
+        db = memory as unknown as Db;
+      const journal = memory.collection(MONEY_MOVE_COLLECTION),
+        update = journal.updateOne.bind(journal);
+      let failed = false;
+      vi.spyOn(journal, "updateOne").mockImplementation(async (...args) => {
+        if (!failed && updateSet(args[1]).status === "applied") {
+          failed = true;
+          if (afterWrite) await update(...args);
+          throw new Error("completion acknowledgement");
+        }
+        return update(...args);
+      });
+      await expect(settleAtomicDocumentTransition(db, transition(), target)).rejects.toThrow(
+        "completion acknowledgement"
+      );
+      await evict(memory);
+      const next = transition("next");
+      next.legs = [
+        { kind: "mint", amount: 5, note: "fixture funding" },
+        { ...next.legs[0], kind: "credit", amount: 5 },
+      ];
+      next.projections[0].update = { $inc: { liquidCapital: 5 } };
+      expect((await settleAtomicDocumentTransition(db, next, { identity })).status).toBe("partial");
+      if (afterWrite) expect((await state(db))?.[field]).toBeUndefined();
+      expect((await resumeSettlement(db, transition().key)).status).toBe("replayed");
+      expect((await resumeSettlement(db, next.key)).status).toBe("applied");
+      expect(await state(db)).toMatchObject({
+        liquidCapital: 65,
+        bankCharter: { cashReserves: 40 },
+      });
+      expect((await state(db))?.[field]).toBeUndefined();
+    }
+  );
+  it.each([false, true])(
+    "clears only its own completed marker after release interruption afterWrite=%s",
+    async (afterWrite) => {
+      const memory = world(),
+        db = memory as unknown as Db;
+      const collection = memory.collection("corporations"),
+        update = collection.updateOne.bind(collection);
+      let failed = false;
+      vi.spyOn(collection, "updateOne").mockImplementation(async (...args) => {
+        const spec = args[1];
+        if (!failed && !Array.isArray(spec) && spec.$unset) {
+          failed = true;
+          if (afterWrite) await update(...args);
+          throw new Error("release acknowledgement");
+        }
+        return update(...args);
+      });
+      await expect(settleAtomicDocumentTransition(db, transition(), target)).rejects.toThrow(
+        "release acknowledgement"
+      );
+      await evict(memory);
+      expect((await resumeSettlement(db, transition().key)).status).toBe("replayed");
+      expect((await state(db))?.[field]).toBeUndefined();
+      expect((await state(db))?.liquidCapital).toBe(60);
+      await collection.updateOne(
+        { _id: id },
+        { $set: { [field]: { key: "another-owner", outcome: "applied" } } }
+      );
+      await resumeSettlement(db, transition().key);
+      expect((await state(db))?.[field]).toEqual({ key: "another-owner", outcome: "applied" });
+    }
+  );
+  it("a protected refusal consumes the old cash writer's generation before cleanup", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    const collection = memory.collection("corporations"),
+      update = collection.updateOne.bind(collection);
+    const entered = barrier(),
+      resume = barrier();
+    let paused = false;
+    vi.spyOn(collection, "updateOne").mockImplementation(async (...args) => {
+      const marker = updateSet(args[1])[field] as { outcome?: string } | undefined;
+      if (!paused && marker?.outcome === "applied") {
+        paused = true;
+        entered.release();
+        await resume.promise;
+      }
+      return update(...args);
+    });
+    const old = settleAtomicDocumentTransition(db, transition(), target);
+    await entered.promise;
+    await update({ _id: id }, { $set: { bankCharter: { status: "revoked" } } });
+    expect((await resumeSettlement(db, transition().key)).status).toBe("rejected");
+    await update({ _id: id }, { $set: { bankCharter: null } });
+    resume.release();
+    expect((await old).status).toBe("rejected");
+    expect((await state(db))?.liquidCapital).toBe(100);
+    expect(memory.collection(MONEY_MOVE_COLLECTION).docs[0].status).toBe("rejected");
+  });
+  it("a stale refusal cannot replace a concurrently completed journal", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    const collection = memory.collection("corporations"),
+      update = collection.updateOne.bind(collection);
+    await update({ _id: id }, { $set: { bankCharter: { status: "revoked" } } });
+    const entered = barrier(),
+      resume = barrier();
+    let paused = false;
+    vi.spyOn(collection, "updateOne").mockImplementation(async (...args) => {
+      const marker = updateSet(args[1])[field] as { outcome?: string } | undefined;
+      if (!paused && marker?.outcome === "rejected") {
+        paused = true;
+        entered.release();
+        await resume.promise;
+      }
+      return update(...args);
+    });
+    const old = settleAtomicDocumentTransition(db, transition(), target);
+    await entered.promise;
+    await update({ _id: id }, { $set: { bankCharter: null } });
+    expect((await resumeSettlement(db, transition().key)).status).toBe("applied");
+    resume.release();
+    expect((await old).status).toBe("replayed");
+    expect((await state(db))?.liquidCapital).toBe(60);
+    expect((await state(db))?.[field]).toBeUndefined();
+    expect(memory.collection(MONEY_MOVE_COLLECTION).docs[0].status).toBe("applied");
+  });
+  it.each([false, true])(
+    "retains an interrupted refusal until its journal is durable afterWrite=%s",
+    async (afterWrite) => {
+      const memory = world(),
+        db = memory as unknown as Db;
+      await memory
+        .collection("corporations")
+        .updateOne({ _id: id }, { $set: { bankCharter: { status: "revoked" } } });
+      const journal = memory.collection(MONEY_MOVE_COLLECTION),
+        update = journal.updateOne.bind(journal);
+      let failed = false;
+      vi.spyOn(journal, "updateOne").mockImplementation(async (...args) => {
+        if (!failed && updateSet(args[1]).status === "rejected") {
+          failed = true;
+          if (afterWrite) await update(...args);
+          throw new Error("refusal acknowledgement");
+        }
+        return update(...args);
+      });
+      await expect(settleAtomicDocumentTransition(db, transition(), target)).rejects.toThrow(
+        "refusal acknowledgement"
+      );
+      await evict(memory);
+      expect((await resumeSettlement(db, transition().key)).status).toBe("rejected");
+      expect((await state(db))?.liquidCapital).toBe(100);
+      expect((await state(db))?.[field]).toBeUndefined();
+    }
+  );
+  it.each([false, true])(
+    "handles legacy partial proof without fabricating an outcome afterEviction=%s",
+    async (afterEviction) => {
+      const memory = world(),
+        db = memory as unknown as Db;
+      const fault = withInjectedCrash(memory, {
+        collection: "corporations",
+        op: "updateOne",
+        onCall: 1,
+        afterWrite: true,
+      });
+      await expect(
+        settleAtomicDocumentTransition(fault.db, transition(), target)
+      ).rejects.toThrow();
+      fault.disarm();
+      await memory.collection("corporations").updateOne({ _id: id }, { $unset: { [field]: "" } });
+      await memory
+        .collection(MONEY_MOVE_COLLECTION)
+        .updateOne({ _id: transition().key }, { $unset: { "atomicDocument.receiptProtocol": "" } });
+      if (afterEviction) await evict(memory);
+      const recovered = await resumeSettlement(db, transition().key);
+      expect(recovered.status).toBe(afterEviction ? "partial" : "replayed");
+      expect((await state(db))?.liquidCapital).toBe(60);
+      if (afterEviction) expect(recovered.error).toContain("reconciliation required");
+    }
+  );
+  it("rejects caller changes to its protected field", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    const altered = transition();
+    altered.projections[0].update!.$set![field] = { key: "forged", outcome: "applied" };
+    expect((await settleAtomicDocumentTransition(db, altered, target)).status).toBe("rejected");
+    expect(
+      (
+        await settleAtomicDocumentTransition(db, transition(), {
+          identity,
+          guard: { $or: [{ [field]: null }] },
+        })
+      ).status
+    ).toBe("rejected");
+    expect(memory.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+  });
+});

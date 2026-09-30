@@ -23,6 +23,7 @@ interface AtomicPlan {
   update: AtomicUpdate;
   receipt: string;
   receiptGuard: unknown;
+  receiptProtocol?: "protected_v1";
   nonCashMode?: "central_bank_bond_exchange";
   cashMode?: "central_bank_reserve_pool";
 }
@@ -33,6 +34,24 @@ interface AtomicRecord extends Document {
   atomicDocument: AtomicPlan;
   legs: { kind: string; amount: number; path: string; applied: boolean }[];
   projections: { projection: TransitionProjection; applied: boolean; appliedAt?: Date | null }[];
+}
+const PROTECTED_RECEIPT = "pendingAtomicSettlementReceipt";
+interface ProtectedReceipt {
+  key: string;
+  journalKey?: string;
+  outcome: "applied" | "rejected";
+  error?: string;
+}
+function mentionsProtectedReceipt(value: unknown): boolean {
+  if (typeof value === "string")
+    return value === `$${PROTECTED_RECEIPT}` || value.startsWith(`$${PROTECTED_RECEIPT}.`);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, nested]) =>
+      key === PROTECTED_RECEIPT ||
+      key.startsWith(`${PROTECTED_RECEIPT}.`) ||
+      mentionsProtectedReceipt(nested)
+  );
 }
 const at = (value: unknown, path: string): unknown =>
   path
@@ -164,6 +183,8 @@ export async function settleAtomicDocumentTransition(
     return bad("Atomic cash legs must share the document identity");
   if (Object.keys(target.guard ?? {}).some((key) => key === "_id" || key === SETTLED_KEYS_FIELD))
     return bad("Atomic guard cannot override identity or receipt");
+  if (mentionsProtectedReceipt(target.guard) || mentionsProtectedReceipt(projection.update))
+    return bad("Atomic callers cannot alter the protected settlement receipt");
   if (Object.keys(projection.update).some((key) => !["$set", "$inc", "$unset"].includes(key)))
     return bad("Unsupported atomic projection operator");
   if (
@@ -198,6 +219,7 @@ export async function settleAtomicDocumentTransition(
     guard: reviveObjectIds(target.guard ?? {}),
     update: reviveObjectIds(projection.update) as AtomicUpdate,
     receipt: `${transition.key}:atomic`,
+    receiptProtocol: "protected_v1",
     receiptGuard: (target.expectedSettledKeys === undefined
       ? original?.[SETTLED_KEYS_FIELD]
       : target.expectedSettledKeys) ?? { $exists: false },
@@ -263,39 +285,141 @@ export async function resumeAtomicDocumentSettlement(
     newlyAppliedProjections: [],
   };
   if (!record?.atomicDocument) return { ...result, error: "No atomic settlement record" };
-  if (
-    record.status === "applied" &&
-    record.legs.every((leg) => leg.applied) &&
-    record.projections.every((projection) => projection.applied)
-  )
-    return {
-      status: "replayed",
-      key,
-      appliedLegs: record.legs.map((_leg, index) => index),
-      appliedProjections: record.projections.map((_projection, index) => index),
-      newlyAppliedProjections: [],
-    };
   const plan = record.atomicDocument;
   const collection = db.collection(plan.collection);
-  const receiptFilter = { ...plan.identity, [SETTLED_KEYS_FIELD]: plan.receipt };
-  let replayed = !!(await collection.findOne(receiptFilter, { projection: { _id: 1 } }));
+  const completedResult = (status: "applied" | "replayed"): SettlementResult => ({
+    status,
+    key,
+    appliedLegs: record.legs.map((_leg, index) => index),
+    appliedProjections: record.projections.map((_projection, index) => index),
+    newlyAppliedProjections: [],
+  });
+  const isComplete = (value: AtomicRecord) =>
+    value.status === "applied" &&
+    value.legs.every((leg) => leg.applied) &&
+    value.projections.every((projection) => projection.applied);
+  const release = () =>
+    collection.updateOne(
+      { ...plan.identity, [`${PROTECTED_RECEIPT}.key`]: plan.receipt },
+      { $unset: { [PROTECTED_RECEIPT]: "" } }
+    );
+  const pending = (error: string): SettlementResult => ({ ...result, status: "partial", error });
+  const readTarget = () =>
+    collection.findOne(plan.identity, {
+      projection: {
+        [PROTECTED_RECEIPT]: 1,
+        ...(!plan.receiptProtocol ? { [SETTLED_KEYS_FIELD]: 1 } : {}),
+      },
+    });
+  const ownerOf = (document: Document | null) =>
+    document?.[PROTECTED_RECEIPT] as ProtectedReceipt | undefined;
+  const hasLegacyReceipt = (document: Document | null) =>
+    !plan.receiptProtocol &&
+    Array.isArray(document?.[SETTLED_KEYS_FIELD]) &&
+    document[SETTLED_KEYS_FIELD].includes(plan.receipt);
+  const busy = async (owner: ProtectedReceipt): Promise<SettlementResult> => {
+    if (owner.journalKey) {
+      const ownerRecord = await journal.findOne({ _id: owner.journalKey });
+      if (
+        ownerRecord?.atomicDocument &&
+        ownerRecord.atomicDocument.collection === plan.collection &&
+        same(ownerRecord.atomicDocument.identity, plan.identity) &&
+        ownerRecord.atomicDocument.receipt === owner.key &&
+        (isComplete(ownerRecord) ||
+          (ownerRecord.status === "rejected" && owner.outcome === "rejected"))
+      ) {
+        // A lost cleanup acknowledgement must not depend on the old API caller returning.
+        await collection.updateOne(
+          { ...plan.identity, [PROTECTED_RECEIPT]: owner },
+          { $unset: { [PROTECTED_RECEIPT]: "" } }
+        );
+      }
+    }
+    return pending("Another atomic settlement owns this target; retry after its recovery");
+  };
+  const terminal = async (current: AtomicRecord): Promise<SettlementResult | null> => {
+    if (isComplete(current)) {
+      await release();
+      return completedResult("replayed");
+    }
+    if (current.status === "rejected") {
+      const owner = ownerOf(await readTarget());
+      if (owner?.key === plan.receipt && owner.outcome === "applied")
+        return pending(
+          "Atomic journal contradicts its protected cash receipt; reconciliation required"
+        );
+      await release();
+      return { ...result, error: current.error ?? "Atomic settlement was rejected" };
+    }
+    return null;
+  };
+  const finished = await terminal(record);
+  if (finished) return finished;
+  // The refusal competes on the same target field as cash. A stale worker
+  // cannot publish cash after another retry has committed the refusal.
+  const refuse = async (error: string): Promise<SettlementResult> => {
+    const latest = await journal.findOne({ _id: key });
+    if (!latest) throw new Error("Atomic journal disappeared before refusal");
+    const prior = await terminal(latest);
+    if (prior) return prior;
+    await collection.updateOne({ ...plan.identity, [PROTECTED_RECEIPT]: { $exists: false } }, {
+      $set: {
+        [PROTECTED_RECEIPT]: { key: plan.receipt, journalKey: key, outcome: "rejected", error },
+      },
+      $push: {
+        [SETTLED_KEYS_FIELD]: { $each: [`${plan.receipt}:rejected`], $slice: -SETTLED_KEYS_CAP },
+      },
+    } as unknown as UpdateFilter<Document>);
+    const target = await readTarget(),
+      owner = ownerOf(target);
+    if (owner?.key !== plan.receipt)
+      return pending("Atomic target is busy or unavailable; original settlement remains pending");
+    if (owner.outcome === "applied") return resumeAtomicDocumentSettlement(db, key);
+    await journal.updateOne(
+      { _id: key, status: { $nin: ["applied", "rejected"] } },
+      { $set: { status: "rejected", error: owner.error ?? error } }
+    );
+    const current = await journal.findOne({ _id: key });
+    if (!current) throw new Error("Atomic journal disappeared after refusal");
+    return (await terminal(current)) ?? pending("Atomic refusal remains pending");
+  };
+  let observed = await readTarget(),
+    owner = ownerOf(observed);
+  if (owner && owner.key !== plan.receipt) return busy(owner);
+  if (owner?.outcome === "rejected") return refuse(owner.error ?? "Atomic quote refused");
+  let replayed = owner?.outcome === "applied";
+  if (!replayed && hasLegacyReceipt(observed)) {
+    // Existing partial claims can retain their still-present original proof.
+    await collection.updateOne(
+      {
+        ...plan.identity,
+        [SETTLED_KEYS_FIELD]: plan.receipt,
+        [PROTECTED_RECEIPT]: { $exists: false },
+      },
+      { $set: { [PROTECTED_RECEIPT]: { key: plan.receipt, journalKey: key, outcome: "applied" } } }
+    );
+    observed = await readTarget();
+    owner = ownerOf(observed);
+    if (owner?.key !== plan.receipt || owner.outcome !== "applied")
+      return pending("Legacy atomic receipt could not be protected; retry recovery");
+    replayed = true;
+  }
   if (!replayed) {
-    if (record.status === "rejected")
-      return { ...result, error: record.error ?? "Atomic settlement was rejected" };
     const document = await collection.findOne({
       ...plan.identity,
       ...plan.guard,
       [SETTLED_KEYS_FIELD]: plan.receiptGuard,
+      [PROTECTED_RECEIPT]: { $exists: false },
     });
     if (!document) {
-      // A concurrent delivery may have changed the guarded state just now.
-      replayed = !!(await collection.findOne(receiptFilter, { projection: { _id: 1 } }));
-      if (!replayed) {
-        await journal.updateOne(
-          { _id: key },
-          { $set: { status: "rejected", error: "Atomic document guard refused; no money moved" } }
-        );
-        return { ...result, error: "Atomic document guard refused; no money moved" };
+      observed = await readTarget();
+      owner = ownerOf(observed);
+      if (owner?.key === plan.receipt && owner.outcome === "applied") replayed = true;
+      else if (owner && owner.key !== plan.receipt) return busy(owner);
+      else {
+        if (!plan.receiptProtocol && !owner)
+          return pending("Legacy atomic outcome has no surviving receipt; reconciliation required");
+        return refuse("Atomic document guard refused; no money moved");
       }
     } else {
       const deltas = new Map<string, number>();
@@ -320,8 +444,7 @@ export async function resumeAtomicDocumentSettlement(
             )
         ) {
           const error = `Atomic projection does not implement journal balance delta at ${path}`;
-          await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
-          return { ...result, error };
+          return refuse(error);
         }
         balanceGuards[path] = value === undefined ? { $exists: false } : value;
       }
@@ -334,8 +457,7 @@ export async function resumeAtomicDocumentSettlement(
           before[0] + before[1] !== after[0] + after[1]
         ) {
           const error = "Atomic bond exchange must conserve nonnegative whole units";
-          await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
-          return { ...result, error };
+          return refuse(error);
         }
         for (const path of paths) {
           const value = at(document, path);
@@ -351,19 +473,25 @@ export async function resumeAtomicDocumentSettlement(
             balanceGuards,
             { [SETTLED_KEYS_FIELD]: plan.receiptGuard },
             { [SETTLED_KEYS_FIELD]: { $ne: plan.receipt } },
+            { [PROTECTED_RECEIPT]: { $exists: false } },
           ],
         } as Filter<Document>,
         {
           ...plan.update,
+          $set: {
+            ...plan.update.$set,
+            [PROTECTED_RECEIPT]: { key: plan.receipt, journalKey: key, outcome: "applied" },
+          },
           $push: { [SETTLED_KEYS_FIELD]: { $each: [plan.receipt], $slice: -SETTLED_KEYS_CAP } },
         } as unknown as UpdateFilter<Document>
       );
       if (changed.matchedCount !== 1) {
-        replayed = !!(await collection.findOne(receiptFilter, { projection: { _id: 1 } }));
+        observed = await readTarget();
+        owner = ownerOf(observed);
+        replayed = owner?.key === plan.receipt && owner.outcome === "applied";
         if (!replayed) {
-          const error = "Atomic document changed before delivery; no money moved";
-          await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
-          return { ...result, error };
+          if (owner && owner.key !== plan.receipt) return busy(owner);
+          return refuse("Atomic document changed before delivery; no money moved");
         }
       }
     }
@@ -393,7 +521,14 @@ export async function resumeAtomicDocumentSettlement(
     completed[`projections.${index}.applied`] = true;
     completed[`projections.${index}.appliedAt`] = now;
   });
-  await journal.updateOne({ _id: key }, { $set: completed, $unset: { error: "" } });
+  await journal.updateOne(
+    { _id: key, status: record.status, legs: record.legs, projections: record.projections },
+    { $set: completed, $unset: { error: "" } }
+  );
+  const current = await journal.findOne({ _id: key });
+  if (!current || !isComplete(current))
+    return pending("Atomic cash receipt remains protected until journal completion is confirmed");
+  await release();
   return {
     status: replayed ? "replayed" : "applied",
     key,

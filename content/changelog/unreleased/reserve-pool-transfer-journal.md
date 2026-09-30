@@ -13,4 +13,5 @@ areas: [fullstack, engine]
 
 - Reserve-pool cash and the existing transfer cooldown commit together.
 - Retried requests return the original result and retain one audit record.
+- Banking recovery preserves completed outcomes through later account activity.
 - Existing authority, limits and reserve-pool amounts are preserved.
