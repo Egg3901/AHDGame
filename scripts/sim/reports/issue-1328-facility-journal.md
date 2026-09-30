@@ -6,7 +6,7 @@ Refs #1328, #2159. This verifies the liquidity advance and facility-servicing jo
 
 Baseline: `56b969b464488ddf615caf4a1e528027bf2b0844`.
 Treatment: `005d1178c52d5e3b1aec86aa9f917b300261ae21`.
-Both executions used clean checkouts and isolated Mongo databases. The companion JSON records the private runner's SHA-256. Later report-only commits do not change the executed runtime.
+Both executions used clean checkouts and isolated Mongo databases. The companion JSON records the private runner's SHA-256. Later evidence and CI fixture-typing commits do not change the executed game runtime. The nullable legacy cooldown read type was aligned with the existing query; its query and effects are unchanged.
 
 The fixture contains ten synthetic USD banks at turn 100, a central bank with prime rate 4, and an observed native-per-anchor FX rate of 2. Ordinary deposit and loan-book work is explicitly pre-stamped complete to isolate facility servicing. This is actual production subsystem code against Mongo, not a new world simulation or retained-player-world qualification.
 
