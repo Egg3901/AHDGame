@@ -89,6 +89,11 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
   readonly country: string;
   readonly why: string;
 }> = [
+  {
+    file: "src/lib/livingConflict/rules/russiaUkraineOutcome.ts",
+    country: "RU",
+    why: "The shared conflict outcome resolver combines Ukrainian, Russian and coalition choices into a joint campaign result; it contains no Russia-only reference data.",
+  },
   // ⚠ NO SHIM ENTRIES HERE. Japan leaves twelve forwarders behind and they used
   // to be listed one by one. They are now RECOGNISED instead: `isCountryFolderShim`
   // in the test accepts a file whose every statement, comments stripped, is an

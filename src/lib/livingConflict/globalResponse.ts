@@ -13,6 +13,7 @@ import {
 import type { LivingConflictState } from "./types";
 import { cfx } from "./effects";
 import { applyCrisisTradeSanctions } from "./sanctions/apply";
+import { russiaUkraineOutcome } from "./rules/russiaUkraineOutcome";
 import type { Db, Filter, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
@@ -610,6 +611,14 @@ export async function resolveGlobalResponse(
         crisis.globalResponse.outcomes.find((candidate) => candidate.outcomeId === outcomeId) ??
         outcome;
     }
+  }
+  if (crisis.globalResponse.conflictKey === "russia_ukraine_security") {
+    outcome = russiaUkraineOutcome(
+      await loadConflictState(db, "russia_ukraine_security"),
+      outcome,
+      crisis.globalResponse.outcomes,
+      scores
+    );
   }
   let attackTarget: string | null = null;
   if (crisis.globalResponse.conflictKey === TERRORISM_KEY) {
