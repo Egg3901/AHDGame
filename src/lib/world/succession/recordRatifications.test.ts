@@ -6,6 +6,8 @@ import { planSuccessionFinances } from "./rules/financialSettlement";
 import { openFederationPoliticalProposal } from "./politicalProposal";
 import { recordFederationRatifications } from "./recordRatifications";
 import { processFederationRatifications } from "@/lib/turn/federationRatifications";
+import { buildRatifiedFederationActivation } from "./buildRatifiedActivation";
+import { planLiveSuccessionActivation } from "./planActivation";
 
 async function scenario() {
   const mem = createInMemoryDb();
@@ -115,17 +117,10 @@ describe("federation ratification records", () => {
       { _id: "CZECHLANDS", countryId: "CS", population: 10, gdp: 100 },
       { _id: "SLOVAKIA", countryId: "CS", population: 5, gdp: 50 },
     ]);
-    mem.seed(
-      "macroCountries",
-      ["CZ2", "SK"].map((entityId) => ({
-        _id: entityId,
-        entityId,
-        presetId: "1991-default",
-        stability: 0.7,
-        fiscalCapacity: 0.5,
-        retiredAt: null,
-      }))
-    );
+    mem.seed("federalBudget", [
+      { _id: "CS", countryId: "CS", treasuryBalance: 12, debt: { principal: 0 } },
+    ]);
+    // Emergent successor economies are not seeded until the split is applied.
     const db = mem as unknown as Db;
     const territories = [
       { entityId: "CZ2", regionIds: ["CZECHLANDS"], population: 10, annualGdpAnchor: 100 },
@@ -178,6 +173,26 @@ describe("federation ratification records", () => {
       ["CZ2", "autonomous"],
       ["SK", "autonomous"],
     ]);
+    expect(records.map(({ choice }) => choice)).toEqual(["approve", "approve"]);
+    expect(await db.collection("macroCountries").countDocuments({})).toBe(0);
     expect(await db.collection("federationRatifications").countDocuments({})).toBe(2);
+    const activation = await buildRatifiedFederationActivation({
+      db,
+      sourceCountryId: "CS",
+      settlementId: "cs-1",
+      revision: 1,
+      currentTurn: 181,
+      currentYear: 1992,
+      now: new Date(2),
+    });
+    const planned = await planLiveSuccessionActivation(db, "CS", activation);
+    expect(activation.finances.financialAssetsMinor).toBe(1200);
+    expect(planned.sourceEntity.status).toBe("dissolved");
+    expect(planned.successorEntities.map(({ status }) => status)).toEqual([
+      "sovereign",
+      "sovereign",
+    ]);
+    expect(planned.macroCountries.map(({ population }) => population)).toEqual([10, 5]);
+    expect(await db.collection("macroCountries").countDocuments({})).toBe(0);
   });
 });

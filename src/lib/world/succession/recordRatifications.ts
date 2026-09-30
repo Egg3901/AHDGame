@@ -3,6 +3,8 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Bill } from "@/lib/db/types/legislation";
 import type { State } from "@/lib/db/types/state";
 import type { MacroCountryState } from "@/lib/world/macro/types";
+import { buildBackgroundMacroCountry } from "@/lib/world/macro/backgroundSeed";
+import { getWorldEntityOrThrow } from "@/lib/world/worldEntityManifest";
 import { allocateSuccessionAmount } from "./rules/financialSettlement";
 import { decideAutonomousFederationConsent } from "./rules/autonomousConsent";
 import {
@@ -100,9 +102,26 @@ export async function recordFederationRatifications(input: {
   const records = db.collection<FederationRatificationRecord>(FEDERATION_RATIFICATIONS_COLLECTION);
   const saved: FederationRatificationRecord[] = [];
   for (const entityId of participants) {
-    const macro = entityId === sourceCountryId ? null : macroById.get(entityId);
-    if (entityId !== sourceCountryId && (!macro || macro.retiredAt))
-      throw new Error(`Federation participant ${entityId} has no active background economy`);
+    const existingMacro = entityId === sourceCountryId ? null : macroById.get(entityId);
+    if (existingMacro?.retiredAt)
+      throw new Error(`Federation participant ${entityId} has a retired background economy`);
+    // Emergent republics have no persistent macro document until sovereignty.
+    // Use their deterministic opening profile only to bound the consent vote;
+    // do not seed a contribution before the settlement is applied.
+    const macro =
+      entityId === sourceCountryId
+        ? null
+        : (existingMacro ??
+          (() => {
+            const entry = getWorldEntityOrThrow("1991-default", entityId);
+            if (
+              entry.parentEntityId !== sourceCountryId ||
+              (entry.status !== "emergent" && entry.status !== "dependent") ||
+              entry.simulationTier !== "background-macro"
+            )
+              throw new Error(`Federation participant ${entityId} is not an emergent successor`);
+            return buildBackgroundMacroCountry(entry, "1991-default", proposal.createdAt);
+          })());
     const decision = macro
       ? decideAutonomousFederationConsent({
           stability: macro.stability,
