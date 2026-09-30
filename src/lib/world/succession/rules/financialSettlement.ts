@@ -16,6 +16,8 @@ export interface SuccessionFinancialTerms {
   /** Shared accounting minor units, never a successor's newly chosen currency. */
   financialAssetsMinor: number;
   creditorDebtMinor: number;
+  /** A negative treasury cash position, separate from existing creditor bonds. */
+  cashDeficitMinor?: number;
   /** Each complete negotiated allocation must sum to 10,000 basis points. */
   assetSharesBps?: Readonly<Record<string, number>>;
   debtSharesBps?: Readonly<Record<string, number>>;
@@ -27,8 +29,10 @@ export interface SuccessionFinancialPlan {
   servicingEntityKind: "continuing-state" | "legacy-administration";
   creditorDebtMinor: number;
   financialAssetsMinor: number;
+  cashDeficitMinor: number;
   assetAllocation: Record<string, number>;
   debtResponsibility: Record<string, number>;
+  cashDeficitResponsibility: Record<string, number>;
   assetWeights: Record<string, number>;
   debtWeights: Record<string, number>;
   assetBasis: "population" | "negotiated";
@@ -117,6 +121,10 @@ export function planSuccessionFinances(terms: SuccessionFinancialTerms): Success
   const populations = participantWeights(terms.participants);
   const assetWeights = agreedWeights(populations, terms.assetSharesBps);
   const debtWeights = agreedWeights(populations, terms.debtSharesBps);
+  const cashDeficitMinor = terms.cashDeficitMinor ?? 0;
+  assertWholeAmount(cashDeficitMinor, "Treasury cash deficit");
+  if (cashDeficitMinor > 0 && terms.financialAssetsMinor > 0)
+    throw new Error("One source treasury cannot contain cash assets and a cash deficit");
   return {
     settlementId: terms.settlementId,
     servicingIssuerId: terms.sourceEntityId,
@@ -125,8 +133,10 @@ export function planSuccessionFinances(terms: SuccessionFinancialTerms): Success
       : "legacy-administration",
     creditorDebtMinor: terms.creditorDebtMinor,
     financialAssetsMinor: terms.financialAssetsMinor,
+    cashDeficitMinor,
     assetAllocation: allocateSuccessionAmount(terms.financialAssetsMinor, assetWeights),
     debtResponsibility: allocateSuccessionAmount(terms.creditorDebtMinor, debtWeights),
+    cashDeficitResponsibility: allocateSuccessionAmount(cashDeficitMinor, debtWeights),
     assetWeights,
     debtWeights,
     assetBasis: terms.assetSharesBps ? "negotiated" : "population",
