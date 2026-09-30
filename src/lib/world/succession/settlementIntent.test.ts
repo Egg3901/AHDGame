@@ -13,6 +13,7 @@ import {
 } from "./settlementIntent";
 import type { SuccessionActivationInput } from "./planActivation";
 import type { FederationRatificationRecord } from "./ratificationStore";
+import { buildFederationPublicationPlan } from "./publicationPlan";
 
 const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
@@ -278,6 +279,29 @@ describe("live federation settlement intent", () => {
     expect(verified.snapshot.residencePlans[0].status).toBe("pending-choice");
     expect(verified.snapshot.privateFirmPlans[0].status).toBe("pending-headquarters");
     expect(verified.snapshot.fiscalShares).toHaveLength(2);
+    const publication = buildFederationPublicationPlan(verified.intent, verified.snapshot);
+    expect(publication.receipt).toMatchObject({
+      status: "applied",
+      entityIds: ["RU", "UKR"],
+      appliedOnTurn: 97,
+    });
+    expect(publication.entityStates.map(({ entityId }) => entityId)).toEqual(["RU", "UKR"]);
+    expect(
+      publication.stateTransfers.map(({ stateId, successorEntityId }) => [
+        stateId,
+        successorEntityId,
+      ])
+    ).toEqual([
+      ["RUSSIA", "RU"],
+      ["UKRAINE", "UKR"],
+    ]);
+    expect(await args.db.collection("federationSettlementApplications").countDocuments({})).toBe(0);
+    expect(() =>
+      buildFederationPublicationPlan(verified.intent, {
+        ...verified.snapshot,
+        payloadHash: "0".repeat(64),
+      })
+    ).toThrow("publication inventory");
     await expect(
       verifyLiveFederationSettlementIntent({
         db: args.db,
