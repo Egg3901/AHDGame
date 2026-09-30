@@ -7,4 +7,4 @@ badges: [patch]
 areas: [engine]
 ---
 
-The corporate operating-revenue boost now starts at turn 1213 and rises to twenty percent over 192 turns. The following valuation ramp starts at turn 1309, preserving its 96-turn delay behind earnings. Financial sectors retain their additional revenue boost, and sector and bank valuation targets retain their existing levels.
+The corporate operating-revenue boost now starts at turn 1213 and rises to twenty percent over 192 turns. The following valuation ramp starts at turn 1253, forty turns after earnings begin rising. Financial sectors retain their additional revenue boost, and sector and bank valuation targets retain their existing levels.
