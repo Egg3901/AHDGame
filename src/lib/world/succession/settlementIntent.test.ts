@@ -5,6 +5,7 @@ import { tier3Entry } from "@/lib/world/registry/builders";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import {
   buildLiveFederationSettlementSnapshot,
+  hashFederationPoliticalTerms,
   hashSettlementPayload,
   stageLiveFederationSettlementIntent,
   verifyLiveFederationSettlementIntent,
@@ -15,6 +16,7 @@ const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
 const sectorId = new ObjectId("000000000000000000000103");
 const bondId = new ObjectId("000000000000000000000104");
+const mandateBillId = new ObjectId("000000000000000000000105");
 
 function activation(): Omit<SuccessionActivationInput, "sourceRegions" | "custodyAssets"> {
   const source = tier3Entry("1991-default", {
@@ -88,6 +90,51 @@ function activation(): Omit<SuccessionActivationInput, "sourceRegions" | "custod
 
 function scenario() {
   const mem = createInMemoryDb();
+  const proposed = activation();
+  const termsHash = hashFederationPoliticalTerms(proposed);
+  mem.seed("bills", [
+    {
+      _id: mandateBillId,
+      countryId: "RU",
+      status: "signed",
+      enactedAt: new Date(0),
+      federationSettlementMandate: {
+        settlementId: "ussr-1",
+        revision: 1,
+        sourceEntityId: "RU",
+        termsHash,
+      },
+    },
+  ]);
+  mem.seed("federationRatifications", [
+    {
+      _id: "1991-default:ussr-1:1:RU",
+      presetId: "1991-default",
+      sourceEntityId: "RU",
+      settlementId: "ussr-1",
+      revision: 1,
+      entityId: "RU",
+      choice: "approve",
+      termsHash,
+      mode: "legislative",
+      reason: "The Supreme Soviet enacted the settlement.",
+      decidedOnTurn: 96,
+      billId: mandateBillId,
+    },
+    {
+      _id: "1991-default:ussr-1:1:UKR",
+      presetId: "1991-default",
+      sourceEntityId: "RU",
+      settlementId: "ussr-1",
+      revision: 1,
+      entityId: "UKR",
+      choice: "approve",
+      termsHash,
+      mode: "autonomous",
+      reason: "The republic accepted the negotiated share.",
+      decidedOnTurn: 96,
+    },
+  ]);
   mem.seed("states", [
     { _id: "RUSSIA", countryId: "RU", population: 10, gdp: 100 },
     { _id: "UKRAINE", countryId: "RU", population: 11, gdp: 101 },
@@ -122,7 +169,7 @@ function scenario() {
   const args = {
     db: mem as unknown as Db,
     sourceCountryId: "RU" as const,
-    activation: activation(),
+    activation: proposed,
     appliedOnTurn: 97,
     currentYear: 1991,
     eraUnitScale: 1,
@@ -228,6 +275,38 @@ describe("live federation settlement intent", () => {
     await expect(verify()).rejects.toThrow("live federation balance sheet");
   });
 
+  it("rejects a claimed approval without an enacted parent bill or matching republic consent", async () => {
+    const { args } = scenario();
+    await args.db
+      .collection("bills")
+      .updateOne({ _id: mandateBillId }, { $set: { status: "vetoed" } });
+    await expect(stageLiveFederationSettlementIntent(args)).rejects.toThrow("parent mandate");
+
+    await args.db
+      .collection("bills")
+      .updateOne({ _id: mandateBillId }, { $set: { status: "signed" } });
+    await args.db
+      .collection("federationRatifications")
+      .updateOne({ _id: "1991-default:ussr-1:1:UKR" }, { $set: { choice: "reject" } });
+    await expect(stageLiveFederationSettlementIntent(args)).rejects.toThrow("required approval");
+  });
+
+  it("rejects a changed republic vote after an intent was staged", async () => {
+    const { args } = scenario();
+    const staged = await stageLiveFederationSettlementIntent(args);
+    await args.db
+      .collection("federationRatifications")
+      .updateOne({ _id: "1991-default:ussr-1:1:UKR" }, { $set: { termsHash: "0".repeat(64) } });
+    await expect(
+      verifyLiveFederationSettlementIntent({
+        db: args.db,
+        intentId: staged._id,
+        sourceCountryId: "RU",
+        appliedOnTurn: 97,
+      })
+    ).rejects.toThrow("matching recorded consent");
+  });
+
   it("rejects changed player choices and terms under the same application key", async () => {
     const { args } = scenario();
     await stageLiveFederationSettlementIntent(args);
@@ -251,7 +330,7 @@ describe("live federation settlement intent", () => {
     });
     await expect(
       stageLiveFederationSettlementIntent({ ...args, activation: changed })
-    ).rejects.toThrow("conflicts");
+    ).rejects.toThrow("parent mandate");
   });
 
   it("rejects a changed live treasury before writing an intent", async () => {
