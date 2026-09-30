@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PlayableResidence, SuccessionResidencePlan } from "./rules/residency";
 import type { PrivateFirmSuccessionPlan } from "./rules/privateFacilities";
@@ -27,6 +27,8 @@ export interface FederationRelocationRecord {
   status: "pending-choice" | "selected";
   destination?: PlayableResidence;
   claimIds: string[];
+  /** Restore the firm's prior operating state after its headquarters choice. */
+  wasSuspended?: boolean;
   createdAt: Date;
 }
 
@@ -39,22 +41,26 @@ export async function publishFederationRelocations(input: {
   residents: readonly SuccessionResidencePlan[];
   firms: readonly PrivateFirmSuccessionPlan[];
   firmOrigins: Readonly<
-    Record<string, { countryId: CountryId; stateId: string; entityId: string }>
+    Record<
+      string,
+      { countryId: CountryId; stateId: string; entityId: string; wasSuspended?: boolean }
+    >
   >;
   now: Date;
+  session?: ClientSession;
 }): Promise<FederationRelocationRecord[]> {
-  const { db, applicationId, residents, firms, firmOrigins, now } = input;
+  const { db, applicationId, residents, firms, firmOrigins, now, session } = input;
   if (!applicationId.trim() || !Number.isFinite(now.getTime()))
     throw new Error("Federation relocation needs an application and time");
   const application = await db
     .collection<FederationSettlementApplicationRecord>(
       FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
     )
-    .findOne({ _id: applicationId, status: "applied" });
+    .findOne({ _id: applicationId, status: "applied" }, { session });
   if (!application) throw new Error("Federation relocation awaits its applied settlement");
   const states = await db
     .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
-    .find({ applicationId })
+    .find({ applicationId }, { session })
     .toArray();
   validateAppliedEntityStates(application.presetId, [application], states);
 
@@ -87,6 +93,7 @@ export async function publishFederationRelocations(input: {
       status: plan.status === "relocating" ? "selected" : "pending-choice",
       ...(plan.destination ? { destination: plan.destination } : {}),
       claimIds: plan.claims.map((claim) => claim.claimId).sort(),
+      ...(origin.wasSuspended !== undefined ? { wasSuspended: origin.wasSuspended } : {}),
       createdAt: now,
     });
   }
@@ -96,7 +103,7 @@ export async function publishFederationRelocations(input: {
   if (expectedClaims.length) {
     const storedClaims = await db
       .collection<FederationFacilityClaimRecord>(FEDERATION_FACILITY_CLAIMS_COLLECTION)
-      .find({ applicationId })
+      .find({ applicationId }, { session })
       .toArray();
     const byId = new Map(storedClaims.map((claim) => [claim.claimId, claim]));
     if (
@@ -116,8 +123,12 @@ export async function publishFederationRelocations(input: {
   const collection = db.collection<FederationRelocationRecord>(FEDERATION_RELOCATIONS_COLLECTION);
   const saved: FederationRelocationRecord[] = [];
   for (const intended of records) {
-    await collection.updateOne({ _id: intended._id }, { $setOnInsert: intended }, { upsert: true });
-    const stored = await collection.findOne({ _id: intended._id });
+    await collection.updateOne(
+      { _id: intended._id },
+      { $setOnInsert: intended },
+      { upsert: true, session }
+    );
+    const stored = await collection.findOne({ _id: intended._id }, { session });
     if (
       !stored ||
       stored.applicationId !== applicationId ||
@@ -127,6 +138,7 @@ export async function publishFederationRelocations(input: {
       stored.formerCountryId !== intended.formerCountryId ||
       stored.formerState !== intended.formerState ||
       JSON.stringify(stored.claimIds) !== JSON.stringify(intended.claimIds) ||
+      stored.wasSuspended !== intended.wasSuspended ||
       (intended.status === "selected" && stored.status !== "selected") ||
       (stored.status === "selected" &&
         intended.destination &&

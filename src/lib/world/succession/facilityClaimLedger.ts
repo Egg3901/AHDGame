@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PrivateFacilityClaim, PrivateFirmSuccessionPlan } from "./rules/privateFacilities";
 import {
@@ -98,7 +98,8 @@ export async function activateFederationFacilityClaim(
   applicationId: string,
   claimId: string,
   corporationId: string,
-  creditorCountryId: CountryId
+  creditorCountryId: CountryId,
+  session?: ClientSession
 ): Promise<FederationFacilityClaimRecord> {
   if (!applicationId.trim() || !claimId.trim() || !corporationId.trim() || !creditorCountryId)
     throw new Error("Facility claim activation needs an application, firm and creditor");
@@ -106,18 +107,18 @@ export async function activateFederationFacilityClaim(
     .collection<FederationSettlementApplicationRecord>(
       FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
     )
-    .findOne({ _id: applicationId, status: "applied" });
+    .findOne({ _id: applicationId, status: "applied" }, { session });
   if (!application) throw new Error("Facility claim cannot activate before its settlement");
   const entityStates = await db
     .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
-    .find({ applicationId })
+    .find({ applicationId }, { session })
     .toArray();
   validateAppliedEntityStates(application.presetId, [application], entityStates);
   const _id = `${applicationId}:${claimId}`;
   const collection = db.collection<FederationFacilityClaimRecord>(
     FEDERATION_FACILITY_CLAIMS_COLLECTION
   );
-  const existing = await collection.findOne({ _id });
+  const existing = await collection.findOne({ _id }, { session });
   if (
     !existing ||
     existing.applicationId !== applicationId ||
@@ -133,10 +134,11 @@ export async function activateFederationFacilityClaim(
         status: "contingent",
         creditorCountryId: existing.creditorCountryId,
       },
-      { $set: { status: "payable", creditorCountryId } }
+      { $set: { status: "payable", creditorCountryId } },
+      { session }
     );
   }
-  const result = await collection.findOne({ _id });
+  const result = await collection.findOne({ _id }, { session });
   if (
     !result ||
     (result.status !== "payable" && result.status !== "paid") ||

@@ -388,6 +388,8 @@ export interface Corporation {
   suspended?: boolean;
   /** Turn after which suspension ends (informational, admin must manually resume) */
   suspendedUntilTurn?: number;
+  /** Protected until the owner chooses a playable headquarters after a federation split. */
+  federationPendingHeadquartersId?: string;
   /** Character being offered the CEO position (pending acceptance) */
   pendingCeoCharacterId?: ObjectId;
   /**
