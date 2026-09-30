@@ -75,6 +75,7 @@ async function observe(db: Db, setup: Awaited<ReturnType<typeof setupCase>>) {
       0
     ),
     householdPool: n(cb?.externalBroadMoney),
+    centralBankReserves: n(cb?.reserveBalance),
     insuranceCash: n(funds?.balance),
     treasuryCash: n(budget?.treasuryBalance),
   };
@@ -103,7 +104,9 @@ async function observe(db: Db, setup: Awaited<ReturnType<typeof setupCase>>) {
     bankStatus: bank.bankCharter.status,
     warningBand: bank.bankCharter.warningBand,
     insurerPremiums: n(funds?.premiumsCollectedLifetime),
-    insurerClaims: n(funds?.claimsPaidLifetime),
+    insurerClaims: n(funds?.payoutsLifetime),
+    treasuryInsuranceBackstop: n(funds?.treasuryBackstopLifetime),
+    insuredCap: n(funds?.insuredCap),
     saverInterest: n(account?.interestEarned),
     income: {
       turn: bank.bankCharter.lastBankingIncomeTurn ?? null,
@@ -305,6 +308,8 @@ async function runCase(
     defaultsWrittenOff: summaries.reduce((sum, entry) => sum + entry.banking.defaultsWrittenOff, 0),
     insurancePremium: ending.insurerPremiums - baseline.insurerPremiums,
     insuranceClaims: ending.insurerClaims - baseline.insurerClaims,
+    treasuryInsuranceBackstop:
+      ending.treasuryInsuranceBackstop - baseline.treasuryInsuranceBackstop,
     facilityInterest: operating.reduce(
       (sum, entry) => sum + entry.state.income.facilityInterest,
       0
@@ -372,7 +377,7 @@ async function main() {
     );
     const retained = await loadRetainedContext(source);
     const cases = arg("case")
-      ? scenarios.filter((scenario) => scenario.id === arg("case"))
+      ? scenarios.filter((scenario) => arg("case")!.split(",").includes(scenario.id))
       : scenarios;
     assert(cases.length > 0);
     const results = [];

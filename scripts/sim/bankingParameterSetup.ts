@@ -10,6 +10,7 @@ import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid } from "@/lib/banking/rules/boundary";
+import { ensureFund } from "@/lib/banking/insurance";
 import { injectBankCapital } from "@/lib/banking/bankCash";
 import { getRateCorridors, clampOffsets } from "@/lib/banking/regulationQ";
 import { corridorDepositTarget } from "@/lib/banking/npcBanks";
@@ -207,13 +208,7 @@ export async function setupCase(db: Db, context: RetainedContext, scenario: Para
       savingsHolder: {},
     },
   });
-  await db.collection("depositInsuranceFunds").insertOne({
-    _id: currency as never,
-    currency,
-    balance: 0,
-    premiumsCollectedLifetime: 0,
-    claimsPaidLifetime: 0,
-  });
+  await ensureFund(db, currency);
   // This hypothetical large borrower's disclosed income is an underwriting input, not a cash credit.
   await db.collection("corporationHistory").insertMany(
     Array.from({ length: 12 }, (_, i) => ({
