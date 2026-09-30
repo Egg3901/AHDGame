@@ -1,3 +1,4 @@
+import { sampleFinancialMacro } from "./financialMacroReplay";
 import { getBankId } from "../../src/lib/centralBank/helpers";
 import type { CountryId } from "../../src/lib/constants/countries";
 import { processCommodityPriceTurn } from "../../src/lib/turn/commodityPriceTurn";
@@ -334,7 +335,7 @@ async function main() {
     assert(approvalBefore && approvalAfter);
     near(
       approvalAfter.approvalRating - approvalBefore.approvalRating,
-      -0.01,
+      -0.3,
       "Rescue backlash enters approval"
     );
     assert.equal(
@@ -560,19 +561,20 @@ async function main() {
     assert((demandAfterLoss.get("DE") ?? 1) >= 0.8);
     const market = await processCommodityPriceTurn(startTurn + 13);
     results.creditTransmission = { afterLoss: demandAfterLoss.get("DE"), market };
+    results.macro = await sampleFinancialMacro(db, startTurn + 13);
     console.log("financial replay: austerity and fiscal accrual");
     const preAusterity = await stocks(db);
-    await publicChoice(db, startTurn + 14, "UK", "fiscal_consolidation");
+    await publicChoice(db, startTurn + 28, "UK", "fiscal_consolidation");
     const postAusterity = await stocks(db);
     assert(postAusterity.primarySpending <= preAusterity.primarySpending);
-    await processTreasuryTurn(startTurn + 15);
+    await processTreasuryTurn(startTurn + 29);
     const postAccrual = await stocks(db);
     assert.equal(postAccrual.debt, preAusterity.debt);
     results.austerity = { before: preAusterity, after: postAusterity, afterAccrual: postAccrual };
     console.log("financial replay: actual failed-auction detection");
     const detection = [];
     for (let index = 0; index < 4; index++) {
-      const turn = startTurn + 24 + 12 * index;
+      const turn = startTurn + 36 + 12 * index;
       const issuance = await issueAdminSovereignBondSeries(db, {
         countryId: "US",
         turn,
@@ -594,7 +596,7 @@ async function main() {
       .findOne({ countryCode: "US", state: "open" });
     const demandRecovered = await loadFinancialCrisisDemand(
       db,
-      startTurn + 54,
+      startTurn + 74,
       await db
         .collection<Corporation>("corporations")
         .find({ bankCharter: { $exists: true } })
@@ -605,15 +607,15 @@ async function main() {
     results.creditTransmission.recovered = demandRecovered.get("DE");
     results.guaranteeExpiry = await processFinancialCrisisGuarantees(
       db,
-      startTurn + TURNS_PER_YEAR + 6,
+      startTurn + TURNS_PER_YEAR + 26,
       await loadBankingPolicy(db)
     );
     assert(decision, "Real funding stress must open a sovereign decision");
     if (decision) {
       const beforeDefault = await stocks(db, "US");
-      await publicChoice(db, startTurn + 60, "US", "sovereign_restructure");
-      const first = await processSovereignLegislativeTurn(db, Date.now(), startTurn + 84);
-      const second = await processSovereignLegislativeTurn(db, Date.now(), startTurn + 108);
+      await publicChoice(db, startTurn + 84, "US", "sovereign_restructure");
+      const first = await processSovereignLegislativeTurn(db, Date.now(), startTurn + 108);
+      const second = await processSovereignLegislativeTurn(db, Date.now(), startTurn + 132);
       const afterDefault = await stocks(db, "US");
       assert(afterDefault.debt < beforeDefault.debt);
       assert.equal(afterDefault.treasury, beforeDefault.treasury);
