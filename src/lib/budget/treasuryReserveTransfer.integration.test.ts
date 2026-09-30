@@ -171,6 +171,48 @@ describe("treasury reserve settlement", () => {
     expect(state(db)).toMatchObject({ treasury: 9000, reserves: 6000, pending: undefined });
     expect(db.collection("ledgerEntries").docs).toHaveLength(1);
   });
+  it.each([false, true])(
+    "terminates a pre-cash eligibility refusal, including lost refusal acknowledgement %s",
+    async (loseRefusalAcknowledgement) => {
+      const db = world();
+      const budget = db.collection("federalBudget");
+      const pause = vi.spyOn(budget, "updateOne").mockRejectedValueOnce(new Error("before cash"));
+      await expect(executeTreasuryReserveTransfer(db as unknown as Db, command)).rejects.toThrow(
+        "before cash"
+      );
+      pause.mockRestore();
+      budget.docs[0].spending = { total: 20_000_000 };
+      if (loseRefusalAcknowledgement) {
+        const original = budget.updateOne.bind(budget);
+        const fault = vi.spyOn(budget, "updateOne").mockImplementation(async (...args) => {
+          const result = await original(...args);
+          if (!Array.isArray(args[1]) && args[1].$set?.treasuryReserveRejectedKey)
+            throw new Error("lost refusal acknowledgement");
+          return result;
+        });
+        await expect(resumeTreasuryReserveTransfers(db as unknown as Db)).rejects.toThrow(
+          "lost refusal acknowledgement"
+        );
+        fault.mockRestore();
+      }
+      await resumeTreasuryReserveTransfers(db as unknown as Db);
+      expect(state(db)).toMatchObject({ treasury: 10000, reserves: 5000, pending: undefined });
+      expect(state(db).history).toHaveLength(0);
+      expect(db.collection(MONEY_MOVE_COLLECTION).docs[0].status).toBe("rejected");
+      expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+      expect(db.collection("financialTxLog").docs).toHaveLength(0);
+      expect(db.collection("actionAuditLog").docs[0].outcome).toBe("rejected");
+      budget.docs[0].spending = { total: 900000 };
+      await expect(executeTreasuryReserveTransfer(db as unknown as Db, command)).rejects.toThrow(
+        "debt ceiling"
+      );
+      await executeTreasuryReserveTransfer(db as unknown as Db, {
+        ...command,
+        operationId: "later",
+      });
+      expect(state(db)).toMatchObject({ treasury: 9000, reserves: 6000, pending: undefined });
+    }
+  );
   it("keeps a successful financial result when audit delivery is unavailable and recovers the original event", async () => {
     const db = world();
     const fault = vi

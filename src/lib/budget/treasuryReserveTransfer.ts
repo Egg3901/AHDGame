@@ -76,6 +76,7 @@ interface BalanceDocument {
   settledKeys?: string[];
   treasuryBalance?: number;
   treasuryReserveRevision?: number;
+  treasuryReserveRejectedKey?: string;
   reserveBalance?: number;
   pendingTreasuryReserveKey?: string;
   treasuryTransferHistory?: TreasuryTransferRecord[];
@@ -477,7 +478,9 @@ export async function resumeTreasuryReserveTransfer(
     const [target, owner, latest] = await Promise.all([
       collection.findOne(
         { _id: id },
-        { projection: { treasuryReserveRevision: 1, settledKeys: 1 } }
+        {
+          projection: { treasuryReserveRevision: 1, treasuryReserveRejectedKey: 1, settledKeys: 1 },
+        }
       ),
       banks.findOne(
         { _id: plan.bankId, pendingTreasuryReserveKey: key },
@@ -486,9 +489,10 @@ export async function resumeTreasuryReserveTransfer(
       journal.findOne({ _id: key }, { projection: { legs: 1 } }),
     ]);
     return (
-      latest?.legs[index]?.applied === true ||
-      target?.settledKeys?.includes(stamp) === true ||
-      (!!owner && target?.treasuryReserveRevision === revision + 1)
+      target?.treasuryReserveRejectedKey !== key &&
+      (latest?.legs[index]?.applied === true ||
+        target?.settledKeys?.includes(stamp) === true ||
+        (!!owner && target?.treasuryReserveRevision === revision + 1))
     );
   }
   const debitStamp = legStamp(key, 0),
@@ -525,8 +529,51 @@ export async function resumeTreasuryReserveTransfer(
     if (
       debit.matchedCount !== 1 &&
       !(await wasDelivered(budgets, plan.budgetId, plan.sourceRevision!, 0, debitStamp))
-    )
-      return result("partial", "Original treasury transfer cannot currently debit its source");
+    ) {
+      if (plan.debtFloor !== undefined) {
+        // A known refusal must compete with cash delivery on the same source
+        // generation. Advancing it without a cash write makes rejection durable
+        // even if its acknowledgement is lost or another retry is suspended.
+        await budgets.updateOne(
+          {
+            _id: plan.budgetId,
+            settledKeys: { $ne: debitStamp },
+            ...revisionGuard(plan.sourceRevision!),
+            $expr: {
+              $lt: [
+                {
+                  $subtract: [
+                    { $ifNull: ["$revenue.total", 0] },
+                    { $ifNull: ["$spending.total", 0] },
+                  ],
+                },
+                plan.debtFloor,
+              ],
+            },
+          },
+          {
+            $inc: { treasuryReserveRevision: 1 },
+            $set: { treasuryReserveRejectedKey: key },
+          }
+        );
+        if (await budgets.findOne({ _id: plan.budgetId, treasuryReserveRejectedKey: key })) {
+          const error = "Transfer would breach the federal debt ceiling.";
+          await journal.updateOne(
+            { _id: key, "treasuryReserveTransfer.state": "admitted" },
+            {
+              $set: {
+                status: "rejected",
+                "treasuryReserveTransfer.state": "rejected",
+                "treasuryReserveTransfer.error": error,
+              },
+            }
+          );
+          return resumeTreasuryReserveTransfer(db, key);
+        }
+      }
+      if (!(await wasDelivered(budgets, plan.budgetId, plan.sourceRevision!, 0, debitStamp)))
+        return result("partial", "Original treasury transfer cannot currently debit its source");
+    }
     await journal.updateOne({ _id: key }, { $set: { "legs.0.applied": true } });
     receipt.legs[0].applied = true;
   }
