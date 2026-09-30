@@ -130,20 +130,25 @@ export async function logIndexFundSubscribe(
     }),
   });
 
-  if (source === "player") {
-    logIndexFundActivity(db, {
-      actionType: "index_fund_subscribe",
-      holder: params.holder,
-      fund: params.fund,
-      units: params.units,
-      navAnchor: params.navAnchor,
-      amountAnchor: params.amountAnchor,
-      turn,
-      fundsChange: -params.amountAnchor,
-      message: `Subscribed to ${params.units} units of ${params.fund.tickerSymbol} at NAV ${params.navAnchor.toLocaleString()}`,
-      details: { source },
-    });
-  }
+  if (source === "player") logIndexFundSubscribeActivity(db, { ...params, turn });
+}
+
+export function logIndexFundSubscribeActivity(
+  db: Db,
+  params: Parameters<typeof logIndexFundSubscribe>[1] & { turn: number }
+): void {
+  logIndexFundActivity(db, {
+    actionType: "index_fund_subscribe",
+    holder: params.holder,
+    fund: params.fund,
+    units: params.units,
+    navAnchor: params.navAnchor,
+    amountAnchor: params.amountAnchor,
+    turn: params.turn,
+    fundsChange: -params.amountAnchor,
+    message: `Subscribed to ${params.units} units of ${params.fund.tickerSymbol} at NAV ${params.navAnchor.toLocaleString()}`,
+    details: { source: "player" },
+  });
 }
 
 /** Record fund unit redemption proceeds credited to the holder (cash credit). */

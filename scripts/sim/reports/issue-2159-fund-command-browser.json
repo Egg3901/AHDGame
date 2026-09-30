@@ -1,0 +1,159 @@
+{
+  "sourceCommit": "ee73216172a14e83d335ef940e9a578ee43b1850",
+  "scope": "Synthetic fixture, real fund UI, authenticated routes, native Mongo, normal fund turn and read model. No world simulation.",
+  "checkpoints": [
+    {
+      "mode": "subscribe",
+      "before": {
+        "wallet": 9960,
+        "cashAnchor": 140,
+        "nav": 10,
+        "supply": 14,
+        "units": 14,
+        "transactions": 10
+      },
+      "committed": {
+        "wallet": 9950,
+        "cashAnchor": 150,
+        "nav": 10,
+        "supply": 15,
+        "units": 15,
+        "transactions": 11
+      },
+      "requests": [
+        {
+          "operationId": "91be9c8b-712b-47dd-8c98-60be727d8e50",
+          "units": 1,
+          "payCurrency": "USD"
+        },
+        {
+          "operationId": "91be9c8b-712b-47dd-8c98-60be727d8e50",
+          "units": 1,
+          "payCurrency": "USD"
+        }
+      ],
+      "lostSuccessfulResponse": true,
+      "readModelMatches": true
+    },
+    {
+      "mode": "redeem",
+      "before": {
+        "wallet": 9950,
+        "cashAnchor": 150,
+        "nav": 10,
+        "supply": 15,
+        "units": 15,
+        "transactions": 11
+      },
+      "committed": {
+        "wallet": 9960,
+        "cashAnchor": 140,
+        "nav": 10,
+        "supply": 14,
+        "units": 14,
+        "transactions": 12
+      },
+      "requests": [
+        {
+          "operationId": "da6d3529-e1c8-4433-b1d8-da33e1e458c8",
+          "units": 1
+        },
+        {
+          "operationId": "da6d3529-e1c8-4433-b1d8-da33e1e458c8",
+          "units": 1
+        }
+      ],
+      "lostSuccessfulResponse": true,
+      "readModelMatches": true
+    }
+  ],
+  "turn": {
+    "fundsProcessed": 1,
+    "navUpdates": 1,
+    "floatPurchases": 0,
+    "rebalances": 0,
+    "crossFundTransfers": 0,
+    "redemptionsPaid": 0,
+    "redemptionsQueued": 0,
+    "bondDeployments": 0,
+    "domesticCoverageFundsEnsured": 0,
+    "nppsProcessed": 0,
+    "nppInvested": 0,
+    "expenseFeesCharged": 0,
+    "expenseFeeAnchor": 0,
+    "windDownsAdvanced": 0,
+    "windDownsCompleted": 0,
+    "equityLiquidityQuotePairs": 0,
+    "equityLiquidityDepthAnchor": 0,
+    "deadHoldingsWrittenOff": 0,
+    "deadHoldingsWrittenOffAnchor": 0,
+    "unsellableHoldings": 0,
+    "errors": []
+  },
+  "afterTurn": {
+    "wallet": 9960,
+    "cashAnchor": 140,
+    "nav": 10,
+    "supply": 14,
+    "units": 14,
+    "transactions": 12
+  },
+  "knownLimit": "An unknown interrupted standalone settlement remains pending for reconciliation; it is never blindly repeated.",
+  "serverSourceCommit": "2d4574de2487b06d8ea57a85ec9ba82dc5c0d262",
+  "runtimeProvenance": "Server started at 2d4574de24; later ee73216172 changes only the browser harness. Gameplay runtime is unchanged from native proof 47af9ac922.",
+  "accounting": {
+    "scope": "Read-only verification of the two actual browser command receipts",
+    "rows": [
+      {
+        "operationId": "91be9c8b-712b-47dd-8c98-60be727d8e50",
+        "state": "completed",
+        "auditComplete": true,
+        "rows": [
+          {
+            "collection": "financialTxLog",
+            "id": "6abd1dd56a4d90a750169fea"
+          },
+          {
+            "collection": "ledgerEntries",
+            "id": "26cdf5a4153aee2b8d0a8b84",
+            "balanced": true
+          },
+          {
+            "collection": "ledgerEntries",
+            "id": "566f4b68431dd3e52a8dd2ed",
+            "balanced": true
+          },
+          {
+            "collection": "actionAuditLog",
+            "id": "8826fd62eaa38eab7f43d0b7"
+          }
+        ]
+      },
+      {
+        "operationId": "da6d3529-e1c8-4433-b1d8-da33e1e458c8",
+        "state": "completed",
+        "auditComplete": true,
+        "rows": [
+          {
+            "collection": "financialTxLog",
+            "id": "6abd1ddc6a4d90a750169ff2"
+          },
+          {
+            "collection": "ledgerEntries",
+            "id": "3b9d11b95794d5e837cc3b51",
+            "balanced": true
+          },
+          {
+            "collection": "ledgerEntries",
+            "id": "fcec0a3a0ef9b40c3a01aaef",
+            "balanced": true
+          },
+          {
+            "collection": "actionAuditLog",
+            "id": "5df1e9845bfaf3e2e1d8a224"
+          }
+        ]
+      }
+    ]
+  }
+}
