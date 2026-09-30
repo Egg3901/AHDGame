@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "2bede343811f7fe7ebcf1ecda9ac8a764eb8f0ea",
+  "sourceCommit": "5f89f1bc10ef3187675b6d44181bd332ccf60f25",
   "baseline": "dde248f1cb2b1ab8aba882b3af2c6428dc490a89",
   "scope": "Synthetic native Mongo command/service qualification, not a full-world run or historical consent",
   "results": [
@@ -135,13 +135,13 @@
       "performance": {
         "baseline": {
           "roundTrips": 17,
-          "requestBytes": 4898,
-          "responseBytes": 2146
+          "requestBytes": 4881,
+          "responseBytes": 2134
         },
         "fixed": {
-          "roundTrips": 35,
-          "requestBytes": 16177,
-          "responseBytes": 18635
+          "roundTrips": 49,
+          "requestBytes": 21228,
+          "responseBytes": 20331
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -288,13 +288,13 @@
       "performance": {
         "baseline": {
           "roundTrips": 16,
-          "requestBytes": 4072,
-          "responseBytes": 1973
+          "requestBytes": 4056,
+          "responseBytes": 1962
         },
         "fixed": {
-          "roundTrips": 35,
-          "requestBytes": 15959,
-          "responseBytes": 18514
+          "roundTrips": 49,
+          "requestBytes": 20954,
+          "responseBytes": 20186
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -431,14 +431,14 @@
       },
       "performance": {
         "baseline": {
-          "roundTrips": 15,
-          "requestBytes": 4067,
-          "responseBytes": 1938
+          "roundTrips": 17,
+          "requestBytes": 5051,
+          "responseBytes": 2230
         },
         "fixed": {
-          "roundTrips": 35,
-          "requestBytes": 17273,
-          "responseBytes": 19967
+          "roundTrips": 49,
+          "requestBytes": 22436,
+          "responseBytes": 21711
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -580,13 +580,13 @@
       "performance": {
         "baseline": {
           "roundTrips": 13,
-          "requestBytes": 3293,
-          "responseBytes": 1813
+          "requestBytes": 3280,
+          "responseBytes": 1803
         },
         "fixed": {
-          "roundTrips": 35,
-          "requestBytes": 13745,
-          "responseBytes": 14485
+          "roundTrips": 42,
+          "requestBytes": 16280,
+          "responseBytes": 15372
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -728,13 +728,13 @@
       "performance": {
         "baseline": {
           "roundTrips": 13,
-          "requestBytes": 3407,
-          "responseBytes": 1913
+          "requestBytes": 3394,
+          "responseBytes": 1903
         },
         "fixed": {
-          "roundTrips": 35,
-          "requestBytes": 14133,
-          "responseBytes": 14811
+          "roundTrips": 42,
+          "requestBytes": 16738,
+          "responseBytes": 15728
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -887,13 +887,13 @@
       "performance": {
         "baseline": {
           "roundTrips": 33,
-          "requestBytes": 12682,
-          "responseBytes": 3247
+          "requestBytes": 12649,
+          "responseBytes": 3233
         },
         "fixed": {
-          "roundTrips": 52,
-          "requestBytes": 25024,
-          "responseBytes": 19983
+          "roundTrips": 66,
+          "requestBytes": 30072,
+          "responseBytes": 22164
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -1048,13 +1048,13 @@
       "performance": {
         "baseline": {
           "roundTrips": 24,
-          "requestBytes": 8718,
-          "responseBytes": 3167
+          "requestBytes": 8694,
+          "responseBytes": 3152
         },
         "fixed": {
-          "roundTrips": 43,
-          "requestBytes": 18792,
-          "responseBytes": 15896
+          "roundTrips": 50,
+          "requestBytes": 21389,
+          "responseBytes": 16809
         }
       },
       "sameTurnRetryUnchanged": true,
@@ -1103,7 +1103,8 @@
         ],
         "accounts": []
       },
-      "concurrentRecoveryOnce": true
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": false
     },
     {
       "case": "lost_centralBanks_ack",
@@ -1148,7 +1149,8 @@
         ],
         "accounts": []
       },
-      "concurrentRecoveryOnce": true
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": false
     },
     {
       "case": "lost_locLedger_ack",
@@ -1193,7 +1195,146 @@
         ],
         "accounts": []
       },
-      "concurrentRecoveryOnce": true
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": false
+    },
+    {
+      "case": "lost_characters_ack_receipt_eviction",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": true
+    },
+    {
+      "case": "lost_centralBanks_ack_receipt_eviction",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": true
+    },
+    {
+      "case": "lost_locLedger_ack_receipt_eviction",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": true
     },
     {
       "case": "garnished_residual_fx",
