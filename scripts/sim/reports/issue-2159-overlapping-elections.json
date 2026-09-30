@@ -1,0 +1,474 @@
+{
+  "sourceCommit": "ccb731078c16e7e086614c32999f1558a379f24b",
+  "development": false,
+  "preset": "1991-default",
+  "syntheticActorsAndVotes": true,
+  "randomSeed": 2159,
+  "schemaVersion": 1,
+  "results": [
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "npp_only",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 4,
+      "filed": 2,
+      "generatedNpps": 2,
+      "outcomes": [
+        {
+          "chamber": "house",
+          "candidates": 4,
+          "players": 0,
+          "npps": 4,
+          "seats": 5,
+          "resolved": true
+        },
+        {
+          "chamber": "senate",
+          "candidates": 2,
+          "players": 0,
+          "npps": 2,
+          "seats": 1,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "npp_only",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 4,
+      "filed": 2,
+      "generatedNpps": 2,
+      "outcomes": [
+        {
+          "chamber": "senate",
+          "candidates": 4,
+          "players": 0,
+          "npps": 4,
+          "seats": 1,
+          "resolved": true
+        },
+        {
+          "chamber": "house",
+          "candidates": 2,
+          "players": 0,
+          "npps": 2,
+          "seats": 5,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "player_vs_npp",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 4,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "house",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 5,
+          "resolved": true
+        },
+        {
+          "chamber": "senate",
+          "candidates": 2,
+          "players": 1,
+          "npps": 1,
+          "seats": 1,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "player_vs_npp",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 4,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "senate",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 1,
+          "resolved": true
+        },
+        {
+          "chamber": "house",
+          "candidates": 2,
+          "players": 1,
+          "npps": 1,
+          "seats": 5,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "opposing_players",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 4,
+      "filed": 0,
+      "generatedNpps": 0,
+      "outcomes": [
+        {
+          "chamber": "house",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 5,
+          "resolved": true
+        },
+        {
+          "chamber": "senate",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 1,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "opposing_players",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 4,
+      "filed": 0,
+      "generatedNpps": 0,
+      "outcomes": [
+        {
+          "chamber": "senate",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 1,
+          "resolved": true
+        },
+        {
+          "chamber": "house",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 5,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "mixed_same_party",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 5,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "house",
+          "candidates": 5,
+          "players": 1,
+          "npps": 4,
+          "seats": 5,
+          "resolved": true
+        },
+        {
+          "chamber": "senate",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 1,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "US",
+      "state": "OR",
+      "field": "mixed_same_party",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 5,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "senate",
+          "candidates": 5,
+          "players": 1,
+          "npps": 4,
+          "seats": 1,
+          "resolved": true
+        },
+        {
+          "chamber": "house",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 5,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "npp_only",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 4,
+      "filed": 2,
+      "generatedNpps": 2,
+      "outcomes": [
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 4,
+          "players": 0,
+          "npps": 4,
+          "seats": 6,
+          "resolved": true
+        },
+        {
+          "chamber": "senato",
+          "candidates": 2,
+          "players": 0,
+          "npps": 2,
+          "seats": 3,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "npp_only",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 4,
+      "filed": 2,
+      "generatedNpps": 2,
+      "outcomes": [
+        {
+          "chamber": "senato",
+          "candidates": 4,
+          "players": 0,
+          "npps": 4,
+          "seats": 3,
+          "resolved": true
+        },
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 2,
+          "players": 0,
+          "npps": 2,
+          "seats": 6,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "player_vs_npp",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 4,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 6,
+          "resolved": true
+        },
+        {
+          "chamber": "senato",
+          "candidates": 2,
+          "players": 1,
+          "npps": 1,
+          "seats": 3,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "player_vs_npp",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 4,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "senato",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 3,
+          "resolved": true
+        },
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 2,
+          "players": 1,
+          "npps": 1,
+          "seats": 6,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "opposing_players",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 4,
+      "filed": 0,
+      "generatedNpps": 0,
+      "outcomes": [
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 6,
+          "resolved": true
+        },
+        {
+          "chamber": "senato",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 3,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "opposing_players",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 4,
+      "filed": 0,
+      "generatedNpps": 0,
+      "outcomes": [
+        {
+          "chamber": "senato",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 3,
+          "resolved": true
+        },
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 2,
+          "players": 2,
+          "npps": 0,
+          "seats": 6,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "mixed_same_party",
+      "lowerFirst": true,
+      "initiallyBusyNpps": 5,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 5,
+          "players": 1,
+          "npps": 4,
+          "seats": 6,
+          "resolved": true
+        },
+        {
+          "chamber": "senato",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 3,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    },
+    {
+      "country": "TR",
+      "state": "TR_IST",
+      "field": "mixed_same_party",
+      "lowerFirst": false,
+      "initiallyBusyNpps": 5,
+      "filed": 1,
+      "generatedNpps": 1,
+      "outcomes": [
+        {
+          "chamber": "senato",
+          "candidates": 5,
+          "players": 1,
+          "npps": 4,
+          "seats": 3,
+          "resolved": true
+        },
+        {
+          "chamber": "milletMeclisi",
+          "candidates": 3,
+          "players": 1,
+          "npps": 2,
+          "seats": 6,
+          "resolved": true
+        }
+      ],
+      "overlappingFieldsValid": true,
+      "duplicateEntryRejected": true
+    }
+  ]
+}
