@@ -11,6 +11,8 @@ import { chromium, type Page } from "playwright";
 import { runBankingActions } from "./bankingJourneyActions";
 import { runGovernanceJourney } from "./bankingJourneyGovernance";
 import { runRecoveryJourney } from "./bankingJourneyRecovery";
+import { runCharterJourney } from "./bankingJourneyCharter";
+import { loadRetainedContext } from "./bankingParameterSetup";
 import { USER, IE_USER, prepareJourney, journeySnapshot } from "./bankingJourneyFixture";
 
 const arg = (key: string) =>
@@ -35,8 +37,34 @@ async function main() {
   const client = await MongoClient.connect(uri);
   global._mongoClientPromise = Promise.resolve(client);
   const db = client.db(target);
-  assert.equal((await db.listCollections().toArray()).length, 0, "Target must be new");
-  const fixture = await prepareJourney(db, client.db(sourceName));
+  const resumeUntouchedFixture = arg("resume-untouched-fixture") === "true";
+  let fixture;
+  if (resumeUntouchedFixture) {
+    // Reuse a previously prepared but never exercised local browser fixture.
+    assert.equal(
+      (await db.collection("users").findOne({ _id: USER }))?.email,
+      "banking-player@example.invalid"
+    );
+    const existing = await journeySnapshot(db);
+    assert.equal(
+      existing.savings.reduce((sum, account) => sum + account.balance, 0),
+      0
+    );
+    assert.equal(existing.loans.length, 0);
+    assert.equal(existing.bank.liability, 0);
+    assert.equal(existing.bank.status, "active");
+    assert(
+      existing.journals.every((move) =>
+        ["banking_parameter_fixture_transfer", "bank_capital_injection"].includes(move.kind)
+      ),
+      "Existing fixture must have no gameplay commands"
+    );
+    const retained = await loadRetainedContext(client.db(sourceName));
+    fixture = { setup: { turn: existing.turn as number }, retainedHash: retained.hash };
+  } else {
+    assert.equal((await db.listCollections().toArray()).length, 0, "Target must be new");
+    fixture = await prepareJourney(db, client.db(sourceName));
+  }
   const port = 39128,
     base = `http://127.0.0.1:${port}`;
   const secret = randomBytes(32).toString("hex");
@@ -101,9 +129,22 @@ async function main() {
       viewport: { width: 1440, height: 1000 },
       extraHTTPHeaders: { "X-Synthetic-Run": "issue1328-banking-journey" },
     });
+    const excludedAuxiliaryPaths = [
+      "/api/players/online",
+      "/api/poll-banner",
+      "/api/global-alerts/active",
+      "/api/client-nav",
+      "/api/flags/country/",
+    ];
     await context.route("**/*", async (route) => {
       const url = new URL(route.request().url());
-      if (url.origin === base || ["data:", "blob:"].includes(url.protocol)) await route.continue();
+      if (
+        url.origin === base &&
+        excludedAuxiliaryPaths.some((path) => url.pathname.startsWith(path))
+      )
+        await route.abort();
+      else if (url.origin === base || ["data:", "blob:"].includes(url.protocol))
+        await route.continue();
       else await route.abort();
     });
     const tokenFor = async (irish = false) =>
@@ -142,7 +183,9 @@ async function main() {
       .waitFor({ timeout: 300_000 });
     const rejectCookies = page.getByRole("button", { name: "Reject", exact: true });
     if (await rejectCookies.isVisible()) await rejectCookies.click();
-    await page.screenshot({ path: `${out}.png`, fullPage: true });
+    await page
+      .screenshot({ path: `${out}.png`, fullPage: true, timeout: 5000 })
+      .catch(() => console.log("Optional banking screenshot unavailable"));
     const baseline = await journeySnapshot(db);
     const actions = await runBankingActions(page, db, base, fixture.setup.turn);
     const recovery = await runRecoveryJourney(page, db, base, arg("development") === "true");
@@ -157,6 +200,21 @@ async function main() {
         },
       ]);
     });
+    await context.addCookies([
+      {
+        name: "auth-token-local",
+        value: await tokenFor(),
+        url: base,
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    const charter = await runCharterJourney(page, db, base);
+    assert.equal(
+      (await loadRetainedContext(client.db(sourceName))).hash,
+      fixture.retainedHash,
+      "Retained source was changed"
+    );
     writeFileSync(
       out,
       JSON.stringify(
@@ -167,6 +225,9 @@ async function main() {
           actions,
           governance,
           recovery,
+          charter,
+          resumeUntouchedFixture,
+          excludedAuxiliaryPaths,
           baseline,
           requests,
           errors,
@@ -179,7 +240,9 @@ async function main() {
     console.log("banking page rendered");
   } catch (error) {
     if (page) {
-      await page.screenshot({ path: `${out}.failed.png`, fullPage: true }).catch(() => {});
+      await page
+        .screenshot({ path: `${out}.failed.png`, fullPage: true, timeout: 5000 })
+        .catch(() => {});
       writeFileSync(
         `${out}.failed.txt`,
         await page

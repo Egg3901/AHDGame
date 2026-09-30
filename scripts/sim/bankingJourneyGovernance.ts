@@ -42,10 +42,13 @@ export async function runGovernanceJourney(
     "Actual player ballot must be recorded against its seat"
   );
   console.log("completed US committee UI ballot");
-  await page.screenshot({
-    path: `${process.env.JOURNEY_SCREENSHOT_PREFIX}-committee.png`,
-    fullPage: true,
-  });
+  await page
+    .screenshot({
+      path: `${process.env.JOURNEY_SCREENSHOT_PREFIX}-committee.png`,
+      fullPage: true,
+      timeout: 5000,
+    })
+    .catch(() => console.log("Optional committee screenshot unavailable"));
   await switchToIrishChair();
   const beforeIe = await db.collection("centralBanks").findOne({ _id: "IE" as never });
   assert(beforeIe);
@@ -68,10 +71,13 @@ export async function runGovernanceJourney(
   assert.equal(afterIe.primeRate, Math.round(beforeIe.primeRate * 4) / 4 + 0.25);
   await page.getByText(/On cooldown/).waitFor();
   assert(await page.getByRole("button", { name: "+", exact: true }).isDisabled());
-  await page.screenshot({
-    path: `${process.env.JOURNEY_SCREENSHOT_PREFIX}-irish-rate.png`,
-    fullPage: true,
-  });
+  await page
+    .screenshot({
+      path: `${process.env.JOURNEY_SCREENSHOT_PREFIX}-irish-rate.png`,
+      fullPage: true,
+      timeout: 5000,
+    })
+    .catch(() => console.log("Optional Irish screenshot unavailable"));
   console.log("completed Irish chair UI rate and cooldown");
   return {
     us: { beforeRate: beforeUs.primeRate, afterRate: afterUs.primeRate, meeting },
