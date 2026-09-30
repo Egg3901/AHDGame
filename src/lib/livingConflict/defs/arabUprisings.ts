@@ -46,8 +46,9 @@ function responseOpt(...args: Parameters<typeof baseResponseOpt>): CrisisDecisio
 }
 
 // Primary anchors: UNSC 1970 (Libya), https://docs.un.org/S/RES/1970(2011),
-// UNSC 2254 (Syria), https://docs.un.org/S/RES/2254(2015), and UNHCR Syria data,
-// https://data.unhcr.org/en/situations/syria. They bound pressures, not outcomes.
+// UNSC 2254 (18 December 2015), https://press.un.org/en/2015/sc12171.doc.htm,
+// and the 30 August 2012 humanitarian briefing, https://press.un.org/en/2012/sc10752.doc.htm.
+// Game thresholds are calibrated mechanics, not numbers prescribed by the UN.
 function role(ctx: RoleContext): ConflictRole {
   if (ctx.belligerents.includes(ctx.countryId)) return "belligerent";
   if (ctx.countryId === ctx.backerA) return "backer_a";
@@ -350,10 +351,10 @@ const outcomes: GlobalResponseOutcome[] = [
     description: "Inconsistent outside policies deepen uncertainty and regional diffusion.",
     priority: 0,
     conditions: [],
-    intensityDelta: 5,
+    intensityDelta: 0,
     trackDeltas: { protestMobilization: 5, civilianStrain: 4, displacement: 3, extremistSpace: 3 },
     campaignDelta: {},
-    tensionDelta: 3,
+    tensionDelta: 0,
     wireMessage: "A divided international response leaves the regional uprising wave unresolved.",
   },
 ];

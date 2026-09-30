@@ -1,5 +1,5 @@
 import type { LivingConflictState } from "../types";
-import { ARAB_UPRISINGS_KEY } from "./arabOrigins";
+import { ARAB_UPRISINGS_KEY, boundedArab, type ArabRegionalState } from "./arabOrigins";
 
 /** The visible regional phase summarizes independent origins; it never writes
  * a winning regional narrative back over their individual political outcomes. */
@@ -83,4 +83,35 @@ export function projectArabRegion(state: LivingConflictState): LivingConflictSta
         }
       : {}),
   };
+}
+
+/** The legacy definition represented Syria alone. Preserve that already-open
+ * conflict's consequences while new regional origins keep their own signals. */
+export function migrateLegacyArabOrigin(
+  state: LivingConflictState,
+  regional: ArabRegionalState
+): ArabRegionalState {
+  if (state.arabRegional || state.phaseLevel < 2 || !regional.origins.SY) return regional;
+  const origin = { ...regional.origins.SY };
+  const fields = {
+    legitimacy: "legitimacy",
+    mobilization: "protestMobilization",
+    repression: "repression",
+    cohesion: "eliteCohesion",
+    opposition: "armedOpposition",
+    civilianStrain: "civilianStrain",
+    displacement: "displacement",
+    infrastructureDamage: "infrastructureDamage",
+    settlement: "settlementMomentum",
+    reconstruction: "reconstruction",
+    extremistSpace: "extremistSpace",
+  } as const;
+  for (const [key, track] of Object.entries(fields)) {
+    const value = state.tracks?.[track];
+    if (typeof value === "number" && Number.isFinite(value))
+      origin[key as keyof typeof fields] = boundedArab(value);
+  }
+  if (state.phaseLevel === 5 || state.phaseLevel === 6) origin.trajectory = "civil_war";
+  else if (state.phaseLevel === 7 && origin.displacement > 0) origin.trajectory = "frozen";
+  return { ...regional, origins: { ...regional.origins, SY: origin } };
 }

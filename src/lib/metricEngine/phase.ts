@@ -241,8 +241,19 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     ? await db
         .collection<LivingConflictState>("livingConflicts")
         .find(
-          { defKey: { $in: ["yugoslav_dissolution", "russia_ukraine_security"] } },
-          { projection: { defKey: 1, hasOpened: 1, status: 1, tracks: 1, representedActors: 1 } }
+          {
+            defKey: { $in: ["yugoslav_dissolution", "russia_ukraine_security", "arab_uprisings"] },
+          },
+          {
+            projection: {
+              defKey: 1,
+              hasOpened: 1,
+              status: 1,
+              tracks: 1,
+              representedActors: 1,
+              arabRegional: 1,
+            },
+          }
         )
         .toArray()
     : [];

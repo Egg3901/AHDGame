@@ -92,7 +92,7 @@ export function classifyArabOrigin(origin: ArabOriginState): ArabTrajectory {
     origin.repression <= 40
   )
     return "reform";
-  if (origin.repression >= 65 && origin.cohesion >= 45 && origin.opposition < 30)
+  if (origin.repression >= 60 && origin.cohesion >= 45 && origin.opposition < 30)
     return "authoritarian";
   return origin.mobilization >= 40 ? "protest" : "pressure";
 }

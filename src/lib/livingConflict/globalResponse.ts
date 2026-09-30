@@ -546,7 +546,7 @@ async function applyOutcomeTrajectory(
       { minimumValue }
     );
   }
-  return campaignResult;
+  return { ...campaignResult, nextStage: state.campaign?.stage ?? campaignResult.nextStage };
 }
 
 /**

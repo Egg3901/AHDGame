@@ -8,7 +8,7 @@ import {
   boundedArab,
   type ArabOriginSignal,
 } from "./rules/arabOrigins";
-import { projectArabRegion } from "./rules/arabProjection";
+import { projectArabRegion, migrateLegacyArabOrigin } from "./rules/arabProjection";
 
 /** Four bounded, projected batch reads, only at initialization or quarterly
  * pressure ticks. Background stability is explicitly an estimate of legitimacy;
@@ -34,6 +34,7 @@ export async function advanceArabRegionalTurn(
             population: 1,
             stability: 1,
             "contribution.byCommodity.food": 1,
+            "sectors.agriculture": 1,
           },
         }
       )
@@ -85,11 +86,17 @@ export async function advanceArabRegionalTurn(
       .map((row) => row.economic?.unemploymentRate?.value)
       .filter((value): value is number => Number.isFinite(value));
     const food = macro?.contribution?.byCommodity?.food;
+    const agriculture = macro?.sectors?.agriculture;
     signals.push({
       countryId,
       population: populations[countryId],
       legitimacy: approval?.approvalRating ?? (macro?.stability ?? 0.5) * 100,
-      foodStress: food && food.supply > 0 ? food.demand / food.supply : 1,
+      foodStress:
+        food && food.supply > 0
+          ? food.demand / food.supply
+          : agriculture && agriculture.capacity * agriculture.productivity > 0
+            ? agriculture.domesticDemand / (agriculture.capacity * agriculture.productivity)
+            : 1,
       ...(unemployment.length
         ? {
             unemployment: unemployment.reduce((sum, value) => sum + value, 0) / unemployment.length,
@@ -100,7 +107,10 @@ export async function advanceArabRegionalTurn(
   }
   return projectArabRegion({
     ...state,
-    arabRegional: advanceArabRegion(state.arabRegional, signals, populations, turn),
+    arabRegional: migrateLegacyArabOrigin(
+      state,
+      advanceArabRegion(state.arabRegional, signals, populations, turn)
+    ),
   });
 }
 

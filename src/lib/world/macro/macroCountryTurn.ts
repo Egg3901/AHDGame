@@ -1,3 +1,4 @@
+import { arabTradeMultiplier } from "@/lib/livingConflict/rules/arabRegional";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
 import {
   crisisEconomicExposure,
@@ -47,8 +48,21 @@ export async function processMacroCountryTurn(
       ? await db
           .collection<LivingConflictState>("livingConflicts")
           .find(
-            { defKey: { $in: ["yugoslav_dissolution", "russia_ukraine_security"] } },
-            { projection: { defKey: 1, hasOpened: 1, status: 1, tracks: 1, representedActors: 1 } }
+            {
+              defKey: {
+                $in: ["yugoslav_dissolution", "russia_ukraine_security", "arab_uprisings"],
+              },
+            },
+            {
+              projection: {
+                defKey: 1,
+                hasOpened: 1,
+                status: 1,
+                tracks: 1,
+                representedActors: 1,
+                arabRegional: 1,
+              },
+            }
           )
           .toArray()
       : [];
@@ -76,7 +90,16 @@ export async function processMacroCountryTurn(
             update: {
               $set: {
                 contribution: computeMacroContribution(
-                  { ...country, shockModifier: baseShock * crisisMacroOutputMultiplier(exposure) },
+                  {
+                    ...country,
+                    shockModifier:
+                      baseShock *
+                      crisisMacroOutputMultiplier(exposure) *
+                      arabTradeMultiplier(
+                        crisis?.find((state) => state.defKey === "arab_uprisings"),
+                        country.entityId
+                      ),
+                  },
                   turn
                 ),
                 ...(persistExposure ? { livingConflictExposure: exposure } : {}),

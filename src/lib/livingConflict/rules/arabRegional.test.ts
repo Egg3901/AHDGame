@@ -6,6 +6,8 @@ import {
   advanceArabRegion,
   allocateArabRefugees,
   arabEconomicTarget,
+  arabTradeMultiplier,
+  arabExtremistSpillover,
   resolveArabRegion,
 } from "./arabRegional";
 import {
@@ -14,7 +16,7 @@ import {
   pressureOnArabOrigin,
   type ArabOriginSignal,
 } from "./arabOrigins";
-import { projectArabRegion } from "./arabProjection";
+import { projectArabRegion, migrateLegacyArabOrigin } from "./arabProjection";
 import { assessCampaignRequirement } from "../campaign";
 
 const signal = (countryId = "SY", legitimacy = 35): ArabOriginSignal => ({
@@ -173,6 +175,38 @@ describe("independent Arab regional trajectories", () => {
     expect(first.npcPolicyReceipt?.turn).toBe(24);
     expect(applyArabNpcPolicy(first, background, 24)).toBe(first);
     expect(applyArabNpcPolicy(base, signal(), 24)).toBe(base);
+  });
+  it("preserves a legacy Syrian war without spreading its damage to new origins", () => {
+    const initial = region();
+    const legacy = {
+      ...emptyConflictState("arab_uprisings"),
+      hasOpened: true,
+      phaseLevel: 5,
+      tracks: { displacement: 50, armedOpposition: 65 },
+    };
+    const migrated = migrateLegacyArabOrigin(legacy, initial);
+    expect(migrated.origins.SY?.displacement).toBe(50);
+    expect(migrated.origins.SY?.trajectory).toBe("civil_war");
+    expect(migrated.origins.TN?.displacement).toBe(0);
+    expect(migrateLegacyArabOrigin({ ...legacy, arabRegional: migrated }, migrated)).toBe(migrated);
+  });
+  it("keeps sanctions and extremist spillover bounded and origin-specific", () => {
+    const regional = region();
+    regional.origins.SY = {
+      ...regional.origins.SY!,
+      sanctions: 100,
+      opposition: 100,
+      extremistSpace: 100,
+    };
+    const conflict = {
+      ...emptyConflictState("arab_uprisings"),
+      hasOpened: true,
+      arabRegional: regional,
+    };
+    expect(arabTradeMultiplier(conflict, "SY")).toBe(0.95);
+    expect(arabTradeMultiplier(conflict, "TN")).toBe(1);
+    expect(arabExtremistSpillover(conflict)).toBe(20);
+    expect(arabExtremistSpillover({ ...conflict, status: "closed" })).toBe(0);
   });
   it("retry neither repeats quarterly pressure nor duplicates refugee allocations", () => {
     const state = region();

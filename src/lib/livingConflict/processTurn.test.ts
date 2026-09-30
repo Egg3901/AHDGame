@@ -248,6 +248,7 @@ describe("living-conflict turn integration", () => {
           population: 1,
           stability: 1,
           "contribution.byCommodity.food": 1,
+          "sectors.agriculture": 1,
         },
       },
     ]);
