@@ -1,6 +1,6 @@
 /** LOC target cash stays protected until its durable journal outcome is acknowledged. */
 import { isDeepStrictEqual } from "node:util";
-import type { Db, Document } from "mongodb";
+import type { Db, Document, ObjectId } from "mongodb";
 import { MONEY_MOVE_COLLECTION, SETTLED_KEYS_CAP } from "@/lib/banking/moneyMove";
 
 interface TargetSpec {
@@ -14,6 +14,14 @@ interface TargetSpec {
   set: Document;
   receipt: string;
 }
+interface TargetDocument {
+  _id: ObjectId | string;
+  settledKeys?: string[];
+  locSettlementRevision?: number;
+  locReserveCreditRevision?: number;
+  pendingLocSettlement?: Document;
+  pendingLocReserveCredit?: Document;
+}
 interface Outcome {
   status: "delivered" | "rejected";
   error?: string;
@@ -26,7 +34,7 @@ interface Outcome {
  */
 export async function publishLocTarget(db: Db, key: string, spec: TargetSpec): Promise<Outcome> {
   const journal = db.collection<Document>(MONEY_MOVE_COLLECTION);
-  const target = db.collection<Document & { settledKeys?: string[] }>(spec.collection);
+  const target = db.collection<TargetDocument>(spec.collection);
   const journalId = { _id: key as never };
   const targetId = { _id: spec.id as never };
   const outcomePath = `locTargetOutcomes.${spec.token}`;
