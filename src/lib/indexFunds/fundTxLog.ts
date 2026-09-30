@@ -250,8 +250,11 @@ export function buildIndexFundDividendTxEntry(params: {
   units: number;
   /** Fund-currency value actually credited; defaults to the ₳ value. */
   amountNative?: number;
-  corporationId: ObjectId;
+  /** Paying corporation. Omitted for a row that sums several corporations. */
+  corporationId?: ObjectId;
   corporationName?: string;
+  /** Number of paying corporations summed into this row (NPP holder rows, #2693). */
+  corporationCount?: number;
   turn: number;
   createdAt?: Date;
 }): Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged"> {
@@ -278,8 +281,9 @@ export function buildIndexFundDividendTxEntry(params: {
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {
       units: params.units,
-      corporationId: params.corporationId.toString(),
+      ...(params.corporationId ? { corporationId: params.corporationId.toString() } : {}),
       ...(params.corporationName ? { corporationName: params.corporationName } : {}),
+      ...(params.corporationCount != null ? { corporationCount: params.corporationCount } : {}),
       ...(params.holder.holderKind === "imperial_character" ? { imperial: true } : {}),
     }),
   };
