@@ -60,7 +60,10 @@ export async function processFederationNpcMandates(
       )
       .toArray(),
     getGovernmentFormationsCollection(db)
-      .find({ _id: { $in: eligible } }, { projection: { _id: 1, pmCharacterId: 1, status: 1 } })
+      .find(
+        { _id: { $in: eligible } },
+        { projection: { _id: 1, pmCharacterId: 1, pmNppId: 1, status: 1 } }
+      )
       .toArray(),
   ]);
   const occupied = new Set([
@@ -77,8 +80,8 @@ export async function processFederationNpcMandates(
     );
     const government = governments.find((formation) => formation._id === source);
     if (
-      government?.pmCharacterId ||
-      government?.status === "pending" ||
+      (government &&
+        (government.status !== "formed" || government.pmCharacterId || !government.pmNppId)) ||
       federalOfficials.some((official) => official.characterId) ||
       !federalOfficials.some((official) => official.officeType === lowerOffice && official.nppId)
     )

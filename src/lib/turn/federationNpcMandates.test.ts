@@ -55,6 +55,33 @@ describe("autonomous federation mandates", () => {
     expect(await mem.collection("bills").countDocuments({})).toBe(0);
   });
 
+  it("waits for an NPP government if a formation record is pending", async () => {
+    const mem = createInMemoryDb();
+    const nppId = new ObjectId();
+    mem.seed("gameState", [
+      { _id: "current", preset: "1991-default", currentYear: 1992, currentTurn: 96 },
+    ]);
+    mem.seed("states", csRegions1991 as unknown as Record<string, unknown>[]);
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        countryId: "CS",
+        officeType: getLowerChamberOfficeType("CS", "1991-default"),
+        nppId,
+        characterId: null,
+      },
+    ]);
+    mem.seed("governmentFormations", [
+      { _id: "CS", status: "pending", pmCharacterId: null, pmNppId: null },
+    ]);
+    const db = mem as unknown as Db;
+    expect(await processFederationNpcMandates(db, "1991-default", 1992, new Date(0))).toBe(0);
+    await mem
+      .collection("governmentFormations")
+      .updateOne({ _id: "CS" }, { $set: { status: "formed", pmNppId: nppId } });
+    expect(await processFederationNpcMandates(db, "1991-default", 1992, new Date(0))).toBe(1);
+  });
+
   it("publishes explicit shared-asset custody in the NPC opening position", () => {
     expect(
       defaultNpcCustodians(
