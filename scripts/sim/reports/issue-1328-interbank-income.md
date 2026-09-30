@@ -6,7 +6,7 @@ Refs #1328, #2159. This completes the interbank income-projection adoption lane.
 
 - Baseline: `78e5600d5e2c201054166fc04eb53de6c29e37b2`, including the facility journal prerequisite from #2637.
 - Treatment: `92be3347279d23a1b6e4e5d49c30799ca5b13e57`.
-- Both checkouts were clean during execution. The companion JSON records the private fixture runner's hash. Later evidence-only changes do not alter this runtime.
+- Both checkouts were clean during execution. The companion JSON records the private fixture runner's hash. Later evidence and fixture-typing changes do not alter this game runtime. The inherited nullable cooldown read type also leaves its original query unchanged.
 
 ## Scope and results
 

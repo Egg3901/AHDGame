@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { BankCharter } from "@/lib/db/types/bank";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { processBankingTurn } from "../bankingTurn";
@@ -67,14 +68,16 @@ describe("interbank realized income follows journal cash", () => {
       fault.disarm();
       await processBankingTurn(memory as unknown as Db, turn);
       await processBankingTurn(memory as unknown as Db, turn);
-      const [b, l] = memory.collection("corporations").docs;
+      const [b, l] = memory
+        .collection("corporations")
+        .docs.map((row) => row.bankCharter as BankCharter);
       const paid = Math.min(100, cash);
-      expect(b.bankCharter.cashReserves).toBe(cash - paid);
-      expect(l.bankCharter.cashReserves).toBe(paid);
-      expect(b.bankCharter.lastBankingIncome).toBe(-paid);
-      expect(l.bankCharter.lastBankingIncome).toBe(paid);
-      expect(b.bankCharter.lastBankingInterbankInterestPaid).toBe(paid);
-      expect(l.bankCharter.lastBankingInterbankInterestReceived).toBe(paid);
+      expect(b.cashReserves).toBe(cash - paid);
+      expect(l.cashReserves).toBe(paid);
+      expect(b.lastBankingIncome).toBe(-paid);
+      expect(l.lastBankingIncome).toBe(paid);
+      expect(b.lastBankingInterbankInterestPaid).toBe(paid);
+      expect(l.lastBankingInterbankInterestReceived).toBe(paid);
       expect(memory.collection("interbankLoans").docs[0].lastProcessedTurn).toBe(turn);
       expect(
         memory.collection("bankMoneyMoves").docs.every((row) => row.status === "applied")
