@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
-import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
+import { yuRegions1991 } from "@/lib/countries/yu/data/yuRegions1991";
+import {
+  getLowerChamberOfficeType,
+  getUpperChamberOfficeType,
+} from "@/lib/legislature/chamberOfficeType";
 import { defaultNpcCustodians } from "@/lib/world/succession/defaultProposal";
 import { processFederationNpcMandates } from "./federationNpcMandates";
 
@@ -80,6 +84,33 @@ describe("autonomous federation mandates", () => {
       .collection("governmentFormations")
       .updateOne({ _id: "CS" }, { $set: { status: "formed", pmNppId: nppId } });
     expect(await processFederationNpcMandates(db, "1991-default", 1992, new Date(0))).toBe(1);
+  });
+
+  it("does not bypass a player in Yugoslavia's appointed upper chamber", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("gameState", [
+      { _id: "current", preset: "1991-default", currentYear: 1991, currentTurn: 1 },
+    ]);
+    mem.seed("states", yuRegions1991 as unknown as Record<string, unknown>[]);
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        countryId: "YU",
+        officeType: getLowerChamberOfficeType("YU", "1991-default"),
+        nppId: new ObjectId(),
+        characterId: null,
+      },
+      {
+        _id: new ObjectId(),
+        countryId: "YU",
+        officeType: getUpperChamberOfficeType("YU", "1991-default"),
+        nppId: null,
+        characterId: new ObjectId(),
+      },
+    ]);
+    expect(
+      await processFederationNpcMandates(mem as unknown as Db, "1991-default", 1991, new Date(0))
+    ).toBe(0);
   });
 
   it("publishes explicit shared-asset custody in the NPC opening position", () => {

@@ -1,8 +1,8 @@
 import type { Db } from "mongodb";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
 import {
-  getJointSittingOfficeTypes,
   getLowerChamberOfficeType,
+  getUpperChamberOfficeType,
 } from "@/lib/legislature/chamberOfficeType";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { earliestFederationDecisionYear } from "@/lib/world/succession/availability";
@@ -73,8 +73,9 @@ export async function processFederationNpcMandates(
   let opened = 0;
   for (const source of eligible) {
     if (occupied.has(source)) continue;
-    const legislatureOffices = new Set(getJointSittingOfficeTypes(source, "1991-default"));
     const lowerOffice = getLowerChamberOfficeType(source, "1991-default");
+    const upperOffice = getUpperChamberOfficeType(source, "1991-default");
+    const legislatureOffices = new Set([lowerOffice, upperOffice].filter(Boolean));
     const federalOfficials = officials.filter(
       (official) => official.countryId === source && legislatureOffices.has(official.officeType)
     );
