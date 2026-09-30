@@ -295,6 +295,7 @@ export async function processNppMonetaryOperations(
             : {}),
         turn,
         actorName: `${authority._id} Monetary Committee`,
+        actorClass: "npp",
         reason: decision.rationale,
       });
       operationsExecuted++;

@@ -16,6 +16,14 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { bondPoolCurrency } from "@/lib/bonds/marketPool";
+import * as Sentry from "@sentry/nextjs";
+import { isDeepStrictEqual } from "node:util";
+import { prepareAuditRecord } from "@/lib/audit/recordAudit";
+import { isAuditLogEnabledFromConfig } from "@/lib/audit/featureFlag";
+import { toAuditEnvelope } from "@/lib/banking/rules/auditEvents";
+import { getAuditRequestContext } from "@/lib/observability/context";
+import { DEFAULT_TURN_LENGTH_MINUTES } from "@/lib/db/types/financialTxLog";
+import type { ActionAuditRecord } from "@/lib/db/types/actionAuditLog";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
 import {
   resumeSettlement,
@@ -30,6 +38,7 @@ import {
 import { accountId } from "@/lib/ledger/accounts";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { treasuryAdvanceMoneyDelta } from "./rules/assemble";
 import { planOpenMarketOperation, quotedQeMarketPrice } from "./quantitativeEasing";
@@ -48,6 +57,9 @@ interface Receipt extends Document {
   currency: CurrencyCode;
   status: "planning" | "admitted" | "refunding" | "applied" | "rejected";
   error?: string;
+  recoveryPending: boolean;
+  audit?: ActionAuditRecord;
+  auditDelivered?: boolean;
   result: MonetaryOperationRecord;
   createdAt: Date;
   cash: BankingTransition;
@@ -78,8 +90,10 @@ export async function existingMonetaryOperation(
   const receipt = await db.collection<Receipt>(COLLECTION).findOne({ _id: input.operationId });
   if (!receipt) return false;
   sameCommand(receipt, input);
-  if (receipt.status === "rejected")
+  if (receipt.status === "rejected") {
+    await publishAudit(db, receipt);
     throw new MonetaryOperationRejected(receipt.error ?? "Monetary operation was rejected");
+  }
   return true;
 }
 function transition(command: Command, currency: CurrencyCode, stage: string): BankingTransition {
@@ -90,7 +104,7 @@ function transition(command: Command, currency: CurrencyCode, stage: string): Ba
     currency,
     legs: [],
     projections: [],
-    event: { kind: "loan.disbursed", command: `monetary.${command.type}` },
+    event: { kind: "monetary.executed", command: `monetary.${command.type}` },
   };
 }
 async function prepare(db: Db, command: Command): Promise<Receipt> {
@@ -102,6 +116,7 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
     currency: COUNTRY_CURRENCY_MAP[command.countryId],
     createdAt: now,
     status: "planning",
+    recoveryPending: true,
     cash: transition(command, COUNTRY_CURRENCY_MAP[command.countryId], "cash"),
     witnesses: [],
     result: {
@@ -115,6 +130,51 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
       createdAt: now,
     },
   };
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne(
+      { _id: "default" },
+      { projection: { ledgerShadow: 1, auditLog: 1, turnLengthMinutes: 1 } }
+    );
+  if (isAuditLogEnabledFromConfig(config)) {
+    const context = getAuditRequestContext();
+    const actorClass = command.actorClass ?? context?.actor?.kind ?? "system";
+    const envelope = toAuditEnvelope({
+      kind: "monetary.executed",
+      command: `monetary.${command.type}`,
+      correlationId: context?.traceId ?? `monetary:${command.operationId}`,
+      actorClass,
+      turn: command.turn,
+      subjectType: "centralBank",
+      subjectId: receipt.bankId,
+      settlementId: `monetary:${command.operationId}:complete`,
+      outcome: "ok",
+    });
+    receipt.audit = prepareAuditRecord(
+      {
+        ...envelope,
+        currencyCode: receipt.currency,
+        // Preserve opaque actor IDs from the original request, with an explicit caller class.
+        actor: context?.actor
+          ? {
+              kind: actorClass,
+              ...(context.actor.userId && ObjectId.isValid(context.actor.userId)
+                ? { userId: new ObjectId(context.actor.userId) }
+                : {}),
+              ...(context.actor.characterId && ObjectId.isValid(context.actor.characterId)
+                ? { characterId: new ObjectId(context.actor.characterId) }
+                : {}),
+              ...(context.actor.role ? { role: context.actor.role } : {}),
+            }
+          : { kind: actorClass },
+      },
+      {
+        turn: command.turn,
+        ts: now,
+        turnLengthMinutes: config?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES,
+      }
+    );
+  }
   if (command.type === "treasury_advance") {
     const amount = Math.max(0, Math.floor(command.amount ?? 0));
     if (!Number.isSafeInteger(amount) || amount <= 0)
@@ -124,7 +184,7 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
       .collection<FederalBudget>("federalBudget")
       .findOne({ _id: budgetId } as { _id: "federal" });
     if (!budget) throw new MonetaryOperationRejected("Federal budget not found");
-    receipt.currency = budget.currencyCode ?? receipt.currency;
+    receipt.currency = resolveCountryCurrencyCode(budget) ?? receipt.currency;
     receipt.cash.currency = receipt.currency;
     receipt.result.amount = amount;
     receipt.result.moneySupplyDelta = treasuryAdvanceMoneyDelta(
@@ -150,9 +210,6 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
         note: "treasury cash publication",
       },
     ];
-    const config = await db
-      .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } });
     if (isLedgerShadowEnabledFromConfig(config)) {
       const [rate, state] = await Promise.all([
         db
@@ -200,15 +257,13 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
   }
   if (!command.bondId || !ObjectId.isValid(command.bondId))
     throw new MonetaryOperationRejected("Valid bond required");
-  const bond = await db
-    .collection<Bond>("bonds")
-    .findOne({
-      _id: new ObjectId(command.bondId),
-      issuerType: "sovereign",
-      countryId: command.countryId,
-      matured: false,
-      defaulted: false,
-    });
+  const bond = await db.collection<Bond>("bonds").findOne({
+    _id: new ObjectId(command.bondId),
+    issuerType: "sovereign",
+    countryId: command.countryId,
+    matured: false,
+    defaulted: false,
+  });
   if (!bond) throw new MonetaryOperationRejected("Eligible sovereign bond not found");
   const plan = planOpenMarketOperation({
     operation: command.type,
@@ -335,11 +390,12 @@ function requireComplete(result: SettlementResult): void {
     throw new Error(result.error ?? "Monetary settlement remains unfinished");
 }
 /** Original leg stamps permit concurrent retries; recovery never computes a new quote. */
-async function ordinary(db: Db, plan: BankingTransition): Promise<void> {
+async function ordinary(db: Db, plan: BankingTransition): Promise<SettlementResult> {
   let result = await settleTransition(db, plan);
   if (result.status !== "rejected" && (result.error || result.status === "partial"))
     result = await resumeSettlement(db, plan.key);
   requireComplete(result);
+  return result;
 }
 async function terminal(db: Db, receipt: Receipt, error?: string): Promise<void> {
   const completion = transition(receipt.command, receipt.currency, error ? "reject" : "complete");
@@ -366,20 +422,73 @@ async function terminal(db: Db, receipt: Receipt, error?: string): Promise<void>
     {
       collection: COLLECTION,
       filter: { _id: receipt._id },
-      update: { $set: { status: error ? "rejected" : "applied", ...(error ? { error } : {}) } },
+      update: {
+        $set: {
+          status: error ? "rejected" : "applied",
+          recoveryPending: !!receipt.audit && !receipt.auditDelivered,
+          ...(error ? { error } : {}),
+        },
+      },
       note: "durable monetary result",
     },
   ];
   await ordinary(db, completion);
+  await publishAudit(db, { ...receipt, status: error ? "rejected" : "applied", error });
+}
+/** Audit delivery never changes a financial result; the fixed row is retained for recovery. */
+async function publishAudit(db: Db, receipt: Receipt): Promise<void> {
+  if (!receipt.audit || receipt.auditDelivered) return;
+  const record: ActionAuditRecord = {
+    ...receipt.audit,
+    outcome: receipt.status === "rejected" ? "rejected" : "ok",
+    ...(receipt.status === "rejected"
+      ? { reason: receipt.error }
+      : { amount: receipt.result.amount }),
+    currencyCode: receipt.currency,
+    meta: {
+      ...receipt.audit.meta,
+      settlementId: `monetary:${receipt._id}:${receipt.status === "rejected" ? "reject" : "complete"}`,
+    },
+  };
+  try {
+    const audit = db.collection<ActionAuditRecord>("actionAuditLog");
+    const inserted = await audit.updateOne(
+      { _id: record._id },
+      { $setOnInsert: record },
+      { upsert: true }
+    );
+    if (
+      inserted.matchedCount === 1 &&
+      !isDeepStrictEqual(await audit.findOne({ _id: record._id }), record)
+    )
+      throw new Error("Monetary audit row differs from the original command");
+    const marked = await db
+      .collection<Receipt>(COLLECTION)
+      .updateOne(
+        { _id: receipt._id, status: receipt.status },
+        { $set: { auditDelivered: true, recoveryPending: false } }
+      );
+    if (marked.matchedCount !== 1)
+      throw new Error("Monetary audit delivered without completion marker");
+  } catch (error) {
+    Sentry.captureException(error, {
+      extra: { phase: "monetary.auditDelivery", operationId: receipt._id },
+    });
+  }
 }
 async function finish(
   db: Db,
   receipt: Receipt,
   cooldown: number
 ): Promise<MonetaryOperationRecord> {
-  if (receipt.status === "applied") return receipt.result;
-  if (receipt.status === "rejected")
+  if (receipt.status === "applied") {
+    await publishAudit(db, receipt);
+    return receipt.result;
+  }
+  if (receipt.status === "rejected") {
+    await publishAudit(db, receipt);
     throw new MonetaryOperationRejected(receipt.error ?? "Monetary operation was rejected");
+  }
   const receipts = db.collection<Receipt>(COLLECTION);
   const banks = db.collection<
     Omit<CentralBank, "lastMonetaryOperationTurn"> & {
@@ -420,7 +529,7 @@ async function finish(
           const error = "Monetary operation is on cooldown or another command is pending";
           await receipts.updateOne(
             { _id: receipt._id, status: "planning" },
-            { $set: { status: "rejected", error } }
+            { $set: { status: "rejected", error, recoveryPending: false } }
           );
           throw new MonetaryOperationRejected(error);
         }
@@ -434,7 +543,10 @@ async function finish(
   // Re-read after admission: another retry may already have committed a refund or result.
   const current = await receipts.findOne({ _id: receipt._id });
   if (!current) throw new Error("Monetary command disappeared");
-  if (current.status === "applied") return current.result;
+  if (current.status === "applied") {
+    await publishAudit(db, current);
+    return current.result;
+  }
   if (current.status === "rejected")
     throw new MonetaryOperationRejected(current.error ?? "Monetary operation was rejected");
   receipt = current;
@@ -512,6 +624,13 @@ export async function executeJournaledMonetaryOperation(
   const receipts = db.collection<Receipt>(COLLECTION);
   let receipt = await receipts.findOne({ _id: command.operationId });
   if (!receipt) {
+    await receipts.createIndex(
+      { recoveryPending: 1, _id: 1 },
+      {
+        name: "monetary_commands_pending_recovery",
+        partialFilterExpression: { recoveryPending: true },
+      }
+    );
     const prepared = await prepare(db, command);
     try {
       await receipts.insertOne(prepared);
@@ -529,7 +648,8 @@ export async function executeJournaledMonetaryOperation(
 export async function resumeMonetaryOperations(db: Db, cooldown: number): Promise<void> {
   const pending = await db
     .collection<Receipt>(COLLECTION)
-    .find({ status: { $in: ["planning", "admitted", "refunding"] } })
+    .find({ recoveryPending: true })
+    .sort({ _id: 1 })
     .limit(100)
     .toArray();
   for (const receipt of pending) {

@@ -16,6 +16,7 @@ export interface ExecuteMonetaryOperationInput {
   type: MonetaryOperationType;
   turn: number;
   actorName: string;
+  actorClass?: "player" | "admin" | "npp" | "system";
   reason?: string;
   amount?: number;
   bondId?: string;

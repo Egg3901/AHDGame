@@ -122,6 +122,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       type: parsed.data.type,
       turn,
       actorName: auth.user.character?.name ?? auth.user.username,
+      actorClass: auth.user.isAdmin ? "admin" : "player",
       reason: parsed.data.reason,
       amount,
       bondId: parsed.data.bondId,

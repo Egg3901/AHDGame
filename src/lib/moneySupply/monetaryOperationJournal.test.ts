@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { executeMonetaryOperation, type ExecuteMonetaryOperationInput } from "./operations";
 import { resumeMonetaryOperations } from "./monetaryOperationJournal";
+import { runInAuditContext } from "@/lib/observability/context";
+beforeEach(() => vi.clearAllMocks());
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 const bondId = new ObjectId();
 function world(shadow = false) {
@@ -80,6 +82,12 @@ describe("journaled monetary commands", () => {
       const result = await executeMonetaryOperation(db, input);
       const { bank, bond, pool, budget } = state(memory);
       expect(bank.monetaryOperations).toHaveLength(1);
+      expect(memory.collection("actionAuditLog").docs).toHaveLength(1);
+      expect(memory.collection("actionAuditLog").docs[0]).toMatchObject({
+        action: "bank.monetary.executed",
+        outcome: "ok",
+        meta: { command: `monetary.${type}` },
+      });
       expect(bank.reserveBalance).toBe(100);
       expect(bank.externalBroadMoney).toBe(1000);
       expect(bank.pendingLiquidityOperationId).toBeUndefined();
@@ -251,5 +259,64 @@ describe("journaled monetary commands", () => {
     });
     expect(state(memory).budget.treasuryBalance).toBe(-500);
     expect(state(memory).bank.monetaryOperations).toHaveLength(2);
+  });
+  it.each([
+    { collection: "actionAuditLog", onCall: 1, afterWrite: false },
+    { collection: "actionAuditLog", onCall: 1, afterWrite: true },
+    { collection: "monetaryOperationCommands", onCall: 3, afterWrite: true },
+  ])(
+    "recovers optional audit delivery with the original actor and one row after %j",
+    async (plan) => {
+      const memory = world(),
+        db = memory as unknown as Db;
+      const fault = withInjectedCrash(memory, { ...plan, op: "updateOne" });
+      const actorId = new ObjectId();
+      const input = { ...command("treasury_advance"), actorClass: "player" as const };
+      const result = await runInAuditContext(
+        "original-request-trace",
+        () => executeMonetaryOperation(fault.db, input),
+        { kind: "player", userId: actorId.toHexString() }
+      );
+      expect(result.amount).toBe(250);
+      expect(state(memory).budget.treasuryBalance).toBe(-750);
+      expect(memory.collection("monetaryOperationCommands").docs[0].status).toBe("applied");
+      fault.disarm();
+      await runInAuditContext("different-recovery-trace", () => resumeMonetaryOperations(db, 6), {
+        kind: "system",
+      });
+      await executeMonetaryOperation(db, input);
+      const audits = memory.collection("actionAuditLog").docs;
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        traceId: "original-request-trace",
+        seq: 0,
+        actor: { kind: "player", userId: actorId },
+        amount: 250,
+        outcome: "ok",
+      });
+      expect(memory.collection("monetaryOperationCommands").docs[0]).toMatchObject({
+        auditDelivered: true,
+        recoveryPending: false,
+      });
+      expect(state(memory).budget.treasuryBalance).toBe(-750);
+      expect(state(memory).bank.monetaryOperations).toHaveLength(1);
+    }
+  );
+  it("keeps the audit kill switch and indexes only pending recovery", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    await memory
+      .collection("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { auditLog: false } });
+    await executeMonetaryOperation(db, command());
+    await resumeMonetaryOperations(db, 6);
+    expect(memory.collection("actionAuditLog").docs).toHaveLength(0);
+    expect(memory.collection("monetaryOperationCommands").docs[0].recoveryPending).toBe(false);
+    expect(await memory.collection("monetaryOperationCommands").indexes()).toContainEqual(
+      expect.objectContaining({
+        key: { recoveryPending: 1, _id: 1 },
+        partialFilterExpression: { recoveryPending: true },
+      })
+    );
   });
 });

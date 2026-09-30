@@ -31,7 +31,7 @@ interface AtomicRecord extends Document {
   turn?: number;
   atomicDocument: AtomicPlan;
   legs: { kind: string; amount: number; path: string; applied: boolean }[];
-  projections: { projection: TransitionProjection; applied: boolean; appliedAt?: Date }[];
+  projections: { projection: TransitionProjection; applied: boolean; appliedAt?: Date | null }[];
 }
 const at = (value: unknown, path: string): unknown =>
   path
@@ -177,17 +177,15 @@ export async function settleAtomicDocumentTransition(
     // The money primitive intentionally makes an empty cash move a no-op.
     // Asset exchanges still claim their complete original plan before mutation.
     try {
-      await db
-        .collection<AtomicRecord>(MONEY_MOVE_COLLECTION)
-        .insertOne({
-          ...extension,
-          _id: transition.key,
-          kind: transition.kind,
-          turn: transition.turn,
-          legs: [],
-          status: "partial",
-          createdAt: new Date(),
-        });
+      await db.collection<AtomicRecord>(MONEY_MOVE_COLLECTION).insertOne({
+        ...extension,
+        _id: transition.key,
+        kind: transition.kind,
+        turn: transition.turn,
+        legs: [],
+        status: "partial",
+        createdAt: new Date(),
+      });
     } catch (error) {
       if (!(error && typeof error === "object" && "code" in error && error.code === 11000))
         throw error;

@@ -163,6 +163,7 @@ describe("POST /api/country/[code]/central-bank/monetary-operation", () => {
       type: "qe",
       turn: 20,
       actorName: "Chair One",
+      actorClass: "player",
       reason: "Support demand",
       amount: 0,
       bondId: "bond-1",
