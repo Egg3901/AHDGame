@@ -266,6 +266,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "federationRatifications", category: "runtime" },
   { name: "federationSettlementIntents", category: "runtime" },
   { name: "federationFacilityClaims", category: "runtime" },
+  { name: "federationFacilityPaymentTurns", category: "runtime" },
   { name: "federationRelocations", category: "runtime" },
   { name: "federationPublicationPreparations", category: "runtime" },
   { name: "federationPreparedEffects", category: "runtime" },

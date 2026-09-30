@@ -16,6 +16,9 @@ export interface FederationFacilityClaimRecord extends PrivateFacilityClaim {
   applicationId: string;
   /** A staged claim cannot pay or enter a firm's balance sheet. */
   status: "contingent" | "payable" | "paid";
+  /** Shared-accounting minor units already transferred; absent starts at zero. */
+  paidMinor?: number;
+  lastPaymentTurn?: number;
   createdAt: Date;
 }
 
