@@ -74,6 +74,7 @@ import { validateNationalizationProvisions } from "@/lib/nationalization/billPro
 import type { SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
 import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
 import { enactSingleplayerDecree } from "@/lib/legislature/commands/enactSingleplayerDecree";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import {
   getBillProposalAutoFailWarning,
   getBillProposalAutoFailWarningError,
@@ -535,7 +536,11 @@ export async function POST(request: Request) {
       try {
         const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
         if (usingSovereignOverride) {
-          await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
+          const enacted = await enactSingleplayerDecree(db, {
+            ...natBill,
+            _id: result.insertedId,
+          } as Bill);
+          if (enacted) await flushServerPosthog();
         }
         logRequest("POST", path, 201, Date.now() - start);
         return NextResponse.json(
@@ -1144,7 +1149,11 @@ export async function POST(request: Request) {
     try {
       const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
       if (usingSovereignOverride) {
-        await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
+        const enacted = await enactSingleplayerDecree(db, {
+          ...bill,
+          _id: result.insertedId,
+        } as Bill);
+        if (enacted) await flushServerPosthog();
       }
       try {
         const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");

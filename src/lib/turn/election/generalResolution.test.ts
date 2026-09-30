@@ -181,7 +181,7 @@ describe("resolveOneGeneralElection", () => {
     const tally = makeTally(election._id, {}, { finalized: true, executiveSeatingPending: true });
     const { resolvePresidentElection } = await import("./presidentResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
-    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW);
+    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW, CURRENT_TURN);
     expect(db.collectionMocks.electionCandidates!.updateMany).not.toHaveBeenCalled();
   });
 
@@ -1266,7 +1266,7 @@ describe("resolveOneGeneralElection", () => {
     );
 
     const { resolvePresidentElection } = await import("@/lib/turn/election/presidentResolution");
-    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW);
+    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW, CURRENT_TURN);
     expect(result.resolved).toBe(true);
 
     // Election marked resolved

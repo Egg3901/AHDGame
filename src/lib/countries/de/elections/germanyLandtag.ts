@@ -39,6 +39,8 @@ import type {
 import type { CareerEvent } from "@/lib/db/types/character";
 import { logger } from "@/lib/observability/logger";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 const LANDTAG_THRESHOLD = 0.05;
 
@@ -541,7 +543,8 @@ async function sweepStaleLandtagOffice(db: Db, landId: string, now: Date): Promi
 export async function resolveDELandtagElection(
   db: Db,
   election: Election,
-  now: Date
+  now: Date,
+  currentTurn = election.endTurn ?? 0
 ): Promise<{ winnersAllocated: number; seatsAllocated: number }> {
   if (election.countryId !== "DE" || election.electionType !== "landtag") {
     throw new Error(
@@ -582,14 +585,24 @@ export async function resolveDELandtagElection(
   // no longer exists so their votes and seats fall to the remaining eligible
   // candidates. Mirrors the FPTP guard in generalResolution.ts.
   let liveCandidates = candidates;
+  const accountIdByCharacterId = new Map<string, string>();
+  const currentOfficeByCharacterId = new Map<string, Character["currentOffice"]>();
   const candidateCharIds = candidates
     .filter((c): c is typeof c & { characterId: ObjectId } => !c.isNPP && !!c.characterId)
     .map((c) => c.characterId);
   if (candidateCharIds.length > 0) {
     const existingChars = await db
       .collection<Character>("characters")
-      .find({ _id: { $in: candidateCharIds } }, { projection: { _id: 1 } })
+      .find(
+        { _id: { $in: candidateCharIds } },
+        { projection: { _id: 1, currentOffice: 1, userId: 1 } }
+      )
       .toArray();
+    for (const character of existingChars) {
+      if (character.userId)
+        accountIdByCharacterId.set(character._id.toString(), character.userId.toString());
+      currentOfficeByCharacterId.set(character._id.toString(), character.currentOffice);
+    }
     const existingCharIds = new Set(existingChars.map((c) => c._id.toString()));
     liveCandidates = candidates.filter(
       (c) => c.isNPP || !c.characterId || existingCharIds.has(c.characterId.toString())
@@ -694,6 +707,88 @@ export async function resolveDELandtagElection(
         updatedAt: now,
       },
     }
+  );
+
+  const totalVotesCast = Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0);
+  const rankedCandidateVotes = Object.entries(tally.totalVotes).sort((a, b) => b[1] - a[1]);
+  await Promise.all(
+    seatResolution.assignments
+      .filter((assignment) => !assignment.candidate.isNPP && assignment.candidate.characterId)
+      .map(async (assignment, winnerOrdinal) => {
+        const characterId = assignment.candidate.characterId!;
+        const previousOffice = currentOfficeByCharacterId.get(characterId.toString());
+        const incumbent =
+          previousOffice?.type === "landtag" &&
+          "state" in previousOffice &&
+          previousOffice.state === landId;
+        const runnerVotes =
+          rankedCandidateVotes.find(
+            ([candidateId]) => candidateId !== assignment.candidateId
+          )?.[1] ?? 0;
+        await Promise.all([
+          captureElectionWon({
+            db,
+            accountId: accountIdByCharacterId.get(characterId.toString()),
+            electionId: election._id.toString(),
+            electionType: election.electionType,
+            partyId: assignment.partyId,
+            seatCount: assignment.seats,
+            voteSharePct: totalVotesCast > 0 ? (assignment.votes / totalVotesCast) * 100 : 0,
+            marginPct:
+              totalVotesCast > 0 ? ((assignment.votes - runnerVotes) / totalVotesCast) * 100 : 0,
+            incumbent,
+            winnerOrdinal,
+            nationId: "DE",
+            turn: currentTurn,
+          }),
+          ...(incumbent
+            ? []
+            : [
+                captureOfficeTransition({
+                  db,
+                  officeType: "landtag",
+                  transitionType: "gained",
+                  partyId: assignment.partyId,
+                  selectionMethod: "election",
+                  tenureTurns: 0,
+                  careerStage: 0,
+                  nationId: "DE",
+                  turn: currentTurn,
+                }),
+              ]),
+        ]);
+      })
+  );
+  const winningCharacterIds = new Set(
+    seatResolution.assignments
+      .filter((assignment) => !assignment.candidate.isNPP && assignment.candidate.characterId)
+      .map((assignment) => assignment.candidate.characterId!.toString())
+  );
+  await Promise.all(
+    liveCandidates
+      .filter((candidate) => !candidate.isNPP && candidate.characterId)
+      .filter((candidate) => {
+        const previousOffice = currentOfficeByCharacterId.get(candidate.characterId!.toString());
+        return (
+          !winningCharacterIds.has(candidate.characterId!.toString()) &&
+          previousOffice?.type === "landtag" &&
+          "state" in previousOffice &&
+          previousOffice.state === landId
+        );
+      })
+      .map((candidate) =>
+        captureOfficeTransition({
+          db,
+          officeType: "landtag",
+          transitionType: "lost",
+          partyId: candidate.party,
+          selectionMethod: "election",
+          tenureTurns: 0,
+          careerStage: 0,
+          nationId: "DE",
+          turn: currentTurn,
+        })
+      )
   );
 
   await db

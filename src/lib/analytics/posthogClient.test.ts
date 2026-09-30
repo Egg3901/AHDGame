@@ -34,7 +34,7 @@ vi.mock("posthog-js", () => ({
 }));
 
 describe("PostHog consent boundary", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_test");
@@ -48,6 +48,8 @@ describe("PostHog consent boundary", () => {
         removeItem: (key: string) => storage.delete(key),
       },
     });
+    const { setProductEventContext } = await import("./capture");
+    setProductEventContext({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" });
   });
 
   it("does not initialize or capture before consent", async () => {
@@ -101,7 +103,10 @@ describe("PostHog consent boundary", () => {
       nation: "US",
       party: "1",
     });
-    expect(state.capture).toHaveBeenCalledWith("bill_drafted");
+    expect(state.capture).toHaveBeenCalledWith(
+      "bill_drafted",
+      expect.objectContaining({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" })
+    );
   });
 
   it("enables sampled, masked session recording with sensitive screens blocked", async () => {
@@ -167,8 +172,14 @@ describe("PostHog consent boundary", () => {
     await Promise.all([captureFirstTurnIfReady("char1"), captureFirstTurnIfReady("char1")]);
     await captureFirstTurnIfReady("char1");
     expect(state.capture).toHaveBeenCalledTimes(2);
-    expect(state.capture).toHaveBeenCalledWith("character_created");
-    expect(state.capture).toHaveBeenCalledWith("first_turn_completed");
+    expect(state.capture).toHaveBeenCalledWith(
+      "character_created",
+      expect.objectContaining({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" })
+    );
+    expect(state.capture).toHaveBeenCalledWith(
+      "first_turn_completed",
+      expect.objectContaining({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" })
+    );
   });
 
   it("carries successful signup across a full navigation and captures it once", async () => {
@@ -180,7 +191,10 @@ describe("PostHog consent boundary", () => {
     await Promise.all([capturePendingAccountCreated(), capturePendingAccountCreated()]);
     await capturePendingAccountCreated();
     expect(state.capture).toHaveBeenCalledTimes(1);
-    expect(state.capture).toHaveBeenCalledWith("account_created");
+    expect(state.capture).toHaveBeenCalledWith(
+      "account_created",
+      expect.objectContaining({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" })
+    );
   });
 
   it("discards pending milestones when consent is withdrawn", async () => {

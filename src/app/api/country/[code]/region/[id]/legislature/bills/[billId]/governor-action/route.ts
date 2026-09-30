@@ -1,3 +1,4 @@
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -63,6 +64,7 @@ export async function POST(
       parsed.data.action,
       parsed.data.vetoMessage
     );
+    await flushServerPosthog();
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {
     return handleRouteError(error);

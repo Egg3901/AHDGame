@@ -38,6 +38,7 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 import { logger } from "../../observability/logger";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 
 function recoverUnitVotesFromSnapshots(
   unitTurnSnapshots: ElectionVoteTally["unitTurnSnapshots"],
@@ -293,7 +294,8 @@ export async function resolvePresidentElection(
   db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
   election: Election,
   tally: ElectionVoteTally,
-  now: Date
+  now: Date,
+  currentTurn = election.endTurn ?? 0
 ): Promise<boolean> {
   if (tally.finalized === true && tally.executiveSeatingPending !== true) return true;
   const seatingRetryOnly = tally.finalized === true && tally.executiveSeatingPending === true;
@@ -484,6 +486,21 @@ export async function resolvePresidentElection(
   }
 
   const { vpCharId, vpNppId } = await resolveVpIds(db, election, winnerCandidate, contingentResult);
+  const nationId = election.countryId ?? "US";
+  const previousPresident = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .findOne({
+      countryId: nationId,
+      officeType: "president",
+    })
+    .catch(() => null);
+  const winnerHolderId = winnerCandidate.isNPP
+    ? winnerCandidate.nppId?.toString()
+    : winnerCandidate.characterId?.toString();
+  const previousHolderId = previousPresident?.isNPP
+    ? previousPresident.nppId?.toString()
+    : previousPresident?.characterId?.toString();
+  const incumbent = !!winnerHolderId && winnerHolderId === previousHolderId;
 
   try {
     await seatPresidentialExecutive(db, {
@@ -492,6 +509,7 @@ export async function resolvePresidentElection(
       vpCharId,
       vpNppId,
       now,
+      turn: currentTurn,
     });
     await recordPresidentialTenure(
       db,
@@ -519,6 +537,44 @@ export async function resolvePresidentElection(
       { electionId: election._id },
       { $set: { executiveSeatingPending: false, updatedAt: now } }
     );
+
+  if (!winnerCandidate.isNPP && winnerCandidate.characterId) {
+    const popularVotes =
+      Object.keys(tally.totalVotes).length > 0
+        ? tally.totalVotes
+        : Object.values(tally.totalVotesByUnit ?? {}).reduce<Record<string, number>>(
+            (totals, unitVotes) => {
+              for (const [candidateId, votes] of Object.entries(unitVotes ?? {})) {
+                totals[candidateId] = (totals[candidateId] ?? 0) + votes;
+              }
+              return totals;
+            },
+            {}
+          );
+    const totalPopularVotes = Object.values(popularVotes).reduce((sum, votes) => sum + votes, 0);
+    const winnerVotes = popularVotes[winnerId] ?? 0;
+    const runnerVotes = Object.entries(popularVotes)
+      .filter(([candidateId]) => candidateId !== winnerId)
+      .reduce((highest, [, votes]) => Math.max(highest, votes), 0);
+    const winnerAccount = await db
+      .collection<{ userId?: ObjectId }>("characters")
+      .findOne({ _id: winnerCandidate.characterId }, { projection: { userId: 1 } })
+      .catch(() => null);
+    await captureElectionWon({
+      db,
+      accountId: winnerAccount?.userId?.toString(),
+      electionId: election._id.toString(),
+      electionType: election.electionType,
+      partyId: winnerCandidate.party,
+      seatCount: 1,
+      voteSharePct: totalPopularVotes > 0 ? (winnerVotes / totalPopularVotes) * 100 : 0,
+      marginPct:
+        totalPopularVotes > 0 ? ((winnerVotes - runnerVotes) / totalPopularVotes) * 100 : 0,
+      incumbent,
+      nationId,
+      turn: currentTurn,
+    });
+  }
 
   const candidateIds = Object.keys(electoralVotesByCandidate).map((id) => new ObjectId(id));
   const winnerCandidateIds = new Set([winnerId]);

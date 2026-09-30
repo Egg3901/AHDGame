@@ -22,7 +22,7 @@ import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getOfficeLabel } from "@/lib/utils/politics";
-import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, CareerEvent, PoliticalParty } from "@/lib/db/types";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
@@ -47,6 +47,7 @@ import { applyConfidenceEventToGov } from "@/lib/countries/uk/confidence/confide
 import { GREAT_OFFICE_POSITION_IDS } from "@/lib/countries/uk/confidence/confidenceGauge";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { canReshuffle, getReshuffleIdentity } from "@/lib/countries/uk/cabinet/reshuffleLimit";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 const appointSchema = z.object({
   positionId: z.string(),
@@ -397,6 +398,18 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
         { _id: targetChar._id },
         { $set: { currentOffice: cabinetOffice, updatedAt: now } }
       );
+    await captureOfficeTransition({
+      db,
+      officeType: cabinetType,
+      transitionType: "gained",
+      partyId: lowerOfficial?.party ?? targetChar.party,
+      selectionMethod: "appointment",
+      tenureTurns: 0,
+      careerStage: (targetChar.careerHistory?.length ?? 0) + 1,
+      nationId: countryId,
+      turn: appointTurn,
+      flush: true,
+    });
 
     // Lock the seat for COOLDOWN_TURNS turns from this appointment. Keyed to the
     // appointment, so it gates the NEXT appointment to this seat and persists
@@ -529,6 +542,21 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
     if (!survivorKept && member.characterId) {
       await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
     }
+    if (!survivorKept && member.characterId) {
+      const { currentTurn } = await getGameTime();
+      await captureOfficeTransition({
+        db,
+        officeType: countryId === COUNTRY_CONFIGS.UK.id ? "ukCabinet" : "parliamentaryCabinet",
+        transitionType: "lost",
+        partyId: member.party,
+        selectionMethod: "removal",
+        tenureTurns: 0,
+        careerStage: 0,
+        nationId: countryId,
+        turn: currentTurn,
+        flush: true,
+      });
+    }
     // Firing is unrestricted and imposes no cooldown of its own. Any existing
     // appointment cooldown on this seat (set when the minister was appointed) is
     // intentionally left in place so the seat stays locked for the remainder of
@@ -622,6 +650,19 @@ export async function resignCabinetMemberHandler(request: Request, countryId: Co
       throw notFound("You do not hold this cabinet seat");
     }
     await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
+    const { currentTurn } = await getGameTime();
+    await captureOfficeTransition({
+      db,
+      officeType: countryId === COUNTRY_CONFIGS.UK.id ? "ukCabinet" : "parliamentaryCabinet",
+      transitionType: "left",
+      partyId: member.party,
+      selectionMethod: "resignation",
+      tenureTurns: 0,
+      careerStage: caller.careerHistory?.length ?? 0,
+      nationId: countryId,
+      turn: currentTurn,
+      flush: true,
+    });
 
     // Confidence gauge (epic #856): a resignation is a flat hit each — waves
     // sum to destabilise — heavier for a Great Office of State. Same UK-only

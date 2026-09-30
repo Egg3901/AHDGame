@@ -3,6 +3,7 @@ import { onBillEnacted } from "@/lib/billEnactment";
 import { applyLegislationEffect } from "@/lib/legislationEffects";
 import { getGameState } from "@/lib/gameState";
 import type { Db } from "mongodb";
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 
 /**
  * Enact a newly validated bill for permanent head-of-state singleplayer.
@@ -29,6 +30,18 @@ export async function enactSingleplayerDecree(db: Db, bill: Bill): Promise<boole
     console.error("Singleplayer decree effect failed:", error)
   );
   const turn = (await getGameState(db))?.currentTurn ?? 0;
+  await captureBillStatusChanged({
+    db,
+    billId: bill._id.toString(),
+    fromStatus: "active",
+    toStatus: "signed",
+    scope: "national",
+    chamber: bill.currentChamber ?? bill.originChamber,
+    category: bill.category,
+    provisionFamily: bill.provisions?.[0]?.type,
+    nationId: bill.countryId ?? "US",
+    turn,
+  });
   await onBillEnacted(db, enacted, turn).catch((error) =>
     console.error("Singleplayer decree enactment hook failed:", error)
   );

@@ -315,6 +315,9 @@ describe("electionResolution", () => {
         collection: vi.fn().mockImplementation((name: string) => {
           if (name === "elections") return { find: electionsFind };
           if (name === "electionVoteTallies") return { find: tallyFind };
+          if (name === "electionCandidates") {
+            return { find: () => ({ toArray: vi.fn().mockResolvedValue([]) }) };
+          }
           if (name === "gameState") {
             return { findOne: vi.fn().mockResolvedValue({ currentTurn: 816 }) };
           }

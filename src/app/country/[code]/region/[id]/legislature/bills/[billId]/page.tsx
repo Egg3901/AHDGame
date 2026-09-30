@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
 import { captureProductEvent } from "@/lib/analytics/capture";
-import { getStoredConsent } from "@/components/CookieConsent";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { BillPageErrorBoundary } from "@/components/BillPageErrorBoundary";
 import { BillTimeline } from "@/components/bills/BillTimeline";
@@ -72,24 +71,6 @@ function StateBillDetailContent() {
   useEffect(() => {
     void fetchBill();
   }, [fetchBill]);
-
-  useEffect(() => {
-    if (
-      !bill ||
-      bill.status !== "enacted" ||
-      bill.sponsorId !== user?.character?.id ||
-      getStoredConsent() !== "accepted"
-    )
-      return;
-    const key = `ahd:bill-passed:${bill.id}`;
-    try {
-      if (window.localStorage.getItem(key)) return;
-      window.localStorage.setItem(key, "1");
-      void captureProductEvent("bill_passed", { bill_id: bill.id });
-    } catch {
-      // Analytics storage is optional.
-    }
-  }, [bill, user?.character?.id]);
 
   async function postJson(url: string, body: Record<string, unknown>, okMessage: string) {
     setError("");

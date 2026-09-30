@@ -62,6 +62,8 @@ import {
 } from "./generalResolutionHelpers";
 import { logger } from "../../observability/logger";
 import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 export type { OneElectionResult } from "./generalResolutionHelpers";
 
@@ -124,7 +126,7 @@ export async function resolveOneGeneralElection(
     if (getElectionMethod(election.countryId, election.electionType) === "pr_sainteLague") {
       const { resolveDELandtagElection } = await import("./germanyLandtag");
       if (!tally?.finalized) {
-        await resolveDELandtagElection(db, election, now);
+        await resolveDELandtagElection(db, election, now, currentTurn);
       }
       await db
         .collection<Election>("elections")
@@ -188,8 +190,8 @@ export async function resolveOneGeneralElection(
         election.countryId != null &&
         COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId);
       const presidentResolved = bespoke
-        ? await resolveNGPresidentElection(db, election, tally, now)
-        : await resolvePresidentElection(db, election, tally, now);
+        ? await resolveNGPresidentElection(db, election, tally, now, currentTurn)
+        : await resolvePresidentElection(db, election, tally, now, currentTurn);
       if (presidentResolved) {
         await db
           .collection<Election>("elections")
@@ -690,8 +692,29 @@ export async function resolveOneGeneralElection(
     const nppLookup = new Map(prefetchedNpps.map((n) => [n._id.toString(), n]));
     const winnerNotifInputs: NotificationInput[] = [];
     const loserNotifInputs: NotificationInput[] = [];
+    const winnerAnalytics: Array<{
+      accountId?: string;
+      electionId: string;
+      electionType: string;
+      partyId: string;
+      seatCount: number;
+      voteSharePct: number;
+      marginPct: number;
+      incumbent: boolean;
+      nationId: string;
+      turn: number;
+      winnerOrdinal: number;
+    }> = [];
+    const officeAnalytics: Array<{
+      officeType: string;
+      transitionType: "gained" | "lost";
+      partyId: string;
+      careerStage: number;
+      nationId: string;
+    }> = [];
+    const rankedVotes = Object.entries(effectiveVotes).sort((a, b) => b[1] - a[1]);
 
-    for (const [candidateId, seats] of winners) {
+    for (const [winnerOrdinal, [candidateId, seats]] of winners.entries()) {
       const candidate = candidateMap.get(candidateId);
       if (!candidate) continue;
 
@@ -965,6 +988,37 @@ export async function resolveOneGeneralElection(
       if (!candidate.isNPP) {
         const char = charLookup.get(candidate.characterId?.toString() ?? "");
         if (char) {
+          const winnerVotes = effectiveVotes[candidateId] ?? 0;
+          const runnerVotes = rankedVotes.find(([id]) => id !== candidateId)?.[1] ?? 0;
+          const officeKey = officeKeyForElectionType(election.electionType, election.countryId);
+          const incumbentOffice = char.currentOffice;
+          const incumbent =
+            !!incumbentOffice &&
+            incumbentOffice.type === officeKey &&
+            (!("state" in incumbentOffice) || incumbentOffice.state === election.state);
+          winnerAnalytics.push({
+            accountId: char.userId?.toString(),
+            electionId: election._id.toString(),
+            electionType: election.electionType,
+            partyId: candidate.party,
+            seatCount: seats,
+            voteSharePct: totalVotesCast > 0 ? (winnerVotes / totalVotesCast) * 100 : 0,
+            marginPct:
+              totalVotesCast > 0 ? ((winnerVotes - runnerVotes) / totalVotesCast) * 100 : 0,
+            incumbent,
+            nationId: election.countryId ?? "US",
+            turn: currentTurn,
+            winnerOrdinal,
+          });
+          if (!incumbent) {
+            officeAnalytics.push({
+              officeType: officeKey,
+              transitionType: "gained",
+              partyId: candidate.party,
+              careerStage: (char.careerHistory?.length ?? 0) + 1,
+              nationId: election.countryId ?? "US",
+            });
+          }
           const seatsLabel = isMultiSeat ? ` (${seats} seat${seats > 1 ? "s" : ""})` : "";
           const typeLabel =
             ELECTION_TYPE_SHORT_LABEL[election.electionType] ?? election.electionType;
@@ -1061,6 +1115,20 @@ export async function resolveOneGeneralElection(
         );
         const char = charLookup.get(candidate.characterId?.toString() ?? "");
         if (char) {
+          const heldOffice = char.currentOffice;
+          if (
+            heldOffice?.type ===
+              officeKeyForElectionType(election.electionType, election.countryId) &&
+            (!("state" in heldOffice) || heldOffice.state === election.state)
+          ) {
+            officeAnalytics.push({
+              officeType: heldOffice.type,
+              transitionType: "lost",
+              partyId: candidate.party,
+              careerStage: char.careerHistory?.length ?? 0,
+              nationId: election.countryId ?? "US",
+            });
+          }
           const typeLabel =
             ELECTION_TYPE_SHORT_LABEL[election.electionType] ?? election.electionType;
           loserNotifInputs.push({
@@ -1220,6 +1288,39 @@ export async function resolveOneGeneralElection(
         { _id: election._id },
         { $set: { status: "resolved" satisfies ElectionStatus, updatedAt: now } }
       );
+    await Promise.all(
+      winnerAnalytics.map((winner) =>
+        captureElectionWon({
+          db,
+          accountId: winner.accountId,
+          electionId: winner.electionId,
+          electionType: winner.electionType,
+          partyId: winner.partyId,
+          seatCount: winner.seatCount,
+          voteSharePct: winner.voteSharePct,
+          marginPct: winner.marginPct,
+          incumbent: winner.incumbent,
+          nationId: winner.nationId,
+          turn: winner.turn,
+          winnerOrdinal: winner.winnerOrdinal,
+        })
+      )
+    );
+    await Promise.all(
+      officeAnalytics.map((transition) =>
+        captureOfficeTransition({
+          db,
+          officeType: transition.officeType,
+          transitionType: transition.transitionType,
+          partyId: transition.partyId,
+          selectionMethod: "election",
+          tenureTurns: 0,
+          careerStage: transition.careerStage,
+          nationId: transition.nationId,
+          turn: currentTurn,
+        })
+      )
+    );
     await voidDebateSessionsForElection(db, election._id, now);
 
     await reconcileGermanElection(db, election, now);

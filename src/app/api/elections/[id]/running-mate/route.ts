@@ -210,6 +210,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       message: `${runningMateChar.name} is now your running mate.`,
+      electionType: election.electionType,
+      phase: "general",
     });
   } catch (error) {
     return handleRouteError(error);

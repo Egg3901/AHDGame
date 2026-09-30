@@ -17,6 +17,10 @@ vi.mock("posthog-node", () => ({
   },
 }));
 
+vi.mock("@/lib/constants/countries", () => ({
+  COUNTRY_CONFIGS: { US: { name: "United States" } },
+}));
+
 function fakeDb(): Db {
   const rows: Record<string, unknown[]> = {
     federalBudget: [

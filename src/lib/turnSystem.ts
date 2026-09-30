@@ -710,6 +710,7 @@ export async function processTurn(
         void captureTurnPosthog({
           db,
           turn: context.newTurn,
+          iteration: activeIteration,
           durationMs,
           phaseStatuses,
           errorCount: lastHealth?.errorCount ?? 0,

@@ -435,7 +435,16 @@ export default function CreateCharacterPage() {
             typeof characterData.characterId === "string" &&
             typeof characterData.createdTurn === "number"
           ) {
-            rememberNewCharacter(characterData.characterId, characterData.createdTurn);
+            rememberNewCharacter(characterData.characterId, characterData.createdTurn, {
+              startingNationId:
+                typeof characterData.countryId === "string"
+                  ? characterData.countryId
+                  : country.toUpperCase(),
+              creationPath: "character_creation_flow",
+              ...(typeof characterData.characterCount === "number"
+                ? { characterCount: characterData.characterCount }
+                : {}),
+            });
           }
         })
         .catch(() => {});

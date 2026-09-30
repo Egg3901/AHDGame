@@ -70,6 +70,7 @@ import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governin
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { hasRequiredPrimeMinisterSeat } from "@/lib/uk/pmSeatEligibility";
 import { isSingleplayer } from "@/lib/singleplayer";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 export { resolveGoverningPartyIdsFromDocuments };
 
@@ -578,7 +579,8 @@ export async function appointPrimeMinister(
     nppId = null;
     characterName = pinnedPlayer.name;
   }
-  const activePreset = preset ?? (await getGameState())?.preset;
+  const activeGameState = await getGameState();
+  const activePreset = preset ?? activeGameState?.preset;
   // Capture the outgoing head of government BEFORE any clears so we only
   // announce a genuinely new appointment. Re-appointing the sitting holder
   // (e.g. the same PM winning a fresh formation vote each turn) must not fire a
@@ -589,6 +591,12 @@ export async function appointPrimeMinister(
   const priorPmCharacterId = priorGov?.pmCharacterId ?? null;
   const isSameHolder =
     characterId != null && priorPmCharacterId != null && priorPmCharacterId.equals(characterId);
+  const outgoingPlayerPm =
+    priorPmCharacterId && !isSameHolder
+      ? await db
+          .collection<Character>("characters")
+          .findOne({ _id: priorPmCharacterId }, { projection: { party: 1, careerHistory: 1 } })
+      : null;
 
   // Clear cabinet
   await clearCabinetOnTransition(db, countryId);
@@ -655,7 +663,10 @@ export async function appointPrimeMinister(
 
     const char = await db
       .collection<Character>("characters")
-      .findOne({ _id: characterId }, { projection: { party: 1, currentOffice: 1 } });
+      .findOne(
+        { _id: characterId },
+        { projection: { party: 1, currentOffice: 1, careerHistory: 1 } }
+      );
     const prev = char?.currentOffice;
     const pmOffice: OfficeType = {
       type: execKey,
@@ -685,10 +696,39 @@ export async function appointPrimeMinister(
         $push: { careerHistory: pmCareer },
       }
     );
+    if (!isSameHolder) {
+      await captureOfficeTransition({
+        db,
+        officeType: execKey,
+        transitionType: "gained",
+        partyId: char?.party,
+        selectionMethod: "appointment",
+        tenureTurns: 0,
+        careerStage: (char?.careerHistory?.length ?? 0) + 1,
+        nationId: countryId,
+        turn: activeGameState?.currentTurn ?? 0,
+        iteration: activeGameState?.iteration,
+      });
+    }
   } else if (nppId) {
     await db
       .collection<NPP>("npps")
       .updateOne({ _id: nppId }, { $set: { currentOffice: { type: execKey }, updatedAt: now } });
+  }
+
+  if (outgoingPlayerPm) {
+    await captureOfficeTransition({
+      db,
+      officeType: execKey,
+      transitionType: "lost",
+      partyId: outgoingPlayerPm.party,
+      selectionMethod: characterId || nppId ? "appointment" : "removal",
+      tenureTurns: 0,
+      careerStage: outgoingPlayerPm.careerHistory?.length ?? 0,
+      nationId: countryId,
+      turn: activeGameState?.currentTurn ?? 0,
+      iteration: activeGameState?.iteration,
+    });
   }
 
   const config = getCountryConfig(countryId, activePreset);

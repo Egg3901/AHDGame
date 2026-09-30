@@ -1,5 +1,12 @@
 import type { Db } from "mongodb";
-import type { ElectedOfficial, Character, NPP, CareerEvent, OfficeType } from "@/lib/db/types";
+import type {
+  ElectedOfficial,
+  Character,
+  NPP,
+  CareerEvent,
+  GameState,
+  OfficeType,
+} from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { getOfficeLabel } from "@/lib/utils/politics";
@@ -9,6 +16,7 @@ import {
   hasReachedExecutiveTermLimit,
   incrementExecutiveTermsServedUpdate,
 } from "@/lib/elections/executiveTermLimits";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 /**
  * Checks if the US president office is vacant and a VP exists.
@@ -130,6 +138,38 @@ export async function processPresidentialSuccession(db: Db): Promise<boolean> {
       $set: { characterId: null, countryId: usCountryId, isNPP: false, updatedAt: now },
       $unset: { characterName: "", party: "", nppId: "" },
     });
+
+  if (vpRecord.characterId && vpCharacter) {
+    const gameState = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } });
+    await Promise.all([
+      captureOfficeTransition({
+        db,
+        officeType: "vicePresident",
+        transitionType: "left",
+        partyId: vpCharacter.party,
+        selectionMethod: "succession",
+        tenureTurns: 0,
+        careerStage: vpCharacter.careerHistory?.length ?? 0,
+        nationId: usCountryId,
+        turn: gameState?.currentTurn ?? 0,
+        iteration: gameState?.iteration,
+      }),
+      captureOfficeTransition({
+        db,
+        officeType: "president",
+        transitionType: "gained",
+        partyId: vpCharacter.party,
+        selectionMethod: "succession",
+        tenureTurns: 0,
+        careerStage: (vpCharacter.careerHistory?.length ?? 0) + 1,
+        nationId: usCountryId,
+        turn: gameState?.currentTurn ?? 0,
+        iteration: gameState?.iteration,
+      }),
+    ]);
+  }
 
   // The ascender moves between executive offices, but must not carry a
   // legislative seat into the presidency (#2038).

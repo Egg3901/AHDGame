@@ -11,6 +11,7 @@ import { didPass } from "@/lib/billLifecycleHelpers";
 import { resolvePhaseVotes } from "./resolvePhaseVotes";
 import { REGIONAL_LIFECYCLE_CONFIG, type RegionalLifecycleConfig } from "./configs/regional";
 import { validateStateBudgetImpact } from "@/lib/budget/validation";
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 
 /**
  * Regional (state) bill-lifecycle walker — the engine's `level: "regional"`
@@ -31,6 +32,29 @@ import { validateStateBudgetImpact } from "@/lib/budget/validation";
  */
 
 type DbConn = Awaited<ReturnType<typeof getDb>>;
+
+async function recordStateBillStatusChange(
+  db: DbConn,
+  bill: StateBill,
+  fromStatus: string,
+  toStatus: string,
+  turn: number,
+  voteMargin?: number
+): Promise<void> {
+  await captureBillStatusChanged({
+    db,
+    billId: bill._id.toString(),
+    fromStatus,
+    toStatus,
+    scope: "regional",
+    chamber: "regional",
+    category: bill.category,
+    provisionFamily: bill.provisions?.[0]?.type,
+    voteMargin,
+    nationId: bill.countryId ?? "US",
+    turn,
+  });
+}
 
 export interface StateBillEnactmentOutcome {
   enacted: boolean;
@@ -91,7 +115,7 @@ export async function finalizeStateBillEnactment(
   const rejection = await enforceStateBudgetGate(db, bill);
   if (rejection) {
     const now = new Date();
-    await db.collection<StateBill>("stateBills").updateOne(
+    const failed = await db.collection<StateBill>("stateBills").updateOne(
       { _id: bill._id },
       {
         $set: {
@@ -102,6 +126,16 @@ export async function finalizeStateBillEnactment(
         },
       }
     );
+    if (failed.modifiedCount > 0) {
+      await recordStateBillStatusChange(
+        db,
+        bill,
+        bill.status,
+        "failed",
+        currentTurn,
+        bill.votesFor - bill.votesAgainst
+      );
+    }
     if (bill.sponsorId) {
       const sponsor = await db
         .collection<Character>("characters")
@@ -229,7 +263,19 @@ export async function processStateBillTimers(
       { returnDocument: "before" }
     );
     if (!claimed) break;
-    const autoSignOutcome = await finalizeStateBillEnactment(db, claimed, currentTurnGov);
+    await recordStateBillStatusChange(
+      db,
+      claimed,
+      claimed.status,
+      executiveAssent.onTimeoutStatus,
+      currentTurnGov,
+      claimed.votesFor - claimed.votesAgainst
+    );
+    const autoSignOutcome = await finalizeStateBillEnactment(
+      db,
+      { ...claimed, status: executiveAssent.onTimeoutStatus },
+      currentTurnGov
+    );
     if (autoSignOutcome.enacted) {
       console.log(`[StateBill] Auto-signed bill ${claimed._id} (governor deadline passed)`);
     }
@@ -347,7 +393,7 @@ async function resolveStateBillVoting(
     });
 
     if (governor && governor.characterId) {
-      await db.collection<StateBill>(config.collection).updateOne(
+      const advanced = await db.collection<StateBill>(config.collection).updateOne(
         { _id: bill._id },
         {
           $set: {
@@ -360,6 +406,16 @@ async function resolveStateBillVoting(
           },
         }
       );
+      if (advanced.modifiedCount > 0) {
+        await recordStateBillStatusChange(
+          db,
+          bill,
+          bill.status,
+          chamberVote.onPassStatus,
+          currentTurn,
+          votesFor - votesAgainst
+        );
+      }
 
       const govChar = await db
         .collection<Character>("characters")
@@ -382,7 +438,7 @@ async function resolveStateBillVoting(
       // No seated executive — bill auto-enacted. Covers English non-London
       // UK regions (no devolved exec exists) and any region with a vacant
       // seat or no NPC seeded.
-      await db.collection<StateBill>(config.collection).updateOne(
+      const enacted = await db.collection<StateBill>(config.collection).updateOne(
         { _id: bill._id },
         {
           $set: {
@@ -394,11 +450,21 @@ async function resolveStateBillVoting(
           },
         }
       );
+      if (enacted.modifiedCount > 0) {
+        await recordStateBillStatusChange(
+          db,
+          bill,
+          bill.status,
+          chamberVote.onPassNoExecutiveStatus,
+          currentTurn,
+          votesFor - votesAgainst
+        );
+      }
       // The snapshot was just persisted above — the in-memory bill predates
       // it, and onBillEnacted reads it for the Discord vote chart.
       const autoEnactOutcome = await finalizeStateBillEnactment(
         db,
-        { ...bill, voteSnapshot },
+        { ...bill, status: chamberVote.onPassNoExecutiveStatus, voteSnapshot },
         currentTurn
       );
       budgetGateRejected = !autoEnactOutcome.enacted;
@@ -429,7 +495,7 @@ async function resolveStateBillVoting(
       `[StateBill] Bill ${bill._id} passed (${votesFor} for / ${votesAgainst} against of ${totalSeats} seats)`
     );
   } else {
-    await db.collection<StateBill>(config.collection).updateOne(
+    const failed = await db.collection<StateBill>(config.collection).updateOne(
       { _id: bill._id },
       {
         $set: {
@@ -440,6 +506,16 @@ async function resolveStateBillVoting(
         },
       }
     );
+    if (failed.modifiedCount > 0) {
+      await recordStateBillStatusChange(
+        db,
+        bill,
+        bill.status,
+        chamberVote.onRejectStatus,
+        currentTurn,
+        votesFor - votesAgainst
+      );
+    }
 
     // Notify sponsor that bill failed
     if (bill.sponsorId) {
@@ -508,7 +584,7 @@ async function resolveOverrideVoting(
   const overrideVotesFor = overrideTotals.for;
 
   if (overrideVotesFor >= supermajority) {
-    await db.collection<StateBill>(config.collection).updateOne(
+    const enacted = await db.collection<StateBill>(config.collection).updateOne(
       { _id: bill._id },
       {
         $set: {
@@ -519,7 +595,21 @@ async function resolveOverrideVoting(
         },
       }
     );
-    const overrideOutcome = await finalizeStateBillEnactment(db, bill, currentTurnOverride);
+    if (enacted.modifiedCount > 0) {
+      await recordStateBillStatusChange(
+        db,
+        bill,
+        bill.status,
+        override.onPassStatus,
+        currentTurnOverride,
+        overrideVotesFor - overrideTotals.against
+      );
+    }
+    const overrideOutcome = await finalizeStateBillEnactment(
+      db,
+      { ...bill, status: override.onPassStatus },
+      currentTurnOverride
+    );
     // Notify sponsor of override success (skipped when the budget gate blocked
     // enactment — the gate already notified the sponsor of the rejection).
     if (bill.sponsorId && overrideOutcome.enacted) {
@@ -546,7 +636,7 @@ async function resolveOverrideVoting(
       `[StateBill] Override succeeded for bill ${bill._id} (${overrideVotesFor}/${totalSeats} seats)`
     );
   } else {
-    await db.collection<StateBill>(config.collection).updateOne(
+    const failed = await db.collection<StateBill>(config.collection).updateOne(
       { _id: bill._id },
       {
         $set: {
@@ -557,6 +647,16 @@ async function resolveOverrideVoting(
         },
       }
     );
+    if (failed.modifiedCount > 0) {
+      await recordStateBillStatusChange(
+        db,
+        bill,
+        bill.status,
+        override.onFailStatus,
+        currentTurnOverride,
+        overrideVotesFor - overrideTotals.against
+      );
+    }
 
     // Notify sponsor of override failure
     if (bill.sponsorId) {

@@ -242,6 +242,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       homeState: freshChar.homeState,
       boostPct: PRIMARY_HOME_SURGE_PCT,
       cost: PRIMARY_HOME_SURGE_COST_FUNDS,
+      electionType: election.electionType,
+      phase: "primary",
     });
   } catch (error) {
     return handleRouteError(error);

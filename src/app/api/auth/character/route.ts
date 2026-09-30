@@ -519,6 +519,8 @@ export async function POST(request: Request) {
         message: "Character created successfully",
         characterId: result.insertedId.toString(),
         createdTurn: gameTime.currentTurn,
+        countryId: stateDoc.countryId ?? requestedCountryId.toUpperCase(),
+        characterCount: activeCount + 1,
       },
       { status: 201 }
     );

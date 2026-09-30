@@ -14,6 +14,7 @@ import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
+import { captureElectionResolved } from "@/lib/analytics/electionAnalytics";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -53,15 +54,30 @@ export async function resolveGeneralElections(
   if (completedElections.length === 0) return 0;
 
   const electionIds = completedElections.map((e) => e._id);
-  const [tallies, gameStateDoc] = await Promise.all([
+  const [tallies, completedCandidates, gameStateDoc] = await Promise.all([
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
       .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_LATEST_SNAPSHOT_ONLY })
       .toArray(),
+    db
+      .collection("electionCandidates")
+      .find(
+        { electionId: { $in: electionIds }, status: "active" },
+        { projection: { electionId: 1, isNPP: 1 } }
+      )
+      .toArray()
+      .catch(() => []),
     db.collection<GameState>("gameState").findOne({ _id: "current" }),
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
   const tallyMap = new Map(tallies.map((t) => [t.electionId.toString(), t]));
+  const candidatesByElection = new Map<string, typeof completedCandidates>();
+  for (const candidate of completedCandidates) {
+    const key = candidate.electionId.toString();
+    const list = candidatesByElection.get(key) ?? [];
+    list.push(candidate);
+    candidatesByElection.set(key, list);
+  }
 
   let resolved = 0;
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
@@ -150,6 +166,37 @@ export async function resolveGeneralElections(
       : [];
   const finalPresidentTallyMap = new Map(
     finalPresidentTallies.map((tally) => [tally.electionId.toString(), tally])
+  );
+
+  await Promise.all(
+    resolvedElections.map((election) => {
+      const electionCandidates = candidatesByElection.get(election._id.toString()) ?? [];
+      const tally = tallyMap.get(election._id.toString());
+      const seatEstimateCount = Object.values(tally?.seatsEstimate ?? {}).reduce(
+        (sum, seats) => sum + seats,
+        0
+      );
+      const isNational =
+        election.electionType === "president" ||
+        election.electionType === "primeMinister" ||
+        election.state === election.countryId;
+      return captureElectionResolved({
+        db,
+        electionId: election._id.toString(),
+        electionType: election.electionType,
+        phase: "general",
+        scope: isNational ? "national" : "regional",
+        candidateCount: electionCandidates.length,
+        playerCandidateCount: electionCandidates.filter((candidate) => !candidate.isNPP).length,
+        turnoutPct: "unknown",
+        seatsAvailable:
+          election.totalSeats ??
+          (seatEstimateCount || (isNational ? 1 : Math.max(1, electionCandidates.length))),
+        nationId: election.countryId,
+        turn: currentTurn,
+        iteration: gameStateDoc?.iteration,
+      });
+    })
   );
 
   for (const election of resolvedElections) {
