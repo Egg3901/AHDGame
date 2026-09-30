@@ -58,17 +58,19 @@ describe("1991 no starting parties picker", () => {
 
   async function pick1991() {
     render(<GameResetControls />);
-    fireEvent.click(await screen.findByRole("button", { name: "1991", exact: true }));
+    fireEvent.click(await screen.findByRole("button", { name: "1991" }));
   }
 
   it("enables No Parties for 1991 and sends the explicit choice without changing the data preset", async () => {
     await pick1991();
-    const noParties = screen.getByRole("button", { name: "No Parties", exact: true });
+    const noParties = screen.getByRole("button", { name: "No Parties" });
     expect(noParties).toHaveProperty("disabled", false);
     fireEvent.click(noParties);
     expect(noParties.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText(/Background countries keep their modeled parties and governments/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reset + No Parties", exact: true }));
+    expect(
+      screen.getByText(/Background countries keep their modeled parties and governments/)
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset + No Parties" }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain("preset=1991-default");
     expect(requests[0].body.startingParties).toBe("none");
@@ -80,18 +82,18 @@ describe("1991 no starting parties picker", () => {
 
   it("switches back to default parties without carrying over the empty-party choice", async () => {
     await pick1991();
-    fireEvent.click(screen.getByRole("button", { name: "No Parties", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Default Parties", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "No Parties" }));
+    fireEvent.click(screen.getByRole("button", { name: "Default Parties" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical" }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].body.startingParties).toBe("default");
   });
 
   it("retains the existing 2019 no-parties preset when switching years", async () => {
     await pick1991();
-    fireEvent.click(screen.getByRole("button", { name: "No Parties", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "2019", exact: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "No Parties" }));
+    fireEvent.click(screen.getByRole("button", { name: "2019" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical" }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain("preset=2019-no-parties");
     expect(requests[0].body.startingParties).toBeUndefined();
