@@ -10,6 +10,8 @@ import {
   writePreForexBalanceCheckpoint,
 } from "../balanceSnapshot";
 import { reconcileTurn } from "../reconcile";
+import type { BalanceSnapshot } from "../types";
+import type { FederalBudget } from "@/lib/db/types/budget";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 function world() {
@@ -46,12 +48,16 @@ describe("government snapshot valuation", () => {
     await processTreasuryTurn(10);
     await writePreForexBalanceCheckpoint(db, 10);
     await writeBalanceSnapshot(db, 10);
-    const budget = memory.collection("federalBudget").docs[0];
-    const closing = memory.collection("balanceSnapshots").docs.find((r) => r.turn === 10)!;
+    const budget = (await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ countryId: "BG" }))!;
+    const closing = (await db
+      .collection<BalanceSnapshot>("balanceSnapshots")
+      .findOne({ turn: 10 }))!;
     expect(budget.treasuryBalance).toBe(5650);
     expect(closing.balances["government:BG:BGL"]).toBe(200);
-    expect(closing.accountValuations["government:BG:BGL"]).toEqual({
-      anchorRate: budget.treasuryAccrual.anchorRate,
+    expect(closing.accountValuations!["government:BG:BGL"]).toEqual({
+      anchorRate: budget.treasuryAccrual!.anchorRate,
       anchorRateSource: "authored_budget_only",
       anchorRatePreset: "1991-default",
     });
