@@ -6,7 +6,7 @@ Refs #1328 and #2159. This qualifies the existing reserve-pool transfer adoption
 
 - Baseline: `e2858e5c5007a19a1d9c5b7f5dde000b2a1c6efe`.
 - Treatment: `0b40ef17d774a5a5420c17f34ce69c7663b7c1f0`.
-- The baseline and each treatment checkout were clean during execution. Baseline evidence is reused from its original run. Treatment includes the baseline development commit, the LOC journal prerequisite through `a094924920`, and the coordinated reserve quote guard. Later report changes do not alter runtime source. The companion JSON records fixture hashes.
+- The baseline and each treatment checkout were clean during execution. Baseline evidence is reused from its original run. Treatment includes the baseline development commit, the LOC journal prerequisite through `a094924920`, and the coordinated reserve quote guard. Later report changes and LOC test/fixture typing corrections through `2bede34381` do not alter runtime game source. The companion JSON records fixture hashes.
 
 ## Outcomes
 

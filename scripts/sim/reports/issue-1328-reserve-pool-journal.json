@@ -247,5 +247,9 @@
   "treatmentFixtureDependenciesSha256": {
     "reserve-pool-auth.ts": "24a71a5ed13b60ffa599e60d34e779d3680afb21a71af21204730d079b647418",
     "reserve-pool-rate-limit.ts": "8fb11b116e6077a943ee9d35b4078fe40ef8af15fcc399d460b900b04c1848f1"
+  },
+  "postRunSourceChanges": {
+    "throughCommit": "2bede34381",
+    "scope": "LOC test fixture typing and separate qualification scripts only; runtime game source unchanged from executed source"
   }
 }
