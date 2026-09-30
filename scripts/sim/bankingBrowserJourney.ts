@@ -11,6 +11,7 @@ import { runBankingActions } from "./bankingJourneyActions";
 import { runGovernanceJourney } from "./bankingJourneyGovernance";
 import { runRecoveryJourney } from "./bankingJourneyRecovery";
 import { runCharterJourney } from "./bankingJourneyCharter";
+import { runApprovalJourney } from "./bankingJourneyApproval";
 import { loadRetainedContext } from "./bankingParameterSetup";
 import { USER, IE_USER, prepareJourney, journeySnapshot } from "./bankingJourneyFixture";
 
@@ -226,7 +227,7 @@ async function main() {
     // Compile the real routes before browser actions. GET on command-only routes
     // returns 405 without calling the financial command, so no funds move here.
     const warmPaths = [
-      ...(!priorSteps ? ["/banking"] : []),
+      "/banking",
       "/corporation/132811?tab=bank",
       "/centralbank/usd?tab=committee",
       "/centralbank/iep",
@@ -250,6 +251,8 @@ async function main() {
       "/api/banking/corporation/000000000000000000002118",
       "/api/corporations/132811/bank/charter",
       "/api/corporations/132811/bank/recapitalize",
+      "/api/corporations/132811/bank/approval",
+      "/api/corporations/132811/bank/loans/000000000000000000002121/decision",
     ];
     // Next dev writes shared manifests during compilation. Warm serially so
     // concurrent cold page requests cannot observe a partially written manifest.
@@ -344,6 +347,15 @@ async function main() {
       },
     ]);
     const charter = await runCharterJourney(page, db, base);
+    writeFileSync(
+      out,
+      JSON.stringify(
+        { sourceCommit, stage: "charter complete", actions, recovery, governance, charter },
+        null,
+        2
+      )
+    );
+    const approval = await runApprovalJourney(page, db, base);
     assert.equal(
       (await loadRetainedContext(client.db(sourceName))).hash,
       fixture.retainedHash,
@@ -360,6 +372,7 @@ async function main() {
           governance,
           recovery,
           charter,
+          approval,
           resumeUntouchedFixture,
           resumedCompletedDeposit: Boolean(resumedDepositBaseline),
           excludedAuxiliaryPaths,

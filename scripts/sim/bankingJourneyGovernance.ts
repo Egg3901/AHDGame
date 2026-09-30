@@ -75,7 +75,17 @@ export async function runGovernanceJourney(
   await switchToIrishChair();
   const beforeIe = await db.collection("centralBanks").findOne({ _id: "IE" as never });
   assert(beforeIe);
-  await page.goto(`${base}/centralbank/iep`, { waitUntil: "domcontentloaded", timeout: 180_000 });
+  const irelandResponse = page.waitForResponse(
+    (r) =>
+      new URL(r.url()).pathname === "/api/country/ie/central-bank" &&
+      r.request().method() === "GET",
+    { timeout: 180_000 }
+  );
+  const [irelandRead] = await Promise.all([
+    irelandResponse,
+    page.goto(`${base}/centralbank/iep`, { waitUntil: "domcontentloaded", timeout: 180_000 }),
+  ]);
+  assert(irelandRead.ok(), "Irish authority read must succeed before setting the rate");
   await page.getByRole("button", { name: "+", exact: true }).click();
   await page
     .getByPlaceholder("Reason (optional)")
