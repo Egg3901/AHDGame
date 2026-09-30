@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
+import { POST } from "../character/route";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -32,7 +33,7 @@ vi.mock("@/lib/time/gameTime", () => ({
 
 const mockUserId = new ObjectId().toString();
 
-function makeDb(baseRate?: number) {
+function makeDb(baseRate?: number, eraPricing = false) {
   const insertedId = new ObjectId();
   const insertOne = vi.fn().mockResolvedValue({ insertedId, acknowledged: true });
 
@@ -65,6 +66,7 @@ function makeDb(baseRate?: number) {
           findOne: vi.fn().mockResolvedValue({
             _id: "default",
             startingFunds: 50_000,
+            campaignEraPriceLevelEnabled: eraPricing,
             startingActions: 3,
             startingPoliticalInfluence: 0,
             startingFavorability: 50,
@@ -73,6 +75,10 @@ function makeDb(baseRate?: number) {
           }),
         };
       }
+      if (name === "gameState")
+        return {
+          findOne: vi.fn().mockResolvedValue(eraPricing ? { preset: "1953-default" } : null),
+        };
       if (name === "users") {
         return {
           findOne: vi.fn().mockResolvedValue({
@@ -139,7 +145,6 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     const { db, insertOne } = makeDb();
     vi.mocked(getDb).mockResolvedValue(db as never);
 
-    const { POST } = await import("../character/route");
     const req = new Request("http://localhost/api/auth/character", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -173,7 +178,6 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     const { db, insertOne } = makeDb(360);
     vi.mocked(getDb).mockResolvedValue(db as never);
 
-    const { POST } = await import("../character/route");
     const req = new Request("http://localhost/api/auth/character", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -202,12 +206,46 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     expect(inserted.autoConvertEnabled).toBe(true);
   });
 
+  it("scales campaign starting funds in 1953 without multiplying personal wealth by campaign prices", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    const { db, insertOne } = makeDb(360, true);
+    vi.mocked(getDb).mockResolvedValue(db as never);
+
+    const req = new Request("http://localhost/api/auth/character", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Tanaka Test",
+        homeState: "jp_tokyo",
+        countryId: "JP",
+        party: "ldp",
+        policies: { economic: 1, social: 1 },
+        demographics: {
+          race: "asian",
+          gender: "male",
+          education: "college",
+          wealth: "middle",
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+
+    const inserted = insertOne.mock.calls[0][0];
+    // wealthBonus = 2_500_000 ₳; INITIAL_RATES.JP = 106 → ¥900_000_000
+    expect(inserted.funds).toBe(1837);
+    expect(inserted.currencyBalances?.campaign).toBe(1837 * 360);
+    expect(inserted.currencyBalances?.personal?.JPY).toBe(inserted.cashOnHand * 360);
+    expect(inserted.displayCurrencyPreference).toBe("local");
+    expect(inserted.autoConvertEnabled).toBe(true);
+  });
+
   it("converts high wealthBonus to JPY using INITIAL_RATES", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { db, insertOne } = makeDb();
     vi.mocked(getDb).mockResolvedValue(db as never);
 
-    const { POST } = await import("../character/route");
     const req = new Request("http://localhost/api/auth/character", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -260,6 +298,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
           findOne: vi.fn().mockResolvedValue({
             _id: "default",
             startingFunds: 50_000,
+            campaignEraPriceLevelEnabled: false,
             startingActions: 3,
             startingPoliticalInfluence: 0,
             startingFavorability: 50,
@@ -268,6 +307,10 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
           }),
         };
       }
+      if (name === "gameState")
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+        };
       if (name === "users") {
         return {
           findOne: vi.fn().mockResolvedValue({
@@ -295,7 +338,6 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     });
     vi.mocked(getDb).mockResolvedValue(db as never);
 
-    const { POST } = await import("../character/route");
     const req = new Request("http://localhost/api/auth/character", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

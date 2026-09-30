@@ -1,4 +1,7 @@
-import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
+} from "@/lib/campaigns/campaignCurrency";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
@@ -140,16 +143,17 @@ export async function getCampaignDetail(
   // the frozen world-seeded currency basis (via campaignAnchorToLocal) so it matches
   // what campaignTurn and upgradeCampaign actually credit/charge (never the live
   // exchangeRates).
-  const [campaignRates, detailPreset] = await Promise.all([
+  const [campaignRates, detailPreset, priceLevel] = await Promise.all([
     loadCampaignCurrencyRates(db),
     // One route-path read: euro members preview in EUR, matching what
     // upgradeCampaign/donateToCampaign actually charge.
     getGameStatePresetOrDefault(db),
+    loadCampaignPriceLevel(db),
   ]);
   const campaignCurrencyCode = getCampaignCurrency(electionCountryId, detailPreset);
   const campaignRate = campaignLocalRate(electionCountryId, campaignRates, detailPreset); // frozen base rate, for the fxRate payload field
   const toLocal = (anchor: number) =>
-    campaignAnchorToLocal(anchor, electionCountryId, campaignRates, detailPreset);
+    campaignAnchorToLocal(anchor * priceLevel, electionCountryId, campaignRates, detailPreset);
   const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)
@@ -238,6 +242,7 @@ export async function getCampaignDetail(
     ...(runningMateSurrogate ? { runningMateSurrogate } : {}),
     currencyCode: campaignCurrencyCode,
     fxRate: campaignRate,
+    priceLevel,
     campaignStrength: campaign.campaignStrength ?? 0,
     ...(campaignStrengthMaxBonus !== CAMPAIGN_STRENGTH_MAX_BONUS
       ? {

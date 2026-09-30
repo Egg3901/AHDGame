@@ -27,6 +27,7 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { emitTx } from "@/lib/financialTxLog/emit";
+import { loadBondQuote } from "@/lib/bonds/marketPool";
 
 describe("purchaseBondUnitsForFund", () => {
   it("enforces the sovereign per-issue cap before debiting fund cash", async () => {
@@ -136,6 +137,43 @@ describe("purchaseBondUnitsForFund", () => {
         expect.objectContaining({ $inc: { cashAnchor: 5_000 } })
       );
       expect(emitTx).not.toHaveBeenCalled();
+    });
+
+    it("sizes purchases at the actual ask and preserves marked cash backing", async () => {
+      vi.mocked(loadBondQuote).mockResolvedValueOnce({
+        askPerUnit: 1_100,
+        bidPerUnit: 990,
+      } as Awaited<ReturnType<typeof loadBondQuote>>);
+      const result = await purchaseBondUnitsForFund(db as unknown as Db, fund, bond, 2, {
+        maxCostAnchor: 1_600,
+        cashFloor: { cashAnchor: 3_000, totalBackingAnchor: 10_000, fraction: 0.05 },
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        units: 1,
+        costAnchor: 1_100,
+        markedValueAnchor: 1_000,
+      });
+      expect(db.collectionMocks.indexFunds.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: fundId, cashAnchor: { $gte: 1_595 } },
+        expect.anything(),
+        expect.anything()
+      );
+    });
+
+    it("rejects a purchase that would breach five percent after a mark gain", async () => {
+      vi.mocked(loadBondQuote).mockResolvedValueOnce({
+        askPerUnit: 900,
+        bidPerUnit: 890,
+      } as Awaited<ReturnType<typeof loadBondQuote>>);
+      const result = await purchaseBondUnitsForFund(db as unknown as Db, fund, bond, 1, {
+        maxCostAnchor: 900,
+        cashFloor: { cashAnchor: 1_400, totalBackingAnchor: 10_000, fraction: 0.05 },
+      });
+
+      expect(result).toEqual({ ok: false, reason: "cash_buffer_floor" });
+      expect(db.collectionMocks.indexFunds.findOneAndUpdate).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,3 +1,8 @@
+/**
+ * Transnational terrorism creates plots from persistent threat pressure.
+ * Intelligence, policing, emergency authority and independent coalition choices
+ * determine containment, attack severity, intervention and eventual drawdown.
+ */
 import type { GlobalResponseOutcome } from "@/lib/db/types/crisis";
 import { choiceNode, responseOpt } from "../authoring";
 import { cfx } from "../effects";
@@ -25,7 +30,7 @@ function role(ctx: RoleContext): ConflictRole {
 }
 
 function trees(key: string): RoleDecisionTrees {
-  return {
+  const result: RoleDecisionTrees = {
     belligerent: choiceNode(
       `${key}_target`,
       "A transnational threat tests the state",
@@ -50,7 +55,7 @@ function trees(key: string): RoleDecisionTrees {
           "military_response",
           "Prepare military retaliation",
           "Build a coalition for strikes or intervention once attribution is strong enough.",
-          { intervention: 4, escalation: 3 },
+          { intervention: 4, escalation: 3, alliance: 1 },
           [],
           0.0008
         ),
@@ -188,9 +193,82 @@ function trees(key: string): RoleDecisionTrees {
       ]
     ),
   };
+  for (const node of Object.values(result)) {
+    if (!node) continue;
+    node.options ??= [];
+    node.options.push(
+      responseOpt(
+        "defer_response",
+        "Take no new action",
+        "Withhold new commitments; existing powers and deployments remain.",
+        {}
+      ),
+      responseOpt(
+        "restore_law",
+        "Restore ordinary law",
+        "Repeal this government's emergency authority and support courts and policing.",
+        { policing: 3, restraint: 2 }
+      ),
+      responseOpt(
+        "draw_down",
+        "Withdraw military commitments",
+        "Withdraw this government's forces and fund civilian reconstruction.",
+        { drawdown: 4, restraint: 2 },
+        [],
+        0.0001
+      )
+    );
+    for (const option of node.options) {
+      option.campaignCommitment =
+        (option.responseScores?.intervention ?? 0) > 0
+          ? { kind: "military", scale: 15, warWearinessDelta: 3 }
+          : option.optionId === "draw_down"
+            ? { kind: "military", scale: -25, warWearinessDelta: -5 }
+            : { kind: "diplomatic", scale: 0 };
+      if (option.optionId === "emergency_powers" || option.optionId === "security_sweep")
+        option.treasuryCostPctGdp = 0.0002;
+    }
+  }
+  return result;
 }
 
 const outcomes: GlobalResponseOutcome[] = [
+  {
+    outcomeId: "threat_persists",
+    label: "Unresolved threat",
+    description: "Incomplete cooperation leaves a persistent network and continuing investigation.",
+    priority: -10,
+    conditions: [],
+    trackDeltas: { threatCapability: 2, plotReadiness: 3, attributionConfidence: 5 },
+    wireMessage: "Unresolved transnational threat pressure continues without a scheduled attack.",
+  },
+  {
+    outcomeId: "limited_attack",
+    label: "Limited attack",
+    description: "Partial preparedness limits the harm of a plot that still breaks through.",
+    priority: -5,
+    conditions: [],
+    nextConflictPhase: "major_attack",
+    nextConflictStatus: "active",
+    intensityDelta: 5,
+    trackDeltas: { plotReadiness: -45, publicFear: 8, attributionConfidence: 20 },
+    campaignDelta: { casualties: 2, civilianStrain: 3, infrastructureDamage: 1 },
+    wireMessage: "An attack breaks through, but preparedness limits its severity.",
+  },
+  {
+    outcomeId: "drawdown",
+    label: "Drawdown and reconstruction",
+    description: "Governments reduce their own military footprints and return to civilian tools.",
+    priority: 30,
+    conditions: [{ axis: "drawdown", min: 4 }],
+    trackDeltas: {
+      insurgency: -12,
+      warWeariness: -8,
+      civilLiberties: 4,
+    },
+    campaignDelta: { refugees: -4, civilianStrain: -4, infrastructureDamage: -3 },
+    wireMessage: "Participating governments begin drawdown and civilian reconstruction.",
+  },
   {
     outcomeId: "plot_disrupted",
     label: "Plot disrupted",
@@ -205,11 +283,10 @@ const outcomes: GlobalResponseOutcome[] = [
     trackDeltas: {
       intelligenceCoverage: 14,
       plotReadiness: -18,
-      threatCapability: -8,
+      threatCapability: -12,
       attributionConfidence: 6,
       publicFear: -4,
     },
-    nextConflictStatus: "active",
     campaignDelta: { civilianStrain: -4, settlementMomentum: 8 },
     tensionDelta: -3,
     wireMessage: "International intelligence cooperation disrupts a major transnational plot.",
@@ -227,9 +304,11 @@ const outcomes: GlobalResponseOutcome[] = [
     intensityDelta: -6,
     trackDeltas: {
       threatCapability: -10,
+      plotReadiness: -12,
+      attributionConfidence: 8,
       intelligenceCoverage: 8,
       civilLiberties: -3,
-      insurgency: -4,
+      insurgency: -12,
       warWeariness: -2,
     },
     campaignDelta: { civilianStrain: -3, settlementMomentum: 6 },
@@ -249,7 +328,6 @@ const outcomes: GlobalResponseOutcome[] = [
     intensityDelta: 8,
     trackDeltas: {
       threatCapability: -8,
-      interventionCommitment: 18,
       insurgency: 14,
       warWeariness: 8,
       civilLiberties: -4,
@@ -282,6 +360,8 @@ const outcomes: GlobalResponseOutcome[] = [
   },
   {
     outcomeId: "attack_breakthrough",
+    nextConflictPhase: "major_attack",
+    nextConflictStatus: "active",
     label: "Attack breakthrough",
     description:
       "Fragmented cooperation leaves an advanced plot able to strike an uncertain target.",
@@ -289,9 +369,9 @@ const outcomes: GlobalResponseOutcome[] = [
     conditions: [],
     intensityDelta: 15,
     trackDeltas: {
-      plotReadiness: 15,
+      plotReadiness: -45,
       publicFear: 18,
-      attributionConfidence: 8,
+      attributionConfidence: 20,
       allianceCohesion: 4,
     },
     campaignDelta: {
@@ -310,15 +390,15 @@ function event(phase: string, headline: string, body: string): ConflictEvent {
     windowTurns: 24,
     decisionTrees: trees(phase),
     defaultOptionIdByRole: {
-      belligerent: "integrated_intelligence",
-      backer_a: "share_intelligence",
-      backer_b: "oppose_intervention",
-      neighbor: "joint_policing",
-      bloc: "bloc_intelligence",
-      bystander: "neutral",
+      belligerent: "defer_response",
+      backer_a: "defer_response",
+      backer_b: "defer_response",
+      neighbor: "defer_response",
+      bloc: "defer_response",
+      bystander: "defer_response",
     },
     outcomes,
-    defaultOutcomeId: "attack_breakthrough",
+    defaultOutcomeId: "threat_persists",
   };
   return {
     key: `${phase}_response`,
@@ -366,7 +446,7 @@ export const TRANSNATIONAL_TERRORISM_DEF: LivingConflictDef = {
     {
       key: "network_growth",
       fromYear: 1998,
-      untilYear: 2006,
+      untilYear: 2027,
       everyTurns: 12,
       phaseKeys: ["network_formation", "warning"],
       trackDeltas: { threatCapability: 4, plotReadiness: 5 },
@@ -381,24 +461,31 @@ export const TRANSNATIONAL_TERRORISM_DEF: LivingConflictDef = {
       key: "normalization_pressure",
       everyTurns: 12,
       phaseKeys: ["network_degradation", "normalization"],
-      trackDeltas: { publicFear: -3, civilLiberties: 2, warWeariness: -2 },
+      trackDeltas: {
+        publicFear: -3,
+        civilLiberties: 2,
+        warWeariness: -2,
+        threatCapability: 1,
+        plotReadiness: 2,
+      },
     },
   ],
   transitions: [
+    {
+      key: "contain_formation",
+      fromPhase: "network_formation",
+      toPhase: "network_degradation",
+      priority: 80,
+      conditions: [
+        { track: "intelligenceCoverage", min: 62 },
+        { track: "threatCapability", max: 38 },
+      ],
+    },
     {
       key: "warnings_mount",
       fromPhase: "network_formation",
       toPhase: "warning",
       conditions: [{ track: "plotReadiness", min: 42 }],
-    },
-    {
-      key: "major_attack",
-      fromPhase: "warning",
-      toPhase: "major_attack",
-      conditions: [
-        { track: "plotReadiness", min: 70 },
-        { track: "intelligenceCoverage", max: 55 },
-      ],
     },
     {
       key: "prevent_attack",

@@ -83,11 +83,13 @@ describe("UK devolution reconciliation", () => {
     });
     expect(writes.find((w) => w.collection === "characters")?.filter).toEqual({
       _id: { $in: [characterId] },
-      currentOffice: "governor",
+      "currentOffice.type": "governor",
+      "currentOffice.state": { $in: ["SCO", "WAL", "NIR", "LON"] },
     });
     expect(writes.find((w) => w.collection === "npps")?.filter).toEqual({
       _id: { $in: [nppId] },
-      currentOffice: "governor",
+      "currentOffice.type": "governor",
+      "currentOffice.state": { $in: ["SCO", "WAL", "NIR", "LON"] },
     });
     expect(writes.at(-1)?.collection).toBe("ukDevolution");
   });

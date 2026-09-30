@@ -292,7 +292,7 @@ describe("materializeSyntheticActors", () => {
     expect(member?.characterId).toEqual(new ObjectId(plan.actors[6].characterIdHex));
   });
 
-  it("declares one candidacy plus one self-vote per office against the real org", async () => {
+  it("declares one chair candidacy and self-vote against the real org", async () => {
     const db = fakeDb();
     plantRealOrg(db);
     const result = await materializeSyntheticActors(db, {
@@ -301,12 +301,12 @@ describe("materializeSyntheticActors", () => {
       turn: 0,
       now: NOW,
     });
-    expect(result.statePartyVotes).toBe(3);
+    expect(result.statePartyVotes).toBe(1);
     const plan = buildSyntheticActorPlan(SEED);
-    expect(await db.collection("statePartyCandidates").countDocuments({})).toBe(3);
-    expect(await db.collection("statePartyElections").countDocuments({})).toBe(3);
-    expect(await db.collection("statePartyVotes").countDocuments({})).toBe(3);
-    for (const position of ["chair", "viceChair", "treasurer"]) {
+    expect(await db.collection("statePartyCandidates").countDocuments({})).toBe(1);
+    expect(await db.collection("statePartyElections").countDocuments({})).toBe(1);
+    expect(await db.collection("statePartyVotes").countDocuments({})).toBe(1);
+    for (const position of ["chair"]) {
       const election = await db.collection("statePartyElections").findOne({ position });
       // Real persisted org keys, never a synthetic partyId.
       expect(election?.stateId).toBe("CA");
@@ -390,11 +390,11 @@ describe("materializeSyntheticActors", () => {
     // The retry attaches to the same live voting elections (nothing new to
     // create) and upserts the same deterministic candidate/vote ids, so
     // counts never grow.
-    expect(first.statePartyElections).toBe(3);
+    expect(first.statePartyElections).toBe(1);
     expect(second.statePartyElections).toBe(0);
-    expect(await db.collection("statePartyElections").countDocuments({})).toBe(3);
-    expect(await db.collection("statePartyCandidates").countDocuments({})).toBe(3);
-    expect(await db.collection("statePartyVotes").countDocuments({})).toBe(3);
+    expect(await db.collection("statePartyElections").countDocuments({})).toBe(1);
+    expect(await db.collection("statePartyCandidates").countDocuments({})).toBe(1);
+    expect(await db.collection("statePartyVotes").countDocuments({})).toBe(1);
   });
 
   it("queues the Fed nomination once and never on retry (idempotent accept pool)", async () => {
@@ -527,7 +527,7 @@ describe("readActorPopulation (persisted manifest input)", () => {
     expect(snapshot.characters).toBe(SYNTHETIC_ACTOR_ROLES.length);
     expect(snapshot.syntheticCharacters).toBe(SYNTHETIC_ACTOR_ROLES.length);
     expect(snapshot.syntheticUsers).toBe(SYNTHETIC_ACTOR_ROLES.length);
-    expect(snapshot.statePartyCandidates).toBe(3);
+    expect(snapshot.statePartyCandidates).toBe(1);
     expect(snapshot.playerFoundedCorps).toBe(2);
     expect(snapshot.crisisDecidedInteractions).toBe(0);
     expect(snapshot.wealthListRows).toBe(0);

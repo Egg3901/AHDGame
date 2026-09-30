@@ -29,6 +29,10 @@ const TYPE_LABELS: Record<string, string> = {
   stateSenate: "State Senate",
   president: "President",
   // UK
+  snap_commons: "Snap Commons",
+  special_commons: "Commons By-Election",
+  snap_bundestag: "Snap Bundestag",
+  snap_shugiin: "Snap Shūgiin",
   commons: "House of Commons",
   primeMinister: "Prime Minister",
   regionalCouncil: "Regional Council",

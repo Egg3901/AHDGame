@@ -151,6 +151,20 @@ describe("deposit", () => {
 });
 
 describe("withdraw", () => {
+  it("never pays more than the claim when a rounded full withdrawal differs by float dust", () => {
+    const balance = 0.3 - 3e-12;
+    const d = allowed(
+      decideSavingsCommand(
+        account({ balance }),
+        { type: "withdraw", amount: 0.3, holder: CB },
+        CTX,
+        "full"
+      )
+    );
+    expect(d.next.balance).toBe(0);
+    expect(d.transition.legs.map((leg) => leg.amount)).toEqual([balance, balance]);
+  });
+
   it("pays out of the holder's cash and lowers the account", () => {
     const d = allowed(
       decideSavingsCommand(
@@ -448,5 +462,14 @@ describe("recover_orphaned_holder", () => {
       "invalid-funding"
     );
     expect(invalidFunding.allowed).toBe(false);
+  });
+  it("does not credit interest into an account frozen for closure", () => {
+    const d = decideSavingsCommand(
+      account({ status: "frozen", accruedInterest: 2 }),
+      { type: "credit_interest", holder: CB },
+      CTX,
+      "frozen"
+    );
+    expect(d.allowed).toBe(false);
   });
 });

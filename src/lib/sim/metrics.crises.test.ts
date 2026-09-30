@@ -1,6 +1,9 @@
+import { ObjectId, type Db } from "mongodb";
+import { vi } from "vitest";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 import { describe, expect, it } from "vitest";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
-import { summarizeLivingConflicts } from "./metrics";
+import { collectCrisisMetrics, summarizeLivingConflicts } from "./metrics";
 
 function conflict(seed: Partial<LivingConflictState> & Pick<LivingConflictState, "defKey">) {
   return {
@@ -78,5 +81,29 @@ describe("living-conflict worldsim metrics", () => {
       tracks: { violence: 12, reconstruction: 55 },
       consequences: { refugees: 2, infrastructureDamage: 8, settlementMomentum: 78 },
     });
+  });
+});
+
+it("counts only living-crisis decisions while retaining the overall disaster totals", async () => {
+  const db = createMockDb();
+  const livingId = new ObjectId();
+  const disasterId = new ObjectId();
+  db.collection("crises").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([
+      { _id: livingId, status: "active", livingConflictEventId: "peace:talks:1:window" },
+      { _id: disasterId, status: "active" },
+    ]),
+  });
+  db.collection("crisisInteractions").countDocuments.mockImplementation(
+    async (query: { crisisId: { $in: ObjectId[] }; resolvedAt: unknown }) => {
+      expect(query.crisisId.$in).toEqual([livingId]);
+      return query.resolvedAt === null ? 1 : 0;
+    }
+  );
+  const metrics = await collectCrisisMetrics(db as unknown as Db);
+  expect(metrics).toMatchObject({
+    totalSpawned: 2,
+    active: 2,
+    living: { pendingDecisions: 1, resolvedDecisions: 0 },
   });
 });

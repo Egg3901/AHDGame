@@ -1,3 +1,4 @@
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import type { Db } from "mongodb";
 import { accountKind } from "@/lib/ledger/accounts";
 import { US_STATES } from "@/lib/constants";
@@ -584,10 +585,15 @@ async function collectCorpHealth(db: Db): Promise<CorpHealthTelemetry> {
 async function collectEraCosts(db: Db): Promise<EraCostTelemetry> {
   const gs = await db.collection("gameState").findOne({ _id: "current" as never });
   const g = (gs ?? {}) as Record<string, unknown>;
-  const rawFlag = g["campaignEraPriceLevelEnabled"];
+  const config = await db
+    .collection("gameConfig")
+    .findOne({ _id: "default" as never }, { projection: { campaignEraPriceLevelEnabled: 1 } });
+  const rawFlag = config?.campaignEraPriceLevelEnabled;
+  const preset = typeof g["preset"] === "string" ? g["preset"] : undefined;
+  const priceLevel = resolveCampaignPriceLevel(rawFlag, preset);
   // Deterministic reference inputs at exactly national-average GDP, so the
   // GDP scalar is 1.0 and the numbers below are pure function snapshots.
-  const baseline = getGdpBaseline("US");
+  const baseline = getGdpBaseline("US", preset);
   const refPop = 1_000_000;
   const refGdpMillions = (baseline * refPop) / 1_000_000;
   const influences = [0, 20, 40, 60, 80];
@@ -596,7 +602,7 @@ async function collectEraCosts(db: Db): Promise<EraCostTelemetry> {
   const donorBuild = [0, 25, 50, 75].map((l) => getDonorActionCost(l, "buildDonorBase"));
   return {
     available: true,
-    note: "Reference costs pin the pure action-cost functions at fixed inputs; they move only when the cost code changes.",
+    note: "Reference costs use the world preset and authoritative configuration flag at national-average GDP.",
     preset: typeof g["preset"] === "string" ? (g["preset"] as string) : "unknown",
     startingYear: typeof g["startingYear"] === "number" ? (g["startingYear"] as number) : null,
     currentYear: typeof g["currentYear"] === "number" ? (g["currentYear"] as number) : null,
@@ -609,9 +615,18 @@ async function collectEraCosts(db: Db): Promise<EraCostTelemetry> {
     referenceCosts: {
       actionPoints: { campaign, advertise, donorBuild },
       fundsAtNationalAverageGdp: {
-        campaign: influences.map((i) => getCampaignFundCost(i, refGdpMillions, refPop, "US")),
-        advertise: getAdvertiseFundCost(0, refGdpMillions, refPop, "US"),
-        donorBuildL25: getBuildDonorBaseFundCost(25, refGdpMillions, refPop, "US"),
+        campaign: influences.map((i) =>
+          getCampaignFundCost(i, refGdpMillions, refPop, "US", preset, priceLevel)
+        ),
+        advertise: getAdvertiseFundCost(0, refGdpMillions, refPop, "US", preset, priceLevel),
+        donorBuildL25: getBuildDonorBaseFundCost(
+          25,
+          refGdpMillions,
+          refPop,
+          "US",
+          preset,
+          priceLevel
+        ),
       },
     },
   };

@@ -254,7 +254,7 @@ export function ExperimentalMobileMenu({
       {/* Search — inline; no autofocus so opening the menu doesn't pop the
           keyboard / scroll-zoom into the field on mobile (focuses on tap). */}
       <div className="mb-3.5">
-        <UniversalSearch />
+        <UniversalSearch onNavigate={onClose} />
       </div>
 
       {/* Profile card — top of the drawer so it's the first thing you hit. */}
@@ -599,7 +599,7 @@ export function ExperimentalMobileMenu({
               href={item.href}
               onClick={onClose}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-[10px] px-3.5 py-3 text-[15px] transition-colors hover:bg-white/5 ${
+              className={`flex items-center gap-2 rounded-[10px] px-3 py-2.5 text-sm transition-colors hover:bg-white/5 ${
                 active ? "bg-card font-semibold text-foreground" : "text-fg-2"
               }`}
             >

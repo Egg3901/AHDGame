@@ -41,6 +41,95 @@ describe("runMetricEngine — phase behavior", () => {
     });
   }
 
+  it("turns persisted Yugoslav damage and displacement into workforce and GDP effects, then recovers", async () => {
+    async function run(displacement: number, damage: number, reconstruction: number) {
+      db = createMockDb();
+      const regionDocs = [
+        {
+          _id: "YU_BIH",
+          name: "Bosnia",
+          countryId: "YU",
+          population: 100000,
+          workingAgePopulation: 60000,
+          gdp: 1000,
+          capitalStock: 3000,
+          outputGap: 0,
+        },
+        {
+          _id: "CA",
+          name: "CA",
+          countryId: "US",
+          population: 100000,
+          workingAgePopulation: 60000,
+          gdp: 1000,
+          capitalStock: 3000,
+          outputGap: 0,
+        },
+      ];
+      setupCollection("states", regionDocs);
+      setupCollection("corporateSectors", []);
+      setupCollection("unownedSectors", []);
+      setupCollection(
+        "macroMetrics",
+        ["YU_BIH", "CA"].map((_id) => ({
+          _id,
+          economic: {
+            laborParticipation: { value: 60 },
+            laborForce: { value: 36000 },
+            sectorGrowth: { value: 2 },
+            gdpGrowth: { value: 2 },
+          },
+        }))
+      );
+      setupCollection("corporations", []);
+      setupCollection("exchangeRates", []);
+      setupCollection("federalBudget", []);
+      setupCollection("stateBudgets", []);
+      db.collection("gameState");
+      db.collectionMocks.gameState!.findOne.mockResolvedValue({
+        _id: "current",
+        livingConflictsEnabled: true,
+      });
+      db.collection("livingConflicts");
+      db.collectionMocks.livingConflicts!.findOne.mockResolvedValue({
+        hasOpened: true,
+        status: "active",
+        tracks: { displacement, infrastructureDamage: damage, reconstruction },
+      });
+      const metrics: Record<string, Record<string, number>> = {};
+      const states: Record<string, Record<string, number>> = {};
+      type Op = {
+        updateOne: { filter: { _id: string }; update: { $set: Record<string, number> } };
+      };
+      db.collectionMocks.macroMetrics!.bulkWrite.mockImplementation(async (ops: Op[]) => {
+        for (const op of ops) metrics[op.updateOne.filter._id] = op.updateOne.update.$set;
+        return { ok: 1 };
+      });
+      db.collectionMocks.states!.bulkWrite.mockImplementation(async (ops: Op[]) => {
+        for (const op of ops) states[op.updateOne.filter._id] = op.updateOne.update.$set;
+        return { ok: 1 };
+      });
+      await runMetricEngine(db as unknown as Db, 10);
+      // Supply shocks enter realized GDP through the stored output gap next turn.
+      setupCollection(
+        "states",
+        regionDocs.map((region) => ({ ...region, ...states[region._id] }))
+      );
+      await runMetricEngine(db as unknown as Db, 11);
+      return { metrics, states };
+    }
+    const peace = await run(0, 0, 0);
+    const war = await run(100, 100, 0);
+    const rebuilt = await run(0, 100, 100);
+    expect(war.metrics.YU_BIH["economic.laborForce.value"]).toBeLessThan(
+      peace.metrics.YU_BIH["economic.laborForce.value"]
+    );
+    expect(war.states.YU_BIH.gdp).toBeLessThan(peace.states.YU_BIH.gdp);
+    expect(war.metrics.YU_BIH["livingConflictExposure.infrastructureDamage"]).toBe(1);
+    expect(war.states.CA.gdp).toBe(peace.states.CA.gdp);
+    expect(rebuilt.states.YU_BIH.gdp).toBeCloseTo(peace.states.YU_BIH.gdp);
+  });
+
   it("consumes a country-scoped crisis GDP rate through sectorGrowth and compounds stock", async () => {
     const macro = [
       {

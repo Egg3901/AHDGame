@@ -8,7 +8,7 @@ import type { LivingConflictDef } from "../types";
 type Participants = LivingConflictDef["participants"];
 
 export function resolveConflictParticipants(
-  def: Pick<LivingConflictDef, "participants" | "participantFallbacks">,
+  def: Pick<LivingConflictDef, "participants" | "participantFallbacks" | "actors">,
   availableCountryIds: ReadonlySet<string>
 ): Participants {
   const primaryActors = [
@@ -41,6 +41,28 @@ export function resolveConflictParticipants(
   const belligerents = resolveMany(def.participants.belligerents);
   const backerA = resolveOne(def.participants.backerA);
   const backerB = resolveOne(def.participants.backerB);
+  const representedActors =
+    availableCountryIds.size === 0
+      ? undefined
+      : def.actors?.map((actor) => {
+          const countryId = actor.countryCandidates.find(
+            (id) =>
+              availableCountryIds.has(id) &&
+              (!owners.has(id) || owners.get(id) === actor.representsCountryId)
+          );
+          return {
+            id: actor.id,
+            name: actor.name,
+            representsCountryId: actor.representsCountryId,
+            ...(countryId ? { countryId } : {}),
+            regionIds: [...actor.regionIds],
+          };
+        });
+  for (const actor of representedActors ?? []) {
+    if (actor.countryId && !belligerents.includes(actor.countryId)) {
+      belligerents.push(actor.countryId);
+    }
+  }
   return {
     belligerents,
     ...(backerA ? { backerA } : {}),
@@ -48,12 +70,20 @@ export function resolveConflictParticipants(
     neighbors: resolveMany(def.participants.neighbors),
     blocMembers: resolveMany(def.participants.blocMembers),
     bystanders: resolveMany(def.participants.bystanders),
+    ...(representedActors ? { representedActors } : {}),
   };
 }
 
 export function hasRequiredBelligerents(
   def: Pick<LivingConflictDef, "participants">,
-  participants: Pick<Participants, "belligerents">
+  participants: Pick<Participants, "belligerents" | "representedActors">
 ): boolean {
+  if (participants.representedActors?.length) {
+    return def.participants.belligerents.every(
+      (id) =>
+        participants.belligerents.includes(id) ||
+        participants.representedActors?.some((actor) => actor.representsCountryId === id)
+    );
+  }
   return new Set(participants.belligerents).size >= new Set(def.participants.belligerents).size;
 }

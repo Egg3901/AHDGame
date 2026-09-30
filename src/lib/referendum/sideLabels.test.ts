@@ -9,3 +9,10 @@ describe("referendumSideLabels", () => {
     expect(referendumSideLabels("independence")).toEqual({ yes: "Independence", no: "Stay in UK" });
   });
 });
+
+it("labels peace agreement consent without promising a territorial change", () => {
+  expect(referendumSideLabels("peace_agreement")).toEqual({
+    yes: "Ratify agreement",
+    no: "Reject agreement",
+  });
+});

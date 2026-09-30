@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { POST } from "./route";
 
 // Mock dependencies
 vi.mock("@/lib/mongodb", () => ({
@@ -67,7 +68,9 @@ function campaignDb(collections: Record<string, Record<string, unknown>>) {
           ? (collections[name] ?? {
               findOne: vi.fn().mockResolvedValue({ preset: "1991-default" }),
             })
-          : collections[name]
+          : name === "gameConfig"
+            ? (collections[name] ?? { findOne: vi.fn().mockResolvedValue(null) })
+            : collections[name]
     ),
   };
 }
@@ -127,7 +130,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
   });
 
   it("returns 400 for invalid campaign ID", async () => {
-    const { POST } = await import("./route");
     const res = await POST(makeRequest("not-an-objectid"), makeParams("not-an-objectid"));
     expect(res.status).toBe(400);
   });
@@ -137,7 +139,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
       ok: false,
       response: new Response(null, { status: 401 }),
     } as any);
-    const { POST } = await import("./route");
     const id = new ObjectId().toString();
     const res = await POST(makeRequest(id), makeParams(id));
     expect(res.status).toBe(401);
@@ -160,7 +161,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
         findOne: vi.fn().mockResolvedValue(null),
       }),
     } as any);
-    const { POST } = await import("./route");
     const id = new ObjectId().toString();
     const res = await POST(makeRequest(id), makeParams(id));
     expect(res.status).toBe(404);
@@ -208,7 +208,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     };
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -259,7 +258,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     };
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -312,7 +310,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     };
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -383,7 +380,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     };
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -488,7 +484,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     };
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
 
     expect(res.status).toBe(200);
@@ -574,7 +569,6 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     };
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
 
     expect(res.status).toBe(200);
@@ -629,7 +623,6 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
     });
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(
       makeBatchRequest(campaignOid.toString(), 5),
       makeParams(campaignOid.toString())
@@ -678,7 +671,6 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
     });
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(
       makeBatchRequest(campaignOid.toString(), "max"),
       makeParams(campaignOid.toString())
@@ -717,7 +709,6 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
     });
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(
       makeBatchRequest(campaignOid.toString(), "max"),
       makeParams(campaignOid.toString())
@@ -740,7 +731,6 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
       },
     } as any);
 
-    const { POST } = await import("./route");
     const res = await POST(
       makeBatchRequest(campaignOid.toString(), 0),
       makeParams(campaignOid.toString())
@@ -778,7 +768,6 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
     });
     mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
-    const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
 
     expect(res.status).toBe(200);

@@ -241,3 +241,37 @@ describe("POST /api/campaigns/[id]/upgrade — no election found", () => {
     expect(incOp["totalActionsSpent"]).toBe(10);
   });
 });
+
+it.each([0.03673, 0.35808, 1, 1.28579])(
+  "charges era campaign upgrades at price %s",
+  async (priceLevel) => {
+    await setupRoute();
+    const preset =
+      priceLevel === 0.03673
+        ? "1953-default"
+        : priceLevel === 0.35808
+          ? "1991-default"
+          : priceLevel === 1
+            ? "2019-default"
+            : "2027-default";
+    db.collection("gameConfig").findOne.mockResolvedValue({ campaignEraPriceLevelEnabled: true });
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 10,
+      preset,
+    });
+    db.collection("elections").findOne.mockResolvedValue({
+      _id: mockElectionId,
+      primaryEndTurn: 20,
+      endTurn: 40,
+    });
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ category: "fundraising" }), {
+      params: Promise.resolve({ id: mockCampaignId.toString() }),
+    });
+    expect(response.status).toBe(200);
+    const update = db.collection("campaigns").updateOne.mock.calls[0][1];
+    expect(update.$inc.funds).toBe(-Math.round(50_000 * priceLevel));
+    expect(update.$inc.actions).toBe(-10);
+  }
+);

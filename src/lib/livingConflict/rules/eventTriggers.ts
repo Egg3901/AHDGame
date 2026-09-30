@@ -13,6 +13,16 @@ export function triggerMatches(event: ConflictEvent, state: LivingConflictState)
   ) {
     return false;
   }
+  if (
+    trigger.trackConditions?.some((condition) => {
+      const value = state.tracks?.[condition.track] ?? 0;
+      return (
+        (condition.min !== undefined && value < condition.min) ||
+        (condition.max !== undefined && value > condition.max)
+      );
+    })
+  )
+    return false;
   if (trigger.minIntensity !== undefined && state.intensity < trigger.minIntensity) return false;
   if (trigger.maxIntensity !== undefined && state.intensity > trigger.maxIntensity) return false;
   if (trigger.onPhaseEnter || trigger.everyTurns !== undefined) {

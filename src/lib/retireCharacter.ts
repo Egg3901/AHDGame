@@ -1,3 +1,4 @@
+import { closeCharacterSavings } from "@/lib/savings/closeCharacterSavings";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { PoliticalParty, ExchangeRate } from "@/lib/db/types";
@@ -174,6 +175,8 @@ export async function retireCharacter(
     ...(opts?.iteration ? { iteration: opts.iteration } : {}),
     ...(opts?.recap ? { recap: opts.recap } : {}),
   };
+  await closeCharacterSavings(db, characterId);
+
   await db.collection("retiredCharacters").insertOne(retiredDoc);
 
   const activeElections = await db

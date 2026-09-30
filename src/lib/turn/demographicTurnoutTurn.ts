@@ -1,3 +1,4 @@
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import {
   getStateDemographicTurnoutCollection,
   getPartyBudgetCollection,
@@ -152,6 +153,7 @@ interface ProcessGOTVResult {
 interface RevenueContext {
   /** World reset preset selecting the GDP-baseline era (issue #798). */
   preset: string;
+  priceLevel?: number;
   partyMap: Map<string, PoliticalParty>;
   statePartyOrgMap: Map<string, StatePartyOrg>;
   statePopMap: Map<string, number>;
@@ -206,6 +208,7 @@ function calculatePartyRevenueFromContext(
         countryId,
         politicalInfluence: member.politicalInfluence ?? 0,
         preset: ctx.preset,
+        priceLevel: ctx.priceLevel,
       });
       revenue += calculateTaxAmount(totalFundRate, nationalTaxRate);
     }
@@ -214,10 +217,10 @@ function calculatePartyRevenueFromContext(
       const totalFundRate = projectNppGeneration({
         population: pop,
         donorBaseLevel: npp.donorBaseLevel ?? 0,
-        currentFundsLocal: npp.funds ?? 0,
+        currentFundsLocal: (npp.funds ?? 0) / (ctx.priceLevel ?? 1),
         nppEconomyEnabled: ctx.nppEconomyEnabled,
       });
-      revenue += calculateTaxAmount(totalFundRate, nationalTaxRate);
+      revenue += calculateTaxAmount(totalFundRate * (ctx.priceLevel ?? 1), nationalTaxRate);
     }
     return revenue;
   } else {
@@ -244,6 +247,7 @@ function calculatePartyRevenueFromContext(
         countryId,
         politicalInfluence: member.politicalInfluence ?? 0,
         preset: ctx.preset,
+        priceLevel: ctx.priceLevel,
       });
       revenue += calculateTaxAmount(totalFundRate, stateTaxRate);
     }
@@ -251,10 +255,10 @@ function calculatePartyRevenueFromContext(
       const totalFundRate = projectNppGeneration({
         population: pop,
         donorBaseLevel: npp.donorBaseLevel ?? 0,
-        currentFundsLocal: npp.funds ?? 0,
+        currentFundsLocal: (npp.funds ?? 0) / (ctx.priceLevel ?? 1),
         nppEconomyEnabled: ctx.nppEconomyEnabled,
       });
-      revenue += calculateTaxAmount(totalFundRate, stateTaxRate);
+      revenue += calculateTaxAmount(totalFundRate * (ctx.priceLevel ?? 1), stateTaxRate);
     }
     return revenue;
   }
@@ -467,6 +471,7 @@ export async function processPartyGOTV(
 
     revenueCtx = {
       preset,
+      priceLevel: resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, preset),
       partyMap: nationalPartyMap,
       statePartyOrgMap,
       // Donor base = adults: use the voting-age population (P1b-1c), falling back

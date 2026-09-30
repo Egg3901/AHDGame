@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 export interface WorldFlags {
   preset: string;
+  campaignPriceLevel: number;
   eurozoneEnabled: boolean;
   /** Era system master switch (era stamps, wire news, era-aware scoring); false until an admin enables it. */
   eraSystemEnabled: boolean;
@@ -26,6 +27,7 @@ export interface WorldFlags {
 
 const DEFAULT_FLAGS: WorldFlags = {
   preset: "2019-default",
+  campaignPriceLevel: 1,
   eurozoneEnabled: true,
   eraSystemEnabled: false,
   currentYear: null,
@@ -50,7 +52,7 @@ function subscribe(listener: () => void): () => void {
     fetch("/api/world/flags")
       .then((r) => r.json())
       .then((data: WorldFlags) => {
-        currentFlags = { ...data, loaded: true };
+        currentFlags = { ...DEFAULT_FLAGS, ...data, loaded: true };
         listeners.forEach((l) => l());
       })
       .catch((err) => {

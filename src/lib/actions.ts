@@ -179,9 +179,10 @@ export function fundraiseYieldLocal(
   character: Character,
   forexEnabled: boolean,
   campaignRates?: import("@/lib/campaigns/rules/currency").CampaignCurrencyRates | null,
+  priceLevel = 1,
   preset?: string
 ): number {
-  const anchor = fundraiseYieldAnchor(character);
+  const anchor = fundraiseYieldAnchor(character, priceLevel);
   return forexEnabled
     ? campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates, preset)
     : anchor;
@@ -823,9 +824,13 @@ function applyEffectToCharacter(
   actionType: ActionType,
   state: State | undefined,
   forexEnabled = false,
-  homeFxRate?: number
+  homeFxRate?: number,
+  pricing: Pick<ActionEffectContext, "preset" | "priceLevel"> = {}
 ): Character {
-  const effect = ACTIONS[actionType].effect(character, state);
+  const effect = ACTIONS[actionType].effect(character, state, {
+    formatFunds: plainFunds,
+    ...pricing,
+  });
   const c: Character = { ...character };
   if (effect.fundsChange) {
     // effect.fundsChange is in ANCHOR units. Apply directly to whichever field
@@ -887,7 +892,8 @@ export function simulateActionBatch(
   actionType: ActionType,
   count: 5 | 10,
   forexEnabled = false,
-  homeFxRate?: number
+  homeFxRate?: number,
+  pricing: Pick<ActionEffectContext, "preset" | "priceLevel"> = {}
 ): SimulateActionBatchResult {
   let c: Character = { ...character };
   let totalActionPoints = 0;
@@ -898,14 +904,18 @@ export function simulateActionBatch(
   const initialFunds = initialBalanceLocal / rate;
 
   for (let i = 0; i < count; i++) {
-    const validation = canPerformAction(c, actionType, state, { forexEnabled, homeFxRate });
+    const validation = canPerformAction(c, actionType, state, {
+      forexEnabled,
+      homeFxRate,
+      ...pricing,
+    });
     if (!validation.canPerform) {
       return { ok: false, reason: validation.reason };
     }
     const ap = getActionPointCost(c, actionType);
     totalActionPoints += ap;
     c = {
-      ...applyEffectToCharacter(c, actionType, state, forexEnabled, homeFxRate),
+      ...applyEffectToCharacter(c, actionType, state, forexEnabled, homeFxRate, pricing),
       actions: (c.actions ?? 0) - ap,
     };
   }

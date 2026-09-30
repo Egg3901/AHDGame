@@ -4,6 +4,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Crisis } from "@/lib/db/types/crisis";
 import ConflictsPage from "./page";
+import { NextIntlClientProvider } from "next-intl";
+import enWorldConflicts from "../../../../messages/en/worldConflicts.json";
+
+async function renderPage() {
+  render(
+    <NextIntlClientProvider locale="en" messages={enWorldConflicts}>
+      {await ConflictsPage()}
+    </NextIntlClientProvider>
+  );
+}
 
 const internationalCrisis = {
   _id: new ObjectId(),
@@ -168,7 +178,7 @@ describe("ConflictsPage historical conflicts", () => {
   // The live board drops a war the moment it resolves, and nothing else linked to
   // its record. The history section is the only way back to it.
   it("lists a resolved war with its outcome and a link to its record", async () => {
-    render(await ConflictsPage());
+    await renderPage();
 
     expect(screen.getByText(/HISTORICAL CONFLICTS/)).toBeTruthy();
     expect(screen.getByText("Manchurian Front")).toBeTruthy();
@@ -180,28 +190,28 @@ describe("ConflictsPage historical conflicts", () => {
   });
 
   it("says when a fresh war's full record opens", async () => {
-    render(await ConflictsPage());
+    await renderPage();
     // Ended on turn 2; the page's clock is turn 4, so the fog is still down.
     expect(screen.getByText(/FOG LIFTS T482/)).toBeTruthy();
   });
 
   it("shows an empty state when no war has concluded", async () => {
     listResolvedConflicts.mockResolvedValueOnce([]);
-    render(await ConflictsPage());
+    await renderPage();
     expect(screen.getByText(/No war has yet concluded/)).toBeTruthy();
   });
 });
 
 describe("ConflictsPage global response feed", () => {
   it("shows international response crises even when their response scope is national", async () => {
-    render(await ConflictsPage());
+    await renderPage();
 
     expect(screen.getByText("Strategic forces raised on an ambiguous warning")).toBeTruthy();
     expect(screen.queryByText("Nationwide Steel Strike")).toBeNull();
   });
 
   it("shows the phase, lifecycle, and named tracks of an open living crisis", async () => {
-    render(await ConflictsPage());
+    await renderPage();
 
     expect(screen.getByText("Novel Pandemic")).toBeTruthy();
     expect(screen.getByText(/Outbreak · NEGOTIATING/)).toBeTruthy();

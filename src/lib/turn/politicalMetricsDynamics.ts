@@ -1,3 +1,12 @@
+import { loadPandemicSignal } from "@/lib/livingConflict/pandemicSignal";
+import { pandemicPoliticalEffects } from "@/lib/livingConflict/rules/pandemic";
+import { loadTerrorismSignal } from "@/lib/livingConflict/terrorismSignal";
+import { terrorismPoliticalEffects } from "@/lib/livingConflict/rules/transnationalTerrorism";
+import { loadNorthernIrelandSignal } from "@/lib/countries/uk/northernIreland/service";
+import {
+  northernIrelandPoliticalEffects,
+  northernIrelandRegion,
+} from "@/lib/countries/uk/northernIreland/rules";
 /**
  * SP2 political-metrics dynamics turn phase (dynamics spec §3): enacted laws
  * define per-metric equilibrium targets; every region's politicalMetrics
@@ -144,14 +153,33 @@ export async function processPoliticalMetricsDynamics(
     spendingProvider(db),
     governmentApprovalProvider(db),
     sectorRevenueTaxProvider(db),
-    db
-      .collection<GameState>("gameState")
-      .findOne(
-        { _id: "current" },
-        { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, eraSystemEnabled: 1 } }
-      ),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          currentYear: 1,
+          currentTurn: 1,
+          startingYear: 1,
+          eraSystemEnabled: 1,
+          livingConflictsEnabled: 1,
+        },
+      }
+    ),
     loadLabourRelationsPoliticalNudgesByCountry(db, turnNumber),
   ]);
+  const northernIrelandSignal = await loadNorthernIrelandSignal(
+    db,
+    eraGameState?.livingConflictsEnabled === true
+  );
+  const northernIrelandEffects = northernIrelandPoliticalEffects(northernIrelandSignal);
+  const terrorismSignal = await loadTerrorismSignal(
+    db,
+    eraGameState?.livingConflictsEnabled === true
+  );
+  const pandemicSignal = await loadPandemicSignal(
+    db,
+    eraGameState?.livingConflictsEnabled === true
+  );
   // Era-aware only while the era system is on, matching every other consumer:
   // a metric's realistic span moves with the era, so scoring a 1953 outcome
   // against modern thresholds would read it as bottom-of-scale.
@@ -295,6 +323,20 @@ export async function processPoliticalMetricsDynamics(
           !sameBySource(doc.cabinetResidualsBySource ?? {}, nextCabinetBySource);
         const cabinetOf = (id: PoliticalMetricId) => nextCabinet[id] ?? 0;
         const labourChanged = !sameNums(doc.labourResiduals ?? {}, nextLabour);
+        const nextConflict = { ...terrorismPoliticalEffects(terrorismSignal, countryId) };
+        for (const [id, delta] of Object.entries(
+          pandemicPoliticalEffects(pandemicSignal, countryId)
+        )) {
+          const key = id as PoliticalMetricId;
+          nextConflict[key] = (nextConflict[key] ?? 0) + delta;
+        }
+        if (northernIrelandRegion(countryId, String(doc._id))) {
+          for (const [id, delta] of Object.entries(northernIrelandEffects)) {
+            const key = id as PoliticalMetricId;
+            nextConflict[key] = (nextConflict[key] ?? 0) + delta;
+          }
+        }
+        const conflictChanged = !sameNums(doc.livingConflictResiduals ?? {}, nextConflict);
 
         // The engine term's inputs, in the legacy "category.metricId" shape the
         // nodes were written against: the region's macro doc, plus the board
@@ -374,7 +416,12 @@ export async function processPoliticalMetricsDynamics(
             const target = composeTarget(
               points,
               supplement?.[id] ?? 0,
-              structural + macroTerm + engineTerm + cabinetOf(id) + labourRelationsOf(id)
+              structural +
+                macroTerm +
+                engineTerm +
+                cabinetOf(id) +
+                labourRelationsOf(id) +
+                (nextConflict[id] ?? 0)
             );
             const next = driftStep(value, target);
             if (next !== value) {
@@ -384,7 +431,7 @@ export async function processPoliticalMetricsDynamics(
           }
         }
 
-        if (healed || changed || cabinetChanged || labourChanged) {
+        if (healed || changed || cabinetChanged || labourChanged || conflictChanged) {
           ops.push({
             updateOne: {
               filter: { _id: doc._id },
@@ -397,6 +444,7 @@ export async function processPoliticalMetricsDynamics(
                     cabinetResidualsBySource: nextCabinetBySource,
                   }),
                   ...(labourChanged && { labourResiduals: nextLabour }),
+                  ...(conflictChanged && { livingConflictResiduals: nextConflict }),
                   lastUpdated: now,
                 },
               },
