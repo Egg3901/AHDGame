@@ -973,6 +973,11 @@ h1 {
 html[data-store-app="true"] .store-purchase-cta {
   display: none !important;
 }
+/* Google refuses OAuth inside app webviews (disallowed_useragent), so its
+   sign-in buttons would only lead to an error page in the phone app. */
+html[data-store-app="true"] .store-app-hidden {
+  display: none !important;
+}
 html:not([data-store-app="true"]) .store-app-only {
   display: none !important;
 }

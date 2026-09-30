@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
+import { isAppleSignInConfigured } from "@/lib/apple";
 
 /**
  * Which ways of signing up actually work on THIS deployment.
@@ -20,6 +21,7 @@ export interface SignupMethods {
   email: { available: true; requiresTestSecret: boolean };
   discord: { available: boolean; reason: "not_configured" | "test_mode" | null };
   google: { available: boolean; reason: "not_configured" | null };
+  apple: { available: boolean; reason: "not_configured" | null };
 }
 
 // GET /api/auth/signup-methods — Which registration methods this deployment supports.
@@ -40,6 +42,8 @@ export async function GET() {
       process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_REDIRECT_URI
     );
 
+    const appleConfigured = isAppleSignInConfigured();
+
     const body: SignupMethods = {
       testMode,
       email: { available: true, requiresTestSecret: testMode },
@@ -52,6 +56,10 @@ export async function GET() {
       google: {
         available: googleConfigured,
         reason: googleConfigured ? null : "not_configured",
+      },
+      apple: {
+        available: appleConfigured,
+        reason: appleConfigured ? null : "not_configured",
       },
     };
 

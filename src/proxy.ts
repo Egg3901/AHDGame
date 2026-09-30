@@ -104,6 +104,9 @@ function passthrough(request: NextRequest): NextResponse {
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
+/** `/api/auth/<provider>/callback`: safe to move between hosts as a GET. */
+const OAUTH_CALLBACK_PATH = /^\/api\/auth\/(discord|google|apple|oidc)\/callback$/;
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") ?? "";
@@ -167,6 +170,22 @@ export async function proxy(request: NextRequest) {
   // bot, whose GAME_API_URL points at www) silently loses every write. API
   // routes aren't indexed, so they don't need canonicalization — let them fall
   // through to the read-gate below and reach the route on whichever host.
+  // Exception: OAuth callbacks are top-level GET navigations with no body, and
+  // the link-flow binding cookie is host-only on the apex (set where Settings
+  // lives). A provider whose registered return URL is on www (Discord) would
+  // otherwise land where that cookie is invisible and every link attempt
+  // fails as "session expired". Hop them to the apex before the route runs.
+  if (
+    host === "www.ahousedividedgame.com" &&
+    request.method === "GET" &&
+    OAUTH_CALLBACK_PATH.test(pathname)
+  ) {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = "ahousedividedgame.com";
+    url.port = "";
+    return NextResponse.redirect(url, 307);
+  }
   if (host === "www.ahousedividedgame.com" && !pathname.startsWith("/api/")) {
     const url = request.nextUrl.clone();
     url.protocol = "https:";

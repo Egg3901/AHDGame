@@ -15,6 +15,7 @@ import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
 import { logCharacterDeleted } from "@/lib/db/collections/activityLog";
+import { getAppleSignInConfig, openAppleRefreshToken, revokeAppleRefreshToken } from "@/lib/apple";
 
 // DELETE /api/auth/delete-account — Permanently deletes the authenticated user's account, character, and clears offices held.
 // Auth: requireBasicAuth
@@ -179,6 +180,11 @@ export const DELETE = withNoStore(async () => {
     // 90 days of it.
     await db.collection(IDENTITY_OBSERVATIONS_COLLECTION).deleteMany({ userId: objectId });
 
+    // App Store rule 5.1.1(v): deleting an account created or linked with
+    // Sign in with Apple must revoke the Apple grant. Best effort, so an
+    // Apple outage never blocks the deletion itself.
+    await revokeAppleGrantForDeletion(user.appleRefreshToken);
+
     // Delete the user
     await usersCollection.deleteOne({ _id: objectId });
 
@@ -192,3 +198,16 @@ export const DELETE = withNoStore(async () => {
     return handleRouteError(error);
   }
 });
+
+async function revokeAppleGrantForDeletion(sealed: string | undefined): Promise<void> {
+  const refreshToken = openAppleRefreshToken(sealed);
+  const config = getAppleSignInConfig();
+  if (!refreshToken || !config) return;
+  try {
+    if (!(await revokeAppleRefreshToken(config, refreshToken))) {
+      console.error("[delete-account] Apple token revocation was rejected");
+    }
+  } catch {
+    console.error("[delete-account] Apple token revocation is unavailable");
+  }
+}

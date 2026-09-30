@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
 /**
- * Start-to-callback binding for provider link flows (Google/Discord).
+ * Start-to-callback binding for provider link flows (Google/Discord/Apple).
  *
  * A link flow spans an external OAuth round-trip. The session check at link
  * start is stale by the time the callback runs: the browser account may have
@@ -20,7 +20,7 @@ import { createHmac, timingSafeEqual } from "crypto";
  * when AUTH_SECRET is missing so link start fails closed.
  */
 
-export type ProviderLinkProvider = "google" | "discord";
+export type ProviderLinkProvider = "google" | "discord" | "apple";
 
 export const PROVIDER_LINK_CONTEXT_TTL_SECONDS = 600;
 
@@ -34,12 +34,13 @@ export const MAX_PROVIDER_LINK_STATE_LENGTH = 1024;
 
 export const GOOGLE_PROVIDER_LINK_CONTEXT_COOKIE = "google_oauth_link_ctx";
 export const DISCORD_PROVIDER_LINK_CONTEXT_COOKIE = "discord_oauth_link_ctx";
+export const APPLE_PROVIDER_LINK_CONTEXT_COOKIE = "apple_oauth_link_ctx";
 
 /** Cookie name carrying the link-intent envelope for a provider. */
 export function providerLinkContextCookieName(provider: ProviderLinkProvider): string {
-  return provider === "google"
-    ? GOOGLE_PROVIDER_LINK_CONTEXT_COOKIE
-    : DISCORD_PROVIDER_LINK_CONTEXT_COOKIE;
+  if (provider === "google") return GOOGLE_PROVIDER_LINK_CONTEXT_COOKIE;
+  if (provider === "apple") return APPLE_PROVIDER_LINK_CONTEXT_COOKIE;
+  return DISCORD_PROVIDER_LINK_CONTEXT_COOKIE;
 }
 
 const KEY_DOMAIN = "ahd-provider-link-context-key-v1";
@@ -87,7 +88,7 @@ export function sealProviderLinkContext(
   input: LinkContextSealInput,
   options: SealOptions = {}
 ): string {
-  if (input.provider !== "google" && input.provider !== "discord") {
+  if (input.provider !== "google" && input.provider !== "discord" && input.provider !== "apple") {
     throw new Error("providerLinkContext: unknown provider");
   }
   if (typeof input.userId !== "string" || input.userId.length === 0) {
