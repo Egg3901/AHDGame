@@ -19,6 +19,15 @@ const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
  * module declares must carry a manifest classification.
  */
 describe("seed manifest classification coverage", () => {
+  it("resets the federation publication and protected-choice journals", () => {
+    for (const name of [
+      "federationRelocations",
+      "federationPublicationPreparations",
+      "federationPreparedEffects",
+    ]) {
+      expect(getCollectionCategory(name)).toBe("runtime");
+    }
+  });
   const declared = readdirSync(COLLECTIONS_DIR)
     .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
     .flatMap((f) => {
