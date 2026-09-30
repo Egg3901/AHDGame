@@ -1,0 +1,235 @@
+{
+  "issue": 1328,
+  "baseline": {
+    "sourceCommit": "c5ff9130b77dcb2d515bd455a6eabc76b6ad8a76",
+    "mode": "baseline",
+    "cohort": {
+      "syntheticCentralBanks": 1,
+      "syntheticBonds": 1,
+      "syntheticBudgets": 1,
+      "turn": 300
+    },
+    "normal": {
+      "qe": {
+        "reserve": 100,
+        "external": 1000,
+        "created": 5000,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 95,
+        "holdings": 15,
+        "marketPrice": 1.0681818181818181,
+        "support": 0.13636363636363635,
+        "poolCash": 15000,
+        "poolFlows": {
+          "qeIn": 5000,
+          "qtOut": 0
+        },
+        "treasury": -1000,
+        "principal": 1000,
+        "ledger": []
+      },
+      "qt": {
+        "reserve": 100,
+        "external": 1000,
+        "created": -5000,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 105,
+        "holdings": 5,
+        "marketPrice": 1.0227272727272727,
+        "support": 0.045454545454545456,
+        "poolCash": 5000,
+        "poolFlows": {
+          "qeIn": 0,
+          "qtOut": 5000
+        },
+        "treasury": -1000,
+        "principal": 1000,
+        "ledger": []
+      },
+      "treasury_advance": {
+        "reserve": 100,
+        "external": 1000,
+        "created": 250,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 100,
+        "holdings": 10,
+        "marketPrice": 1,
+        "support": null,
+        "poolCash": 10000,
+        "poolFlows": {
+          "qeIn": 0,
+          "qtOut": 0
+        },
+        "treasury": -750,
+        "principal": 1000,
+        "ledger": [
+          {
+            "balanced": true,
+            "legs": [
+              {
+                "account": "government:US:USD",
+                "amount": 250,
+                "currencyCode": "USD",
+                "anchorAmount": 125,
+                "role": "primary"
+              },
+              {
+                "account": "mint:treasury_advance:USD",
+                "amount": -250,
+                "currencyCode": "USD",
+                "anchorAmount": -125,
+                "role": "contra"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "performance": {
+      "qe": {
+        "commands": 5,
+        "readBsonBytes": 294
+      },
+      "qt": {
+        "commands": 5,
+        "readBsonBytes": 294
+      },
+      "treasury_advance": {
+        "commands": 7,
+        "readBsonBytes": 286
+      },
+      "idleBankingPhase": {
+        "commands": 2,
+        "readBsonBytes": 46
+      }
+    },
+    "recoveryCases": 0,
+    "concurrentCases": 0,
+    "refundRecovery": false,
+    "auditRecoveryCases": 0,
+    "pendingIndexProbe": null
+  },
+  "treatment": {
+    "sourceCommit": "6f053f3b0ab0893997dced317e7498118c2785f6",
+    "mode": "treatment",
+    "cohort": {
+      "syntheticCentralBanks": 1,
+      "syntheticBonds": 1,
+      "syntheticBudgets": 1,
+      "turn": 300
+    },
+    "normal": {
+      "qe": {
+        "reserve": 100,
+        "external": 1000,
+        "created": 5000,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 95,
+        "holdings": 15,
+        "marketPrice": 1.0681818181818181,
+        "support": 0.13636363636363635,
+        "poolCash": 15000,
+        "poolFlows": {
+          "qeIn": 5000,
+          "qtOut": 0
+        },
+        "treasury": -1000,
+        "principal": 1000,
+        "ledger": []
+      },
+      "qt": {
+        "reserve": 100,
+        "external": 1000,
+        "created": -5000,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 105,
+        "holdings": 5,
+        "marketPrice": 1.0227272727272727,
+        "support": 0.045454545454545456,
+        "poolCash": 5000,
+        "poolFlows": {
+          "qeIn": 0,
+          "qtOut": 5000
+        },
+        "treasury": -1000,
+        "principal": 1000,
+        "ledger": []
+      },
+      "treasury_advance": {
+        "reserve": 100,
+        "external": 1000,
+        "created": 250,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 100,
+        "holdings": 10,
+        "marketPrice": 1,
+        "support": null,
+        "poolCash": 10000,
+        "poolFlows": {
+          "qeIn": 0,
+          "qtOut": 0
+        },
+        "treasury": -750,
+        "principal": 1000,
+        "ledger": [
+          {
+            "balanced": true,
+            "legs": [
+              {
+                "account": "government:US:USD",
+                "amount": 250,
+                "currencyCode": "USD",
+                "anchorAmount": 125,
+                "role": "primary"
+              },
+              {
+                "account": "mint:treasury_advance:USD",
+                "amount": -250,
+                "currencyCode": "USD",
+                "anchorAmount": -125,
+                "role": "contra"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "performance": {
+      "qe": {
+        "commands": 37,
+        "readBsonBytes": 3719
+      },
+      "qt": {
+        "commands": 34,
+        "readBsonBytes": 5488
+      },
+      "treasury_advance": {
+        "commands": 33,
+        "readBsonBytes": 2528
+      },
+      "idleBankingPhase": {
+        "commands": 3,
+        "readBsonBytes": 46
+      }
+    },
+    "recoveryCases": 6,
+    "concurrentCases": 3,
+    "refundRecovery": true,
+    "auditRecoveryCases": 2,
+    "pendingIndexProbe": {
+      "historicalCompletedCommands": 1000,
+      "documentsExamined": 0,
+      "keysExamined": 0
+    }
+  },
+  "normalEconomicParity": true,
+  "fixtureSha256": "b0fb25d0a49848fec350eba1fd7b8b927e32837c1274176bc2321422fe5e7ed0",
+  "scope": "Synthetic isolated Mongo subsystem qualification. Normal operations and normal banking recovery; no full world or production activation.",
+  "performanceScope": "Per-command measurements plus private-banking-disabled recovery phase. Returned cursor BSON only."
+}
