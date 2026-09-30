@@ -1,3 +1,4 @@
+import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import type { Bond, Corporation, CentralBank, Character, NPP } from "@/lib/db/types";
@@ -196,9 +197,11 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     currMap.set(bondCurrency, (currMap.get(bondCurrency) ?? 0) + localAmount);
   }
   const fundPaymentsAnchor = new Map<string, number>(); // fundId -> coupon/maturity (₳)
-  function addFundPayment(fundIdStr: string, paymentAnchor: number) {
-    if (paymentAnchor <= 0) return;
-    fundPaymentsAnchor.set(fundIdStr, (fundPaymentsAnchor.get(fundIdStr) ?? 0) + paymentAnchor);
+  function addFundPayment(fundIdStr: string, paymentAnchor: number): number {
+    if (paymentAnchor <= 0) return 0;
+    const previous = fundPaymentsAnchor.get(fundIdStr) ?? 0;
+    fundPaymentsAnchor.set(fundIdStr, previous + paymentAnchor);
+    return roundedAggregateCredit(previous, paymentAnchor);
   }
   // v3 autonomous NPP bondholders: coupon/maturity are INVESTMENT returns, so
   // they accumulate in ₳ (anchor) and credit the personal forex account
@@ -351,7 +354,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
           },
         });
       } else if (holder.fundId) {
-        addFundPayment(holder.fundId.toString(), paymentAnchor);
+        const couponAnchor = addFundPayment(holder.fundId.toString(), paymentAnchor);
         // #992 tranche 4: the fund credit lands on cashAnchor (₳), so the row
         // is fund-subject in the fund's own currency with the ₳ value stated
         // outright — never derived from the live FX table. Without a fund doc
@@ -360,7 +363,6 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         const couponFundIdStr = holder.fundId.toString();
         const couponFundCcy = fundLedgerCurrency(couponFundIdStr);
         if (couponFundCcy) {
-          const couponAnchor = Math.round(paymentAnchor * 100) / 100;
           txBondEntries.push({
             type: "bond_coupon",
             turn,
@@ -378,6 +380,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
               couponRate: bond.couponRate,
               fundId: couponFundIdStr,
               fundCurrency: couponFundCcy,
+              unroundedAnchorAmount: paymentAnchor,
+              roundingMethod: "cumulative_fund_credit",
             },
           });
         } else {
@@ -962,12 +966,11 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
           },
         });
       } else if (holder.fundId) {
-        addFundPayment(holder.fundId.toString(), faceValueReturnAnchor);
+        const maturityAnchor = addFundPayment(holder.fundId.toString(), faceValueReturnAnchor);
         // #992 tranche 4: same fund-subject treatment as the coupon leg above.
         const maturityFundIdStr = holder.fundId.toString();
         const maturityFundCcy = fundLedgerCurrency(maturityFundIdStr);
         if (maturityFundCcy) {
-          const maturityAnchor = Math.round(faceValueReturnAnchor * 100) / 100;
           txBondEntries.push({
             type: "bond_maturity",
             turn,
@@ -983,6 +986,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
               couponRate: bond.couponRate,
               fundId: maturityFundIdStr,
               fundCurrency: maturityFundCcy,
+              unroundedAnchorAmount: faceValueReturnAnchor,
+              roundingMethod: "cumulative_fund_credit",
             },
           });
         } else {

@@ -230,7 +230,14 @@ export function logIndexFundRedeemActivity(
 
 export function buildIndexFundDividendTxEntry(params: {
   fund: FundRef;
-  holder: Pick<IndexFundHolderContext, "holderKind" | "holderId" | "holderName">;
+  holder:
+    | Pick<IndexFundHolderContext, "holderKind" | "holderId" | "holderName">
+    | {
+        holderKind: "npp";
+        holderId: ObjectId;
+        holderName: string;
+        currencyCode: CurrencyCode;
+      };
   amountAnchor: number;
   units: number;
   /** Fund-currency value actually credited; defaults to the ₳ value. */
@@ -245,12 +252,15 @@ export function buildIndexFundDividendTxEntry(params: {
     type: "index_fund_dividend",
     turn: params.turn,
     createdAt,
-    subjectType: "character",
+    subjectType: params.holder.holderKind === "npp" ? "npp" : "character",
     subjectId: params.holder.holderId,
     subjectName: params.holder.holderName,
     amount: params.amountNative ?? params.amountAnchor,
     anchorAmount: params.amountAnchor,
-    currencyCode: params.fund.anchorCurrencyCode as CurrencyCode,
+    currencyCode:
+      params.holder.holderKind === "npp"
+        ? params.holder.currencyCode
+        : params.fund.anchorCurrencyCode,
     // `amountAnchor` is ₳; `amount` is the native figure the wallet moved. See
     // logIndexFundSubscribe for why anchorAmount is stated rather than derived.
     counterpartyType: "system",
@@ -261,6 +271,29 @@ export function buildIndexFundDividendTxEntry(params: {
       ...(params.corporationName ? { corporationName: params.corporationName } : {}),
       ...(params.holder.holderKind === "imperial_character" ? { imperial: true } : {}),
     }),
+  };
+}
+
+/** The retained slice moves fund cashAnchor directly, including unpaid remainder. */
+export function buildIndexFundRetainedDividendTxEntry(params: {
+  fund: FundRef;
+  amountAnchor: number;
+  corporationId: ObjectId;
+  turn: number;
+  createdAt: Date;
+}): Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged"> {
+  return {
+    type: "dividend_reinvest",
+    turn: params.turn,
+    createdAt: params.createdAt,
+    subjectType: "fund",
+    subjectId: params.fund._id,
+    subjectName: params.fund.name,
+    amount: params.amountAnchor,
+    anchorAmount: params.amountAnchor,
+    currencyCode: params.fund.anchorCurrencyCode,
+    counterpartyType: "system",
+    meta: buildFundMeta(params.fund, { corporationId: params.corporationId.toString() }),
   };
 }
 

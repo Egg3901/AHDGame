@@ -33,10 +33,12 @@ import {
 } from "@/lib/indexFunds/fundQueries";
 import { splitIndexFundDividend } from "@/lib/indexFunds/unitAccounting";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
 import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import {
   buildIndexFundDividendTxEntry,
+  buildIndexFundRetainedDividendTxEntry,
   logIndexFundDividendBulk,
 } from "@/lib/indexFunds/fundTxLog";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -149,7 +151,8 @@ export async function processIndexFundDividend(
     .filter((p) => p.holderKind === "imperial_character" && p.imperialCharacterId)
     .map((p) => p.imperialCharacterId!);
 
-  const [characterDocs, imperialDocs] = await Promise.all([
+  const nppIds = positions.filter((p) => p.holderKind === "npp" && p.nppId).map((p) => p.nppId!);
+  const [characterDocs, imperialDocs, nppDocs] = await Promise.all([
     characterIds.length > 0
       ? db
           .collection<Character>("characters")
@@ -162,8 +165,15 @@ export async function processIndexFundDividend(
           .find({ _id: { $in: imperialIds } }, { projection: { _id: 1, name: 1 } })
           .toArray()
       : Promise.resolve([] as Pick<ImperialCharacter, "_id" | "name">[]),
+    nppIds.length
+      ? db
+          .collection<{ _id: ObjectId; countryId: CountryId }>("npps")
+          .find({ _id: { $in: nppIds } }, { projection: { _id: 1, countryId: 1 } })
+          .toArray()
+      : Promise.resolve([]),
   ]);
   const characterNameById = new Map(characterDocs.map((c) => [c._id.toString(), c.name]));
+  const nppById = new Map(nppDocs.map((n) => [n._id.toString(), n]));
   const imperialNameById = new Map(imperialDocs.map((c) => [c._id.toString(), c.name]));
 
   let holdersPaid = 0;
@@ -259,6 +269,26 @@ export async function processIndexFundDividend(
       holdersPaid++;
       distributedAnchor += holderDividend;
     } else if (position.holderKind === "npp" && position.nppId) {
+      const npp = nppById.get(position.nppId.toString());
+      if (!npp) continue;
+      dividendTxEntries.push(
+        buildIndexFundDividendTxEntry({
+          fund,
+          holder: {
+            holderKind: "npp",
+            holderId: npp._id,
+            holderName: "NPP dividend recipient",
+            currencyCode: COUNTRY_CURRENCY_MAP[npp.countryId] ?? "USD",
+          },
+          amountAnchor: holderDividend,
+          amountNative: holderDividend,
+          units: position.units,
+          corporationId,
+          corporationName,
+          turn,
+          createdAt: now,
+        })
+      );
       nppOps.push({
         updateOne: {
           filter: { _id: position.nppId },
@@ -284,10 +314,6 @@ export async function processIndexFundDividend(
   if (nppOps.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("npps").bulkWrite(nppOps as any);
-  }
-
-  if (dividendTxEntries.length > 0) {
-    await logIndexFundDividendBulk(db, dividendTxEntries);
   }
 
   const undistributedPassThrough =
@@ -316,6 +342,17 @@ export async function processIndexFundDividend(
 
   // Also log the retained cash portion.
   const retainedAnchor = split.reinvestAnchor + undistributedPassThrough;
+  if (retainedAnchor > 0)
+    dividendTxEntries.push(
+      buildIndexFundRetainedDividendTxEntry({
+        fund,
+        amountAnchor: retainedAnchor,
+        corporationId,
+        turn,
+        createdAt: now,
+      })
+    );
+  await logIndexFundDividendBulk(db, dividendTxEntries);
   await insertFundTransaction(db, {
     fundId,
     kind: "dividend_reinvest",
@@ -409,14 +446,16 @@ export async function processIndexFundDividendsBatch(
   ];
   const charIds: ObjectId[] = [];
   const impIds: ObjectId[] = [];
+  const nppIds: ObjectId[] = [];
   for (const key of fundIdStrs) {
     for (const p of positionsByFund.get(key) ?? []) {
       if (p.holderKind === "character" && p.characterId) charIds.push(p.characterId);
       if (p.holderKind === "imperial_character" && p.imperialCharacterId)
         impIds.push(p.imperialCharacterId);
+      if (p.holderKind === "npp" && p.nppId) nppIds.push(p.nppId);
     }
   }
-  const [corpDocs, charDocs, impDocs] = await Promise.all([
+  const [corpDocs, charDocs, impDocs, nppDocs] = await Promise.all([
     corpIds.length
       ? db
           .collection<Corporation>("corporations")
@@ -435,7 +474,14 @@ export async function processIndexFundDividendsBatch(
           .find({ _id: { $in: impIds } }, { projection: { _id: 1, name: 1 } })
           .toArray()
       : Promise.resolve([] as Pick<ImperialCharacter, "_id" | "name">[]),
+    nppIds.length
+      ? db
+          .collection<{ _id: ObjectId; countryId: CountryId }>("npps")
+          .find({ _id: { $in: nppIds } }, { projection: { _id: 1, countryId: 1 } })
+          .toArray()
+      : Promise.resolve([]),
   ]);
+  const nppById = new Map(nppDocs.map((n) => [n._id.toString(), n]));
   const corpNameById = new Map(corpDocs.map((c) => [c._id.toString(), c.name]));
   const charNameById = new Map(charDocs.map((c) => [c._id.toString(), c.name]));
   const impNameById = new Map(impDocs.map((c) => [c._id.toString(), c.name]));
@@ -542,6 +588,26 @@ export async function processIndexFundDividendsBatch(
         holdersPaid++;
         distributedAnchor += holderDividend;
       } else if (position.holderKind === "npp" && position.nppId) {
+        const npp = nppById.get(position.nppId.toString());
+        if (!npp) continue;
+        holderTxEntries.push(
+          buildIndexFundDividendTxEntry({
+            fund,
+            holder: {
+              holderKind: "npp",
+              holderId: npp._id,
+              holderName: "NPP dividend recipient",
+              currencyCode: COUNTRY_CURRENCY_MAP[npp.countryId] ?? "USD",
+            },
+            amountAnchor: holderDividend,
+            amountNative: holderDividend,
+            units: position.units,
+            corporationId: accrual.corporationId,
+            corporationName,
+            turn,
+            createdAt: now,
+          })
+        );
         addAmt(nppInc, position.nppId, holderDividend);
         holdersPaid++;
         distributedAnchor += holderDividend;
@@ -552,6 +618,16 @@ export async function processIndexFundDividendsBatch(
       Math.round(Math.max(0, split.passThroughAnchor - distributedAnchor) * 100) / 100;
     const retainedAnchor = split.reinvestAnchor + undistributedPassThrough;
     addAmt(fundCashInc, accrual.fundId, retainedAnchor);
+    if (retainedAnchor > 0)
+      holderTxEntries.push(
+        buildIndexFundRetainedDividendTxEntry({
+          fund,
+          amountAnchor: retainedAnchor,
+          corporationId: accrual.corporationId,
+          turn,
+          createdAt: now,
+        })
+      );
 
     fundTxDocs.push({
       fundId: accrual.fundId,
