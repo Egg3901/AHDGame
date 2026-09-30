@@ -129,6 +129,7 @@ export interface MoneyMoveRecordLeg {
 
 interface MoneyMoveRecord {
   atomicDocument?: unknown;
+  legacyInterestBatch?: unknown;
   _id: string;
   kind: string;
   turn?: number;

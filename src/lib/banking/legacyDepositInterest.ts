@@ -43,6 +43,10 @@ interface InterestRecord extends Document {
   status: string;
   legacyInterestBatch?: Plan;
 }
+interface InterestBalanceDocument extends Document {
+  _id: ObjectId;
+  settledKeys?: string[];
+}
 export interface LegacyInterestResult {
   paid: number;
   npcInterestPaid: number;
@@ -197,7 +201,7 @@ async function deliverLegacyDepositInterest(
   };
   if (record.status === "applied") return result;
   const recipients = await db
-    .collection("characters")
+    .collection<InterestBalanceDocument>("characters")
     .find(
       { _id: { $in: plan.credits.map((credit) => credit.characterId) } },
       { projection: { [SETTLED_KEYS_FIELD]: 1 } }
@@ -207,7 +211,7 @@ async function deliverLegacyDepositInterest(
   if (before.size !== plan.credits.length)
     throw new Error("Legacy interest recipient missing; original allocation retained for recovery");
   const bankStamp = legStamp(record._id, 0);
-  const bank = db.collection("corporations");
+  const bank = db.collection<InterestBalanceDocument>("corporations");
   const debited = await bank.updateOne(
     {
       ...plan.bankGuard,
@@ -229,7 +233,7 @@ async function deliverLegacyDepositInterest(
   )
     throw new Error("Bank could not fund the original legacy interest allocation");
 
-  await db.collection("characters").bulkWrite(
+  await db.collection<InterestBalanceDocument>("characters").bulkWrite(
     plan.credits.map((credit, i) => ({
       updateOne: {
         filter: {
@@ -254,7 +258,7 @@ async function deliverLegacyDepositInterest(
     { ordered: false }
   );
   const after = await db
-    .collection("characters")
+    .collection<InterestBalanceDocument>("characters")
     .find(
       { _id: { $in: plan.credits.map((credit) => credit.characterId) } },
       { projection: { [SETTLED_KEYS_FIELD]: 1 } }
