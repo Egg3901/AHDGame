@@ -1,0 +1,1477 @@
+{
+  "sourceCommit": "022ec0bc3e859e40fc850d6dc993886217968422",
+  "sourceDirty": false,
+  "scope": "Synthetic simultaneous composition of qualified subsystem states; not a historical or full-world simulation",
+  "turns": 48,
+  "provenance": {
+    "sourceName": "ahd_sim_audit_europe_control_2027_0929",
+    "financeName": "ahd_sim_financial2154_final_1184c",
+    "arabName": "ahd_sim_arab2157_final_8731bf_civil_war_recovery",
+    "retainedCollections": [
+      {
+        "name": "gameState",
+        "count": 2
+      },
+      {
+        "name": "gameConfig",
+        "count": 1
+      },
+      {
+        "name": "countryGameStates",
+        "count": 29
+      },
+      {
+        "name": "federalBudget",
+        "count": 16
+      },
+      {
+        "name": "centralBanks",
+        "count": 18
+      },
+      {
+        "name": "corporations",
+        "count": 315
+      },
+      {
+        "name": "corporateSectors",
+        "count": 1716
+      },
+      {
+        "name": "exchangeRates",
+        "count": 18
+      },
+      {
+        "name": "commodityPrices",
+        "count": 28
+      },
+      {
+        "name": "systemSettings",
+        "count": 0
+      },
+      {
+        "name": "bankLoans",
+        "count": 109
+      },
+      {
+        "name": "bankGuarantees",
+        "count": 2
+      },
+      {
+        "name": "depositInsuranceFunds",
+        "count": 16
+      },
+      {
+        "name": "interbankLoans",
+        "count": 0
+      },
+      {
+        "name": "bonds",
+        "count": 2595
+      },
+      {
+        "name": "bondMarketPools",
+        "count": 16
+      },
+      {
+        "name": "states",
+        "count": 5
+      },
+      {
+        "name": "regionDemographics",
+        "count": 5
+      },
+      {
+        "name": "macroMetrics",
+        "count": 5
+      },
+      {
+        "name": "politicalMetrics",
+        "count": 2
+      },
+      {
+        "name": "stateMetrics",
+        "count": 0
+      },
+      {
+        "name": "governmentApprovals",
+        "count": 16
+      },
+      {
+        "name": "statePolicies",
+        "count": 2215
+      },
+      {
+        "name": "enactedLaws",
+        "count": 741
+      },
+      {
+        "name": "regionalBudgets",
+        "count": 43
+      },
+      {
+        "name": "stateBudgets",
+        "count": 170
+      },
+      {
+        "name": "militaryUnits",
+        "count": 383
+      },
+      {
+        "name": "countryMilitary",
+        "count": 0
+      },
+      {
+        "name": "macroCountries",
+        "count": 14
+      }
+    ],
+    "sourceHash": "5ba37bbfde65aa17562e1849ba0eb3b08f4538d05189cbbe5f46e65d5a7cb8fa",
+    "regionIds": ["AK", "EAE", "BB", "COR", "TR_ANK"],
+    "crisisStateHash": "9603738d177dffb4fe2f11c955da7831cdb16e8a2ac3bb82d4e8addfe15028a8",
+    "financeReplayCommit": "1184cdd81dd0da3b7137afac72496a80a681c77d",
+    "securityReplayCommit": "cb842bce2ae8848a549fb6bbaa19e710f1e3791e",
+    "pandemicReplayCommit": "4539951b6a6d2d78513e80d84f37b5db5f29e4aa"
+  },
+  "sourcePreserved": true,
+  "sourceWrites": 0,
+  "results": [
+    {
+      "scenario": "control",
+      "initial": {
+        "population": 15071435,
+        "workingAge": 7912115,
+        "unemploymentMin": 7.15,
+        "unemploymentMax": 14.97,
+        "regions": [
+          {
+            "id": "AK",
+            "countryId": "US",
+            "population": 731322,
+            "workingAge": 451917,
+            "gdp": 75026.88033433375
+          },
+          {
+            "id": "BB",
+            "countryId": "DE",
+            "population": 2538921,
+            "workingAge": 1245976,
+            "gdp": 95529.10249613284
+          },
+          {
+            "id": "COR",
+            "countryId": "IE",
+            "population": 599762,
+            "workingAge": 377599,
+            "gdp": 65837.59275247579
+          },
+          {
+            "id": "EAE",
+            "countryId": "UK",
+            "population": 6677206,
+            "workingAge": 3647352,
+            "gdp": 205925.88548037136
+          },
+          {
+            "id": "TR_ANK",
+            "countryId": "TR",
+            "population": 4524224,
+            "workingAge": 2189271,
+            "gdp": 322167.5890054451
+          }
+        ]
+      },
+      "final": {
+        "population": 15017825,
+        "workingAge": 7903450,
+        "unemploymentMin": 9.85,
+        "unemploymentMax": 14.97,
+        "regions": [
+          {
+            "id": "AK",
+            "countryId": "US",
+            "population": 724785,
+            "workingAge": 444423,
+            "gdp": 74061.6825839247
+          },
+          {
+            "id": "BB",
+            "countryId": "DE",
+            "population": 2489593,
+            "workingAge": 1230856,
+            "gdp": 95528.36796652262
+          },
+          {
+            "id": "COR",
+            "countryId": "IE",
+            "population": 601566,
+            "workingAge": 376811,
+            "gdp": 65884.62112855207
+          },
+          {
+            "id": "EAE",
+            "countryId": "UK",
+            "population": 6651548,
+            "workingAge": 3642072,
+            "gdp": 206898.6496275138
+          },
+          {
+            "id": "TR_ANK",
+            "countryId": "TR",
+            "population": 4550333,
+            "workingAge": 2209288,
+            "gdp": 326287.4895452636
+          }
+        ]
+      },
+      "windows": {},
+      "peakConcurrent": 0,
+      "maxPerFamily": 0,
+      "peakByCountry": {},
+      "resolutions": 0,
+      "retries": 0,
+      "actualPlayerDecisions": 0,
+      "peakDisease": 0,
+      "minimumMacroRatio": 1,
+      "peakHosting": 0,
+      "peakDisplaced": 0,
+      "minDemand": 1,
+      "maxDemand": 1,
+      "samples": [
+        {
+          "turn": 2000,
+          "population": 15070390,
+          "workingAge": 7912098,
+          "unemploymentMin": 7.29,
+          "unemploymentMax": 14.8,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 731174,
+              "workingAge": 451759,
+              "gdp": 75002.51476524315
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2537839,
+              "workingAge": 1245672,
+              "gdp": 95698.1857814436
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 599829,
+              "workingAge": 377616,
+              "gdp": 65950.45783662434
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6676606,
+              "workingAge": 3647218,
+              "gdp": 205896.0535969151
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4524942,
+              "workingAge": 2189833,
+              "gdp": 322793.4247802776
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.328476152723045,
+          "foodWithoutCreditShock": 27.328476152723045,
+          "macroRows": []
+        },
+        {
+          "turn": 2006,
+          "population": 15062869,
+          "workingAge": 7910761,
+          "unemploymentMin": 7.95,
+          "unemploymentMax": 14.92,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 730283,
+              "workingAge": 450805,
+              "gdp": 74845.07611366108
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2531266,
+              "workingAge": 1243718,
+              "gdp": 95743.93045464487
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 600033,
+              "workingAge": 377532,
+              "gdp": 65945.69033161245
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6673193,
+              "workingAge": 3646551,
+              "gdp": 205922.6144664208
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4528094,
+              "workingAge": 2192155,
+              "gdp": 323383.5745609015
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.30648630381974,
+          "foodWithoutCreditShock": 27.30648630381974,
+          "macroRows": []
+        },
+        {
+          "turn": 2012,
+          "population": 15055484,
+          "workingAge": 7909389,
+          "unemploymentMin": 8.55,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 729415,
+              "workingAge": 449855,
+              "gdp": 74700.71372629754
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2524806,
+              "workingAge": 1241770,
+              "gdp": 95678.54814331995
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 600225,
+              "workingAge": 377426,
+              "gdp": 65876.09070714311
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6669854,
+              "workingAge": 3645896,
+              "gdp": 205999.21915111985
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4531184,
+              "workingAge": 2194442,
+              "gdp": 323674.23900976544
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.287977901094635,
+          "foodWithoutCreditShock": 27.287977901094635,
+          "macroRows": []
+        },
+        {
+          "turn": 2018,
+          "population": 15048387,
+          "workingAge": 7908124,
+          "unemploymentMin": 9.15,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 728571,
+              "workingAge": 448910,
+              "gdp": 74569.63600740793
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2518475,
+              "workingAge": 1239844,
+              "gdp": 95627.76355699741
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 600429,
+              "workingAge": 377320,
+              "gdp": 65833.58405442056
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6666576,
+              "workingAge": 3645243,
+              "gdp": 206105.54450877232
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4534336,
+              "workingAge": 2196807,
+              "gdp": 324022.4901001306
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.268944378132616,
+          "foodWithoutCreditShock": 27.268944378132616,
+          "macroRows": []
+        },
+        {
+          "turn": 2024,
+          "population": 15041570,
+          "workingAge": 7906966,
+          "unemploymentMin": 9.45,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 727749,
+              "workingAge": 447972,
+              "gdp": 74449.5563668355
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2512270,
+              "workingAge": 1237941,
+              "gdp": 95589.65812615438
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 600645,
+              "workingAge": 377215,
+              "gdp": 65813.76991060487
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6663359,
+              "workingAge": 3644589,
+              "gdp": 206236.4727785432
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4537547,
+              "workingAge": 2199249,
+              "gdp": 324420.06665960245
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.24955116818261,
+          "foodWithoutCreditShock": 27.24955116818261,
+          "macroRows": []
+        },
+        {
+          "turn": 2030,
+          "population": 15035022,
+          "workingAge": 7905912,
+          "unemploymentMin": 9.57,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 726948,
+              "workingAge": 447039,
+              "gdp": 74338.63898153571
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2506188,
+              "workingAge": 1236061,
+              "gdp": 95562.16804340218
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 600872,
+              "workingAge": 377110,
+              "gdp": 65812.65781926995
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6660201,
+              "workingAge": 3643937,
+              "gdp": 206387.71028646955
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4540813,
+              "workingAge": 2201765,
+              "gdp": 324859.85997187055
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.229934888549177,
+          "foodWithoutCreditShock": 27.229934888549177,
+          "macroRows": []
+        },
+        {
+          "turn": 2036,
+          "population": 15028728,
+          "workingAge": 7904956,
+          "unemploymentMin": 9.69,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 726167,
+              "workingAge": 446111,
+              "gdp": 74235.33357763544
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2500225,
+              "workingAge": 1234204,
+              "gdp": 95543.62014262012
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 601108,
+              "workingAge": 377004,
+              "gdp": 65826.96023407378
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6657099,
+              "workingAge": 3643282,
+              "gdp": 206555.82282342817
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4544129,
+              "workingAge": 2204355,
+              "gdp": 325335.9686770187
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.210194147233604,
+          "foodWithoutCreditShock": 27.210194147233604,
+          "macroRows": []
+        },
+        {
+          "turn": 2042,
+          "population": 15022681,
+          "workingAge": 7904095,
+          "unemploymentMin": 9.8,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 725406,
+              "workingAge": 445188,
+              "gdp": 74138.36991647196
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2494378,
+              "workingAge": 1232368,
+              "gdp": 95532.58819268167
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 601354,
+              "workingAge": 376899,
+              "gdp": 65853.97835751534
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6654049,
+              "workingAge": 3642624,
+              "gdp": 206737.9324441983
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4547494,
+              "workingAge": 2207016,
+              "gdp": 325843.4911496052
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.190422369419824,
+          "foodWithoutCreditShock": 27.190422369419824,
+          "macroRows": []
+        },
+        {
+          "turn": 2047,
+          "population": 15017825,
+          "workingAge": 7903450,
+          "unemploymentMin": 9.85,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 724785,
+              "workingAge": 444423,
+              "gdp": 74061.6825839247
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2489593,
+              "workingAge": 1230856,
+              "gdp": 95528.36796652262
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 601566,
+              "workingAge": 376811,
+              "gdp": 65884.62112855207
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6651548,
+              "workingAge": 3642072,
+              "gdp": 206898.6496275138
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4550333,
+              "workingAge": 2209288,
+              "gdp": 326287.4895452636
+            }
+          ],
+          "demand": {},
+          "foodDemand": 27.173975195716217,
+          "foodWithoutCreditShock": 27.173975195716217,
+          "macroRows": [
+            {
+              "country": "CA",
+              "ratio": 1
+            },
+            {
+              "country": "PL",
+              "ratio": 1
+            }
+          ]
+        }
+      ],
+      "fiscalUnchanged": true
+    },
+    {
+      "scenario": "combined",
+      "initial": {
+        "population": 15071435,
+        "workingAge": 7912115,
+        "unemploymentMin": 7.15,
+        "unemploymentMax": 14.97,
+        "regions": [
+          {
+            "id": "AK",
+            "countryId": "US",
+            "population": 731322,
+            "workingAge": 451917,
+            "gdp": 75026.88033433375
+          },
+          {
+            "id": "BB",
+            "countryId": "DE",
+            "population": 2538921,
+            "workingAge": 1245976,
+            "gdp": 95529.10249613284
+          },
+          {
+            "id": "COR",
+            "countryId": "IE",
+            "population": 599762,
+            "workingAge": 377599,
+            "gdp": 65837.59275247579
+          },
+          {
+            "id": "EAE",
+            "countryId": "UK",
+            "population": 6677206,
+            "workingAge": 3647352,
+            "gdp": 205925.88548037136
+          },
+          {
+            "id": "TR_ANK",
+            "countryId": "TR",
+            "population": 4524224,
+            "workingAge": 2189271,
+            "gdp": 322167.5890054451
+          }
+        ]
+      },
+      "final": {
+        "population": 14945831,
+        "workingAge": 7865943,
+        "unemploymentMin": 9.52,
+        "unemploymentMax": 14.97,
+        "regions": [
+          {
+            "id": "AK",
+            "countryId": "US",
+            "population": 721367,
+            "workingAge": 442358,
+            "gdp": 73950.38213484616
+          },
+          {
+            "id": "BB",
+            "countryId": "DE",
+            "population": 2477564,
+            "workingAge": 1224940,
+            "gdp": 95147.5678096509
+          },
+          {
+            "id": "COR",
+            "countryId": "IE",
+            "population": 598694,
+            "workingAge": 375027,
+            "gdp": 65784.8552289019
+          },
+          {
+            "id": "EAE",
+            "countryId": "UK",
+            "population": 6619694,
+            "workingAge": 3624805,
+            "gdp": 206586.46840038535
+          },
+          {
+            "id": "TR_ANK",
+            "countryId": "TR",
+            "population": 4528512,
+            "workingAge": 2198813,
+            "gdp": 325017.560796821
+          }
+        ]
+      },
+      "windows": {
+        "pandemic": 4,
+        "northern_ireland": 2,
+        "transnational_terrorism": 2,
+        "yugoslav_dissolution": 2,
+        "arab_uprisings": 2,
+        "global_financial_crisis": 2,
+        "russia_ukraine_security": 2
+      },
+      "peakConcurrent": 7,
+      "maxPerFamily": 1,
+      "peakByCountry": {
+        "US": 6,
+        "AT": 3,
+        "BR": 6,
+        "DE": 6,
+        "IE": 7,
+        "PL": 3,
+        "RU": 6,
+        "TR": 6,
+        "UK": 7,
+        "UKR": 3
+      },
+      "resolutions": 9,
+      "retries": 48,
+      "actualPlayerDecisions": 0,
+      "peakDisease": 0.005710150348627448,
+      "minimumMacroRatio": 0.7827476038338661,
+      "peakHosting": 0.005,
+      "peakDisplaced": 0.023999999999999997,
+      "minDemand": 0.9999869511134952,
+      "maxDemand": 1,
+      "samples": [
+        {
+          "turn": 2000,
+          "population": 15068641,
+          "workingAge": 7911198,
+          "unemploymentMin": 7.29,
+          "unemploymentMax": 14.75,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 731087,
+              "workingAge": 451706,
+              "gdp": 75002.51476524315
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2537542,
+              "workingAge": 1245529,
+              "gdp": 95698.1857814436
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 599758,
+              "workingAge": 377571,
+              "gdp": 65950.45783662434
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6675812,
+              "workingAge": 3646785,
+              "gdp": 205896.0535969151
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4524442,
+              "workingAge": 2189607,
+              "gdp": 322793.4247802776
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 0.9999869511134952,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.324462977239513,
+          "foodWithoutCreditShock": 27.324526395956838,
+          "macroRows": []
+        },
+        {
+          "turn": 2006,
+          "population": 15051038,
+          "workingAge": 7904716,
+          "unemploymentMin": 7.85,
+          "unemploymentMax": 14.85,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 729705,
+              "workingAge": 450453,
+              "gdp": 74842.50710205492
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2529246,
+              "workingAge": 1242743,
+              "gdp": 95720.94404283902
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 599553,
+              "workingAge": 377232,
+              "gdp": 65943.40443401365
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6667836,
+              "workingAge": 3643652,
+              "gdp": 205915.46168051544
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4524698,
+              "workingAge": 2190636,
+              "gdp": 323308.0948693813
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 0.9999869511134952,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.28062929725827,
+          "foodWithoutCreditShock": 27.280692463168815,
+          "macroRows": []
+        },
+        {
+          "turn": 2012,
+          "population": 15033858,
+          "workingAge": 7898276,
+          "unemploymentMin": 8.39,
+          "unemploymentMax": 14.94,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 728369,
+              "workingAge": 449219,
+              "gdp": 74690.35576469741
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2521130,
+              "workingAge": 1239987,
+              "gdp": 95598.95489978994
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 599353,
+              "workingAge": 376882,
+              "gdp": 65866.81641890421
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6660135,
+              "workingAge": 3640638,
+              "gdp": 205970.32067032147
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4524871,
+              "workingAge": 2191550,
+              "gdp": 323413.2513266429
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.242412875231025,
+          "foodWithoutCreditShock": 27.242412875231025,
+          "macroRows": []
+        },
+        {
+          "turn": 2018,
+          "population": 15017255,
+          "workingAge": 7892040,
+          "unemploymentMin": 8.85,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 727076,
+              "workingAge": 448003,
+              "gdp": 74547.42793436743
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2513206,
+              "workingAge": 1237276,
+              "gdp": 95489.172346838
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 599182,
+              "workingAge": 376543,
+              "gdp": 65813.73792124509
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6652681,
+              "workingAge": 3637724,
+              "gdp": 206043.64861938747
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4525110,
+              "workingAge": 2192494,
+              "gdp": 323567.083837346
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.204542020209566,
+          "foodWithoutCreditShock": 27.204542020209566,
+          "macroRows": []
+        },
+        {
+          "turn": 2024,
+          "population": 15001323,
+          "workingAge": 7886110,
+          "unemploymentMin": 9.03,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 725823,
+              "workingAge": 446804,
+              "gdp": 74412.4050175539
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2505481,
+              "workingAge": 1234623,
+              "gdp": 95395.4899971661
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 599037,
+              "workingAge": 376213,
+              "gdp": 65780.5515458591
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6645459,
+              "workingAge": 3634901,
+              "gdp": 206132.8415427592
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4525523,
+              "workingAge": 2193569,
+              "gdp": 323780.1434017062
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.167222690710645,
+          "foodWithoutCreditShock": 27.167222690710645,
+          "macroRows": []
+        },
+        {
+          "turn": 2030,
+          "population": 14986021,
+          "workingAge": 7880469,
+          "unemploymentMin": 9.18,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 724610,
+              "workingAge": 445622,
+              "gdp": 74284.1718353809
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2497945,
+              "workingAge": 1232024,
+              "gdp": 95315.54047362685
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 598916,
+              "workingAge": 375893,
+              "gdp": 65763.95358645216
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6638453,
+              "workingAge": 3632160,
+              "gdp": 206235.6850048889
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4526097,
+              "workingAge": 2194770,
+              "gdp": 324044.6136863181
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.130498943983664,
+          "foodWithoutCreditShock": 27.130498943983664,
+          "macroRows": []
+        },
+        {
+          "turn": 2036,
+          "population": 14971316,
+          "workingAge": 7875102,
+          "unemploymentMin": 9.3,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 723434,
+              "workingAge": 444457,
+              "gdp": 74161.82846864156
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2490592,
+              "workingAge": 1229478,
+              "gdp": 95247.35800832981
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 598818,
+              "workingAge": 375580,
+              "gdp": 65761.19852864914
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6631651,
+              "workingAge": 3629496,
+              "gdp": 206350.3946931672
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4526821,
+              "workingAge": 2196091,
+              "gdp": 324353.51456850034
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.094413373037355,
+          "foodWithoutCreditShock": 27.094413373037355,
+          "macroRows": []
+        },
+        {
+          "turn": 2042,
+          "population": 14957181,
+          "workingAge": 7869997,
+          "unemploymentMin": 9.42,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 722293,
+              "workingAge": 443306,
+              "gdp": 74044.62445232886
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2483414,
+              "workingAge": 1226982,
+              "gdp": 95189.27189613412
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 598742,
+              "workingAge": 375275,
+              "gdp": 65770.01679663867
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6625047,
+              "workingAge": 3626906,
+              "gdp": 206475.40106239967
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4527685,
+              "workingAge": 2197528,
+              "gdp": 324701.35786886193
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.05900150835896,
+          "foodWithoutCreditShock": 27.05900150835896,
+          "macroRows": []
+        },
+        {
+          "turn": 2047,
+          "population": 14945831,
+          "workingAge": 7865943,
+          "unemploymentMin": 9.52,
+          "unemploymentMax": 14.97,
+          "regions": [
+            {
+              "id": "AK",
+              "countryId": "US",
+              "population": 721367,
+              "workingAge": 442358,
+              "gdp": 73950.38213484616
+            },
+            {
+              "id": "BB",
+              "countryId": "DE",
+              "population": 2477564,
+              "workingAge": 1224940,
+              "gdp": 95147.5678096509
+            },
+            {
+              "id": "COR",
+              "countryId": "IE",
+              "population": 598694,
+              "workingAge": 375027,
+              "gdp": 65784.8552289019
+            },
+            {
+              "id": "EAE",
+              "countryId": "UK",
+              "population": 6619694,
+              "workingAge": 3624805,
+              "gdp": 206586.46840038535
+            },
+            {
+              "id": "TR_ANK",
+              "countryId": "TR",
+              "population": 4528512,
+              "workingAge": 2198813,
+              "gdp": 325017.560796821
+            }
+          ],
+          "demand": {
+            "AT": 1,
+            "BR": 1,
+            "CN": 1,
+            "DE": 1,
+            "ES": 1,
+            "FI": 1,
+            "FR": 1,
+            "GR": 1,
+            "IE": 1,
+            "IT": 1,
+            "JP": 1,
+            "NG": 1,
+            "SE": 1,
+            "TR": 1,
+            "UK": 1,
+            "US": 1
+          },
+          "foodDemand": 27.030051695198992,
+          "foodWithoutCreditShock": 27.030051695198992,
+          "macroRows": [
+            {
+              "country": "CA",
+              "ratio": 1
+            },
+            {
+              "country": "PL",
+              "ratio": 0.9974424552429668,
+              "exposure": {
+                "turn": 2047,
+                "displacedShare": 0,
+                "hostingShare": 0.005,
+                "infrastructureDamage": 0
+              }
+            }
+          ]
+        }
+      ],
+      "fiscalUnchanged": true
+    }
+  ],
+  "performance": {
+    "creditDemand": {
+      "calls": 96,
+      "maxCommands": 4,
+      "maxReadBytes": 7666
+    },
+    "commodity": {
+      "calls": 8,
+      "maxCommands": 58,
+      "maxReadBytes": 745431
+    },
+    "metrics": {
+      "calls": 96,
+      "maxCommands": 40,
+      "maxReadBytes": 1596594
+    },
+    "demographics": {
+      "calls": 96,
+      "maxCommands": 10,
+      "maxReadBytes": 29462
+    },
+    "macro": {
+      "calls": 96,
+      "maxCommands": 4,
+      "maxReadBytes": 14052
+    },
+    "sevenFamilyDriver": {
+      "calls": 48,
+      "maxCommands": 98,
+      "maxReadBytes": 377123
+    },
+    "expiry": {
+      "calls": 9,
+      "maxCommands": 17,
+      "maxReadBytes": 87531
+    }
+  },
+  "paired": {
+    "additionalPopulationLoss": 71994,
+    "additionalWorkingAgeLoss": 37507,
+    "gdpRatiosByRegion": [
+      {
+        "regionId": "AK",
+        "countryId": "US",
+        "ratio": 0.9984971925401179
+      },
+      {
+        "regionId": "BB",
+        "countryId": "DE",
+        "ratio": 0.9960137479056987
+      },
+      {
+        "regionId": "COR",
+        "countryId": "IE",
+        "ratio": 0.9984857482984457
+      },
+      {
+        "regionId": "EAE",
+        "countryId": "UK",
+        "ratio": 0.9984911393685242
+      },
+      {
+        "regionId": "TR_ANK",
+        "countryId": "TR",
+        "ratio": 0.9961079453269495
+      }
+    ]
+  }
+}
