@@ -76,7 +76,7 @@ const sendAid = () =>
   ]);
 
 function responseTrees(key: string): RoleDecisionTrees {
-  return {
+  const trees: RoleDecisionTrees = {
     belligerent: choiceNode(
       `${key}_afflicted`,
       "The outbreak tests state capacity",
@@ -173,7 +173,7 @@ function responseTrees(key: string): RoleDecisionTrees {
           "targeted_controls",
           "Use targeted controls",
           "Combine testing, ventilation, isolation, and limited closures.",
-          { surveillance: 3, containment: 2 },
+          { surveillance: 3, containment: 2, travel: 2 },
           [],
           0.004
         ),
@@ -254,6 +254,87 @@ function responseTrees(key: string): RoleDecisionTrees {
       ]
     ),
   };
+  // Every government can invest in every shared bottleneck. The role-specific
+  // menu remains first, but no research or manufacturing actor is mandatory.
+  const common = [
+    responseOpt(
+      "research_pool",
+      "Fund shared clinical research",
+      "Pool trials and data; protection requires time and production.",
+      { research: 4, cooperation: 3 },
+      [],
+      0.006
+    ),
+    responseOpt(
+      "expand_manufacturing",
+      "Expand licensed manufacturing",
+      "Build production capacity and share technical knowledge.",
+      { manufacturing: 4, cooperation: 2 },
+      [],
+      0.005
+    ),
+    responseOpt(
+      "targeted_controls",
+      "Use targeted controls",
+      "Testing, ventilation, isolation and travel screening reduce spread.",
+      { surveillance: 3, containment: 2, travel: 2 },
+      [],
+      0.004
+    ),
+    responseOpt(
+      "restrict",
+      "Impose supported restrictions",
+      "Reduce contact while supporting households and firms.",
+      { containment: 4, support: 2 },
+      [cfx("tick", "approval", "government", "overall", -0.015, "Restriction fatigue")],
+      0.015
+    ),
+    responseOpt(
+      "covax",
+      "Share medical supply",
+      "Distribute available medical production equitably.",
+      { equity: 4, cooperation: 3 },
+      [],
+      0.003
+    ),
+    responseOpt(
+      "domestic_priority",
+      "Reserve domestic supply",
+      "National contracts expand capacity but reduce access elsewhere.",
+      { nationalism: 4, manufacturing: 2, research: 1 },
+      [],
+      0.005
+    ),
+    responseOpt(
+      "prepare_capacity",
+      "Prepare hospital capacity",
+      "Fund reserve beds, staffing and public-health capacity.",
+      { surveillance: 2, capacity: 4 },
+      [],
+      0.006
+    ),
+    responseOpt(
+      "reopen",
+      "Reopen and maintain precautions",
+      "Lift emergency restrictions while keeping routine surveillance.",
+      { openness: 4, surveillance: 1 }
+    ),
+    responseOpt(
+      "defer",
+      "Take no new action",
+      "Make no new public-health or research commitment.",
+      {}
+    ),
+  ];
+  for (const node of Object.values(trees)) {
+    if (!node) continue;
+    const ids = new Set((node.options ?? []).map((option) => option.optionId));
+    node.options = [
+      ...(node.options ?? []),
+      ...common.filter((option) => !ids.has(option.optionId)),
+    ];
+  }
+  return trees;
 }
 
 const responseOutcomes: GlobalResponseOutcome[] = [
@@ -378,15 +459,15 @@ const responseOutcomes: GlobalResponseOutcome[] = [
 
 function responseEvent(phase: string): ConflictEvent {
   const response: EventResponseDefinition = {
-    windowTurns: 24,
+    windowTurns: 12,
     decisionTrees: responseTrees(phase),
     defaultOptionIdByRole: {
-      belligerent: "test_trace",
-      backer_a: "research_pool",
-      backer_b: "expand_manufacturing",
-      neighbor: "targeted_controls",
-      bloc: "joint_procurement",
-      bystander: "prepare_capacity",
+      belligerent: "defer",
+      backer_a: "defer",
+      backer_b: "defer",
+      neighbor: "defer",
+      bloc: "defer",
+      bystander: "defer",
     },
     outcomes: responseOutcomes,
     defaultOutcomeId: "uncontrolled_wave",
@@ -396,7 +477,7 @@ function responseEvent(phase: string): ConflictEvent {
     kind: "authored",
     severity: phase === "pandemic" ? "critical" : "major",
     affects: "all",
-    trigger: { onPhaseEnter: true, everyTurns: 24 },
+    trigger: { onPhaseEnter: true, everyTurns: 12 },
     headline: "Governments coordinate the pandemic response",
     body: "Containment, fiscal support, research, manufacturing, and distribution choices will shape the next wave.",
     response,
@@ -433,33 +514,17 @@ export const PANDEMIC_DEF: LivingConflictDef = {
     distributionEquity: { initial: 12 },
     supplyChainStrain: { initial: 5 },
     immunity: { initial: 0 },
+    containmentPolicy: { initial: 0 },
+    travelControls: { initial: 0 },
+    researchInvestment: { initial: 0 },
+    manufacturingInvestment: { initial: 0 },
+    capacityInvestment: { initial: 0 },
+    cooperation: { initial: 0 },
+    economicSupport: { initial: 0 },
+    variantWaves: { initial: 0 },
+    distributionInvestment: { initial: 0 },
   },
-  scheduledPressures: [
-    {
-      key: "zoonotic_uncertainty",
-      everyTurns: 12,
-      phaseKeys: ["emergence", "outbreak"],
-      trackDeltas: { transmission: 5, surveillance: 2 },
-    },
-    {
-      key: "wave_pressure",
-      everyTurns: 12,
-      phaseKeys: ["pandemic", "containment"],
-      trackDeltas: { transmission: 4, restrictionFatigue: 3, supplyChainStrain: 2 },
-    },
-    {
-      key: "research_learning",
-      everyTurns: 12,
-      phaseKeys: ["outbreak", "pandemic", "containment"],
-      trackDeltas: { vaccineResearch: 4, manufacturing: 2 },
-    },
-    {
-      key: "endemic_immunity",
-      everyTurns: 12,
-      phaseKeys: ["endemic"],
-      trackDeltas: { immunity: 2, transmission: -2, restrictionFatigue: -2 },
-    },
-  ],
+  scheduledPressures: [],
   transitions: [
     {
       key: "sustained_outbreak",
@@ -482,10 +547,7 @@ export const PANDEMIC_DEF: LivingConflictDef = {
       key: "global_spread",
       fromPhase: "outbreak",
       toPhase: "pandemic",
-      conditions: [
-        { track: "transmission", min: 70 },
-        { track: "healthCapacity", max: 50 },
-      ],
+      conditions: [{ track: "transmission", min: 70 }],
     },
     {
       key: "outbreak_contained",
@@ -534,7 +596,7 @@ export const PANDEMIC_DEF: LivingConflictDef = {
       toStatus: "active",
       priority: 100,
       conditions: [
-        { track: "transmission", min: 78 },
+        { track: "transmission", min: 40 },
         { track: "immunity", max: 55 },
       ],
     },
@@ -717,7 +779,7 @@ export const PANDEMIC_DEF: LivingConflictDef = {
           kind: "procedural",
           severity: "critical",
           affects: "all",
-          trigger: { everyTurns: 6, minIntensity: 50 },
+          trigger: { everyTurns: 96 },
           headline: "A more transmissible variant emerges",
           body: "Sequencing confirms a variant that spreads faster and dodges some immunity.",
           effects: {
@@ -731,7 +793,8 @@ export const PANDEMIC_DEF: LivingConflictDef = {
       level: 4,
       key: "containment",
       label: "Containment",
-      summary: "Vaccines and immunity are turning the curve. The worst is passing.",
+      summary:
+        "Containment and accumulated protection are reducing cases. Reopening remains a choice.",
       minDwellTurns: 4,
       advancePressure: 999,
       defcon: 4,
@@ -761,8 +824,8 @@ export const PANDEMIC_DEF: LivingConflictDef = {
           severity: "major",
           affects: "all",
           trigger: { onPhaseEnter: true },
-          headline: "Mass vaccination turns the tide",
-          body: "Immunisation reaches critical mass and case counts fall across the worst-hit regions.",
+          headline: "Pandemic transmission comes under control",
+          body: "Cases are falling under the combined effects of containment and protection. Renewed spread remains possible.",
         },
       ],
     },

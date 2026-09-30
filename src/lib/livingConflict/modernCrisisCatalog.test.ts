@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { advancePandemicState } from "./rules/pandemic";
+import { normalizeConflictState } from "./engine";
 import { ARAB_UPRISINGS_DEF } from "./defs/arabUprisings";
 import { GLOBAL_FINANCIAL_CRISIS_DEF } from "./defs/globalFinancialCrisis";
 import { NORTHERN_IRELAND_DEF } from "./defs/northernIreland";
@@ -21,7 +23,18 @@ describe("modern crisis catalog contract", () => {
   it.each(MODERN_CRISIS_DEFS)("$key uses the negotiated-crisis authoring contract", (def) => {
     expect(Object.keys(def.tracks ?? {})).not.toHaveLength(0);
     expect(def.transitions).not.toHaveLength(0);
-    expect(def.scheduledPressures).not.toHaveLength(0);
+    if (def.key === "pandemic") {
+      // Disease pressure now depends on the current health/policy state rather
+      // than an unconditional fixed scheduled delta.
+      const initial = normalizeConflictState(def, {
+        defKey: def.key,
+        hasOpened: true,
+        phaseLevel: 1,
+      });
+      expect(advancePandemicState(initial).tracks?.transmission).not.toBe(
+        initial.tracks?.transmission
+      );
+    } else expect(def.scheduledPressures).not.toHaveLength(0);
     expect(def.phases.every((phase) => phase.advancePressure >= 100)).toBe(true);
     expect(
       def.phases.some(
