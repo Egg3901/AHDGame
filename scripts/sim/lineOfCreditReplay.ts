@@ -166,7 +166,8 @@ async function main() {
     }
   });
   client.on("commandSucceeded", (event) => {
-    if (collecting) responseBytes += BSON.calculateObjectSize(event.reply);
+    if (collecting && event.reply && typeof event.reply === "object" && !Array.isArray(event.reply))
+      responseBytes += BSON.calculateObjectSize(event.reply as Record<string, unknown>);
   });
   const measured = async <T>(work: () => Promise<T>) => {
     commands = 0;

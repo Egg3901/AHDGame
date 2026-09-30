@@ -19,7 +19,7 @@ function fixture() {
   db.seed("characters", [
     {
       _id: id,
-      lineOfCredit: { balances: {}, accountsOpened: { USD: true } },
+      lineOfCredit: { balances: {}, arrears: {}, accountsOpened: { USD: true } },
       currencyBalances: { personal: { USD: 1000 } },
     },
   ]);
@@ -32,12 +32,12 @@ function plan(): LocPlan {
   return {
     characterId: id,
     expectedRevision: null,
-    expectedLoc: { balances: {}, accountsOpened: { USD: true } },
+    expectedLoc: { balances: {}, arrears: {}, accountsOpened: { USD: true } },
     request: { operation: "draw", currency: "USD", amount: 100 },
     drawAdmission: { bankId: "US", addInternal: 100, exchangeRate: 1 },
     createdAt: new Date("2026-09-30T00:00:00Z"),
     effect: {
-      locAfter: { balances: { USD: 100 }, accountsOpened: { USD: true } },
+      locAfter: { balances: { USD: 100 }, arrears: {}, accountsOpened: { USD: true } },
       walletInc: { "currencyBalances.personal.USD": 100 },
       reserves: [],
       ledger: [],
@@ -70,7 +70,9 @@ describe("recoverable LOC debt-book admission", () => {
     snapshot.available = 50;
     const result = await settleLocPlan(db as unknown as Db, "declined", 1, plan());
     expect(result.status).toBe("rejected");
-    expect(db.collection("characters").docs[0].currencyBalances.personal.USD).toBe(1000);
+    expect(db.collection("characters").docs[0]).toMatchObject({
+      currencyBalances: { personal: { USD: 1000 } },
+    });
     expect(db.collection("centralBanks").docs[0].pendingLocBookMutationId).toBeUndefined();
     snapshot.available = 1000;
     expect((await settleLocPlan(db as unknown as Db, "declined", 1, plan())).status).toBe(
@@ -87,8 +89,14 @@ describe("recoverable LOC debt-book admission", () => {
       let fired = false;
       vi.spyOn(target, "updateOne").mockImplementation(async (...args) => {
         const result = await update(...args);
+        const updateSpec = args[1];
         const matches =
-          point !== "release" || Object.hasOwn(args[1].$unset ?? {}, "pendingLocBookMutationId");
+          point !== "release" ||
+          (!Array.isArray(updateSpec) &&
+            "$unset" in updateSpec &&
+            !!updateSpec.$unset &&
+            typeof updateSpec.$unset === "object" &&
+            Object.hasOwn(updateSpec.$unset, "pendingLocBookMutationId"));
         if (!fired && matches) {
           fired = true;
           throw new Error("lost acknowledgement");
@@ -100,7 +108,9 @@ describe("recoverable LOC debt-book admission", () => {
       );
       await settleLocPlan(native, "recover", 1, plan());
       await settleLocPlan(native, "recover", 1, plan());
-      expect(db.collection("characters").docs[0].currencyBalances.personal.USD).toBe(1100);
+      expect(db.collection("characters").docs[0]).toMatchObject({
+        currencyBalances: { personal: { USD: 1100 } },
+      });
       expect(db.collection("centralBanks").docs[0].pendingLocBookMutationId).toBeUndefined();
       expect(db.collection("centralBanks").docs[0].locBookRevision).toBe(2);
       expect(snapshot.calls).toBe(1);
@@ -116,6 +126,8 @@ describe("recoverable LOC debt-book admission", () => {
     service.effect.flows = [];
     await settleLocPlan(db as unknown as Db, "service", 1, service);
     expect(snapshot.calls).toBe(0);
-    expect(db.collection("characters").docs[0].lineOfCredit.balances.USD).toBe(100);
+    expect(db.collection("characters").docs[0]).toMatchObject({
+      lineOfCredit: { balances: { USD: 100 } },
+    });
   });
 });
