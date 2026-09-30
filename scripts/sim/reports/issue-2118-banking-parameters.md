@@ -8,7 +8,7 @@ The issue asks for a separate tuning pass and a conservation/liquidity/default/p
 
 ## Provenance and reproduction
 
-- Clean replay/source commit: `458c60a05cfa11bacf2552d8ab1238422f7f8a83`.
+- Clean replay/source commit: `458c60a05cfa11bacf2552d8ab1238422f7f8a83`. Later commits add this report and register the isolated sector fixture in the revenue-writer guard; no runtime or scenario behavior changed.
 - Banking-enabled retained context: `ahd_sim_financial2154_final_1184c`, accepted #2154 source `1184cdd81dd0da3b7137afac72496a80a681c77d`.
 - Retained input digest: `797d474072a54f2bb53259650fead0352288b2f3eda3df77c168a08a5bdd2d27`. Re-read once after all 26 scenarios: unchanged.
 - The retained context has nonzero private deposits and loan books. The earlier 480-turn source with banking off is **not** used as a banking baseline.

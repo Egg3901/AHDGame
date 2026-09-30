@@ -188,6 +188,8 @@ export async function setupCase(db: Db, context: RetainedContext, scenario: Para
       liquidCurrencyCode: currency,
     },
   ]);
+  // PLANTS-GATED: isolated fixture seeds authoritative positive capitalStock.
+  // Banking capacity reads stock first; this legacy revenue nameplate never funds cash.
   await db.collection("corporateSectors").insertOne({
     corporationId: BANK,
     sectorType: "financial",
