@@ -1,0 +1,138 @@
+/** Treasury cash accrual must be witnessed by the same per-turn owner. */
+import { describe, expect, it, vi } from "vitest";
+import type { Db } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
+import { reconcileLedger } from "@/lib/ledger/reconcile";
+import type { LedgerEntry } from "@/lib/ledger/types";
+import { processTreasuryTurn } from "./treasuryTurn";
+import { getDb } from "@/lib/mongodb";
+
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+
+function world() {
+  const db = createInMemoryDb();
+  db.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
+  db.seed("gameState", [{ _id: "current", currentTurn: 10 }]);
+  db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1 }]);
+  db.seed("federalBudget", [
+    {
+      _id: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      gdp: 48000,
+      revenue: { total: 48000 },
+      spending: { total: 24000, debtInterest: 0 },
+      debt: { principal: 0, interestRate: 0 },
+      treasuryBalance: -1000,
+    },
+  ]);
+  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  return db;
+}
+
+describe("treasury accrual stock-flow ownership", () => {
+  it("records the actual signed treasury movement without inventing financing", async () => {
+    const db = world();
+    await processTreasuryTurn(10);
+    const close = Number(db.collection("federalBudget").docs[0].treasuryBalance);
+    expect(close).toBe(-500);
+    const report = reconcileLedger({
+      turn: 10,
+      openingBalances: { "government:US:USD": -1000 },
+      closingBalances: { "government:US:USD": close },
+      entries: db.collection("ledgerEntries").docs as unknown as LedgerEntry[],
+    });
+    expect(report.stockVsFlow.divergentCount).toBe(0);
+    expect(report.trialBalance.status).toBe("green");
+    expect(report.unattributed).toEqual([]);
+  });
+  it("two concurrent phase calls accrue once and publish one witness", async () => {
+    const db = world();
+    await Promise.all([processTreasuryTurn(10), processTreasuryTurn(10)]);
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(-500);
+    expect(db.collection("ledgerEntries").docs).toHaveLength(1);
+  });
+
+  it.each([
+    { collection: "federalBudget", afterWrite: true },
+    { collection: "ledgerEntries", afterWrite: false },
+    { collection: "ledgerEntries", afterWrite: true },
+  ])("recovers $collection afterWrite=$afterWrite without charging again", async (fault) => {
+    const db = world();
+    const crash = withInjectedCrash(db, { ...fault, op: "updateOne", onCall: 1 });
+    vi.mocked(getDb).mockResolvedValue(crash.db);
+    await expect(processTreasuryTurn(10)).rejects.toThrow("crash");
+    await processTreasuryTurn(10);
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(-500);
+    expect(db.collection("ledgerEntries").docs).toHaveLength(1);
+  });
+
+  it("recovers the previous witness before the next turn replaces its receipt", async () => {
+    const db = world();
+    const crash = withInjectedCrash(db, {
+      collection: "ledgerEntries",
+      op: "updateOne",
+      onCall: 1,
+    });
+    vi.mocked(getDb).mockResolvedValue(crash.db);
+    await expect(processTreasuryTurn(10)).rejects.toThrow("crash");
+    await processTreasuryTurn(11);
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(0);
+    expect(
+      db
+        .collection("ledgerEntries")
+        .docs.map((d) => d.turn)
+        .sort()
+    ).toEqual([10, 11]);
+  });
+
+  it("preserves negative cash and records named spending, service and rounding", async () => {
+    const db = world();
+    await db.collection("federalBudget").updateOne(
+      { _id: "federal" },
+      {
+        $set: {
+          revenue: { total: 4801 },
+          spending: { total: 9601, debtInterest: 0 },
+          debt: { principal: 48000, interestRate: 0.05 },
+          unionsBanned: true,
+          unionEnforcementPosture: "crackdown",
+          gdp: 48000,
+        },
+      }
+    );
+    await processTreasuryTurn(10);
+    const close = Number(db.collection("federalBudget").docs[0].treasuryBalance);
+    expect(close).toBeLessThan(-1100);
+    const entries = db.collection("ledgerEntries").docs as unknown as LedgerEntry[];
+    expect(entries[0].legs.some((l) => l.account.includes("fiscal_debt_service"))).toBe(true);
+    expect(entries[0].legs.some((l) => l.account.includes("fiscal_union_enforcement"))).toBe(true);
+    const report = reconcileLedger({
+      turn: 10,
+      openingBalances: { "government:US:USD": -1000 },
+      closingBalances: { "government:US:USD": close },
+      entries,
+    });
+    expect(report.stockVsFlow.divergentCount).toBe(0);
+  });
+
+  it.each(["gov_tax_revenue", "gov_coupon_payment"] as const)(
+    "marks %s statistics without suppressing real cash rows",
+    (type) => {
+      const row = {
+        type,
+        turn: 10,
+        createdAt: new Date(),
+        subjectType: "government" as const,
+        countryId: "US",
+        amount: 100,
+        currencyCode: "USD" as const,
+        anchorAmount: 100,
+      };
+      expect(deriveLedgerEntry({ ...row, meta: { treasuryCashMovement: false } })).toBeNull();
+      expect(deriveLedgerEntry(row)).not.toBeNull();
+    }
+  );
+});

@@ -282,6 +282,13 @@ export function deriveLedgerEntry(
   tx: DerivableTx,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
+  // These marked rows describe tax-base or holder-service statistics. Their
+  // emitters never move treasury cash; the fiscal accrual owner witnesses that.
+  if (
+    (tx.type === "gov_tax_revenue" || tx.type === "gov_coupon_payment") &&
+    tx.meta?.treasuryCashMovement === false
+  )
+    return null;
   const anchor = tx.anchorAmount;
   // No anchor value → not derivable in ₳ terms; skip rather than guess a rate
   // (deriving anchor from the live FX table causes historical drift — plan §5).

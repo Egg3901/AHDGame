@@ -668,6 +668,8 @@ export async function emitCorporationTurnTx(args: {
       meta: {
         taxAnchor: Math.round(taxAnchor),
         source: "corp_operating_plus_dividend_received",
+        // Tax-base telemetry; treasury cash accrues in processTreasuryTurn.
+        treasuryCashMovement: false,
       },
     });
   }

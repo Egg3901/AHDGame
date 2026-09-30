@@ -1,3 +1,6 @@
+import { treasuryAccrualReceipt } from "@/lib/budget/rules/treasuryAccrual";
+import { publishTreasuryAccrualReceipt } from "@/lib/budget/treasuryAccrualReceipt";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudgetPolicy";
 import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
@@ -55,81 +58,127 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const liveCountries = await getRegisteredCountryIdSet(db);
   const budgets = allBudgets.filter((b) => liveCountries.has(String(b.countryId ?? b._id)));
 
+  const [config, rates] = await Promise.all([
+    db
+      .collection<{ _id: string; ledgerShadow?: boolean }>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { ledgerShadow: 1 } }),
+    db
+      .collection<{ currencyCode: string; rate: number }>("exchangeRates")
+      .find({}, { projection: { currencyCode: 1, rate: 1 } })
+      .toArray(),
+  ]);
+  const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
   let countriesProcessed = 0;
-  for (const b of budgets) {
-    // Invariant: every federalBudget carries a signed treasuryBalance (set at
-    // creation + backfilled). If one is still null, heal it in place to zero so
-    // the country starts accruing this turn instead of freezing, and surface
-    // the gap in logs. The heal is zero, never bond debt: cash and
-    // `debt.principal` are separate positions, and fabricating a cash hole from
-    // the bond stock would invent an obligation payment that never happened
-    // (refs #1975).
-    let current = b.treasuryBalance;
-    if (current == null) {
-      current = 0;
-      console.warn(
-        `[treasuryTurn] ${String(b._id)} had null treasuryBalance; ` +
-          `initializing to 0 (cash unknown; bond stock untouched). Seed/backfill missed this budget.`
-      );
-    }
-
-    await expireFinancialCrisisAusterity(db, b, _turn);
-    const revenue = b.revenue?.total ?? 0;
-    const spendingTotal = b.spending?.total ?? 0;
-    const debtInterest = b.spending?.debtInterest ?? 0;
-    const primaryPerTurn = (revenue - (spendingTotal - debtInterest)) / TURNS_PER_YEAR;
-
-    // Live debt-service on the bond-owned stock (the per-turn cash leg of coupon
-    // service). Uses the PRE-slice stock so the rate reflects this turn's opening
-    // position. Never touches `debt.principal` itself.
-    const bondPrincipal = Math.max(0, b.debt?.principal ?? 0);
-    const terms = sovereignDebtTerms(bondPrincipal, {
-      gdp: b.gdp ?? 0,
-      gdpSmoothed: b.gdpSmoothed,
-      investorConfidence: b.investorConfidence,
-      imfBailoutActive: b.imfSovereignBailoutActive,
-      sovereignRiskAnchor: b.sovereignRiskAnchor,
-    });
-    const debtServiceTurn =
-      bondPrincipal > 0 ? (bondPrincipal * terms.interestRate) / TURNS_PER_YEAR : 0;
-
-    const enforcementCost = enforcementTreasuryCostPerTurn(
-      b.gdp ?? 0,
-      b.unionsBanned === true,
-      b.unionEnforcementPosture
-    );
-    const next = Math.round(current + primaryPerTurn - debtServiceTurn - enforcementCost);
-
-    // Ticket #1102: walk any enacted tax-rate change one step toward its
-    // target, so a large move arrives over several turns instead of shocking
-    // the economy in one. Reached targets drop out of the map on their own.
-    const ramp = advanceTaxRatePhaseIn(
-      // FederalTaxRates is a fixed-key shape with no string index signature,
-      // so widening needs the explicit two-step. The helper only reads keys it
-      // was handed in `pending`, all of which are real tax types.
-      (b.taxRates ?? {}) as unknown as Record<string, number | null | undefined>,
-      b.taxRatePhaseIn as Record<string, number> | undefined
-    );
-    const rampSet: Record<string, number> = {};
-    for (const [taxType, rate] of Object.entries(ramp.rates)) {
-      rampSet[`taxRates.${taxType}`] = rate;
-    }
-    const rampUnset: Record<string, ""> = {};
-    for (const taxType of Object.keys(b.taxRatePhaseIn ?? {})) {
-      if (!(taxType in ramp.pending)) rampUnset[`taxRatePhaseIn.${taxType}`] = "";
-    }
-
-    await db.collection<FederalBudget>("federalBudget").updateOne(
-      { _id: b._id },
-      {
-        $set: {
-          treasuryBalance: next,
-          ...rampSet,
-        },
-        ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}),
+  for (const initial of budgets) {
+    let b = initial;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (b.treasuryAccrual) {
+        await publishTreasuryAccrualReceipt(db, b, b.treasuryAccrual);
+        if (b.treasuryAccrual.turn >= _turn) break;
       }
-    );
-    countriesProcessed += 1;
+      // Invariant: every federalBudget carries a signed treasuryBalance (set at
+      // creation + backfilled). If one is still null, heal it in place to zero so
+      // the country starts accruing this turn instead of freezing, and surface
+      // the gap in logs. The heal is zero, never bond debt: cash and
+      // `debt.principal` are separate positions, and fabricating a cash hole from
+      // the bond stock would invent an obligation payment that never happened
+      // (refs #1975).
+      let current = b.treasuryBalance;
+      if (current == null) {
+        current = 0;
+        console.warn(
+          `[treasuryTurn] ${String(b._id)} had null treasuryBalance; ` +
+            `initializing to 0 (cash unknown; bond stock untouched). Seed/backfill missed this budget.`
+        );
+      }
+
+      await expireFinancialCrisisAusterity(db, b, _turn);
+      const revenue = b.revenue?.total ?? 0;
+      const spendingTotal = b.spending?.total ?? 0;
+      const debtInterest = b.spending?.debtInterest ?? 0;
+
+      // Live debt-service on the bond-owned stock (the per-turn cash leg of coupon
+      // service). Uses the PRE-slice stock so the rate reflects this turn's opening
+      // position. Never touches `debt.principal` itself.
+      const bondPrincipal = Math.max(0, b.debt?.principal ?? 0);
+      const terms = sovereignDebtTerms(bondPrincipal, {
+        gdp: b.gdp ?? 0,
+        gdpSmoothed: b.gdpSmoothed,
+        investorConfidence: b.investorConfidence,
+        imfBailoutActive: b.imfSovereignBailoutActive,
+        sovereignRiskAnchor: b.sovereignRiskAnchor,
+      });
+      const debtServiceTurn =
+        bondPrincipal > 0 ? (bondPrincipal * terms.interestRate) / TURNS_PER_YEAR : 0;
+
+      const enforcementCost = enforcementTreasuryCostPerTurn(
+        b.gdp ?? 0,
+        b.unionsBanned === true,
+        b.unionEnforcementPosture
+      );
+      const currencyCode =
+        b.currencyCode ?? COUNTRY_CURRENCY_MAP[b.countryId as CountryId] ?? "USD";
+      const observedRate = rateByCurrency.get(currencyCode) ?? 1;
+      const receipt = treasuryAccrualReceipt({
+        turn: _turn,
+        openingCash: current,
+        currencyCode,
+        anchorRate: Number.isFinite(observedRate) && observedRate > 0 ? observedRate : 1,
+        ledgerShadow: config?.ledgerShadow === true,
+        annualRevenue: revenue,
+        annualPrimarySpending: spendingTotal - debtInterest,
+        debtService: debtServiceTurn,
+        enforcement: enforcementCost,
+      });
+      const next = current + receipt.cashDelta;
+
+      // Ticket #1102: walk any enacted tax-rate change one step toward its
+      // target, so a large move arrives over several turns instead of shocking
+      // the economy in one. Reached targets drop out of the map on their own.
+      const ramp = advanceTaxRatePhaseIn(
+        // FederalTaxRates is a fixed-key shape with no string index signature,
+        // so widening needs the explicit two-step. The helper only reads keys it
+        // was handed in `pending`, all of which are real tax types.
+        (b.taxRates ?? {}) as unknown as Record<string, number | null | undefined>,
+        b.taxRatePhaseIn as Record<string, number> | undefined
+      );
+      const rampSet: Record<string, number> = {};
+      for (const [taxType, rate] of Object.entries(ramp.rates)) {
+        rampSet[`taxRates.${taxType}`] = rate;
+      }
+      const rampUnset: Record<string, ""> = {};
+      for (const taxType of Object.keys(b.taxRatePhaseIn ?? {})) {
+        if (!(taxType in ramp.pending)) rampUnset[`taxRatePhaseIn.${taxType}`] = "";
+      }
+
+      const applied = await db.collection<FederalBudget>("federalBudget").updateOne(
+        {
+          _id: b._id,
+          treasuryBalance: b.treasuryBalance ?? null,
+          $or: [
+            { "treasuryAccrual.turn": { $exists: false } },
+            { "treasuryAccrual.turn": { $lt: _turn } },
+          ],
+        },
+        {
+          $set: {
+            treasuryBalance: next,
+            treasuryAccrual: receipt,
+            ...rampSet,
+          },
+          ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}),
+        }
+      );
+      if (applied.matchedCount === 1) {
+        await publishTreasuryAccrualReceipt(db, b, receipt);
+        countriesProcessed += 1;
+        break;
+      }
+      const refreshed = await db.collection<FederalBudget>("federalBudget").findOne({ _id: b._id });
+      if (!refreshed) throw new Error(`Treasury budget ${b._id} disappeared during accrual`);
+      b = refreshed;
+      if (attempt === 3) throw new Error(`Treasury accrual ${b._id}:${_turn} could not claim cash`);
+    }
   }
   return { countriesProcessed };
 }
