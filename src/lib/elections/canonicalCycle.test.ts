@@ -123,6 +123,51 @@ describe("canonicalTurnsForCycle", () => {
     });
   });
 
+  it("cycles modeled BR macroregion governors with Brazil's general election", () => {
+    for (const [preset, startingYear] of [
+      ["1991-default", 1991],
+      ["2019-default", 2019],
+      ["2027-default", 2027],
+    ] as const) {
+      const ctx = { preset, startingYear };
+      const governor = canonicalTurnsForCycle({
+        electionType: "governor",
+        countryId: "BR",
+        cycle: 1,
+        ctx,
+      });
+      const chamber = canonicalTurnsForCycle({
+        electionType: "chamber",
+        countryId: "BR",
+        cycle: 1,
+        ctx,
+      });
+      expect(governor?.endTurn).toBe(chamber?.endTurn);
+      expect(governor?.endTurn).toBe(192);
+      expect(
+        canonicalTurnsForCycle({ electionType: "governor", countryId: "BR", cycle: 2, ctx })
+          ?.endTurn
+      ).toBe(384);
+    }
+    // Other regional executive cycles retain their own shared anchor.
+    expect(
+      canonicalTurnsForCycle({ electionType: "governor", countryId: "IE", cycle: 1 })?.endTurn
+    ).toBe(288);
+    for (const [preset, startingYear] of [
+      ["1953-default", 1953],
+      ["1979-default", 1979],
+    ] as const) {
+      expect(
+        canonicalTurnsForCycle({
+          electionType: "governor",
+          countryId: "BR",
+          cycle: 1,
+          ctx: { preset, startingYear },
+        })
+      ).toBeNull();
+    }
+  });
+
   describe("sangiin", () => {
     it.each([
       [1, 1, 171], // Class 1 cycle 1 → Jul 2022

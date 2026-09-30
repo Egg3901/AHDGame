@@ -11,6 +11,7 @@ import {
   ensureJPCouncillorElections,
   ensureDEElections,
   ensureBRElections,
+  ensureBRGovernorElections,
   ensureNGElections,
   ensureIEElections,
   ensureIEUachtaranElections,
@@ -1165,6 +1166,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           },
           async () => {
             await ensureBRElections(now);
+            await ensureBRGovernorElections(now);
           },
           async () => {
             await ensureNGElections(now);

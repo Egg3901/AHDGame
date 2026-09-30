@@ -24,6 +24,10 @@ import {
   JP_SHUGIIN_2027,
   UK_COMMONS_2027,
 } from "@/lib/seeds/reference/worldSeats2027";
+import {
+  modeledBrMacroregionGovernors,
+  modeledIeRegionalOffices,
+} from "@/lib/seeds/reference/rules/aggregateRegionalOffices";
 
 export interface HistoricalSeat {
   state: string;
@@ -4162,15 +4166,16 @@ const SEAT_GROUPS_2020: SeatGroups = {
 // Michael D. Higgins began his second presidential term on 11 Nov 2018.
 // https://president.ie/en/the-president/michaeldhiggins/
 const SEAT_GROUPS_2019: SeatGroups = mergeGroups(SEAT_GROUPS_2020, {
-  IE: IE_UACHTARAN_2019,
+  BR: modeledBrMacroregionGovernors("2019-default"),
+  IE: [...IE_UACHTARAN_2019, ...modeledIeRegionalOffices("2019-default")],
 });
 
 /**
  * The 2027 preset, re-expressed in the country-owned grouping.
  *
- * Composed from the same arrays upstream's flat `2027-default` case used, so
- * the seats are identical; only the shape differs. The 2027 roster is US, UK,
- * DE, JP and CN, so IE has no entry here.
+ * Existing major-country rosters retain their prior arrays. BR and IE add
+ * only the explicitly modeled aggregate regional offices; their wider 2027
+ * legislative rosters remain separate historical-authoring work.
  *
  * ⚠ THE US EXECUTIVE IS SEATED FROM 2020, and upstream's flat case seated
  * none at all. A presidential player country with no president is a broken
@@ -4199,6 +4204,8 @@ const SEAT_GROUPS_2027: SeatGroups = {
     ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
     ...CN_GOVERNORS_2020,
   ],
+  BR: modeledBrMacroregionGovernors("2027-default"),
+  IE: modeledIeRegionalOffices("2027-default"),
 };
 
 const SEAT_GROUPS_1992: SeatGroups = {
@@ -4217,10 +4224,15 @@ const SEAT_GROUPS_1992: SeatGroups = {
     ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_1991),
     ...CN_GOVERNORS_1991,
   ],
-  BR: [...BR_CHAMBER_1991, ...BR_SENATE_1991],
+  BR: [...BR_CHAMBER_1991, ...BR_SENATE_1991, ...modeledBrMacroregionGovernors("1991-default")],
   // Mary Robinson was inaugurated on 3 Dec 1990 and held office at opening.
   // https://www.president.ie/en/the-president/mary-robinson
-  IE: [...IE_DAIL_1991, ...IE_SEANAD_1991, ...IE_UACHTARAN_1991],
+  IE: [
+    ...IE_DAIL_1991,
+    ...IE_SEANAD_1991,
+    ...IE_UACHTARAN_1991,
+    ...modeledIeRegionalOffices("1991-default"),
+  ],
 };
 
 const SEAT_GROUPS_1953: SeatGroups = mergeGroups(

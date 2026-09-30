@@ -72,7 +72,11 @@ export {
   ensureTRElections,
   ensureTRSenateElections,
 } from "./perpetualElections/countries/betaParliaments";
-export { ensureBRElections, ensureBRSenateElections } from "./perpetualElections/countries/br";
+export {
+  ensureBRElections,
+  ensureBRSenateElections,
+  ensureBRGovernorElections,
+} from "./perpetualElections/countries/br";
 export {
   ensureCNElections,
   ensureCNGovernorElections,

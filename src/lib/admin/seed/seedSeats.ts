@@ -24,6 +24,7 @@ import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
 import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
+import { IE_LOCAL_COUNCIL_SEATS } from "@/lib/countries/ie/data/ieLocalCouncilSeats";
 
 // State name lookup for display names
 const STATE_NAMES: Record<string, string> = {
@@ -83,24 +84,6 @@ const STATE_NAMES: Record<string, string> = {
  * The United Kingdom's region names, forwarded to its country folder, where they
  * are DERIVED from `UK_REGIONS` rather than written out a second time.
  */
-
-/**
- * Per-region councillor seat allocation for the IE Local Council. Must mirror
- * `IE_LOCAL_COUNCIL_SEATS` in `src/lib/turn/perpetualElections.ts` — the
- * seed file is intentionally kept module-local to avoid a turn-system
- * import from the admin seed path (matches the UK_REGIONAL_COUNCIL_SEATS
- * duplication pattern).
- */
-const IE_LOCAL_COUNCIL_SEATS_LOCAL: Record<string, number> = {
-  DUB: 62,
-  KIL: 26,
-  COR: 25,
-  DON: 21,
-  GAL: 19,
-  LIM: 18,
-  WEX: 17,
-  MID: 12,
-};
 
 export const REGION_NAME_MAPS: Partial<Record<CountryId, Record<string, string>>> = {
   UK: UK_GEOGRAPHY.regionNames,
@@ -690,7 +673,7 @@ export async function seedSeats(
       countryId: "IE",
       electionType: "localCouncil",
       state: region._id,
-      totalSeats: IE_LOCAL_COUNCIL_SEATS_LOCAL[region._id] ?? 1,
+      totalSeats: IE_LOCAL_COUNCIL_SEATS[region._id] ?? 1,
       displayName: buildDisplayName("IE", "localCouncil", region._id),
       shortName: buildShortName("IE", "localCouncil", region._id),
       createdAt: now,

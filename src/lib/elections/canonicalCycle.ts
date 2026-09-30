@@ -389,23 +389,38 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
     }
     case "governor":
     case "stateSenate": {
+      // The aggregate BR governor roster is authored only for 1991 and the
+      // modern presets. Earlier BR worlds did not run this regional election.
+      if (
+        electionType === "governor" &&
+        countryId === "BR" &&
+        (ctx.preset === "1953-default" || ctx.preset === "1979-default")
+      ) {
+        return null;
+      }
       // D10: RU First Secretaries ride the republic-soviet cycle, and DD Land
       // First Secretaries ride the Volkskammer cycle (Bezirk/Land elections
       // were held with the chamber's) — anchor overrides only (the 192-turn
       // period already comes from dur.durationHours). Null anchors era-gate
-      // both OFF outside the Cold-War presets. Every other country keeps the
-      // shared governorStateSenate anchor.
+      // both OFF outside the Cold-War presets. Brazil's modeled macroregion
+      // governors ride its general election; other countries keep the shared
+      // governorStateSenate anchor.
       // UKR/BLR/BAL oblast/republic first secretaries ride the republic-soviet
       // cycle for the same reason RU's do: the regional soviets were elected on
       // the republic cycle, not on a separate schedule of their own.
       const govAnchor =
         electionType === "governor" && customCycle1EndTurn !== undefined
           ? customCycle1EndTurn
-          : countryId === "RU" || countryId === "UKR" || countryId === "BLR" || countryId === "BAL"
-            ? anchors.ruRepublicSoviet
-            : countryId === "DD"
-              ? anchors.ddVolkskammer
-              : anchors.governorStateSenate;
+          : electionType === "governor" && countryId === "BR"
+            ? anchors.brChamber
+            : countryId === "RU" ||
+                countryId === "UKR" ||
+                countryId === "BLR" ||
+                countryId === "BAL"
+              ? anchors.ruRepublicSoviet
+              : countryId === "DD"
+                ? anchors.ddVolkskammer
+                : anchors.governorStateSenate;
       if (govAnchor == null) return null;
       const endTurn = cycle === 1 ? govAnchor : govAnchor + (cycle - 1) * dur.durationHours;
       return {

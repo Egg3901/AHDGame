@@ -16,6 +16,7 @@ import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonic
 import type { CycleAnchorContext } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
+import { IE_LOCAL_COUNCIL_SEATS } from "@/lib/countries/ie/data/ieLocalCouncilSeats";
 import { snapAnchorEndTime } from "@/lib/elections/snapShift";
 import {
   buildCanonicalSpawn,
@@ -864,17 +865,7 @@ export const WAL_REGIONAL_COUNCIL_SEATS: Record<string, number> = {
  * allocation once it reunifies (population-proportional at the same ratio).
  * Mirrors the UK_REGIONAL_COUNCIL_SEATS pattern.
  */
-export const IE_LOCAL_COUNCIL_SEATS: Record<string, number> = {
-  DUB: 62,
-  KIL: 26,
-  COR: 25,
-  DON: 21,
-  GAL: 19,
-  LIM: 18,
-  WEX: 17,
-  MID: 12,
-  NIR: 95,
-};
+export { IE_LOCAL_COUNCIL_SEATS };
 
 /**
  * Shared spawner for direct-elected regional executive (the "governor"
