@@ -231,6 +231,52 @@ describe("spawnNppCorporation — plants", () => {
     expect(poolSet.revenue).toBe(Math.max(0, POOL_REVENUE - CAPTURE_REVENUE));
   });
 
+  it("conserves a small sim pool across repeated seeded spawns", async () => {
+    const { batchSpawnNppCorporations, spawnNppCorporation } =
+      await import("./spawnNppCorporation");
+    const poolRevenue = 1_500_000;
+    const initialUnits = computeUnownedHeadroomUnits("manufacturing", poolRevenue, 1);
+    const pool = {
+      _id: new ObjectId(),
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "manufacturing",
+      revenue: poolRevenue,
+      headroomUnits: initialUnits,
+    };
+    db.collectionMocks.unownedSectors!.findOne.mockImplementation(async () => ({ ...pool }));
+    db.collectionMocks.unownedSectors!.updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set: { revenue: number; headroomUnits: number } }) => {
+        pool.revenue = update.$set.revenue;
+        pool.headroomUnits = update.$set.headroomUnits;
+      }
+    );
+    const spawned = await batchSpawnNppCorporations(db as unknown as Db, "US", {
+      sectorTypes: ["manufacturing"],
+      perSectorCount: 3,
+      headquartersState: "CA",
+      limitToUnownedPool: true,
+    });
+    expect(spawned).toHaveLength(2);
+    await expect(
+      spawnNppCorporation(db as unknown as Db, {
+        name: "Three",
+        type: "manufacturing",
+        countryId: "US",
+        headquartersState: "CA",
+        limitToUnownedPool: true,
+      })
+    ).rejects.toThrow("No unowned manufacturing capacity remains");
+    const grantedUnits = db.collectionMocks.corporateSectors!.insertOne.mock.calls.reduce(
+      (sum: number, call) => sum + (call[0] as { capitalStock: number }).capitalStock,
+      0
+    );
+    expect(grantedUnits).toBeCloseTo(initialUnits, 6);
+    expect(pool.revenue).toBe(0);
+    expect(pool.headroomUnits).toBeCloseTo(0, 6);
+    expect(db.collectionMocks.corporateSectors!.insertOne).toHaveBeenCalledTimes(2);
+  });
+
   it("never drives the pool negative", async () => {
     db.collectionMocks.unownedSectors!.findOne.mockResolvedValue({
       _id: new ObjectId(),

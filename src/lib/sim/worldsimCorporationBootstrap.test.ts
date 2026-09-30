@@ -18,6 +18,7 @@ vi.mock("@/lib/admin/spawnNppCorporation", () => ({
     US: "DC",
     UK: "LON",
     DE: "BE",
+    JP: "TOH",
     CN: "HB",
     UKR: "UKR_KYI",
     BLR: "BLR_MIN",
@@ -171,8 +172,14 @@ describe("bootstrapWorldsimCorporations", () => {
   });
 
   it("skips countries that already have NPP corps, so a retry attempts nothing", async () => {
-    base.collectionMocks.corporations!.countDocuments.mockImplementation(
-      async (filter: Record<string, unknown>) => (filter.countryId === "US" ? 51 : 0)
+    const { CORPORATION_TYPES } = await import("@/lib/constants/corporations");
+    const complete = CORPORATION_TYPES.flatMap((type) => Array(3).fill({ type }));
+    base.collectionMocks.corporations!.find.mockImplementation(
+      (filter: Record<string, unknown>) => ({
+        project: () => ({
+          toArray: async () => (filter.countryId === "US" ? complete : []),
+        }),
+      })
     );
     const first = await bootstrapWorldsimCorporations(db, {
       countryIds: ["US", "UK"],
@@ -183,7 +190,9 @@ describe("bootstrapWorldsimCorporations", () => {
 
     // Retry: UK now seeded too - zero attempts anywhere.
     vi.clearAllMocks();
-    base.collectionMocks.corporations!.countDocuments.mockResolvedValue(51);
+    base.collectionMocks.corporations!.find.mockReturnValue({
+      project: () => ({ toArray: async () => complete }),
+    });
     const second = await bootstrapWorldsimCorporations(db, {
       countryIds: ["US", "UK"],
       perSectorCount: 3,
@@ -202,12 +211,52 @@ describe("bootstrapWorldsimCorporations", () => {
     expect(corps.updateOne).not.toHaveBeenCalled();
     expect(corps.deleteMany).not.toHaveBeenCalled();
     expect(corps.bulkWrite).not.toHaveBeenCalled();
-    // Eligibility is read-only: the only corporations reads are the
-    // per-country idempotency counts for eligible countries.
-    expect(corps.countDocuments).toHaveBeenCalled();
-    for (const call of corps.countDocuments.mock.calls) {
+    // Eligibility is read-only: inspect existing NPP sector types in eligible countries.
+    expect(corps.find).toHaveBeenCalled();
+    for (const call of corps.find.mock.calls) {
       expect(["US", "UK", "DE"]).toContain((call[0] as { countryId: string }).countryId);
     }
+  });
+
+  it("fills missing sectors when finance seed already created two NPP banks", async () => {
+    const { CORPORATION_TYPES } = await import("@/lib/constants/corporations");
+    const existing: Array<{ type: string }> = [{ type: "financial" }, { type: "financial" }];
+    base.collectionMocks.corporations!.find.mockReturnValue({
+      project: () => ({ toArray: async () => existing }),
+    });
+    batchSpawnNppCorporations.mockImplementation(
+      async (
+        _db: unknown,
+        _countryId: CountryId,
+        options: { sectorTypes: string[]; perSectorCount: number }
+      ) => {
+        for (const type of options.sectorTypes) {
+          for (let i = 0; i < options.perSectorCount; i++) {
+            existing.push({ type });
+          }
+        }
+        return Array(options.perSectorCount * options.sectorTypes.length).fill({ countryId: "JP" });
+      }
+    );
+
+    const first = await bootstrapWorldsimCorporations(db, {
+      countryIds: ["JP"],
+      perSectorCount: 3,
+    });
+    expect(first.spawnedByCountry.JP).toBe(CORPORATION_TYPES.length * 3 - 2);
+    expect(existing).toHaveLength(CORPORATION_TYPES.length * 3);
+    expect(existing.filter((corp) => corp.type === "financial")).toHaveLength(3);
+    for (const type of CORPORATION_TYPES) {
+      expect(existing.filter((corp) => corp.type === type)).toHaveLength(3);
+    }
+
+    batchSpawnNppCorporations.mockClear();
+    const retry = await bootstrapWorldsimCorporations(db, {
+      countryIds: ["JP"],
+      perSectorCount: 3,
+    });
+    expect(retry.skippedExisting).toEqual(["JP"]);
+    expect(batchSpawnNppCorporations).not.toHaveBeenCalled();
   });
 
   it("lets an unrelated spawn failure fail visibly without stopping the sweep", async () => {

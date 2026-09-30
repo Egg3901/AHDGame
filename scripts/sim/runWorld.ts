@@ -44,6 +44,7 @@ import { worldsimQueryMonitoringRequested } from "./queryMonitoring";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import type { TurnLog } from "@/lib/db/types/turnLog";
+import type { WorldsimCorporationBootstrapResult } from "@/lib/sim/worldsimCorporationBootstrap";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -128,6 +129,11 @@ interface SimRunDoc {
     ok?: number | null;
     warn?: number | null;
     critical?: number | null;
+  };
+  /** Sim-only synthetic producer augmentation, not historical opening-economy fidelity. */
+  corporationBootstrap?: WorldsimCorporationBootstrapResult & {
+    mode: "sim-augmentation";
+    perSectorCount: number;
   };
 }
 
@@ -778,10 +784,9 @@ async function main() {
     }
     log(`Backfill complete: ${seatsBackfilled} seats filled across all countries`);
 
-    // Bootstrap seeds no tradeable corporations at all (only 8 non-tradeable
-    // country-owned entities, one per country) — found via this harness: 50
-    // turns of NPP bond/stock/index-fund investing produced 384 bond
-    // positions but ZERO share positions, because there was nothing to buy.
+    // Some presets seed no tradeable corporations; others seed historical
+    // producers or finance NPPs. This sim-only augmentation fills the missing
+    // three-per-type producer slots without replacing those existing actors.
     // Corporation creation has always been player-driven (found-a-corp
     // action) or admin-batch-seeded (batchSpawnNppCorporations, used by
     // /api/admin/corporations/spawn-npp-all in production) — never automatic
@@ -795,12 +800,11 @@ async function main() {
     // /reset path.
     // elections-only freezes the economy (corporationTurn is skipped), so NPP
     // corporations would just sit idle — skip the (slow) spawn to speed seeding.
+    let corporationBootstrap: SimRunDoc["corporationBootstrap"];
     if (electionsOnly) {
       log("elections-only: skipping NPP corporation spawn (economy is frozen this run)");
     } else {
-      log(
-        "Spawning NPP-owned corporations (bootstrap seeds none — needed for stock/index-fund investing)"
-      );
+      log("Augmenting NPP producers to three per sector from conserved unowned capacity");
       // Eligibility (planned economies keep their SOEs, zero private attempts)
       // is determined inside, against the marketization-dial gate, before any
       // creation attempt.
@@ -809,7 +813,14 @@ async function main() {
         perSectorCount: 3,
         log,
       });
-      log(`Corporation spawn complete: ${corpBootstrap.countriesSeeded} countries seeded`);
+      corporationBootstrap = {
+        mode: "sim-augmentation",
+        perSectorCount: 3,
+        ...corpBootstrap,
+      };
+      log(
+        `Corporation augmentation complete: ${corpBootstrap.countriesSeeded} countries augmented`
+      );
     }
 
     await simRuns.updateOne(
@@ -821,6 +832,7 @@ async function main() {
           currentTurn: 0,
           error: null,
           source,
+          ...(corporationBootstrap ? { corporationBootstrap } : {}),
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           bootstrapConformance: {
