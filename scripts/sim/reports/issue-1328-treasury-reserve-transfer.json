@@ -242,5 +242,56 @@
       "commands": 3,
       "replyBytes": 325
     }
+  },
+  "preCashRefusalQualification": {
+    "source": "37abc27968655642ff6039b5c4152827f7af9d70",
+    "cleanSource": true,
+    "cases": [
+      {
+        "label": "refusal",
+        "declined": {
+          "treasury": 10000,
+          "reserves": 5000,
+          "combined": 15000,
+          "spending": 20000000,
+          "surplus": 100000,
+          "history": 0,
+          "pending": null
+        },
+        "later": {
+          "treasury": 9000,
+          "reserves": 6000,
+          "combined": 15000,
+          "spending": 900000,
+          "surplus": 100000,
+          "history": 1,
+          "pending": null
+        },
+        "originalCommandRemainsRejected": true
+      },
+      {
+        "label": "refusal_lost_ack",
+        "declined": {
+          "treasury": 10000,
+          "reserves": 5000,
+          "combined": 15000,
+          "spending": 20000000,
+          "surplus": 100000,
+          "history": 0,
+          "pending": null
+        },
+        "later": {
+          "treasury": 9000,
+          "reserves": 6000,
+          "combined": 15000,
+          "spending": 900000,
+          "surplus": 100000,
+          "history": 1,
+          "pending": null
+        },
+        "originalCommandRemainsRejected": true
+      }
+    ],
+    "costs": {}
   }
 }

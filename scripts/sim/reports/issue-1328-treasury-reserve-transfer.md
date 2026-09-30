@@ -13,6 +13,10 @@ Runtime source: `4ebec5b1566cd4de6a04ff6200bd7967fa403d05`, clean checkout. Comp
 - After two actual treasury turns, control and treatment combined cash both equaled 19,166. The treatment retained the original 1,000 treasury/reserve difference without changing subsequent accrual.
 - An idle recovery scan made no financial changes. Two scans made three database commands total, including the first-use index check, and returned 325 BSON bytes. The full audited API command made 37 commands and returned 20,409 BSON bytes. These are small synthetic command measurements, not full-world phase-budget qualification.
 
+## Pre-cash refusal follow-up
+
+Clean runtime `37abc27968655642ff6039b5c4152827f7af9d70` passed two additional native cases. If the budget fails the existing debt-ceiling guard before the treasury debit, the source generation records a terminal refusal without moving cash. A lost acknowledgement of that refusal also recovers to one rejected audit, zero financial/ledger entries, and no held reservation. Restoring eligibility does not revive the rejected command; a distinct new command remains usable. The 15 command integration tests pass, including both refusal cases. The companion JSON keeps this separate runtime pin explicit.
+
 ## Scope
 
 The bounded recovery query uses a partial index and processes at most 100 outstanding command IDs per turn. Treasury cash is signed; annual budget eligibility and the per-turn revenue cap remain enforced. Missing treasury cash requires reconciliation. The original receipt freezes financial, ledger, and audit identities before delivery.
