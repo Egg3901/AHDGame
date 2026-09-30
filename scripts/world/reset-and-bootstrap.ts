@@ -3,6 +3,7 @@ import type { BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
 import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWorld";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { resolveResetTarget } from "./resetTarget";
 
 function getMode(): BootstrapMode {
   const arg = process.argv.find((value) => value.startsWith("--mode="));
@@ -19,7 +20,18 @@ function hasFlag(flag: string) {
 }
 
 async function main() {
-  const db = await connectDb();
+  const databaseName = resolveResetTarget(
+    {
+      MONGODB_URI: process.env.MONGODB_URI,
+      MONGO_URL: process.env.MONGO_URL,
+      MONGODB_DB: process.env.MONGODB_DB,
+      MONGO_DB_NAME: process.env.MONGO_DB_NAME,
+    },
+    process.argv
+  );
+  // Seeders that use getDb() must select the same world as explicit Db callers.
+  process.env.MONGODB_DB = databaseName;
+  const db = await connectDb(databaseName);
   const mode = getMode();
   const preset = getPreset();
   const skipRegionalCouncil = hasFlag("--skip-regional-council");
@@ -45,6 +57,11 @@ async function main() {
     mode === "historical" && (preIteration ?? presetDefaultsToFoundingPhase(preset));
 
   try {
+    console.log(`Reset target database: ${db.databaseName}`);
+    if (hasFlag("--check-target")) {
+      console.log("Target check complete; no reset or bootstrap executed");
+      return;
+    }
     console.log(
       `Resetting and bootstrapping game world (mode=${mode}, preset=${preset}${
         foundingEffective ? ", pre-iteration founding" : ""
