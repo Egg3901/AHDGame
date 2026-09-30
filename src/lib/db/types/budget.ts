@@ -412,7 +412,9 @@ export interface TreasuryAccrualReceipt {
   openingCash: number;
   cashDelta: number;
   currencyCode: import("@/lib/constants/currencies").CurrencyCode;
-  anchorRate: number;
+  anchorRate: number | null;
+  anchorRateSource?: "observed" | "authored_budget_only" | "unpriced";
+  anchorRatePreset?: string;
   ledgerShadow: boolean;
   components: {
     revenue: number;

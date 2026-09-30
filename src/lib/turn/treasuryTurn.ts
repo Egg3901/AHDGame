@@ -1,10 +1,13 @@
-import { treasuryAccrualReceipt } from "@/lib/budget/rules/treasuryAccrual";
+import {
+  treasuryAccrualReceipt,
+  treasuryAnchorValuation,
+} from "@/lib/budget/rules/treasuryAccrual";
 import { publishTreasuryAccrualReceipt } from "@/lib/budget/treasuryAccrualReceipt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudgetPolicy";
 import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
-import type { FederalBudget } from "@/lib/db/types/budget";
+import type { FederalBudget, TreasuryAccrualReceipt } from "@/lib/db/types/budget";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { CountryId } from "@/lib/constants/countries";
@@ -68,15 +71,28 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       .toArray(),
   ]);
   const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
-  // Validate the complete active cohort before any country accrues cash. A
-  // missing rate must not leave an otherwise valid earlier country advanced.
-  for (const budget of budgets) {
-    const currency = resolveCountryCurrencyCode(budget) ?? "USD";
-    const rate = rateByCurrency.get(currency);
-    if (rate === undefined || !Number.isFinite(rate) || rate <= 0) {
-      throw new Error(`Missing valid treasury-accrual exchange rate for ${currency}`);
+  const ledgerShadow = config?.ledgerShadow === true;
+  function valuationFor(
+    budget: FederalBudget
+  ): Pick<TreasuryAccrualReceipt, "anchorRate" | "anchorRateSource" | "anchorRatePreset"> {
+    const currencyCode = resolveCountryCurrencyCode(budget) ?? "USD";
+    try {
+      return treasuryAnchorValuation({
+        countryId: String(budget.countryId ?? budget._id),
+        currencyCode,
+        preset,
+        observedRate: rateByCurrency.get(currencyCode),
+      });
+    } catch (error) {
+      if (ledgerShadow) throw error;
+      // Native fiscal cash does not trade currencies. Legacy flag-off worlds
+      // retain native receipts without inventing an unavailable anchor value.
+      return { anchorRate: null, anchorRateSource: "unpriced", anchorRatePreset: preset };
     }
   }
+  // Shadow qualification validates the entire cohort before any cash accrues.
+  // A missing rate cannot partially advance an earlier, valid treasury.
+  if (ledgerShadow) for (const budget of budgets) valuationFor(budget);
 
   let countriesProcessed = 0;
   for (const initial of budgets) {
@@ -127,16 +143,13 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         b.unionEnforcementPosture
       );
       const currencyCode = resolveCountryCurrencyCode(b) ?? "USD";
-      const observedRate = rateByCurrency.get(currencyCode);
-      if (observedRate === undefined || !Number.isFinite(observedRate) || observedRate <= 0) {
-        throw new Error(`Missing valid treasury-accrual exchange rate for ${currencyCode}`);
-      }
+      const valuation = valuationFor(b);
       const receipt = treasuryAccrualReceipt({
         turn: _turn,
         openingCash: current,
         currencyCode,
-        anchorRate: observedRate,
-        ledgerShadow: config?.ledgerShadow === true,
+        ...valuation,
+        ledgerShadow,
         annualRevenue: revenue,
         annualPrimarySpending: spendingTotal - debtInterest,
         debtService: debtServiceTurn,

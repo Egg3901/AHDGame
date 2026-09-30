@@ -162,4 +162,92 @@ describe("treasury accrual stock-flow ownership", () => {
     }
     expect(db.collection("ledgerEntries").docs).toHaveLength(0);
   });
+  it.each([
+    ["BG", "BGL"],
+    ["CS", "CSK"],
+    ["HU", "HUF"],
+    ["PL", "PLZ"],
+    ["RO", "ROL"],
+    ["YU", "YUD"],
+  ])(
+    "values budget-only %s using authored era without creating a tradable rate",
+    async (countryId, currencyCode) => {
+      const db = world();
+      await db
+        .collection("gameState")
+        .updateOne({ _id: "current" }, { $set: { preset: "1991-default" } });
+      await db
+        .collection("federalBudget")
+        .updateOne({ _id: "federal" }, { $set: { countryId, currencyCode } });
+      await processTreasuryTurn(10);
+      const budget = db.collection("federalBudget").docs[0];
+      const receipt = budget.treasuryAccrual as {
+        anchorRate: number;
+        anchorRateSource: string;
+        anchorRatePreset: string;
+      };
+      expect(budget.treasuryBalance).toBe(-500);
+      expect(receipt.anchorRate).toBeGreaterThan(0);
+      expect(receipt.anchorRateSource).toBe("authored_budget_only");
+      expect(receipt.anchorRatePreset).toBe("1991-default");
+      expect(db.collection("exchangeRates").docs).toHaveLength(1);
+      const report = reconcileLedger({
+        turn: 10,
+        openingBalances: {
+          [`government:${countryId}:${currencyCode}`]: -1000 / receipt.anchorRate,
+        },
+        closingBalances: { [`government:${countryId}:${currencyCode}`]: -500 / receipt.anchorRate },
+        entries: db.collection("ledgerEntries").docs as unknown as LedgerEntry[],
+      });
+      expect(report.stockVsFlow.divergentCount).toBe(0);
+    }
+  );
+  it("rejects corrupt explicit budget-only FX before any treasury advances", async () => {
+    const db = world();
+    await db
+      .collection("gameState")
+      .updateOne({ _id: "current" }, { $set: { preset: "1991-default" } });
+    db.seed("federalBudget", [
+      {
+        ...db.collection("federalBudget").docs[0],
+        _id: "budget-only",
+        countryId: "BG",
+        currencyCode: "BGL",
+      },
+    ]);
+    db.seed("exchangeRates", [{ _id: "BGL", currencyCode: "BGL", rate: 0 }]);
+    await expect(processTreasuryTurn(10)).rejects.toThrow("exchange rate for BGL");
+    expect(db.collection("federalBudget").docs.every((b) => b.treasuryBalance === -1000)).toBe(
+      true
+    );
+    expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+  });
+  it("keeps flag-off native cash and retries independent of unavailable FX", async () => {
+    const db = world();
+    await db
+      .collection("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { ledgerShadow: false } });
+    await db.collection("exchangeRates").deleteMany({});
+    await processTreasuryTurn(10);
+    await processTreasuryTurn(10);
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(-500);
+    expect(db.collection("federalBudget").docs[0].treasuryAccrual).toMatchObject({
+      anchorRate: null,
+      anchorRateSource: "unpriced",
+      ledgerShadow: false,
+    });
+    expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+    // Enabling shadow accounting never fabricates the previous receipt's rate.
+    await db
+      .collection("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { ledgerShadow: true } });
+    await expect(processTreasuryTurn(11)).rejects.toThrow("exchange rate for USD");
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(-500);
+    db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1.25 }]);
+    await processTreasuryTurn(10);
+    expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+    await processTreasuryTurn(11);
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(0);
+    expect(db.collection("ledgerEntries").docs.map((e) => e.turn)).toEqual([11]);
+  });
 });

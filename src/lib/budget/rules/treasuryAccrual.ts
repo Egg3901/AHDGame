@@ -1,6 +1,13 @@
 /** Named components of the existing signed treasury accrual, without new cash rules. */
 import type { TreasuryAccrualReceipt } from "@/lib/db/types/budget";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import {
+  COUNTRY_CURRENCY_MAP,
+  FOREX_ACTIVE_COUNTRIES,
+  eraRateForCurrency,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
 import type { LedgerLeg } from "@/lib/ledger/types";
 
 export function treasuryAccrualReceipt(
@@ -36,6 +43,8 @@ export function treasuryAccrualLegs(
   countryId: string,
   receipt: TreasuryAccrualReceipt
 ): LedgerLeg[] {
+  if (receipt.anchorRate === null)
+    throw new Error("Unpriced treasury receipt cannot publish anchor legs");
   const legs: LedgerLeg[] = [];
   const reasons = {
     revenue: "fiscal_revenue",
@@ -63,4 +72,34 @@ export function treasuryAccrualLegs(
     });
   }
   return legs;
+}
+
+/** Native fiscal cash needs valuation, never a synthetic tradable FX quote. */
+export function treasuryAnchorValuation(input: {
+  countryId: string;
+  currencyCode: CurrencyCode;
+  preset: string;
+  observedRate: number | undefined;
+}): {
+  anchorRate: number;
+  anchorRateSource: "observed" | "authored_budget_only";
+  anchorRatePreset: string;
+} {
+  const { countryId, currencyCode, preset, observedRate } = input;
+  if (observedRate !== undefined) {
+    if (Number.isFinite(observedRate) && observedRate > 0)
+      return { anchorRate: observedRate, anchorRateSource: "observed", anchorRatePreset: preset };
+  } else if (
+    !FOREX_ACTIVE_COUNTRIES.includes(countryId as CountryId) &&
+    COUNTRY_CURRENCY_MAP[countryId as CountryId] === currencyCode
+  ) {
+    const authored = eraRateForCurrency(currencyCode, preset);
+    if (authored !== undefined && Number.isFinite(authored) && authored > 0)
+      return {
+        anchorRate: authored,
+        anchorRateSource: "authored_budget_only",
+        anchorRatePreset: preset,
+      };
+  }
+  throw new Error(`Missing valid treasury-accrual exchange rate for ${currencyCode}`);
 }

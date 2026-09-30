@@ -9,7 +9,11 @@ import { reconcileLedger } from "../../src/lib/ledger/reconcile";
 import { emitBondTurnLedger } from "../../src/lib/turn/bondTurnLedger";
 import type { LedgerEntry } from "../../src/lib/ledger/types";
 import type { FederalBudget } from "../../src/lib/db/types/budget";
-import { COUNTRY_CURRENCY_MAP } from "../../src/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  FOREX_ACTIVE_COUNTRIES,
+  eraRateForCurrency,
+} from "../../src/lib/constants/currencies";
 import type { CountryId } from "../../src/lib/constants/countries";
 
 const arg = (name: string) =>
@@ -96,6 +100,30 @@ async function main() {
     const budgets = () =>
       db.collection<FederalBudget>("federalBudget").find({}).sort({ _id: 1 }).toArray();
     const savedBudgets = saved.find(([name]) => name === "federalBudget")![1];
+    const authoredBudgetValuations: Document[] = [];
+    for (const b of savedBudgets) {
+      const countryId = String(b.countryId) as CountryId;
+      const currencyCode = String(
+        b.currencyCode
+      ) as import("../../src/lib/constants/currencies").CurrencyCode;
+      if (
+        !rates.has(currencyCode) &&
+        !FOREX_ACTIVE_COUNTRIES.includes(countryId) &&
+        COUNTRY_CURRENCY_MAP[countryId] === currencyCode
+      ) {
+        const rate = eraRateForCurrency(currencyCode, String(state.preset));
+        assert(rate && Number.isFinite(rate) && rate > 0);
+        rates.set(currencyCode, rate);
+        authoredBudgetValuations.push({
+          countryId,
+          currencyCode,
+          rate,
+          source: "authored_budget_only",
+          preset: state.preset,
+        });
+      }
+    }
+
     const excludedUnpricedBudgets = savedBudgets
       .filter((b) => {
         const rate = rates.get(String(b.currencyCode));
@@ -118,21 +146,37 @@ async function main() {
     }
     const invalidFxRejections: Document[] = [];
     if (!baseline)
-      for (const excluded of excludedUnpricedBudgets) {
-        await selectFiscalCohort(excluded.countryId);
+      for (const invalid of [
+        { countryId: "US", currencyCode: "USD", mode: "missing" },
+        { countryId: "BG", currencyCode: "BGL", mode: "corrupt" },
+      ]) {
+        await selectFiscalCohort();
+        const savedRates = saved.find(([name]) => name === "exchangeRates")![1];
+        await db.collection("exchangeRates").deleteMany({});
+        await db
+          .collection("exchangeRates")
+          .insertMany(savedRates.filter((r) => r.currencyCode !== invalid.currencyCode));
+        if (invalid.mode === "corrupt")
+          await db
+            .collection("exchangeRates")
+            .insertOne({ currencyCode: invalid.currencyCode, rate: 0 });
         const before = hash(await budgets());
         await assert.rejects(
           processTreasuryTurn(startTurn),
-          new RegExp(`exchange rate for ${excluded.currencyCode}`)
+          new RegExp(`exchange rate for ${invalid.currencyCode}`)
         );
         assert.equal(
           hash(await budgets()),
           before,
-          "Missing FX must not partially advance another treasury"
+          "Invalid FX must not partially advance another treasury"
         );
         assert.equal(await db.collection("ledgerEntries").countDocuments({}), 0);
-        invalidFxRejections.push({ ...excluded, rejected: true, allTreasuriesUnchanged: true });
+        invalidFxRejections.push({ ...invalid, rejected: true, allTreasuriesUnchanged: true });
       }
+    await db.collection("exchangeRates").deleteMany({});
+    await db
+      .collection("exchangeRates")
+      .insertMany(saved.find(([name]) => name === "exchangeRates")![1]);
     await selectFiscalCohort();
     const balances = (rows: FederalBudget[]) =>
       Object.fromEntries(
@@ -141,7 +185,7 @@ async function main() {
             b.currencyCode ?? COUNTRY_CURRENCY_MAP[b.countryId as CountryId] ?? "USD";
           return [
             `government:${b.countryId}:${currency}`,
-            Number(b.treasuryBalance ?? 0) / (rates.get(currency) ?? 1),
+            Number(b.treasuryBalance ?? 0) / rates.get(currency)!,
           ];
         })
       );
@@ -219,10 +263,11 @@ async function main() {
       sourceHash,
       sourcePreserved: true,
       scope:
-        "Twelve real treasury phases over the 17 retained budgets with observed valid FX; six unpriced currencies are separate rejection fixtures. Other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
+        "Twelve real treasury phases over all 23 retained budgets: 17 observed FX and six explicitly budget-only authored era valuations. Missing active USD and corrupt explicit BGL rates are separate whole-cohort rejection fixtures. Other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
       latestInventory,
       pricedCountries: [...pricedCountries].sort(),
       excludedUnpricedBudgets,
+      authoredBudgetValuations,
       invalidFxRejections,
       results,
       telemetry: { syntheticCouponStatistic: 1234, addedLedgerEntries },
