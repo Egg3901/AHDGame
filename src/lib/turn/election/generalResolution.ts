@@ -61,6 +61,7 @@ import {
   type OneElectionResult,
 } from "./generalResolutionHelpers";
 import { logger } from "../../observability/logger";
+import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
 
 export type { OneElectionResult } from "./generalResolutionHelpers";
 
@@ -110,12 +111,22 @@ export async function resolveOneGeneralElection(
       if (tally) {
         await db
           .collection<ElectionVoteTally>("electionVoteTallies")
-          .updateOne({ _id: tally._id }, { $set: { finalized: true } });
+          .updateOne(
+            { _id: tally._id },
+            {
+              $set: {
+                finalized: true,
+                resolutionPath: "sainte_lague",
+                resolvedAtTurn: currentTurn,
+              },
+            }
+          );
       }
       return { resolved: true, newsOutcomes };
     }
 
-    if (tally?.finalized) {
+    if (tally?.finalized && election.electionType !== "president") {
+      await finishFinalizedElectionCleanup(db, election, tally, now);
       // Tally already finalized (officials already written) but the election
       // was never marked "resolved" (e.g. spawnCommonsElection threw a
       // duplicate-key error on a previous turn). Recover by spawning the next
@@ -1048,7 +1059,25 @@ export async function resolveOneGeneralElection(
       .collection<ElectionVoteTally>("electionVoteTallies")
       .updateOne(
         { electionId: election._id },
-        { $set: { seatsEstimate, finalized: true, updatedAt: now } }
+        {
+          $set: {
+            seatsEstimate,
+            finalized: true,
+            updatedAt: now,
+            resolvedAtTurn: currentTurn,
+            resolutionPath: districted
+              ? "districted_house"
+              : runtimeBlocQuota
+                ? "bloc_list"
+                : election.countryId === "DE" &&
+                    (election.electionType === "bundestag" ||
+                      election.electionType === "snap_bundestag")
+                  ? "ams_direct"
+                  : isMultiSeat
+                    ? "hare_quota"
+                    : "single_winner",
+          },
+        }
       );
 
     const winnerCandidateIds = new Set(winners.map(([id]) => id));

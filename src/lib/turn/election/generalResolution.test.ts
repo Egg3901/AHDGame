@@ -176,6 +176,46 @@ describe("resolveOneGeneralElection", () => {
     expect(db.collectionMocks["electedOfficials"]!.insertOne).not.toHaveBeenCalled();
   });
 
+  it("routes finalized presidential results back through pending executive seating", async () => {
+    const election = makeElection({ electionType: "president", status: "completed" });
+    const tally = makeTally(election._id, {}, { finalized: true, executiveSeatingPending: true });
+    const { resolveOneGeneralElection } = await import("./generalResolution");
+    const { resolvePresidentElection } = await import("./presidentResolution");
+    await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW);
+    expect(db.collectionMocks.electionCandidates!.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("withdraws stale candidacies after a finalized result resumes", async () => {
+    const election = makeElection({ status: "completed" });
+    const winner = makeCandidate(election._id);
+    const loser = makeCandidate(election._id);
+    const tally = makeTally(
+      election._id,
+      { [winner._id.toString()]: 70, [loser._id.toString()]: 30 },
+      {
+        finalized: true,
+        seatsEstimate: { [winner._id.toString()]: 1, [loser._id.toString()]: 0 },
+      }
+    );
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor([winner, loser]));
+    const { resolveOneGeneralElection } = await import("./generalResolution");
+    await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    expect(db.collectionMocks.electionCandidates!.updateMany).toHaveBeenCalledWith(
+      { electionId: election._id, status: "active" },
+      { $set: { status: "withdrawn", withdrawnAt: NOW } }
+    );
+    expect(db.collectionMocks.electionCandidates!.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        electionId: { $ne: election._id },
+        status: "active",
+        $or: [{ characterId: { $in: [winner.characterId] } }, { nppId: { $in: [] } }],
+      }),
+      { $set: { status: "withdrawn", withdrawnAt: NOW } }
+    );
+    expect(db.collectionMocks.electedOfficials!.insertOne).not.toHaveBeenCalled();
+  });
+
   it("spawns next house election cycle when recovering a finalized house tally", async () => {
     const election = makeElection({ electionType: "house", state: "CA" });
     const tally = makeTally(election._id, {}, { finalized: true });

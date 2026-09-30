@@ -39,6 +39,7 @@ import {
 } from "@/lib/turn/election/ticketSplitCrossover";
 import { buildDEPartySlugToSeqId } from "@/lib/seeds/de/deStatePartyOrgCalculations";
 import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { reconcileBundestagHolderOffices } from "./bundestagHolderOffices";
 
 const VOTE_THRESHOLD = 0.05;
 
@@ -533,6 +534,25 @@ export async function maybeReconcileBundestag(
 
   const result = await allocateBundestag(db, cycle);
   await persistBundestagResult(db, result, now);
+  await reconcileBundestagHolderOffices(db, now);
+  const elections = await db
+    .collection<Election>("elections")
+    .find(
+      {
+        countryId: "DE",
+        electionType: { $in: ["bundestag", "snap_bundestag"] },
+        cycle,
+        status: "resolved",
+      },
+      { projection: { _id: 1 } }
+    )
+    .toArray();
+  await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .updateMany(
+      { electionId: { $in: elections.map((election) => election._id) }, finalized: true },
+      { $set: { resolutionPath: "ams" } }
+    );
   await db
     .collection<GameState>("gameState")
     .updateOne(
