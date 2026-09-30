@@ -319,4 +319,59 @@ describe("journaled monetary commands", () => {
       })
     );
   });
+  it.each([false, true])(
+    "retains rejected-admission audit recovery after delivery interruption (ack: %s)",
+    async (afterWrite) => {
+      const memory = world(),
+        db = memory as unknown as Db;
+      await memory
+        .collection("centralBanks")
+        .updateOne({ _id: "US" }, { $set: { pendingLiquidityOperationId: "competing-command" } });
+      const fault = withInjectedCrash(memory, {
+        collection: "actionAuditLog",
+        op: "updateOne",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(executeMonetaryOperation(fault.db, command())).rejects.toThrow(/pending/);
+      expect(memory.collection("monetaryOperationCommands").docs[0]).toMatchObject({
+        status: "rejected",
+        recoveryPending: true,
+      });
+      fault.disarm();
+      await resumeMonetaryOperations(db, 6);
+      await resumeMonetaryOperations(db, 6);
+      const audits = memory.collection("actionAuditLog").docs;
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        action: "bank.monetary.executed",
+        outcome: "rejected",
+        meta: { command: "monetary.qe" },
+      });
+      expect(memory.collection("monetaryOperationCommands").docs[0]).toMatchObject({
+        recoveryPending: false,
+        auditDelivered: true,
+      });
+      expect(state(memory).bank.pendingLiquidityOperationId).toBe("competing-command");
+      expect(state(memory).pool.cashLocal).toBe(10000);
+      expect(state(memory).bond.publicFloat).toBe(100);
+    }
+  );
+  it.each(["null", "missing"])("retains legacy %s holdings compatibility", async (kind) => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    await memory
+      .collection("bonds")
+      .updateOne(
+        { _id: bondId },
+        kind === "null"
+          ? { $set: { centralBankHoldings: null } }
+          : { $unset: { centralBankHoldings: "" } }
+      );
+    const result = await executeMonetaryOperation(db, command());
+    expect(result.units).toBe(5);
+    expect(state(memory).bond).toMatchObject({ publicFloat: 95, centralBankHoldings: 5 });
+    await executeMonetaryOperation(db, command());
+    expect(state(memory).pool.cashLocal).toBe(15000);
+  });
 });

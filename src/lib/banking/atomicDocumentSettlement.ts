@@ -293,7 +293,11 @@ export async function resumeAtomicDocumentSettlement(
           await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
           return { ...result, error };
         }
-        for (const path of paths) balanceGuards[path] = at(document, path) ?? { $exists: false };
+        for (const path of paths) {
+          const value = at(document, path);
+          balanceGuards[path] =
+            value === undefined ? { $exists: false } : { $eq: value, $exists: true };
+        }
       }
       const changed = await collection.updateOne(
         {

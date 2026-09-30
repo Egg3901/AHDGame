@@ -315,7 +315,9 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
     matured: false,
     defaulted: false,
     publicFloat: bond.publicFloat,
-    centralBankHoldings: bond.centralBankHoldings ?? { $exists: false },
+    centralBankHoldings: Object.hasOwn(bond, "centralBankHoldings")
+      ? { $eq: bond.centralBankHoldings, $exists: true }
+      : { $exists: false },
     marketPrice: bond.marketPrice,
   };
   const pool = { _id: receipt.currency };
@@ -529,8 +531,9 @@ async function finish(
           const error = "Monetary operation is on cooldown or another command is pending";
           await receipts.updateOne(
             { _id: receipt._id, status: "planning" },
-            { $set: { status: "rejected", error, recoveryPending: false } }
+            { $set: { status: "rejected", error, recoveryPending: !!receipt.audit } }
           );
+          await publishAudit(db, { ...receipt, status: "rejected", error });
           throw new MonetaryOperationRejected(error);
         }
       }
@@ -547,8 +550,10 @@ async function finish(
     await publishAudit(db, current);
     return current.result;
   }
-  if (current.status === "rejected")
+  if (current.status === "rejected") {
+    await publishAudit(db, current);
     throw new MonetaryOperationRejected(current.error ?? "Monetary operation was rejected");
+  }
   receipt = current;
   if (receipt.status !== "refunding") {
     if (receipt.command.type === "qt") {
