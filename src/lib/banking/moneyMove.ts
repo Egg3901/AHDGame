@@ -133,6 +133,7 @@ interface MoneyMoveRecord {
   genericMoneyMoveVersion?: number;
   atomicDocument?: unknown;
   legacyInterestBatch?: unknown;
+  locSettlement?: unknown;
   treasuryReserveTransfer?: unknown;
   _id: string;
   kind: string;
@@ -501,7 +502,12 @@ async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const record = await records.findOne({ _id: key });
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
-  if (record.atomicDocument || record.legacyInterestBatch || record.treasuryReserveTransfer)
+  if (
+    record.atomicDocument ||
+    record.legacyInterestBatch ||
+    record.locSettlement ||
+    record.treasuryReserveTransfer
+  )
     return {
       status: "rejected",
       applied: [],
