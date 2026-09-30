@@ -103,4 +103,37 @@ describe("PosturePanel", () => {
     );
     expect(screen.getByText("Move to Article 5")).toBeTruthy();
   });
+
+  it("tells a security alliance that no posture, Article 5 included, is a war clause", () => {
+    const org = { ...baseOrg, posture: "article5" } as unknown as OrgSummary;
+    render(
+      <PosturePanel
+        org={org}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/does not commit members to a war/)).toBeTruthy();
+    expect(screen.getByText(/has no mutual-defence clause/)).toBeTruthy();
+  });
+
+  it("points a bloc at its conflict-entry resolution instead", () => {
+    const org = {
+      ...baseOrg,
+      def: { ...baseOrg.def, category: "bloc" },
+    } as unknown as OrgSummary;
+    render(
+      <PosturePanel
+        org={org}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/unanimous conflict-entry resolution/)).toBeTruthy();
+    expect(screen.queryByText(/has no mutual-defence clause/)).toBeNull();
+  });
 });
