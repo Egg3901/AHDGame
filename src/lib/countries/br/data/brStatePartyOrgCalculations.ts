@@ -54,7 +54,7 @@ const BR_PARTY_SLUG_TO_NAME: Record<string, string> = {
  * Estimated 2018 presidential first-round vote share by macro-region and party (%).
  * Simplified from actual regional patterns. PT dominant in NE, PL strong in S/CO.
  */
-const BR_REGION_VOTE_SHARES_2019: Record<string, Record<string, number>> = {
+export const BR_REGION_VOTE_SHARES_2019: Record<string, Record<string, number>> = {
   NORTE: { pt: 28, pl: 22, mdb: 12, uniao: 10, psd: 8 },
   NORDESTE: { pt: 42, pl: 18, mdb: 10, uniao: 8, psd: 6 },
   CENTRO_OESTE: { pt: 22, pl: 28, mdb: 15, uniao: 12, psd: 10 },
@@ -67,7 +67,7 @@ const BR_REGION_VOTE_SHARES_2019: Record<string, Record<string, number>> = {
  * PMDB was the dominant catch-all; PFL strong in NE; PT rising but still
  * regionalised to the industrial SE/S.
  */
-const BR_REGION_VOTE_SHARES_1991: Record<string, Record<string, number>> = {
+export const BR_REGION_VOTE_SHARES_1991: Record<string, Record<string, number>> = {
   NORTE: { pmdb: 28, pfl: 18, pdt: 8, pds: 10, ptb: 8, prn: 6, psb: 4, pcob: 2, pt: 8, psd: 8 },
   NORDESTE: { pmdb: 30, pfl: 25, pdt: 10, pds: 8, ptb: 6, prn: 4, psb: 3, pcob: 2, pt: 6, psd: 6 },
   CENTRO_OESTE: {

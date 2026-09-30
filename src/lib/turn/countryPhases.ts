@@ -56,6 +56,7 @@ import {
   ensureCNGovernorElections,
   ensureBRElections,
   ensureBRSenateElections,
+  ensureBRGovernorElections,
   ensureRUSupremeSovietElections,
   ensureRUNationalitiesElections,
   ensureRURepublicSovietElections,
@@ -341,6 +342,7 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
   BR: [
     { name: "brElections", fn: ensureBRElections },
     { name: "brSenateElections", fn: ensureBRSenateElections },
+    { name: "brGovernorElections", fn: ensureBRGovernorElections },
   ],
   // RU phases are status-gated no-ops while RU is `coming-soon` (gated in each
   // ensure fn) and era-gated by null anchors outside the Cold-War presets;
