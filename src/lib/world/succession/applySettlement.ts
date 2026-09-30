@@ -1,5 +1,6 @@
 import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { CountryGameState } from "@/lib/db/types/gameState";
 import { verifyLiveFederationSettlementIntent } from "./settlementIntent";
 import { buildFederationPublicationPlan } from "./publicationPlan";
 import { verifyPreparedFederationPlan } from "./preparePublication";
@@ -125,7 +126,7 @@ export async function applyPreparedFederationSettlement(input: {
     shares: plan.fiscalShares,
   });
   if (snapshot.activationPlan.sourceEntity.status === "dissolved") {
-    const updated = await db.collection("countryGameStates").updateOne(
+    const updated = await db.collection<CountryGameState>("countryGameStates").updateOne(
       { _id: sourceCountryId, dissolvedTurn: null },
       {
         $set: {
