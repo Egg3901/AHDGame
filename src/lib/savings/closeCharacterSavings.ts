@@ -54,7 +54,7 @@ export async function closeCharacterSavings(
       throw new Error("Savings closure claim is unavailable");
     const key = `savings-close:${account._id}:${account.version}`;
     const recorded = await db
-      .collection(MONEY_MOVE_COLLECTION)
+      .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
       .findOne({ _id: key }, { projection: { _id: 1 } });
     if (recorded) {
       const resumed = await resumeSettlement(db, key);

@@ -186,7 +186,7 @@ export async function runSavingsCommand(
       ok: false,
       error:
         account.status === "frozen"
-          ? "This savings account is frozen while its bank is resolved. It reopens with the central bank once the resolution settles."
+          ? "This savings account is frozen while a pending settlement completes."
           : "This savings account is closed.",
     };
   }

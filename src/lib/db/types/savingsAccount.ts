@@ -22,7 +22,7 @@ export type SavingsAccountOwnerType = "character" | "npp";
 export type SavingsAccountStatus =
   /** Normal. Deposits, withdrawals and transfers allowed. */
   | "open"
-  /** The holder is being resolved; no movements until the resolution lands. */
+  /** Holder resolution or owner departure is settling; new movements are refused. */
   | "frozen"
   /** Closed with a zero balance. Kept for history. */
   | "closed";

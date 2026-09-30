@@ -70,7 +70,13 @@ describe("departing owner savings", () => {
       accruedInterest: 0,
       status: "closed",
     });
-    expect(await db.collection("centralBanks").findOne({ _id: "US" })).toMatchObject({
+    expect(
+      await db
+        .collection<{ _id: string; externalBroadMoney: number; householdSavingsLiability: number }>(
+          "centralBanks"
+        )
+        .findOne({ _id: "US" })
+    ).toMatchObject({
       externalBroadMoney: 1000,
       householdSavingsLiability: 0,
     });
@@ -81,7 +87,15 @@ describe("departing owner savings", () => {
     ).toBe(0);
     await closeCharacterSavings(db, OWNER);
     expect(
-      (await db.collection("centralBanks").findOne({ _id: "US" }))?.householdSavingsLiability
+      (
+        await db
+          .collection<{
+            _id: string;
+            externalBroadMoney: number;
+            householdSavingsLiability: number;
+          }>("centralBanks")
+          .findOne({ _id: "US" })
+      )?.householdSavingsLiability
     ).toBe(0);
   });
   it("returns bank backing once, including repair after the owner was already deleted", async () => {
@@ -92,9 +106,17 @@ describe("departing owner savings", () => {
     expect((await db.collection("corporations").findOne({ _id: BANK }))?.bankCharter).toMatchObject(
       { cashReserves: 400, playerDeposits: 0 }
     );
-    expect((await db.collection("centralBanks").findOne({ _id: "US" }))?.externalBroadMoney).toBe(
-      1100
-    );
+    expect(
+      (
+        await db
+          .collection<{
+            _id: string;
+            externalBroadMoney: number;
+            householdSavingsLiability: number;
+          }>("centralBanks")
+          .findOne({ _id: "US" })
+      )?.externalBroadMoney
+    ).toBe(1100);
     expect(
       (await buildSavingsComparison(db, 20, { authoritativeCurrencies: ["USD"] }))
         .totalDiscrepancies
@@ -103,15 +125,23 @@ describe("departing owner savings", () => {
   it("does not move backing for a shadow account that never became a liability", async () => {
     seedAccount(BANK.toHexString());
     await db
-      .collection("gameConfig")
+      .collection<{ _id: string; savingsAccountsMode: string }>("gameConfig")
       .updateOne({ _id: "default" }, { $set: { savingsAccountsMode: "shadow" } });
     await closeCharacterSavings(db, OWNER);
     expect(
       (await db.collection("corporations").findOne({ _id: BANK }))?.bankCharter.cashReserves
     ).toBe(500);
-    expect((await db.collection("centralBanks").findOne({ _id: "US" }))?.externalBroadMoney).toBe(
-      1000
-    );
+    expect(
+      (
+        await db
+          .collection<{
+            _id: string;
+            externalBroadMoney: number;
+            householdSavingsLiability: number;
+          }>("centralBanks")
+          .findOne({ _id: "US" })
+      )?.externalBroadMoney
+    ).toBe(1000);
   });
   it("refuses to take over a bank-resolution freeze", async () => {
     seedAccount();
@@ -136,9 +166,17 @@ describe("departing owner savings", () => {
     expect(
       (await db.collection("corporations").findOne({ _id: BANK }))?.bankCharter.cashReserves
     ).toBe(400);
-    expect((await db.collection("centralBanks").findOne({ _id: "US" }))?.externalBroadMoney).toBe(
-      1100
-    );
+    expect(
+      (
+        await db
+          .collection<{
+            _id: string;
+            externalBroadMoney: number;
+            householdSavingsLiability: number;
+          }>("centralBanks")
+          .findOne({ _id: "US" })
+      )?.externalBroadMoney
+    ).toBe(1100);
     expect((await db.collection("savingsAccounts").findOne({ _id: ACCOUNT }))?.status).toBe(
       "closed"
     );
@@ -173,8 +211,16 @@ describe("departing owner savings", () => {
     expect((await db.collection("savingsAccounts").findOne({ _id: ACCOUNT }))?.status).toBe(
       "closed"
     );
-    expect((await db.collection("centralBanks").findOne({ _id: "US" }))?.externalBroadMoney).toBe(
-      1000
-    );
+    expect(
+      (
+        await db
+          .collection<{
+            _id: string;
+            externalBroadMoney: number;
+            householdSavingsLiability: number;
+          }>("centralBanks")
+          .findOne({ _id: "US" })
+      )?.externalBroadMoney
+    ).toBe(1000);
   });
 });
