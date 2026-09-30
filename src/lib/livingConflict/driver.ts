@@ -129,6 +129,20 @@ export async function driveConflictTurn(
   if (state.status === "closed") return { state, events: [] };
   if (participants.representedActors)
     state = { ...state, representedActors: participants.representedActors };
+  if (def.key === "russia_ukraine_security" && participants.belligerents[0]) {
+    state = {
+      ...state,
+      representedActors: [
+        {
+          id: "ukrainian-sovereign-authority",
+          name: "Affected sovereign authority",
+          representsCountryId: "UKR",
+          countryId: participants.belligerents[0],
+          regionIds: [],
+        },
+      ],
+    };
+  }
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
