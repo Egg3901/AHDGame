@@ -29,9 +29,9 @@ export interface WorldsimCorporationBootstrapResult {
 
 /**
  * Sim-only NPP corporation bootstrap for the headless world harness
- * (scripts/sim/runWorld.ts). Bootstrap seeds no tradeable corporations, so a
- * pure-NPP sim world gets its corporate sector here, once, mirroring the
- * production admin batch-spawn tool.
+ * (scripts/sim/runWorld.ts). Preset bootstrap may seed historical producers or
+ * finance NPPs. This sim-only augmentation fills remaining producer slots from
+ * conserved unowned capacity, once, using the production admin spawn tool.
  *
  * Eligibility is determined BEFORE any creation attempt, using the same
  * marketization-dial gate the production creation paths enforce
