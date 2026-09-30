@@ -143,7 +143,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       status: "payable",
     }));
     await db.collection("corporations").insertMany(firms);
-    await db.collection("federationFacilityClaims").insertMany(claims);
+    await db.collection<Fixture>("federationFacilityClaims").insertMany(claims);
     await db.collection<Fixture>("federationFiscalAccounts").insertOne({
       _id: `${applicationId}:UKR`,
       applicationId,
@@ -424,6 +424,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       _id: retainedFirmId,
       countryId: "RU",
       headquartersState: retained._id,
+      liquidCurrencyCode: "RUB",
       liquidCapital: 200,
       suspended: false,
     });
@@ -552,6 +553,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     expect(await db.collection("macroCountries").countDocuments({})).toBe(14);
     expect(await db.collection("corporations").findOne({ _id: retainedFirmId })).toMatchObject({
       headquartersState: retained._id,
+      liquidCurrencyCode: "RUB",
       liquidCapital: 200,
       suspended: false,
     });
