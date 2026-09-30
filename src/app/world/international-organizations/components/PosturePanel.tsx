@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { ALERT_POSTURES, POSTURE_META, type AlertPosture } from "@/lib/constants/orgPosture";
+import {
+  ALERT_POSTURES,
+  POSTURE_META,
+  postureWarEntryNote,
+  type AlertPosture,
+} from "@/lib/constants/orgPosture";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
@@ -100,6 +105,7 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
             posture. {POSTURE_META[current].blurb} Changing it needs a majority of the members that
             hold a vote.
           </p>
+          <p className="mt-1 text-xs text-muted">{postureWarEntryNote(org.def.category)}</p>
         </div>
         {viewerIsMember && viewerFmCountry && (
           <Button

@@ -62,7 +62,8 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     label: "Security",
     flagshipLabel: "Alliance",
     flagship: "alliance",
-    blurb: "A defense alliance — collective posture, pledges, and joint statements.",
+    blurb:
+      "A defense alliance: collective posture, pledges, and joint statements. Members are not pulled into each other's wars.",
     // A defense alliance has no trade/coercion instruments: no FTAs or sanctions —
     // just collective posture and joint statements (plus the baseline dues).
     powers: ["set_posture", "joint_statement"],
