@@ -186,7 +186,8 @@ describe("treasury reserve settlement", () => {
         const original = budget.updateOne.bind(budget);
         const fault = vi.spyOn(budget, "updateOne").mockImplementation(async (...args) => {
           const result = await original(...args);
-          if (!Array.isArray(args[1]) && args[1].$set?.treasuryReserveRejectedKey)
+          const fields = Array.isArray(args[1]) ? null : args[1].$set;
+          if (fields && typeof fields === "object" && "treasuryReserveRejectedKey" in fields)
             throw new Error("lost refusal acknowledgement");
           return result;
         });
