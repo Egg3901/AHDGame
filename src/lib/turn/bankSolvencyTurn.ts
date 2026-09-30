@@ -274,7 +274,10 @@ async function evaluateOneBank(
   const propEnabled = policy.propTrading;
   const live = await db
     .collection<Corporation>("corporations")
-    .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1 } });
+    .findOne(
+      { _id: corp._id },
+      { projection: { liquidCapital: 1, bankCharter: 1, bankPropBookRevision: 1 } }
+    );
   if (!live?.bankCharter || live.bankCharter.lastSolvencyTurn === turn) {
     return null;
   }
@@ -303,16 +306,34 @@ async function evaluateOneBank(
   if (propRunning) {
     const beforeMarkCharter = charter;
     const marked = await markBook(db, charter);
-    const liq = await forceLiquidateToLeverageCap(db, corp._id, cashReserves, charter, marked);
+    const liq = await forceLiquidateToLeverageCap(
+      db,
+      corp._id,
+      cashReserves,
+      charter,
+      marked,
+      live.bankPropBookRevision,
+      corp.name,
+      turn
+    );
     if (liq.stale) return null;
     cashReserves = liq.cashReserves;
     charter = liq.charter;
     forcedLiquidation = liq.forced;
     if (!liq.forced) {
       const markedUpdate = await db.collection<Corporation>("corporations").updateOne(
-        { _id: corp._id, bankCharter: beforeMarkCharter, "bankCharter.status": "active" },
+        {
+          _id: corp._id,
+          bankCharter: beforeMarkCharter,
+          "bankCharter.status": "active",
+          bankPropBookRevision:
+            live.bankPropBookRevision === undefined
+              ? { $exists: false }
+              : live.bankPropBookRevision,
+        },
         {
           $set: {
+            bankPropBookRevision: (live.bankPropBookRevision ?? 0) + 1,
             "bankCharter.propBook": marked.positions,
             "bankCharter.propBookMarkValue": marked.propBookMarkValue,
             updatedAt: new Date(),

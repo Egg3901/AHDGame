@@ -17,7 +17,7 @@ import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
 import type { BookTranche } from "@/lib/banking/creditBands";
 import { getCashReserves } from "@/lib/banking/bankCash";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import { settlePropBookChange } from "./propSettlement";
 import { revokeCharter } from "./charter";
 import {
   RECAP_GRACE_TURNS,
@@ -84,11 +84,17 @@ export async function processBankSupervision(db: Db, turn: number): Promise<Supe
   const corps = await db
     .collection<Corporation>("corporations")
     .find({ "bankCharter.status": "active" })
-    .project<Pick<Corporation, "_id" | "name" | "userId" | "liquidCapital" | "bankCharter">>({
+    .project<
+      Pick<
+        Corporation,
+        "_id" | "name" | "userId" | "liquidCapital" | "bankCharter" | "bankPropBookRevision"
+      >
+    >({
       name: 1,
       userId: 1,
       liquidCapital: 1,
       bankCharter: 1,
+      bankPropBookRevision: 1,
     })
     .toArray();
 
@@ -199,7 +205,7 @@ function supervisionMessage(
 
 async function revokeForUndercapitalization(
   db: Db,
-  corp: Pick<Corporation, "_id" | "name" | "userId" | "bankCharter">,
+  corp: Pick<Corporation, "_id" | "name" | "userId" | "bankCharter" | "bankPropBookRevision">,
   turn: number
 ): Promise<boolean> {
   const now = new Date();
@@ -266,7 +272,7 @@ async function revokeForUndercapitalization(
  */
 async function unwindPropBookToCashReserves(
   db: Db,
-  corp: Pick<Corporation, "_id" | "name" | "bankCharter">,
+  corp: Pick<Corporation, "_id" | "name" | "bankCharter" | "bankPropBookRevision">,
   turn: number
 ): Promise<number | null> {
   const charter = corp.bankCharter;
@@ -275,32 +281,18 @@ async function unwindPropBookToCashReserves(
   const hasPositions = (charter.propBook?.length ?? 0) > 0;
   if (mark <= 0 && !hasPositions) return 0;
 
-  const result = await db.collection<Corporation>("corporations").updateOne(
-    { _id: corp._id, bankCharter: charter, "bankCharter.status": "active" },
-    {
-      ...(mark > 0 ? { $inc: { "bankCharter.cashReserves": mark } } : {}),
-      $set: {
-        "bankCharter.propBook": [],
-        "bankCharter.propBookMarkValue": 0,
-        updatedAt: new Date(),
-      },
-    }
-  );
-  if (result.matchedCount !== 1) return null;
-  if (mark <= 0) return 0;
-
-  await emitTx(db, {
-    type: "bank_prop_trade_sell",
+  const result = await settlePropBookChange(db, {
+    bankId: corp._id,
+    bankName: corp.name,
+    charter,
+    revision: corp.bankPropBookRevision,
+    operation: "supervision_unwind",
     turn,
-    createdAt: new Date(),
-    subjectType: "corporation",
-    subjectId: corp._id,
-    subjectName: corp.name,
-    amount: mark,
-    currencyCode: charter.currency,
-    counterpartyType: "system",
-    counterpartyName: "Prop book",
+    cashDelta: mark,
+    nextBook: [],
+    nextMark: 0,
     meta: { reason: "supervision_revoke_unwind" },
   });
+  if (!result.ok) return null;
   return mark;
 }

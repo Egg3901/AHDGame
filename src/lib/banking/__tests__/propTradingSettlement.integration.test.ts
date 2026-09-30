@@ -1,13 +1,15 @@
 /** Concurrent prop commands conserve the bank's cash and held positions. */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ObjectId, type Db } from "mongodb";
+import { MongoClient, ObjectId, type Db } from "mongodb";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { openPosition, closePosition, forceLiquidateToLeverageCap, markBook } from "../propTrading";
+import { resumeSettlement } from "../settlementJournal";
+import { MONEY_MOVE_COLLECTION } from "../moneyMove";
+import { randomUUID } from "node:crypto";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
 const BANK = new ObjectId();
 const ASSET = new ObjectId();
@@ -85,7 +87,8 @@ describe("prop command settlement", () => {
       closePosition(db as unknown as Db, BANK, ticket),
       closePosition(db as unknown as Db, BANK, ticket),
     ]);
-    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.some((r) => r.ok)).toBe(true);
+    expect(db.collection("financialTxLog").docs).toHaveLength(1);
     expect(wealth(db)).toBe(before);
   });
   it("keeps the cash debit and purchased units consistent under competing opens", async () => {
@@ -130,3 +133,63 @@ describe("prop command settlement", () => {
     expect(wealth(db)).toBe(expected);
   });
 });
+
+it.skipIf(process.env.AHD_PROP_SETTLEMENT_REAL_MONGO !== "1")(
+  "persists one native Mongo settlement and recovers its original transaction receipt",
+  async () => {
+    const client = new MongoClient("mongodb://127.0.0.1:27018");
+    const db = client.db(`ahd_sim_prop_settlement_${randomUUID().replaceAll("-", "")}`);
+    try {
+      await client.connect();
+      const memory = world(10);
+      for (const name of ["corporations", "gameConfig", "gameState", "exchangeRates"])
+        await db.collection(name).insertMany(memory.collection(name).docs);
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db);
+      let interrupted = false;
+      const fault = new Proxy(db, {
+        get(target, property) {
+          if (property === "collection")
+            return (name: string) => {
+              const collection = target.collection(name);
+              if (name !== "financialTxLog") return collection;
+              return new Proxy(collection, {
+                get(c, key) {
+                  if (key === "updateOne")
+                    return async (...args: Parameters<typeof c.updateOne>) => {
+                      const result = await c.updateOne(...args);
+                      if (!interrupted) {
+                        interrupted = true;
+                        throw new Error("receipt acknowledgement interrupted");
+                      }
+                      return result;
+                    };
+                  const value = Reflect.get(c, key);
+                  return typeof value === "function" ? value.bind(c) : value;
+                },
+              });
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      await expect(closePosition(fault, BANK, ticket)).rejects.toThrow(
+        "receipt acknowledgement interrupted"
+      );
+      const journal = await db.collection<{ _id: string }>(MONEY_MOVE_COLLECTION).findOne({});
+      expect(journal).not.toBeNull();
+      await resumeSettlement(db, journal!._id);
+      await resumeSettlement(db, journal!._id);
+      const bank = await db.collection("corporations").findOne({ _id: BANK });
+      expect(bank?.bankCharter.cashReserves).toBe(1100);
+      expect(bank?.bankCharter.propBook).toEqual([]);
+      expect(await db.collection("financialTxLog").countDocuments()).toBe(1);
+      const receipt = await db.collection("financialTxLog").findOne({});
+      expect(receipt).toMatchObject({ amount: 100, meta: { bankVaultMovement: true } });
+      expect((await closePosition(db, BANK, ticket)).ok).toBe(false);
+    } finally {
+      await db.dropDatabase();
+      await client.close();
+    }
+  }
+);
