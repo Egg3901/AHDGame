@@ -34,6 +34,24 @@ describe("deriveLedgerEntry (Phase 1 shim)", () => {
     ).toBeNull();
   });
 
+  it("does not duplicate a journal-owned primary financing witness during receipt replay", () => {
+    expect(
+      deriveLedgerEntry(
+        tx({
+          type: "gov_bond_issuance",
+          subjectType: "government",
+          countryId: "US",
+          amount: 1000,
+          anchorAmount: 1000,
+          meta: {
+            ledgerOwnedBySettlement: true,
+            settlementKey: "sovereign-primary:admin:US:240:48:1000",
+          },
+        })
+      )
+    ).toBeNull();
+  });
+
   it("derives a balanced 2-leg entry: subject primary + counterparty contra", () => {
     const counterpartyId = new ObjectId();
     const entry = deriveLedgerEntry(tx({ counterpartyType: "character", counterpartyId }));

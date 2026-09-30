@@ -238,6 +238,7 @@ describe("sovereign primary settlement", () => {
     expect(cash(db)).toBe(before);
     expect(budget(db).treasuryBalance).toBe(9280);
     expect(principal(db)).toBe(9000);
+    expect(budget(db).debtToGdpRatio).toBe(0.009);
     expect(face(db)).toBe(9000);
     expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
     expect(cash(db)).toBe(before);
@@ -305,6 +306,7 @@ describe("sovereign primary settlement", () => {
     expect(await monetizeUnsoldSovereignUnits(db as unknown as Db, args)).toBe(true);
     expect(budget(db).treasuryBalance).toBe(2100);
     expect(principal(db)).toBe(2000);
+    expect(budget(db).debtToGdpRatio).toBe(0.002);
     expect(db.collection("centralBanks").docs[0].externalBroadMoney).toBe(500000);
   });
 });

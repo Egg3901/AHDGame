@@ -82,6 +82,7 @@ export async function commitSovereignPrimary(
         anchorAmount: (input.poolCash + input.monetaryCash) / rate,
         meta: {
           settlementKey: input.key,
+          ledgerOwnedBySettlement: true,
           poolCash: input.poolCash,
           monetaryCash: input.monetaryCash,
           face: input.face,

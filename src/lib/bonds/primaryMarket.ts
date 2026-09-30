@@ -34,7 +34,7 @@ import {
   corpCapitalToAnchor,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { getNationalBudgetId, refreshSovereignDebtTerms } from "@/lib/bonds/sovereign";
 import { poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import {
   commitSovereignPrimary,
@@ -309,6 +309,7 @@ export async function placeUnsoldBondUnits(
         ],
         accounting
       );
+      await refreshSovereignDebtTerms(db, getNationalBudgetId(bond.countryId));
       advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
       budgetByCurrency.set(currency, budget - paid);
       result.bondsTouched++;
@@ -470,6 +471,7 @@ export async function monetizeUnsoldSovereignUnits(
     ],
     accounting
   );
+  await refreshSovereignDebtTerms(db, getNationalBudgetId(bond.countryId));
   return true;
 }
 

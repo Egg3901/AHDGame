@@ -591,7 +591,7 @@ export async function issueScheduledSovereignBondSeries(
 
     // Primary market: the currency's pool underwrites each tranche at par with
     // the cash it has and the appetite the demand model gives this issuer.
-    // No pool for the currency (seeds, pre-migration) keeps full placement.
+    // Without a funded pool, units remain unplaced unless monetary financing supplies cash.
     const poolCurrency: CurrencyCode =
       resolveCountryCurrencyCode(budgetDoc) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
     // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
@@ -1149,22 +1149,7 @@ async function fundSovereignSeries(
     projections,
     args.accounting
   );
-  const refreshed = await db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: args.budget._id });
-  if (refreshed) {
-    const terms = applySovereignDebtAdjustment(refreshed, 0, 0);
-    await db.collection<FederalBudget>("federalBudget").updateOne(
-      { _id: args.budget._id },
-      {
-        $set: {
-          "debt.interestRate": terms.debt.interestRate,
-          debtToGdpRatio: terms.debtToGdpRatio,
-          creditRating: terms.creditRating,
-        },
-      }
-    );
-  }
+  await refreshSovereignDebtTerms(db, args.budget._id);
   const unsold = funded.reduce((sum, doc) => sum + (doc.unsoldUnits ?? 0), 0);
   if (unsold > 0)
     await handleSovereignShortfall(db, {
@@ -1175,4 +1160,25 @@ async function fundSovereignSeries(
       requestedTotal: requested,
     });
   return funded;
+}
+
+/** Refresh derived debt terms after a funded principal/coupon projection. */
+export async function refreshSovereignDebtTerms(
+  db: Db,
+  budgetId: FederalBudget["_id"]
+): Promise<void> {
+  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  if (refreshed) {
+    const terms = applySovereignDebtAdjustment(refreshed, 0, 0);
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budgetId },
+      {
+        $set: {
+          "debt.interestRate": terms.debt.interestRate,
+          debtToGdpRatio: terms.debtToGdpRatio,
+          creditRating: terms.creditRating,
+        },
+      }
+    );
+  }
 }

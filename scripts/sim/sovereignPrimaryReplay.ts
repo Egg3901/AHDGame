@@ -201,21 +201,19 @@ async function main() {
         await db.collection("federalBudget").deleteMany({ countryId: { $ne: "US" } });
         await db.collection("bonds").deleteMany({});
         await db.collection("centralBanks").updateMany({}, { $set: { chairMode: "player" } });
-        await db
-          .collection("bondMarketPools")
-          .updateOne(
-            { _id: "USD" as never },
-            {
-              $set: {
-                cashLocal:
-                  scenario === "unfunded" || scenario === "monetary"
-                    ? 0
-                    : scenario === "partial"
-                      ? 5000
-                      : 1_000_000,
-              },
-            }
-          );
+        await db.collection("bondMarketPools").updateOne(
+          { _id: "USD" as never },
+          {
+            $set: {
+              cashLocal:
+                scenario === "unfunded" || scenario === "monetary"
+                  ? 0
+                  : scenario === "partial"
+                    ? 5000
+                    : 1_000_000,
+            },
+          }
+        );
         if (scenario === "monetary")
           await db
             .collection("centralBanks")
@@ -251,7 +249,7 @@ async function main() {
                           if (
                             armed &&
                             !Array.isArray(args[1]) &&
-                            args[1].$inc?.treasuryBalance > 0
+                            Number(args[1].$inc?.treasuryBalance ?? 0) > 0
                           ) {
                             armed = false;
                             throw new Error("Injected post-credit crash");
@@ -293,25 +291,23 @@ async function main() {
       await db
         .collection("bondMarketPools")
         .updateOne({ _id: "USD" as never }, { $set: { cashLocal: 100000, targetCashLocal: 0 } });
-      await db
-        .collection("bonds")
-        .insertOne({
-          _id: new ObjectId(),
-          issuerType: "sovereign",
-          countryId: "US",
-          currencyCode: "USD",
-          corporationId: new ObjectId(),
-          totalIssued: 0,
-          publicFloat: 0,
-          unsoldUnits: 500,
-          requestedUnits: 500,
-          couponRate: 5,
-          marketPrice: 1,
-          matured: false,
-          defaulted: false,
-          issuedAtTurn: turn - 1,
-          maturityTurn: turn + 48,
-        });
+      await db.collection("bonds").insertOne({
+        _id: new ObjectId(),
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        corporationId: new ObjectId(),
+        totalIssued: 0,
+        publicFloat: 0,
+        unsoldUnits: 500,
+        requestedUnits: 500,
+        couponRate: 5,
+        marketPrice: 1,
+        matured: false,
+        defaulted: false,
+        issuedAtTurn: turn - 1,
+        maturityTurn: turn + 48,
+      });
       const opening = await observed();
       const placed = await measure("fixture_laterUnsold", () =>
         placeUnsoldBondUnits(db, turn, now)
