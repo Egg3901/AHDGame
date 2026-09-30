@@ -52,18 +52,14 @@ async function main() {
       return check;
     });
     const cohorts = await seedCohortVectors(db, "1991-default", log);
-    // France and Spain have no resolvable 1991 census profiles in the current registry.
-    // Keep that existing coverage gap explicit; do not fabricate age distributions.
-    assert.equal(cohorts.covered, 29);
-    assert.equal(cohorts.skipped.length, 16);
-    assert(
-      cohorts.skipped.every((entry) => /^ES_|^FR_/.test(entry) && entry.includes("no census"))
-    );
+    // #2728 now supplies explicit 1991 age-only proxies for the 16 FR/ES regions.
+    assert.equal(cohorts.covered, 45);
+    assert.deepEqual(cohorts.skipped, []);
     const stocks = await db
       .collection<{ _id: string; ages: { male: number[]; female: number[] } }>("regionDemographics")
       .find()
       .toArray();
-    assert.equal(stocks.length, 29);
+    assert.equal(stocks.length, 45);
     let expectedTarget = 0;
     let roundingTolerance = 0;
     for (const stock of stocks) {
@@ -80,14 +76,63 @@ async function main() {
     }
     assert.equal(cohorts.totalTargetPop, expectedTarget);
     assert(Math.abs(cohorts.totalPeople - expectedTarget) <= roundingTolerance);
+    const repeated = await seedCohortVectors(db, "1991-default", log);
+    assert.equal(repeated.covered, 45);
+    const repeatedStocks = await db
+      .collection<{ _id: string; ages: { male: number[]; female: number[] } }>("regionDemographics")
+      .find()
+      .toArray();
+    for (const stock of stocks) {
+      assert.deepEqual(repeatedStocks.find((row) => row._id === stock._id)?.ages, stock.ages);
+    }
+    await db.collection("gameState").updateOne(
+      { _id: "current" } as never,
+      {
+        $set: {
+          preset: "1991-default",
+          startingYear: 1991,
+          currentYear: 1991,
+          currentTurn: 1,
+          livingConflictsEnabled: false,
+        },
+      },
+      { upsert: true }
+    );
+    const { runDemographicFlows } = await import("../../src/lib/demographics/phase");
+    for (let turn = 1; turn <= 10; turn++) {
+      const phase = await runDemographicFlows(db, turn);
+      assert.equal(phase.regionsProcessed, 45);
+      const currentStates = await db.collection("states").find().toArray();
+      const currentStocks = await db
+        .collection<{ _id: string; ages: { male: number[]; female: number[] } }>(
+          "regionDemographics"
+        )
+        .find()
+        .toArray();
+      assert.equal(currentStocks.length, 45);
+      for (const stock of currentStocks) {
+        const cells = [...stock.ages.male, ...stock.ages.female];
+        assert.equal(cells.length, 202);
+        assert(
+          cells.every((value) => Number.isFinite(value) && value >= 0),
+          stock._id
+        );
+        const people = cells.reduce((sum, value) => sum + value, 0);
+        const state = currentStates.find((row) => String(row._id) === stock._id);
+        assert(state && people > 0);
+        assert(Math.abs(people - Number(state.population)) <= 0.500001, stock._id);
+      }
+    }
     console.log(
       JSON.stringify(
         {
-          passed: 3,
+          passed: 5,
           cases: [
             "actual six-country seeders write45 reconciled regions and repeat deterministically",
             "full conformance reports exact national population equality for all six countries",
-            "actual cohort seeder consumes corrected populations for29 covered regions;16 existing FR/ES census gaps remain explicit",
+            "actual cohort seeder consumes corrected populations for all45 regions, including16 FR/ES age-only proxies",
+            "repeated cohort seeding preserves all45 age/sex vectors",
+            "ten actual demographic phase calls process all45 regions with finite nonnegative stocks and matching state totals",
           ],
           populationChecks: checks,
           cohorts,
