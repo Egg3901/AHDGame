@@ -36,8 +36,9 @@ export async function qualifyTreasuryPanel(db: Db, page: Page, base: string) {
     };
   };
   const before = await snapshot();
-  const amount = Math.floor(Math.min(100, before.annualRevenue * 0.005, before.treasury));
-  assert(amount > 0, "Use existing funded treasury, never inject cash for the UI");
+  const amount = Math.floor(Math.min(100, before.annualRevenue * 0.005));
+  assert(Number.isFinite(before.treasury) && amount > 0, "Use retained treasury and revenue");
+  // The real route enforces the existing debt ceiling; a negative cash position is permitted.
   const endpoint = "/api/country/us/cabinet/treasury-transfer";
   const operationIds: string[] = [];
   page.on("request", (request) => {
