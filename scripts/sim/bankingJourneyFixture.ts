@@ -49,6 +49,7 @@ export async function prepareJourney(db: Db, source: Db) {
         userId: USER,
         name: "Synthetic banking player",
         isSynthetic: true,
+        statsAllocated: true,
         sequentialId: 132801,
         avatarUrl: null,
         currentOffice: null,

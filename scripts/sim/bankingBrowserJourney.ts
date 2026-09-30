@@ -140,6 +140,8 @@ async function main() {
       .getByText("Journey Savings Bank", { exact: true })
       .first()
       .waitFor({ timeout: 300_000 });
+    const rejectCookies = page.getByRole("button", { name: "Reject", exact: true });
+    if (await rejectCookies.isVisible()) await rejectCookies.click();
     await page.screenshot({ path: `${out}.png`, fullPage: true });
     const baseline = await journeySnapshot(db);
     const actions = await runBankingActions(page, db, base, fixture.setup.turn);

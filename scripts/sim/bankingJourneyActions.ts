@@ -43,7 +43,9 @@ export async function runBankingActions(page: Page, db: Db, base: string, turn: 
   await command("/api/character/savings/deposit", () =>
     page.getByRole("button", { name: "Deposit savings", exact: true }).click()
   );
-  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  await page
+    .getByRole("dialog", { name: "Deposit with Journey Savings Bank" })
+    .waitFor({ state: "hidden" });
   const deposited = await capture("UI deposit 1000000 USD");
   near(deposited.saverWallet, baseline.saverWallet - 1_000_000, "deposit wallet debit");
   near(deposited.bank.cash, baseline.bank.cash + 1_000_000, "deposit vault credit");
@@ -85,7 +87,9 @@ export async function runBankingActions(page: Page, db: Db, base: string, turn: 
   await command("/api/banking/loans", () =>
     page.getByRole("button", { name: "Submit loan request", exact: true }).click()
   );
-  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  await page
+    .getByRole("dialog", { name: "Arrange private-bank credit" })
+    .waitFor({ state: "hidden" });
   const loan = await capture("UI corporate loan 100000 USD");
   near(loan.borrowerCash, baseline.borrowerCash + 100_000, "loan credit");
   near(loan.bank.cash, returned.bank.cash - 100_000, "loan vault debit");

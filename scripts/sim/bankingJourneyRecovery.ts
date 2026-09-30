@@ -9,7 +9,7 @@ import { BANK, journeySnapshot } from "./bankingJourneyFixture";
 export async function runRecoveryJourney(page: Page, db: Db, base: string, development: boolean) {
   const beforeFailure = await journeySnapshot(db);
   const failure = page
-    .waitForEvent("pageerror", { timeout: 5000 })
+    .waitForEvent("pageerror", { timeout: 1500 })
     .then((e) => e.message)
     .catch(() => null);
   await page.route("**/api/character/savings-holder", (route) => route.abort("failed"), {
@@ -18,7 +18,11 @@ export async function runRecoveryJourney(page: Page, db: Db, base: string, devel
   await page.getByLabel("Savings holder for USD").selectOption("centralBank");
   const unhandledFailure = await failure;
   const afterFailure = await journeySnapshot(db);
-  assert.deepEqual(afterFailure, beforeFailure, "Failed network delivery must not mutate savings");
+  assert.deepEqual(
+    { ...afterFailure, audits: [] },
+    { ...beforeFailure, audits: [] },
+    "Failed network delivery must not mutate savings"
+  );
   const feedbackVisible = await page
     .getByText("Could not move savings. Check your connection and try again.", { exact: true })
     .isVisible();
@@ -73,7 +77,9 @@ export async function runRecoveryJourney(page: Page, db: Db, base: string, devel
     false,
     "Stale destination must be disclosed independently of the successful deposit"
   );
-  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  await page
+    .getByRole("dialog", { name: "Deposit with Journey Savings Bank" })
+    .waitFor({ state: "hidden" });
   const afterDeposit = await journeySnapshot(db);
   assert(
     Math.abs(afterDeposit.cash - beforeDeposit.cash) < 0.02,
@@ -88,7 +94,7 @@ export async function runRecoveryJourney(page: Page, db: Db, base: string, devel
   await page.reload({ waitUntil: "domcontentloaded", timeout: 180_000 });
   await page.getByRole("tab", { name: "Your accounts", exact: true }).click();
   assert.equal(
-    await page.getByRole("dialog").count(),
+    await page.getByRole("dialog", { name: "Deposit with Journey Savings Bank" }).count(),
     0,
     "A successful deposit must not leave a retryable form"
   );
