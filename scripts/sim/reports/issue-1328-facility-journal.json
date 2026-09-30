@@ -92,5 +92,12 @@
     "Read BSON bytes count returned cursor documents, not transport headers.",
     "Command windows include best-effort audit work; asynchronous audit batches can cross measurement windows.",
     "No saved player world, rollout or long-horizon acceptance is claimed."
-  ]
+  ],
+  "finalPersistedStateSupplement": {
+    "banks": 10,
+    "totalMarginDebt": 1004000,
+    "corporateLiquidCapital": 170,
+    "openingMarginDebt": 1000000,
+    "openingCorporateLiquidCapital": 170
+  }
 }
