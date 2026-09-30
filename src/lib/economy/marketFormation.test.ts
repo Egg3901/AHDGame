@@ -156,6 +156,78 @@ describe("computeMarketFormationSnapshot", () => {
 });
 
 describe("empty-cell sampling", () => {
+  it("counts positive-use country coverage outside the bounded examples", () => {
+    const pools = Array.from({ length: 300 }, (_, i) =>
+      pool(`S${String(i).padStart(4, "0")}`, "manufacturing")
+    );
+    const steel = price("steel", "unused", 0, 0, 0);
+    steel.stateDemand = Object.fromEntries(
+      pools.map((row, i) => [row.stateId, i >= 250 ? 100 : 0])
+    );
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: pools,
+      prices: [steel],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.emptyMarketCells).toHaveLength(250);
+    expect(snapshot.emptyMarketCells.every((cell) => cell.localDemandValueAnchor === 0)).toBe(true);
+    expect(snapshot.coverageByCountry[0]?.demandCoverage).toEqual({
+      observedCells: 300,
+      positiveUseCells: 50,
+      emptyPositiveUseCells: 50,
+    });
+    expect(snapshot.coverageByState.find((row) => row.stateId === "S0299")?.demandCoverage).toEqual(
+      { observedCells: 1, positiveUseCells: 1, emptyPositiveUseCells: 1 }
+    );
+    expect(normalizeMarketFormationSnapshot(snapshot)?.coverageByCountry).toEqual(
+      snapshot.coverageByCountry
+    );
+  });
+
+  it("separates measured zero, missing demand and active positive-use cells", () => {
+    const steel = price("steel", "NY", 100, 50, 50);
+    steel.stateDemand.PA = 100;
+    steel.stateDemand.NJ = 0;
+    steel.stateDemand.OH = Number.NaN;
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [
+        sector("NY", "manufacturing"),
+        { ...sector("PA", "manufacturing"), mothballed: true },
+      ],
+      unownedSectors: ["NY", "PA", "NJ", "OH", "AK"].map((id) => pool(id, "manufacturing")),
+      prices: [steel],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.coverageByCountry[0]?.demandCoverage).toEqual({
+      observedCells: 3,
+      positiveUseCells: 2,
+      emptyPositiveUseCells: 1,
+    });
+    expect(snapshot.coverageByState.find((row) => row.stateId === "NY")?.demandCoverage).toEqual({
+      observedCells: 1,
+      positiveUseCells: 1,
+      emptyPositiveUseCells: 0,
+    });
+    expect(snapshot.coverageByState.find((row) => row.stateId === "AK")?.demandCoverage).toEqual({
+      observedCells: 0,
+      positiveUseCells: 0,
+      emptyPositiveUseCells: 0,
+    });
+  });
+
+  it("keeps older demand coverage unavailable instead of fabricating zero", () => {
+    const oldSnapshot = {
+      coverageByCountry: [{ countryId: "US", cells: 300 }],
+      coverageByState: [{ countryId: "US", stateId: "NY", cells: 17 }],
+    };
+    const normalized = normalizeMarketFormationSnapshot(oldSnapshot);
+    expect(normalized?.coverageByCountry[0]?.demandCoverage).toBeUndefined();
+    expect(normalized?.coverageByState[0]?.demandCoverage).toBeUndefined();
+  });
+
   /**
    * The snapshot is persisted once per turn. The full empty-cell list reached
    * ~1MB per document and nothing outside the producer reads it, so it is

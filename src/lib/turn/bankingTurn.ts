@@ -42,7 +42,11 @@ import {
 } from "@/lib/banking/rules/facilityInterest";
 import { interbankServiceTransition } from "@/lib/banking/rules/interbankServicing";
 import { settleLegacyDepositInterest } from "@/lib/banking/legacyDepositInterest";
-import { settleTransition } from "@/lib/banking/settlementJournal";
+import {
+  settleTransition,
+  recoverProjections,
+  unfinishedSettlementFilter,
+} from "@/lib/banking/settlementJournal";
 import {
   oid,
   type BankingTransition,
@@ -1530,8 +1534,8 @@ async function serviceNpcBulkBook(
 }
 
 /**
- * Service interbank interest (borrower → lender) and CB margin interest
- * (borrower cash destroyed; mirror of LOC principal creation/destruction).
+ * Service interbank interest from borrower to lender, and central-bank
+ * facility interest from bank vaults to central-bank reserves.
  * Runs even when no deposit-taking banks need a pass this turn.
  */
 async function serviceInterbankAndCbMargin(
@@ -1541,6 +1545,23 @@ async function serviceInterbankAndCbMargin(
   propTrading: boolean,
   centralBanks: ReadonlyMap<string, { primeRate?: number }>
 ): Promise<void> {
+  if (propTrading) {
+    // A loan may already carry this turn's stamp while its journal still owns
+    // unfinished income projections. Never replay live cash legs here.
+    const pending = await db
+      .collection<{ _id: string; legs: { applied: boolean }[] }>(MONEY_MOVE_COLLECTION)
+      .find(
+        { ...unfinishedSettlementFilter(), kind: "interbank_interest", turn },
+        { projection: { _id: 1, legs: 1 } }
+      )
+      .toArray();
+    for (const receipt of pending) {
+      if (!receipt.legs.every((leg) => leg.applied)) continue;
+      const recovered = await recoverProjections(db, receipt._id);
+      if (recovered.status === "partial" || recovered.status === "rejected" || recovered.error)
+        throw new Error(recovered.error ?? "Interbank income recovery unfinished");
+    }
+  }
   const loans = propTrading
     ? await db
         .collection<InterbankLoan>("interbankLoans")
@@ -1555,33 +1576,6 @@ async function serviceInterbankAndCbMargin(
     const result = await serviceOneInterbankLoan(db, turn, loan);
     summary.interbankInterestPaid += result.interestPaid;
     summary.interbankDefaultsWrittenOff += result.writtenOff;
-    if (result.interestPaid > 0) {
-      // Interbank interest is a transfer between two bank owners. It is still
-      // real income for the lender and a real expense for the borrower, so the
-      // per-bank realized earnings snapshot needs both sides.
-      await Promise.all([
-        db.collection<Corporation>("corporations").updateOne(
-          { _id: loan.borrowerCorporationId, "bankCharter.status": "active" },
-          {
-            $inc: {
-              "bankCharter.lastBankingIncome": -result.interestPaid,
-              "bankCharter.lastBankingInterbankInterestPaid": result.interestPaid,
-            },
-            $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
-          }
-        ),
-        db.collection<Corporation>("corporations").updateOne(
-          { _id: loan.lenderCorporationId, "bankCharter.status": "active" },
-          {
-            $inc: {
-              "bankCharter.lastBankingIncome": result.interestPaid,
-              "bankCharter.lastBankingInterbankInterestReceived": result.interestPaid,
-            },
-            $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
-          }
-        ),
-      ]);
-    }
   }
 
   const marginBanks = await db
