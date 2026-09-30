@@ -1,6 +1,5 @@
 import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CountryGameState } from "@/lib/db/types/gameState";
 import { verifyLiveFederationSettlementIntent } from "./settlementIntent";
 import { buildFederationPublicationPlan } from "./publicationPlan";
 import { verifyPreparedFederationPlan } from "./preparePublication";
@@ -11,6 +10,7 @@ import { materializeFederationPrivateFirms } from "./materializePrivateFirms";
 import { materializeFederationResidentHolds } from "./materializeResidents";
 import { materializeFederationSuccessorMacros } from "./materializeSuccessorMacros";
 import { materializeFederationFiscalAccounts } from "./materializeFiscalAccounts";
+import { materializeFederationFederalRetirement } from "./materializeFederalRetirement";
 import { publishFederationRelocations } from "./relocationLedger";
 import {
   FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
@@ -126,19 +126,13 @@ export async function applyPreparedFederationSettlement(input: {
     shares: plan.fiscalShares,
   });
   if (snapshot.activationPlan.sourceEntity.status === "dissolved") {
-    const updated = await db.collection<CountryGameState>("countryGameStates").updateOne(
-      { _id: sourceCountryId, dissolvedTurn: null },
-      {
-        $set: {
-          dissolvedTurn: appliedOnTurn,
-          updatedAt: now,
-          ...(sourceCountryId === "YU" ? { yuSettlementAppliedSinceTurn: appliedOnTurn } : {}),
-        },
-      },
-      { session }
-    );
-    if (updated.matchedCount !== 1)
-      throw new Error("Federation source country changed before dissolution");
+    await materializeFederationFederalRetirement({
+      db,
+      session,
+      sourceCountryId,
+      appliedOnTurn,
+      now,
+    });
   }
   await applications.insertOne(plan.receipt, { session });
   await publishFederationRelocations({
