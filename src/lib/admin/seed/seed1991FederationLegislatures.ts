@@ -5,7 +5,7 @@ import {
   getLowerChamberOfficeType,
   getUpperChamberOfficeType,
 } from "@/lib/legislature/chamberOfficeType";
-import type { PoliticalParty, State, StatePartyOrg } from "@/lib/db/types";
+import type { ElectedOfficial, PoliticalParty, State, StatePartyOrg } from "@/lib/db/types";
 import { buildProportionalChamberSeats, sumSeatsHeld } from "@/lib/seeds/proportionalChamberSeats";
 import { seedFromSeats, type SeedMode } from "@/lib/npp/seedHistorical";
 
@@ -127,6 +127,21 @@ export async function seed1991FederationLegislatures(
             presence,
           })
         : [];
+    const federalOffices = [getLowerChamberOfficeType(countryId, preset), upperOffice].filter(
+      (office): office is string => office !== undefined
+    );
+    const playerOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne(
+      {
+        countryId,
+        officeType: { $in: federalOffices },
+        characterId: { $ne: null },
+      },
+      { projection: { _id: 1 } }
+    );
+    if (playerOfficial) {
+      log(`Preserved player-held ${countryId} federal chamber without adding opening NPP seats`);
+      continue;
+    }
     const result = await seedFromSeats(db, [...lower, ...upper], seedMode, {
       skipAlreadySeatedChambers: true,
     });
