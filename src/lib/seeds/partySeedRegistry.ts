@@ -41,6 +41,7 @@ import { yuParties } from "@/lib/seeds/yu/yuParties";
 import { uaParties } from "@/lib/seeds/ua/uaParties";
 import { blrParties } from "@/lib/seeds/blr/blrParties";
 import { balParties } from "@/lib/seeds/bal/balParties";
+import { PARTY_ROSTERS_2019 } from "@/lib/seeds/partyRosters2019";
 import { isShippingPreset, tierFor } from "@/lib/world/eraRoster";
 import { SUCCESSOR_PARTIES_1991 } from "@/lib/seeds/reference/successorParties1991";
 
@@ -93,6 +94,7 @@ export function partySeedsForPreset(countryId: CountryId, presetId: string): Par
   const seeds = [
     ...(PARTY_SEED_MODULES[countryId] ?? []),
     ...(presetId === "1991-default" ? (SUCCESSOR_PARTIES_1991[countryId] ?? []) : []),
+    ...(presetId === "2019-default" ? (PARTY_ROSTERS_2019[countryId] ?? []) : []),
   ];
   return seeds.filter((seed) => !seed.validForPresets || seed.validForPresets.includes(presetId));
 }
