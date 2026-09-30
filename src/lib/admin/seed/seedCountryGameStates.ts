@@ -181,6 +181,7 @@ export async function seedCountryGameStates(
           ? {
               $unset: {
                 ruSovietSuccessionSinceTurn: "",
+                ruProvisionalCongressSeats: "",
                 ruPresidencyMandateSinceTurn: "",
                 ruPresidencyElectionCertifiedSinceTurn: "",
                 ruFederalAssemblyMandateSinceTurn: "",
