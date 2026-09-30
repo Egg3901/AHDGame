@@ -7,7 +7,10 @@ import { recordFederationRatifications } from "@/lib/world/succession/recordRati
 import { processLegacyFederationServiceTurn } from "@/lib/world/succession/legacyServiceTurn";
 import { processRatifiedFederationSettlements } from "./federationSettlements";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
-import { materializeFacilityPaymentTurn } from "@/lib/world/succession/facilityPaymentTurn";
+import {
+  materializeFacilityPaymentTurn,
+  processFederationFacilityPaymentTurn,
+} from "@/lib/world/succession/facilityPaymentTurn";
 
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
@@ -99,6 +102,86 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
   });
   afterAll(async () => {
     await client?.close();
+  });
+
+  it("pays one hundred firms through the normal compensation phase in at most twenty commands", async () => {
+    const db = client.db(databaseName);
+    const applicationId = "1991-default:payment-volume:1";
+    await db.collection<Fixture>("federationSettlementApplications").insertOne({
+      _id: applicationId,
+      presetId: "1991-default",
+      settlementId: "payment-volume",
+      revision: 1,
+      sourceEntityId: "RU",
+      entityIds: ["RU", "UKR"],
+      status: "applied",
+      appliedOnTurn: 180,
+    });
+    await db.collection<Fixture>("worldEntityStates").insertMany(
+      ["RU", "UKR"].map((entityId) => ({
+        _id: `1991-default:${entityId}`,
+        entityId,
+        applicationId,
+        appliedOnTurn: 180,
+      }))
+    );
+    const firms = Array.from({ length: 100 }, () => ({
+      _id: new ObjectId(),
+      countryId: "RU",
+      liquidCurrencyCode: "RUB",
+      liquidCapital: 100,
+    }));
+    const claims = firms.map((firm, index) => ({
+      _id: `${applicationId}:plant-${index}`,
+      applicationId,
+      claimId: `plant-${index}`,
+      corporationId: firm._id.toHexString(),
+      sectorId: `sector-${index}`,
+      debtorEntityId: "UKR",
+      creditorCountryId: "RU",
+      amountAnchor: 10,
+      status: "payable",
+    }));
+    await db.collection("corporations").insertMany(firms);
+    await db.collection("federationFacilityClaims").insertMany(claims);
+    await db.collection<Fixture>("federationFiscalAccounts").insertOne({
+      _id: `${applicationId}:UKR`,
+      applicationId,
+      entityId: "UKR",
+      kind: "background-successor",
+      claimIds: claims.map((claim) => claim.claimId),
+      facilityClaimLiabilityMinor: 100000,
+    });
+    await db.collection<Fixture>("macroCountries").insertOne({
+      _id: "UKR",
+      presetId: "1991-default",
+      simulationTier: "background-macro",
+      federationTreasuryMinor: 50000,
+    });
+    await db
+      .collection<Fixture>("exchangeRates")
+      .insertOne({ _id: "RUB", currencyCode: "RUB", rate: 2 });
+    commands = 0;
+    expect(await processFederationFacilityPaymentTurn(db, 181, new Date(2))).toBe(1);
+    const paymentCommands = commands;
+    expect(paymentCommands).toBeLessThanOrEqual(20);
+    expect(await db.collection("corporations").countDocuments({ liquidCapital: 110 })).toBe(100);
+    expect(
+      await db
+        .collection("federationFacilityClaims")
+        .countDocuments({ paidMinor: 500, status: "payable" })
+    ).toBe(100);
+    expect(await db.collection<Fixture>("macroCountries").findOne({ _id: "UKR" })).toMatchObject({
+      federationTreasuryMinor: 0,
+    });
+    expect(
+      await db.collection("federationFacilityPaymentTurns").findOne({ applicationId })
+    ).toMatchObject({ paidMinor: 50000 });
+    await processFederationFacilityPaymentTurn(db, 181, new Date(3));
+    expect(await db.collection("corporations").countDocuments({ liquidCapital: 110 })).toBe(100);
+    console.info(
+      `Facility volume qualification: payment=${paymentCommands} commands; firms=100; transferred=50000 minor`
+    );
   });
 
   it("commits real sovereignty and balances once, then services unchanged creditor contracts", async () => {
