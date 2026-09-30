@@ -13,6 +13,7 @@ import {
 import { loadPersistedFederationApproval } from "./ratificationStore";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import { planSuccessionTerritories } from "./rules/territory";
+import { hashFederationPoliticalTerms } from "./settlementIntent";
 
 export type RatifiedActivation = Omit<SuccessionActivationInput, "sourceRegions" | "custodyAssets">;
 
@@ -134,7 +135,7 @@ export async function buildRatifiedFederationActivation(input: {
       ];
     })
   );
-  return {
+  const activation: RatifiedActivation = {
     settlementId,
     approval,
     source: getWorldEntityOrThrow("1991-default", sourceCountryId),
@@ -146,4 +147,7 @@ export async function buildRatifiedFederationActivation(input: {
     macroTerms,
     now,
   };
+  if (hashFederationPoliticalTerms(activation) !== proposal.termsHash)
+    throw new Error("Federation activation differs from the enacted political terms");
+  return activation;
 }
