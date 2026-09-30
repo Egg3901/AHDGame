@@ -365,10 +365,7 @@ describe("processBankSolvencyTurn", () => {
       { liquidCapital: 40_000 }
     );
     seedBanks([corp]);
-    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
-      _id: "US",
-      bankReserveRequirement: 0.1,
-    });
+    persisted.collection("centralBanks").docs[0].bankReserveRequirement = 0.1;
 
     const externalBefore = cbState.externalBroadMoney;
     const summary = await processBankSolvencyTurn(db as unknown as Db, TURN);
@@ -404,10 +401,7 @@ describe("processBankSolvencyTurn", () => {
     };
     charactersByBank.set(corp._id.toString(), [depositor]);
     seedBanks([corp]);
-    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
-      _id: "US",
-      bankReserveRequirement: 0.2,
-    });
+    persisted.collection("centralBanks").docs[0].bankReserveRequirement = 0.2;
 
     const externalBefore = cbState.externalBroadMoney;
     const summary = await processBankSolvencyTurn(db as unknown as Db, TURN);
@@ -548,10 +542,7 @@ describe("processBankSolvencyTurn", () => {
       { liquidCapital: 1_000_000 }
     );
     seedBanks([failing, peer]);
-    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
-      _id: "US",
-      bankReserveRequirement: 0.2,
-    });
+    persisted.collection("centralBanks").docs[0].bankReserveRequirement = 0.2;
 
     const summary = await processBankSolvencyTurn(db as unknown as Db, TURN);
     expect(summary.failures).toBe(1);
@@ -573,10 +564,7 @@ describe("processBankSolvencyTurn", () => {
       { liquidCapital: 1_000_000 }
     );
     seedBanks([corp]);
-    db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
-      _id: "US",
-      bankReserveRequirement: 0.1,
-    });
+    persisted.collection("centralBanks").docs[0].bankReserveRequirement = 0.1;
 
     await processBankSolvencyTurn(db as unknown as Db, TURN);
     expect(liveCorps.get(corp._id.toString())!.bankCharter!.panicTurns).toBe(2);
