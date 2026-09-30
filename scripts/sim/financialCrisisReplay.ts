@@ -13,7 +13,11 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { MongoClient, ObjectId, type Db, type Document } from "mongodb";
 import type { Corporation, FederalBudget } from "../../src/lib/db/types";
-import type { CrisisInteraction, GlobalResponseRole } from "../../src/lib/db/types/crisis";
+import type {
+  CrisisDecisionNode,
+  CrisisInteraction,
+  GlobalResponseRole,
+} from "../../src/lib/db/types/crisis";
 import { GLOBAL_FINANCIAL_CRISIS_DEF as def } from "../../src/lib/livingConflict/defs/globalFinancialCrisis";
 import { createCrisisFromTemplate } from "../../src/lib/crises/createCrisisFromTemplate";
 import {
@@ -98,7 +102,7 @@ async function publicChoice(
     .collection("gameState")
     .updateOne({ _id: "current" as never }, { $set: { currentTurn: turn } });
   const response = def.phases[0].events[0].response!;
-  const node = {
+  const node: CrisisDecisionNode = {
     nodeId: `financial_replay_${turn}_${optionId}`,
     type: "choice" as const,
     title: "Financial crisis policy response",
