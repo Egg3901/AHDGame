@@ -64,6 +64,13 @@ export async function POST(request: Request) {
     if (!authResult.ok) return authResult.response;
     const auth = authResult.user;
 
+    if (auth.character.federationPendingResidenceId) {
+      return NextResponse.json(
+        { error: "Choose a playable residence through your federation settlement first." },
+        { status: 409 }
+      );
+    }
+
     const rateLimit = checkRateLimit(auth.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
