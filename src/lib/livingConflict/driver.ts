@@ -120,7 +120,8 @@ export async function driveConflictTurn(
   turn: number,
   year: number | null | undefined,
   externalPressure = 0,
-  openingTrackDeltas: Record<string, number> = {}
+  openingTrackDeltas: Record<string, number> = {},
+  observedTrackValues: Record<string, number> = {}
 ): Promise<DriveResult> {
   let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
@@ -165,6 +166,21 @@ export async function driveConflictTurn(
 
   if (wasOpen && state.hasOpened) {
     state = { ...state, campaign: advanceCampaignTurn(state.campaign) };
+  }
+
+  // Authoritative observations replace their prior values each turn. They
+  // cannot accumulate solely because the driver runs again.
+  if (Object.keys(observedTrackValues).length > 0) {
+    state = applyTrackDeltas(
+      def,
+      state,
+      Object.fromEntries(
+        Object.entries(observedTrackValues).map(([key, value]) => [
+          key,
+          value - (state.tracks?.[key] ?? def.tracks?.[key]?.initial ?? 0),
+        ])
+      )
+    );
   }
 
   const trackDeltas = scheduledPressureDeltas(

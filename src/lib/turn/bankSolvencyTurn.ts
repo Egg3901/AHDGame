@@ -1,3 +1,4 @@
+import { processFinancialCrisisGuarantees } from "@/lib/crises/financialCrisisGuarantees";
 /**
  * Bank runs and depositor protection. processBankSolvencyTurn evaluates bank
  * confidence, returns fleeing household deposits with their cash, and resolves
@@ -236,6 +237,8 @@ export async function processBankSolvencyTurn(
       );
     }
   }
+
+  await processFinancialCrisisGuarantees(db, turn, policy);
 
   const unresolved = await db
     .collection<Corporation>("corporations")

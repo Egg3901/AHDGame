@@ -1,3 +1,4 @@
+import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudgetPolicy";
 import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
@@ -72,6 +73,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       );
     }
 
+    await expireFinancialCrisisAusterity(db, b, _turn);
     const revenue = b.revenue?.total ?? 0;
     const spendingTotal = b.spending?.total ?? 0;
     const debtInterest = b.spending?.debtInterest ?? 0;

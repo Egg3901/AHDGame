@@ -1,3 +1,4 @@
+import { loadFinancialExposure } from "./financialExposure";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type {
@@ -237,15 +238,18 @@ export async function processLivingConflictsTurn(
       }
     }
     conflictsProcessed++;
-    const participants: ConflictParticipants = resolveConflictParticipants(
-      def,
-      availableCountryIds
-    );
+    let participants: ConflictParticipants = resolveConflictParticipants(def, availableCountryIds);
     let externalPressure =
       def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0;
     let openingTrackDeltas: Record<string, number> = {};
+    let observedTrackValues: Record<string, number> = {};
     if (def.key === GLOBAL_FINANCIAL_CRISIS_KEY) {
-      const signal = await loadFinancialCrisisSignal(db, currentTurn);
+      const [signal, exposure] = await Promise.all([
+        loadFinancialCrisisSignal(db, currentTurn),
+        loadFinancialExposure(db, availableCountryIds),
+      ]);
+      participants = exposure.participants;
+      observedTrackValues = { euroSovereignExposure: exposure.euroExposure };
       externalPressure = signal.pressure;
       openingTrackDeltas = signal.openingTrackDeltas;
     }
@@ -256,7 +260,8 @@ export async function processLivingConflictsTurn(
       currentTurn,
       currentYear,
       externalPressure,
-      openingTrackDeltas
+      openingTrackDeltas,
+      observedTrackValues
     );
     if (def.key === "northern_ireland") {
       result.state = await reconcileNorthernIrelandRatification(
