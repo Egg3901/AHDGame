@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   consent: null as "accepted" | "rejected" | null,
@@ -216,3 +216,5 @@ describe("PostHog consent boundary", () => {
     expect(state.capture).not.toHaveBeenCalled();
   });
 });
+
+afterAll(() => vi.unstubAllEnvs());

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 
 const sdk = vi.hoisted(() => ({
@@ -114,3 +114,5 @@ describe("turn PostHog telemetry", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+afterAll(() => vi.unstubAllEnvs());

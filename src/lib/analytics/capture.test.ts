@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   consent: null as "accepted" | "rejected" | null,
@@ -285,3 +285,5 @@ describe("analytics fan-out", () => {
     );
   });
 });
+
+afterAll(() => vi.unstubAllEnvs());
