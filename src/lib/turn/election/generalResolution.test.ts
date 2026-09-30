@@ -43,6 +43,10 @@ vi.mock("@/lib/achievements/triggers", () => ({
   checkElectionWinAchievements: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/turn/ruConvocation", () => ({
+  handleRuConvocationReset: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const NOW = new Date("2025-11-15T00:00:00Z");
@@ -1376,6 +1380,49 @@ describe("resolveOneGeneralElection", () => {
       );
     }
   );
+
+  it.each([
+    "supremeSovietDeputy",
+    "unionCongressDeputy",
+    "congressDeputy",
+    "stateDuma",
+    "snap_stateDuma",
+  ])("passes the actual Russian %s cycle to the constitution-aware reset", async (electionType) => {
+    const election = makeElection({
+      countryId: "RU",
+      electionType,
+      state: "RU_WEST",
+      cycle: 4,
+      totalSeats: 1,
+    });
+    const id = new ObjectId();
+    const candidate = makeCandidate(election._id, { characterId: id, party: "2" });
+    const tally = makeTally(election._id, { [candidate._id.toString()]: 100 });
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor([candidate]));
+    db.collectionMocks.characters!.find.mockReturnValue(
+      makeCursor([{ _id: id, userId: new ObjectId(), currentOffice: null }])
+    );
+    db.collection("countryState");
+    db.collectionMocks.countryState!.findOne.mockResolvedValue({
+      _id: "RU",
+      governmentType: "parliamentaryRepublic",
+      rulingPartyId: null,
+      opsVoteMultipliers: null,
+      hasLeaderConfidenceModel: false,
+    });
+    db.collectionMocks.elections!.countDocuments.mockResolvedValue(0);
+    await resolveBulgarianElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    const { handleRuConvocationReset } = await import("@/lib/turn/ruConvocation");
+    expect(handleRuConvocationReset).toHaveBeenCalledWith(db, 4, NOW, electionType);
+    expect(db.collectionMocks.elections!.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "RU",
+        electionType,
+        cycle: 4,
+        status: { $in: ["upcoming", "active", "completed"] },
+      })
+    );
+  });
 
   // ── President: delegates to resolvePresidentElection ────────────────────
 
