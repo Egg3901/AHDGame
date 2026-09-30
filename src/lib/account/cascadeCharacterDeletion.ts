@@ -8,6 +8,7 @@
  * abandoning, then vacate the CEO seat using the standard vacancy markers.
  */
 
+import { closeCharacterSavings } from "@/lib/savings/closeCharacterSavings";
 import type { Db, ObjectId } from "mongodb";
 import type { Bond, Corporation, ElectionCandidate, GameState } from "@/lib/db/types";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -40,6 +41,7 @@ export async function cascadeCharacterDeletion(
   db: Db,
   characterId: ObjectId
 ): Promise<CascadeResult> {
+  await closeCharacterSavings(db, characterId);
   const corps = db.collection<Corporation>("corporations");
   const now = new Date();
   const forexEnabled = await isForexEnabled();
