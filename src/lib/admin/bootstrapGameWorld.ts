@@ -796,7 +796,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const coldWarFoundation = await seedColdWarFoundations(
     db,
     gameState.currentYear ?? getStartingYearForPreset(preset),
-    gameState.currentTurn
+    gameState.currentTurn,
+    { presetId: preset }
   );
   log(
     `Cold War foundation: ${coldWarFoundation.programsInserted} programmes, ${coldWarFoundation.conflictsInserted} campaigns`

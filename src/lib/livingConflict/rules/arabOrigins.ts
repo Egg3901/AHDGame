@@ -17,6 +17,9 @@ export interface ArabOriginSignal {
   basis: "playable" | "background";
 }
 export interface ArabOriginState {
+  /** Dated seed evidence; subsequent player/NPC choices can change the trajectory. */
+  openingSourceUrl?: string;
+  openingEvidenceAsOf?: string;
   policy: "unchanged" | "reform" | "repress" | "transition";
   population: number;
   legitimacy: number;

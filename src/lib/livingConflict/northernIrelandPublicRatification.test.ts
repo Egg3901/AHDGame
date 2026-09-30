@@ -6,6 +6,7 @@ import { NORTHERN_IRELAND_DEF as def } from "./defs/northernIreland";
 import { normalizeConflictState } from "./engine";
 import { reconcileNorthernIrelandRatification } from "./northernIrelandRatification";
 import { northernIrelandCampaignSupport } from "./rules/northernIrelandRatification";
+import { build2027ConflictOpening } from "./initialState2027";
 
 vi.mock("@/lib/referendum/wire", () => ({ recordWireEvent: vi.fn() }));
 import { recordWireEvent } from "@/lib/referendum/wire";
@@ -66,6 +67,49 @@ function setup() {
 beforeEach(() => vi.mocked(recordWireEvent).mockResolvedValue(undefined));
 
 describe("Northern Ireland public ratification", () => {
+  it("allows a new rejection and a fresh agreement after inherited 2027 consent", async () => {
+    const { db, bills, rows } = setup();
+    const inherited = build2027ConflictOpening(def, {
+      countries: new Set(["UK", "IE"]),
+      populations: {},
+    });
+    const proposed = await reconcileNorthernIrelandRatification(db, def, inherited, 2027, 1249);
+    expect(proposed.tracks?.referendumRatification).toBe(0);
+    await reconcileNorthernIrelandRatification(
+      db,
+      def,
+      { ...proposed, phaseLevel: 5, status: "negotiating" },
+      2027,
+      1250
+    );
+    expect(rows).toHaveLength(1);
+    rows[0].status = "settled";
+    rows[0].result = { finalYesShare: 40, turnout: 60, passed: false, resolvedTurn: 1251 };
+    const rejected = await reconcileNorthernIrelandRatification(db, def, inherited, 2027, 1251);
+    expect(rejected).toMatchObject({
+      phaseLevel: 4,
+      status: "negotiating",
+      tracks: { referendumRatification: 0 },
+    });
+    bills[0] = { ...bills[0], _id: new ObjectId(), proposedTurn: 1252 };
+    bills[1] = { ...bills[1], _id: new ObjectId(), proposedTurn: 1252 };
+    const renewed = await reconcileNorthernIrelandRatification(
+      db,
+      def,
+      { ...rejected, phaseLevel: 5 },
+      2027,
+      1252
+    );
+    expect(rows).toHaveLength(2);
+    rows[1].status = "completed";
+    rows[1].result = { finalYesShare: 65, turnout: 64, passed: true, resolvedTurn: 1253 };
+    const restored = await reconcileNorthernIrelandRatification(db, def, renewed, 2027, 1253);
+    expect(restored).toMatchObject({
+      phaseLevel: 6,
+      status: "settled",
+      tracks: { ratificationAuthorization: 2, referendumRatification: 1 },
+    });
+  });
   it("opens one ordinary campaign only after both laws; a retry preserves its mandate and deadline", async () => {
     const { db, bills, rows } = setup();
     bills[1].status = "active";
