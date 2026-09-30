@@ -286,6 +286,23 @@ true` — gives the operator a chance to abort with Ctrl-C before turns
 
 ## Wiki Migration Scripts
 
+### Seed the missing Snap Elections article
+
+Inserts the canonical `snap-elections` wiki seed only when that slug is absent.
+An existing row is always preserved, including drafts and human-edited pages.
+The script is a dry run unless `--apply` is supplied.
+
+```bash
+# Preview against production/live
+npx tsx scripts/migrations/2026-09-30-seed-snap-election-wiki-page.ts --live
+
+# Insert the missing page
+npx tsx scripts/migrations/2026-09-30-seed-snap-election-wiki-page.ts --live --apply
+```
+
+It is also registered as `2026-09-30-seed-snap-election-wiki-page` for the
+normal migration runner.
+
 ## Wave 8 compatibility backfill
 
 Backfills the remaining live compatibility fields that still block broad

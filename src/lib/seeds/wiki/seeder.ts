@@ -46,7 +46,7 @@ function seedLastUpdated(seed: WikiSeedPage): Date {
   return parseSeedDate(seed.lastUpdated ?? WIKI_LAST_UPDATED[seed.slug]);
 }
 
-function pageDocForSeed(
+export function wikiPageDocForSeed(
   seed: WikiSeedPage,
   adminUserId: ObjectId,
   now: Date
@@ -109,7 +109,7 @@ export async function seedWikiPages(
     const existing = await wikiPages.findOne({ slug: seed.slug });
 
     if (!existing) {
-      await wikiPages.insertOne(pageDocForSeed(seed, adminUserId, now) as never);
+      await wikiPages.insertOne(wikiPageDocForSeed(seed, adminUserId, now) as never);
       inserted.push(seed.slug);
       continue;
     }

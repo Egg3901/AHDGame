@@ -97,6 +97,7 @@ import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-back
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
 import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-30-financial-tx-log-counterparty-index";
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
+import { migration as seedSnapElectionWikiPage } from "./entries/2026-09-30-seed-snap-election-wiki-page";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -314,6 +315,9 @@ export const MIGRATIONS: Migration[] = [
   financialTxLogCounterpartyIndex,
   // Also in the startup allowlist, like longHorizonTelemetryIndexes.
   appleProviderIdentityIndex,
+  // Player ticket 1368: deployed worlds can predate the Snap Elections wiki
+  // seed. Insert-only so worlds that already have the page remain untouched.
+  seedSnapElectionWikiPage,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

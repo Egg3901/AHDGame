@@ -16,4 +16,13 @@ describe("MIGRATIONS", () => {
       ids.indexOf("2026-06-02-index-fund-real-bonds")
     );
   });
+
+  it("registers the insert-only Snap Elections wiki backfill", () => {
+    const migration = MIGRATIONS.find(
+      (candidate) => candidate.id === "2026-09-30-seed-snap-election-wiki-page"
+    );
+
+    expect(migration).toBeDefined();
+    expect(migration?.idempotent).toBe(true);
+  });
 });
