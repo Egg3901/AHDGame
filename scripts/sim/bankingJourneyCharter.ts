@@ -49,7 +49,10 @@ export async function runCharterJourney(page: Page, db: Db, base: string) {
   assert.equal(capitalJournal.length, 1, "One actual charter capital settlement");
   assert.equal(capitalJournal[0].status, "applied");
   assert.deepEqual(
-    capitalJournal[0].amounts.map((leg) => ({ kind: leg.kind, amount: leg.amount })),
+    capitalJournal[0].amounts.map((leg: { kind: string; amount: number }) => ({
+      kind: leg.kind,
+      amount: leg.amount,
+    })),
     [
       { kind: "debit", amount: issueResult.postedCapital },
       { kind: "credit", amount: issueResult.postedCapital },

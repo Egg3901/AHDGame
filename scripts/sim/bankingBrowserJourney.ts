@@ -1,13 +1,12 @@
 /** Real browser -> local Next routes -> sandbox journal -> banking turn qualification. */
 import assert from "node:assert/strict";
-import { spawn, execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { createWriteStream, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { MongoClient } from "mongodb";
 import { SignJWT } from "jose";
 import { chromium, type Page } from "playwright";
+import { bankingJourneyApp } from "./bankingJourneyApp";
 import { runBankingActions } from "./bankingJourneyActions";
 import { runGovernanceJourney } from "./bankingJourneyGovernance";
 import { runRecoveryJourney } from "./bankingJourneyRecovery";
@@ -96,56 +95,19 @@ async function main() {
     assert.equal((await db.listCollections().toArray()).length, 0, "Target must be new");
     fixture = await prepareJourney(db, client.db(sourceName));
   }
-  const port = 39128,
-    base = `http://127.0.0.1:${port}`;
-  const secret = randomBytes(32).toString("hex");
-  const appLog = createWriteStream(`${out}.app.log`);
-  // Deliberate allowlist: no inherited integration credentials or production Mongo aliases.
-  const app = spawn(
-    process.execPath,
-    [
-      resolve("node_modules/next/dist/bin/next"),
-      "dev",
-      "--webpack",
-      "--hostname",
-      "127.0.0.1",
-      "--port",
-      String(port),
-    ],
-    {
-      cwd: process.cwd(),
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        PATH: process.env.PATH,
-        HOME: process.env.HOME,
-        NODE_ENV: "development",
-        MONGODB_URI: uri,
-        MONGODB_DB: target,
-        MONGO_DB_NAME: target,
-        AUTH_SECRET: secret,
-        ADMIN_REGISTRATION_KEY: "synthetic-local-only",
-        CRON_SECRET: "synthetic-local-only",
-        DISABLE_DEV_BACKGROUND: "1",
-        CRON_OWNER: "worker",
-        NEXT_TELEMETRY_DISABLED: "1",
-        NEXT_PUBLIC_BASE_URL: base,
-        ALLOWED_ORIGINS: base,
-        SENTRY_DSN: "",
-        NEXT_PUBLIC_SENTRY_DSN: "",
-      },
-    }
-  );
-  app.stdout?.pipe(appLog);
-  app.stderr?.pipe(appLog);
+  const app = bankingJourneyApp(uri, target, out, sourceCommit, arg("app-session"));
+  const { base, secret } = app;
+  let succeeded = false;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   let page: Page | undefined;
   process.env.JOURNEY_SCREENSHOT_PREFIX = out;
   try {
     let ready = false;
     for (let i = 0; i < 120 && !ready; i++) {
-      assert(app.exitCode === null, "Local app exited before readiness");
+      app.assertAlive();
       try {
+        // This health probe only reaches the owned loopback sandbox app, never external HTTP.
+        // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
         const r = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2500) });
         ready = r.status < 500;
       } catch {
@@ -221,7 +183,50 @@ async function main() {
         out,
         JSON.stringify({ sourceCommit, measurements, state: await journeySnapshot(db) }, null, 2)
       );
+      succeeded = true;
       return;
+    }
+    // Compile the real routes before browser actions. GET on command-only routes
+    // returns 405 without calling the financial command, so no funds move here.
+    const warmPaths = [
+      "/banking",
+      "/corporation/132811?tab=bank",
+      "/centralbank/usd?tab=committee",
+      "/centralbank/iep",
+      "/api/maintenance",
+      "/api/character/me",
+      "/api/client-status",
+      "/api/world/flags",
+      "/api/forex/rates",
+      "/api/banking/hub",
+      "/api/character/savings/open",
+      "/api/character/savings/deposit",
+      "/api/character/savings/withdraw",
+      "/api/character/savings-holder",
+      "/api/banking/loans",
+      "/api/country/us/fomc/vote",
+      "/api/country/us/central-bank",
+      "/api/country/ie/central-bank",
+      "/api/country/ie/central-bank/rate",
+      "/api/banking/corporation/000000000000000000002118",
+      "/api/corporations/132811/bank/charter",
+      "/api/corporations/132811/bank/recapitalize",
+    ];
+    for (let index = 0; index < warmPaths.length; index += 4) {
+      const results = await Promise.allSettled(
+        warmPaths.slice(index, index + 4).map(async (path) => {
+          const started = performance.now();
+          const response = await context.request.get(`${base}${path}`, { timeout: 300_000 });
+          console.log(
+            "route readiness",
+            path,
+            response.status(),
+            Math.round(performance.now() - started)
+          );
+          assert(response.status() < 500, `Readiness failed: ${path}`);
+        })
+      );
+      for (const result of results) if (result.status === "rejected") throw result.reason;
     }
     page = await context.newPage();
     const errors: string[] = [],
@@ -299,6 +304,7 @@ async function main() {
         2
       )
     );
+    succeeded = true;
     console.log("banking page rendered");
   } catch (error) {
     if (page) {
@@ -316,23 +322,7 @@ async function main() {
     throw error;
   } finally {
     await browser?.close();
-    if (app.pid) {
-      try {
-        process.kill(-app.pid, "SIGTERM");
-      } catch {
-        /* already stopped */
-      }
-      await Promise.race([
-        new Promise<void>((done) => app.once("exit", () => done())),
-        delay(5000),
-      ]);
-      try {
-        process.kill(-app.pid, "SIGKILL");
-      } catch {
-        /* process group already stopped */
-      }
-    }
-    appLog.end();
+    app.finish(succeeded);
     await client.close();
   }
 }

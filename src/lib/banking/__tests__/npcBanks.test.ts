@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { MONEY_MOVE_COLLECTION } from "../moneyMove";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Corporation } from "@/lib/db/types";
-import type { BankCharter } from "@/lib/db/types/bank";
 import { MODERN_DEPOSIT_CORRIDOR, MODERN_LENDING_CORRIDOR } from "@/lib/banking/regulationQ";
 import { NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
 import { NPC_BANKS_PER_COUNTRY } from "../npcBanks";
@@ -128,6 +129,17 @@ describe("npcBanks", () => {
   }
 
   function wireSpawnToIssueCharter() {
+    const memory = createInMemoryDb();
+    memory.seed(
+      "corporations",
+      Array.from(corpsBySeedKey, ([npcBankSeedKey, corp]) => ({ ...corp, npcBankSeedKey }))
+    );
+    const originalCollection = db.collection.getMockImplementation()!;
+    db.collection.mockImplementation((name: string) =>
+      ["corporations", MONEY_MOVE_COLLECTION].includes(name)
+        ? memory.collection(name)
+        : originalCollection(name)
+    );
     spawnNppCorporation.mockImplementation(
       async (_db: Db, input: { name: string; countryId: string; startingCapital: number }) => {
         // Treasury and HQ follow the seeded country so the real charter path
@@ -144,38 +156,7 @@ describe("npcBanks", () => {
           headquartersState: NPP_CAPITAL_STATES[countryId],
         });
 
-        const priorFindOne = db.collectionMocks.corporations!.findOne.getMockImplementation();
-        db.collectionMocks.corporations!.findOne.mockImplementation(
-          async (filter: Record<string, unknown>) => {
-            if (filter._id && corp._id.equals(filter._id as ObjectId)) {
-              return corp;
-            }
-            if (priorFindOne) return priorFindOne(filter);
-            return null;
-          }
-        );
-
-        db.collectionMocks.corporations!.findOneAndUpdate.mockImplementation(
-          async (
-            _filter: unknown,
-            update: { $inc?: { liquidCapital: number }; $set?: { bankCharter: BankCharter } }
-          ) => {
-            const debit = -(update.$inc?.liquidCapital ?? 0);
-            corp.liquidCapital -= debit;
-            corp.bankCharter = update.$set?.bankCharter;
-            return { ...corp };
-          }
-        );
-
-        db.collectionMocks.corporations!.updateOne.mockImplementation(
-          async (_filter: unknown, update: { $set?: { npcBankSeedKey?: string } }) => {
-            if (update.$set?.npcBankSeedKey) {
-              corp.npcBankSeedKey = update.$set.npcBankSeedKey;
-              corpsBySeedKey.set(update.$set.npcBankSeedKey, corp);
-            }
-            return { matchedCount: 1, modifiedCount: 1 };
-          }
-        );
+        await memory.collection("corporations").insertOne({ ...corp });
 
         return {
           corporationId: corp._id.toString(),
@@ -325,83 +306,25 @@ describe("npcBanks", () => {
         makeCorp({ countryId: "RU", name: "Volga Savings Bank" })
       );
 
-      let lastDebit: number | undefined;
-      let lastLiquidAfter: number | undefined;
-
-      spawnNppCorporation.mockImplementation(
-        async (_db: Db, input: { name: string; countryId: string; startingCapital: number }) => {
-          expect(input.countryId).toBe("US");
-          expect(input.startingCapital).toBe(requirement * 3);
-          const corp = makeCorp({
-            _id: new ObjectId(),
-            name: input.name,
-            liquidCapital: input.startingCapital,
-            liquidCurrencyCode: "USD",
-          });
-
-          db.collectionMocks.corporations!.findOne.mockImplementation(
-            async (filter: Record<string, unknown>) => {
-              if (typeof filter.npcBankSeedKey === "string") {
-                return corpsBySeedKey.get(filter.npcBankSeedKey) ?? null;
-              }
-              if (filter.name && filter.countryId) {
-                for (const c of corpsBySeedKey.values()) {
-                  if (c.name === filter.name && c.countryId === filter.countryId) return c;
-                }
-                return null;
-              }
-              if (filter._id && corp._id.equals(filter._id as ObjectId)) return corp;
-              return null;
-            }
-          );
-
-          db.collectionMocks.corporations!.findOneAndUpdate.mockImplementation(
-            async (
-              _filter: unknown,
-              update: { $inc?: { liquidCapital: number }; $set?: { bankCharter: BankCharter } }
-            ) => {
-              lastDebit = update.$inc?.liquidCapital;
-              corp.liquidCapital += lastDebit ?? 0;
-              lastLiquidAfter = corp.liquidCapital;
-              corp.bankCharter = update.$set?.bankCharter;
-              return { ...corp };
-            }
-          );
-
-          db.collectionMocks.corporations!.updateOne.mockImplementation(
-            async (_f: unknown, update: { $set?: { npcBankSeedKey?: string } }) => {
-              if (update.$set?.npcBankSeedKey) {
-                corp.npcBankSeedKey = update.$set.npcBankSeedKey;
-                corpsBySeedKey.set(update.$set.npcBankSeedKey, corp);
-              }
-              return { matchedCount: 1, modifiedCount: 1 };
-            }
-          );
-
-          return {
-            corporationId: corp._id.toString(),
-            sequentialId: 1,
-            name: input.name,
-            type: "financial" as const,
-            countryId: "US",
-            headquartersState: "DC",
-            startingCapital: input.startingCapital,
-            startingRevenue: 1000,
-            sectorId: new ObjectId().toString(),
-            nppId: new ObjectId().toString(),
-            nppName: "NPP Banker",
-            tickerSymbol: "FNB",
-          };
-        }
-      );
+      wireSpawnToIssueCharter();
 
       const { seedNpcBanks } = await importNpcBanks();
       const result = await seedNpcBanks(db as unknown as Db);
 
       expect(result.created).toBe(2);
-      expect(lastDebit).toBe(-requirement);
-      expect(lastLiquidAfter).toBe(requirement * 2);
-      expect(db.collectionMocks.corporations!.findOneAndUpdate).toHaveBeenCalled();
+      const created = await db.collection("corporations").find({ countryId: "US" }).toArray();
+      expect(created).toHaveLength(2);
+      for (const corp of created)
+        expect(corp).toMatchObject({
+          liquidCapital: requirement * 2,
+          bankCharter: { status: "active", cashReserves: requirement },
+        });
+      const receipts = await db
+        .collection(MONEY_MOVE_COLLECTION)
+        .find({ kind: "bank_charter_capital" })
+        .toArray();
+      expect(receipts).toHaveLength(2);
+      expect(receipts.every((row: { status: string }) => row.status === "applied")).toBe(true);
     });
   });
 

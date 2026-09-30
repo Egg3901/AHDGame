@@ -294,7 +294,7 @@ describe("banking charter", () => {
   describe("issueCharter", () => {
     function charterWorld(corp: Corporation) {
       const memory = createInMemoryDb();
-      memory.seed("corporations", [corp]);
+      memory.seed("corporations", [{ ...corp }]);
       memory.seed("gameConfig", [
         { _id: "default", privateBankingEnabled: true, playerAdvancedBankChartersEnabled: true },
       ]);

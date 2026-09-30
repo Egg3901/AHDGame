@@ -362,7 +362,7 @@ describe("BankingHubClient", () => {
       fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
         target: { value: "500" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Deposit savings", exact: true }));
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings" }));
       try {
         await waitFor(() => expect(reads).toBe(2));
         await waitFor(() =>
