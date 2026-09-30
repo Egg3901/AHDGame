@@ -446,7 +446,11 @@ class InMemoryCollection {
 
   docs: Doc[] = [];
 
-  constructor(public name: string) {}
+  constructor(
+    public name: string,
+    /** Owning database, for stages that read another collection ($unionWith). */
+    private readonly owner?: InMemoryDb
+  ) {}
 
   async findOne(filter: Doc = {}): Promise<Doc | null> {
     const found = this.docs.find((d) => matchesFilter(d, filter));
@@ -655,10 +659,18 @@ class InMemoryCollection {
    * The pipeline subset the banking passes use: `$match`, `$group` with
    * `$sum` / `$min` / `$max` / `$avg` / `$first` / `$last` over a field or a
    * constant, `$project` with 1/0 and `"$field"` aliases, `$sort`, `$limit`,
-   * `$count`. Anything else throws, so a test never passes on a stage the
+   * `$count`, `$unionWith`. Anything else throws, so a test never passes on a stage the
    * adapter quietly ignored.
    */
   aggregate(pipeline: Doc[] = []) {
+    return {
+      toArray: async () => this.runPipeline(pipeline),
+      next: async () => this.runPipeline(pipeline)[0] ?? null,
+    };
+  }
+
+  /** Synchronous pipeline evaluation shared by `aggregate` and `$unionWith`. */
+  runPipeline(pipeline: Doc[] = []): Doc[] {
     const run = (): Doc[] => {
       let rows: Doc[] = this.docs.map((d) => ({ ...d }));
       for (const stage of pipeline) {
@@ -783,16 +795,25 @@ class InMemoryCollection {
           case "$count":
             rows = [{ [spec as unknown as string]: rows.length }];
             break;
+          case "$unionWith": {
+            // Both forms: a bare collection name, or { coll, pipeline }.
+            const collName = typeof spec === "string" ? spec : (spec.coll as string);
+            const subPipeline = typeof spec === "string" ? [] : ((spec.pipeline as Doc[]) ?? []);
+            if (!this.owner) {
+              throw new Error(
+                "inMemoryDb: $unionWith needs a collection created through InMemoryDb"
+              );
+            }
+            rows = rows.concat(this.owner.collection(collName).runPipeline(subPipeline));
+            break;
+          }
           default:
             throw new Error(`inMemoryDb: aggregate stage ${op} is not implemented`);
         }
       }
       return rows;
     };
-    return {
-      toArray: async () => run(),
-      next: async () => run()[0] ?? null,
-    };
+    return run();
   }
 
   /**
@@ -846,7 +867,7 @@ export class InMemoryDb {
   collection(name: string): InMemoryCollection {
     let existing = this.collections.get(name);
     if (!existing) {
-      existing = new InMemoryCollection(name);
+      existing = new InMemoryCollection(name, this);
       this.collections.set(name, existing);
     }
     return existing;
