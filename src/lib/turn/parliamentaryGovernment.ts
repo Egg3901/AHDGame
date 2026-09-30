@@ -1,3 +1,4 @@
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 /**
  * Prime ministers, government formation and no-confidence votes in parliamentary
  * countries (UK, Japan, Germany and others). Seats are tallied by party
@@ -30,6 +31,7 @@ import type {
   CareerEvent,
   OfficeType,
   BillStatus,
+  Bill,
 } from "@/lib/db/types";
 import type { Coalition } from "@/lib/db/types/coalition";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
@@ -579,7 +581,7 @@ export async function appointPrimeMinister(
     nppId = null;
     characterName = pinnedPlayer.name;
   }
-  const activeGameState = await getGameState();
+  const activeGameState = preset ? await getGameState().catch(() => null) : await getGameState();
   const activePreset = preset ?? activeGameState?.preset;
   // Capture the outgoing head of government BEFORE any clears so we only
   // announce a genuinely new appointment. Re-appointing the sitting holder
@@ -596,6 +598,7 @@ export async function appointPrimeMinister(
       ? await db
           .collection<Character>("characters")
           .findOne({ _id: priorPmCharacterId }, { projection: { party: 1, careerHistory: 1 } })
+          .catch(() => null)
       : null;
 
   // Clear cabinet
@@ -1724,6 +1727,14 @@ export async function unformGovernmentAndVacatePM(
 
   const clearPM = { $set: { currentOffice: null, updatedAt: now } };
   const execKeyVacate = getExecutiveOfficeKey(countryId);
+  const departingPlayers = await db
+    .collection<Character>("characters")
+    .find(
+      { countryId, "currentOffice.type": execKeyVacate },
+      { projection: { party: 1, careerHistory: 1 } }
+    )
+    .toArray()
+    .catch(() => []);
   await Promise.all([
     db
       .collection<Character>("characters")
@@ -1732,6 +1743,23 @@ export async function unformGovernmentAndVacatePM(
       .collection<NPP>("npps")
       .updateMany({ "currentOffice.type": execKeyVacate, countryId }, clearPM),
   ]);
+  await Promise.all(
+    departingPlayers.map((player) =>
+      captureOfficeTransition({
+        db,
+        officeType: execKeyVacate,
+        transitionType: "lost",
+        partyId: player.party,
+        selectionMethod:
+          reason === "post-election" || reason === "lost-seat" ? "election" : "removal",
+        tenureTurns:
+          existing.formedTurn != null ? Math.max(0, currentTurn - existing.formedTurn) : undefined,
+        careerStage: player.careerHistory?.length ?? 0,
+        nationId: countryId,
+        turn: currentTurn,
+      })
+    )
+  );
 }
 
 /**
@@ -1911,6 +1939,14 @@ export async function failInProgressBills(
   const lowerChamberKey = getCountryConfig(countryId).legislature.lowerChamber.key;
   if (!lowerChamberKey) return 0;
 
+  const telemetryBills = await db
+    .collection<Bill>("bills")
+    .find(
+      { countryId, currentChamber: lowerChamberKey, status: { $in: LOWER_CHAMBER_FAIL_STATUSES } },
+      { projection: { status: 1, category: 1, "provisions.type": 1 } }
+    )
+    .toArray()
+    .catch(() => []);
   const result = await db.collection("bills").updateMany(
     {
       countryId,
@@ -1919,6 +1955,41 @@ export async function failInProgressBills(
     },
     { $set: { status: "failed", failedAt: now, updatedAt: now } }
   );
+  if (result.modifiedCount > 0 && telemetryBills.length > 0) {
+    const [committed, gameState] = await Promise.all([
+      db
+        .collection<Bill>("bills")
+        .find(
+          { _id: { $in: telemetryBills.map((bill) => bill._id) }, status: "failed", failedAt: now },
+          { projection: { _id: 1 } }
+        )
+        .toArray()
+        .catch(() => []),
+      db
+        .collection<{ _id: string; currentTurn?: number }>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } })
+        .catch(() => null),
+    ]);
+    const committedIds = new Set(committed.map((bill) => bill._id.toString()));
+    await Promise.all(
+      telemetryBills
+        .filter((bill) => committedIds.has(bill._id.toString()))
+        .map((bill) =>
+          captureBillStatusChanged({
+            db,
+            billId: bill._id.toString(),
+            fromStatus: bill.status,
+            toStatus: "failed",
+            scope: "national",
+            chamber: lowerChamberKey,
+            category: bill.category,
+            provisionFamily: bill.provisions?.[0]?.type,
+            nationId: countryId,
+            turn: gameState?.currentTurn ?? 0,
+          })
+        )
+    );
+  }
 
   return result.modifiedCount;
 }

@@ -125,6 +125,181 @@ const ACTION_VERBS = new Set([
   "wire",
 ]);
 
+// Route vocabulary is fixed here: arbitrary slugs, option text and request
+// content never become event properties.
+const DEPTH_ACTION_SEGMENTS = new Set([
+  "auto-join",
+  "abandon",
+  "agenda",
+  "approval",
+  "assign",
+  "assign-branch",
+  "back",
+  "bid",
+  "blacklist",
+  "build",
+  "bulk",
+  "bulk-org",
+  "campaigners",
+  "capacity",
+  "capital-injection",
+  "caretaker",
+  "cash",
+  "caucuses",
+  "challenge",
+  "charter",
+  "consolidate",
+  "decision",
+  "defence-contracts",
+  "detente",
+  "discount-window",
+  "discussion",
+  "dissolve",
+  "dividend-floor",
+  "dividends",
+  "draw-cap",
+  "embargoes",
+  "escrow-withdraw",
+  "escalate",
+  "exchange",
+  "factories",
+  "fill",
+  "formalize",
+  "fund-direction",
+  "go-public",
+  "gotv",
+  "growth",
+  "hero",
+  "hostile-takeover",
+  "index-petition",
+  "influence",
+  "interact",
+  "issue",
+  "join-requests",
+  "landesliste",
+  "legal-structure",
+  "lending-profile",
+  "list",
+  "listings",
+  "lobby",
+  "loans",
+  "mandate",
+  "margin",
+  "members",
+  "motions",
+  "name",
+  "nominate",
+  "offers",
+  "orders",
+  "parent-bond-payoff",
+  "platform",
+  "play",
+  "policy",
+  "positions",
+  "posture",
+  "pricing",
+  "priority-region",
+  "private-invites",
+  "privatize",
+  "profit-split",
+  "proposals",
+  "ps-investment",
+  "purge",
+  "rate",
+  "rates",
+  "recapitalize",
+  "recruit",
+  "refinance",
+  "registration-drive",
+  "release",
+  "relocate",
+  "remove-ceo",
+  "rename",
+  "request",
+  "restructure",
+  "resign-ceo",
+  "ruleset",
+  "schedule",
+  "sectors",
+  "self-issue",
+  "settings",
+  "shareholder-address",
+  "slate",
+  "spin-off",
+  "stockpile",
+  "strategy",
+  "subsidiary",
+  "supply-agreements",
+  "supply-listings",
+  "suppression",
+  "tariffs",
+  "tax",
+  "terms",
+  "ticker",
+  "treasury-draw",
+  "treasury-plan",
+  "union-busting",
+  "unlist",
+  "unlock",
+  "upstream",
+  "wage",
+  "whip",
+]);
+
+type DepthFamily = "party" | "corporation" | "market" | "battle" | "diplomacy" | "crisis";
+
+function depthFamilyFor(segments: string[]): DepthFamily | undefined {
+  if (segments.includes("crises") || segments.includes("crisis")) return "crisis";
+  if (segments.includes("parties") || segments.includes("party")) return "party";
+  if (
+    segments.some((segment) =>
+      ["battle", "battles", "combat", "offensive", "offensives"].includes(segment)
+    )
+  )
+    return "battle";
+  if (
+    segments.some((segment) =>
+      [
+        "forex",
+        "commodities",
+        "shares",
+        "bonds",
+        "stock-exchange",
+        "index-funds",
+        "investment-funds",
+      ].includes(segment)
+    )
+  )
+    return "market";
+  if (
+    segments.some((segment) =>
+      ["corporation", "corporations", "national-corporation"].includes(segment)
+    )
+  )
+    return "corporation";
+  if (
+    segments.some((segment) =>
+      [
+        "world",
+        "intorg",
+        "imf",
+        "diplomacy",
+        "diplomatic",
+        "foreign-affairs",
+        "treaties",
+        "treaty",
+        "relations",
+        "trade",
+        "conflicts",
+        "conflict",
+        "peace",
+      ].includes(segment)
+    )
+  )
+    return "diplomacy";
+  return undefined;
+}
+
 const ELECTION_TYPES = new Set([
   "president",
   "presidential",
@@ -173,6 +348,9 @@ const ELECTION_TYPES = new Set([
 const ACTION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const NON_ACTION_PATH_SEGMENTS = new Set([
   "check",
+  "forecast",
+  "simulate",
+  "dry-run",
   "lookup",
   "preview",
   "query",
@@ -210,6 +388,7 @@ export interface PlayerActionRoute {
     action_type: string;
     phase: string;
   };
+  depth_family?: DepthFamily;
   campaign?: {
     campaign_id: string;
   };
@@ -241,6 +420,8 @@ function entityIdFromPath(pathname: string): string | undefined {
 function actionTypeFor(segments: string[], method: string): string {
   const action = [...segments].reverse().find((segment) => ACTION_VERBS.has(segment));
   if (action) return action;
+  const depthAction = [...segments].reverse().find((segment) => DEPTH_ACTION_SEGMENTS.has(segment));
+  if (depthAction) return depthAction.replaceAll("-", "_");
   if (segments.includes("home-state-surge")) return "home_state_surge";
   if (segments.includes("state-attack")) return "state_attack";
   if (segments.includes("campaigns") || segments.includes("campaign")) return "campaign";
@@ -253,6 +434,13 @@ function actionTypeFor(segments: string[], method: string): string {
 
 function actionDomainFor(segments: string[]): string {
   const root = segments[1] ?? "";
+  if (segments.includes("crises")) return "crisis";
+  if (
+    segments.some((segment) =>
+      ["battle", "battles", "combat", "offensive", "offensives", "military"].includes(segment)
+    )
+  )
+    return "military";
   if (root === "elections" || root === "campaigns" || root === "canvassing") return "election";
   if (root === "congress" || root === "impeachments" || root === "whitehouse") return "legislation";
   if (root === "bonds" || root === "banking" || root === "forex" || root === "portfolio")
@@ -287,6 +475,8 @@ function actionDomainFor(segments: string[]): string {
     return "legislation";
   if (segments.includes("election") || segments.includes("elections")) return "election";
   if (segments.includes("executive") || segments.includes("cabinet")) return "government";
+  if (segments.includes("parties") || segments.includes("party")) return "politics";
+  if (segments.includes("national-corporation")) return "economy";
   if (["country", "uk"].includes(root)) return "government";
   if (["state", "states", "governors", "officials", "npps"].includes(root)) return "government";
   if (["campaigns", "charters", "debates", "events", "parties", "unions"].includes(root))
@@ -309,9 +499,25 @@ function entityTypeFor(segments: string[], domain: string): string {
     "campaign",
     "fund",
     "office",
+    "crisis",
+    "battle",
+    "order",
+    "listing",
+    "commodity",
+    "treaty",
   ];
-  const entity = segments.find((segment) => known.includes(segment.replace(/s$/, "")));
-  if (entity) return entity.replace(/s$/, "");
+  if (segments.includes("crises")) return "crisis";
+  const singular = (segment: string) =>
+    segment === "parties"
+      ? "party"
+      : segment === "commodities"
+        ? "commodity"
+        : segment.replace(/s$/, "");
+  const entity = [...segments]
+    .reverse()
+    .map(singular)
+    .find((segment) => known.includes(segment));
+  if (entity) return entity;
   if (domain === "election") return "election";
   if (domain === "legislation") return "bill";
   if (domain === "finance") return "account";
@@ -323,7 +529,8 @@ function entityTypeFor(segments: string[], domain: string): string {
 function scopeFor(segments: string[], root: string): string {
   if (segments.includes("region") || segments.includes("state") || segments.includes("district"))
     return "regional";
-  if (root === "world" || segments.includes("conflicts")) return "world";
+  if (root === "world" || root === "intorg" || root === "imf" || segments.includes("conflicts"))
+    return "world";
   if (root === "country" || ["uk", "de", "ie", "jp", "ng", "cn", "ru", "br"].includes(root))
     return "nation";
   return "entity";
@@ -338,6 +545,7 @@ export function classifyPlayerActionRoute(
   if (!pathname.startsWith("/api/") || !ACTION_METHODS.has(method)) return null;
   const root = segments[1] ?? "";
   if (!PLAYER_ACTION_API_ROOTS.has(root)) return null;
+  if (segments.some((segment) => ["admin", "bot", "public"].includes(segment))) return null;
   if (
     root === "settings" &&
     !segments.some((segment) => ["resign", "resign-all"].includes(segment))
@@ -347,7 +555,26 @@ export function classifyPlayerActionRoute(
   const action_domain = actionDomainFor(segments);
   const action_type = actionTypeFor(segments, method);
   const entity_type = entityTypeFor(segments, action_domain);
-  const id = entityIdFromPath(pathname);
+  const partyIndex = segments.findIndex((segment) => segment === "parties" || segment === "party");
+  const partyId = partyIndex >= 0 ? pathname.split("/")[partyIndex + 2] : undefined;
+  const rawSegments = pathname.split("/").filter(Boolean);
+  const entityIndex = segments.reduce(
+    (index, segment, current) =>
+      segment === entity_type ||
+      segment === `${entity_type}s` ||
+      (entity_type === "party" && segment === "parties")
+        ? current
+        : index,
+    -1
+  );
+  const entityPathId = rawSegments[entityIndex + 1];
+  const id =
+    (entityIndex >= 0 && entityPathId && (OBJECT_ID.test(entityPathId) || UUID.test(entityPathId))
+      ? entityPathId
+      : undefined) ??
+    (entityIndex < 0 ? entityIdFromPath(pathname) : undefined) ??
+    (entity_type === "party" && partyId && /^\d{1,10}$/.test(partyId) ? partyId : undefined);
+  const depth_family = depthFamilyFor(segments);
   const nation = root === "country" ? segments[2]?.toUpperCase() : root.toUpperCase();
   const nation_id = nation && NATION_ID.test(nation) ? nation : undefined;
   const campaignId = root === "campaigns" ? segments[2] : undefined;
@@ -407,6 +634,7 @@ export function classifyPlayerActionRoute(
     action_type,
     scope: scopeFor(segments, root),
     entity_type,
+    ...(depth_family ? { depth_family } : {}),
     ...(id ? { entity_id: id } : {}),
     ...(nation_id ? { nation_id } : {}),
     ...(election ? { election } : {}),
@@ -591,6 +819,157 @@ async function campaignElectionContext(
   };
 }
 
+function depthActionProperties(
+  family: DepthFamily,
+  pathname: string,
+  body: Record<string, unknown> | null
+): Record<string, string> {
+  const segments = getSegments(pathname);
+  if (family === "party") {
+    const groups: Array<[string, string[]]> = [
+      ["leadership", ["leadership", "election"]],
+      ["conference", ["conference", "committee"]],
+      ["caucus", ["caucuses"]],
+      ["treasury", ["treasury", "treasury-plan", "donate", "send", "transfer", "tax"]],
+      [
+        "organization",
+        [
+          "bulk-org",
+          "registration-drive",
+          "suppression",
+          "ps-investment",
+          "gotv",
+          "priority-region",
+        ],
+      ],
+      ["campaign", ["campaigners", "slate"]],
+      ["membership", ["join", "leave", "join-requests", "recruitment", "purge"]],
+    ];
+    return {
+      activity_group:
+        groups.find(([, tokens]) => tokens.some((token) => segments.includes(token)))?.[0] ??
+        "administration",
+    };
+  }
+  if (family === "corporation") {
+    return {
+      activity_group: segments.includes("bank")
+        ? "banking"
+        : segments.includes("sectors")
+          ? "production"
+          : segments.includes("subsidiary")
+            ? "subsidiary"
+            : segments.includes("ceo") || segments.includes("votes")
+              ? "governance"
+              : segments.includes("supply-agreements") || segments.includes("supply-listings")
+                ? "supply"
+                : "administration",
+    };
+  }
+  if (family === "market") {
+    return {
+      instrument_type: segments.includes("forex")
+        ? "currency"
+        : segments.includes("commodities")
+          ? "commodity"
+          : segments.includes("bonds")
+            ? "bond"
+            : segments.includes("index-funds") || segments.includes("investment-funds")
+              ? "fund"
+              : "equity",
+    };
+  }
+  if (family === "crisis")
+    return {
+      decision_type:
+        body?.decline === true
+          ? "decline"
+          : typeof body?.pctGdp === "number"
+            ? "aid_pledge"
+            : "decision",
+    };
+  if (family === "battle")
+    return { command_type: segments.includes("auto-join") ? "standing_order" : "offensive" };
+  return {
+    activity_group: segments.includes("peace")
+      ? "peace"
+      : segments.includes("trade")
+        ? "trade"
+        : segments.includes("central-bank")
+          ? "central_bank"
+          : segments.includes("international-organizations") || segments.includes("intorg")
+            ? "international_organization"
+            : "international_relations",
+  };
+}
+
+function depthEntityProperties(
+  family: DepthFamily,
+  body: Record<string, unknown> | null,
+  result: Record<string, unknown> | null,
+  pathname: string
+): Record<string, string> {
+  const properties: Record<string, string> = {};
+  const idFields: Array<[string, string]> =
+    family === "corporation"
+      ? [["corporationId", "corporation_id"]]
+      : family === "market"
+        ? [
+            ["corporationId", "corporation_id"],
+            ["orderId", "order_id"],
+            ["listingId", "listing_id"],
+          ]
+        : family === "battle" || family === "diplomacy"
+          ? [
+              ["conflictId", "conflict_id"],
+              ["theaterId", "conflict_id"],
+            ]
+          : family === "crisis"
+            ? [["crisisId", "crisis_id"]]
+            : [];
+  for (const [field, property] of idFields) {
+    const value = result?.[field] ?? body?.[field];
+    if (typeof value === "string" && (OBJECT_ID.test(value) || UUID.test(value)))
+      properties[property] = value;
+  }
+  const segments = pathname.split("/").filter(Boolean);
+  const partyIndex = segments.findIndex((segment) => segment === "parties" || segment === "party");
+  const partyId = segments[partyIndex + 1];
+  if (
+    family === "party" &&
+    partyIndex >= 0 &&
+    partyId &&
+    (/^\d{1,10}$/.test(partyId) || OBJECT_ID.test(partyId))
+  )
+    properties.target_party_id = partyId;
+  const targetNation = result?.targetCountry ?? body?.targetCountry;
+  if (
+    (family === "battle" || family === "diplomacy") &&
+    typeof targetNation === "string" &&
+    NATION_ID.test(targetNation)
+  )
+    properties.target_nation_id = targetNation;
+  return properties;
+}
+
+/** Passive onboarding and cosmetic account edits do not activate a character. */
+function isMeaningfulGameAction(route: PlayerActionRoute, actionType: string): boolean {
+  if (route.action_domain === "onboarding") return false;
+  if (route.action_domain !== "character") return true;
+  return [
+    "resign",
+    "retire",
+    "transfer",
+    "travel",
+    "train",
+    "invest",
+    "donate",
+    "join",
+    "leave",
+    "vote",
+  ].includes(actionType);
+}
+
 async function trackActionResponse(
   route: PlayerActionRoute,
   response: Response,
@@ -616,7 +995,7 @@ async function trackActionResponse(
   let resultBody: Record<string, unknown> | null = null;
   if (response.ok) {
     try {
-      resultBody = await response.clone().json();
+      resultBody = await response.json();
     } catch {
       // Mutation endpoints may return no JSON body.
     }
@@ -632,7 +1011,12 @@ async function trackActionResponse(
 
   const entity = nestedRecord(resultBody?.[route.entity_type]);
   const returnedId =
-    resultBody?.[`${route.entity_type}Id`] ?? entity?.id ?? entity?._id ?? resultBody?.id;
+    resultBody?.[`${route.entity_type}Id`] ??
+    entity?.id ??
+    entity?._id ??
+    resultBody?.id ??
+    body?.[`${route.entity_type}Id`] ??
+    (route.entity_type === "battle" ? body?.theaterId : undefined);
   if (
     !route.entity_id &&
     typeof returnedId === "string" &&
@@ -646,7 +1030,21 @@ async function trackActionResponse(
     ...base,
     ...(spend ?? {}),
   });
-  if (context.characterId && route.action_domain !== "onboarding") {
+  if (route.depth_family) {
+    const marketSide = body?.type === "buy" || body?.type === "sell" ? body.type : undefined;
+    await captureProductEvent(`${route.depth_family}_action_succeeded`, {
+      ...base,
+      ...spend,
+      ...depthEntityProperties(route.depth_family, body, resultBody, route.pathname),
+      ...depthActionProperties(route.depth_family, route.pathname, body),
+      party_id: safePartyId(context.partyId) ?? "unknown",
+      ...(marketSide && route.depth_family === "market" ? { order_side: marketSide } : {}),
+      ...((safeRegionId(resultBody) ?? safeRegionId(body))
+        ? { target_region_id: safeRegionId(resultBody) ?? safeRegionId(body)! }
+        : {}),
+    });
+  }
+  if (context.characterId && isMeaningfulGameAction(route, base.action_type)) {
     await captureFirstMeaningfulAction(context.characterId, {
       action_domain: route.action_domain,
       action_type: base.action_type,
@@ -710,17 +1108,20 @@ export function installPlayerActionAnalytics(): () => void {
       ? classifyPlayerActionRoute(request.pathname, init?.method ?? request.method)
       : null;
     const shouldTrack =
-      route !== null &&
-      getStoredConsent() === "accepted" &&
-      !!currentContext.userId &&
-      !currentContext.isPrivileged;
+      route !== null && getStoredConsent() === "accepted" && !!currentContext.userId;
     const bodyPromise = shouldTrack ? readRequestBody(input, init) : null;
     const response = await delegate(input, init);
     if (route && shouldTrack) {
+      let observedResponse: Response;
+      try {
+        observedResponse = response.clone();
+      } catch {
+        return response;
+      }
       void (async () => {
         // Let body inspection share the request clone opened before fetch sends it.
         const body = await bodyPromise;
-        await trackActionResponse(route, response, body, currentContext);
+        await trackActionResponse(route, observedResponse, body, currentContext);
       })().catch(() => {
         // Analytics must not affect the API response or the game action.
       });

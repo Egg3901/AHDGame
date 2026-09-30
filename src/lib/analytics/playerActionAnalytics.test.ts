@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   consent: "accepted" as "accepted" | "rejected" | null,
@@ -22,6 +22,7 @@ function makeWindow(fetch: typeof window.fetch) {
 }
 
 describe("player action analytics", () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -264,6 +265,47 @@ describe("player action analytics", () => {
     uninstall();
   });
 
+  it("keeps response truth when the caller consumes it before request inspection finishes", async () => {
+    const delegate = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: "private text" }), { status: 200 })
+      );
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    setPlayerActionContext({ userId: "opaque-account-id", characterId: "character-id" });
+    const uninstall = installPlayerActionAnalytics();
+    const request = new Request("https://game.test/api/congress/bills", {
+      method: "POST",
+      body: "{}",
+    });
+    const clonedRequest = request.clone();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(clonedRequest, "json").mockImplementation(async () => {
+      await gate;
+      return {};
+    });
+    vi.spyOn(request, "clone").mockReturnValue(clonedRequest);
+    const response = await window.fetch(request);
+    await response.json();
+    release();
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "player_action_rejected",
+        expect.objectContaining({ failure_code: "action_rejected" })
+      )
+    );
+    expect(state.captureProductEvent).not.toHaveBeenCalledWith(
+      "player_action_succeeded",
+      expect.anything()
+    );
+    uninstall();
+  });
+
   it("ignores mutations sent to another origin", async () => {
     const delegate = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("window", makeWindow(delegate));
@@ -286,6 +328,11 @@ describe("player action analytics", () => {
       classifyPlayerActionRoute("/api/elections/0123456789abcdef01234567/results", "GET")
     ).toBeNull();
     expect(classifyPlayerActionRoute("/api/admin/users", "POST")).toBeNull();
+    expect(
+      classifyPlayerActionRoute("/api/country/UK/coalitions/42/admin/chair", "POST")
+    ).toBeNull();
+    expect(classifyPlayerActionRoute("/api/country/US/regime/public", "POST")).toBeNull();
+    expect(classifyPlayerActionRoute("/api/world/bot/actions", "POST")).toBeNull();
     expect(classifyPlayerActionRoute("/api/public/v1/world", "POST")).toBeNull();
     expect(classifyPlayerActionRoute("/api/discord-bot/action", "POST")).toBeNull();
     expect(classifyPlayerActionRoute("/api/settings/theme", "PATCH")).toBeNull();
@@ -313,6 +360,180 @@ describe("player action analytics", () => {
     state.consent = "rejected";
     await window.fetch("/api/congress/bills", { method: "POST", body: "{}" });
     expect(state.captureProductEvent).not.toHaveBeenCalled();
+    uninstall();
+  });
+  it.each([
+    ["/api/country/US/parties/2/registration-drive", "party", "registration_drive"],
+    [
+      "/api/corporations/0123456789abcdef01234567/capital-injection",
+      "corporation",
+      "capital_injection",
+    ],
+    ["/api/corporations/0123456789abcdef01234567/shares/orders", "market", "orders"],
+    ["/api/forex/orders", "market", "orders"],
+    ["/api/country/US/executive/cabinet/defense/battle/auto-join", "battle", "auto_join"],
+    ["/api/country/US/executive/peace/0123456789abcdef01234567", "diplomacy", "post"],
+    ["/api/world/trade/embargoes", "diplomacy", "embargoes"],
+    ["/api/crises/0123456789abcdef01234567/interact", "crisis", "interact"],
+  ])("classifies the depth family of %s", async (path, family, action) => {
+    const { classifyPlayerActionRoute } = await import("./playerActionAnalytics");
+    expect(classifyPlayerActionRoute(path, "POST")).toEqual(
+      expect.objectContaining({ depth_family: family, action_type: action })
+    );
+  });
+
+  it.each([
+    ["/api/country/US/parties/2/donate", "party"],
+    ["/api/corporations/0123456789abcdef01234567/capital-injection", "corporation"],
+    ["/api/forex/orders", "market"],
+    ["/api/country/US/executive/cabinet/defense/battle/declare", "battle"],
+    ["/api/world/trade/embargoes", "diplomacy"],
+    ["/api/crises/0123456789abcdef01234567/interact", "crisis"],
+  ])("captures a successful %s without request or response content", async (path, family) => {
+    const delegate = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          message: "private response",
+          funds: 9000,
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    setPlayerActionContext({
+      userId: "opaque-account-id",
+      characterId: "character-id",
+      nationId: "US",
+      partyId: "2",
+    });
+    const uninstall = installPlayerActionAnalytics();
+    await window.fetch(path, {
+      method: "POST",
+      body: JSON.stringify({
+        amount: 25,
+        type: "buy",
+        text: "private request",
+        optionId: "private option text",
+        theaterId: "abcdef0123456789abcdef01",
+        targetCountry: "DE",
+      }),
+    });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        `${family}_action_succeeded`,
+        expect.objectContaining({
+          resource_type: "funds",
+          resource_amount: 25,
+          nation_id: "US",
+          party_id: "2",
+        })
+      )
+    );
+    const serialized = JSON.stringify(state.captureProductEvent.mock.calls);
+    expect(serialized).not.toContain("private request");
+    expect(serialized).not.toContain("private response");
+    expect(serialized).not.toContain("private option text");
+    if (family === "market")
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "market_action_succeeded",
+        expect.objectContaining({ order_side: "buy" })
+      );
+    uninstall();
+  });
+
+  it("does not report a rejection as a successful depth action or capture forecast reads", async () => {
+    const delegate = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: false, error: "private text" }), { status: 200 })
+      );
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { classifyPlayerActionRoute, installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    expect(
+      classifyPlayerActionRoute("/api/country/US/executive/cabinet/defense/battle/forecast", "POST")
+    ).toBeNull();
+    setPlayerActionContext({ userId: "opaque-account-id", characterId: "character-id" });
+    const uninstall = installPlayerActionAnalytics();
+    await window.fetch("/api/forex/orders", { method: "POST", body: "{}" });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "player_action_rejected",
+        expect.objectContaining({ failure_code: "action_rejected" })
+      )
+    );
+    expect(state.captureProductEvent.mock.calls.map(([event]) => event)).not.toContain(
+      "market_action_succeeded"
+    );
+    uninstall();
+  });
+  it("tracks ordinary player actions by privileged accounts but excludes telemetry and admin endpoints", async () => {
+    const delegate = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { classifyPlayerActionRoute, installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    expect(classifyPlayerActionRoute("/api/analytics/first-meaningful-action", "POST")).toBeNull();
+    expect(classifyPlayerActionRoute("/api/admin/users", "POST")).toBeNull();
+    setPlayerActionContext({
+      userId: "opaque-account-id",
+      characterId: "character-id",
+      isPrivileged: true,
+    });
+    const uninstall = installPlayerActionAnalytics();
+    await window.fetch("/api/country/US/parties/2/donate", { method: "POST", body: "{}" });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "party_action_succeeded",
+        expect.any(Object)
+      )
+    );
+    uninstall();
+  });
+
+  it.each(["/api/character/appearance", "/api/character/biography", "/api/onboarding/complete"])(
+    "does not count %s as meaningful activation",
+    async (path) => {
+      const delegate = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("window", makeWindow(delegate));
+      const { installPlayerActionAnalytics, setPlayerActionContext } =
+        await import("./playerActionAnalytics");
+      setPlayerActionContext({ userId: "opaque-account-id", characterId: "character-id" });
+      const uninstall = installPlayerActionAnalytics();
+      await window.fetch(path, { method: "POST", body: "{}" });
+      await vi.waitFor(() =>
+        expect(state.captureProductEvent).toHaveBeenCalledWith(
+          "player_action_succeeded",
+          expect.any(Object)
+        )
+      );
+      expect(state.captureFirstMeaningfulAction).not.toHaveBeenCalled();
+      uninstall();
+    }
+  );
+  it("uses the created order identifier instead of the parent corporation identifier", async () => {
+    const corporationId = "0123456789abcdef01234567";
+    const orderId = "abcdef0123456789abcdef01";
+    const delegate = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ orderId }), { status: 200 }));
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    setPlayerActionContext({ userId: "opaque-account-id", characterId: "character-id" });
+    const uninstall = installPlayerActionAnalytics();
+    await window.fetch(`/api/corporations/${corporationId}/shares/orders`, {
+      method: "POST",
+      body: "{}",
+    });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "market_action_succeeded",
+        expect.objectContaining({ entity_type: "order", entity_id: orderId })
+      )
+    );
     uninstall();
   });
 });

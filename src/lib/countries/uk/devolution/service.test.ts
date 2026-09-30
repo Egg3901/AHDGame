@@ -1,7 +1,13 @@
 import { ObjectId, type Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
-import { reconcileUKDevolution } from "./service";
+import { reconcileUKDevolution, vacateUKRegionalExecutives } from "./service";
 import { initialUKDevolutionState, type UKDevolutionState } from "./rules";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 function fixture(stored: UKDevolutionState | null, policy: object | null, legacyRegion?: string) {
   const writes: Array<{ collection: string; filter: unknown; update: unknown }> = [];
@@ -10,7 +16,13 @@ function fixture(stored: UKDevolutionState | null, policy: object | null, legacy
   const db = {
     collection: (name: string) => ({
       findOne: vi.fn(async () =>
-        name === "ukDevolution" ? stored : name === "statePolicies" ? policy : null
+        name === "ukDevolution"
+          ? stored
+          : name === "statePolicies"
+            ? policy
+            : name === "gameState"
+              ? { currentTurn: 42 }
+              : null
       ),
       find: () => ({
         toArray: async () =>
@@ -29,6 +41,7 @@ function fixture(stored: UKDevolutionState | null, policy: object | null, legacy
 
 describe("UK devolution reconciliation", () => {
   it("preserves already seated leaders as an alternate-history institution", async () => {
+    vi.mocked(captureOfficeTransition).mockClear();
     const { db, writes } = fixture(null, null, "SCO");
     const state = await reconcileUKDevolution(db, 1991, [], new Date());
     expect(state.regions.SCO.active).toBe(true);
@@ -92,5 +105,47 @@ describe("UK devolution reconciliation", () => {
       "currentOffice.state": { $in: ["SCO", "WAL", "NIR", "LON"] },
     });
     expect(writes.at(-1)?.collection).toBe("ukDevolution");
+  });
+});
+
+describe("abolished regional governor telemetry", () => {
+  it("captures the inactive region holder after clearing while preserving active offices", async () => {
+    vi.mocked(captureOfficeTransition).mockClear();
+    const db = createInMemoryDb() as unknown as Db;
+    const inactive = new ObjectId(),
+      active = new ObjectId();
+    await db
+      .collection<{ _id: string; currentTurn: number }>("gameState")
+      .insertOne({ _id: "current", currentTurn: 42 });
+    await db.collection("characters").insertMany([
+      { _id: inactive, currentOffice: { type: "governor", state: "WAL" } },
+      { _id: active, currentOffice: { type: "governor", state: "SCO" } },
+    ]);
+    await db.collection("electedOfficials").insertMany([
+      { countryId: "UK", officeType: "governor", state: "WAL", characterId: inactive, party: "1" },
+      { countryId: "UK", officeType: "governor", state: "SCO", characterId: active, party: "2" },
+    ]);
+    await vacateUKRegionalExecutives(db, ["WAL"], new Date());
+    expect(
+      (await db.collection("characters").findOne({ _id: inactive }))?.currentOffice
+    ).toBeNull();
+    expect((await db.collection("characters").findOne({ _id: active }))?.currentOffice).toEqual({
+      type: "governor",
+      state: "SCO",
+    });
+    expect(captureOfficeTransition).toHaveBeenCalledTimes(1);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "governor",
+        transitionType: "lost",
+        partyId: "1",
+        selectionMethod: "removal",
+        nationId: "UK",
+        turn: 42,
+      })
+    );
+    vi.mocked(captureOfficeTransition).mockClear();
+    await vacateUKRegionalExecutives(db, ["WAL"], new Date());
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
   });
 });

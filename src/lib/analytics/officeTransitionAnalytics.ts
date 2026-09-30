@@ -24,6 +24,8 @@ const OFFICE_TYPES = new Set([
   "ministerPresident",
   "landtag",
   "deCabinet",
+  "centralBankChair",
+  "ceo",
   "other",
 ]);
 

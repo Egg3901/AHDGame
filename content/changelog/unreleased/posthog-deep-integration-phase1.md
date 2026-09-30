@@ -1,9 +1,10 @@
 ---
 date: 2026-09-30
-title: PostHog Phase 1 analytics
+title: Expanded game analytics
 summary: >-
   Analytics now records completed player actions and confirmed election, bill,
-  office, and conflict outcomes from game results.
+  office, and conflict outcomes from game results. Party, corporation, market,
+  battle, diplomacy, crisis, and economy telemetry is also expanded.
 # Free text. What the change was about: economy, elections, balance, corporations.
 tags: [analytics, elections, legislation, wars]
 # How big this change is, which sets how it is grouped in the release post.

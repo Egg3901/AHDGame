@@ -142,7 +142,8 @@ export async function processPresidentialSuccession(db: Db): Promise<boolean> {
   if (vpRecord.characterId && vpCharacter) {
     const gameState = await db
       .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } });
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+      .catch(() => null);
     await Promise.all([
       captureOfficeTransition({
         db,

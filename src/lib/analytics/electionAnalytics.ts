@@ -102,9 +102,9 @@ export async function captureElectionWon(input: {
   electionType: string;
   partyId: string;
   seatCount: number;
-  voteSharePct: number;
-  marginPct: number;
-  incumbent: boolean;
+  voteSharePct: number | "unknown";
+  marginPct: number | "unknown";
+  incumbent: boolean | "unknown";
   winnerOrdinal?: number;
   nationId?: string;
   turn: number;
@@ -122,9 +122,11 @@ export async function captureElectionWon(input: {
       election_id: input.electionId,
       election_type: safeElectionType(input.electionType),
       party_id: /^[A-Za-z0-9_-]{1,32}$/.test(input.partyId) ? input.partyId : "unknown",
+      office: safeElectionType(input.electionType),
       seat_count: Math.max(0, Math.trunc(input.seatCount)),
-      vote_share_pct: percentage(input.voteSharePct),
-      margin_pct: percentage(input.marginPct),
+      vote_share_pct: input.voteSharePct === "unknown" ? "unknown" : percentage(input.voteSharePct),
+      margin_pct: input.marginPct === "unknown" ? "unknown" : percentage(input.marginPct),
+      margin: input.marginPct === "unknown" ? "unknown" : percentage(input.marginPct),
       incumbent: input.incumbent,
       outcome_source: "server_resolution",
     },

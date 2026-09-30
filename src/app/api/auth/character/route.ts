@@ -1,3 +1,4 @@
+import { rememberCharacterActivation } from "@/lib/analytics/characterActivation";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { withNoStore } from "@/lib/api/withNoStore";
@@ -512,6 +513,14 @@ export async function POST(request: Request) {
         },
         { $set: { characterName: name } }
       );
+    }
+
+    if (parsed.data.analyticsConsent) {
+      await rememberCharacterActivation(db, result.insertedId.toString(), {
+        createdTurn: gameTime.currentTurn,
+        startingNationId: stateDoc.countryId ?? requestedCountryId.toUpperCase(),
+        characterCount: activeCount + 1,
+      });
     }
 
     return NextResponse.json(

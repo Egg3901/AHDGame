@@ -11,6 +11,7 @@ import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { Crisis } from "@/lib/db/types/crisis";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCountryHistoryCollection } from "@/lib/db/collections/countryHistory";
+import { captureWorldDepthPosthog } from "./worldDepthAnalytics";
 import { gameEventEnvelope } from "./gameEventEnvelope";
 import { flushServerPosthog, getServerPosthogClient } from "./serverPosthog";
 
@@ -40,7 +41,20 @@ export async function captureTurnPosthog(input: {
         .collection<FederalBudget>("federalBudget")
         .find(
           {},
-          { projection: { countryId: 1, treasuryBalance: 1, "economicFactors.inflationRate": 1 } }
+          {
+            projection: {
+              countryId: 1,
+              treasuryBalance: 1,
+              economicFactors: 1,
+              gdp: 1,
+              debtToGdpRatio: 1,
+              "debt.principal": 1,
+              "debt.interestRate": 1,
+              "revenue.total": 1,
+              "spending.total": 1,
+              surplus: 1,
+            },
+          }
         )
         .toArray(),
       db
@@ -108,6 +122,17 @@ export async function captureTurnPosthog(input: {
           total_player_wealth: total,
           top_1pct_wealth_share: topShare,
           inflation_rate: budget.economicFactors?.inflationRate ?? 0,
+          gdp: budget.gdp ?? 0,
+          gdp_growth_pct: budget.economicFactors?.gdpGrowth ?? 0,
+          wage_growth_pct: budget.economicFactors?.wageGrowth ?? 0,
+          trade_growth_pct: budget.economicFactors?.tradeGrowth ?? 0,
+          debt_principal: budget.debt?.principal ?? 0,
+          debt_interest_rate: budget.debt?.interestRate ?? 0,
+          debt_to_gdp_ratio: budget.debtToGdpRatio ?? 0,
+          fiscal_revenue: budget.revenue?.total ?? 0,
+          fiscal_spending: budget.spending?.total ?? 0,
+          fiscal_surplus: budget.surplus ?? 0,
+          player_wealth_sample_count: values.length,
           $process_person_profile: false,
         },
       });
@@ -149,6 +174,7 @@ export async function captureTurnPosthog(input: {
         worldEvent("record_wealth", "New player wealth record");
       }
     }
+    await captureWorldDepthPosthog({ db, turn, iteration: input.iteration });
     await flushServerPosthog();
   } catch (error) {
     console.warn("[PostHog] Turn telemetry failed", error);

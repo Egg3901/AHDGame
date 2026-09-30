@@ -28,6 +28,7 @@ import type {
 import type { OfficeType } from "@/lib/db/types/character";
 import type { CountryId } from "@/lib/constants/countries";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { cabinetOfficeTypeForCountry } from "@/lib/actions/officeActionBonus";
 
 /**
  * NPP vote based on party lines: same party as nominee -> for; opposite -> against.
@@ -348,28 +349,29 @@ export async function processCabinetNominationLifecycle(
     .toArray();
 
   const cabinetMemberFilters = expired
-    .filter((nom) => nom.positionId !== "vicePresident" && (nom.countryId ?? "US") === "US")
+    .filter((nom) => nom.positionId !== "vicePresident")
     .map((nom) => ({
       countryId: (nom.countryId ?? "US") as CountryId,
       positionId: nom.positionId,
     }));
-  const cabinetNomineeIds = expired
+  const cabinetNomineeFilters = expired
     .filter((nom) => nom.positionId !== "vicePresident" && nom.nomineeCharacterId)
-    .map((nom) => nom.nomineeCharacterId!);
+    .map((nom) => ({
+      countryId: (nom.countryId ?? "US") as CountryId,
+      characterId: nom.nomineeCharacterId!,
+    }));
   const priorCabinetMembers =
-    cabinetMemberFilters.length > 0 || cabinetNomineeIds.length > 0
+    cabinetMemberFilters.length > 0 || cabinetNomineeFilters.length > 0
       ? await db
           .collection<CabinetMember>("cabinetMembers")
           .find(
             {
               $or: [
                 ...(cabinetMemberFilters.length > 0 ? cabinetMemberFilters : []),
-                ...(cabinetNomineeIds.length > 0
-                  ? [{ countryId: "US" as CountryId, characterId: { $in: cabinetNomineeIds } }]
-                  : []),
+                ...cabinetNomineeFilters,
               ],
             },
-            { projection: { countryId: 1, positionId: 1, characterId: 1, party: 1 } }
+            { projection: { countryId: 1, positionId: 1, characterId: 1, nppId: 1, party: 1 } }
           )
           .toArray()
           .catch(() => [])
@@ -380,7 +382,7 @@ export async function processCabinetNominationLifecycle(
   const priorCabinetByCharacter = new Map(
     priorCabinetMembers
       .filter((member) => member.characterId)
-      .map((member) => [member.characterId!.toString(), member])
+      .map((member) => [`${member.countryId}:${member.characterId!.toString()}`, member])
   );
 
   const notificationInputs: NotificationInput[] = [];
@@ -414,10 +416,12 @@ export async function processCabinetNominationLifecycle(
         await seatConfirmedVicePresident(db, nom, now, currentTurn);
       } else {
         // Confirm: create or replace cabinet member
-        const oldSeatHolder = priorCabinetBySeat.get(`${nom.countryId}:${nom.positionId}`);
+        const oldSeatHolder = priorCabinetBySeat.get(`${nom.countryId ?? "US"}:${nom.positionId}`);
         const nomineeOldSeat = nom.nomineeCharacterId
-          ? priorCabinetByCharacter.get(nom.nomineeCharacterId.toString())
+          ? priorCabinetByCharacter.get(`${nom.countryId ?? "US"}:${nom.nomineeCharacterId}`)
           : undefined;
+        const nominationNation = (nom.countryId ?? "US") as CountryId;
+        const nominationOffice = cabinetOfficeTypeForCountry(nominationNation);
         await db
           .collection<CabinetMember>("cabinetMembers")
           // Country-scoped: position ids are not unique across countries, so an
@@ -499,7 +503,7 @@ export async function processCabinetNominationLifecycle(
               if (nom.nomineeCharacterId && member.characterId?.equals(nom.nomineeCharacterId)) {
                 return false;
               }
-              return !(nom.nomineeMode === "npp" && member.nppId === nom.nomineeNppId);
+              return !(nom.nomineeMode === "npp" && member.nppId?.equals(nom.nomineeNppId!));
             })
             .map((member) => [member._id.toString(), member])
         );
@@ -507,30 +511,30 @@ export async function processCabinetNominationLifecycle(
           [...outgoing.values()].map((member) =>
             captureOfficeTransition({
               db,
-              officeType: "usCabinet",
+              officeType: nominationOffice,
               transitionType: "lost",
               partyId: member.party,
               selectionMethod: "appointment",
               tenureTurns: 0,
               careerStage: 0,
-              nationId: "US",
+              nationId: nominationNation,
               turn: currentTurn,
             })
           )
         );
         const sameOfficeHolder =
           (nom.nomineeCharacterId && oldSeatHolder?.characterId?.equals(nom.nomineeCharacterId)) ||
-          (nom.nomineeMode === "npp" && oldSeatHolder?.nppId === nom.nomineeNppId);
+          (nom.nomineeMode === "npp" && oldSeatHolder?.nppId?.equals(nom.nomineeNppId!));
         if (!sameOfficeHolder) {
           await captureOfficeTransition({
             db,
-            officeType: "usCabinet",
+            officeType: nominationOffice,
             transitionType: "gained",
             partyId: nom.nomineeParty,
             selectionMethod: "appointment",
             tenureTurns: 0,
             careerStage: 0,
-            nationId: "US",
+            nationId: nominationNation,
             turn: currentTurn,
           });
         }

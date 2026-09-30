@@ -2,7 +2,7 @@
  * Integration tests for character creation endpoint.
  * Tests end-to-end character creation flow with mocked database.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { MongoServerError, ObjectId } from "mongodb";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 
@@ -26,6 +26,11 @@ vi.mock("@/lib/achievements", () => ({
 vi.mock("@/lib/time/gameTime", () => ({
   getGameTime: vi.fn().mockResolvedValue({ currentTurn: 42, effectiveNow: new Date() }),
 }));
+
+// Load the large dependency graph outside individual assertion timeouts.
+beforeAll(async () => {
+  await import("../character/route");
+}, 180_000);
 
 describe("POST /api/auth/character - Character Creation", () => {
   const mockUserId = new ObjectId().toString();

@@ -38,6 +38,7 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 import { logger } from "../../observability/logger";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 
 function recoverUnitVotesFromSnapshots(
@@ -92,7 +93,8 @@ async function vacatePresidency(
   db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
   election: Election,
   now: Date,
-  reason: string
+  reason: string,
+  currentTurn: number
 ): Promise<void> {
   await db
     .collection<ElectionVoteTally>("electionVoteTallies")
@@ -104,6 +106,14 @@ async function vacatePresidency(
       { $set: { status: "withdrawn", withdrawnAt: now } }
     );
   const vacateCountryId = election.countryId ?? "US";
+  const departingPlayers = await db
+    .collection<Character>("characters")
+    .find(
+      { countryId: vacateCountryId, "currentOffice.type": { $in: ["president", "vicePresident"] } },
+      { projection: { party: 1, currentOffice: 1, careerHistory: 1 } }
+    )
+    .toArray()
+    .catch(() => []);
   await db.collection<Character>("characters").updateMany(
     {
       countryId: vacateCountryId,
@@ -130,6 +140,20 @@ async function vacatePresidency(
         updatedAt: now,
       } as Record<string, unknown>,
     }
+  );
+  await Promise.all(
+    departingPlayers.map((player) =>
+      captureOfficeTransition({
+        db,
+        officeType: player.currentOffice?.type ?? "president",
+        transitionType: "lost",
+        partyId: player.party,
+        selectionMethod: "election",
+        careerStage: player.careerHistory?.length ?? 0,
+        nationId: vacateCountryId,
+        turn: currentTurn,
+      })
+    )
   );
   console.log(`[Turn] Vacated presidency — election ${election._id} ${reason}`);
 }
@@ -339,7 +363,7 @@ export async function resolvePresidentElection(
     }
 
     if (!totalVotesByUnit || Object.keys(totalVotesByUnit).length === 0) {
-      await vacatePresidency(db, election, now, "resolved with no unit vote data");
+      await vacatePresidency(db, election, now, "resolved with no unit vote data", currentTurn);
       return true;
     }
 
@@ -354,7 +378,7 @@ export async function resolvePresidentElection(
 
     const totalEV = Object.values(electoralVotesByCandidate).reduce((s, v) => s + v, 0);
     if (totalEV === 0) {
-      await vacatePresidency(db, election, now, "resolved with zero electoral votes");
+      await vacatePresidency(db, election, now, "resolved with zero electoral votes", currentTurn);
       return true;
     }
     // Every unit allocates all of its electors, so the allocated sum IS the

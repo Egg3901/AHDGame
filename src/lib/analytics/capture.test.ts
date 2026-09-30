@@ -91,6 +91,26 @@ describe("analytics fan-out", () => {
     });
   });
 
+  it("loads the clock for initial events when only nation context has been supplied", async () => {
+    vi.resetModules();
+    const { captureProductEvent, setProductEventContext } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ iterationId: "beta-3", currentTurn: 22 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    setProductEventContext({ nation_id: "US" });
+    await captureProductEvent("game_visit");
+    expect(fetchMock).toHaveBeenCalledWith("/api/game/turn/status", { cache: "no-store" });
+    expect(state.posthog.capture).toHaveBeenCalledWith("game_visit", {
+      iteration_id: "beta-3",
+      turn_number: 22,
+      nation_id: "US",
+    });
+  });
+
   it("sends nothing to either destination before consent", async () => {
     const { captureProductEvent } = await import("./capture");
     await captureProductEvent("character_created");
@@ -221,6 +241,21 @@ describe("analytics fan-out", () => {
     const { captureFirstMeaningfulAction, rememberNewCharacter } = await import("./capture");
     state.consent = "accepted";
     await identifyPlayer();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          activation: {
+            ...envelope,
+            turns_since_character_creation: 3,
+            starting_nation_id: "US",
+            creation_path: "character_creator",
+            character_count: 1,
+          },
+        }),
+      })
+    );
     rememberNewCharacter("opaque-character-id", 5, {
       startingNationId: "US",
       creationPath: "character_creation_flow",
@@ -245,17 +280,100 @@ describe("analytics fan-out", () => {
         action_type: "propose",
         turns_since_character_creation: 3,
         starting_nation_id: "US",
-        creation_path: "character_creation_flow",
+        creation_path: "character_creator",
         character_count: 1,
       })
     );
     expect(JSON.stringify(state.posthog.capture.mock.calls)).not.toContain("opaque-character-id");
   });
 
+  it("captures a durable claim even if optional browser storage fails", async () => {
+    const { captureFirstMeaningfulAction, rememberNewCharacter } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    rememberNewCharacter("storage-failure-character", 5);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          activation: {
+            ...envelope,
+            turn_number: 99,
+            turns_since_character_creation: 94,
+            starting_nation_id: "US",
+            creation_path: "character_creator",
+            character_count: 1,
+          },
+        }),
+      })
+    );
+    const write = vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("Storage blocked");
+    });
+    await captureFirstMeaningfulAction("storage-failure-character", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "first_meaningful_action",
+      expect.objectContaining({ turn_number: 99 })
+    );
+    write.mockRestore();
+  });
+
+  it("claims a newly created character from another browser without a local anchor", async () => {
+    const { captureFirstMeaningfulAction } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activation: {
+          ...envelope,
+          turns_since_character_creation: 2,
+          starting_nation_id: "US",
+          creation_path: "character_creator",
+          character_count: 1,
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await captureFirstMeaningfulAction("other-browser-character", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    await captureFirstMeaningfulAction("other-browser-character", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "first_meaningful_action",
+      expect.objectContaining({ turns_since_character_creation: 2 })
+    );
+  });
+
   it("keeps first-action anchors for multiple new characters independently", async () => {
     const { captureFirstMeaningfulAction, rememberNewCharacter } = await import("./capture");
     state.consent = "accepted";
     await identifyPlayer();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (_url, options) => ({
+        ok: true,
+        json: async () => ({
+          activation: {
+            ...envelope,
+            turns_since_character_creation: 3,
+            starting_nation_id:
+              JSON.parse(options.body).characterId === "character-one" ? "US" : "UK",
+            creation_path: "character_creator",
+            character_count: JSON.parse(options.body).characterId === "character-one" ? 1 : 2,
+          },
+        }),
+      }))
+    );
     rememberNewCharacter("character-one", 5, { startingNationId: "US", characterCount: 1 });
     rememberNewCharacter("character-two", 6, { startingNationId: "UK", characterCount: 2 });
 

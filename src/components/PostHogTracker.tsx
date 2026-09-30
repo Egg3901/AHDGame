@@ -25,17 +25,7 @@ import {
 } from "@/lib/analytics/playerActionAnalytics";
 import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
 
-function productArea(pathname: string): string | null {
-  if (pathname === "/") return "landing";
-  if (pathname === "/register") return "registration";
-  if (pathname === "/create-character") return "character_creation";
-  if (pathname === "/profile") return "profile";
-  if (pathname.startsWith("/corporation")) return "corporations";
-  if (pathname.startsWith("/bank")) return "banking";
-  if (pathname.startsWith("/news")) return "media";
-  if (pathname.startsWith("/elections")) return "elections";
-  return null;
-}
+import { productArea } from "@/lib/analytics/productArea";
 
 /** Captures only named areas and an opaque account id, never URLs or player text. */
 export function PostHogTracker() {

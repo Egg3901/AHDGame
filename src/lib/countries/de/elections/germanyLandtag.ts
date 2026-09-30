@@ -500,7 +500,12 @@ export function allocateLandtagSeatsToCandidates(
   };
 }
 
-async function sweepStaleLandtagOffice(db: Db, landId: string, now: Date): Promise<void> {
+async function sweepStaleLandtagOffice(
+  db: Db,
+  landId: string,
+  now: Date,
+  currentTurn: number
+): Promise<void> {
   const current = await db
     .collection<ElectedOfficial>("electedOfficials")
     .find({ officeType: "landtag", state: landId }, { projection: { characterId: 1, nppId: 1 } })
@@ -510,12 +515,30 @@ async function sweepStaleLandtagOffice(db: Db, landId: string, now: Date): Promi
   const currentNppIds = current.filter((o) => o.nppId).map((o) => o.nppId!);
   const officeMatch = { "currentOffice.type": "landtag", "currentOffice.state": landId };
 
-  await db.collection<Character>("characters").updateMany(
-    {
-      ...officeMatch,
-      ...(currentCharIds.length > 0 ? { _id: { $nin: currentCharIds } } : {}),
-    },
-    { $set: { currentOffice: null, updatedAt: now } }
+  const departingFilter = {
+    ...officeMatch,
+    ...(currentCharIds.length > 0 ? { _id: { $nin: currentCharIds } } : {}),
+  };
+  const departingPlayers = await db
+    .collection<Character>("characters")
+    .find(departingFilter, { projection: { _id: 1, party: 1, countryId: 1 } })
+    .toArray()
+    .catch(() => []);
+  await db
+    .collection<Character>("characters")
+    .updateMany(departingFilter, { $set: { currentOffice: null, updatedAt: now } });
+  await Promise.all(
+    departingPlayers.map((character) =>
+      captureOfficeTransition({
+        db,
+        officeType: "landtag",
+        transitionType: "lost",
+        selectionMethod: "election",
+        partyId: character.party ?? undefined,
+        nationId: "DE",
+        turn: currentTurn,
+      })
+    )
   );
 
   await db.collection<NPP>("npps").updateMany(
@@ -564,7 +587,7 @@ export async function resolveDELandtagElection(
     await db
       .collection<ElectedOfficial>("electedOfficials")
       .deleteMany({ officeType: "landtag", state: landId });
-    await sweepStaleLandtagOffice(db, landId, now);
+    await sweepStaleLandtagOffice(db, landId, now, currentTurn);
     logger.warn("Landtag", `No vote tally for ${landId} cycle ${election.cycle}`);
     return { winnersAllocated: 0, seatsAllocated: 0 };
   }
@@ -690,7 +713,7 @@ export async function resolveDELandtagElection(
     await action();
   }
 
-  await sweepStaleLandtagOffice(db, landId, now);
+  await sweepStaleLandtagOffice(db, landId, now, currentTurn);
 
   await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
     { _id: tally._id },
@@ -758,37 +781,6 @@ export async function resolveDELandtagElection(
               ]),
         ]);
       })
-  );
-  const winningCharacterIds = new Set(
-    seatResolution.assignments
-      .filter((assignment) => !assignment.candidate.isNPP && assignment.candidate.characterId)
-      .map((assignment) => assignment.candidate.characterId!.toString())
-  );
-  await Promise.all(
-    liveCandidates
-      .filter((candidate) => !candidate.isNPP && candidate.characterId)
-      .filter((candidate) => {
-        const previousOffice = currentOfficeByCharacterId.get(candidate.characterId!.toString());
-        return (
-          !winningCharacterIds.has(candidate.characterId!.toString()) &&
-          previousOffice?.type === "landtag" &&
-          "state" in previousOffice &&
-          previousOffice.state === landId
-        );
-      })
-      .map((candidate) =>
-        captureOfficeTransition({
-          db,
-          officeType: "landtag",
-          transitionType: "lost",
-          partyId: candidate.party,
-          selectionMethod: "election",
-          tenureTurns: 0,
-          careerStage: 0,
-          nationId: "DE",
-          turn: currentTurn,
-        })
-      )
   );
 
   await db

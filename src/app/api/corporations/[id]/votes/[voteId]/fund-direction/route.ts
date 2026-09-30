@@ -223,6 +223,8 @@ async function resolveIfReady(db: Db, voteId: ObjectId, corporation: Corporation
     db,
     vote: updated,
     totalEligibleShares: totalVotingPower(corporation),
+    nationId: corporation.countryId,
+    flushTelemetry: true,
     currentTurn,
   });
   if (!claimed || outcome === "open") return;

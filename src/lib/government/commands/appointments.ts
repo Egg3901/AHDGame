@@ -23,7 +23,8 @@ export async function adminAppointPrimeMinister(
   characterId: string | null
 ): Promise<{ success: true; message: string }> {
   const now = new Date();
-  const appointmentTurn = (await getGameState(db))?.currentTurn ?? 0;
+  const appointmentTurn =
+    (await (characterId ? getGameState(db).catch(() => null) : getGameState(db)))?.currentTurn ?? 0;
 
   let character: Character | null = null;
   if (characterId) {
@@ -50,7 +51,8 @@ export async function adminAppointPrimeMinister(
       { "currentOffice.type": execKey, countryId },
       { projection: { party: 1, careerHistory: 1 } }
     )
-    .toArray();
+    .toArray()
+    .catch(() => []);
   await db
     .collection<Character>("characters")
     .updateMany(
@@ -376,7 +378,7 @@ export async function appointSenator(
       { _id: appointeeId },
       { $set: { currentOffice: officeType, updatedAt: now } }
     );
-    const gameState = await getGameState(db);
+    const gameState = await getGameState(db).catch(() => null);
     await captureOfficeTransition({
       db,
       officeType: "senate",

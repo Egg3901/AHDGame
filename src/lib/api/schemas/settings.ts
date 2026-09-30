@@ -54,6 +54,7 @@ export const characterDemographicsSchema = z.object({
 });
 
 export const createCharacterSchema = z.object({
+  analyticsConsent: z.boolean().optional().default(false),
   name: moderatedNameSchema("Name", 2, 50),
   homeState: z.string().min(1, "Home state required"),
   // The country picked by the user at character creation. Used to scope the

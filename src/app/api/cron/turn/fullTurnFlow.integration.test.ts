@@ -8,7 +8,7 @@
  * without a real database or game state.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
@@ -135,6 +135,11 @@ vi.mock("@/lib/navair/turn", () => ({
     formationsUpdated: 0,
   }),
 }));
+
+// Load the large dependency graph outside individual assertion timeouts.
+beforeAll(async () => {
+  await import("@/lib/turnSystem");
+}, 180_000);
 
 describe("processTurn() — full turn flow", () => {
   let db: MockDb;

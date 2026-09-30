@@ -3,6 +3,7 @@ import type { GameIteration } from "@/lib/db/types/gameState";
 /** Stable iteration key shared by browser and server game events. */
 export function gameIterationId(iteration?: GameIteration | null): string {
   if (!iteration || !Number.isInteger(iteration.number) || iteration.number < 1) return "unknown";
+  if (typeof iteration.type !== "string") return "unknown";
   const type = iteration.type.toLowerCase();
   if (type !== "alpha" && type !== "beta" && type !== "iteration") return "unknown";
   return `${type}-${iteration.number}`;

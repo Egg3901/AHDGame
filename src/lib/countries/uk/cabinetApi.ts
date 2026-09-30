@@ -543,7 +543,7 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
       await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
     }
     if (!survivorKept && member.characterId) {
-      const { currentTurn } = await getGameTime();
+      const { currentTurn } = await getGameTime().catch(() => ({ currentTurn: 0 }));
       await captureOfficeTransition({
         db,
         officeType: countryId === COUNTRY_CONFIGS.UK.id ? "ukCabinet" : "parliamentaryCabinet",
@@ -650,7 +650,7 @@ export async function resignCabinetMemberHandler(request: Request, countryId: Co
       throw notFound("You do not hold this cabinet seat");
     }
     await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
-    const { currentTurn } = await getGameTime();
+    const { currentTurn } = await getGameTime().catch(() => ({ currentTurn: 0 }));
     await captureOfficeTransition({
       db,
       officeType: countryId === COUNTRY_CONFIGS.UK.id ? "ukCabinet" : "parliamentaryCabinet",

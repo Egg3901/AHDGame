@@ -31,7 +31,14 @@ export function setProductEventContext(
   } else if (nation_id !== undefined) {
     delete productEventContext.nation_id;
   }
-  productEventContextExpiresAt = Date.now() + 15_000;
+  if (
+    typeof context.iteration_id === "string" &&
+    typeof context.turn_number === "number" &&
+    Number.isInteger(context.turn_number) &&
+    context.turn_number >= 0
+  ) {
+    productEventContextExpiresAt = Date.now() + 15_000;
+  }
 }
 
 async function getProductEventContext(): Promise<ProductEventContext> {
@@ -97,11 +104,17 @@ export async function captureProductEvent(
   if (eventProperties && eventNationId !== undefined && !safeEventNationId) {
     delete eventProperties.nation_id;
   }
+  const suppliedContextIsValid =
+    typeof eventProperties?.iteration_id === "string" &&
+    /^(?:unknown|(?:alpha|beta|iteration)-[1-9][0-9]*)$/.test(eventProperties.iteration_id) &&
+    typeof eventProperties.turn_number === "number" &&
+    Number.isInteger(eventProperties.turn_number) &&
+    eventProperties.turn_number >= 0;
   const enrichedProperties = context
     ? {
         ...eventProperties,
-        iteration_id: context.iteration_id,
-        turn_number: context.turn_number,
+        iteration_id: suppliedContextIsValid ? eventProperties!.iteration_id : context.iteration_id,
+        turn_number: suppliedContextIsValid ? eventProperties!.turn_number : context.turn_number,
         ...(safeEventNationId
           ? { nation_id: safeEventNationId }
           : context.nation_id
@@ -126,6 +139,7 @@ let accountCaptureInFlight = false;
 const characterCaptureInFlight = new Set<string>();
 const firstTurnCaptureInFlight = new Set<string>();
 const firstMeaningfulActionInFlight = new Set<string>();
+const firstMeaningfulActionChecked = new Set<string>();
 
 type FirstMeaningfulActionAnchor = {
   characterId: string;
@@ -197,6 +211,7 @@ export function rememberNewCharacter(
   metadata: { startingNationId?: string; creationPath?: string; characterCount?: number } = {}
 ): void {
   if (getStoredConsent() !== "accepted" || !Number.isInteger(createdTurn)) return;
+  firstMeaningfulActionChecked.delete(characterId);
   try {
     const anchor = { characterId, createdTurn, ...metadata };
     window.localStorage.setItem(
@@ -219,29 +234,47 @@ export async function captureFirstMeaningfulAction(
   if (
     getStoredConsent() !== "accepted" ||
     !characterId ||
+    firstMeaningfulActionChecked.has(characterId) ||
     firstMeaningfulActionInFlight.has(characterId)
   )
     return;
   firstMeaningfulActionInFlight.add(characterId);
   try {
     const anchors = readFirstMeaningfulActionAnchors();
-    const anchor = anchors[characterId];
-    if (!anchor || anchor.captured || !Number.isInteger(anchor.createdTurn)) return;
-    // Mark synchronously before any await so parallel actions for other newly
-    // created characters cannot overwrite one another's local anchors.
-    anchors[characterId] = { ...anchor, captured: true };
-    window.localStorage.setItem(FIRST_MEANINGFUL_ACTION_KEY, JSON.stringify(anchors));
-    const context = await getProductEventContext();
-    if (getStoredConsent() !== "accepted") return;
+    if (anchors[characterId]?.captured) return;
+    const response = await fetch("/api/analytics/first-meaningful-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ characterId, consent: true }),
+    });
+    if (!response.ok || getStoredConsent() !== "accepted") return;
+    const result = (await response.json()) as { activation?: Record<string, unknown> | null };
+    const activation = result.activation;
+    firstMeaningfulActionChecked.add(characterId);
+    if (!activation || typeof activation.turns_since_character_creation !== "number") return;
+    if (anchors[characterId]) {
+      anchors[characterId] = { ...anchors[characterId], captured: true };
+      try {
+        window.localStorage.setItem(FIRST_MEANINGFUL_ACTION_KEY, JSON.stringify(anchors));
+      } catch {
+        // The durable claim already owns this event; optional storage cannot suppress it.
+      }
+    }
     await captureProductEvent("first_meaningful_action", {
       ...action,
-      turns_since_character_creation: Math.max(0, context.turn_number - anchor.createdTurn!),
-      starting_nation_id: anchor.startingNationId ?? "unknown",
-      creation_path: anchor.creationPath ?? "unknown",
+      iteration_id:
+        typeof activation.iteration_id === "string" ? activation.iteration_id : "unknown",
+      turn_number: typeof activation.turn_number === "number" ? activation.turn_number : 0,
+      turns_since_character_creation: activation.turns_since_character_creation,
+      starting_nation_id:
+        typeof activation.starting_nation_id === "string" &&
+        /^[A-Z]{2,3}$/.test(activation.starting_nation_id)
+          ? activation.starting_nation_id
+          : "unknown",
+      creation_path:
+        activation.creation_path === "character_creator" ? "character_creator" : "unknown",
       character_count:
-        typeof anchor.characterCount === "number" && Number.isFinite(anchor.characterCount)
-          ? anchor.characterCount
-          : 1,
+        typeof activation.character_count === "number" ? activation.character_count : 1,
     });
   } catch {
     // Analytics storage is optional.

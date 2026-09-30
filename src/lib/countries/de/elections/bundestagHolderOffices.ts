@@ -3,14 +3,17 @@
  * List-only winners gain an office; departing holders lose it. Parliamentary
  * executive roles survive reconciliation through preserveExecutiveOffice.
  */
-import type { Db, AnyBulkWriteOperation } from "mongodb";
+import type { Db, AnyBulkWriteOperation, Filter } from "mongodb";
 import type { Character, ElectedOfficial, NPP, OfficeType } from "@/lib/db/types";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { preserveExecutiveOffice } from "@/lib/turn/election/generalResolutionHelpers";
 
 export async function reconcileBundestagHolderOffices(
   db: Db,
-  now: Date
+  now: Date,
+  currentTurn?: number,
+  telemetryActors?: Map<string, Pick<Character, "userId" | "currentOffice">>
 ): Promise<ElectedOfficial[]> {
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
@@ -24,13 +27,35 @@ export async function reconcileBundestagHolderOffices(
   const [characters, npps] = await Promise.all([
     db
       .collection<Character>("characters")
-      .find({ _id: { $in: characterIds } }, { projection: { _id: 1, currentOffice: 1 } })
+      .find(
+        { _id: { $in: characterIds } },
+        { projection: { _id: 1, currentOffice: 1, party: 1, userId: 1 } }
+      )
       .toArray(),
     db
       .collection<NPP>("npps")
       .find({ _id: { $in: nppIds } }, { projection: { _id: 1, currentOffice: 1 } })
       .toArray(),
   ]);
+  for (const character of characters) telemetryActors?.set(character._id.toString(), character);
+  const departingFilter: Filter<Character> = {
+    countryId: "DE",
+    "currentOffice.type": "bundestag",
+    _id: { $nin: characterIds },
+  };
+  const departingPlayers =
+    currentTurn !== undefined
+      ? await db
+          .collection<Character>("characters")
+          .find(departingFilter, { projection: { _id: 1, party: 1 } })
+          .toArray()
+          .catch(() => [])
+      : [];
+  const officeTransitions: Array<{
+    officeType: string;
+    transitionType: "gained" | "left" | "lost";
+    partyId?: string;
+  }> = [];
   const characterWrites: AnyBulkWriteOperation<Character>[] = [];
   const nppWrites: AnyBulkWriteOperation<NPP>[] = [];
   const vacancyWrites: AnyBulkWriteOperation<ElectedOfficial>[] = [];
@@ -54,6 +79,24 @@ export async function reconcileBundestagHolderOffices(
         .reduce((sum, o) => sum + (o.seatsHeld ?? 0), 0);
       const office: OfficeType = { type: "bundestag", state, seatsHeld };
       const nextOffice = preserveExecutiveOffice(office, actor.currentOffice ?? null);
+      if (
+        !npp &&
+        currentTurn !== undefined &&
+        nextOffice.type === "bundestag" &&
+        actor.currentOffice?.type !== "bundestag"
+      ) {
+        if (actor.currentOffice)
+          officeTransitions.push({
+            officeType: actor.currentOffice.type,
+            transitionType: "left",
+            partyId: actor.party ?? undefined,
+          });
+        officeTransitions.push({
+          officeType: "bundestag",
+          transitionType: "gained",
+          partyId: held[0]?.party ?? actor.party ?? undefined,
+        });
+      }
       const identity = npp ? { nppId: actor._id } : { characterId: actor._id };
       vacancyWrites.push({
         updateMany: {
@@ -76,15 +119,32 @@ export async function reconcileBundestagHolderOffices(
   if (nppWrites.length) await db.collection<NPP>("npps").bulkWrite(nppWrites);
   await db
     .collection<Character>("characters")
-    .updateMany(
-      { countryId: "DE", "currentOffice.type": "bundestag", _id: { $nin: characterIds } },
-      { $set: { currentOffice: null, updatedAt: now } }
-    );
+    .updateMany(departingFilter, { $set: { currentOffice: null, updatedAt: now } });
   await db
     .collection<NPP>("npps")
     .updateMany(
       { countryId: "DE", "currentOffice.type": "bundestag", _id: { $nin: nppIds } },
       { $set: { currentOffice: null, updatedAt: now } }
     );
+  if (currentTurn !== undefined) {
+    officeTransitions.push(
+      ...departingPlayers.map((character) => ({
+        officeType: "bundestag",
+        transitionType: "lost" as const,
+        partyId: character.party ?? undefined,
+      }))
+    );
+    await Promise.all(
+      officeTransitions.map((transition) =>
+        captureOfficeTransition({
+          db,
+          ...transition,
+          selectionMethod: "election",
+          nationId: "DE",
+          turn: currentTurn,
+        })
+      )
+    );
+  }
   return officials;
 }

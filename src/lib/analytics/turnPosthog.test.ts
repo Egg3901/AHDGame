@@ -24,7 +24,17 @@ vi.mock("@/lib/constants/countries", () => ({
 function fakeDb(): Db {
   const rows: Record<string, unknown[]> = {
     federalBudget: [
-      { countryId: "US", treasuryBalance: 1000, economicFactors: { inflationRate: 2.5 } },
+      {
+        countryId: "US",
+        treasuryBalance: 1000,
+        economicFactors: { inflationRate: 2.5, gdpGrowth: 3, wageGrowth: 2, tradeGrowth: 1 },
+        gdp: 5000,
+        debt: { principal: 2000, interestRate: 4 },
+        debtToGdpRatio: 0.4,
+        revenue: { total: 300 },
+        spending: { total: 250 },
+        surplus: 50,
+      },
     ],
     countryHistory: [{ eventType: "bill_enacted", countryId: "US" }],
     elections: [{ countryId: "US" }],
@@ -93,6 +103,17 @@ describe("turn PostHog telemetry", () => {
           total_player_wealth: 100,
           top_1pct_wealth_share: 0.9,
           inflation_rate: 2.5,
+          gdp: 5000,
+          gdp_growth_pct: 3,
+          wage_growth_pct: 2,
+          trade_growth_pct: 1,
+          debt_principal: 2000,
+          debt_interest_rate: 4,
+          debt_to_gdp_ratio: 0.4,
+          fiscal_revenue: 300,
+          fiscal_spending: 250,
+          fiscal_surplus: 50,
+          player_wealth_sample_count: 2,
         }),
       })
     );

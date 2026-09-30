@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", () => ({
@@ -344,6 +349,7 @@ describe("triggerSnapElection", () => {
   });
 
   it("vacates the dissolved Commons before government cleanup", async () => {
+    vi.mocked(captureOfficeTransition).mockClear();
     const now = new Date("2026-09-28T12:00:00.000Z");
     setupMocks({
       currentTurn: 100,
@@ -361,6 +367,9 @@ describe("triggerSnapElection", () => {
       ],
     });
 
+    db.collection("characters").find = vi
+      .fn()
+      .mockReturnValue({ toArray: async () => [{ _id: new ObjectId(), party: "1" }] });
     await triggerSnapElection(db as unknown as Db, "UK", now, {
       reason: "pm-trigger",
     });
@@ -377,6 +386,16 @@ describe("triggerSnapElection", () => {
     expect(db.collectionMocks["npps"]!.updateMany).toHaveBeenCalledWith(
       { countryId: "UK", "currentOffice.type": "commons" },
       { $set: { currentOffice: null, updatedAt: now } }
+    );
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "commons",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: "UK",
+        turn: 100,
+        partyId: "1",
+      })
     );
 
     const { unformGovernmentAndVacatePM } = await import("@/lib/turn/parliamentaryGovernment");

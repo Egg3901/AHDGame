@@ -32,6 +32,7 @@ import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { PM_VACANCY_DEADLINE_TURNS } from "@/lib/constants/turnTime";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import {
   assertCanOpenCountryToPlayers,
   PlayerOpenBlockedError,
@@ -54,6 +55,11 @@ export const CLAIMABLE_ROLE_KINDS = [
 ] as const;
 
 export type ClaimableRoleKind = (typeof CLAIMABLE_ROLE_KINDS)[number];
+
+const CABINET_OFFICE_TYPES: Partial<Record<CountryId, string>> = {
+  US: "usCabinet",
+  UK: "ukCabinet",
+};
 
 /**
  * Roles that stay on their own pipelines across handoff. Not transferred to
@@ -309,6 +315,11 @@ export async function exitCountryForPlayers(
 
   const now = opts?.now ?? new Date();
   const vacatedOffices: VacatedClaimableOffice[] = [];
+  const transitions: Array<{
+    officeType: string;
+    partyId?: string;
+    appointedTurn?: number;
+  }> = [];
   const refill = new Set<ConstitutionalRefillProcess>();
   const governmentType = getCountryConfig(countryId).governmentType;
 
@@ -360,6 +371,7 @@ export async function exitCountryForPlayers(
         role: classified.role,
         characterId: String(official.characterId),
       });
+      transitions.push({ officeType: officeKey, partyId: official.party });
       refill.add(refillProcessForClaimableVacancy(classified.role, governmentType));
     }
 
@@ -371,6 +383,11 @@ export async function exitCountryForPlayers(
     for (const minister of ministers) {
       if (!minister.characterId) continue;
       await cabinetCol.deleteOne({ _id: minister._id });
+      transitions.push({
+        officeType: CABINET_OFFICE_TYPES[countryId] ?? "parliamentaryCabinet",
+        partyId: minister.party,
+        appointedTurn: minister.appointedTurn,
+      });
       vacatedOffices.push({
         collection: "cabinetMembers",
         officeKey: minister.positionId,
@@ -388,7 +405,15 @@ export async function exitCountryForPlayers(
       }
     );
 
-    await clearPlayerHeadOfGovernment(db, countryId, playerIds, now, vacatedOffices, refill);
+    await clearPlayerHeadOfGovernment(
+      db,
+      countryId,
+      playerIds,
+      now,
+      vacatedOffices,
+      refill,
+      transitions
+    );
   }
 
   await db.collection<CountryGameState>("countryGameStates").updateOne(
@@ -401,6 +426,31 @@ export async function exitCountryForPlayers(
     },
     { upsert: true }
   );
+
+  if (transitions.length > 0) {
+    // One context read for the whole handoff, never a query for each holder.
+    const context = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+      .catch(() => null);
+    for (const [index, transition] of transitions.entries()) {
+      await captureOfficeTransition({
+        db,
+        officeType: transition.officeType,
+        partyId: transition.partyId,
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: countryId,
+        turn: context?.currentTurn ?? 0,
+        iteration: context?.iteration,
+        tenureTurns:
+          transition.appointedTurn == null
+            ? undefined
+            : (context?.currentTurn ?? 0) - transition.appointedTurn,
+        flush: index === transitions.length - 1,
+      });
+    }
+  }
 
   return {
     countryId,
@@ -418,7 +468,8 @@ async function clearPlayerHeadOfGovernment(
   playerIds: ObjectId[],
   now: Date,
   vacatedOffices: VacatedClaimableOffice[],
-  refill: Set<ConstitutionalRefillProcess>
+  refill: Set<ConstitutionalRefillProcess>,
+  transitions: Array<{ officeType: string; partyId?: string; appointedTurn?: number }>
 ): Promise<void> {
   const govCol = getGovernmentFormationsCollection(db);
   const gov = await govCol.findOne({ _id: countryId });
@@ -451,6 +502,13 @@ async function clearPlayerHeadOfGovernment(
   // Ensure refill process is recorded even if the electedOfficials row was
   // already handled above.
   if (!vacatedOffices.some((v) => v.role === "head-of-government")) {
+    transitions.push({
+      officeType:
+        getCountryConfig(countryId).officeTypes.find((office) => office.isExecutive)?.key ??
+        "primeMinister",
+      partyId: gov.governingPartyId ?? undefined,
+      appointedTurn: gov.formedTurn ?? undefined,
+    });
     refill.add(
       refillProcessForClaimableVacancy(
         "head-of-government",

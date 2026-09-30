@@ -176,7 +176,7 @@ export async function resolveOneGeneralElection(
     if (!tally) {
       // No votes were recorded — clear stale officials / vacate single-seat
       // incumbents and open the next race. See resolveElectionWithNoTally.
-      return await resolveElectionWithNoTally(db, election, now);
+      return await resolveElectionWithNoTally(db, election, now, currentTurn);
     }
 
     // ── President: per-country resolution (US electoral college; NG/bespoke
@@ -224,7 +224,7 @@ export async function resolveOneGeneralElection(
     if (totalVotesCast === 0) {
       // Tally exists but zero votes were cast — finalize, withdraw candidates,
       // vacate stale seats and respawn. See resolveElectionWithZeroVotes.
-      return await resolveElectionWithZeroVotes(db, election, now);
+      return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
     }
 
     const candidateIds = Object.keys(effectiveVotes);
@@ -422,7 +422,7 @@ export async function resolveOneGeneralElection(
     if (ranked.length === 0) {
       // Every ranked candidate was dropped (missing docs / deleted characters)
       // — same cleanup as zero votes. See resolveElectionWithNoRankedCandidates.
-      return await resolveElectionWithNoRankedCandidates(db, election, now);
+      return await resolveElectionWithNoRankedCandidates(db, election, now, currentTurn);
     }
 
     const totalSeats = election.totalSeats ?? 1;
@@ -1291,7 +1291,8 @@ export async function resolveOneGeneralElection(
         election.electionType,
         election.state,
         now,
-        getChamberClass(election)
+        getChamberClass(election),
+        { turn: currentTurn, nationId: election.countryId }
       );
     }
     // Spawn next cycle for election types with dedicated respawn functions
@@ -1306,22 +1307,31 @@ export async function resolveOneGeneralElection(
         { $set: { status: "resolved" satisfies ElectionStatus, updatedAt: now } }
       );
     await Promise.all(
-      winnerAnalytics.map((winner) =>
-        captureElectionWon({
-          db,
-          accountId: winner.accountId,
-          electionId: winner.electionId,
-          electionType: winner.electionType,
-          partyId: winner.partyId,
-          seatCount: winner.seatCount,
-          voteSharePct: winner.voteSharePct,
-          marginPct: winner.marginPct,
-          incumbent: winner.incumbent,
-          nationId: winner.nationId,
-          turn: winner.turn,
-          winnerOrdinal: winner.winnerOrdinal,
-        })
-      )
+      winnerAnalytics
+        .filter(
+          () =>
+            !(
+              election.countryId === "DE" &&
+              getElectionMethod(election.countryId, election.electionType) === "ams" &&
+              (election.electionType === "bundestag" || election.electionType === "snap_bundestag")
+            )
+        )
+        .map((winner) =>
+          captureElectionWon({
+            db,
+            accountId: winner.accountId,
+            electionId: winner.electionId,
+            electionType: winner.electionType,
+            partyId: winner.partyId,
+            seatCount: winner.seatCount,
+            voteSharePct: winner.voteSharePct,
+            marginPct: winner.marginPct,
+            incumbent: winner.incumbent,
+            nationId: winner.nationId,
+            turn: winner.turn,
+            winnerOrdinal: winner.winnerOrdinal,
+          })
+        )
     );
     await Promise.all(
       officeAnalytics.map((transition) =>

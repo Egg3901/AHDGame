@@ -69,11 +69,14 @@ describe("server game analytics", () => {
         properties: expect.objectContaining({
           election_id: "0123456789abcdef01234567",
           election_type: "house",
+          office: "house",
           party_id: "4",
           seat_count: 2,
           vote_share_pct: 42.12,
           margin_pct: 8.46,
+          margin: 8.46,
           incumbent: true,
+          outcome_source: "server_resolution",
         }),
       })
     );
@@ -92,6 +95,50 @@ describe("server game analytics", () => {
     expect(state.captureServerGameEvent).toHaveBeenCalledWith(
       expect.objectContaining({ properties: expect.objectContaining({ tenure_turns: "unknown" }) })
     );
+  });
+
+  it("preserves unknown election percentages and incumbency when no historical tally exists", async () => {
+    const { captureElectionWon } = await import("./electionAnalytics");
+    await captureElectionWon({
+      db: {} as never,
+      electionId: "0123456789abcdef01234567",
+      electionType: "bundestag",
+      partyId: "1",
+      seatCount: 25,
+      voteSharePct: "unknown",
+      marginPct: "unknown",
+      incumbent: "unknown",
+      turn: 42,
+    });
+    expect(state.captureServerGameEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          vote_share_pct: "unknown",
+          margin_pct: "unknown",
+          margin: "unknown",
+          incumbent: "unknown",
+          seat_count: 25,
+        }),
+      })
+    );
+  });
+
+  it("keeps central bank chairs and corporate CEOs as controlled office types", async () => {
+    const { captureOfficeTransition } = await import("./officeTransitionAnalytics");
+    for (const officeType of ["centralBankChair", "ceo"]) {
+      await captureOfficeTransition({
+        db: {} as never,
+        officeType,
+        transitionType: "gained",
+        selectionMethod: "appointment",
+        turn: 12,
+      });
+      expect(state.captureServerGameEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          properties: expect.objectContaining({ office_type: officeType }),
+        })
+      );
+    }
   });
 
   it("reduces office types and bill taxonomies to controlled values", async () => {

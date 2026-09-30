@@ -8,6 +8,10 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { PlayerOpenBlockedError } from "./countryReadinessContract";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 import {
   CLAIMABLE_ROLE_KINDS,
   PRESERVED_HANDOFF_DOMAINS,
@@ -162,6 +166,7 @@ describe("exitCountryForPlayers", () => {
   const now = new Date("1953-06-01T00:00:00Z");
 
   beforeEach(() => {
+    vi.mocked(captureOfficeTransition).mockClear();
     db = createMockDb();
     db.collection("gameState");
     db.collection("countryGameStates");
@@ -272,5 +277,43 @@ describe("exitCountryForPlayers", () => {
     expect(db.collectionMocks["corporations"]).toBeUndefined();
     expect(db.collectionMocks["diplomaticRelations"]).toBeUndefined();
     expect(db.collectionMocks["sphereRelationships"]).toBeUndefined();
+  });
+
+  it("records removed seats, cabinet roles and an unrepresented head of government", async () => {
+    await exitCountryForPlayers(db as unknown as Db, "UK", { now });
+    expect(
+      vi.mocked(captureOfficeTransition).mock.calls.map(([event]) => event.officeType)
+    ).toEqual(["commons", "ukCabinet", "primeMinister"]);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "primeMinister",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: "UK",
+        turn: 40,
+        flush: true,
+      })
+    );
+    expect(db.collectionMocks["gameState"]!.findOne).toHaveBeenCalledTimes(2);
+  });
+
+  it("counts a player executive represented by both office and formation only once", async () => {
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue(
+      cursorOf([
+        {
+          _id: playerOfficialId,
+          countryId: "UK",
+          officeType: "primeMinister",
+          characterId: playerId,
+          isNPP: false,
+        },
+      ])
+    );
+    await exitCountryForPlayers(db as unknown as Db, "UK", { now });
+    expect(
+      vi
+        .mocked(captureOfficeTransition)
+        .mock.calls.filter(([event]) => event.officeType === "primeMinister")
+    ).toHaveLength(1);
   });
 });
