@@ -77,12 +77,6 @@ export async function loadFinancialExposure(db: Db, availableCountries: Set<stri
       treasuryBalance: budget?.treasuryBalance ?? 0,
     });
   }
-  const stressedBonds = bonds.filter(
-    (bond) =>
-      bond.countryId &&
-      byCountry.get(bond.countryId)?.euroMember &&
-      (byCountry.get(bond.countryId)?.sovereignStress ?? 0) > 0
-  );
   for (const bank of banks) {
     const row = byCountry.get(bank.countryId);
     const charter = bank.bankCharter;
@@ -92,23 +86,33 @@ export async function loadFinancialExposure(db: Db, availableCountries: Set<stri
       charter.status === "failed" ? 100 : 100 * Math.max(0, 0.8 - (charter.confidence ?? 1))
     );
     let exposure = 0;
-    for (const bond of stressedBonds) {
+    let sovereignAssets = 0;
+    for (const bond of bonds) {
       const ledgerUnits = bond.holders
         .filter((holder) => holder.corporationId?.equals(bank._id))
         .reduce((sum, holder) => sum + Math.max(0, holder.units), 0);
       // Only conserved holder-ledger units qualify. Legacy prop-book-only
       // positions have no issued security behind them and cannot trigger contagion.
       const rate = bond.currencyCode ? (rates.get(bond.currencyCode) ?? 1) : 1;
-      exposure += (ledgerUnits * bond.faceValue * Math.max(0, bond.marketPrice)) / rate;
+      const value = (ledgerUnits * bond.faceValue * Math.max(0, bond.marketPrice)) / rate;
+      sovereignAssets += value;
+      if (
+        bond.countryId &&
+        byCountry.get(bond.countryId)?.euroMember &&
+        (byCountry.get(bond.countryId)?.sovereignStress ?? 0) > 0
+      )
+        exposure += value;
     }
     row.euroSovereignExposure += exposure;
     if (exposure > 0)
       row.exposedBankAssets += Math.max(
         exposure,
-        (getCashReserves(charter) +
-          Math.max(0, charter.totalLoans ?? 0) +
-          Math.max(0, charter.propBookMarkValue ?? 0)) /
-          (rates.get(charter.currency) ?? 1)
+        (getCashReserves(charter) + Math.max(0, charter.totalLoans ?? 0)) /
+          (rates.get(charter.currency) ?? 1) +
+          Math.max(
+            sovereignAssets,
+            Math.max(0, charter.propBookMarkValue ?? 0) / (rates.get(charter.currency) ?? 1)
+          )
       );
     if (bankEquity(charter) < 0) row.bankStress = Math.max(row.bankStress, 80);
   }
