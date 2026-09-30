@@ -1,3 +1,4 @@
+import { resumeTreasuryReserveTransfers } from "@/lib/budget/treasuryReserveTransfer";
 /**
  * Private banking each turn. processBankingTurn moves household deposits,
  * pays savings interest and services loans from their payers' available cash.
@@ -162,6 +163,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   await resumeReservePoolTransfers(db);
   await resumeMonetaryOperations(db, MONETARY_OPERATION_COOLDOWN_TURNS);
   await resumeLiquidityAdvances(db, MONETARY_OPERATION_COOLDOWN_TURNS);
+  await resumeTreasuryReserveTransfers(db);
   // One config read per turn. Every stage below decides from this snapshot,
   // so a flag flipped mid-turn cannot split the pass between two policies.
   const policy = await loadBankingPolicy(db);
