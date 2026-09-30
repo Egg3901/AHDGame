@@ -1210,6 +1210,33 @@ async function main() {
     await import("./sectorInvestmentSnapshot");
   if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
   const targetTurn = startTurn + turns;
+  // A full 1991 to 2027 qualification needs durable crisis histories. This
+  // hook runs only in the isolated long-horizon sandbox profile, never in the
+  // live turn registry or ordinary short simulations.
+  const crisisHorizonTelemetry =
+    preset === "1991-default" && turns >= 1700 && simTurnPhaseMode === "full" && !cloneMode;
+  let captureCrisisHorizonTurn:
+    (typeof import("./crisisHorizonTelemetry"))["captureCrisisHorizonTurn"] | undefined;
+  if (crisisHorizonTelemetry) {
+    if (!source.executedCommit) throw new Error("Crisis horizon requires a source-pinned run");
+    ({ captureCrisisHorizonTurn } = await import("./crisisHorizonTelemetry"));
+    await db
+      .collection("simCrisisHorizon")
+      .createIndex({ runId: 1, turn: 1, defKey: 1 }, { unique: true });
+    await simRuns.updateOne(
+      { _id: runId },
+      {
+        $set: {
+          crisisHorizonTelemetry: {
+            schemaVersion: 1,
+            expectedFirstTurn: startTurn + 1,
+            expectedLastTurn: targetTurn,
+            families: 7,
+          },
+        },
+      }
+    );
+  }
   log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
 
   try {
@@ -1292,6 +1319,14 @@ async function main() {
       if (actorMode === "synthetic") {
         const { driveSyntheticActors } = await import("@/lib/sim/driveSyntheticActors");
         await driveSyntheticActors(db, { seed, turn: lastTurn, now: new Date() });
+      }
+      if (captureCrisisHorizonTurn) {
+        await captureCrisisHorizonTurn(db, {
+          runId,
+          turn: lastTurn,
+          seed,
+          codeVersion: source.executedCommit!,
+        });
       }
 
       if (iterations % checkpointEvery === 0 || lastTurn >= targetTurn) {
