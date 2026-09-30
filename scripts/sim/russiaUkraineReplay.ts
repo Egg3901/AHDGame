@@ -28,6 +28,7 @@ const strategies = [
   "neutrality",
   "deterrence",
   "proxy",
+  "frozen",
   "limited",
   "invasion_recovery",
   "prolonged",
@@ -56,10 +57,14 @@ function choice(strategy: Strategy, country: string, role: string, offset: numbe
     strategy === "neutrality" ||
     strategy === "counterfactual" ||
     (strategy === "limited" && offset > 24) ||
-    (strategy === "invasion_recovery" && offset > 240);
+    ((strategy === "invasion_recovery" || strategy === "frozen") && offset > 240);
   if (role === "belligerent") return "uk_neutral";
   if (role === "backer_a")
-    return peace ? "ru_bargain" : strategy === "proxy" ? "ru_proxy" : "ru_invade";
+    return peace
+      ? "ru_bargain"
+      : strategy === "proxy" || strategy === "frozen"
+        ? "ru_proxy"
+        : "ru_invade";
   if (role === "backer_b")
     return peace ? "us_talks" : strategy === "deterrence" ? "us_aid" : "us_sanctions";
   if (role === "neighbor")
@@ -173,19 +178,28 @@ async function main() {
       await db
         .collection("characters")
         .insertMany(leaders.filter((actor) => active.includes(actor.countryId)));
-      await db
-        .collection("gameState")
-        .updateOne(
-          { _id: "current" as never },
-          {
-            $set: {
-              livingConflictsEnabled: true,
-              crisisInteractionEnabled: true,
-              currentYear: 2013,
-              currentTurn: 1056,
-            },
-          }
-        );
+      // The background sovereign has no player office in the retained world.
+      // A disclosed synthetic office row exercises its actual authority lookup.
+      await db.collection("electedOfficials").insertMany(
+        leaders
+          .filter((actor) => active.includes(actor.countryId))
+          .map((actor) => ({
+            countryId: actor.countryId,
+            officeType: actor.currentOffice.type,
+            characterId: actor._id,
+          }))
+      );
+      await db.collection("gameState").updateOne(
+        { _id: "current" as never },
+        {
+          $set: {
+            livingConflictsEnabled: true,
+            crisisInteractionEnabled: true,
+            currentYear: 2013,
+            currentTurn: 1056,
+          },
+        }
+      );
       const roles = new Map(
         await Promise.all(
           leaders.map(
@@ -212,11 +226,9 @@ async function main() {
             { _id: "current" as never },
             { $set: { currentTurn: turn, currentYear: year } }
           );
-        const pending = await db
-          .collection<Crisis>("crises")
-          .find({ status: "active", endTurn: { $lte: turn } })
-          .toArray();
+        const pending = await db.collection<Crisis>("crises").find({ status: "active" }).toArray();
         for (const crisis of pending) {
+          if (crisis.startTurn + (crisis.durationTurns ?? 24) > turn) continue;
           const result = await measure("resolve", () => resolveGlobalResponse(db, crisis._id));
           assert(result);
           const state = await loadConflictState(db, def.key);
@@ -237,11 +249,12 @@ async function main() {
           lastPhase = state.phaseLevel;
         }
         if (offset % 24 === 0) {
+          const persisted = await loadConflictState(db, def.key);
           assert.equal(
             (await driveConflictTurn(db, def, participants, turn, year)).events.length,
             0
           );
-          assert.deepEqual(await loadConflictState(db, def.key), state);
+          assert.deepEqual(await loadConflictState(db, def.key), persisted);
           retries++;
         }
         for (const event of driven.events) {
@@ -337,6 +350,28 @@ async function main() {
       }
       const final = await loadConflictState(db, def.key);
       const embargoes = await db.collection("tradeEmbargoes").countDocuments();
+      if (Number(arg("turns") ?? 720) >= 720) {
+        assert(outcomes.length > 0, "Response windows must actually resolve");
+        if (["neutrality", "limited", "invasion_recovery", "counterfactual"].includes(strategy)) {
+          assert.equal(final.phaseLevel, 6, `${strategy}: recovery phase`);
+          assert.equal(final.status, "settled", `${strategy}: durable settlement`);
+        }
+        if (strategy === "deterrence" || strategy === "frozen") {
+          assert.equal(final.phaseLevel, 6);
+          assert.equal(final.status, "ceasefire");
+        }
+        if (strategy === "proxy") assert.equal(final.phaseLevel, 3);
+        if (strategy === "prolonged") assert.equal(final.phaseLevel, 5);
+        if (strategy === "invasion_recovery" || strategy === "prolonged")
+          assert(outcomes.some((row) => row.outcome === "broad_invasion"));
+        if (["limited", "proxy", "frozen", "invasion_recovery", "prolonged"].includes(strategy)) {
+          assert(
+            minimumOutput < 1 && peakDisplacement > 0,
+            "War must affect the real origin economy"
+          );
+          assert(embargoes > 0 && totalPaid > 0, "Actual sanctions and paid commitments required");
+        }
+      }
       const result = {
         strategy,
         windows,

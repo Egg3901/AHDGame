@@ -8,6 +8,7 @@ import { RUSSIA_UKRAINE_DEF } from "./defs/russiaUkraine";
 import { selectGlobalResponseOutcome } from "./globalResponse";
 import { resolveConflictParticipants } from "./rules/participants";
 import type { ConflictRole } from "./types";
+import { russiaUkraineOutcome } from "./rules/russiaUkraineOutcome";
 
 function stateAt(phaseKey: string, tracks: Record<string, number> = {}) {
   const phase = RUSSIA_UKRAINE_DEF.phases.find((candidate) => candidate.key === phaseKey);
@@ -72,6 +73,44 @@ describe("Russia-Ukraine security crisis", () => {
     expect(RUSSIA_UKRAINE_DEF.roleResolver({ countryId: "PL", ...participants })).toBe(
       "belligerent"
     );
+  });
+
+  it("requires mobilization before broad war and retains concurrent assistance", () => {
+    const catalog = RUSSIA_UKRAINE_DEF.phases[0].events[0].response!.outcomes;
+    const selected = decision([["backer_a", "ru_invade"]]);
+    const limited = russiaUkraineOutcome(stateAt("territorial_confrontation"), selected, catalog, {
+      aid: 4,
+      militaryAid: 4,
+      sanctions: 8,
+    });
+    expect(limited.outcomeId).toBe("limited_incursion");
+    expect(limited.trackDeltas).toMatchObject({
+      westernAid: 4,
+      sanctionsPressure: 8,
+      displacement: 6,
+    });
+    expect(limited.tradeSanction).toMatchObject({ commodity: "oil", targetRole: "backer_a" });
+    const broad = russiaUkraineOutcome(stateAt("mobilization"), selected, catalog, {});
+    expect(broad.outcomeId).toBe("broad_invasion");
+    expect(broad.trackDeltas!.displacement).toBeGreaterThan(limited.trackDeltas!.displacement);
+  });
+
+  it("does not turn sustained proxy pressure into direct invasion without that choice", () => {
+    let state = stateAt("proxy_conflict");
+    for (let window = 0; window < 30; window++) {
+      state = applyConflictOutcome(RUSSIA_UKRAINE_DEF, state, outcome("proxy_conflict"));
+      state = evaluateConflictTransitions(RUSSIA_UKRAINE_DEF, state, 2020).state;
+    }
+    expect(state.phaseLevel).toBe(3);
+    expect(state.tracks?.directIntervention).toBe(0);
+    expect(state.tracks?.displacement).toBeGreaterThan(0);
+  });
+
+  it("preserves a completed settlement under repeated reciprocal diplomacy", () => {
+    let state = stateAt("armistice_reconstruction", { settlementMomentum: 90, escalationRisk: 0 });
+    state.status = "settled";
+    state = applyConflictOutcome(RUSSIA_UKRAINE_DEF, state, outcome("negotiated_neutrality"));
+    expect(state.status).toBe("settled");
   });
 
   it("adapts absent principals through explicit fallbacks", () => {
