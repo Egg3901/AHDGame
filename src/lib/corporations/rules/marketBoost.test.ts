@@ -56,6 +56,15 @@ describe("rampMultiplier", () => {
 });
 
 describe("sectorRevenueBoostMultiplier", () => {
+  it("starts the accelerated window at 40/192 on turn 1253 and caps at twenty percent", () => {
+    expect(sectorRevenueBoostMultiplier(1253, "manufacturing")).toBeCloseTo(
+      1 + 0.2 * (40 / 192),
+      10
+    );
+    expect(sectorRevenueBoostMultiplier(1405, "manufacturing")).toBeCloseTo(1.2, 10);
+    expect(sectorRevenueBoostMultiplier(1600, "manufacturing")).toBeCloseTo(1.2, 10);
+  });
+
   it("is 1.0 before phase A and reaches target after the ramp", () => {
     expect(sectorRevenueBoostMultiplier(1, "manufacturing")).toBe(1);
     expect(sectorRevenueBoostMultiplier(STOCK_BOOST_REVENUE_START_TURN - 1, "manufacturing")).toBe(
@@ -96,6 +105,14 @@ describe("sectorRevenueBoostMultiplier", () => {
 });
 
 describe("sectorNpvBoostMultiplier", () => {
+  it("starts valuation at turn 1253 with a 40-turn earnings lead", () => {
+    expect(STOCK_BOOST_NPV_START_TURN - STOCK_BOOST_REVENUE_START_TURN).toBe(40);
+    expect(sectorNpvBoostMultiplier(1253)).toBe(1);
+    expect(sectorNpvBoostMultiplier(1293)).toBeCloseTo(1 + 0.3 * (40 / 192), 10);
+    expect(bankNpvBoostMultiplier(1293)).toBeCloseTo(1 + 0.5 * (40 / 192), 10);
+    expect(sectorRiskPremiumAtTurn("financial", 1293)).toBeCloseTo(0.06 - 0.02 * (40 / 192), 10);
+  });
+
   it("lags revenue: still 1.0 when phase A opens", () => {
     expect(sectorNpvBoostMultiplier(STOCK_BOOST_REVENUE_START_TURN)).toBe(1);
     expect(
