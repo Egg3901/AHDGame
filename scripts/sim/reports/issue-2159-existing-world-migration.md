@@ -2,6 +2,8 @@
 
 Issue: #2159. Runtime and replay source: `b0fb427bb2260e1719c19f94c8c11c53642b6a55`.
 
+A later CI correction types the replay config collection and fixtures as `GameConfig`; queries, assertions, and production behavior are unchanged. The evidence remains pinned to the executed source above.
+
 This confirms the migration half of the reset-configuration criterion. Reset CLI target selection has separate evidence. This report does not constitute the full reset and ten-turn rehearsal or freeze the release configuration.
 
 ## Contracts and repaired gaps

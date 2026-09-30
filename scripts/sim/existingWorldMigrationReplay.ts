@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { MongoClient, type Document } from "mongodb";
+import type { GameConfig } from "../../src/lib/db/types";
 import { runMigrations } from "../../src/lib/migrations/runner";
 import type { Migration } from "../../src/lib/migrations/types";
 import { migration as configMigration } from "../../src/lib/migrations/entries/2026-08-08-adopt-reference-gameconfig-gates";
@@ -159,11 +160,11 @@ async function main() {
       );
       assert.equal(hash(await snapshot()), guardHash);
     }
-    const configs = db.collection<Document & { _id: string }>("gameConfig");
+    const configs = db.collection<GameConfig>("gameConfig");
     const flagCases = [];
     for (const turn of [2, 500])
       for (const value of [undefined, false, true]) {
-        const legacy: Document & { _id: string } = {
+        const legacy: GameConfig & { migrationFixtureSentinel: string } = {
           ...referenceConfig,
           migrationFixtureSentinel: "keep",
         };
@@ -187,7 +188,11 @@ async function main() {
           true
         );
         assert.equal(
-          (await configs.findOne({ _id: referenceConfig._id }))?.migrationFixtureSentinel,
+          (
+            await db
+              .collection<GameConfig & { migrationFixtureSentinel: string }>("gameConfig")
+              .findOne({ _id: referenceConfig._id })
+          )?.migrationFixtureSentinel,
           "keep"
         );
         flagCases.push({
