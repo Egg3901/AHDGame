@@ -241,9 +241,19 @@ describe("living-conflict turn integration", () => {
     expect(pathValue(crisis!, "globalResponse.roleByCountry.RU")).toBe("backer_a");
     expect(reads.filter((read) => read.collection === "macroCountries")).toEqual([
       { collection: "macroCountries", projection: { entityId: 1, _id: 0 } },
+      {
+        collection: "macroCountries",
+        projection: {
+          entityId: 1,
+          population: 1,
+          stability: 1,
+          "contribution.byCommodity.food": 1,
+        },
+      },
     ]);
     expect(reads.filter((read) => read.collection === "states")).toEqual([
       { collection: "states", projection: { countryId: 1, _id: 0 } },
+      { collection: "states", projection: { _id: 1, countryId: 1, population: 1 } },
     ]);
   });
 

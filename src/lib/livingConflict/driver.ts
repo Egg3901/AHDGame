@@ -1,3 +1,4 @@
+import { advanceArabRegionalTurn, reconcileArabTerrorismSpillover } from "./arabRegional";
 import type { Db } from "mongodb";
 import { hasRequiredBelligerents } from "./rules/participants";
 import type {
@@ -181,6 +182,8 @@ export async function driveConflictTurn(
     typeof year === "number" ? year : undefined
   ).state;
 
+  state = await advanceArabRegionalTurn(db, state, turn);
+  state = await reconcileArabTerrorismSpillover(db, state, turn);
   const fired = selectEvents(def, state, turn);
   const events: DrivenEvent[] = fired.map((f) => ({
     fired: f,
