@@ -2,7 +2,7 @@
 
 ## Source and scope
 
-Report source: `b2c073054f15abbdffac120c9c91829a81314433`. Read-only retained world: run `4f55908e-1495-4a05-895c-369e285fae2d`, seed `audit-allflags-1991-r3`, preset `1991-default`, executed source `a6cca21537b4119ad9ae358fe9999b738f0089f2`, raw turn 480 / year 2000.
+Report source: `a3bf8dcbbd117b0e06f8d3d0b7105956cf97a223`. Read-only retained world: run `4f55908e-1495-4a05-895c-369e285fae2d`, seed `audit-allflags-1991-r3`, preset `1991-default`, executed source `a6cca21537b4119ad9ae358fe9999b738f0089f2`, raw turn 480 / year 2000.
 
 This is a historical reporting qualification. It does not replace the deterministic resolver matrix or claim reset qualification on the eventual release SHA. No simulation was started, no election replayed, and no source database written. The query used 12 Mongo read commands. The adjacent JSON contains aggregate results without candidate names or identities.
 
@@ -11,7 +11,7 @@ Current recorded flags are `redistrictingEnabled=true`, `nppAutonomyEnabled=true
 ## Method
 
 - Group by country and election family; compare adjacent resolved races only within the same state, seat and chamber-class scope. Missing outcomes, ambiguous duplicate cycles and changed seat capacity are excluded with counts. Different outcome coverage scopes never compare.
-- A party seat-vector change differs from a unique leading-party flip. Ties count separately and are excluded from the unique-control denominator.
+- A party seat-vector change differs from a unique leading-party flip. Tied outcome cycles and adjacent comparisons involving a tie count separately; ties are excluded from the unique-control denominator.
 - An actual character or NPP may hold aggregate `seatsHeld` voting weight. Identity metrics count that actor once. Replacement means the winner identity set changed; full incumbent hold means the same set; any incumbent retained measures intersection. No anonymous individuals are manufactured for each seat.
 - Player/NPP rates count cycles won by each actor kind among cycles with known winner kinds; both can win a mixed multi-seat race. Resolver shares use all resolved cycles, including unknown. Each metric preserves count, its own comparable denominator and rate per 100.
 - New resolved holder receipts include actual direct and list representatives. Legacy AMS without those receipts is labeled direct tier only. Other old candidate allocations retain unknown historical composite coverage. Current offices never reconstruct past holders.
@@ -79,3 +79,9 @@ SIM_MONGODB_URI="<isolated sandbox URI>" npx tsx --tsconfig tsconfig.json \
 ```
 
 The runner accepts only the local isolated sandbox server and an `ahd_sim_` database. `scripts/sim/checkpointReport.ts` now embeds the same collector and renders the family rate table.
+
+## Complete AMS receipt smoke
+
+The stable `ahd_sim_2124_matrix_receipts` sandbox was produced by election runtime `d49c8c3ce9` in the 120-resolution deterministic matrix. Its final three AMS cycles retain full direct and list holder receipts. The collector reads all three as `ams`, with no missing identity or outcome evidence: two party seat-vector changes, one unique control flip in two comparisons, and the same complete representative identity set in both comparisons. This correctly distinguishes seat-weight transfer from representative replacement. This database contains only the last matrix fixture, not the entire 120-case history. See `issue-2124-ams-report-smoke.json` and the separate persisted matrix report.
+
+The fixed-window multiplayer comparison and exact reconciliation of the tracker 307/305 discrepancy are in `issue-2124-live-election-comparison.md`.

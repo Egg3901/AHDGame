@@ -1,11 +1,16 @@
 {
-  "reportSourceCommit": "b2c073054f15abbdffac120c9c91829a81314433",
+  "reportSourceCommit": "a3bf8dcbbd117b0e06f8d3d0b7105956cf97a223",
   "sandbox": "ahd_sim_audit-allflags-1991-r3",
   "commands": 12,
   "report": {
     "basis": "All retained resolved elections at query time, independent of chart checkpoint cutoff. Actual resolved holder receipts, finalized stored seat allocations or frozen single-winner results; archived candidate rows identify people. Current offices never reconstruct history. Each character or NPP holding aggregate seatsHeld voting weight counts once in representative identity comparisons.",
     "denominators": "Each rate carries its own comparableCycles. Seat/person metrics compare consecutive races with unchanged capacity in the same scope. Win and resolver shares count resolved outcome cycles. Player/NPP win-cycle rates can overlap in mixed multi-seat races.",
     "legacyLimit": "Missing historical person identity, actor kind and executed resolver remain unknown. Present-day flags are context only.",
+    "selection": {
+      "timeBasis": "Scheduled election endTurn among currently resolved records; old finalization timestamps are unavailable. This is not an as-of database reconstruction.",
+      "firstScheduledEndTurn": 60,
+      "lastScheduledEndTurn": 480
+    },
     "provenance": {
       "run": {
         "preset": "1991-default",
@@ -66,6 +71,11 @@
           "count": 3,
           "comparableCycles": 5,
           "per100": 60
+        },
+        "tiedControlCycles": {
+          "count": 5,
+          "comparableCycles": 10,
+          "per100": 50
         },
         "personReplacement": {
           "count": 0,
@@ -145,6 +155,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 5,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 10,
           "per100": 0
         },
         "personReplacement": {
@@ -227,6 +242,11 @@
           "comparableCycles": 5,
           "per100": 100
         },
+        "tiedControlCycles": {
+          "count": 7,
+          "comparableCycles": 10,
+          "per100": 70
+        },
         "personReplacement": {
           "count": 5,
           "comparableCycles": 5,
@@ -305,6 +325,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 7,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 14,
           "per100": 0
         },
         "personReplacement": {
@@ -387,6 +412,11 @@
           "comparableCycles": 7,
           "per100": 0
         },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 14,
+          "per100": 0
+        },
         "personReplacement": {
           "count": 5,
           "comparableCycles": 7,
@@ -465,6 +495,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 7,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 14,
           "per100": 0
         },
         "personReplacement": {
@@ -547,6 +582,11 @@
           "comparableCycles": 16,
           "per100": 37.5
         },
+        "tiedControlCycles": {
+          "count": 10,
+          "comparableCycles": 32,
+          "per100": 31.25
+        },
         "personReplacement": {
           "count": 3,
           "comparableCycles": 16,
@@ -626,6 +666,11 @@
           "count": 1,
           "comparableCycles": 13,
           "per100": 7.6923076923076925
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 29,
+          "per100": 3.4482758620689653
         },
         "personReplacement": {
           "count": 7,
@@ -707,6 +752,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 10,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 24,
           "per100": 0
         },
         "personReplacement": {
@@ -792,6 +842,11 @@
           "comparableCycles": 8,
           "per100": 37.5
         },
+        "tiedControlCycles": {
+          "count": 3,
+          "comparableCycles": 16,
+          "per100": 18.75
+        },
         "personReplacement": {
           "count": 0,
           "comparableCycles": 8,
@@ -871,6 +926,11 @@
           "count": 4,
           "comparableCycles": 8,
           "per100": 50
+        },
+        "tiedControlCycles": {
+          "count": 6,
+          "comparableCycles": 16,
+          "per100": 37.5
         },
         "personReplacement": {
           "count": 0,
@@ -952,6 +1012,11 @@
           "comparableCycles": 6,
           "per100": 16.666666666666668
         },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 12,
+          "per100": 8.333333333333334
+        },
         "personReplacement": {
           "count": 0,
           "comparableCycles": 6,
@@ -1031,6 +1096,11 @@
           "count": 2,
           "comparableCycles": 8,
           "per100": 25
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 16,
+          "per100": 12.5
         },
         "personReplacement": {
           "count": 3,
@@ -1112,6 +1182,11 @@
           "comparableCycles": 0,
           "per100": null
         },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
         "personReplacement": {
           "count": 0,
           "comparableCycles": 0,
@@ -1190,6 +1265,11 @@
         "tiedControlComparison": {
           "count": 1,
           "comparableCycles": 6,
+          "per100": 16.666666666666668
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 12,
           "per100": 16.666666666666668
         },
         "personReplacement": {
@@ -1272,6 +1352,11 @@
           "comparableCycles": 16,
           "per100": 25
         },
+        "tiedControlCycles": {
+          "count": 3,
+          "comparableCycles": 24,
+          "per100": 12.5
+        },
         "personReplacement": {
           "count": 7,
           "comparableCycles": 16,
@@ -1350,6 +1435,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 8,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 16,
           "per100": 0
         },
         "personReplacement": {
@@ -1431,6 +1521,11 @@
           "count": 0,
           "comparableCycles": 0,
           "per100": null
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 4,
+          "per100": 0
         },
         "personReplacement": {
           "count": 0,
@@ -1515,6 +1610,11 @@
           "comparableCycles": 0,
           "per100": null
         },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 1,
+          "per100": 0
+        },
         "personReplacement": {
           "count": 0,
           "comparableCycles": 0,
@@ -1594,6 +1694,11 @@
           "count": 1,
           "comparableCycles": 8,
           "per100": 12.5
+        },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 16,
+          "per100": 6.25
         },
         "personReplacement": {
           "count": 0,
@@ -1675,6 +1780,11 @@
           "comparableCycles": 8,
           "per100": 12.5
         },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 16,
+          "per100": 6.25
+        },
         "personReplacement": {
           "count": 3,
           "comparableCycles": 8,
@@ -1753,6 +1863,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 8,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 16,
           "per100": 0
         },
         "personReplacement": {
@@ -1835,6 +1950,11 @@
           "comparableCycles": 8,
           "per100": 0
         },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 16,
+          "per100": 0
+        },
         "personReplacement": {
           "count": 5,
           "comparableCycles": 8,
@@ -1914,6 +2034,11 @@
           "count": 0,
           "comparableCycles": 8,
           "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 24,
+          "per100": 8.333333333333334
         },
         "personReplacement": {
           "count": 7,
@@ -1995,6 +2120,11 @@
           "comparableCycles": 8,
           "per100": 12.5
         },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 16,
+          "per100": 6.25
+        },
         "personReplacement": {
           "count": 4,
           "comparableCycles": 8,
@@ -2073,6 +2203,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 6,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 12,
           "per100": 0
         },
         "personReplacement": {
@@ -2155,6 +2290,11 @@
           "comparableCycles": 18,
           "per100": 16.666666666666668
         },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 24,
+          "per100": 8.333333333333334
+        },
         "personReplacement": {
           "count": 15,
           "comparableCycles": 18,
@@ -2233,6 +2373,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 6,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 12,
           "per100": 0
         },
         "personReplacement": {
@@ -2315,6 +2460,11 @@
           "comparableCycles": 6,
           "per100": 16.666666666666668
         },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 12,
+          "per100": 16.666666666666668
+        },
         "personReplacement": {
           "count": 5,
           "comparableCycles": 6,
@@ -2394,6 +2544,11 @@
           "count": 2,
           "comparableCycles": 8,
           "per100": 25
+        },
+        "tiedControlCycles": {
+          "count": 2,
+          "comparableCycles": 16,
+          "per100": 12.5
         },
         "personReplacement": {
           "count": 1,
@@ -2475,6 +2630,11 @@
           "comparableCycles": 8,
           "per100": 37.5
         },
+        "tiedControlCycles": {
+          "count": 5,
+          "comparableCycles": 16,
+          "per100": 31.25
+        },
         "personReplacement": {
           "count": 0,
           "comparableCycles": 8,
@@ -2553,6 +2713,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 12,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 24,
           "per100": 0
         },
         "personReplacement": {
@@ -2635,6 +2800,11 @@
           "comparableCycles": 4,
           "per100": 0
         },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 8,
+          "per100": 0
+        },
         "personReplacement": {
           "count": 1,
           "comparableCycles": 4,
@@ -2715,6 +2885,11 @@
           "comparableCycles": 5,
           "per100": 0
         },
+        "tiedControlCycles": {
+          "count": 1,
+          "comparableCycles": 17,
+          "per100": 5.882352941176471
+        },
         "personReplacement": {
           "count": 3,
           "comparableCycles": 5,
@@ -2793,6 +2968,11 @@
         "tiedControlComparison": {
           "count": 0,
           "comparableCycles": 50,
+          "per100": 0
+        },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 100,
           "per100": 0
         },
         "personReplacement": {
@@ -2878,6 +3058,11 @@
           "comparableCycles": 172,
           "per100": 22.093023255813954
         },
+        "tiedControlCycles": {
+          "count": 42,
+          "comparableCycles": 244,
+          "per100": 17.21311475409836
+        },
         "personReplacement": {
           "count": 31,
           "comparableCycles": 172,
@@ -2961,6 +3146,11 @@
           "comparableCycles": 67,
           "per100": 0
         },
+        "tiedControlCycles": {
+          "count": 0,
+          "comparableCycles": 167,
+          "per100": 0
+        },
         "personReplacement": {
           "count": 24,
           "comparableCycles": 67,
@@ -3040,6 +3230,11 @@
           "count": 5,
           "comparableCycles": 50,
           "per100": 10
+        },
+        "tiedControlCycles": {
+          "count": 5,
+          "comparableCycles": 100,
+          "per100": 5
         },
         "personReplacement": {
           "count": 13,
