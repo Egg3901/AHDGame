@@ -374,4 +374,25 @@ describe("journaled monetary commands", () => {
     await executeMonetaryOperation(db, command());
     expect(state(memory).pool.cashLocal).toBe(15000);
   });
+  it("retains the bond receipt generation captured with the original command quote", async () => {
+    const memory = world(),
+      db = memory as unknown as Db;
+    const commands = memory.collection("monetaryOperationCommands"),
+      insert = commands.insertOne.bind(commands);
+    vi.spyOn(commands, "insertOne").mockImplementation(async (...args) => {
+      const result = await insert(...args);
+      await memory
+        .collection("bonds")
+        .updateOne({ _id: bondId }, { $push: { settledKeys: "intervening-asset-settlement" } });
+      return result;
+    });
+    await expect(executeMonetaryOperation(db, command())).rejects.toThrow(/inventory changed/);
+    expect(state(memory).pool.cashLocal).toBe(10000);
+    expect(state(memory).bond).toMatchObject({ publicFloat: 100, centralBankHoldings: 10 });
+    expect(state(memory).bank.netMoneyCreatedLifetime).toBe(0);
+    expect(memory.collection("monetaryOperationCommands").docs[0]).toMatchObject({
+      status: "rejected",
+      assetGeneration: null,
+    });
+  });
 });

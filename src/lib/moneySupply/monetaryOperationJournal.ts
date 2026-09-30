@@ -65,6 +65,7 @@ interface Receipt extends Document {
   cash: BankingTransition;
   asset?: BankingTransition;
   assetGuard?: Record<string, unknown>;
+  assetGeneration?: readonly string[] | null;
   refund?: BankingTransition;
   witnesses: TransitionProjection[];
 }
@@ -257,7 +258,7 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
   }
   if (!command.bondId || !ObjectId.isValid(command.bondId))
     throw new MonetaryOperationRejected("Valid bond required");
-  const bond = await db.collection<Bond>("bonds").findOne({
+  const bond = await db.collection<Bond & { settledKeys?: string[] }>("bonds").findOne({
     _id: new ObjectId(command.bondId),
     issuerType: "sovereign",
     countryId: command.countryId,
@@ -311,6 +312,7 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
       note: "exchange float and central-bank units at the original quote",
     },
   ];
+  receipt.assetGeneration = bond.settledKeys ? [...bond.settledKeys] : null;
   receipt.assetGuard = {
     matured: false,
     defaulted: false,
@@ -573,6 +575,7 @@ async function finish(
         identity: { _id: oid(receipt.command.bondId!) },
         guard: receipt.assetGuard,
         nonCashMode: "central_bank_bond_exchange",
+        expectedSettledKeys: receipt.assetGeneration,
       });
       if (assets.status === "rejected") {
         if (!receipt.refund) {
