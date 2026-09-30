@@ -170,9 +170,12 @@ async function finishLiquidityAdvance(
   if (receipt.status === "rejected")
     throw new LiquidityAdvanceRejected(receipt.error ?? "Liquidity command was rejected");
   const { command, bankId, currency } = receipt;
-  const banks = db.collection<CentralBank & { pendingLiquidityOperationId?: string }>(
-    "centralBanks"
-  );
+  const banks = db.collection<
+    Omit<CentralBank, "lastMonetaryOperationTurn"> & {
+      lastMonetaryOperationTurn?: number | null;
+      pendingLiquidityOperationId?: string;
+    }
+  >("centralBanks");
   if (receipt.status === "planning") {
     const already = await banks.findOne(
       { _id: bankId, pendingLiquidityOperationId: receipt._id },
