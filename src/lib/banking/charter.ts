@@ -1,4 +1,4 @@
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { BankCharter, BankCharterType } from "@/lib/db/types/bank";
 import type { Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -12,6 +12,8 @@ import {
 } from "@/lib/currency/gdpAnchorRate";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
+import { oid } from "./rules/boundary";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
@@ -298,34 +300,57 @@ async function issueCharterInner(
     blacklist: {},
   };
 
-  // Single-document atomic debit + charter write. Filter re-gates capital and
-  // rejects a race that already activated a charter.
-  const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
+  const identity = { _id: oid(corporationId.toHexString()) };
+  const settlement = await settleAtomicDocumentTransition(
+    db,
     {
-      _id: corporationId,
-      liquidCapital: { $gte: postedCapital },
-      $or: [{ bankCharter: { $exists: false } }, { "bankCharter.status": { $ne: "active" } }],
+      key: `bank_charter_capital:${corporationId}:${new ObjectId()}`,
+      kind: "bank_charter_capital",
+      turn: charteredTurn,
+      currency,
+      legs: [
+        {
+          kind: "debit",
+          amount: postedCapital,
+          collection: "corporations",
+          filter: identity,
+          path: "liquidCapital",
+          note: "Corporation posts charter capital",
+        },
+        {
+          kind: "credit",
+          amount: postedCapital,
+          collection: "corporations",
+          filter: identity,
+          path: "bankCharter.cashReserves",
+          note: "Opening charter vault",
+        },
+      ],
+      projections: [
+        {
+          collection: "corporations",
+          filter: identity,
+          update: {
+            $inc: { liquidCapital: -postedCapital },
+            $set: { bankCharter: charter, updatedAt: now },
+          },
+          note: "Publish fully funded charter",
+        },
+      ],
+      event: { kind: "charter.issued", command: "bank.charter.issue" },
     },
-    {
-      $inc: { liquidCapital: -postedCapital },
-      $set: {
-        bankCharter: charter,
-        updatedAt: now,
-      },
-    },
-    { returnDocument: "after" }
+    { identity, guard: { bankCharter: prior === undefined ? { $exists: false } : prior } }
   );
-
-  if (!updated) {
+  if (settlement.status !== "applied" && settlement.status !== "replayed") {
     return {
       ok: false,
-      reasons: ["Failed to post capital (insufficient funds or charter already active)"],
+      reasons: ["Failed to post capital (insufficient funds or charter changed)"],
     };
   }
 
   return {
     ok: true,
-    charter: updated.bankCharter ?? charter,
+    charter,
     postedCapital,
   };
 }

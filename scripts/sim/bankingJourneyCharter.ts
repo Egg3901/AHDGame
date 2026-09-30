@@ -45,6 +45,16 @@ export async function runCharterJourney(page: Page, db: Db, base: string) {
   assert(Math.abs(treasuryBefore - treasuryAfter - issueResult.postedCapital) < 0.02);
   assert(Math.abs(chartered.bank.cash - issueResult.postedCapital) < 0.02);
   assert(Math.abs(chartered.cash - before.cash) < 0.02);
+  const capitalJournal = chartered.journals.filter((move) => move.kind === "bank_charter_capital");
+  assert.equal(capitalJournal.length, 1, "One actual charter capital settlement");
+  assert.equal(capitalJournal[0].status, "applied");
+  assert.deepEqual(
+    capitalJournal[0].amounts.map((leg) => ({ kind: leg.kind, amount: leg.amount })),
+    [
+      { kind: "debit", amount: issueResult.postedCapital },
+      { kind: "credit", amount: issueResult.postedCapital },
+    ]
+  );
   console.log("completed actual UI retail charter issuance");
   await page.getByRole("button", { name: "Treasury", exact: true }).click();
   await page.getByLabel("Capital transfer amount").fill("1000");

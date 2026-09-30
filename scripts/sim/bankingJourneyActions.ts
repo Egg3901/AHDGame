@@ -5,7 +5,13 @@ import type { Db } from "mongodb";
 import type { Page } from "playwright";
 import { BANK, BORROWER, advanceJourney, journeySnapshot } from "./bankingJourneyFixture";
 
-export async function runBankingActions(page: Page, db: Db, base: string, turn: number) {
+export async function runBankingActions(
+  page: Page,
+  db: Db,
+  base: string,
+  turn: number,
+  resumedDepositBaseline?: Awaited<ReturnType<typeof journeySnapshot>>
+) {
   page.setDefaultTimeout(120_000);
   const snapshots: { stage: string; state: Awaited<ReturnType<typeof journeySnapshot>> }[] = [];
   const capture = async (stage: string) => {
@@ -35,18 +41,22 @@ export async function runBankingActions(page: Page, db: Db, base: string, turn: 
     assert(result.ok(), `${path}: ${result.status()} ${JSON.stringify(body)}`);
     return body;
   };
-  const baseline = await capture("baseline");
-  await page
-    .getByRole("button", { name: "Deposit savings at Journey Savings Bank", exact: true })
-    .click();
-  await page.getByLabel("Deposit amount in USD").fill("1000000");
-  await command("/api/character/savings/deposit", () =>
-    page.getByRole("button", { name: "Deposit savings", exact: true }).click()
+  const baseline = resumedDepositBaseline ?? (await capture("baseline"));
+  if (!resumedDepositBaseline) {
+    await page
+      .getByRole("button", { name: "Deposit savings at Journey Savings Bank", exact: true })
+      .click();
+    await page.getByLabel("Deposit amount in USD").fill("1000000");
+    await command("/api/character/savings/deposit", () =>
+      page.getByRole("button", { name: "Deposit savings", exact: true }).click()
+    );
+    await page
+      .getByRole("dialog", { name: "Deposit with Journey Savings Bank" })
+      .waitFor({ state: "hidden" });
+  }
+  const deposited = await capture(
+    resumedDepositBaseline ? "resumed completed UI deposit 1000000 USD" : "UI deposit 1000000 USD"
   );
-  await page
-    .getByRole("dialog", { name: "Deposit with Journey Savings Bank" })
-    .waitFor({ state: "hidden" });
-  const deposited = await capture("UI deposit 1000000 USD");
   near(deposited.saverWallet, baseline.saverWallet - 1_000_000, "deposit wallet debit");
   near(deposited.bank.cash, baseline.bank.cash + 1_000_000, "deposit vault credit");
   near(deposited.bank.liability, 1_000_000, "deposit liability");

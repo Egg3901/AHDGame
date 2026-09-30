@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { createWriteStream, writeFileSync } from "node:fs";
+import { createWriteStream, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { MongoClient } from "mongodb";
@@ -37,9 +37,40 @@ async function main() {
   const client = await MongoClient.connect(uri);
   global._mongoClientPromise = Promise.resolve(client);
   const db = client.db(target);
+  const resumeDepositEvidence = arg("resume-deposit-evidence");
+  const resumedDepositBaseline = resumeDepositEvidence
+    ? (
+        JSON.parse(readFileSync(resumeDepositEvidence, "utf8")) as {
+          stage: string;
+          state: Awaited<ReturnType<typeof journeySnapshot>>;
+        }[]
+      ).find((row) => row.stage === "baseline")?.state
+    : undefined;
+  if (resumeDepositEvidence) assert(resumedDepositBaseline, "Missing initial deposit baseline");
+  const probeHub = arg("probe-hub") === "true";
   const resumeUntouchedFixture = arg("resume-untouched-fixture") === "true";
   let fixture;
-  if (resumeUntouchedFixture) {
+  if (probeHub || resumedDepositBaseline) {
+    assert.equal(
+      (await db.collection("users").findOne({ _id: USER }))?.email,
+      "banking-player@example.invalid"
+    );
+    const retained = await loadRetainedContext(client.db(sourceName));
+    fixture = {
+      setup: { turn: (resumedDepositBaseline?.turn as number) ?? 0 },
+      retainedHash: retained.hash,
+    };
+    if (resumedDepositBaseline) {
+      const existing = await journeySnapshot(db);
+      assert.equal(existing.turn, resumedDepositBaseline.turn);
+      assert.equal(existing.loans.length, 0);
+      assert.equal(existing.bank.status, "active");
+      assert.equal(existing.savings.length, 1);
+      assert.equal(existing.savings[0].balance, 1_000_000);
+      assert.equal(existing.bank.liability, 1_000_000);
+      assert.equal(existing.saverWallet, resumedDepositBaseline.saverWallet - 1_000_000);
+    }
+  } else if (resumeUntouchedFixture) {
     // Reuse a previously prepared but never exercised local browser fixture.
     assert.equal(
       (await db.collection("users").findOne({ _id: USER }))?.email,
@@ -170,6 +201,28 @@ async function main() {
     // The real session bundle is a readiness read, so cold compilation cannot trigger the UI's short network timeout.
     const authenticated = await context.request.get(`${base}/api/client-nav`, { timeout: 300_000 });
     assert(authenticated.ok(), "Synthetic session bundle failed");
+    if (probeHub) {
+      const measurements = [];
+      for (let index = 0; index < 3; index++) {
+        const started = performance.now();
+        const response = await context.request.get(`${base}/api/banking/hub`, { timeout: 300_000 });
+        const body = await response.json();
+        measurements.push({
+          index,
+          elapsedMs: performance.now() - started,
+          status: response.status(),
+          currentTurn: body.currentTurn,
+          savings: body.savings,
+        });
+        console.log("authenticated hub probe", JSON.stringify(measurements.at(-1)));
+        assert(response.ok(), "Hub probe failed");
+      }
+      writeFileSync(
+        out,
+        JSON.stringify({ sourceCommit, measurements, state: await journeySnapshot(db) }, null, 2)
+      );
+      return;
+    }
     page = await context.newPage();
     const errors: string[] = [],
       requests: { path: string; status: number }[] = [];
@@ -189,7 +242,13 @@ async function main() {
       .screenshot({ path: `${out}.png`, fullPage: true, timeout: 5000 })
       .catch(() => console.log("Optional banking screenshot unavailable"));
     const baseline = await journeySnapshot(db);
-    const actions = await runBankingActions(page, db, base, fixture.setup.turn);
+    const actions = await runBankingActions(
+      page,
+      db,
+      base,
+      fixture.setup.turn,
+      resumedDepositBaseline
+    );
     const recovery = await runRecoveryJourney(page, db, base, arg("development") === "true");
     const governance = await runGovernanceJourney(page, db, base, async () => {
       await context.addCookies([
@@ -229,6 +288,7 @@ async function main() {
           recovery,
           charter,
           resumeUntouchedFixture,
+          resumedCompletedDeposit: Boolean(resumedDepositBaseline),
           excludedAuxiliaryPaths,
           baseline,
           requests,

@@ -334,6 +334,55 @@ describe("BankingHubClient", () => {
     );
   });
 
+  it.each([true, false])(
+    "closes a completed deposit before a delayed refresh (holder routed=%s)",
+    async (holderRouted) => {
+      let reads = 0;
+      let finishRefresh!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        finishRefresh = resolve;
+      });
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        if (url === "/api/banking/hub" && ++reads > 1) await pending;
+        if (url === "/api/character/savings/deposit")
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              holderRouted,
+              holderError: "Bank no longer accepts deposits",
+            }),
+          };
+        return { ok: true, json: async () => payload };
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      render(<BankingHubClient />);
+      await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+      fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
+        target: { value: "500" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings", exact: true }));
+      try {
+        await waitFor(() => expect(reads).toBe(2));
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("dialog", { name: "Deposit with Continental Trust" })
+          ).toBeNull()
+        );
+        expect(
+          fetchMock.mock.calls.filter(([url]) => url === "/api/character/savings/deposit")
+        ).toHaveLength(1);
+        expect(showToast).toHaveBeenCalledWith(
+          expect.stringContaining(holderRouted ? "Deposited" : "could not route"),
+          holderRouted ? "success" : "error"
+        );
+      } finally {
+        finishRefresh();
+      }
+    }
+  );
+
   it("shows a recovery message and releases the holder selector when delivery fails", async () => {
     let attempts = 0;
     const fetchMock = vi.fn().mockImplementation(async (url: string) => {
