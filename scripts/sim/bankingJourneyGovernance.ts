@@ -1,5 +1,6 @@
 /** Browser exercises real authority gates; appointments are explicit scenario inputs. */
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import type { Db } from "mongodb";
 import type { Page } from "playwright";
 import { SAVER } from "./bankingJourneyFixture";
@@ -12,10 +13,22 @@ export async function runGovernanceJourney(
 ) {
   const beforeUs = await db.collection("centralBanks").findOne({ _id: "US" as never });
   assert(beforeUs?.activeFomcMeeting, "Actual committee turn must have opened a meeting");
-  await page.goto(`${base}/centralbank/usd?tab=committee`, {
-    waitUntil: "domcontentloaded",
-    timeout: 180_000,
-  });
+  // This page loads its real session before requesting the committee. Await that
+  // read explicitly instead of starting a button timeout while the shell loads.
+  const meetingResponse = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/country/us/fomc" && r.request().method() === "GET",
+    { timeout: 180_000 }
+  );
+  const [meetingRead] = await Promise.all([
+    meetingResponse,
+    page.goto(`${base}/centralbank/usd?tab=committee`, {
+      waitUntil: "domcontentloaded",
+      timeout: 180_000,
+    }),
+  ]);
+  assert(meetingRead.ok(), "Actual committee read must succeed before voting");
+  const rejectCookies = page.getByRole("button", { name: "Reject", exact: true });
+  if (await rejectCookies.isVisible()) await rejectCookies.click();
   const voteResponse = page.waitForResponse(
     (r) =>
       new URL(r.url()).pathname === "/api/country/us/fomc/vote" && r.request().method() === "POST",
@@ -42,6 +55,14 @@ export async function runGovernanceJourney(
         ballot.seatId === "seat-1" && ballot.auto === false && ballot.vote === "hold"
     ),
     "Actual player ballot must be recorded against its seat"
+  );
+  writeFileSync(
+    `${process.env.JOURNEY_SCREENSHOT_PREFIX}.us-vote.json`,
+    JSON.stringify(
+      { beforeRate: beforeUs.primeRate, afterRate: afterUs.primeRate, meeting },
+      null,
+      2
+    )
   );
   console.log("completed US committee UI ballot");
   await page
