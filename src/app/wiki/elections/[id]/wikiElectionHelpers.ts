@@ -114,8 +114,6 @@ export function generateOverview(election: ElectionDetail, totalVotes: number): 
     }
   })();
 
-  const dateStr = formatDate(election.endTime);
-
   if (election.generalResults) {
     const sortedCandidates = Object.entries(election.generalResults.candidateNames)
       .map(([id, name]) => ({
@@ -134,17 +132,17 @@ export function generateOverview(election: ElectionDetail, totalVotes: number): 
       election.electionType === "president" &&
       election.generalResults.electoralVotesByCandidate
     ) {
-      return `The ${typeDesc} was held on ${dateStr}, during Cycle ${election.cycle} of the simulation. ${winner.name} of the ${winner.party} secured victory with ${winner.ev} electoral votes, defeating ${runnerUp?.name} of the ${runnerUp?.party} who received ${runnerUp?.ev} electoral votes.`;
+      return `The ${typeDesc} was held in ${election.year}. ${winner.name} of the ${winner.party} secured victory with ${winner.ev} electoral votes, defeating ${runnerUp?.name} of the ${runnerUp?.party} who received ${runnerUp?.ev} electoral votes.`;
     } else if (election.electionType === "house" && election.generalResults.seatsEstimate) {
       const winnerSeats = election.generalResults.seatsEstimate[winner.id];
-      return `The ${typeDesc} was held on ${dateStr}, during Cycle ${election.cycle} of the simulation. The ${winner.party} won control with ${winnerSeats} seat${winnerSeats !== 1 ? "s" : ""} out of ${election.totalSeats} total.`;
+      return `The ${typeDesc} was held in ${election.year}. The ${winner.party} won control with ${winnerSeats} seat${winnerSeats !== 1 ? "s" : ""} out of ${election.totalSeats} total.`;
     } else {
       const winnerPct = totalVotes > 0 ? ((winner.votes / totalVotes) * 100).toFixed(1) : "0";
-      return `The ${typeDesc} was held on ${dateStr}, during Cycle ${election.cycle} of the simulation. ${winner.name} of the ${winner.party} won with ${winnerPct}% of the vote.`;
+      return `The ${typeDesc} was held in ${election.year}. ${winner.name} of the ${winner.party} won with ${winnerPct}% of the vote.`;
     }
   }
 
-  return `The ${typeDesc} was held on ${dateStr}, during Cycle ${election.cycle} of the simulation.`;
+  return `The ${typeDesc} was held in ${election.year}.`;
 }
 
 export function generateBackground(election: ElectionDetail): string {
@@ -162,8 +160,52 @@ export function generateBackground(election: ElectionDetail): string {
     return `As part of the staggered Senate election cycle, ${election.stateName}'s Class ${election.senateClass} Senate seat was contested in this election. The race featured ${candidateCount} candidate${candidateCount !== 1 ? "s" : ""} vying for a six-year term in the upper chamber of Congress. The outcome would influence the balance of power in the Senate and shape the state's representation in federal legislative deliberations.`;
   } else if (election.electionType === "house") {
     return `This election encompassed all ${election.totalSeats} House seat${election.totalSeats !== 1 ? "s" : ""} in ${election.stateName}, with voters in each district selecting their representative for a two-year term. The collective results would determine which party controlled the state's House delegation and contributed to the overall partisan balance in the lower chamber of Congress. ${partyCount} ${partyCount !== 1 ? "parties" : "party"} fielded candidates across the various districts, making this a comprehensive test of political strength statewide.`;
-  } else {
-    return `This state legislative election determined the composition of ${election.stateName}'s State Senate for the coming term. With ${election.totalSeats} seat${election.totalSeats !== 1 ? "s" : ""} at stake, the results would shape state policy-making and legislative priorities. The election attracted ${candidateCount} candidate${candidateCount !== 1 ? "s" : ""} across multiple districts, reflecting diverse political viewpoints within the state.`;
+  }
+
+  const chamber = legislativeChamber(election.electionType);
+  const seats = `${election.totalSeats} seat${election.totalSeats !== 1 ? "s" : ""}`;
+  const field = `The election attracted ${candidateCount} candidate${candidateCount !== 1 ? "s" : ""} from ${partyCount} ${partyCount !== 1 ? "parties" : "party"}.`;
+  if (chamber?.national) {
+    const snap = election.electionType.startsWith("snap_")
+      ? `This snap election was called before the end of the parliamentary term. `
+      : "";
+    return `${snap}${election.stateName} returned ${seats} to the ${chamber.name}. The result fed into the national balance of the chamber and the government formed from it. ${field}`;
+  }
+  const body = chamber?.name ?? typeLabel(election.electionType);
+  return `This election determined the composition of ${election.stateName}'s ${body} for the coming term. With ${seats} at stake, the results would shape regional policy-making and legislative priorities. ${field}`;
+}
+
+/**
+ * The legislative body a race fills. `national` marks races that elect a
+ * region's share of a national chamber rather than a regional body.
+ */
+export function legislativeChamber(type: string): { name: string; national: boolean } | null {
+  switch (type) {
+    case "commons":
+    case "snap_commons":
+      return { name: "House of Commons", national: true };
+    case "bundestag":
+    case "snap_bundestag":
+      return { name: "Bundestag", national: true };
+    case "shugiin":
+    case "snap_shugiin":
+      return { name: "House of Representatives", national: true };
+    case "sangiin":
+      return { name: "House of Councillors", national: true };
+    case "dail":
+      return { name: "Dáil Éireann", national: true };
+    case "seanad":
+      return { name: "Seanad Éireann", national: true };
+    case "stateSenate":
+      return { name: "State Senate", national: false };
+    case "regionalCouncil":
+      return { name: "Regional Council", national: false };
+    case "landtag":
+      return { name: "Landtag", national: false };
+    case "localCouncil":
+      return { name: "Local Council", national: false };
+    default:
+      return null;
   }
 }
 

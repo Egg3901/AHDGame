@@ -194,7 +194,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       ? {
           totalVotes: voteTally.totalVotes,
           candidateNames: voteTally.candidateNames,
-          candidateParties: voteTally.candidateParties,
+          // Tallies store the party's sequential id; the wiki renders names.
+          candidateParties: Object.fromEntries(
+            Object.entries(voteTally.candidateParties ?? {}).map(([candId, partyId]) => [
+              candId,
+              partyMap.get(String(partyId))?.name ?? partyId,
+            ])
+          ),
           seatsEstimate: voteTally.seatsEstimate ?? undefined,
           finalized: voteTally.finalized,
           turnSnapshots: voteTally.turnSnapshots ?? [],
