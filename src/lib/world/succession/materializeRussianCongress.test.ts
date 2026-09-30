@@ -346,6 +346,17 @@ describe("fresh Soviet settlement political handoff", () => {
     expect(await mem.collection("cabinetMembers").countDocuments({ countryId: "UK" })).toBe(1);
   });
 
+  it("accepts an explicit null succession marker from an older save", async () => {
+    const { mem, input } = fixture();
+    await mem
+      .collection("countryGameStates")
+      .updateOne({ _id: "RU" }, { $set: { ruSovietSuccessionSinceTurn: null } });
+    expect(await materializeProvisionalRussianCongress(input)).toMatchObject({ totalSeats: 10 });
+    expect(await mem.collection("countryGameStates").findOne({ _id: "RU" })).toMatchObject({
+      ruSovietSuccessionSinceTurn: 41,
+    });
+  });
+
   it("requires an active transaction and a complete retained partition", async () => {
     const { input } = fixture();
     await expect(

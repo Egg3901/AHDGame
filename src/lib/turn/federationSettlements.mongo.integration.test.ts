@@ -320,6 +320,20 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     await db
       .collection<Fixture>("exchangeRates")
       .insertOne({ _id: "RUB", currencyCode: "RUB", rate: 1 });
+    const sovietBondId = new ObjectId();
+    await db.collection("bonds").insertOne({
+      _id: sovietBondId,
+      issuerType: "sovereign",
+      countryId: "RU",
+      currencyCode: "RUB",
+      totalIssued: 200,
+      couponRate: 4.8,
+      maturityTurn: 300,
+      holders: [{ units: 0.2 }],
+      publicFloat: 0,
+      matured: false,
+      defaulted: false,
+    });
     const retained = sovietUnionRegions1991.find((row) => !row._id.startsWith("SU_"))!;
     const playerId = new ObjectId();
     const slateId = new ObjectId();
@@ -435,6 +449,13 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       currentOffice: { type: "congressDeputy", seatsHeld: 3 },
     });
     expect(await db.collection("macroCountries").countDocuments({})).toBe(14);
+    expect(await db.collection("bonds").findOne({ _id: sovietBondId })).toMatchObject({
+      countryId: "RU",
+      currencyCode: "RUB",
+      totalIssued: 200,
+      matured: false,
+      defaulted: false,
+    });
     expect(
       await processRatifiedFederationSettlements(db, "1991-default", 183, 1992, new Date(4))
     ).toBe(0);

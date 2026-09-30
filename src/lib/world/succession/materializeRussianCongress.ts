@@ -89,7 +89,6 @@ export async function materializeProvisionalRussianCongress(input: {
   if (establishedConstitution) {
     return preserveEstablishedRussianConstitution({
       ...input,
-      country,
       officials,
       retainedStateIds,
     });
@@ -299,7 +298,7 @@ export async function materializeProvisionalRussianCongress(input: {
       _id: "RU",
       $or: [
         { ruSovietSuccessionSinceTurn: { $exists: false } },
-        { ruSovietSuccessionSinceTurn: null },
+        { ruSovietSuccessionSinceTurn: { $type: "null" } },
       ],
     },
     {
@@ -487,7 +486,7 @@ async function preserveEstablishedRussianConstitution(input: {
       _id: "RU",
       $or: [
         { ruSovietSuccessionSinceTurn: { $exists: false } },
-        { ruSovietSuccessionSinceTurn: null },
+        { ruSovietSuccessionSinceTurn: { $type: "null" } },
       ],
     },
     { $set: { ruSovietSuccessionSinceTurn: appliedOnTurn, updatedAt: now } },
