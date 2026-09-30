@@ -4,7 +4,7 @@ Date: 2026-09-30. This repairs a confirmed account-lifecycle defect for #992 and
 
 ## Source and inputs
 
-- Treatment: `aca1b636a9fb197f7272d9df3f50f28ecd344adf`, clean at start and finish. [Runner](../sovereignPrimaryReplay.ts), [measured results](issue-992-primary-financing.json).
+- Treatment: `0b7472c047d9b270afeb28ad918126cccf2083cc`, clean at start and finish. [Runner](../sovereignPrimaryReplay.ts), [measured results](issue-992-primary-financing.json).
 - Baseline runtime: `7d7ecad06dde93bf51ee6550f18cfc19ef1731a3`. Execution commit `322a2b0b7bd4171d7bd4c4d8a7839eeb027be303` adds only the identical runner; its `src` diff against the baseline is empty. No treatment source is loaded by the baseline process.
 - Both start from completed retained run `4d943526-e75f-48c7-b46f-6a10d5aeff64`, generated at `2aa9c18195207a1726a04afae60e5a8f913045fd`, saved turn 241. The older run supplies input, not validation of new code.
 - Eight copied collection selections have content SHA256 `76aafccbc5f63601cadab11ec931e5a9c597694f15051f282c1a56ea766cbe3e`. Both executions verify the source remains unchanged. Public output excludes database names, connection details and player identities.
@@ -39,6 +39,8 @@ All 19 treatment result rows pass the real ledger reconciler: balanced entries, 
 | Later placement of an unfilled offer | Nine units placed through the actual quote path; proceeds, face and repeated-call checks pass                |
 
 The journal claims an immutable key before cash moves. Buyer cash, treasury proceeds, issued units, principal, coupon obligations and durable receipts belong to that intent. A partial move remains visible for the existing recovery worker. A caller cannot recalculate a second issue while that intent is unfinished. Unfunded units incur no principal or coupon. Central-bank ownership is distinct from the pool's public inventory. All funded entry points refresh the canonical debt ratio, credit rating and rate immediately. Journal-owned audit receipts are explicitly excluded from generic ledger re-derivation, so receipt reprocessing cannot add a second cash witness.
+
+The final four focused suites pass 90 tests. They include rejection of missing, non-finite or nonpositive FX before any cash or journal mutation for USD, GBP and DEM, and correct anchor witnesses when USD floats at 1.25. No currency receives a fabricated 1:1 rate.
 
 Focused stateful tests additionally cover concurrent duplicate requests, interruptions after each cash leg and during debt/bond projections, rollover preserving the old holder's units until ordinary maturity, absence of a buyer pool, and cash-neutral historical reconciliation. Existing monetary integration tests verify a single M2 destination; the retained replay's monetary check is cash/ledger attribution, not a complete economic money-supply forecast.
 
