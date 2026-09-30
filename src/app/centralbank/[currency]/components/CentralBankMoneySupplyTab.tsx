@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { Button } from "@/components/ui";
 import { formatNativeCurrency } from "./centralBankUtils";
@@ -30,6 +30,7 @@ export function CentralBankMoneySupplyTab({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const pendingLiquidity = useRef<{ signature: string; operationId: string } | null>(null);
   const fmt = (amount: number) => formatNativeCurrency(amount, data.currencyCode);
   const isBondOperation = type === "qe" || type === "qt";
 
@@ -40,20 +41,31 @@ export function CentralBankMoneySupplyTab({
     setMessage(null);
     const numeric = Number(value);
     try {
+      const signature = JSON.stringify({ countryId, type, amount: numeric, reason: reason.trim() });
+      if (type === "liquidity_injection" && pendingLiquidity.current?.signature !== signature) {
+        pendingLiquidity.current = { signature, operationId: crypto.randomUUID() };
+      }
       const response = await fetch(`/api/country/${countryId}/central-bank/monetary-operation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type,
+          ...(type === "liquidity_injection"
+            ? { operationId: pendingLiquidity.current?.operationId }
+            : {}),
           ...(isBondOperation ? { bondId, units: Math.floor(numeric) } : { amount: numeric }),
           reason: reason || undefined,
         }),
       });
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error ?? "Monetary operation failed");
+      if (!response.ok) {
+        if ([400, 403, 409, 422].includes(response.status)) pendingLiquidity.current = null;
+        throw new Error(json.error ?? "Monetary operation failed");
+      }
       setMessage(
         `${type.replaceAll("_", " ").toUpperCase()} completed: ${fmt(json.operation.amount)}`
       );
+      pendingLiquidity.current = null;
       setValue("");
       setReason("");
       onChanged();

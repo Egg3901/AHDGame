@@ -313,3 +313,83 @@ describe("convertForExplicitPay", () => {
     expect(result.shortfall).toBe(0);
   });
 });
+
+it("funds a purchase from euro ledger units without spread even when market quotes are stale", async () => {
+  const { planEuroSettlement } = await import("./euro/rules");
+  const { convertForExplicitPay } = await import("./autoConvert");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const character = {
+    _id: new ObjectId(),
+    countryId: "UK",
+    currencyBalances: { campaign: 0, personal: { GBP: 750 } },
+  };
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  db.collection("characters").findOne.mockResolvedValue(character);
+  db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+  db.collection("exchangeRates").findOne.mockResolvedValue({ rate: 99 });
+  const result = await convertForExplicitPay(db as unknown as Db, {
+    character,
+    payCurrency: "GBP",
+    requiredCurrency: "EUR",
+    requiredAmount: 1000,
+    turn: 386,
+    forexEnabled: true,
+  });
+  expect(result.success).toBe(true);
+  expect(result.convertedAmount).toBeCloseTo(750);
+  expect(result.spreadCharged).toBe(0);
+  expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      $inc: expect.objectContaining({ "currencyBalances.personal.EUR": 1000 }),
+    })
+  );
+});
+
+it("funds external purchases with the common anchor's spread setting", async () => {
+  const { planEuroSettlement } = await import("./euro/rules");
+  const { convertForExplicitPay } = await import("./autoConvert");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const character = {
+    _id: new ObjectId(),
+    countryId: "UK",
+    currencyBalances: { campaign: 0, personal: { GBP: 200000 } },
+  };
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  db.collection("characters").findOne.mockResolvedValue(character);
+  db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+  db.collection("exchangeRates").findOne.mockImplementation(async ({ _id }: { _id: string }) => {
+    if (_id === "DE") return { _id, currencyCode: "EUR", rate: 1.6, forexSpreadStrength: 1.5 };
+    return {
+      _id,
+      currencyCode: _id === "UK" ? "GBP" : "USD",
+      rate: _id === "UK" ? 99 : 1,
+      forexSpreadStrength: 0.5,
+    };
+  });
+  const result = await convertForExplicitPay(db as unknown as Db, {
+    character,
+    payCurrency: "GBP",
+    requiredCurrency: "USD",
+    requiredAmount: 100000,
+    turn: 386,
+    forexEnabled: true,
+  });
+  expect(result.success).toBe(true);
+  const update = db.collection("characters").updateOne.mock.calls[0][1];
+  expect(update.$inc["currencyBalances.personal.USD"]).toBeGreaterThanOrEqual(100000);
+});

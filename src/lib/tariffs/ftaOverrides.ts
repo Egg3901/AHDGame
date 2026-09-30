@@ -1,3 +1,5 @@
+import { europeanCommonMarketPairs } from "@/lib/internationalOrganizations/europeanIntegration/rules";
+import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
@@ -13,23 +15,34 @@ import { getOrganizationLegislationCollection } from "@/lib/db/collections";
  */
 
 /** Canonical pair key, order-independent. */
-export function ftaPairKey(a: CountryId, b: CountryId): string {
+export function ftaPairKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
 export type FtaPairSet = ReadonlySet<string>;
 
 /**
- * Load all currently-active FTA country pairs from organizationLegislation.
+ * Load active FTA pairs and the European Community common market.
  * Each multilateral FTA contributes every C(n,2) pair from its `parties`.
  */
 export async function loadActiveFtaPairs(db: Db): Promise<Set<string>> {
   const col = await getOrganizationLegislationCollection(db);
-  const active = await col
-    .find({ type: "free_trade_agreement", status: "active" }, { projection: { parties: 1 } })
-    .toArray();
+  const [active, communityMembers] = await Promise.all([
+    col
+      .find({ type: "free_trade_agreement", status: "active" }, { projection: { parties: 1 } })
+      .toArray(),
+    db
+      .collection<OrganizationMembership>("organizationMemberships")
+      .find({ organizationId: "EU" }, { projection: { countryId: 1 } })
+      .toArray(),
+  ]);
 
-  const pairs = new Set<string>();
+  // The Community's common market is a membership obligation, not a second
+  // discretionary resolution. Withdrawal immediately removes this coverage;
+  // a separately enacted agreement may still cover the departing country.
+  const pairs = new Set(
+    europeanCommonMarketPairs(communityMembers.map((member) => member.countryId))
+  );
   for (const fta of active) {
     const parties = fta.parties as CountryId[];
     for (let i = 0; i < parties.length; i++) {
@@ -51,7 +64,7 @@ export async function loadActiveFtaPairs(db: Db): Promise<Set<string>> {
  */
 export function isFtaActive(pairs: FtaPairSet, a: string, b: string): boolean {
   if (a === b) return true; // domestic — treated as fully integrated
-  return pairs.has(ftaPairKey(a as CountryId, b as CountryId));
+  return pairs.has(ftaPairKey(a, b));
 }
 
 /**

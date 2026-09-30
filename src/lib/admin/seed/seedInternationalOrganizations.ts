@@ -1,3 +1,5 @@
+import { ensureEuropeanIntegrationState } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { withEuropeanInstitution } from "@/lib/internationalOrganizations/europeanIntegration/definition";
 import { ObjectId, type Db } from "mongodb";
 import {
   INTERNATIONAL_ORGANIZATIONS,
@@ -66,8 +68,13 @@ export async function seedInternationalOrganizations(
   const leadershipDocs: OrganizationLeadership[] = [];
 
   const startingYear = getStartingYearForPreset(preset);
+  const european = await ensureEuropeanIntegrationState(
+    db,
+    preset,
+    [...seenMembers].some((key) => key.startsWith("EU\u0000"))
+  );
   for (const orgId of INTERNATIONAL_ORGANIZATION_ORDER) {
-    const org = INTERNATIONAL_ORGANIZATIONS[orgId];
+    const org = withEuropeanInstitution(INTERNATIONAL_ORGANIZATIONS[orgId], european);
     // Founding-year gate: an org founded after this preset's starting year is
     // not seeded AT ALL (no memberships, no leadership row). It auto-founds
     // empty mid-game via foundDueOrganizations when the live year arrives.

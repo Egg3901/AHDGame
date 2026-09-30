@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { CurrencyProvider, useCurrency } from "./CurrencyContext";
 
 const state = vi.hoisted(() => ({
@@ -119,4 +119,21 @@ describe("historical currency presentation through the provider", () => {
     expect(result.current.inputSymbol).toBe("₳");
     expect(result.current.toInternal(100)).toBe(100);
   });
+});
+
+it("refreshes spread settings even when the currency quotes are unchanged", async () => {
+  const result = await currency();
+  expect(result.current.forexSpreadStrengths).toEqual({});
+  vi.mocked(fetch).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({
+      rates: state.rates,
+      baseRates: state.baseRates,
+      spreadStrengths: { EUR: 1.5 },
+    }),
+  } as Response);
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await waitFor(() => expect(result.current.forexSpreadStrengths).toEqual({ EUR: 1.5 }));
 });

@@ -6,7 +6,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getBankId, getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 import type { CentralBank, FederalBudget, GameConfig } from "@/lib/db/types";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import {
@@ -15,6 +15,10 @@ import {
   LIQUIDITY_INJECTION_GDP_CAP,
   MONETARY_OPERATION_COOLDOWN_TURNS,
 } from "@/lib/moneySupply/operations";
+import {
+  existingLiquidityAdvance,
+  LiquidityAdvanceRejected,
+} from "@/lib/moneySupply/liquidityAdvance";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
 import { isMoneySupplyEnabledFromConfig } from "@/lib/moneySupply/featureFlag";
 
@@ -24,6 +28,10 @@ const schema = z.object({
   bondId: z.string().optional(),
   units: z.number().int().positive().optional(),
   reason: z.string().trim().max(240).optional(),
+  operationId: z
+    .string()
+    .regex(/^[a-zA-Z0-9_-]{8,128}$/)
+    .optional(),
 });
 
 export async function POST(request: Request, context: { params: Promise<{ code: string }> }) {
@@ -51,14 +59,34 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       return NextResponse.json({ error: "Money-supply policy is not enabled" }, { status: 409 });
     if (!bank || !budget)
       return NextResponse.json({ error: "Monetary authority unavailable" }, { status: 404 });
+    const scope = await getMonetaryPolicyScope(db, countryId);
+    const authority =
+      scope.bankId === bank._id
+        ? bank
+        : await db
+            .collection<CentralBank>("centralBanks")
+            .findOne(
+              { _id: scope.bankId },
+              { projection: { chairCharacterId: 1, chairControlsLocked: 1 } }
+            );
     const isChair =
       auth.user.character?._id != null &&
-      bank.chairCharacterId?.toString() === auth.user.character._id.toString();
-    if (!auth.user.isAdmin && (!isChair || bank.chairControlsLocked))
+      authority?.chairCharacterId?.toString() === auth.user.character._id.toString();
+    if (!auth.user.isAdmin && (!isChair || authority?.chairControlsLocked))
       return NextResponse.json({ error: "Only the central-bank chair may act" }, { status: 403 });
     const turn = gameState?.currentTurn ?? 0;
+    const replay =
+      parsed.data.type === "liquidity_injection" && parsed.data.operationId
+        ? await existingLiquidityAdvance(db, {
+            operationId: parsed.data.operationId,
+            countryId,
+            amount: Math.max(0, Math.floor(parsed.data.amount ?? 0)),
+            reason: parsed.data.reason,
+          })
+        : false;
     if (
       !auth.user.isAdmin &&
+      !replay &&
       bank.lastMonetaryOperationTurn != null &&
       turn - bank.lastMonetaryOperationTurn < MONETARY_OPERATION_COOLDOWN_TURNS
     )
@@ -70,6 +98,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
         : budget.gdp * LIQUIDITY_INJECTION_GDP_CAP;
     if (
       !auth.user.isAdmin &&
+      !replay &&
       (parsed.data.type === "treasury_advance" || parsed.data.type === "liquidity_injection") &&
       amount > cap
     )
@@ -79,6 +108,9 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       );
     const operation = await executeMonetaryOperation(db, {
       countryId,
+      ...(parsed.data.type === "liquidity_injection"
+        ? { operationId: parsed.data.operationId, bypassCooldown: auth.user.isAdmin }
+        : {}),
       type: parsed.data.type,
       turn,
       actorName: auth.user.character?.name ?? auth.user.username,
@@ -90,6 +122,8 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     await snapshotMoneySupply(db, turn);
     return NextResponse.json({ success: true, operation });
   } catch (error) {
+    if (error instanceof LiquidityAdvanceRejected)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     return handleRouteError(error);
   }
 }

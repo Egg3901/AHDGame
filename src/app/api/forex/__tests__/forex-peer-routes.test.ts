@@ -1,3 +1,5 @@
+import { planEuroSettlement } from "@/lib/currency/euro/rules";
+import { POST as POST_LIMIT_ORDER } from "../orders/route";
 /**
  * POST /api/forex/orders/[orderId]/fill — peer-fill another player's limit order
  * POST /api/forex/direct/[requestId]/accept|decline — direct trade requests
@@ -911,4 +913,79 @@ describe("POST /api/forex/direct", () => {
     expect(res.status).toBe(403);
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
+});
+
+describe("settled euro denominations", () => {
+  it.each(["create-limit", "create-direct", "fill-limit", "accept-direct"])(
+    "rejects %s before moving or escrowing money",
+    async (operation) => {
+      await setupDb();
+      const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      vi.mocked(isForexEnabled).mockResolvedValue(true);
+      const actorId = new ObjectId();
+      const orderId = new ObjectId();
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+        authOk({
+          _id: actorId,
+          name: "Buyer",
+          countryId: "UK",
+          currencyBalances: { personal: { GBP: 10000, EUR: 10000 } },
+        })
+      );
+      const union = planEuroSettlement({
+        year: 1999,
+        turn: 385,
+        preset: "1991-default",
+        europeanMembers: ["DE", "IE", "UK"],
+        consentedCountries: ["DE", "IE", "UK"],
+        rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+      }).union;
+      db.collection("gameState").findOne.mockResolvedValue({
+        currentTurn: 386,
+        currentYear: 1999,
+        euroMonetaryUnion: union,
+      });
+      db.collection("currencyOrders").findOne.mockResolvedValue({
+        _id: orderId,
+        characterId: new ObjectId(),
+        targetCharacterId: actorId,
+        status: "open",
+        type: operation === "accept-direct" ? "direct" : "limit",
+        fromCurrency: "GBP",
+        toCurrency: "EUR",
+        amount: 100,
+        filledAmount: 0,
+        limitRate: 2,
+      });
+      const request = new Request("http://localhost", {
+        method: "POST",
+        body: JSON.stringify({
+          fromCurrency: "GBP",
+          toCurrency: "EUR",
+          amount: 100,
+          limitRate: 2,
+          proposedRate: 2,
+          targetCharacterId: new ObjectId().toString(),
+          action: "accept",
+        }),
+      });
+      const response =
+        operation === "create-limit"
+          ? await POST_LIMIT_ORDER(request)
+          : operation === "create-direct"
+            ? await POST_DIRECT_TRADE_REQUEST(request)
+            : operation === "fill-limit"
+              ? await POST_FILL_LIMIT_ORDER(request, {
+                  params: Promise.resolve({ orderId: String(orderId) }),
+                })
+              : await POST_DIRECT_TRADE(request, {
+                  params: Promise.resolve({ requestId: String(orderId) }),
+                });
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toContain("fixed euro rate");
+      expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.currencyOrders.insertOne).not.toHaveBeenCalled();
+    }
+  );
 });

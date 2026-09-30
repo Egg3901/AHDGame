@@ -1,3 +1,6 @@
+import { euroCurrencyRate } from "@/lib/currency/euro/rules";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
+import { clampForexSpreadStrength } from "@/lib/constants/currencies";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
@@ -16,7 +19,11 @@ export async function GET() {
       return NextResponse.json({ error: "Forex not enabled" }, { status: 403 });
     }
 
-    const rateRows = await db.collection<ExchangeRate>("exchangeRates").find({}).toArray();
+    const [rateRows, union] = await Promise.all([
+      db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
+      loadEuroMonetaryUnion(db),
+    ]);
+    const spreadStrengths: Partial<Record<CurrencyCode, number>> = {};
 
     const rates: Partial<Record<CurrencyCode, number>> = {};
     const baseRates: Partial<Record<CurrencyCode, number>> = {};
@@ -31,6 +38,7 @@ export async function GET() {
     > = {};
     for (const row of rateRows) {
       rates[row.currencyCode] = row.rate;
+      spreadStrengths[row.currencyCode] = clampForexSpreadStrength(row.forexSpreadStrength);
       baseRates[row.currencyCode] = row.baseRate;
       regimes[row.currencyCode] = resolveMonetaryRegime(row.monetaryRegime);
       if (row.interventionPolicy) {
@@ -44,8 +52,19 @@ export async function GET() {
       }
     }
 
+    if (union) {
+      const rawRates = { ...rates };
+      for (const member of Object.values(union.members)) {
+        if (!member) continue;
+        const rate = euroCurrencyRate(union, member.ledgerCurrency, rawRates);
+        if (rate == null) delete rates[member.ledgerCurrency];
+        else rates[member.ledgerCurrency] = rate;
+        spreadStrengths[member.ledgerCurrency] = spreadStrengths[union.anchorCurrency] ?? 1;
+      }
+    }
+
     return NextResponse.json(
-      { rates, baseRates, interventionBands, regimes },
+      { rates, baseRates, interventionBands, regimes, spreadStrengths },
       {
         headers: {
           "Cache-Control":

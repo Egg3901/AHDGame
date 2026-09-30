@@ -123,7 +123,7 @@ export function interbankServiceTransition(input: {
   if (decision.outcome === "closed") {
     projections.push({
       collection: "interbankLoans",
-      filter: { _id: oid(loanId), lastProcessedTurn: { $ne: turn } },
+      filter: { _id: oid(loanId) },
       update: {
         $set: { status: "repaid", outstanding: 0, lastProcessedTurn: turn, arrearsTurns: 0 },
       },
@@ -141,7 +141,7 @@ export function interbankServiceTransition(input: {
       },
       {
         collection: "interbankLoans",
-        filter: { _id: oid(loanId), lastProcessedTurn: { $ne: turn } },
+        filter: { _id: oid(loanId) },
         update: {
           $set: {
             status: "defaulted",
@@ -156,10 +156,41 @@ export function interbankServiceTransition(input: {
   } else {
     projections.push({
       collection: "interbankLoans",
-      filter: { _id: oid(loanId), lastProcessedTurn: { $ne: turn } },
+      filter: { _id: oid(loanId) },
       update: { $set: { arrearsTurns: decision.arrearsTurns, lastProcessedTurn: turn } },
       note: "interbank loan advances one turn",
     });
+  }
+
+  if (decision.interestPaid > 0) {
+    // Earnings are projections of this loan's original paid interest. The
+    // journal owns their publication and recovery together with the loan.
+    projections.push(
+      {
+        collection: "corporations",
+        filter: { _id: oid(borrower), "bankCharter.status": "active" },
+        update: {
+          $inc: {
+            "bankCharter.lastBankingIncome": -decision.interestPaid,
+            "bankCharter.lastBankingInterbankInterestPaid": decision.interestPaid,
+          },
+          $set: { "bankCharter.lastBankingIncomeTurn": turn },
+        },
+        note: "borrower's realized interbank interest expense",
+      },
+      {
+        collection: "corporations",
+        filter: { _id: oid(lender), "bankCharter.status": "active" },
+        update: {
+          $inc: {
+            "bankCharter.lastBankingIncome": decision.interestPaid,
+            "bankCharter.lastBankingInterbankInterestReceived": decision.interestPaid,
+          },
+          $set: { "bankCharter.lastBankingIncomeTurn": turn },
+        },
+        note: "lender's realized interbank interest income",
+      }
+    );
   }
 
   return {

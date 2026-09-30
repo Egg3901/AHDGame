@@ -4,6 +4,8 @@
  * Discount-window interest remains due when proprietary trading is disabled.
  */
 import { ObjectId, type Db } from "mongodb";
+import { resumeLiquidityAdvances } from "@/lib/moneySupply/liquidityAdvance";
+import { MONETARY_OPERATION_COOLDOWN_TURNS } from "@/lib/moneySupply/operations";
 import type { Character, Corporation } from "@/lib/db/types";
 import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
 import type { CentralBank } from "@/lib/db/types/centralBank";
@@ -34,9 +36,22 @@ import {
   perTurnInterest,
 } from "@/lib/banking/rules/loans";
 import { loanServiceTransition } from "@/lib/banking/rules/loanServicing";
+import {
+  facilityInterestTransition,
+  facilityInterestAmounts,
+} from "@/lib/banking/rules/facilityInterest";
 import { interbankServiceTransition } from "@/lib/banking/rules/interbankServicing";
-import { settleTransition } from "@/lib/banking/settlementJournal";
-import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
+import {
+  settleTransition,
+  recoverProjections,
+  unfinishedSettlementFilter,
+} from "@/lib/banking/settlementJournal";
+import {
+  oid,
+  type BankingTransition,
+  type TransitionLeg,
+  type TransitionProjection,
+} from "@/lib/banking/rules/boundary";
 import { cbMarginRatePercent } from "@/lib/banking/interbank";
 import { effectiveBankRatesFromPrime, playerDepositRatePercent } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
@@ -50,7 +65,6 @@ import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilitie
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
 import {
-  applyMoneyMove,
   claimMoneyMove,
   completeMoneyMove,
   turnMoveKey,
@@ -147,6 +161,7 @@ type DepositTaker = {
  * the turn explicitly for idempotency keys.
  */
 export async function processBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
+  await resumeLiquidityAdvances(db, MONETARY_OPERATION_COOLDOWN_TURNS);
   // One config read per turn. Every stage below decides from this snapshot,
   // so a flag flipped mid-turn cannot split the pass between two policies.
   const policy = await loadBankingPolicy(db);
@@ -306,7 +321,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   recordBankingStage(db, turn, "deadBankLoans", Date.now() - deadBankStarted);
 
   await timedBankingStage(db, turn, "interbank", () =>
-    serviceInterbankAndCbMargin(db, turn, summary, policy.propTrading)
+    serviceInterbankAndCbMargin(db, turn, summary, policy.propTrading, cbById)
   );
 
   // What this pass leaves behind for the repair queue. Reported on the turn
@@ -1556,16 +1571,34 @@ async function serviceNpcBulkBook(
 }
 
 /**
- * Service interbank interest (borrower → lender) and CB margin interest
- * (borrower cash destroyed; mirror of LOC principal creation/destruction).
+ * Service interbank interest from borrower to lender, and central-bank
+ * facility interest from bank vaults to central-bank reserves.
  * Runs even when no deposit-taking banks need a pass this turn.
  */
 async function serviceInterbankAndCbMargin(
   db: Db,
   turn: number,
   summary: BankingTurnSummary,
-  propTrading: boolean
+  propTrading: boolean,
+  centralBanks: ReadonlyMap<string, { primeRate?: number }>
 ): Promise<void> {
+  if (propTrading) {
+    // A loan may already carry this turn's stamp while its journal still owns
+    // unfinished income projections. Never replay live cash legs here.
+    const pending = await db
+      .collection<{ _id: string; legs: { applied: boolean }[] }>(MONEY_MOVE_COLLECTION)
+      .find(
+        { ...unfinishedSettlementFilter(), kind: "interbank_interest", turn },
+        { projection: { _id: 1, legs: 1 } }
+      )
+      .toArray();
+    for (const receipt of pending) {
+      if (!receipt.legs.every((leg) => leg.applied)) continue;
+      const recovered = await recoverProjections(db, receipt._id);
+      if (recovered.status === "partial" || recovered.status === "rejected" || recovered.error)
+        throw new Error(recovered.error ?? "Interbank income recovery unfinished");
+    }
+  }
   const loans = propTrading
     ? await db
         .collection<InterbankLoan>("interbankLoans")
@@ -1580,33 +1613,6 @@ async function serviceInterbankAndCbMargin(
     const result = await serviceOneInterbankLoan(db, turn, loan);
     summary.interbankInterestPaid += result.interestPaid;
     summary.interbankDefaultsWrittenOff += result.writtenOff;
-    if (result.interestPaid > 0) {
-      // Interbank interest is a transfer between two bank owners. It is still
-      // real income for the lender and a real expense for the borrower, so the
-      // per-bank realized earnings snapshot needs both sides.
-      await Promise.all([
-        db.collection<Corporation>("corporations").updateOne(
-          { _id: loan.borrowerCorporationId, "bankCharter.status": "active" },
-          {
-            $inc: {
-              "bankCharter.lastBankingIncome": -result.interestPaid,
-              "bankCharter.lastBankingInterbankInterestPaid": result.interestPaid,
-            },
-            $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
-          }
-        ),
-        db.collection<Corporation>("corporations").updateOne(
-          { _id: loan.lenderCorporationId, "bankCharter.status": "active" },
-          {
-            $inc: {
-              "bankCharter.lastBankingIncome": result.interestPaid,
-              "bankCharter.lastBankingInterbankInterestReceived": result.interestPaid,
-            },
-            $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
-          }
-        ),
-      ]);
-    }
   }
 
   const marginBanks = await db
@@ -1636,185 +1642,103 @@ async function serviceInterbankAndCbMargin(
     .project({ _id: 1, liquidCapital: 1, bankCharter: 1 })
     .toArray();
 
-  const primeByCurrency = new Map<CurrencyCode, number>();
+  const receiptKeys = marginBanks.flatMap((corp) => [
+    turnMoveKey("cb-margin-interest", corp._id.toString(), turn),
+    turnMoveKey("discount-window-interest", corp._id.toString(), turn),
+  ]);
+  type Receipt = {
+    _id: string;
+    kind: string;
+    turn: number;
+    currency: string;
+    legs: TransitionLeg[];
+    projections?: { projection: TransitionProjection }[];
+  };
+  const receipts =
+    receiptKeys.length > 0
+      ? await db
+          .collection<Receipt>(MONEY_MOVE_COLLECTION)
+          .find(
+            { _id: { $in: receiptKeys } },
+            { projection: { kind: 1, turn: 1, currency: 1, legs: 1, projections: 1 } }
+          )
+          .toArray()
+      : [];
+  const receiptByKey = new Map(receipts.map((receipt) => [receipt._id, receipt]));
 
   for (const corp of marginBanks) {
     const charter = corp.bankCharter;
     if (!charter || charter.status !== "active") continue;
-    const hasMargin =
-      propTrading && (charter.cbMarginDebt ?? 0) > 0 && charter.lastCbMarginTurn !== turn;
-    const hasWindow =
-      (charter.discountWindowDebt ?? 0) > 0 && charter.lastDiscountWindowTurn !== turn;
-    if (!hasMargin && !hasWindow) continue;
-
     const currency = charter.currency as CurrencyCode;
-    if (!primeByCurrency.has(currency)) {
-      const bankId = getBankId(getCountryIdForCurrency(currency));
-      const cb = await db
-        .collection<CentralBank>("centralBanks")
-        .findOne({ _id: bankId }, { projection: { primeRate: 1 } });
-      const prime =
-        typeof cb?.primeRate === "number" && Number.isFinite(cb.primeRate) ? cb.primeRate : 0;
-      primeByCurrency.set(currency, prime);
-    }
-    const rate = cbMarginRatePercent(primeByCurrency.get(currency) ?? 0);
-    const debt = hasMargin ? Math.max(0, charter.cbMarginDebt ?? 0) : 0;
-    const interestDue = (debt * (rate / 100)) / TURNS_PER_YEAR;
-    const liquid = getCashReserves(charter);
-    let paid = Math.min(interestDue, liquid);
-    let shortfall = Math.max(0, interestDue - paid);
-    let facilityInterestDue = interestDue;
     const cbDocId = getBankId(getCountryIdForCurrency(currency));
-
-    // The bank's debit and the CB's reserveBalance credit travel together
-    // through the primitive. The old shape debited per corp with the stamp in
-    // the same write and flushed the CB credit once at the end of the whole
-    // pass, so a crash after any stamped debit destroyed the interest with no
-    // claim record, and the debit itself was unguarded against concurrent
-    // spends. The guarded debit lands first; if it fails, nothing was paid and
-    // the whole due amount accrues as arrears below.
-    if (paid > 0) {
-      const marginMove = await applyMoneyMove(db, {
-        key: turnMoveKey("cb-margin-interest", corp._id.toString(), turn),
-        kind: "cb_margin_interest",
-        turn,
-        legs: [
+    const storedPrime = centralBanks.get(cbDocId)?.primeRate;
+    const prime = typeof storedPrime === "number" && Number.isFinite(storedPrime) ? storedPrime : 0;
+    let availableCash = getCashReserves(charter);
+    for (const facility of ["cbMargin", "discountWindow"] as const) {
+      const enabled = facility === "discountWindow" || propTrading;
+      const debt = Math.max(0, charter[`${facility}Debt`] ?? 0);
+      const stamp =
+        facility === "cbMargin" ? charter.lastCbMarginTurn : charter.lastDiscountWindowTurn;
+      if (!enabled || debt <= 0 || stamp === turn) continue;
+      const key = turnMoveKey(
+        facility === "cbMargin" ? "cb-margin-interest" : "discount-window-interest",
+        corp._id.toString(),
+        turn
+      );
+      const prior = receiptByKey.get(key);
+      // Old interrupted primitive-only receipts do not prove their original
+      // charge. Leave them for explicit recovery instead of inventing arrears.
+      if (prior && !prior.projections)
+        throw new Error("Legacy facility receipt requires explicit recovery");
+      const transition: BankingTransition = prior
+        ? {
+            key,
+            kind: prior.kind,
+            turn: prior.turn,
+            currency: prior.currency,
+            legs: prior.legs,
+            projections: prior.projections!.map((row) => row.projection),
+            event: { kind: "loan.paid", command: "bank.turn.facilityInterest" },
+          }
+        : facilityInterestTransition({
+            key,
+            bankId: corp._id.toString(),
+            centralBankId: cbDocId,
+            currency,
+            turn,
+            facility,
+            debt,
+            ratePercent:
+              facility === "cbMargin"
+                ? cbMarginRatePercent(prime)
+                : discountWindowRatePercent(prime),
+            availableCash,
+          });
+      const amounts = facilityInterestAmounts(transition);
+      const result = await settleTransition(db, transition);
+      if (result.status === "partial" || result.status === "rejected" || result.error)
+        throw new Error(
+          `Facility interest settlement unfinished: ${result.error ?? result.status}`
+        );
+      if (result.newlyAppliedProjections.includes(0))
+        emitBankingAuditEvent(
           {
-            kind: "debit",
-            amount: paid,
-            collection: "corporations",
-            filter: { _id: corp._id, "bankCharter.status": "active" },
-            path: "bankCharter.cashReserves",
-            note: "bank pays interest on its central-bank margin line",
+            ...transition.event,
+            turn,
+            currency,
+            bankId: corp._id.toString(),
+            settlementId: key,
+            outcome: "ok",
+            amount: amounts.paid,
           },
-          {
-            kind: "credit",
-            amount: paid,
-            collection: "centralBanks",
-            filter: { _id: cbDocId },
-            path: "reserveBalance",
-            note: "central bank books margin-line interest",
-          },
-        ],
-      });
-      if (marginMove.status === "partial" || marginMove.status === "rejected") {
-        paid = 0;
-        shortfall = interestDue;
+          db
+        );
+      // A replay's debit is already present in the balance loaded above.
+      if (result.status === "applied") availableCash = Math.max(0, availableCash - amounts.paid);
+      if (facility === "cbMargin") {
+        summary.cbMarginInterestPaid += amounts.paid;
+        summary.cbMarginInterestShortfall += amounts.shortfall;
       }
-    }
-
-    // Interest is CB revenue, exactly like line-of-credit interest, which credits
-    // the same reserveBalance. Destroying it here while crediting it there made
-    // the same concept (a central-bank loan to a player-controlled borrower)
-    // move money two opposite ways depending on who borrowed.
-    //
-    // A shortfall is no longer merely tallied: it accrues as arrears on the
-    // charter and joins the principal the draw cap is measured against, so a
-    // bank that cannot service the line loses headroom rather than borrowing its
-    // own unpaid interest indefinitely.
-    if (hasMargin) {
-      const marginUpdate: {
-        $inc?: Record<string, number>;
-        $set: { "bankCharter.lastCbMarginTurn": number; updatedAt: Date };
-      } = {
-        $set: {
-          "bankCharter.lastCbMarginTurn": turn,
-          updatedAt: new Date(),
-        },
-      };
-      if (shortfall > 0) {
-        // Cash moved through the primitive above; this write carries only the
-        // arrears accrual and the stamp.
-        marginUpdate.$inc = { "bankCharter.cbMarginArrears": shortfall };
-      }
-      await db.collection<Corporation>("corporations").updateOne(
-        {
-          _id: corp._id,
-          "bankCharter.status": "active",
-          $or: [
-            { "bankCharter.lastCbMarginTurn": { $ne: turn } },
-            { "bankCharter.lastCbMarginTurn": { $exists: false } },
-          ],
-        },
-        marginUpdate
-      );
-    }
-
-    // B8: discount-window interest, serviced on the same terms as the margin
-    // line — paid to the CB's reserve balance, shortfall accrued as arrears so
-    // a bank that cannot service the facility loses headroom rather than
-    // borrowing its own unpaid interest indefinitely (the B3 rule).
-    const windowDebt = Math.max(0, charter.discountWindowDebt ?? 0);
-    if (hasWindow) {
-      const windowRate = discountWindowRatePercent(primeByCurrency.get(currency) ?? 0);
-      const windowInterestDue = (windowDebt * (windowRate / 100)) / TURNS_PER_YEAR;
-      facilityInterestDue += windowInterestDue;
-      const availableAfterMargin = Math.max(0, liquid - paid);
-      let windowPaid = Math.min(windowInterestDue, availableAfterMargin);
-      let windowShortfall = Math.max(0, windowInterestDue - windowPaid);
-      if (windowPaid > 0) {
-        const windowMove = await applyMoneyMove(db, {
-          key: turnMoveKey("discount-window-interest", corp._id.toString(), turn),
-          kind: "discount_window_interest",
-          turn,
-          legs: [
-            {
-              kind: "debit",
-              amount: windowPaid,
-              collection: "corporations",
-              filter: { _id: corp._id, "bankCharter.status": "active" },
-              path: "bankCharter.cashReserves",
-              note: "bank pays discount-window interest",
-            },
-            {
-              kind: "credit",
-              amount: windowPaid,
-              collection: "centralBanks",
-              filter: { _id: cbDocId },
-              path: "reserveBalance",
-              note: "central bank books discount-window interest",
-            },
-          ],
-        });
-        if (windowMove.status === "partial" || windowMove.status === "rejected") {
-          windowPaid = 0;
-          windowShortfall = windowInterestDue;
-        }
-      }
-      await db.collection<Corporation>("corporations").updateOne(
-        {
-          _id: corp._id,
-          "bankCharter.status": "active",
-          $or: [
-            { "bankCharter.lastDiscountWindowTurn": { $ne: turn } },
-            { "bankCharter.lastDiscountWindowTurn": { $exists: false } },
-          ],
-        },
-        {
-          ...(windowShortfall > 0
-            ? { $inc: { "bankCharter.discountWindowArrears": windowShortfall } }
-            : {}),
-          $set: { "bankCharter.lastDiscountWindowTurn": turn, updatedAt: new Date() },
-        }
-      );
-    }
-
-    summary.cbMarginInterestPaid += paid;
-    summary.cbMarginInterestShortfall += shortfall;
-
-    if (facilityInterestDue > 0) {
-      // An unpaid facility bill becomes arrears, which is still a liability and
-      // therefore an economic loss even when no cash leg could settle it.
-      await db.collection<Corporation>("corporations").updateOne(
-        { _id: corp._id, "bankCharter.status": "active" },
-        {
-          $inc: {
-            "bankCharter.lastBankingIncome": -facilityInterestDue,
-            "bankCharter.lastBankingFacilityInterest": facilityInterestDue,
-          },
-          $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
-        }
-      );
     }
   }
 }
