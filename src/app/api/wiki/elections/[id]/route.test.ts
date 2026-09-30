@@ -68,3 +68,35 @@ it("uses the active preset for a legacy election without a stored year", async (
   expect(response.status).toBe(200);
   expect((await response.json()).label).toBe("1955 London House of Commons");
 });
+
+it("renders candidate parties by name when the tally stores party ids", async () => {
+  const db = createMockDb();
+  vi.mocked(getDb).mockResolvedValue(db as never);
+  const id = new ObjectId();
+  db.collection("elections").findOne.mockResolvedValue({
+    _id: id,
+    electionType: "snap_commons",
+    countryId: "UK",
+    state: "LON",
+    status: "resolved",
+    electionYear: 1977,
+    cycle: 6,
+    totalSeats: 91,
+    endTime: new Date("2026-09-29T13:00:00Z"),
+  });
+  db.collection("states").findOne.mockResolvedValue({ _id: "LON", name: "London" });
+  db.collection("politicalParties")
+    .find()
+    .toArray.mockResolvedValue([{ sequentialId: 1, name: "Labour Party", color: "#e00" }]);
+  db.collection("electionVoteTallies").findOne.mockResolvedValue({
+    totalVotes: { a: 60, b: 40 },
+    candidateNames: { a: "Candidate A", b: "Candidate B" },
+    candidateParties: { a: "1", b: "42" },
+    finalized: true,
+  });
+  const response = await GET(new Request(`http://localhost/api/wiki/elections/${id}`), {
+    params: Promise.resolve({ id: id.toString() }),
+  });
+  const data = await response.json();
+  expect(data.generalResults.candidateParties).toEqual({ a: "Labour Party", b: "42" });
+});
