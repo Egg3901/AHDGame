@@ -15,6 +15,8 @@ export interface WorldsimCorporationBootstrapOptions {
 export interface WorldsimCorporationBootstrapResult {
   countriesSeeded: number;
   spawnedByCountry: Record<string, number>;
+  /** Requested slots that could not be filled from the remaining unowned pool. */
+  unfilledByCountry: Record<string, number>;
   /** Planned economies skipped BEFORE any spawn attempt (zero attempts, zero noise). */
   skippedBlocked: string[];
   /** Countries with all requested NPP sector slots already filled. */
@@ -47,6 +49,7 @@ export async function bootstrapWorldsimCorporations(
   const result: WorldsimCorporationBootstrapResult = {
     countriesSeeded: 0,
     spawnedByCountry: {},
+    unfilledByCountry: {},
     skippedBlocked: [],
     skippedExisting: [],
     skippedNoCapital: [],
@@ -101,10 +104,16 @@ export async function bootstrapWorldsimCorporations(
         const spawned = await batchSpawnNppCorporations(db, countryId, {
           sectorTypes,
           perSectorCount: count,
+          limitToUnownedPool: true,
         });
         spawnedCount += spawned.length;
       }
       result.spawnedByCountry[countryId] = spawnedCount;
+      const unfilled = missing.reduce((sum, { count }) => sum + count, 0) - spawnedCount;
+      if (unfilled > 0) {
+        result.unfilledByCountry[countryId] = unfilled;
+        log(`  ${countryId}: ${unfilled} requested NPP slots lacked unowned capacity`);
+      }
       if (spawnedCount > 0) {
         log(`  ${countryId}: spawned ${spawnedCount} NPP corporations`);
         result.countriesSeeded++;

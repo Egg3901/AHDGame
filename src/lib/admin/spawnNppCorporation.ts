@@ -169,6 +169,8 @@ export interface SpawnNppCorporationInput {
   foundedAtTurn?: number;
   /** Initial operating strategy for the founding sector. Defaults to standard. */
   initialStrategyId?: string;
+  /** Sim-only: never grant more opening plant capacity than the unowned pool holds. */
+  limitToUnownedPool?: boolean;
 }
 
 /**
@@ -296,6 +298,28 @@ export async function spawnNppCorporation(
       `State "${headquartersState}" belongs to country "${state.countryId}", not "${countryId}"`
     );
   }
+  const eraUnitScale = await loadWorldEraUnitScale(db);
+  const boundedPool = input.limitToUnownedPool
+    ? await db
+        .collection("unownedSectors")
+        .findOne({ stateId: headquartersState, sectorType: type })
+    : null;
+  // Reject before allocating an NPP CEO or corporation when the sim pool is
+  // exhausted. The regular admin spawn path retains its historical floor.
+  const boundedPoolRevenue = boundedPool
+    ? Math.min(
+        boundedPool.revenue,
+        typeof boundedPool.headroomUnits === "number" && Number.isFinite(boundedPool.headroomUnits)
+          ? Math.floor(
+              Math.max(0, boundedPool.headroomUnits) /
+                unownedHeadroomUnitsPerAnchor(type, eraUnitScale)
+            )
+          : boundedPool.revenue
+      )
+    : 0;
+  if (input.limitToUnownedPool && !(boundedPoolRevenue > 0)) {
+    throw new Error(`No unowned ${type} capacity remains in ${headquartersState}`);
+  }
 
   // Get currency for the country
   const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
@@ -374,9 +398,11 @@ export async function spawnNppCorporation(
   if (customRevenue !== undefined) {
     startingRevenue = customRevenue;
   } else {
-    const unowned = await db
-      .collection("unownedSectors")
-      .findOne({ stateId: headquartersState, sectorType: type });
+    const unowned =
+      boundedPool ??
+      (await db
+        .collection("unownedSectors")
+        .findOne({ stateId: headquartersState, sectorType: type }));
     if (unowned?.revenue) {
       startingRevenue = Math.round(unowned.revenue * 0.25);
     } else {
@@ -391,6 +417,9 @@ export async function spawnNppCorporation(
   }
 
   startingRevenue = Math.max(startingRevenue, DEFAULT_SECTOR_STARTING_REVENUE);
+  if (input.limitToUnownedPool && boundedPool) {
+    startingRevenue = Math.min(startingRevenue, boundedPoolRevenue);
+  }
   const profitMargin = customMargin ?? DEFAULT_PROFIT_MARGIN;
 
   // Get next sequential ID for corporation
@@ -465,7 +494,6 @@ export async function spawnNppCorporation(
   // a seeded world's opening capacity is unchanged; only its BASIS changes from
   // ₳/day to units/day.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
-  const eraUnitScale = await loadWorldEraUnitScale(db);
   const startingCapacityUnitsStandard = plantsEnabled
     ? computeUnownedHeadroomUnits(type, startingRevenue, eraUnitScale)
     : 0;
@@ -527,9 +555,11 @@ export async function spawnNppCorporation(
   await db.collection<CorporateSector>("corporateSectors").insertOne(sectorDoc as CorporateSector);
 
   // Reduce the unowned sector pool to reflect market capture.
-  const unownedSector = await db
-    .collection("unownedSectors")
-    .findOne({ stateId: headquartersState, sectorType: type });
+  const unownedSector =
+    boundedPool ??
+    (await db
+      .collection("unownedSectors")
+      .findOne({ stateId: headquartersState, sectorType: type }));
   if (unownedSector) {
     const captureAmount = startingRevenue;
     const newRevenue = Math.max(0, unownedSector.revenue - captureAmount);
@@ -603,6 +633,8 @@ export async function batchSpawnNppCorporations(
      * aggregate economic output.
      */
     perSectorCount?: number;
+    /** Sim-only: bound grants by the currently available unowned pool. */
+    limitToUnownedPool?: boolean;
   }
 ): Promise<SpawnNppCorporationResult[]> {
   const defaultHq = NPP_CAPITAL_STATES[countryId];
@@ -645,6 +677,7 @@ export async function batchSpawnNppCorporations(
           countryId,
           headquartersState: hqState,
           startingCapital: options?.startingCapital,
+          limitToUnownedPool: options?.limitToUnownedPool,
         });
         results.push(result);
       } catch (err) {
