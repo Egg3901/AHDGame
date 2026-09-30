@@ -170,6 +170,8 @@ export interface Character {
   startingCountryId?: CountryId;
   name: string;
   homeState: string;
+  /** Protected until this resident chooses a playable home after federation succession. */
+  federationPendingResidenceId?: string;
   avatarUrl?: string;
   /** Wide banner image for profile hero (player-uploaded). */
   profileHeaderImageUrl?: string;
