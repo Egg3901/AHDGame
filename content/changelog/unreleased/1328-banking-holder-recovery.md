@@ -14,5 +14,5 @@ areas: [frontend]
 - Savings holder network errors now show feedback instead of escaping as an unhandled rejection.
 - Completed deposits close their form before refreshing balances, including central-bank fallback when the chosen bank is unavailable.
 - Add browser qualification of banking commands, settlements, turn outcomes and monetary governance.
-
 - Charter capital now records both cash legs in the Settlement Journal while publishing the funded charter atomically. Interrupted delivery can recover without posting capital twice.
+- Renewed charters retain the outstanding loans they continue to service. Concurrent charter or loan changes reject stale publication without charging capital again.
