@@ -56,4 +56,4 @@ SIM_MONGODB_URI=mongodb://127.0.0.1:27018/ \
   --target=ahd_sim_loc_qualification --out=loc-qualification.json
 ```
 
-The original browser page qualification is recorded separately after its authenticated command, lost-response retry, new draw, repayment and LOC turn/read-model checks complete. No browser result is implied by the native replay above.
+The completed [actual browser qualification](issue-1328-loc-browser.md) separately verifies authenticated commands, lost-response retry, a new draw, repayment, LOC turn/read-model checks and the treasury transfer panel. Its source pin and evidence are distinct from this native replay.
