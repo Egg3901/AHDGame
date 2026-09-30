@@ -27,7 +27,11 @@
       "negotiated": "Ausgehandelte Anteile vorschlagen",
       "totalRequired": "Gib jeden Nachfolgestaat an. Jede Aufteilung muss insgesamt 100 Prozent ergeben.",
       "percentLabel": "Anteil von {entity} (%)",
-      "share": "{entity}: {share}"
+      "share": "{entity}: {share}",
+      "consentStatus": "{entity}: {choice}",
+      "approved": "zugestimmt",
+      "rejected": "abgelehnt",
+      "freshVote": "Überarbeitete Bedingungen erfordern eine neue Abstimmung und die erneute Zustimmung aller Nachfolgestaaten. Frühere Zustimmungen werden nicht übernommen."
     }
   }
 }

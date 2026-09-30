@@ -17,13 +17,17 @@ import {
   type DefaultFederationSource,
 } from "@/lib/world/succession/defaultProposal";
 import { loadLiveSuccessionInventory } from "@/lib/world/succession/loadLiveInventory";
-import type { FederationPoliticalProposalRecord } from "@/lib/world/succession/politicalProposal";
+import {
+  FederationProposalConflictError,
+  type FederationPoliticalProposalRecord,
+} from "@/lib/world/succession/politicalProposal";
 import type { Bill } from "@/lib/db/types/legislation";
 
 const bodySchema = z.object({
   negotiatedCustodians: z.record(z.string(), z.string()).default({}),
   assetSharesBps: z.record(z.string(), z.number().int().min(0).max(10_000)).optional(),
   debtSharesBps: z.record(z.string(), z.number().int().min(0).max(10_000)).optional(),
+  revision: z.number().int().min(1).max(10_000).default(1),
 });
 
 function sourceForCode(code: string): DefaultFederationSource | null {
@@ -45,15 +49,36 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         available: false,
         reason: "This world has no federation decision.",
       });
-    const proposal = await db
-      .collection<FederationPoliticalProposalRecord>("federationPoliticalProposals")
-      .findOne({ _id: `1991-default:${sourceCountryId.toLowerCase()}-1991-default:1` });
+    const proposal = (
+      await db
+        .collection<FederationPoliticalProposalRecord>("federationPoliticalProposals")
+        .find({ presetId: "1991-default", sourceEntityId: sourceCountryId })
+        .sort({ revision: -1 })
+        .limit(1)
+        .toArray()
+    )[0];
     const bill = proposal
       ? await db.collection<Bill>("bills").findOne({ _id: proposal.billId })
       : null;
+    const consents = proposal
+      ? await db
+          .collection("federationRatifications")
+          .find(
+            {
+              presetId: "1991-default",
+              sourceEntityId: sourceCountryId,
+              settlementId: proposal.settlementId,
+              revision: proposal.revision,
+              termsHash: proposal.termsHash,
+            },
+            { projection: { _id: 0, entityId: 1, choice: 1, reason: 1 } }
+          )
+          .toArray()
+      : [];
     const available = (state?.currentYear ?? 0) >= year;
+    const canRevise = proposal && ["rejected", "withdrawn"].includes(proposal.status);
     const assets =
-      available && !proposal
+      available && (!proposal || canRevise)
         ? (await loadLiveSuccessionInventory(db, sourceCountryId)).custodyAssets
             .filter((asset) => asset.kind === "strategic-force" || asset.homeRegionId === null)
             .map(({ assetId, kind }) => ({ assetId, kind }))
@@ -66,6 +91,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       proposal: proposal
         ? {
             status: proposal.status,
+            revision: proposal.revision,
+            canRevise: !!canRevise,
+            consents,
             billId: proposal.billId.toString(),
             billStatus: bill?.status ?? null,
             termsHash: proposal.termsHash,
@@ -162,12 +190,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       negotiatedCustodians: assigned,
       assetSharesBps: parsed.data.assetSharesBps,
       debtSharesBps: parsed.data.debtSharesBps,
+      revision: parsed.data.revision,
     });
     return NextResponse.json(
       { billId: proposal.billId.toString(), status: proposal.status },
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof FederationProposalConflictError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     return handleRouteError(error);
   }
 }

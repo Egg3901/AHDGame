@@ -80,6 +80,7 @@ export async function openDefaultFederationPoliticalProposal(input: {
   /** Omitted allocations retain population defaults; explicit terms total 10,000 basis points. */
   assetSharesBps?: Readonly<Record<string, number>>;
   debtSharesBps?: Readonly<Record<string, number>>;
+  revision?: number;
 }) {
   const { db, sourceCountryId, currentYear, now } = input;
   const availableFromYear = earliestFederationDecisionYear("1991-default", sourceCountryId);
@@ -100,7 +101,7 @@ export async function openDefaultFederationPoliticalProposal(input: {
       settlementId,
       approval: {
         settlementId,
-        revision: 1,
+        revision: input.revision ?? 1,
         availableFromYear,
         currentYear,
         requiredParticipants: participants,

@@ -6,6 +6,7 @@ import type { Bill } from "@/lib/db/types/legislation";
 import type { GameState } from "@/lib/db/types/gameState";
 import { getWorldEntityOrThrow } from "@/lib/world/worldEntityManifest";
 import { earliestFederationDecisionYear } from "./availability";
+import { proposalRevisionConflict } from "./rules/proposalRevision";
 import { loadLiveSuccessionInventory } from "./loadLiveInventory";
 import { planSuccessionCustody } from "./rules/custody";
 import { planSuccessionTerritories } from "./rules/territory";
@@ -22,6 +23,13 @@ import {
 export const FEDERATION_POLITICAL_PROPOSALS_COLLECTION = "federationPoliticalProposals";
 const VOTING_DURATION_TURNS = 24;
 const APPROX_TURN_MS = 3_600_000;
+
+export class FederationProposalConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FederationProposalConflictError";
+  }
+}
 
 export interface FederationPoliticalProposalRecord {
   _id: string;
@@ -135,13 +143,29 @@ export async function openFederationPoliticalProposal(input: {
       FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
     )
     .findOne({ presetId: "1991-default", sourceEntityId: sourceCountryId, status: "applied" });
-  if (applied) throw new Error("Federation has already settled");
+  if (applied) throw new FederationProposalConflictError("Federation has already settled");
 
   const _id = `1991-default:${terms.settlementId}:${terms.revision}`;
   const termsHash = hashFederationPoliticalTerms(activation);
   const collection = db.collection<FederationPoliticalProposalRecord>(
     FEDERATION_POLITICAL_PROPOSALS_COLLECTION
   );
+  const latest = (
+    await collection
+      .find(
+        { presetId: "1991-default", sourceEntityId: sourceCountryId },
+        { projection: { settlementId: 1, revision: 1, status: 1 } }
+      )
+      .sort({ revision: -1 })
+      .limit(1)
+      .toArray()
+  )[0];
+  const revisionConflict = proposalRevisionConflict({
+    settlementId: terms.settlementId,
+    revision: terms.revision,
+    latest,
+  });
+  if (revisionConflict) throw new FederationProposalConflictError(revisionConflict);
   const intended: FederationPoliticalProposalRecord = {
     _id,
     presetId: "1991-default",
@@ -164,7 +188,9 @@ export async function openFederationPoliticalProposal(input: {
     stored.termsHash !== termsHash ||
     !ObjectId.isValid(stored.billId)
   )
-    throw new Error("Federation proposal key conflicts with another decision");
+    throw new FederationProposalConflictError(
+      "Federation proposal key conflicts with another decision"
+    );
   const chamber = getCountryConfig(sourceCountryId, "1991-default").legislature.lowerChamber.key;
   const allocationSummary = (basis: string, weights: Record<string, number>) =>
     basis === "population"

@@ -5,6 +5,7 @@ import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getCountryConfig } from "@/lib/constants/countries";
+import { processFederationRatifications } from "@/lib/turn/federationRatifications";
 
 const mocks = vi.hoisted(() => ({
   getDb: vi.fn(),
@@ -89,6 +90,97 @@ describe("federation proposal action", () => {
       assetWeights: { CZ2: 6000, SK: 4000 },
       debtWeights: { CZ2: 7000, SK: 3000 },
     });
+  });
+
+  it("opens a fresh mandate after rejection and exposes the latest revision", async () => {
+    const chamber = getCountryConfig("CS", "1991-default").legislature.lowerChamber.key;
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        characterId,
+        countryId: "CS",
+        officeType: getOfficeTypeForChamber("CS", chamber, "1991-default"),
+      },
+    ]);
+    expect((await POST(request(), params)).status).toBe(201);
+    const first = await mem
+      .collection("federationPoliticalProposals")
+      .findOne({ sourceEntityId: "CS" });
+    await mem.collection("bills").updateOne({ _id: first!.billId }, { $set: { status: "failed" } });
+    await processFederationRatifications(mem as unknown as Db, "1991-default", 97);
+    const before = await GET(
+      new Request("http://localhost/api/country/cs/federation/proposal"),
+      params
+    );
+    expect(await before.json()).toMatchObject({
+      proposal: { revision: 1, status: "rejected", canRevise: true },
+    });
+    expect(
+      (await POST(request({ revision: 2, assetSharesBps: { CZ2: 6000, SK: 4000 } }), params)).status
+    ).toBe(201);
+    const after = await GET(
+      new Request("http://localhost/api/country/cs/federation/proposal"),
+      params
+    );
+    expect(await after.json()).toMatchObject({
+      proposal: {
+        revision: 2,
+        status: "open",
+        canRevise: false,
+        consents: [],
+        financialTerms: { assetSharesBps: { CZ2: 6000, SK: 4000 } },
+      },
+    });
+    expect((await POST(request({ revision: 3 }), params)).status).toBe(409);
+    expect(await mem.collection("bills").countDocuments({})).toBe(2);
+  });
+
+  it("exposes an autonomous rejection reason and permits a fresh vote without reusing consent", async () => {
+    const chamber = getCountryConfig("CS", "1991-default").legislature.lowerChamber.key;
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        characterId,
+        countryId: "CS",
+        officeType: getOfficeTypeForChamber("CS", chamber, "1991-default"),
+      },
+    ]);
+    expect(
+      (
+        await POST(
+          request({ assetSharesBps: { CZ2: 10000, SK: 0 }, debtSharesBps: { CZ2: 0, SK: 10000 } }),
+          params
+        )
+      ).status
+    ).toBe(201);
+    const first = await mem
+      .collection("federationPoliticalProposals")
+      .findOne({ sourceEntityId: "CS" });
+    await mem
+      .collection("bills")
+      .updateOne({ _id: first!.billId }, { $set: { status: "signed", enactedAt: new Date(1) } });
+    await processFederationRatifications(mem as unknown as Db, "1991-default", 97);
+    const before = await GET(
+      new Request("http://localhost/api/country/cs/federation/proposal"),
+      params
+    );
+    const body = await before.json();
+    expect(body.proposal).toMatchObject({ status: "rejected", canRevise: true });
+    expect(body.proposal.consents).toContainEqual(
+      expect.objectContaining({
+        entityId: "SK",
+        choice: "reject",
+        reason: expect.stringContaining("Debt exceeds"),
+      })
+    );
+    expect((await POST(request({ revision: 2 }), params)).status).toBe(201);
+    const after = await GET(
+      new Request("http://localhost/api/country/cs/federation/proposal"),
+      params
+    );
+    expect(await after.json()).toMatchObject({ proposal: { revision: 2, consents: [] } });
+    expect(await mem.collection("federationRatifications").countDocuments({ revision: 1 })).toBe(2);
+    expect(await mem.collection("federationRatifications").countDocuments({ revision: 2 })).toBe(0);
   });
 
   it.each([{ CZ2: 6000, SK: 3000 }, { CZ2: 6000, RU: 4000 }, { CZ2: 10000 }])(
