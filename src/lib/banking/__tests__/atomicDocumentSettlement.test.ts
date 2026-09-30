@@ -57,6 +57,36 @@ async function state(db: Db) {
   return db.collection("corporations").findOne({ _id: id });
 }
 describe("atomic document settlement", () => {
+  it.each([null, ["prior-receipt"]])(
+    "rejects a generation changed since quote assembly before creating a claim (%j)",
+    async (quotedGeneration) => {
+      const memory = world();
+      const db = memory as unknown as Db;
+      await db
+        .collection("corporations")
+        .updateOne(
+          { _id: id },
+          { $set: { settledKeys: [...(quotedGeneration ?? []), "concurrent-book-change"] } }
+        );
+      const result = await settleAtomicDocumentTransition(db, transition(), {
+        ...target,
+        expectedSettledKeys: quotedGeneration,
+      });
+      expect(result.status).toBe("rejected");
+      expect(await state(db)).toMatchObject({ liquidCapital: 100, bankCharter: null });
+      expect(memory.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+    }
+  );
+  it("replays the original claim with the original caller generation", async () => {
+    const memory = world();
+    const db = memory as unknown as Db;
+    const quoted = { ...target, expectedSettledKeys: null };
+    expect((await settleAtomicDocumentTransition(db, transition(), quoted)).status).toBe("applied");
+    expect((await settleAtomicDocumentTransition(db, transition(), quoted)).status).toBe(
+      "replayed"
+    );
+    expect(await state(db)).toMatchObject({ liquidCapital: 60, bankCharter: { cashReserves: 40 } });
+  });
   it("publishes capital and the complete charter together and ignores changed retry quotes", async () => {
     const memory = world();
     const db = memory as unknown as Db;
