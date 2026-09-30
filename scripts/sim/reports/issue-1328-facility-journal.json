@@ -1,0 +1,96 @@
+{
+  "issue": 1328,
+  "scope": "Isolated synthetic ten-bank facility and liquidity cohort; no full-world or activation qualification",
+  "baseline": {
+    "sourceCommit": "56b969b464488ddf615caf4a1e528027bf2b0844",
+    "mode": "baseline",
+    "cohort": {
+      "syntheticBanks": 10,
+      "turn": 100
+    },
+    "phase": {
+      "commands": 163,
+      "readBsonBytes": 8451
+    },
+    "phaseReplay": {
+      "commands": 12,
+      "readBsonBytes": 7429
+    },
+    "phaseBalances": {
+      "vault": 0,
+      "margin": 0,
+      "window": 604.1666666666667,
+      "income": -2604.1666666666665,
+      "reserve": 2000,
+      "created": 0,
+      "logs": 0
+    },
+    "advance": {
+      "commands": 10,
+      "readBsonBytes": 4136
+    },
+    "advanceBalances": {
+      "vault": 4000,
+      "margin": 0,
+      "window": 0,
+      "income": 0,
+      "reserve": 0,
+      "created": 4000,
+      "logs": 10
+    },
+    "interruptionCases": 0
+  },
+  "treatment": {
+    "sourceCommit": "005d1178c52d5e3b1aec86aa9f917b300261ae21",
+    "mode": "treatment",
+    "cohort": {
+      "syntheticBanks": 10,
+      "turn": 100
+    },
+    "phase": {
+      "commands": 221,
+      "readBsonBytes": 8507
+    },
+    "phaseReplay": {
+      "commands": 15,
+      "readBsonBytes": 8861
+    },
+    "phaseBalances": {
+      "vault": 0,
+      "margin": 0,
+      "window": 604.1666666666667,
+      "income": -2604.1666666666665,
+      "reserve": 2000,
+      "created": 0,
+      "logs": 0
+    },
+    "advance": {
+      "commands": 108,
+      "readBsonBytes": 28359
+    },
+    "advanceBalances": {
+      "vault": 4000,
+      "margin": 0,
+      "window": 0,
+      "income": 0,
+      "reserve": 0,
+      "created": 4000,
+      "logs": 10
+    },
+    "interruptionCases": 2
+  },
+  "runnerSha256": "a1f71e8ec80e1990fdd0e76729f57b8fb67f7cf22329885bffd9a7a1fc00a91c",
+  "phaseBudget": 1000,
+  "assertions": {
+    "normalFacilityBalancesEqual": true,
+    "normalAdvanceBalancesEqual": true,
+    "duplicateCommandStable": true,
+    "recoveryCasesPassed": 2
+  },
+  "limitations": [
+    "Facility-only cohort at turn100; other banking stages pre-stamped as complete.",
+    "Read BSON bytes count returned cursor documents, not transport headers.",
+    "Command windows include best-effort audit work; asynchronous audit batches can cross measurement windows.",
+    "No saved player world, rollout or long-horizon acceptance is claimed."
+  ]
+}
