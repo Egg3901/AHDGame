@@ -18,6 +18,7 @@ import {
   prepareFederationPublication,
   verifyPreparedFederationPublication,
 } from "./preparePublication";
+import { loadRuntimeWorldEntities } from "./runtimeEntities";
 
 const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
@@ -312,6 +313,15 @@ describe("live federation settlement intent", () => {
     expect((await verifyPreparedFederationPublication(args.db, intent._id)).length).toBe(
       prepared.effectIds.length
     );
+    expect(
+      (await loadRuntimeWorldEntities(args.db, "1991-default"))
+        .filter(({ entityId }) => entityId === "RU" || entityId === "UKR")
+        .map(({ entityId, status }) => [entityId, status])
+        .sort(([a], [b]) => a.localeCompare(b))
+    ).toEqual([
+      ["RU", "sovereign"],
+      ["UKR", "dependent"],
+    ]);
     expect(await args.db.collection("federationSettlementApplications").countDocuments({})).toBe(0);
     await expect(
       verifyLiveFederationSettlementIntent({

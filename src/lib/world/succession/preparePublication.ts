@@ -3,7 +3,9 @@ import { hashSettlementPayload } from "./settlementIntent";
 import type { FederationPublicationPlan } from "./publicationPlan";
 import {
   FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
+  WORLD_ENTITY_STATES_COLLECTION,
   type FederationSettlementApplicationRecord,
+  type RuntimeWorldEntityState,
   overlayRuntimeWorldEntities,
   validateAppliedEntityStates,
 } from "./runtimeEntities";
@@ -164,6 +166,16 @@ export async function prepareFederationPublication(
       hashSettlementPayload(saved.value) !== effect.valueHash
     )
       throw new Error("Federation prepared effect conflicts with its approved plan");
+  }
+  // Runtime entity rows are inert until the complete applied receipt exists.
+  // Staging them here permits standalone Mongo retries without making a
+  // partial federation visible as sovereign.
+  const states = db.collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION);
+  for (const state of plan.entityStates) {
+    await states.updateOne({ _id: state._id }, { $setOnInsert: state }, { upsert: true });
+    const saved = await states.findOne({ _id: state._id });
+    if (!saved || hashSettlementPayload(saved) !== hashSettlementPayload(state))
+      throw new Error("Federation runtime entity state conflicts with its approved plan");
   }
   return stored;
 }
