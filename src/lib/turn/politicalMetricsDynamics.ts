@@ -1,5 +1,7 @@
 import { loadPandemicSignal } from "@/lib/livingConflict/pandemicSignal";
 import { pandemicPoliticalEffects } from "@/lib/livingConflict/rules/pandemic";
+import { loadTerrorismSignal } from "@/lib/livingConflict/terrorismSignal";
+import { terrorismPoliticalEffects } from "@/lib/livingConflict/rules/transnationalTerrorism";
 import { loadNorthernIrelandSignal } from "@/lib/countries/uk/northernIreland/service";
 import {
   northernIrelandPoliticalEffects,
@@ -170,6 +172,10 @@ export async function processPoliticalMetricsDynamics(
     eraGameState?.livingConflictsEnabled === true
   );
   const northernIrelandEffects = northernIrelandPoliticalEffects(northernIrelandSignal);
+  const terrorismSignal = await loadTerrorismSignal(
+    db,
+    eraGameState?.livingConflictsEnabled === true
+  );
   const pandemicSignal = await loadPandemicSignal(
     db,
     eraGameState?.livingConflictsEnabled === true
@@ -317,11 +323,17 @@ export async function processPoliticalMetricsDynamics(
           !sameBySource(doc.cabinetResidualsBySource ?? {}, nextCabinetBySource);
         const cabinetOf = (id: PoliticalMetricId) => nextCabinet[id] ?? 0;
         const labourChanged = !sameNums(doc.labourResiduals ?? {}, nextLabour);
-        const nextConflict = { ...pandemicPoliticalEffects(pandemicSignal, countryId) };
+        const nextConflict = { ...terrorismPoliticalEffects(terrorismSignal, countryId) };
+        for (const [id, delta] of Object.entries(
+          pandemicPoliticalEffects(pandemicSignal, countryId)
+        )) {
+          const key = id as PoliticalMetricId;
+          nextConflict[key] = (nextConflict[key] ?? 0) + delta;
+        }
         if (northernIrelandRegion(countryId, String(doc._id))) {
-          for (const [key, value] of Object.entries(northernIrelandEffects)) {
-            const metric = key as PoliticalMetricId;
-            nextConflict[metric] = (nextConflict[metric] ?? 0) + value;
+          for (const [id, delta] of Object.entries(northernIrelandEffects)) {
+            const key = id as PoliticalMetricId;
+            nextConflict[key] = (nextConflict[key] ?? 0) + delta;
           }
         }
         const conflictChanged = !sameNums(doc.livingConflictResiduals ?? {}, nextConflict);

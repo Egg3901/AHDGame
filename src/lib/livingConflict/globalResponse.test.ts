@@ -9,8 +9,13 @@ import type {
   GlobalResponseOutcome,
 } from "@/lib/db/types/crisis";
 import { ApiError } from "@/lib/api/errors";
-import { createAsyncIterableCursor, createMockDb } from "@/lib/test-utils/mockDb";
 import {
+  createAsyncIterableCursor,
+  createMockDb,
+  type MockCollection,
+} from "@/lib/test-utils/mockDb";
+import {
+  recordGlobalResponseCommitment,
   globalResponseRoleFor,
   loadCampaignCapability,
   optionsForGlobalResponder,
@@ -24,6 +29,9 @@ import { EQUIPMENT_TRACK_MAX } from "@/lib/military/arsenal";
 import { VIETNAM_DEF } from "./defs/vietnam";
 import { YUGOSLAVIA_DEF } from "./defs/yugoslavia";
 import { allLivingConflictDefs } from "./registry";
+import { emptyConflictState } from "./engine";
+import { normalizeCampaignState } from "./campaign";
+import type { LivingConflictState } from "./types";
 
 const outcomes: GlobalResponseOutcome[] = [
   {
@@ -346,4 +354,108 @@ describe("loadCampaignCapability — national logistics", () => {
 
     expect(result.logistics).toBe(100);
   });
+});
+
+describe("concurrent national campaign commitments", () => {
+  it.each([true, false])(
+    "retains both countries when reads collide (stored campaign: %s)",
+    async (hasCampaign) => {
+      const db = createMockDb();
+      const collection: MockCollection = db.collection("livingConflicts");
+      const stored: LivingConflictState = {
+        ...emptyConflictState("transnational_terrorism"),
+        tracks: { threatCapability: 61 },
+        ...(hasCampaign ? { campaign: normalizeCampaignState(undefined) } : {}),
+      };
+      let reads = 0;
+      let release: () => void = () => {};
+      const bothRead = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      collection.findOne.mockImplementation(async () => {
+        const snapshot = structuredClone(stored);
+        reads++;
+        if (reads === 2) release();
+        if (reads <= 2) await bothRead;
+        return snapshot;
+      });
+      let collisions = 0;
+      collection.updateOne.mockImplementation(
+        async (
+          filter: { campaign?: { $exists?: boolean } },
+          update: { $set: Record<string, unknown> }
+        ) => {
+          // Model Mongo's atomic equality guard, including the stale first read.
+          if (
+            filter.campaign &&
+            JSON.stringify(filter.campaign) !== JSON.stringify(stored.campaign)
+          ) {
+            collisions++;
+            return { matchedCount: 0, modifiedCount: 0 };
+          }
+          for (const [path, value] of Object.entries(update.$set)) {
+            if (path.startsWith("tracks.")) {
+              stored.tracks = { ...stored.tracks, [path.slice(7)]: Number(value) };
+            } else {
+              Object.assign(stored, { [path]: value });
+            }
+          }
+          return { matchedCount: 1, modifiedCount: 1 };
+        }
+      );
+      const event = {
+        ...crisis(),
+        livingConflictEventId: "terrorism:concurrent:1",
+      };
+      if (!event.globalResponse) throw new Error("Missing fixture definition");
+      event.globalResponse.conflictKey = "transnational_terrorism";
+      const option: CrisisDecisionOption = {
+        optionId: "emergency_powers",
+        label: "Emergency powers",
+        description: "Test response",
+        effects: [],
+        nextNodeId: null,
+        campaignCommitment: {
+          kind: "military",
+          scale: 12,
+          consequences: { civilianStrain: 3 },
+        },
+      };
+      await Promise.all(
+        ["US", "UK"].map((country) =>
+          recordGlobalResponseCommitment(db as unknown as Db, event, country, 48, option)
+        )
+      );
+      expect(collisions).toBe(1);
+      expect(stored.campaign?.countryMemory.US.militaryCommitment).toBe(12);
+      expect(stored.campaign?.countryMemory.UK.militaryCommitment).toBe(12);
+      expect(stored.campaign?.consequences.civilianStrain).toBe(6);
+      expect(stored.tracks).toEqual({
+        threatCapability: 61,
+        "emergencyPowers:US": 20,
+        "emergencyPowers:UK": 20,
+      });
+      const after = structuredClone(stored);
+      const writes = collection.updateOne.mock.calls.length;
+      await Promise.all(
+        ["US", "UK"].map((country) =>
+          recordGlobalResponseCommitment(db as unknown as Db, event, country, 48, option)
+        )
+      );
+      expect(stored).toEqual(after);
+      expect(collection.updateOne).toHaveBeenCalledTimes(writes);
+      expect(
+        collection.updateOne.mock.calls.every(([, update]) =>
+          Object.keys(update.$set).every((key) =>
+            [
+              "campaign",
+              "updatedAt",
+              "tracks.emergencyPowers:US",
+              "tracks.emergencyPowers:UK",
+            ].includes(key)
+          )
+        )
+      ).toBe(true);
+    }
+  );
 });

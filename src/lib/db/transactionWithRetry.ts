@@ -54,17 +54,12 @@ function defaultSleep(ms: number): Promise<void> {
  * stale. All other errors propagate immediately. Every session is ended,
  * including on the failure path.
  *
- * STANDALONE FALLBACK. Production Mongo has no replica set, so `withTransaction`
- * fails outright (code 20/263) rather than transiently. Retrying that on a fresh
- * session is futile and turns every call into an opaque 500 for the player: the
- * exact failure ticket #1239 reported on attack-sector. So the deployment is
- * probed FIRST, and when it cannot do transactions the body runs with NO
- * session; callers must treat that as non-atomic (`run` receives `undefined`)
- * and compensate for a partial write themselves. Every write in the callers'
- * bodies is already an optimistic compare-and-set that rejects on
- * `modifiedCount !== 1`, so the sequential path stays correct under concurrency.
- * It just is not atomic. This is the same trade `runWithOptionalTransaction`
- * already makes for money flow.
+ * STANDALONE FALLBACK. A standalone deployment rejects transactions, so the
+ * topology is probed first. When it cannot do transactions, the body receives
+ * no session and callers must handle partial writes themselves. Optimistic
+ * compare-and-set guards can reject competing writes, but do not make a
+ * multi-document operation atomic. Replica sets and sharded deployments use
+ * the transaction path regardless of whether the URI names a replica set.
  *
  * The probe is the ONLY thing that selects the sequential path. A transaction
  * that fails once started is never re-run here, because `withTransaction` can

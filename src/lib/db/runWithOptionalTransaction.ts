@@ -11,20 +11,14 @@ let warnedNonAtomicFallback = false;
  * available, and fall back to the provided sequential implementation on
  * standalone dev mongods that reject sessions/transactions.
  *
- * TODO(infra): production Mongo (Railway "Main DB") is a STANDALONE instance —
- * its MONGODB_URI has no `?replicaSet`, so withTransaction below always throws
- * (code 20/263) and money flow runs NON-ATOMIC in prod (GlitchTip:
- * "mongo-non-atomic-fallback", ~40 events). The real fix is a one-time
- * maintenance-window migration to a single-node replica set:
- *   1. Take a fresh DB backup/snapshot.
- *   2. Run mongod with `--replSet rs0` (Railway: set the Main DB start command
- *      / use a replica-set-capable image).
- *   3. Connect once and `rs.initiate({_id:"rs0", members:[{_id:0, host:"<advertised host:port>"}]})`.
- *   4. Update MONGODB_URI on Main Site + Sandbox Staging to append
- *      `?replicaSet=rs0` (and `directConnection=true` if going through the TCP proxy).
- *   5. Verify `withTransaction` succeeds, then this fallback path goes cold.
- * Until then the fallback keeps writes working (just not atomic). Do NOT
- * attempt this live without a backup + window — it can cause downtime.
+ * Topology is detected with the server's hello response, not URI query options.
+ * A replica set can accept transactions through a direct connection without a
+ * replicaSet query parameter. Standalone deployments use the supplied fallback;
+ * callers remain responsible for partial-write safety on that path.
+ *
+ * Production topology is deployment state. Verify it with the boot probe and a
+ * transaction against the target deployment instead of inferring it from this
+ * helper or from the connection string.
  */
 export async function runWithOptionalTransaction<T>(
   runInTransaction: (session: ClientSession) => Promise<T>,
