@@ -310,36 +310,33 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     await db
       .collection<Fixture>("states")
       .insertMany(sovietUnionRegions1991.map((row) => ({ ...row })));
+    await db.collection<Fixture>("federalBudget").insertOne({
+      _id: "RU",
+      countryId: "RU",
+      currencyCode: "RUB",
+      treasuryBalance: 100,
+      debt: { principal: 200 },
+    });
     await db
-      .collection<Fixture>("federalBudget")
-      .insertOne({
-        _id: "RU",
-        countryId: "RU",
-        currencyCode: "RUB",
-        treasuryBalance: 100,
-        debt: { principal: 200 },
-      });
+      .collection<Fixture>("exchangeRates")
+      .insertOne({ _id: "RUB", currencyCode: "RUB", rate: 1 });
     const retained = sovietUnionRegions1991.find((row) => !row._id.startsWith("SU_"))!;
     const playerId = new ObjectId();
     const slateId = new ObjectId();
-    await db
-      .collection("characters")
-      .insertOne({
-        _id: playerId,
-        countryId: "RU",
-        homeState: retained._id,
-        cash: 75,
-        currentOffice: { type: "unionCongressDeputy" },
-      });
-    await db
-      .collection("npps")
-      .insertOne({
-        _id: slateId,
-        countryId: "RU",
-        funds: 125,
-        homeState: retained._id,
-        currentOffice: { type: "unionCongressDeputy" },
-      });
+    await db.collection("characters").insertOne({
+      _id: playerId,
+      countryId: "RU",
+      homeState: retained._id,
+      cash: 75,
+      currentOffice: { type: "unionCongressDeputy" },
+    });
+    await db.collection("npps").insertOne({
+      _id: slateId,
+      countryId: "RU",
+      funds: 125,
+      homeState: retained._id,
+      currentOffice: { type: "unionCongressDeputy" },
+    });
     await db.collection("electedOfficials").insertMany([
       {
         _id: new ObjectId(),
