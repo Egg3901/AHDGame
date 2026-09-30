@@ -9,6 +9,8 @@ export interface FinancialCountryExposure {
   euroSovereignExposure: number;
   exposedBankAssets: number;
   treasuryBalance: number;
+  /** Actual charter presence supplies responders before confidence breaks. */
+  bankingSystemPresent?: boolean;
 }
 
 /** Actual charter distress determines responders; geography cannot confer exposure. */
@@ -19,7 +21,7 @@ export function financialCrisisParticipants(
     (a, b) => b.bankStress - a.bankStress || a.countryId.localeCompare(b.countryId)
   );
   const belligerents = ranked
-    .filter((row) => row.bankStress > 0)
+    .filter((row) => row.bankStress > 0 || row.bankingSystemPresent)
     .slice(0, 2)
     .map((row) => row.countryId);
   const used = new Set(belligerents);

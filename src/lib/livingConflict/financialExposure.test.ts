@@ -2,6 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import { expect, it, vi } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
+import { financialCrisisParticipants } from "./rules/financialExposure";
 import { loadFinancialExposure } from "./financialExposure";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -60,4 +61,18 @@ it("uses enacted euro membership and actual holdings without counting a position
   expect(
     (await loadFinancialExposure(db as unknown as Db, new Set(["DE", "IE"]))).euroExposure
   ).toBe(0);
+});
+
+it("keeps real banking governments available before live confidence breaks", () => {
+  const rows = ["DE", "IE", "UK"].map((countryId) => ({
+    countryId,
+    euroMember: true,
+    bankStress: 0,
+    sovereignStress: 0,
+    euroSovereignExposure: 0,
+    exposedBankAssets: 0,
+    treasuryBalance: 1,
+    bankingSystemPresent: countryId !== "UK",
+  }));
+  expect(financialCrisisParticipants(rows).belligerents).toEqual(["DE", "IE"]);
 });

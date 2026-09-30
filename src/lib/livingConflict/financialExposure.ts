@@ -80,7 +80,9 @@ export async function loadFinancialExposure(db: Db, availableCountries: Set<stri
   for (const bank of banks) {
     const row = byCountry.get(bank.countryId);
     const charter = bank.bankCharter;
-    if (!row || !charter || charter.depositorsResolvedTurn !== undefined) continue;
+    if (!row || !charter) continue;
+    row.bankingSystemPresent = true;
+    if (charter.depositorsResolvedTurn !== undefined) continue;
     row.bankStress = Math.max(
       row.bankStress,
       charter.status === "failed" ? 100 : 100 * Math.max(0, 0.8 - (charter.confidence ?? 1))
