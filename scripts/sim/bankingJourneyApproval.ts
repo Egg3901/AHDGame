@@ -5,7 +5,12 @@ import type { Db } from "mongodb";
 import type { Page } from "playwright";
 import { BANK, BORROWER, advanceJourney, journeySnapshot } from "./bankingJourneyFixture";
 
-export async function runApprovalJourney(page: Page, db: Db, base: string) {
+export async function runApprovalJourney(
+  page: Page,
+  db: Db,
+  base: string,
+  resumedToggleSource?: string
+) {
   page.setDefaultTimeout(120_000);
   const near = (actual: number, expected: number, label: string) =>
     assert(Math.abs(actual - expected) < 0.02, `${label}: ${actual} != ${expected}`);
@@ -31,10 +36,18 @@ export async function runApprovalJourney(page: Page, db: Db, base: string) {
         .toArray()
     ).map((loan) => loan._id.toHexString())
   );
+  if (!page.url().startsWith(`${base}/corporation/132811`))
+    await page.goto(`${base}/corporation/132811?tab=bank`, {
+      waitUntil: "domcontentloaded",
+      timeout: 180_000,
+    });
+  const rejectCookies = page.getByRole("button", { name: "Reject", exact: true });
+  if (await rejectCookies.isVisible()) await rejectCookies.click();
   await page.getByRole("button", { name: /^Lending(?:\s*\d+)?$/ }).click();
-  await command(`/api/corporations/132811/bank/approval`, () =>
-    page.getByRole("button", { name: "Auto-approve", exact: true }).click()
-  );
+  if (!resumedToggleSource)
+    await command(`/api/corporations/${BANK.toHexString()}/bank/approval`, () =>
+      page.getByRole("button", { name: "Auto-approve", exact: true }).click()
+    );
   assert.equal(
     (await db.collection("corporations").findOne({ _id: BANK }))?.bankCharter.requireApproval,
     true
@@ -82,8 +95,9 @@ export async function runApprovalJourney(page: Page, db: Db, base: string) {
     timeout: 180_000,
   });
   await page.getByRole("button", { name: /^Lending(?:\s*\d+)?$/ }).click();
-  await command(`/api/corporations/132811/bank/loans/${pending._id.toHexString()}/decision`, () =>
-    page.getByRole("button", { name: "Approve", exact: true }).click()
+  await command(
+    `/api/corporations/${BANK.toHexString()}/bank/loans/${pending._id.toHexString()}/decision`,
+    () => page.getByRole("button", { name: "Approve", exact: true }).click()
   );
   const acceptedLoan = await db.collection("bankLoans").findOne({ _id: pending._id });
   assert.equal(acceptedLoan?.status, "current");
@@ -125,6 +139,7 @@ export async function runApprovalJourney(page: Page, db: Db, base: string) {
   assert.equal(readModel.currentTurn, game.currentTurn + 1);
   console.log("completed actual UI pending corporate loan, CEO approval and next-turn read model");
   const result = {
+    resumedToggleSource,
     toggleExplanation,
     pendingExplanation,
     before,

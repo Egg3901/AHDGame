@@ -69,10 +69,31 @@ async function main() {
       )
     );
   }
+  const charterEvidence = arg("resume-charter-evidence");
+  const priorCharter = charterEvidence
+    ? (JSON.parse(readFileSync(charterEvidence, "utf8")) as {
+        sourceCommit: string;
+        stage: string;
+        actions: unknown;
+        recovery: unknown;
+        governance: Awaited<ReturnType<typeof runGovernanceJourney>>;
+        charter: Awaited<ReturnType<typeof runCharterJourney>>;
+      })
+    : undefined;
+  if (priorCharter) {
+    assert.equal(priorCharter.stage, "charter complete");
+    assert(/^[a-f0-9]{40}$/.test(priorCharter.sourceCommit));
+    const toggleLog = arg("resume-toggle-log");
+    assert(toggleLog, "Completed approval toggle needs its actual HTTP receipt");
+    const receipts = readFileSync(toggleLog, "utf8").match(
+      /PUT \/api\/corporations\/000000000000000000002118\/bank\/approval 200 /g
+    );
+    assert.equal(receipts?.length, 1, "Exactly one successful prior UI approval toggle");
+  }
   const probeHub = arg("probe-hub") === "true";
   const resumeUntouchedFixture = arg("resume-untouched-fixture") === "true";
   let fixture;
-  if (probeHub || resumedDepositBaseline || priorSteps) {
+  if (probeHub || resumedDepositBaseline || priorSteps || priorCharter) {
     assert.equal(
       (await db.collection("users").findOne({ _id: USER }))?.email,
       "banking-player@example.invalid"
@@ -82,7 +103,24 @@ async function main() {
       setup: { turn: (resumedDepositBaseline?.turn as number) ?? 0 },
       retainedHash: retained.hash,
     };
-    if (priorSteps) {
+    if (priorCharter) {
+      const current = await journeySnapshot(db);
+      const { audits: currentAudits, ...currentFinancial } = current;
+      const { audits: priorAudits, ...priorFinancial } = priorCharter.charter.afterTurn;
+      void currentAudits;
+      void priorAudits;
+      assert.deepEqual(
+        JSON.parse(JSON.stringify(currentFinancial)),
+        priorFinancial,
+        "Completed charter financial state changed"
+      );
+      assert.equal(
+        (await db.collection("corporations").findOne({ sequentialId: 132811 }))?.bankCharter
+          .requireApproval,
+        true
+      );
+      fixture.setup.turn = current.turn as number;
+    } else if (priorSteps) {
       const afterTurn = priorSteps.at(-1);
       assert.equal(afterTurn?.stage, "actual banking solvency and committee turn");
       assert(afterTurn);
@@ -233,6 +271,10 @@ async function main() {
       "/centralbank/iep",
       "/api/maintenance",
       "/api/character/me",
+      "/api/auth/me",
+      "/api/corporations/132811",
+      "/api/corporations/132811/bond-default",
+      "/api/corporations/132811/nationalization-status",
       "/api/client-status",
       "/api/world/flags",
       "/api/forex/rates",
@@ -285,7 +327,10 @@ async function main() {
     const baseline = await journeySnapshot(db);
     let actions;
     let recovery;
-    if (priorSteps && priorRecovery) {
+    if (priorCharter) {
+      actions = priorCharter.actions;
+      recovery = priorCharter.recovery;
+    } else if (priorSteps && priorRecovery) {
       actions = {
         snapshots: priorSteps,
         sourceCommit: recoverySource,
@@ -318,17 +363,19 @@ async function main() {
       out,
       JSON.stringify({ sourceCommit, stage: "recovery complete", actions, recovery }, null, 2)
     );
-    const governance = await runGovernanceJourney(page, db, base, async () => {
-      await context.addCookies([
-        {
-          name: "auth-token-local",
-          value: await tokenFor(true),
-          url: base,
-          httpOnly: true,
-          sameSite: "Lax",
-        },
-      ]);
-    });
+    const governance =
+      priorCharter?.governance ??
+      (await runGovernanceJourney(page, db, base, async () => {
+        await context.addCookies([
+          {
+            name: "auth-token-local",
+            value: await tokenFor(true),
+            url: base,
+            httpOnly: true,
+            sameSite: "Lax",
+          },
+        ]);
+      }));
     writeFileSync(
       out,
       JSON.stringify(
@@ -346,7 +393,7 @@ async function main() {
         sameSite: "Lax",
       },
     ]);
-    const charter = await runCharterJourney(page, db, base);
+    const charter = priorCharter?.charter ?? (await runCharterJourney(page, db, base));
     writeFileSync(
       out,
       JSON.stringify(
@@ -355,7 +402,7 @@ async function main() {
         2
       )
     );
-    const approval = await runApprovalJourney(page, db, base);
+    const approval = await runApprovalJourney(page, db, base, priorCharter?.sourceCommit);
     assert.equal(
       (await loadRetainedContext(client.db(sourceName))).hash,
       fixture.retainedHash,
@@ -366,6 +413,7 @@ async function main() {
       JSON.stringify(
         {
           sourceCommit,
+          completedGovernanceCharterSource: priorCharter?.sourceCommit ?? sourceCommit,
           retainedHash: fixture.retainedHash,
           stage: "banking actions",
           actions,
