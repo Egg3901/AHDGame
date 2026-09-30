@@ -136,7 +136,7 @@ export async function prepareJourney(db: Db, source: Db) {
 }
 
 export async function journeySnapshot(db: Db) {
-  const [people, corporations, central, insurance, accounts, loans, moves, audits, state] =
+  const [people, corporations, central, insurance, accounts, loans, moves, audits, state, budget] =
     await Promise.all([
       db.collection("characters").find({}).toArray(),
       db.collection("corporations").find({}).toArray(),
@@ -150,6 +150,7 @@ export async function journeySnapshot(db: Db) {
       db.collection("bankMoneyMoves").find({}).toArray(),
       db.collection("actionAuditLog").find({}).toArray(),
       db.collection("gameState").findOne({ _id: "current" as never }),
+      db.collection("federalBudget").findOne({ countryId: "US" }),
     ]);
   const number = (value: unknown) =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -161,10 +162,20 @@ export async function journeySnapshot(db: Db) {
     ) +
     number(central?.externalBroadMoney) +
     number(central?.reserveBalance) +
-    number(insurance?.balance);
+    number(insurance?.balance) +
+    Math.max(0, number(budget?.treasuryBalance));
   return {
     turn: state?.currentTurn,
     cash,
+    treasuryFiscalPosition: number(budget?.treasuryBalance),
+    mint: moves
+      .flatMap((row) => row.legs ?? [])
+      .filter((leg) => leg.applied && leg.kind === "mint")
+      .reduce((sum, leg) => sum + number(leg.amount), 0),
+    burn: moves
+      .flatMap((row) => row.legs ?? [])
+      .filter((leg) => leg.applied && leg.kind === "burn")
+      .reduce((sum, leg) => sum + number(leg.amount), 0),
     saverWallet: number(
       people.find((row) => row._id.equals(SAVER))?.currencyBalances?.personal?.USD
     ),
@@ -206,7 +217,10 @@ export async function journeySnapshot(db: Db) {
       action: row.action,
       category: row.category,
       turn: row.turn,
-      metadata: row.metadata,
+      amount: row.amount,
+      currency: row.currencyCode,
+      outcome: row.outcome,
+      metadata: row.meta,
     })),
   };
 }

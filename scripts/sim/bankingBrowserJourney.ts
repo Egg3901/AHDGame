@@ -7,7 +7,10 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { MongoClient } from "mongodb";
 import { SignJWT } from "jose";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
+import { runBankingActions } from "./bankingJourneyActions";
+import { runGovernanceJourney } from "./bankingJourneyGovernance";
+import { runRecoveryJourney } from "./bankingJourneyRecovery";
 import { USER, IE_USER, prepareJourney, journeySnapshot } from "./bankingJourneyFixture";
 
 const arg = (key: string) =>
@@ -77,6 +80,8 @@ async function main() {
   app.stdout?.pipe(appLog);
   app.stderr?.pipe(appLog);
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  let page: Page | undefined;
+  process.env.JOURNEY_SCREENSHOT_PREFIX = out;
   try {
     let ready = false;
     for (let i = 0; i < 120 && !ready; i++) {
@@ -122,7 +127,7 @@ async function main() {
         sameSite: "Lax",
       },
     ]);
-    const page = await context.newPage();
+    page = await context.newPage();
     const errors: string[] = [],
       requests: { path: string; status: number }[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -130,20 +135,36 @@ async function main() {
       if (new URL(response.url()).origin === base && response.request().method() !== "GET")
         requests.push({ path: new URL(response.url()).pathname, status: response.status() });
     });
-    await page.goto(`${base}/banking`, { waitUntil: "domcontentloaded", timeout: 180_000 });
+    await page.goto(`${base}/banking`, { waitUntil: "domcontentloaded", timeout: 300_000 });
     await page
       .getByText("Journey Savings Bank", { exact: true })
       .first()
-      .waitFor({ timeout: 180_000 });
+      .waitFor({ timeout: 300_000 });
     await page.screenshot({ path: `${out}.png`, fullPage: true });
     const baseline = await journeySnapshot(db);
+    const actions = await runBankingActions(page, db, base, fixture.setup.turn);
+    const recovery = await runRecoveryJourney(page, db, base, arg("development") === "true");
+    const governance = await runGovernanceJourney(page, db, base, async () => {
+      await context.addCookies([
+        {
+          name: "auth-token-local",
+          value: await tokenFor(true),
+          url: base,
+          httpOnly: true,
+          sameSite: "Lax",
+        },
+      ]);
+    });
     writeFileSync(
       out,
       JSON.stringify(
         {
           sourceCommit,
           retainedHash: fixture.retainedHash,
-          stage: "banking page",
+          stage: "banking actions",
+          actions,
+          governance,
+          recovery,
           baseline,
           requests,
           errors,
@@ -154,6 +175,18 @@ async function main() {
       )
     );
     console.log("banking page rendered");
+  } catch (error) {
+    if (page) {
+      await page.screenshot({ path: `${out}.failed.png`, fullPage: true }).catch(() => {});
+      writeFileSync(
+        `${out}.failed.txt`,
+        await page
+          .locator("body")
+          .innerText()
+          .catch(() => "unavailable")
+      );
+    }
+    throw error;
   } finally {
     await browser?.close();
     if (app.pid) {
