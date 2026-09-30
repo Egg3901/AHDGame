@@ -57,6 +57,20 @@ describe("wiki snap election history", () => {
     ).toBe(400);
   });
 
+  it.each(["senat", "senato", "senado", "chamber", "nationalrat", "eduskunta", "vouli"])(
+    "accepts the live chamber type %s without changing the gameplay label registry",
+    async (electionType) => {
+      const response = await GET(
+        new Request(`http://localhost/api/wiki/elections?state=LON&type=${electionType}`)
+      );
+
+      expect(response.status).toBe(200);
+      expect(db.collection("elections").find).toHaveBeenLastCalledWith(
+        expect.objectContaining({ state: "LON", electionType })
+      );
+    }
+  );
+
   it("opens the snap election regional browse link", async () => {
     const response = await GET(
       new Request("http://localhost/api/wiki/elections?state=LON&type=snap_commons")

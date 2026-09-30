@@ -21,7 +21,23 @@ export interface WikiElectionSummary {
   label: string;
 }
 
-const isElectionType = (type: string) => Object.hasOwn(ELECTION_TYPE_LABEL_MAP, type);
+// These live chamber keys intentionally stay out of ELECTION_TYPE_LABEL_MAP:
+// that map is also a gameplay registry, and adding them there would change
+// election-method resolution. They are still valid wiki browse keys.
+const WIKI_ONLY_ELECTION_TYPES = new Set([
+  "senat",
+  "senato",
+  "senado",
+  "chamber",
+  "nationalrat",
+  "eduskunta",
+  "vouli",
+  "holyrood",
+  "senedd",
+]);
+
+const isElectionType = (type: string) =>
+  Object.hasOwn(ELECTION_TYPE_LABEL_MAP, type) || WIKI_ONLY_ELECTION_TYPES.has(type);
 
 // GET /api/wiki/elections — Returns completed elections grouped by year and type, with optional filtering by year, state, or election type.
 // Auth: public; blocked when wiki is disabled
