@@ -57,7 +57,12 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export async function settleAtomicDocumentTransition(
   db: Db,
   transition: BankingTransition,
-  target: { identity: Record<string, unknown>; guard?: Record<string, unknown> }
+  target: {
+    identity: Record<string, unknown>;
+    guard?: Record<string, unknown>;
+    /** Receipt generation captured with the caller's quote. Null means absent. */
+    expectedSettledKeys?: readonly string[] | null;
+  }
 ): Promise<SettlementResult> {
   const identity = reviveObjectIds(target.identity);
   const projection = transition.projections[0];
@@ -123,13 +128,25 @@ export async function settleAtomicDocumentTransition(
   const original = await db
     .collection(projection.collection)
     .findOne(identity, { projection: { [SETTLED_KEYS_FIELD]: 1 } });
+  if (target.expectedSettledKeys !== undefined) {
+    // An existing claim owns its original plan even when its own delivery has
+    // advanced the generation. A new claim cannot refresh an older quote.
+    const existing = await db
+      .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: transition.key });
+    if (existing) return resumeAtomicDocumentSettlement(db, transition.key);
+    if (!same(original?.[SETTLED_KEYS_FIELD] ?? null, target.expectedSettledKeys))
+      return bad("Atomic quote receipt generation changed");
+  }
   const plan: AtomicPlan = {
     collection: projection.collection,
     identity,
     guard: reviveObjectIds(target.guard ?? {}),
     update: reviveObjectIds(projection.update) as AtomicUpdate,
     receipt: `${transition.key}:atomic`,
-    receiptGuard: original?.[SETTLED_KEYS_FIELD] ?? { $exists: false },
+    receiptGuard: (target.expectedSettledKeys === undefined
+      ? original?.[SETTLED_KEYS_FIELD]
+      : target.expectedSettledKeys) ?? { $exists: false },
   };
   const claimed = await claimMoneyMove(db, {
     key: transition.key,
