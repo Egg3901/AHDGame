@@ -1194,6 +1194,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const { processRoParliamentTransition } =
             await import("@/lib/turn/roParliamentTransition");
           await processRoParliamentTransition(db, context.gameState, newTurn, gameNow);
+          const { processFederationRatifications } =
+            await import("@/lib/turn/federationRatifications");
+          await processFederationRatifications(db, context.gameState.preset, newTurn);
           const { processYuDissolution } = await import("@/lib/turn/yuDissolution");
           await processYuDissolution(db, context.gameState, newTurn, gameNow);
           const { processRuPresidencyTransition } =
