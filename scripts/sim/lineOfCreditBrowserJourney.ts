@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { MongoClient } from "mongodb";
 import { chromium } from "playwright";
 import { SignJWT } from "jose";
+import { qualifyTreasuryPanel } from "./bankingJourneyTreasury";
 import { bankingJourneyApp } from "./bankingJourneyApp";
 import { USER, SAVER } from "./bankingJourneyFixture";
 import { processLineOfCreditTurn } from "@/lib/turn/lineOfCreditTurn";
@@ -238,6 +239,9 @@ async function main() {
     assert(read.ok());
     const readModel = await read.json();
     assert.equal(readModel.snapshot.balances.USD, afterTurn.loc.balances.USD);
+    const treasury =
+      arg("treasury") === "true" ? await qualifyTreasuryPanel(db, page, app.base) : undefined;
+    await checkpoint("after_optional_treasury");
     assert.deepEqual(errors, []);
     assert.equal((await retained.command({ dbHash: 1 })).md5, sourceHash);
     writeFileSync(
@@ -255,6 +259,7 @@ async function main() {
           afterRepay,
           afterTurn,
           servicing,
+          treasury,
           commandIds: { retrySame: true, nextDifferent: true },
           errors,
           readModelPrincipal: readModel.snapshot.balances.USD,
