@@ -80,13 +80,11 @@ async function main() {
       generation = "legacy-v1";
     const oldChunks = planTimelineChunks(v1Id, generation, legacy, 1000);
     await db.collection<TimelineChunk>("simExperimentReportChunks").insertMany(oldChunks);
-    await db
-      .collection<StoredExperimentReport>("simExperimentReports")
-      .insertOne({
-        _id: v1Id,
-        turn: source.turn,
-        timelineStorage: { version: 1, generation, chunkCount: oldChunks.length },
-      });
+    await db.collection<StoredExperimentReport>("simExperimentReports").insertOne({
+      _id: v1Id,
+      turn: source.turn,
+      timelineStorage: { version: 1, generation, chunkCount: oldChunks.length },
+    });
     for (const legacyId of ["inline-storage-regression", v1Id]) {
       const read = await readExperimentReport(db, legacyId);
       assert(read);
