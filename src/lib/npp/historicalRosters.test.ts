@@ -62,6 +62,8 @@ import {
   CN_GOVERNORS_2020,
   IE_DAIL_2020,
   IE_SEANAD_2020,
+  IE_UACHTARAN_1991,
+  IE_UACHTARAN_2019,
   type HistoricalSeat,
 } from "@/lib/constants/historicalSeats";
 import { getHistoricalRosterEntry, isRosteredPreset, rosterKey } from "./historicalRosters";
@@ -112,6 +114,7 @@ const COMPOSITION: Record<
       { country: "BR", seats: BR_SENATE_1991 },
       { country: "IE", seats: IE_DAIL_1991 },
       { country: "IE", seats: IE_SEANAD_1991 },
+      { country: "IE", seats: IE_UACHTARAN_1991 },
     ],
   },
   "2019-default": {
@@ -140,6 +143,7 @@ const COMPOSITION: Record<
       { country: "CN", seats: CN_GOVERNORS_2020 },
       { country: "IE", seats: IE_DAIL_2020 },
       { country: "IE", seats: IE_SEANAD_2020 },
+      { country: "IE", seats: IE_UACHTARAN_2019 },
     ],
   },
 };
