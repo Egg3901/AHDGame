@@ -379,6 +379,7 @@ describe("explicit central-bank reserve pool exchange", () => {
           collection: "centralBanks",
           filter: { _id: "US" },
           path: "forexRevenue",
+          note: "Source pool",
         },
         {
           kind: "credit",
@@ -386,6 +387,7 @@ describe("explicit central-bank reserve pool exchange", () => {
           collection: "centralBanks",
           filter: { _id: "US" },
           path: "reserveBalance",
+          note: "Destination pool",
         },
       ],
       projections: [

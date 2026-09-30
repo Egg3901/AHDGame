@@ -47,9 +47,9 @@ describe("journaled reserve-pool commands", () => {
           : { forexRevenue: 1400, reserveBalance: 400 }
       );
       expect(f.memory.collection("actionAuditLog").docs).toHaveLength(1);
-      expect(f.memory.collection("actionAuditLog").docs[0].actor.userId).toEqual(
-        new ObjectId(command.userId)
-      );
+      expect(f.memory.collection("actionAuditLog").docs[0]).toMatchObject({
+        actor: { userId: new ObjectId(command.userId) },
+      });
     }
   );
   it("refuses conflicting reuse while allowing deliberate new admin transfers", async () => {
@@ -95,6 +95,30 @@ describe("journaled reserve-pool commands", () => {
     expect(f.bank().forexRevenue).toBe(600);
     expect(f.bank().reserveBalance).toBe(1200);
     expect(f.memory.collection("reservePoolTransferCommands").docs[0].status).toBe("applied");
+  });
+  it("refuses an active loan-book mutation before quoting", async () => {
+    const f = fixture();
+    await f.memory
+      .collection("centralBanks")
+      .updateOne({ _id: "US" }, { $set: { pendingLocBookMutationId: "synthetic-loan" } });
+    await expect(f.run()).rejects.toThrow("loan settlement is in progress");
+    expect(f.bank().reserveBalance).toBe(800);
+    expect(f.memory.collection("bankMoneyMoves").docs).toHaveLength(0);
+  });
+  it("refuses a changed liability revision instead of publishing an old reserve quote", async () => {
+    const f = fixture(),
+      commands = f.memory.collection("reservePoolTransferCommands");
+    const original = commands.insertOne.bind(commands);
+    vi.spyOn(commands, "insertOne").mockImplementation(async (...args) => {
+      const result = await original(...args);
+      await f.memory
+        .collection("centralBanks")
+        .updateOne({ _id: "US" }, { $inc: { locBookRevision: 1 } });
+      return result;
+    });
+    await expect(f.run()).rejects.toThrow();
+    expect(f.bank().reserveBalance).toBe(800);
+    expect(f.bank().forexRevenue).toBe(1000);
   });
   it("recovers audit acknowledgement without repeating cash or actor", async () => {
     const f = fixture(),

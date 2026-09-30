@@ -33,6 +33,11 @@ export interface ReservePoolTransferInput {
   userId?: string;
   characterId?: string;
 }
+type ReservePoolBank = CentralBank & {
+  settledKeys?: string[];
+  locBookRevision?: number;
+  pendingLocBookMutationId?: string;
+};
 interface TransferResult {
   success: true;
   direction: ReservePoolTransferDirection;
@@ -80,14 +85,21 @@ async function outstandingLoans(db: Db, currency: string): Promise<number> {
     .toArray();
   return (rows[0]?.totalBalance ?? 0) + (rows[0]?.totalArrears ?? 0);
 }
-function exactField(bank: CentralBank, field: keyof CentralBank): unknown {
+function exactField(bank: ReservePoolBank, field: keyof ReservePoolBank): unknown {
   return Object.hasOwn(bank, field) ? { $eq: bank[field], $exists: true } : { $exists: false };
 }
 async function prepare(
   db: Db,
-  bank: CentralBank & { settledKeys?: string[] },
+  bank: ReservePoolBank,
   command: ReservePoolTransferInput
 ): Promise<Receipt> {
+  if (bank.pendingLocBookMutationId)
+    throw new ReservePoolTransferRejected("A loan settlement is in progress. Retry shortly.");
+  if (
+    bank.locBookRevision !== undefined &&
+    (!Number.isSafeInteger(bank.locBookRevision) || bank.locBookRevision < 0)
+  )
+    throw new ReservePoolTransferRejected("Invalid loan-book revision");
   const currency = COUNTRY_CURRENCY_MAP[command.countryId];
   if (!currency) throw new ReservePoolTransferRejected("Country has no forex currency");
   const remaining = turnsUntilReservePoolTransferReady({
@@ -143,6 +155,8 @@ async function prepare(
     },
     generation: bank.settledKeys ? [...bank.settledKeys] : null,
     guard: {
+      locBookRevision: exactField(bank, "locBookRevision"),
+      pendingLocBookMutationId: { $exists: false },
       forexRevenue: exactField(bank, "forexRevenue"),
       reserveBalance: exactField(bank, "reserveBalance"),
       lastReservePoolTransferTurn: exactField(bank, "lastReservePoolTransferTurn"),
@@ -153,15 +167,29 @@ async function prepare(
       turn: command.turn,
       currency,
       legs: [
-        { kind: "debit", amount, collection: "centralBanks", filter: identity, path: from },
-        { kind: "credit", amount, collection: "centralBanks", filter: identity, path: to },
+        {
+          kind: "debit",
+          amount,
+          collection: "centralBanks",
+          filter: identity,
+          path: from,
+          note: "Source reserve pool debit",
+        },
+        {
+          kind: "credit",
+          amount,
+          collection: "centralBanks",
+          filter: identity,
+          path: to,
+          note: "Destination reserve pool credit",
+        },
       ],
       projections: [
         {
           collection: "centralBanks",
           filter: identity,
           update: {
-            $inc: { forexRevenue: forexDelta, reserveBalance: -forexDelta },
+            $inc: { forexRevenue: forexDelta, reserveBalance: -forexDelta, locBookRevision: 1 },
             $set: { lastReservePoolTransferTurn: command.turn, updatedAt: now },
           },
           note: "Reserve pools and transfer cooldown commit together",
@@ -190,6 +218,7 @@ async function prepare(
           currency,
           meta: { direction: command.direction },
         }),
+        currencyCode: currency,
         actor: {
           kind: command.isAdmin ? "admin" : "player",
           ...(command.userId && ObjectId.isValid(command.userId)
@@ -273,7 +302,7 @@ async function finish(db: Db, receipt: Receipt): Promise<TransferResult> {
 }
 export async function executeReservePoolTransfer(
   db: Db,
-  bank: CentralBank & { settledKeys?: string[] },
+  bank: ReservePoolBank,
   input: ReservePoolTransferInput
 ): Promise<TransferResult> {
   const command = { ...input, amount: Math.floor(input.amount) };

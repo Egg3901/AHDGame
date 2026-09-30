@@ -139,7 +139,11 @@ export async function settleAtomicDocumentTransition(
       !poolPaths.has(debit.path ?? "") ||
       !poolPaths.has(credit.path ?? "") ||
       Object.keys(projection.update).some((key) => !["$inc", "$set"].includes(key)) ||
-      Object.keys(projection.update.$inc ?? {}).some((path) => !poolPaths.has(path)) ||
+      Object.keys(projection.update.$inc ?? {}).some(
+        (path) => !poolPaths.has(path) && path !== "locBookRevision"
+      ) ||
+      (projection.update.$inc?.locBookRevision !== undefined &&
+        projection.update.$inc.locBookRevision !== 1) ||
       Object.keys(projection.update.$set ?? {}).some(
         (path) => !["updatedAt", "lastReservePoolTransferTurn"].includes(path)
       )
