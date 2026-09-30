@@ -237,6 +237,7 @@ async function runCase(
         playerDepositsAreLiabilities: true,
       });
       const window = await drawDiscountWindow(db, BANK, quote.headroomAnchor, setup.turn);
+      assert(window.ok, JSON.stringify(window));
       decisions.discountWindow = window;
       await record("explicit central bank window draw");
     }
@@ -249,6 +250,7 @@ async function runCase(
       { type: "withdraw", amount },
       `${scenario.id}:withdraw`
     );
+    if (scenario.withdrawal === 0.2) assert(withdrawal.ok, JSON.stringify(withdrawal));
     decisions.withdrawal = {
       amount,
       fraction: scenario.withdrawal,
@@ -290,6 +292,10 @@ async function runCase(
     assert.equal(retry.banksProcessed, 0);
   }
   const ending = timeline.at(-1)!.state;
+  if (scenario.defaultShock) {
+    assert.equal(ending.namedLoans[0]?.status, "defaulted");
+    assert.equal(ending.bankStatus, "failed");
+  }
   const operating = timeline.filter(
     (entry) =>
       entry.stage.startsWith("turn ") &&
