@@ -28,7 +28,7 @@ The audit outbox shares a pending-recovery flag with the command. A partial inde
 
 - 16 atomic settlement regressions cover existing cash transitions and restricted noncash bond exchanges, including conservation, concurrent delivery, interruption recovery and rejection of cash-field updates without cash legs.
 - 54 tests passed across the final monetary, audit, API and NPP suites. They include original command identity, native negative treasury cash, concurrent fiscal credits, shared pending-command exclusion, deliberate fresh admin commands, audit delivery and actor preservation.
-- The earlier API/UI/NPP qualification passed 28 tests, including all four UI operation types retaining command IDs after network failure. Wrapper and liquidity qualification passed 29 tests before the audit extension; those financial outcomes were requalified in the final Mongo run.
+- The earlier API/UI/NPP qualification passed 28 tests, including all four UI operation types retaining command IDs after network failure. Wrapper and liquidity qualification passed 29 tests before the audit extension; the final Mongo run separately qualifies QE, QT and treasury flows after the audit extension.
 - The focused bootstrap collection-classification gate passed. New command collections are classified as runtime data.
 
 Native treasury credit remains available without FX when shadow accounting is disabled. With shadow accounting enabled, the canonical treasury valuation rules require valid active-currency rates or an authored budget-only valuation. No synthetic one-to-one rate is introduced. Original command policy and audit context are frozen before delivery.
