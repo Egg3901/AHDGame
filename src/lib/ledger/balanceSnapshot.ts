@@ -60,6 +60,16 @@ async function collectBalanceState(
   const rates = await loadAnchorRates(db);
   const balances: Record<string, number> = {};
 
+  // Bond pools hold the funded buyer side of sovereign primary placements.
+  const pools = db.collection<{ _id: CurrencyCode; cashLocal?: number }>("bondMarketPools");
+  for await (const pool of pools.find({}, { projection: { cashLocal: 1 } })) {
+    add(
+      balances,
+      accountId("bond_pool", pool._id, pool._id),
+      toAnchor(pool.cashLocal ?? 0, pool._id, rates)
+    );
+  }
+
   // --- Characters: personal + savings wallets --------------------------------
   const characters = db.collection<{
     _id: ObjectId;

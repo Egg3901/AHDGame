@@ -35,6 +35,7 @@ export type LedgerAccountKind =
   | "corporation"
   | "party"
   | "state_party"
+  | "bond_pool"
   | "government"
   | "fund"
   | "org"
@@ -69,6 +70,7 @@ export const REAL_ACCOUNT_KINDS: readonly LedgerAccountKind[] = [
   "corporation",
   "party",
   "state_party",
+  "bond_pool",
   "government",
   "fund",
   "org",

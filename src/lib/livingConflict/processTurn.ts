@@ -104,14 +104,14 @@ export async function materializeLivingConflictEvent(
     .collection<Crisis>("crises")
     .findOne(
       { "globalResponse.conflictKey": def.key, status: "active" },
-      { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+      { projection: { _id: 1, startTurn: 1, durationTurns: 1 }, sort: { startTurn: -1 } }
     );
   const activeNegotiationWindow = driven.fired.event.negotiation
     ? await db
         .collection<Crisis>("crises")
         .findOne(
           { livingConflictEventId: { $regex: `^${def.key}:` }, status: "active" },
-          { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+          { projection: { _id: 1, startTurn: 1, durationTurns: 1 }, sort: { startTurn: -1 } }
         )
     : null;
   const activeWindow = activeGlobalWindow ?? activeNegotiationWindow;

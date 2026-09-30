@@ -3,6 +3,7 @@
  * potential growth. Recovery releases those constraints without creating people
  * or money. Stored exposure limits abrupt workforce changes and repeat turns.
  */
+import { arabEconomicTarget } from "./arabRegional";
 import type { LivingConflictState } from "../types";
 
 export interface CrisisEconomicExposure {
@@ -36,6 +37,13 @@ export function crisisEconomicExposure(
   let infrastructureDamage = 0;
   for (const current of conflicts) {
     if (!current.hasOpened || current.status === "closed") continue;
+    if (current.defKey === "arab_uprisings") {
+      const target = arabEconomicTarget(current, region.countryId);
+      displaced += target.displacedShare;
+      hosted += target.hostingShare;
+      infrastructureDamage += target.infrastructureDamage;
+      continue;
+    }
     const ukraine = current.defKey === "russia_ukraine_security";
     const origin = ukraine ? "UKR" : "YU";
     const local =

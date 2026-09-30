@@ -1,3 +1,4 @@
+import type { ArabRegionalState } from "./rules/arabOrigins";
 import type {
   CrisisEffect,
   CrisisDecisionNode,
@@ -274,6 +275,8 @@ export interface LivingConflictDef {
  * west/east support, so a two-sided war and a one-sided disaster share a shape.
  */
 export interface LivingConflictState {
+  /** Independent origin trajectories and conserved regional hosting exposure. */
+  arabRegional?: ArabRegionalState;
   defKey: string;
   hasOpened: boolean;
   /** Absent on legacy documents and normalized on read. */

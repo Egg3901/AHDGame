@@ -36,26 +36,34 @@ export function nextPresidentialTenure(
 
 /**
  * Persist the tenure update for `countryId` after a presidential resolution.
- * No-op on a missing winning party. Best-effort — callers should not fail the
- * resolution if this throws.
+ * An election receipt and compare-and-set make partial seating retries safe.
+ * The caller keeps seating pending until this write succeeds.
  */
 export async function recordPresidentialTenure(
   db: Db,
   countryId: CountryId,
-  winnerParty: string | undefined | null
+  winnerParty: string | undefined | null,
+  electionId: string
 ): Promise<void> {
   if (!winnerParty) return;
-  const gs = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { presidentialTenureByCountry: 1 } });
-  const prior = gs?.presidentialTenureByCountry?.[countryId];
-  const next = nextPresidentialTenure(prior, winnerParty);
-  await db
-    .collection<GameState>("gameState")
-    .updateOne(
+  const collection = db.collection<GameState>("gameState");
+  const path = `presidentialTenureByCountry.${countryId}`;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const gs = await collection.findOne(
       { _id: "current" },
-      { $set: { [`presidentialTenureByCountry.${countryId}`]: next } }
+      { projection: { presidentialTenureByCountry: 1 } }
     );
+    if (!gs) throw new Error("Presidential tenure requires the current world record");
+    const prior = gs.presidentialTenureByCountry?.[countryId];
+    if (prior?.lastElectionId === electionId) return;
+    const next = { ...nextPresidentialTenure(prior, winnerParty), lastElectionId: electionId };
+    const result = await collection.updateOne(
+      { _id: "current", [path]: prior ?? { $exists: false } },
+      { $set: { [path]: next } }
+    );
+    if (result.matchedCount === 1) return;
+  }
+  throw new Error("Concurrent presidential tenure update did not settle");
 }
 
 /**
