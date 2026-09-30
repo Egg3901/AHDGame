@@ -53,7 +53,7 @@ async function main() {
       .collection("balanceSnapshots")
       .findOne({ turn: state.currentTurn - 1 });
     const closing = await source
-      .collection("balanceSnapshotCheckpoints")
+      .collection("balanceSnapshots")
       .findOne({ turn: state.currentTurn });
     assert(opening && closing);
     const sourceDividends = await source
