@@ -106,7 +106,12 @@ for (const preset of [
   const after = summarize(corrected);
   assert(after.distinct > after.count * 0.9);
   assert(after.nearFloor < after.count * 0.1);
-  const scenarios = [];
+  const scenarios: {
+    name: string;
+    shockModifier: number;
+    refreshes: number;
+    after48Turns: ReturnType<typeof summarize>;
+  }[] = [];
   for (const [name, shockModifier] of [
     ["baseline", 1],
     ["output-shock", 0.5],
