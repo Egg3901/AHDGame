@@ -352,24 +352,28 @@ async function acknowledgeLeg(
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const path = `legs.${receipt.index}`;
   const field = receipt.outcome === "applied" ? `${path}.applied` : `${path}.refusal`;
-  await records.updateOne(
+  const acknowledged = await records.updateOne(
     {
       _id: receipt.key,
       status: "partial",
+      [`${path}.collection`]: collection,
+      [`${path}.filter._id`]: id,
       [`${path}.applied`]: false,
       [`${path}.refusal`]: { $exists: false },
     },
     { $set: { [field]: receipt.outcome === "applied" ? true : receipt.error } }
   );
-  const saved = await records.findOne({ _id: receipt.key }, { projection: { legs: 1 } });
-  const leg = saved?.legs[receipt.index];
-  if (
-    !leg ||
-    leg.collection !== collection ||
-    !isDeepStrictEqual(leg.filter?._id, id) ||
-    (receipt.outcome === "applied" ? !leg.applied : leg.refusal !== receipt.error)
-  )
-    throw new Error("Money movement target outcome requires journal reconciliation");
+  if (!acknowledged.matchedCount) {
+    const saved = await records.findOne({ _id: receipt.key }, { projection: { legs: 1 } });
+    const leg = saved?.legs[receipt.index];
+    if (
+      !leg ||
+      leg.collection !== collection ||
+      !isDeepStrictEqual(leg.filter?._id, id) ||
+      (receipt.outcome === "applied" ? !leg.applied : leg.refusal !== receipt.error)
+    )
+      throw new Error("Money movement target outcome requires journal reconciliation");
+  }
   await db
     .collection<LegTarget>(collection)
     .updateOne({ _id: id, [PENDING_LEG]: receipt } as Filter<LegTarget>, {

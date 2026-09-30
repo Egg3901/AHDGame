@@ -208,6 +208,25 @@ describe("durable leg outcomes", () => {
     expect(f.balances()).toEqual([990, 110]);
   });
 
+  it("does not acknowledge a receipt pointing at another target", async () => {
+    const f = fixture();
+    await f.journals.insertOne({
+      _id: "foreign",
+      status: "partial",
+      kind: "transfer",
+      legs: f.move.legs.map((leg) => ({ ...leg, applied: false })),
+    });
+    f.accounts.docs[0].pendingMoneyMoveReceipt = {
+      key: "foreign",
+      index: 1,
+      generation: 1,
+      outcome: "applied",
+    };
+    await expect(applyMoneyMove(f.db, f.move)).rejects.toThrow("requires journal reconciliation");
+    expect(f.journals.docs[0].legs).toEqual(f.move.legs.map((leg) => ({ ...leg, applied: false })));
+    expect(f.balances()).toEqual([1000, 100]);
+  });
+
   it("leaves ambiguous legacy delivery for reconciliation", async () => {
     const f = fixture();
     await f.journals.insertOne({
