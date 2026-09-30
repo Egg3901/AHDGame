@@ -13,6 +13,10 @@ import { materializeFederationFiscalAccounts } from "./materializeFiscalAccounts
 import { materializeFederationFederalRetirement } from "./materializeFederalRetirement";
 import { publishFederationRelocations } from "./relocationLedger";
 import {
+  FEDERATION_POLITICAL_PROPOSALS_COLLECTION,
+  type FederationPoliticalProposalRecord,
+} from "./politicalProposal";
+import {
   FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
   WORLD_ENTITY_STATES_COLLECTION,
   type FederationSettlementApplicationRecord,
@@ -144,5 +148,14 @@ export async function applyPreparedFederationSettlement(input: {
     firmOrigins,
     now,
   });
+  const completed = await db
+    .collection<FederationPoliticalProposalRecord>(FEDERATION_POLITICAL_PROPOSALS_COLLECTION)
+    .updateOne(
+      { _id: intentId, sourceEntityId: sourceCountryId, status: "open" },
+      { $set: { status: "applied" } },
+      { session }
+    );
+  if (completed.matchedCount !== 1)
+    throw new Error("Federation political proposal changed during settlement");
   return plan.receipt;
 }

@@ -138,6 +138,9 @@ describe("ratified federation turn application", () => {
     expect(await db.collection("states").countDocuments({ countryId: "CS" })).toBe(0);
     expect(await db.collection("macroCountries").countDocuments({})).toBe(2);
     expect(await db.collection("federationFiscalAccounts").countDocuments({})).toBe(3);
+    expect(
+      await db.collection("federationPoliticalProposals").findOne({ sourceEntityId: "CS" })
+    ).toMatchObject({ status: "applied" });
   });
 
   it("leaves no frozen preparation after a failed transaction and retries at the later turn", async () => {
