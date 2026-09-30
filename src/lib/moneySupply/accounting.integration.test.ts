@@ -217,6 +217,9 @@ describe("monetary stock boundaries", () => {
 
   it("credits only the issuer treasury for primary monetization", async () => {
     const db = world();
+    await db
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { revenue: { total: 0 }, gdp: 100000 } });
     const id = new ObjectId();
     db.seed("bonds", [
       {
