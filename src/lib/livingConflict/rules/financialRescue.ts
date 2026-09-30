@@ -29,6 +29,7 @@ export function guaranteedDepositorShortfall(
 export function financialRescueTransition(input: {
   key: string;
   countryId: string;
+  treasuryId: string;
   currency: string;
   turn: number;
   amount: number;
@@ -68,7 +69,7 @@ export function financialRescueTransition(input: {
     kind: "debit",
     amount,
     collection: "federalBudget",
-    filter: { countryId },
+    filter: { _id: input.treasuryId, countryId },
     path: "treasuryBalance",
     note: "Fund the authorized crisis intervention",
   });
