@@ -80,11 +80,17 @@ export async function startingPoliticalCountries(
   return preset === "2019-no-parties" ? null : getEnabledCountryIdsFromDb(db);
 }
 
+/** A country predicate is independent of each collection's document-ID type. */
+interface StartingCountryPredicate {
+  countryId?: { $in: CountryId[] };
+  $or?: Array<{ countryId: { $in: CountryId[] } | { $exists: false } }>;
+}
+
 /** Only original US-only callers opt into country-less legacy rows. */
 export function startingCountryFilter(
   countries: readonly CountryId[] | null,
   legacyUS = false
-): Filter<Document> {
+): StartingCountryPredicate {
   if (countries === null) return {};
   return legacyUS && countries.includes("US")
     ? { $or: [{ countryId: { $in: [...countries] } }, { countryId: { $exists: false } }] }

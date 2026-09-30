@@ -12,6 +12,7 @@ import {
 } from "../startingParties";
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { buildCountryReadinessReport } from "@/lib/admin/countryReadinessReport";
@@ -1358,13 +1359,13 @@ async function checkEmptyPoliticalStart(
     ],
   ];
   for (const [collection, filter] of occupiedFilters) {
-    const scope =
+    const count =
       collection === "countryState"
-        ? countries === null
-          ? {}
-          : { _id: { $in: countries } }
-        : countryFilter;
-    const count = await db.collection(collection).countDocuments({ $and: [scope, filter] });
+        ? await getCountryStateCollection(db).countDocuments({
+            ...(countries === null ? {} : { _id: { $in: countries } }),
+            rulingPartyId: { $exists: true, $ne: null },
+          })
+        : await db.collection(collection).countDocuments({ $and: [countryFilter, filter] });
     checks.push(
       check(
         `startingParties.${collection}`,
