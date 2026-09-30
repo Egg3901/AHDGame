@@ -393,8 +393,9 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
       // First Secretaries ride the Volkskammer cycle (Bezirk/Land elections
       // were held with the chamber's) — anchor overrides only (the 192-turn
       // period already comes from dur.durationHours). Null anchors era-gate
-      // both OFF outside the Cold-War presets. Every other country keeps the
-      // shared governorStateSenate anchor.
+      // both OFF outside the Cold-War presets. Brazil's modeled macroregion
+      // governors ride its general election; other countries keep the shared
+      // governorStateSenate anchor.
       // UKR/BLR/BAL oblast/republic first secretaries ride the republic-soviet
       // cycle for the same reason RU's do: the regional soviets were elected on
       // the republic cycle, not on a separate schedule of their own.
