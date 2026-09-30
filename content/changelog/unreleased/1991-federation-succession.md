@@ -26,3 +26,5 @@ areas: [backend]
 - Classify Soviet republics as dependent or emergent at the January 1991 opening, stage Czechoslovak and Yugoslav successors as emergent identities, and keep seven countries with detailed region seeds out of the background-economy seeder.
 
 - Model a legacy settlement administration for a vanished parent issuer. Successors fund its contractual payment by agreed shares; budget shortfalls create contribution arrears and actual cash limits creditor payment. Continuing states keep their own debt service. Runtime transfer and collection remain gated.
+
+- Let an unoccupied NPC federal legislature open a rejectable CS or YU settlement mandate after its decision date. Shared and strategic custody appears in the terms, and each successor still decides consent separately.
