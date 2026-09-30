@@ -43,7 +43,7 @@ interface InterestRecord extends Document {
   status: string;
   legacyInterestBatch?: Plan;
 }
-interface InterestBalanceDocument extends Document {
+interface InterestBalanceDocument {
   _id: ObjectId;
   settledKeys?: string[];
 }
