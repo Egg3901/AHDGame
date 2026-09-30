@@ -9,6 +9,8 @@ describe("live private firm succession inventory", () => {
     const mem = createInMemoryDb();
     const corporationId = new ObjectId("000000000000000000000011");
     const publicId = new ObjectId("000000000000000000000012");
+    const nppId = new ObjectId("000000000000000000000016");
+    const caretakerId = new ObjectId("000000000000000000000017");
     const facilityId = new ObjectId("000000000000000000000013");
     const facility = {
       _id: facilityId,
@@ -26,11 +28,20 @@ describe("live private firm succession inventory", () => {
     mem.seed("corporations", [
       { _id: corporationId, countryId: "RU", headquartersState: "KYIV" },
       { _id: publicId, countryId: "RU", headquartersState: "KYIV", countryOwnerId: "RU" },
+      { _id: nppId, countryId: "RU", headquartersState: "KYIV", ceoType: "npp" },
+      {
+        _id: caretakerId,
+        countryId: "RU",
+        headquartersState: "KYIV",
+        ceoType: "npp",
+        caretakerCeo: { ceoId: "player" },
+      },
     ]);
     mem.seed("corporateSectors", [
       facility,
       { ...facility, _id: new ObjectId("000000000000000000000014"), countryId: "FR" },
       { ...facility, _id: new ObjectId("000000000000000000000015"), corporationId: publicId },
+      { ...facility, _id: new ObjectId("000000000000000000000018"), corporationId: nppId },
     ]);
     const firms = await loadLivePrivateSuccessionFirms(mem as unknown as Db, "RU", 1991, 1);
     expect(firms).toEqual([
@@ -46,6 +57,13 @@ describe("live private firm succession inventory", () => {
             bookValueAnchor: sectorBookValueAnchor(facility as never, 1991, 1),
           },
         ],
+      },
+      {
+        corporationId: caretakerId.toString(),
+        countryId: "RU",
+        headquartersState: "KYIV",
+        headquartersRegionId: "UKRAINE",
+        facilities: [],
       },
     ]);
   });

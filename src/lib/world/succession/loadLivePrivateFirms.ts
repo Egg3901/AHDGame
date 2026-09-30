@@ -3,6 +3,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector } from "@/lib/db/types/corporation";
 import type { State } from "@/lib/db/types/state";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { isNppOwned } from "@/lib/corporations/nppOwned";
 import { sectorBookValueAnchor } from "@/lib/corporations/sectorProfitBasis";
 import type { PrivateSuccessionFirm } from "./rules/privateFacilities";
 import { buildSourceRegionHierarchy } from "./sourceRegionHierarchy";
@@ -27,7 +28,9 @@ export async function loadLivePrivateSuccessionFirms(
     .collection<Corporation>("corporations")
     .find({ countryId: sourceCountryId }, { session })
     .toArray();
-  const privateCorporations = corporations.filter((corp) => !isStateOwned(corp));
+  const privateCorporations = corporations.filter(
+    (corp) => !isStateOwned(corp) && !isNppOwned(corp)
+  );
   const sectors = privateCorporations.length
     ? await db
         .collection<CorporateSector>("corporateSectors")

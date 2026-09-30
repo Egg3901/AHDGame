@@ -310,6 +310,14 @@ describe("live federation settlement intent", () => {
     ).toThrow("publication inventory");
     const prepared = await prepareFederationPublication(args.db, publication, new Date(2));
     expect(prepared.effectIds.length).toBeGreaterThan(4);
+    expect(
+      (await verifyPreparedFederationPublication(args.db, intent._id)).find(
+        (effect) => effect.kind === "source-firm"
+      )?.value
+    ).toMatchObject({
+      corporationId: firmId.toString(),
+      headquartersRegionId: "UKRAINE",
+    });
     expect(await prepareFederationPublication(args.db, publication, new Date(3))).toEqual(prepared);
     expect((await verifyPreparedFederationPublication(args.db, intent._id)).length).toBe(
       prepared.effectIds.length

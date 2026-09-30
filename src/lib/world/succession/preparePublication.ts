@@ -20,7 +20,9 @@ export type FederationPreparedEffectKind =
   | "custody"
   | "fiscal-share"
   | "resident-choice"
-  | "firm-choice";
+  | "firm-choice"
+  | "source-resident"
+  | "source-firm";
 
 export interface FederationPreparedEffect {
   _id: string;
@@ -80,6 +82,16 @@ function enumerateEffects(plan: FederationPublicationPlan, now: Date): Federatio
     })),
     ...plan.privateFirmPlans.map((value) => ({
       kind: "firm-choice" as const,
+      key: value.corporationId,
+      value: { ...value },
+    })),
+    ...plan.sourceResidents.map((value) => ({
+      kind: "source-resident" as const,
+      key: value.characterId,
+      value: { ...value },
+    })),
+    ...plan.sourceFirms.map((value) => ({
+      kind: "source-firm" as const,
       key: value.corporationId,
       value: { ...value },
     })),
