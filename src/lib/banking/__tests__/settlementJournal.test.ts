@@ -256,13 +256,16 @@ describe("settleTransition", () => {
 });
 
 describe("fresh settlement journal reads", () => {
-  it("does not reload records it has just exclusively claimed", async () => {
+  it("checks durable projection acknowledgement while preserving the original quote", async () => {
     const db = world();
     const journalReads = vi.spyOn(db.collection(MONEY_MOVE_COLLECTION), "findOne");
     const journalWrites = vi.spyOn(db.collection(MONEY_MOVE_COLLECTION), "updateOne");
     const result = await settleTransition(db as unknown as Db, loanTransition());
     expect(result.status).toBe("applied");
-    expect(journalReads).not.toHaveBeenCalled();
+    expect(journalReads).toHaveBeenCalledWith(
+      { _id: loanTransition().key },
+      { projection: { projections: 1 } }
+    );
     const projectionClaims = journalWrites.mock.calls.filter(
       ([, update]) =>
         !Array.isArray(update) &&

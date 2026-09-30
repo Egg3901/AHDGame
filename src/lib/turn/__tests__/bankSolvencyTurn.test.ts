@@ -63,6 +63,7 @@ function findCursor(docs: unknown[]) {
 
 describe("processBankSolvencyTurn", () => {
   let db: MockDb;
+  let persisted: ReturnType<typeof createInMemoryDb>;
   let liveCorps: Map<string, Corporation>;
   let cbState: { externalBroadMoney: number };
   let loans: BankLoan[];
@@ -78,53 +79,6 @@ describe("processBankSolvencyTurn", () => {
         c._id.toString(),
         { ...c, bankCharter: c.bankCharter ? { ...c.bankCharter } : undefined },
       ])
-    );
-    db.collectionMocks.corporations!.find.mockImplementation((filter?: Record<string, unknown>) => {
-      let docs = [...liveCorps.values()];
-      const status = filter?.["bankCharter.status"];
-      if (status === "failed") {
-        docs = docs.filter((c) => c.bankCharter?.status === "failed");
-        const resolvedFilter = filter?.["bankCharter.depositorsResolvedTurn"] as
-          { $exists?: boolean } | undefined;
-        if (resolvedFilter?.$exists === false) {
-          docs = docs.filter((c) => c.bankCharter?.depositorsResolvedTurn == null);
-        }
-      } else if (status === "active") {
-        docs = docs.filter((c) => c.bankCharter?.status === "active");
-      }
-      return findCursor(
-        docs.map((c) => ({
-          ...c,
-          bankCharter: c.bankCharter ? { ...c.bankCharter } : undefined,
-        }))
-      );
-    });
-    db.collectionMocks.corporations!.findOne.mockImplementation(
-      async (filter: { _id?: ObjectId }) => {
-        if (!filter?._id) return null;
-        const live = liveCorps.get(filter._id.toString());
-        if (!live) return null;
-        return {
-          ...live,
-          bankCharter: live.bankCharter ? { ...live.bankCharter } : undefined,
-        };
-      }
-    );
-    // Depositor resolution CLAIMS its idempotency key atomically before it
-    // touches anyone, so a crash cannot let a retry haircut twice. Without this
-    // the claim returns undefined here and the whole resolution no-ops.
-    db.collectionMocks.corporations!.findOneAndUpdate.mockImplementation(
-      async (filter: { _id?: ObjectId }, update: { $set?: Record<string, unknown> }) => {
-        if (!filter?._id) return null;
-        const live = liveCorps.get(filter._id.toString());
-        if (!live?.bankCharter) return null;
-        if (live.bankCharter.status !== "failed") return null;
-        if (live.bankCharter.depositorsResolvedTurn != null) return null;
-        const before = { ...live, bankCharter: { ...live.bankCharter } };
-        const stamp = update?.$set?.["bankCharter.depositorsResolvedTurn"];
-        if (typeof stamp === "number") live.bankCharter.depositorsResolvedTurn = stamp;
-        return before;
-      }
     );
   }
 
@@ -182,41 +136,6 @@ describe("processBankSolvencyTurn", () => {
       const inc = (update as { $inc?: { externalBroadMoney?: number } }).$inc;
       if (typeof inc?.externalBroadMoney === "number") {
         cbState.externalBroadMoney += inc.externalBroadMoney;
-      }
-      return { matchedCount: 1, modifiedCount: 1 };
-    });
-
-    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
-      const f = filter as { _id?: ObjectId };
-      if (!f._id) return { matchedCount: 0, modifiedCount: 0 };
-      const live = liveCorps.get(f._id.toString());
-      if (!live?.bankCharter) return { matchedCount: 0, modifiedCount: 0 };
-      const u = update as {
-        $set?: Record<string, unknown>;
-        $inc?: Record<string, number>;
-      };
-      if (u.$inc) {
-        for (const [key, value] of Object.entries(u.$inc)) {
-          if (key === "liquidCapital") {
-            live.liquidCapital = (live.liquidCapital ?? 0) + value;
-          } else if (key.startsWith("bankCharter.")) {
-            const field = key.slice("bankCharter.".length);
-            const cur = (live.bankCharter as unknown as Record<string, number>)[field] ?? 0;
-            (live.bankCharter as unknown as Record<string, number>)[field] = cur + value;
-          }
-        }
-      }
-      if (u.$set) {
-        if (typeof u.$set.liquidCapital === "number") {
-          live.liquidCapital = u.$set.liquidCapital as number;
-        }
-        for (const [key, value] of Object.entries(u.$set)) {
-          if (key === "updatedAt" || key === "liquidCapital") continue;
-          if (key.startsWith("bankCharter.")) {
-            const field = key.slice("bankCharter.".length);
-            (live.bankCharter as unknown as Record<string, unknown>)[field] = value;
-          }
-        }
       }
       return { matchedCount: 1, modifiedCount: 1 };
     });
@@ -342,6 +261,53 @@ describe("processBankSolvencyTurn", () => {
         { currencyCode: "EUR", rate: 1 },
       ]),
     });
+    // Preserve the fixture's live balance handles while using the real in-memory
+    // filter/update contract for durable projections and their journal receipts.
+    persisted = createInMemoryDb();
+    Object.defineProperty(persisted.collection("corporations"), "docs", {
+      get: () => [...liveCorps.values()],
+    });
+    Object.defineProperty(persisted.collection("depositInsuranceFunds"), "docs", {
+      get: () => [fundState],
+    });
+    const centralBank = { _id: "US", bankReserveRequirement: 0.1 };
+    Object.defineProperty(centralBank, "externalBroadMoney", {
+      enumerable: true,
+      get: () => cbState.externalBroadMoney,
+      set: (value: number) => {
+        cbState.externalBroadMoney = value;
+      },
+    });
+    persisted.collection("centralBanks").docs.push(centralBank);
+    const budget = { _id: "federal", countryId: "US" };
+    Object.defineProperty(budget, "treasuryBalance", {
+      enumerable: true,
+      get: () => _treasuryBalance,
+      set: (value: number) => {
+        _treasuryBalance = value;
+      },
+    });
+    persisted.collection("federalBudget").docs.push(budget);
+    for (const name of [
+      "bankMoneyMoves",
+      "corporations",
+      "centralBanks",
+      "depositInsuranceFunds",
+      "federalBudget",
+    ]) {
+      db.collection(name);
+      const backing = persisted.collection(name);
+      for (const method of [
+        "find",
+        "findOne",
+        "insertOne",
+        "updateOne",
+        "findOneAndUpdate",
+      ] as const)
+        db.collectionMocks[name]![method].mockImplementation(
+          backing[method].bind(backing) as never
+        );
+    }
   });
 
   it("reads the feature policy exactly once per turn", async () => {
@@ -753,12 +719,12 @@ describe("processBankSolvencyTurn", () => {
       originatedTurn: 1,
       status: "current" as const,
     };
-    db.collectionMocks.interbankLoans!.find.mockReturnValue(findCursor([interbankLoan]));
-    const defaulted: unknown[] = [];
-    db.collectionMocks.interbankLoans!.updateOne.mockImplementation(async (filter, update) => {
-      defaulted.push({ filter, update });
-      return { matchedCount: 1, modifiedCount: 1 };
-    });
+    persisted.seed("interbankLoans", [interbankLoan]);
+    const interbank = persisted.collection("interbankLoans");
+    for (const method of ["find", "findOne", "updateOne"] as const)
+      db.collectionMocks.interbankLoans![method].mockImplementation(
+        interbank[method].bind(interbank) as never
+      );
 
     const summary = await processBankSolvencyTurn(db as unknown as Db, TURN);
     expect(summary.failures).toBe(1);
@@ -766,6 +732,6 @@ describe("processBankSolvencyTurn", () => {
     expect(live.bankCharter!.status).toBe("failed");
     expect(live.bankCharter!.interbankDebt).toBe(0);
     expect(live.bankCharter!.cbMarginDebt).toBe(0);
-    expect(defaulted.length).toBeGreaterThan(0);
+    expect(interbank.docs[0].status).toBe("defaulted");
   });
 });

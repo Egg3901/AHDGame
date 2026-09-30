@@ -179,29 +179,33 @@ describe("switchCharterType", () => {
     expect(expectSwitchWrite()["bankCharter.totalDeposits"]).toBeUndefined();
   });
 
+  function statefulSwitchFixture(corp: Corporation) {
+    const memory = createInMemoryDb();
+    memory.seed("corporations", [
+      { ...corp, bankCharter: { ...corp.bankCharter, cashReserves: 6_000_000 } },
+    ]);
+    memory.seed("centralBanks", [{ _id: "US", externalBroadMoney: 100_000_000 }]);
+    memory.seed("depositInsuranceFunds", [{ _id: "USD", balance: 0 }]);
+    memory.seed("gameState", [
+      { _id: "current", preset: "2019-default", currentTurn: CURRENT_TURN },
+    ]);
+    memory.seed("gameConfig", [
+      { _id: "default", privateBankingEnabled: true, playerAdvancedBankChartersEnabled: true },
+    ]);
+    return memory;
+  }
+
   it("stamps a cooldown and refuses a second switch inside it", async () => {
     const corp = makeCorp(makeCharter());
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-    db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-      ...corp,
-      bankCharter: { ...corp.bankCharter!, type: "investment" },
-    });
-
+    const memory = statefulSwitchFixture(corp);
     const { switchCharterType, CHARTER_SWITCH_COOLDOWN_TURNS } = await importCharter();
-    const first = await switchCharterType(db as unknown as Db, corp._id, "investment");
+    const first = await switchCharterType(memory as unknown as Db, corp._id, "investment");
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     expect(first.cooldownUntilTurn).toBe(CURRENT_TURN + CHARTER_SWITCH_COOLDOWN_TURNS);
 
-    const locked = makeCorp(
-      makeCharter({
-        type: "investment",
-        charterSwitchCooldownUntilTurn: CURRENT_TURN + CHARTER_SWITCH_COOLDOWN_TURNS,
-      })
-    );
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(locked);
-
-    const second = await switchCharterType(db as unknown as Db, locked._id, "retail");
+    // Read the actual persisted cooldown on the same corporation.
+    const second = await switchCharterType(memory as unknown as Db, corp._id, "retail");
     expect(second.ok).toBe(false);
     if (second.ok) return;
     expect(second.blockers).toContain("cooldown");
@@ -263,17 +267,13 @@ describe("switchCharterType", () => {
 
   it("archives the outgoing charter so the history survives the type change", async () => {
     const corp = makeCorp(makeCharter());
-    db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-    db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-      ...corp,
-      bankCharter: { ...corp.bankCharter!, type: "investment" },
-    });
-
+    const memory = statefulSwitchFixture(corp);
     const { switchCharterType } = await importCharter();
-    await switchCharterType(db as unknown as Db, corp._id, "investment");
+    const result = await switchCharterType(memory as unknown as Db, corp._id, "investment");
 
-    expect(db.collectionMocks.bankCharterHistory!.insertOne).toHaveBeenCalledTimes(1);
-    const [doc] = db.collectionMocks.bankCharterHistory!.insertOne.mock.calls[0];
-    expect((doc as { charter: BankCharter }).charter.type).toBe("retail");
+    expect(result.ok).toBe(true);
+    const history = memory.collection("bankCharterHistory").docs;
+    expect(history).toHaveLength(1);
+    expect((history[0].charter as BankCharter).type).toBe("retail");
   });
 });

@@ -1,5 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, FederalBudget } from "@/lib/db/types";
 import {
   settleTransition,
   resumeSettlement,
@@ -66,6 +66,21 @@ export async function processFinancialCrisisGuarantees(
     })
     .sort({ openedTurn: 1, _id: 1 })
     .toArray();
+  // Resolve all possible refund identities once, before any escrow debit.
+  const expiredCountries = [
+    ...new Set(
+      guarantees
+        .filter((guarantee) => turn > guarantee.expiresTurn)
+        .map((guarantee) => guarantee.countryId)
+    ),
+  ];
+  const refundBudgets = expiredCountries.length
+    ? await db
+        .collection<FederalBudget>("federalBudget")
+        .find({ countryId: { $in: expiredCountries } }, { projection: { _id: 1, countryId: 1 } })
+        .toArray()
+    : [];
+  const refundBudgetIds = new Map(refundBudgets.map((budget) => [budget.countryId, budget._id]));
   for (const guarantee of guarantees) {
     let available = guarantee.escrowBalance;
     const banks = await db
@@ -130,6 +145,8 @@ export async function processFinancialCrisisGuarantees(
       summary.paid += amount;
     }
     if (turn <= guarantee.expiresTurn || !(available > 0)) continue;
+    const treasuryId = refundBudgetIds.get(guarantee.countryId);
+    if (!treasuryId) throw new Error("Guarantee refund treasury is unavailable");
     const result = await settleTransition(db, {
       key: `${guarantee._id}:expiry`,
       kind: "financial_crisis_guarantee_refund",
@@ -148,7 +165,7 @@ export async function processFinancialCrisisGuarantees(
           kind: "credit",
           amount: available,
           collection: "federalBudget",
-          filter: { countryId: guarantee.countryId },
+          filter: { _id: treasuryId, countryId: guarantee.countryId },
           path: "treasuryBalance",
           note: "Return unused coverage to its funding treasury",
         },

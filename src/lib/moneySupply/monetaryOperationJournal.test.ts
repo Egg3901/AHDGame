@@ -263,7 +263,13 @@ describe("journaled monetary commands", () => {
   it.each([
     { collection: "actionAuditLog", onCall: 1, afterWrite: false },
     { collection: "actionAuditLog", onCall: 1, afterWrite: true },
-    { collection: "monetaryOperationCommands", onCall: 3, afterWrite: true },
+    {
+      collection: "monetaryOperationCommands",
+      onCall: 1,
+      afterWrite: true,
+      matches: (args: unknown[]) =>
+        (args[1] as { $set?: { auditDelivered?: boolean } }).$set?.auditDelivered === true,
+    },
   ])(
     "recovers optional audit delivery with the original actor and one row after %j",
     async (plan) => {
