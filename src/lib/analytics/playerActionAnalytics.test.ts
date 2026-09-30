@@ -100,6 +100,30 @@ describe("player action analytics", () => {
     uninstall();
   });
 
+  it("uses controlled body actions and ignores returned balances as spending", async () => {
+    const delegate = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ success: true, funds: 9000 }), { status: 200 })
+      );
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { installPlayerActionAnalytics, setPlayerActionContext } =
+      await import("./playerActionAnalytics");
+    setPlayerActionContext({ userId: "opaque-account-id", characterId: "character-id" });
+    const uninstall = installPlayerActionAnalytics();
+    await window.fetch("/api/congress/bills/0123456789abcdef01234567", {
+      method: "POST",
+      body: JSON.stringify({ action: "vote", vote: "for" }),
+    });
+    await vi.waitFor(() =>
+      expect(state.captureProductEvent).toHaveBeenCalledWith(
+        "player_action_succeeded",
+        expect.objectContaining({ action_type: "vote", resource_type: "none", resource_amount: 0 })
+      )
+    );
+    uninstall();
+  });
+
   it("maps rejected responses to stable failure codes without forwarding response text", async () => {
     const delegate = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "private server detail" }), {

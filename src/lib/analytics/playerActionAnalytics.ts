@@ -78,6 +78,11 @@ const ACTION_VERBS = new Set([
   "cancel",
   "cast",
   "close",
+  "cosponsor",
+  "uncosponsor",
+  "filibuster",
+  "veto_override_vote",
+  "presidential_action",
   "create",
   "declare",
   "defend",
@@ -454,7 +459,8 @@ function safeRegionId(body: Record<string, unknown> | null): string | undefined 
 }
 
 function safeSpend(
-  body: Record<string, unknown> | null
+  body: Record<string, unknown> | null,
+  source: "request" | "response" = "request"
 ): { resource_type: string; resource_amount: number } | undefined {
   if (!body) return undefined;
   const keys: Array<[string, string]> = [
@@ -474,6 +480,11 @@ function safeSpend(
     ["amount", "funds"],
   ];
   for (const [key, resource_type] of keys) {
+    if (
+      source === "response" &&
+      ["funds", "actionPoints", "shares", "units", "quantity", "amount"].includes(key)
+    )
+      continue;
     const amount = body[key];
     if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0) {
       return { resource_type, resource_amount: amount };
@@ -589,7 +600,10 @@ async function trackActionResponse(
   if (getStoredConsent() !== "accepted") return;
   const base = {
     action_domain: route.action_domain,
-    action_type: route.action_type,
+    action_type:
+      typeof body?.action === "string" && ACTION_VERBS.has(body.action)
+        ? body.action
+        : route.action_type,
     scope: route.scope,
     entity_type: route.entity_type,
     entity_id: route.entity_id ?? "unknown",
@@ -616,7 +630,17 @@ async function trackActionResponse(
     return;
   }
 
-  const spend = safeSpend(resultBody) ??
+  const entity = nestedRecord(resultBody?.[route.entity_type]);
+  const returnedId =
+    resultBody?.[`${route.entity_type}Id`] ?? entity?.id ?? entity?._id ?? resultBody?.id;
+  if (
+    !route.entity_id &&
+    typeof returnedId === "string" &&
+    (OBJECT_ID.test(returnedId) || UUID.test(returnedId))
+  )
+    base.entity_id = returnedId;
+
+  const spend = safeSpend(resultBody, "response") ??
     safeSpend(body) ?? { resource_type: "none", resource_amount: 0 };
   await captureProductEvent("player_action_succeeded", {
     ...base,
@@ -625,7 +649,7 @@ async function trackActionResponse(
   if (context.characterId && route.action_domain !== "onboarding") {
     await captureFirstMeaningfulAction(context.characterId, {
       action_domain: route.action_domain,
-      action_type: route.action_type,
+      action_type: base.action_type,
     });
   }
 
