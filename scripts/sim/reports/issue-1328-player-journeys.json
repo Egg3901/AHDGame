@@ -1,0 +1,6959 @@
+{
+  "scope": "Synthetic browser actors and funded setup in isolated retained legal/currency context; actual commands and banking phases, not full-world qualification",
+  "sourceCommit": "cb68eeee5b872cebfd908f8b0e90236fea16ab1a",
+  "completedGovernanceCharterSource": "5d4e1002a5c90c8150fb0839831e3e0a8d8c33e8",
+  "retainedHash": "797d474072a54f2bb53259650fead0352288b2f3eda3df77c168a08a5bdd2d27",
+  "actions": {
+    "sourceCommit": "2e2bb59d3f",
+    "snapshots": [
+      {
+        "stage": "resumed completed UI deposit 1000000 USD",
+        "state": {
+          "turn": 565,
+          "cash": 5394306676867.324,
+          "treasuryFiscalPosition": -2318224476419,
+          "mint": 0,
+          "burn": 0,
+          "saverWallet": 114223553.37,
+          "savings": [
+            {
+              "currency": "USD",
+              "balance": 1000000,
+              "holder": "privateBank",
+              "interestEarned": 0,
+              "status": "open"
+            }
+          ],
+          "bank": {
+            "cash": 12522355,
+            "liability": 1000000,
+            "loans": 0,
+            "status": "active"
+          },
+          "borrowerCash": 0,
+          "loans": [],
+          "journals": [
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355.34,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355.34,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "bank_capital_injection",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 115223553.37,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 115223553.37,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_migration",
+              "status": "applied",
+              "turn": 565,
+              "amounts": []
+            },
+            {
+              "kind": "savings_deposit",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            }
+          ],
+          "audits": [
+            {
+              "action": "bank.charter.issued",
+              "category": "money",
+              "turn": 565,
+              "amount": 11522355,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.deposit",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "stage": "UI withdrawal 200000 USD",
+        "state": {
+          "turn": 565,
+          "cash": 5394306676867.324,
+          "treasuryFiscalPosition": -2318224476419,
+          "mint": 0,
+          "burn": 0,
+          "saverWallet": 114423553.37,
+          "savings": [
+            {
+              "currency": "USD",
+              "balance": 800000,
+              "holder": "privateBank",
+              "interestEarned": 0,
+              "status": "open"
+            }
+          ],
+          "bank": {
+            "cash": 12322355,
+            "liability": 800000,
+            "loans": 0,
+            "status": "active"
+          },
+          "borrowerCash": 0,
+          "loans": [],
+          "journals": [
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355.34,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355.34,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "bank_capital_injection",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 115223553.37,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 115223553.37,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_migration",
+              "status": "applied",
+              "turn": 565,
+              "amounts": []
+            },
+            {
+              "kind": "savings_deposit",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_withdrawal",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 200000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 200000,
+                  "applied": true
+                }
+              ]
+            }
+          ],
+          "audits": [
+            {
+              "action": "bank.charter.issued",
+              "category": "money",
+              "turn": 565,
+              "amount": 11522355,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.deposit",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "stage": "UI holder transfer to central bank",
+        "state": {
+          "turn": 565,
+          "cash": 5394306676867.324,
+          "treasuryFiscalPosition": -2318224476419,
+          "mint": 0,
+          "burn": 0,
+          "saverWallet": 114423553.37,
+          "savings": [
+            {
+              "currency": "USD",
+              "balance": 800000,
+              "holder": "centralBank",
+              "interestEarned": 0,
+              "status": "open"
+            }
+          ],
+          "bank": {
+            "cash": 11522355,
+            "liability": 0,
+            "loans": 0,
+            "status": "active"
+          },
+          "borrowerCash": 0,
+          "loans": [],
+          "journals": [
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355.34,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355.34,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "bank_capital_injection",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 115223553.37,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 115223553.37,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_migration",
+              "status": "applied",
+              "turn": 565,
+              "amounts": []
+            },
+            {
+              "kind": "savings_deposit",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_withdrawal",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 200000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 200000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            }
+          ],
+          "audits": [
+            {
+              "action": "bank.charter.issued",
+              "category": "money",
+              "turn": 565,
+              "amount": 11522355,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.deposit",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.withdraw",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "stage": "UI holder transfer to private bank",
+        "state": {
+          "turn": 565,
+          "cash": 5394306676867.324,
+          "treasuryFiscalPosition": -2318224476419,
+          "mint": 0,
+          "burn": 0,
+          "saverWallet": 114423553.37,
+          "savings": [
+            {
+              "currency": "USD",
+              "balance": 800000,
+              "holder": "privateBank",
+              "interestEarned": 0,
+              "status": "open"
+            }
+          ],
+          "bank": {
+            "cash": 12322355,
+            "liability": 800000,
+            "loans": 0,
+            "status": "active"
+          },
+          "borrowerCash": 0,
+          "loans": [],
+          "journals": [
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355.34,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355.34,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "bank_capital_injection",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 115223553.37,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 115223553.37,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_migration",
+              "status": "applied",
+              "turn": 565,
+              "amounts": []
+            },
+            {
+              "kind": "savings_deposit",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_withdrawal",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 200000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 200000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            }
+          ],
+          "audits": [
+            {
+              "action": "bank.charter.issued",
+              "category": "money",
+              "turn": 565,
+              "amount": 11522355,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.deposit",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.withdraw",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 800000,
+              "currency": "USD",
+              "outcome": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "stage": "UI corporate loan 100000 USD",
+        "state": {
+          "turn": 565,
+          "cash": 5394306676867.324,
+          "treasuryFiscalPosition": -2318224476419,
+          "mint": 0,
+          "burn": 0,
+          "saverWallet": 114423553.37,
+          "savings": [
+            {
+              "currency": "USD",
+              "balance": 800000,
+              "holder": "privateBank",
+              "interestEarned": 0,
+              "status": "open"
+            }
+          ],
+          "bank": {
+            "cash": 12222355,
+            "liability": 800000,
+            "loans": 100000,
+            "status": "active"
+          },
+          "borrowerCash": 100000,
+          "loans": [
+            {
+              "principal": 100000,
+              "outstanding": 100000,
+              "ratePercent": 6.875,
+              "status": "current"
+            }
+          ],
+          "journals": [
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355.34,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355.34,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "bank_capital_injection",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 115223553.37,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 115223553.37,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_migration",
+              "status": "applied",
+              "turn": 565,
+              "amounts": []
+            },
+            {
+              "kind": "savings_deposit",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_withdrawal",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 200000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 200000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "named_loan_origination",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 100000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 100000,
+                  "applied": true
+                }
+              ]
+            }
+          ],
+          "audits": [
+            {
+              "action": "bank.charter.issued",
+              "category": "money",
+              "turn": 565,
+              "amount": 11522355,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.deposit",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.withdraw",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 800000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 800000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "money.bank_loan_origination",
+              "category": "money",
+              "turn": 565,
+              "amount": 100000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.loan.originated",
+              "category": "money",
+              "turn": 565,
+              "amount": 100000,
+              "currency": "USD",
+              "outcome": "ok"
+            }
+          ]
+        }
+      },
+      {
+        "stage": "actual banking solvency and committee turn",
+        "state": {
+          "turn": 566,
+          "cash": 5394306676867.324,
+          "treasuryFiscalPosition": -2318224476419,
+          "mint": 0,
+          "burn": 0,
+          "saverWallet": 114423553.37,
+          "savings": [
+            {
+              "currency": "USD",
+              "balance": 800008.33,
+              "holder": "privateBank",
+              "interestEarned": 8.33,
+              "status": "open"
+            }
+          ],
+          "bank": {
+            "cash": 15619863.837948067,
+            "liability": 800008.33,
+            "loans": 139221.6941494939,
+            "status": "active"
+          },
+          "borrowerCash": 90765.86174242424,
+          "loans": [
+            {
+              "principal": 100000,
+              "outstanding": 90909.09090909091,
+              "ratePercent": 6.875,
+              "status": "current"
+            }
+          ],
+          "journals": [
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355.34,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355.34,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "bank_capital_injection",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 11522355,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 11522355,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "banking_parameter_fixture_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 115223553.37,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 115223553.37,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_migration",
+              "status": "applied",
+              "turn": 565,
+              "amounts": []
+            },
+            {
+              "kind": "savings_deposit",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 1000000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 1000000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_withdrawal",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 200000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 200000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "savings_holder_transfer",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 800000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 800000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "named_loan_origination",
+              "status": "applied",
+              "turn": 565,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 100000,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 100000,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "npc_deposit_flow",
+              "status": "applied",
+              "turn": 566,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 3436706.5,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 3436706.5,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "deposit_interest",
+              "status": "applied",
+              "turn": 566,
+              "amounts": []
+            },
+            {
+              "kind": "insurance_premium",
+              "status": "applied",
+              "turn": 566,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 176.53127625,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 176.53127625,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "loan_service",
+              "status": "applied",
+              "turn": 566,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 9234.138257575756,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 9234.138257575756,
+                  "applied": true
+                }
+              ]
+            },
+            {
+              "kind": "npc_book_settlement",
+              "status": "applied",
+              "turn": 566,
+              "amounts": [
+                {
+                  "kind": "debit",
+                  "amount": 48255.26903325821,
+                  "applied": true
+                },
+                {
+                  "kind": "credit",
+                  "amount": 48255.26903325821,
+                  "applied": true
+                }
+              ]
+            }
+          ],
+          "audits": [
+            {
+              "action": "bank.charter.issued",
+              "category": "money",
+              "turn": 565,
+              "amount": 11522355,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.deposited",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.deposit",
+              "category": "money",
+              "turn": 565,
+              "amount": 1000000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.withdrawn",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "savings.withdraw",
+              "category": "money",
+              "turn": 565,
+              "amount": -200000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 800000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.account.holder_changed",
+              "category": "money",
+              "turn": 565,
+              "amount": 800000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "money.bank_loan_origination",
+              "category": "money",
+              "turn": 565,
+              "amount": 100000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.loan.originated",
+              "category": "money",
+              "turn": 565,
+              "amount": 100000,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "money.bank_deposit_interest",
+              "category": "money",
+              "turn": 566,
+              "amount": 8.33,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "money.bank_loan_repayment",
+              "category": "money",
+              "turn": 566,
+              "amount": -9234.138257575756,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "bank.loan.paid",
+              "category": "money",
+              "turn": 566,
+              "amount": 9234.138257575756,
+              "currency": "USD",
+              "outcome": "ok"
+            },
+            {
+              "action": "money.bank_npc_loan_interest",
+              "category": "money",
+              "turn": 566,
+              "amount": 67.75724259201192,
+              "currency": "USD",
+              "outcome": "ok"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "governance": {
+    "us": {
+      "beforeRate": 2.75,
+      "afterBallotRate": 2.75,
+      "ballots": [
+        {
+          "vote": "hike",
+          "auto": true
+        },
+        {
+          "vote": "hike",
+          "auto": true
+        },
+        {
+          "vote": "hike",
+          "auto": true
+        },
+        {
+          "vote": "hike",
+          "auto": true
+        },
+        {
+          "vote": "hike",
+          "auto": true
+        },
+        {
+          "vote": "hike",
+          "auto": true
+        },
+        {
+          "vote": "hold",
+          "auto": false
+        }
+      ]
+    },
+    "ireland": {
+      "beforeRate": 4.75,
+      "afterRate": 5,
+      "lastRateChangeTurn": 566,
+      "cooldownVisible": true
+    }
+  },
+  "recovery": {
+    "unhandledFailure": null,
+    "feedbackVisible": true,
+    "sourceCommit": "2e2bb59d3f",
+    "dialogClosed": true,
+    "reloadDidNotRepeatCommand": true
+  },
+  "errors": [],
+  "charter": {
+    "explanation": "CEO CONTROL\nIssue bank charter\n\nPosts $5.00M from the corporation treasury. Legal types follow this nation's banking separation law.",
+    "fundingExplanation": "CEO CONTROL\nCapital adequacy\n\nThe supervisor requires your own cash, after every borrowed claim on it, to cover at least 8% of the loan book plus your own investments. Money moved here crosses into the bank and stands behind the depositors. It can only come back out of reserves the bank holds above its requirement, and only while the supervisor rates it adequate.\n\nFalling below 8% starts a 12 turns (about 12 hours) clock to post capital. Missing it revokes the charter: the bank is wound up in an orderly way and remaining capital is returned. That is not a bank failure: depositors are paid out, they do not take a haircut. How banking works",
+    "treasuryBefore": 11383113.547948066,
+    "treasuryAfter": 6383113.547948066,
+    "treasuryFunded": 6382113.547948066,
+    "postedCapital": 5000000,
+    "before": {
+      "turn": 566,
+      "cash": 5394306676867.323,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 0,
+        "liability": 0,
+        "loans": 139221.6941494939,
+        "status": "revoked"
+      },
+      "borrowerCash": 90765.86174242424,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 90909.09090909091,
+          "ratePercent": 6.875,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        }
+      ]
+    },
+    "chartered": {
+      "turn": 566,
+      "cash": 5394306676867.323,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 5000000,
+        "status": "active"
+      },
+      "borrowerCash": 90765.86174242424,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 90909.09090909091,
+          "ratePercent": 6.875,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        }
+      ]
+    },
+    "funded": {
+      "turn": 566,
+      "cash": 5394306676867.323,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 5001000,
+        "status": "active"
+      },
+      "borrowerCash": 90765.86174242424,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 90909.09090909091,
+          "ratePercent": 6.875,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 5000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        }
+      ]
+    },
+    "afterTurn": {
+      "turn": 567,
+      "cash": 5394306676867.324,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 6487928.443950341,
+        "loans": 22614.38843146824,
+        "status": "active"
+      },
+      "borrowerCash": 81544.74431818181,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 81818.18181818182,
+          "ratePercent": 6.875,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1500300,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1500300,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 62.54831458333334,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 62.54831458333334,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9221.117424242426,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9221.117424242426,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 22530.12515931768,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 22530.12515931768,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 5000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "corp.capital_injection",
+          "category": "money",
+          "turn": 566,
+          "amount": -1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 567,
+          "amount": -9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 567,
+          "amount": 9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 567,
+          "amount": 99.85505693232199,
+          "currency": "USD",
+          "outcome": "ok"
+        }
+      ]
+    },
+    "phases": {
+      "banking": {
+        "banksProcessed": 1,
+        "depositInterestPaid": 859.55,
+        "depositInterestShortfall": 0,
+        "loanInterestCollected": 230.06339026565533,
+        "loanPrincipalRepaid": 9090.909090909092,
+        "defaultsWrittenOff": 15.591784781761618,
+        "npcDepositDelta": 1500300,
+        "npcBulkShortfall": 0,
+        "premiumShortfall": 0,
+        "interbankInterestPaid": 0,
+        "interbankDefaultsWrittenOff": 0,
+        "cbMarginInterestPaid": 0,
+        "cbMarginInterestShortfall": 0,
+        "deadBankLoansServiced": 0,
+        "deadBankRecoveredToEstate": 0,
+        "deadBankRecoveredToInsurer": 0,
+        "unfinishedSettlements": 0,
+        "recovery": {
+          "resumedSettlements": 0,
+          "stillPartial": 0,
+          "estatesRecovered": 0,
+          "estatesStillResolving": 0
+        }
+      },
+      "solvency": {
+        "banksEvaluated": 1,
+        "fled": 0,
+        "failures": 0,
+        "contagionTriggered": 0,
+        "depositorsResolved": 0,
+        "insurancePaid": 0,
+        "haircutsApplied": 0,
+        "forcedLiquidations": 0
+      },
+      "meetings": {
+        "banksProcessed": 1,
+        "meetingsOpened": 0,
+        "meetingsResolved": 1,
+        "ratesChanged": 1,
+        "seatsReplaced": 0
+      }
+    },
+    "readModel": {
+      "cashReserves": 6487928.443950341,
+      "status": "active"
+    }
+  },
+  "approval": {
+    "resumedToggleSource": "5d4e1002a5c90c8150fb0839831e3e0a8d8c33e8",
+    "toggleExplanation": "New loan requests wait for you to approve or decline them in the loan book.",
+    "pendingExplanation": "This bank reviews requests manually. Your request will be queued and no money moves until its CEO approves it.",
+    "before": {
+      "turn": 567,
+      "cash": 5394306676867.324,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 6487928.443950341,
+        "loans": 22614.38843146824,
+        "status": "active"
+      },
+      "borrowerCash": 81544.74431818181,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 81818.18181818182,
+          "ratePercent": 6.875,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1500300,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1500300,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 62.54831458333334,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 62.54831458333334,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9221.117424242426,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9221.117424242426,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 22530.12515931768,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 22530.12515931768,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 5000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "corp.capital_injection",
+          "category": "money",
+          "turn": 566,
+          "amount": -1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 567,
+          "amount": -9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 567,
+          "amount": 9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 567,
+          "amount": 99.85505693232199,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        }
+      ]
+    },
+    "queued": {
+      "turn": 567,
+      "cash": 5394306676867.324,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 6487928.443950341,
+        "loans": 22614.38843146824,
+        "status": "active"
+      },
+      "borrowerCash": 81544.74431818181,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 81818.18181818182,
+          "ratePercent": 6.875,
+          "status": "current"
+        },
+        {
+          "principal": 10000,
+          "outstanding": 10000,
+          "ratePercent": 3.75,
+          "status": "pending"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1500300,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1500300,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 62.54831458333334,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 62.54831458333334,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9221.117424242426,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9221.117424242426,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 22530.12515931768,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 22530.12515931768,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_request",
+          "status": "applied",
+          "turn": 567,
+          "amounts": []
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 5000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "corp.capital_injection",
+          "category": "money",
+          "turn": 566,
+          "amount": -1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 567,
+          "amount": -9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 567,
+          "amount": 9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 567,
+          "amount": 99.85505693232199,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        }
+      ]
+    },
+    "accepted": {
+      "turn": 567,
+      "cash": 5394306676867.324,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 6477928.443950341,
+        "loans": 32614.38843146824,
+        "status": "active"
+      },
+      "borrowerCash": 91544.74431818181,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 81818.18181818182,
+          "ratePercent": 6.875,
+          "status": "current"
+        },
+        {
+          "principal": 10000,
+          "outstanding": 10000,
+          "ratePercent": 3.75,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1500300,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1500300,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 62.54831458333334,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 62.54831458333334,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9221.117424242426,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9221.117424242426,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 22530.12515931768,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 22530.12515931768,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_request",
+          "status": "applied",
+          "turn": 567,
+          "amounts": []
+        },
+        {
+          "kind": "named_loan_disbursement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 10000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 10000,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 5000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "corp.capital_injection",
+          "category": "money",
+          "turn": 566,
+          "amount": -1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 567,
+          "amount": -9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 567,
+          "amount": 9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 567,
+          "amount": 99.85505693232199,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 567,
+          "amount": 10000,
+          "currency": "USD",
+          "outcome": "ok"
+        }
+      ]
+    },
+    "afterTurn": {
+      "turn": 568,
+      "cash": 5394306676867.324,
+      "treasuryFiscalPosition": -2318224476419,
+      "mint": 0,
+      "burn": 0,
+      "saverWallet": 114422553.37,
+      "savings": [
+        {
+          "currency": "USD",
+          "balance": 801008.33,
+          "holder": "centralBank",
+          "interestEarned": 8.33,
+          "status": "open"
+        }
+      ],
+      "bank": {
+        "cash": 7946480.742481842,
+        "loans": 67013.92174453675,
+        "status": "active"
+      },
+      "borrowerCash": 81419.74431818181,
+      "loans": [
+        {
+          "principal": 100000,
+          "outstanding": 72727.27272727274,
+          "ratePercent": 6.875,
+          "status": "current"
+        },
+        {
+          "principal": 10000,
+          "outstanding": 9090.90909090909,
+          "ratePercent": 3.75,
+          "status": "current"
+        }
+      ],
+      "journals": [
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355.34,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355.34,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 11522355,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11522355,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "banking_parameter_fixture_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 115223553.37,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 115223553.37,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_migration",
+          "status": "applied",
+          "turn": 565,
+          "amounts": []
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_withdrawal",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 200000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 200000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_origination",
+          "status": "applied",
+          "turn": 565,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 100000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 100000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436706.5,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436706.5,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_interest",
+          "status": "applied",
+          "turn": 566,
+          "amounts": []
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 176.53127625,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 176.53127625,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9234.138257575756,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9234.138257575756,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 48255.26903325821,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 48255.26903325821,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_holder_transfer",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 800008.33,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 800008.33,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "deposit_book_return",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 3436742.3,
+              "applied": true
+            },
+            {
+              "kind": "debit",
+              "amount": 11383113.207948066,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 11383113.207948066,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "savings_deposit",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_charter_capital",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 5000000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 5000000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "bank_capital_injection",
+          "status": "applied",
+          "turn": 566,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1500300,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1500300,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 62.54831458333334,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 62.54831458333334,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9221.117424242426,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9221.117424242426,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 22530.12515931768,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 22530.12515931768,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "named_loan_request",
+          "status": "applied",
+          "turn": 567,
+          "amounts": []
+        },
+        {
+          "kind": "named_loan_disbursement",
+          "status": "applied",
+          "turn": 567,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 10000,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 10000,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_deposit_flow",
+          "status": "applied",
+          "turn": 568,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 1502814.9847145427,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 1502814.9847145427,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "insurance_premium",
+          "status": "applied",
+          "turn": 568,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 125.25687227977261,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 125.25687227977261,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 568,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 9208.096590909092,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 9208.096590909092,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "loan_service",
+          "status": "applied",
+          "turn": 568,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 916.9034090909091,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 916.9034090909091,
+              "applied": true
+            }
+          ]
+        },
+        {
+          "kind": "npc_book_settlement",
+          "status": "applied",
+          "turn": 568,
+          "amounts": [
+            {
+              "kind": "debit",
+              "amount": 44262.429310762476,
+              "applied": true
+            },
+            {
+              "kind": "credit",
+              "amount": 44262.429310762476,
+              "applied": true
+            }
+          ]
+        }
+      ],
+      "audits": [
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 565,
+          "amount": 11522355,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 565,
+          "amount": 1000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.withdrawn",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.withdraw",
+          "category": "money",
+          "turn": 565,
+          "amount": -200000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 565,
+          "amount": 800000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 565,
+          "amount": 100000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_deposit_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 8.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 566,
+          "amount": -9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 566,
+          "amount": 9234.138257575756,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 566,
+          "amount": 67.75724259201192,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 566,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.holder_changed",
+          "category": "money",
+          "turn": 566,
+          "amount": 800008.33,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.bank.resolved",
+          "category": "money",
+          "turn": 566,
+          "amount": 3436742.3,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.revoked",
+          "category": "money",
+          "turn": 566,
+          "amount": 11383113.207948066,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.account.deposited",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "savings.deposit",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.voted",
+          "category": "governance",
+          "turn": 566,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 566,
+          "currency": "IEP",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 5000000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.charter.issued",
+          "category": "money",
+          "turn": 566,
+          "amount": 1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "corp.capital_injection",
+          "category": "money",
+          "turn": 566,
+          "amount": -1000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 567,
+          "amount": -9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 567,
+          "amount": 9221.117424242426,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_npc_loan_interest",
+          "category": "money",
+          "turn": 567,
+          "amount": 99.85505693232199,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.policy.rate_changed",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.meeting.transitioned",
+          "category": "governance",
+          "turn": 567,
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.originated",
+          "category": "money",
+          "turn": 567,
+          "amount": 10000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_origination",
+          "category": "money",
+          "turn": 568,
+          "amount": 10000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.approved",
+          "category": "money",
+          "turn": 567,
+          "amount": 10000,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 568,
+          "amount": -9208.096590909092,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 568,
+          "amount": 9208.096590909092,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "money.bank_loan_repayment",
+          "category": "money",
+          "turn": 568,
+          "amount": -916.9034090909091,
+          "currency": "USD",
+          "outcome": "ok"
+        },
+        {
+          "action": "bank.loan.paid",
+          "category": "money",
+          "turn": 568,
+          "amount": 916.9034090909091,
+          "currency": "USD",
+          "outcome": "ok"
+        }
+      ]
+    },
+    "phases": {
+      "banking": {
+        "banksProcessed": 1,
+        "depositInterestPaid": 2190.4,
+        "depositInterestShortfall": 0,
+        "loanInterestCollected": 287.6760944490387,
+        "loanPrincipalRepaid": 10000.000000000002,
+        "defaultsWrittenOff": 25.572092143004443,
+        "npcDepositDelta": 1502814.9847145427,
+        "npcBulkShortfall": 0,
+        "premiumShortfall": 0,
+        "interbankInterestPaid": 0,
+        "interbankDefaultsWrittenOff": 0,
+        "cbMarginInterestPaid": 0,
+        "cbMarginInterestShortfall": 0,
+        "deadBankLoansServiced": 0,
+        "deadBankRecoveredToEstate": 0,
+        "deadBankRecoveredToInsurer": 0,
+        "unfinishedSettlements": 0,
+        "recovery": {
+          "resumedSettlements": 0,
+          "stillPartial": 0,
+          "estatesRecovered": 0,
+          "estatesStillResolving": 0
+        }
+      },
+      "solvency": {
+        "banksEvaluated": 1,
+        "fled": 0,
+        "failures": 0,
+        "contagionTriggered": 0,
+        "depositorsResolved": 0,
+        "insurancePaid": 0,
+        "haircutsApplied": 0,
+        "forcedLiquidations": 0
+      },
+      "meetings": {
+        "banksProcessed": 1,
+        "meetingsOpened": 0,
+        "meetingsResolved": 0,
+        "ratesChanged": 0,
+        "seatsReplaced": 0
+      }
+    },
+    "readModel": {
+      "currentTurn": 568,
+      "principal": 10000,
+      "outstanding": 9090.90909090909,
+      "status": "current"
+    }
+  }
+}
