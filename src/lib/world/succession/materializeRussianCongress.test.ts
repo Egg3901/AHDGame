@@ -264,10 +264,10 @@ describe("fresh Soviet settlement political handoff", () => {
       });
       await mem
         .collection("electedOfficials")
-        .updateOne({ nppId: slateId }, { $set: { officeType: "stateDumaDeputy" } });
+        .updateOne({ nppId: slateId }, { $set: { officeType: "dumaDeputy" } });
       await mem
         .collection("npps")
-        .updateOne({ _id: slateId }, { $set: { currentOffice: { type: "stateDumaDeputy" } } });
+        .updateOne({ _id: slateId }, { $set: { currentOffice: { type: "dumaDeputy" } } });
       await mem.collection("governmentFormations").updateOne(
         { _id: "RU" },
         {
@@ -295,7 +295,7 @@ describe("fresh Soviet settlement political handoff", () => {
       });
       expect(await mem.collection("npps").findOne({ _id: slateId })).toMatchObject({
         funds: 125,
-        currentOffice: { type: "stateDumaDeputy" },
+        currentOffice: { type: "dumaDeputy" },
       });
       expect(await mem.collection("countryGameStates").findOne({ _id: "RU" })).toMatchObject({
         ...markers,
@@ -313,24 +313,20 @@ describe("fresh Soviet settlement political handoff", () => {
     await mem
       .collection("countryGameStates")
       .updateOne({ _id: "RU" }, { $set: { ruPresidencySinceTurn: 30 } });
-    mem
-      .collection("electedOfficials")
-      .docs.push({
-        _id: new ObjectId(),
-        countryId: "RU",
-        officeType: "president",
-        nppId: presidentId,
-      });
+    mem.collection("electedOfficials").docs.push({
+      _id: new ObjectId(),
+      countryId: "RU",
+      officeType: "president",
+      nppId: presidentId,
+    });
     mem
       .collection("npps")
       .docs.push({ _id: presidentId, countryId: "RU", currentOffice: { type: "president" } });
-    mem
-      .collection("npps")
-      .docs.push({
-        _id: new ObjectId(),
-        countryId: "RU",
-        currentOffice: { type: "parliamentaryCabinet" },
-      });
+    mem.collection("npps").docs.push({
+      _id: new ObjectId(),
+      countryId: "RU",
+      currentOffice: { type: "parliamentaryCabinet" },
+    });
     await mem
       .collection("governmentFormations")
       .updateOne({ _id: "RU" }, { $set: { presidentNppId: presidentId, hosNppId: presidentId } });
