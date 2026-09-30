@@ -109,6 +109,15 @@ describe("prop command settlement", () => {
     ]);
     expect(wealth(db)).toBe(before);
   });
+  it("keeps the native receipt without an invented anchor valuation when FX is missing", async () => {
+    const db = await prepare(10);
+    await db.collection("exchangeRates").deleteMany({});
+    const result = await closePosition(db as unknown as Db, BANK, ticket);
+    expect(result.ok).toBe(true);
+    const receipt = db.collection("financialTxLog").docs[0];
+    expect(receipt).toMatchObject({ amount: 100, meta: { anchorValuation: "unavailable" } });
+    expect(receipt).not.toHaveProperty("anchorAmount");
+  });
   it("does not replace newer reserves during forced liquidation", async () => {
     const db = await prepare(100);
     await db
@@ -137,7 +146,12 @@ describe("prop command settlement", () => {
 it.skipIf(process.env.AHD_PROP_SETTLEMENT_REAL_MONGO !== "1")(
   "persists one native Mongo settlement and recovers its original transaction receipt",
   async () => {
-    const client = new MongoClient("mongodb://127.0.0.1:27018");
+    const commands: Record<string, number> = {};
+    let measuring = false;
+    const client = new MongoClient("mongodb://127.0.0.1:27018", { monitorCommands: true });
+    client.on("commandStarted", (event) => {
+      if (measuring) commands[event.commandName] = (commands[event.commandName] ?? 0) + 1;
+    });
     const db = client.db(`ahd_sim_prop_settlement_${randomUUID().replaceAll("-", "")}`);
     try {
       await client.connect();
@@ -173,6 +187,7 @@ it.skipIf(process.env.AHD_PROP_SETTLEMENT_REAL_MONGO !== "1")(
           return typeof value === "function" ? value.bind(target) : value;
         },
       });
+      measuring = true;
       await expect(closePosition(fault, BANK, ticket)).rejects.toThrow(
         "receipt acknowledgement interrupted"
       );
@@ -180,6 +195,8 @@ it.skipIf(process.env.AHD_PROP_SETTLEMENT_REAL_MONGO !== "1")(
       expect(journal).not.toBeNull();
       await resumeSettlement(db, journal!._id);
       await resumeSettlement(db, journal!._id);
+      measuring = false;
+      console.info("Native prop interrupted close and two recoveries:", JSON.stringify(commands));
       const bank = await db.collection("corporations").findOne({ _id: BANK });
       expect(bank?.bankCharter.cashReserves).toBe(1100);
       expect(bank?.bankCharter.propBook).toEqual([]);

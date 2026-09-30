@@ -80,6 +80,12 @@ export async function settlePropBookChange(
     loadAnchorRateMap(db, [entry]),
   ]);
   const [document] = buildTxDocs([entry], thresholds, cadence, rates);
+  const observedRate = rates.get(input.charter.currency);
+  if (observedRate === undefined || !Number.isFinite(observedRate) || observedRate <= 0) {
+    delete document.anchorAmount;
+    document.meta = { ...document.meta, anchorValuation: "unavailable" };
+  }
+
   document._id = new ObjectId(createHash("sha256").update(`${key}:tx`).digest("hex").slice(0, 24));
   transition.projections.push({
     collection: "financialTxLog",
