@@ -41,6 +41,7 @@ import { checkBalancedTransfer } from "@/lib/banking/rules/invariants";
 import { countBankingEvent } from "@/lib/banking/telemetry";
 
 import { reviveObjectIds } from "./settlementEncoding";
+import { resumeLegacyDepositInterest } from "./legacyDepositInterest";
 import { resumeAtomicDocumentSettlement } from "./atomicDocumentSettlement";
 export { reviveObjectIds } from "./settlementEncoding";
 
@@ -95,6 +96,7 @@ function safeToRetryBlind(_projection: TransitionProjection): boolean {
  */
 interface JournalExtension {
   atomicDocument?: unknown;
+  legacyInterestBatch?: unknown;
   status?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
@@ -527,8 +529,11 @@ export async function resumeSettlement(
   options: FinishOptions = {}
 ): Promise<SettlementResult> {
   const record = await db
-    .collection<{ _id: string; atomicDocument?: unknown }>(MONEY_MOVE_COLLECTION)
-    .findOne({ _id: key }, { projection: { atomicDocument: 1 } });
+    .collection<{ _id: string; atomicDocument?: unknown; legacyInterestBatch?: unknown }>(
+      MONEY_MOVE_COLLECTION
+    )
+    .findOne({ _id: key }, { projection: { atomicDocument: 1, legacyInterestBatch: 1 } });
+  if (record?.legacyInterestBatch) return resumeLegacyDepositInterest(db, key);
   if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const moved = await resumeMoneyMove(db, key);
   if (moved.status !== "applied") {
@@ -559,6 +564,7 @@ export async function recoverProjections(
     MONEY_MOVE_COLLECTION
   );
   const record = await journal.findOne({ _id: key });
+  if (record?.legacyInterestBatch) return resumeLegacyDepositInterest(db, key);
   if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const result: SettlementResult = {
     status: "applied",
