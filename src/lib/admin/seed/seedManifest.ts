@@ -269,6 +269,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "federationRelocations", category: "runtime" },
   { name: "federationPublicationPreparations", category: "runtime" },
   { name: "federationPreparedEffects", category: "runtime" },
+  { name: "federationArchivedRegionRows", category: "runtime" },
   { name: "federationSettlementApplications", category: "runtime" },
   { name: "worldEntityStates", category: "runtime" },
   {
