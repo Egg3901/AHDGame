@@ -1,3 +1,4 @@
+import { advanceArabRegionalTurn, reconcileArabTerrorismSpillover } from "./arabRegional";
 import { advancePandemicState, pandemicOpeningYear, PANDEMIC_KEY } from "./rules/pandemic";
 import type { Db } from "mongodb";
 import { hasRequiredBelligerents } from "./rules/participants";
@@ -225,12 +226,16 @@ export async function driveConflictTurn(
       pandemicOriginCountryId: state.pandemicOriginCountryId ?? participants.belligerents[0],
     });
   }
-  state = evaluateConflictTransitions(
-    def,
-    state,
-    typeof year === "number" ? year : undefined
-  ).state;
+  if (def.key !== "arab_uprisings" || !state.arabRegional) {
+    state = evaluateConflictTransitions(
+      def,
+      state,
+      typeof year === "number" ? year : undefined
+    ).state;
+  }
 
+  state = await advanceArabRegionalTurn(db, state, turn);
+  state = await reconcileArabTerrorismSpillover(db, state, turn);
   const fired = selectEvents(def, state, turn);
   const events: DrivenEvent[] = fired.map((f) => ({
     fired: f,
