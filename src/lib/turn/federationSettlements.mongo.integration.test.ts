@@ -7,6 +7,7 @@ import { recordFederationRatifications } from "@/lib/world/succession/recordRati
 import { processLegacyFederationServiceTurn } from "@/lib/world/succession/legacyServiceTurn";
 import { processRatifiedFederationSettlements } from "./federationSettlements";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
+import { materializeFacilityPaymentTurn } from "@/lib/world/succession/facilityPaymentTurn";
 
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
@@ -481,6 +482,62 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
         .collection("federationFacilityClaims")
         .findOne({ corporationId: retainedFirmId.toHexString() })
     ).toMatchObject({ status: "payable", creditorCountryId: "RU", debtorEntityId: "UKR" });
+    await db
+      .collection<Fixture>("macroCountries")
+      .updateOne({ _id: "UKR" }, { $set: { federationTreasuryMinor: 500 } });
+    await db.createCollection("federationFacilityPaymentTurns", {
+      validator: { blocked: { $eq: true } },
+    });
+    // The application key is shared with the already qualified settlement receipt.
+    const applied = await db.collection<Fixture>("federationSettlementApplications").findOne({});
+    expect(applied).not.toBeNull();
+    const payment = () =>
+      runRequiredTransaction(
+        (session) =>
+          materializeFacilityPaymentTurn({
+            db,
+            session,
+            applicationId: String(applied!._id),
+            turn: 183,
+            now: new Date(4),
+          }),
+        { client }
+      );
+    await expect(payment()).rejects.toThrow(/validation/i);
+    expect(await db.collection("corporations").findOne({ _id: retainedFirmId })).toMatchObject({
+      liquidCapital: 200,
+    });
+    expect(await db.collection<Fixture>("macroCountries").findOne({ _id: "UKR" })).toMatchObject({
+      federationTreasuryMinor: 500,
+    });
+    expect(
+      await db
+        .collection("federationFacilityClaims")
+        .findOne({ corporationId: retainedFirmId.toHexString() })
+    ).not.toHaveProperty("paidMinor");
+    await db.command({ collMod: "federationFacilityPaymentTurns", validator: {} });
+    commands = 0;
+    expect(await payment()).toMatchObject({ paidMinor: 500 });
+    const paymentCommands = commands;
+    expect(paymentCommands).toBeLessThanOrEqual(20);
+    expect(await db.collection("corporations").findOne({ _id: retainedFirmId })).toMatchObject({
+      liquidCapital: 205,
+    });
+    expect(await db.collection<Fixture>("macroCountries").findOne({ _id: "UKR" })).toMatchObject({
+      federationTreasuryMinor: 0,
+    });
+    expect(
+      await db
+        .collection("federationFacilityClaims")
+        .findOne({ corporationId: retainedFirmId.toHexString() })
+    ).toMatchObject({ paidMinor: 500, status: "payable" });
+    expect(await payment()).toMatchObject({ paidMinor: 500 });
+    expect(await db.collection("corporations").findOne({ _id: retainedFirmId })).toMatchObject({
+      liquidCapital: 205,
+    });
+    console.info(
+      `Facility compensation qualification: payment=${paymentCommands} commands; cash=500 minor; late rollback and replay passed`
+    );
     expect(await db.collection("bonds").findOne({ _id: sovietBondId })).toMatchObject({
       countryId: "RU",
       currencyCode: "RUB",
