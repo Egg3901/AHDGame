@@ -492,6 +492,16 @@ export async function processIndexFundDividendsBatch(
   const impInc = new Map<string, { id: ObjectId; inc: Record<string, number> }>();
   const nppInc = new Map<string, { id: ObjectId; amt: number }>();
   const holderTxEntries: ReturnType<typeof buildIndexFundDividendTxEntry>[] = [];
+  const nppDividendRows = new Map<
+    string,
+    {
+      fund: NonNullable<ReturnType<typeof fundById.get>>;
+      npp: NonNullable<ReturnType<typeof nppById.get>>;
+      amountAnchor: number;
+      units: number;
+      corporations: number;
+    }
+  >();
   const fundTxDocs: Omit<IndexFundTransaction, "_id">[] = [];
 
   const addInc = (
@@ -590,24 +600,25 @@ export async function processIndexFundDividendsBatch(
       } else if (position.holderKind === "npp" && position.nppId) {
         const npp = nppById.get(position.nppId.toString());
         if (!npp) continue;
-        holderTxEntries.push(
-          buildIndexFundDividendTxEntry({
+        // NPP holder rows are summed per (fund, NPP) for the whole turn and
+        // emitted after the loop: one row instead of one per paying
+        // corporation. The credited balance is unchanged (it was already
+        // aggregated per NPP) and so is every account total; only the
+        // per-corporation split of anonymous NPP rows is dropped (#2693).
+        const rowKey = `${accrual.fundId.toString()}:${position.nppId.toString()}`;
+        const row = nppDividendRows.get(rowKey);
+        if (row) {
+          row.amountAnchor += holderDividend;
+          row.corporations += 1;
+        } else {
+          nppDividendRows.set(rowKey, {
             fund,
-            holder: {
-              holderKind: "npp",
-              holderId: npp._id,
-              holderName: "NPP dividend recipient",
-              currencyCode: COUNTRY_CURRENCY_MAP[npp.countryId] ?? "USD",
-            },
+            npp,
             amountAnchor: holderDividend,
-            amountNative: holderDividend,
             units: position.units,
-            corporationId: accrual.corporationId,
-            corporationName,
-            turn,
-            createdAt: now,
-          })
-        );
+            corporations: 1,
+          });
+        }
         addAmt(nppInc, position.nppId, holderDividend);
         holdersPaid++;
         distributedAnchor += holderDividend;
@@ -649,6 +660,27 @@ export async function processIndexFundDividendsBatch(
       note: `Dividend retained: ${retainedAnchor.toFixed(2)}₳ to fund cash`,
       createdAt: now,
     } as Omit<IndexFundTransaction, "_id">);
+  }
+
+  for (const row of nppDividendRows.values()) {
+    const amountAnchor = Math.round(row.amountAnchor * 100) / 100;
+    holderTxEntries.push(
+      buildIndexFundDividendTxEntry({
+        fund: row.fund,
+        holder: {
+          holderKind: "npp",
+          holderId: row.npp._id,
+          holderName: "NPP dividend recipient",
+          currencyCode: COUNTRY_CURRENCY_MAP[row.npp.countryId] ?? "USD",
+        },
+        amountAnchor,
+        amountNative: amountAnchor,
+        units: row.units,
+        corporationCount: row.corporations,
+        turn,
+        createdAt: now,
+      })
+    );
   }
 
   // Bulk writes — one round-trip per collection.
