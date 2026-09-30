@@ -153,6 +153,19 @@ describe("canonicalTurnsForCycle", () => {
     expect(
       canonicalTurnsForCycle({ electionType: "governor", countryId: "IE", cycle: 1 })?.endTurn
     ).toBe(288);
+    for (const [preset, startingYear] of [
+      ["1953-default", 1953],
+      ["1979-default", 1979],
+    ] as const) {
+      expect(
+        canonicalTurnsForCycle({
+          electionType: "governor",
+          countryId: "BR",
+          cycle: 1,
+          ctx: { preset, startingYear },
+        })
+      ).toBeNull();
+    }
   });
 
   describe("sangiin", () => {
