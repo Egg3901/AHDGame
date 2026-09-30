@@ -17,7 +17,7 @@ const fixtures = [
   { name: "loss-making", inputs: 70_000, labor: 25_000, other: 15_000, policyPp: 0 },
   { name: "policy-drag", inputs: 50_000, labor: 20_000, other: 10_000, policyPp: -10 },
 ];
-const checkpoints = new Set([1212, 1213, 1253, 1309, 1349, 1405, 1446, 1501]);
+const checkpoints = new Set([1212, 1213, 1253, 1293, 1405, 1445, 1446, 1501]);
 const rows = [];
 for (const sectorType of ["manufacturing", "financial"]) {
   let previousMultiplier = 1;
@@ -70,9 +70,9 @@ assert.equal(sectorRevenueBoostMultiplier(1212, "manufacturing"), 1);
 assert.ok(
   Math.abs(sectorRevenueBoostMultiplier(1253, "manufacturing") - (1 + (0.2 * 40) / 192)) < 1e-12
 );
-assert.equal(sectorNpvBoostMultiplier(1309), 1);
-assert.equal(sectorNpvBoostMultiplier(1501), 1.3);
-assert.equal(bankNpvBoostMultiplier(1501), 1.5);
+assert.equal(sectorNpvBoostMultiplier(1253), 1);
+assert.equal(sectorNpvBoostMultiplier(1445), 1.3);
+assert.equal(bankNpvBoostMultiplier(1445), 1.5);
 console.log(
   JSON.stringify(
     {

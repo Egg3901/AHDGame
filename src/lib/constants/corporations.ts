@@ -1006,7 +1006,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
 //   is not boosted, only realized operating revenue.
 //
 //   Phase B (valuation follows): sector NPV and bank NPV ramp 1.0 → target
-//   over STOCK_BOOST_NPV_RAMP_TURNS turns, starting one half-ramp after
+//   over STOCK_BOOST_NPV_RAMP_TURNS turns, starting 40 turns after
 //   revenue so cash earnings lead and capitalized values follow. The financial
 //   cost-of-capital premium eases 0.06 → STOCK_BOOST_FINANCIAL_RISK_PREMIUM
 //   over the same window.
@@ -1016,7 +1016,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
 // A/B before treating as final.
 //
 // Owner-approved acceleration: at turn 1253 phase A is 40/192 complete.
-// Phase B keeps its 96-turn lag so operating earnings still lead valuation.
+// Phase B starts at turn 1253, following phase A by 40 turns.
 
 /** First turn the operating-revenue boost applies (ramps from 1.0). */
 export const STOCK_BOOST_REVENUE_START_TURN = 1213;
@@ -1026,8 +1026,8 @@ export const STOCK_BOOST_REVENUE_RAMP_TURNS = 192;
 export const STOCK_BOOST_REVENUE_TARGET = 1.2;
 /** Extra steady-state revenue multiplier compounding on financial sectors. */
 export const STOCK_BOOST_FINANCIAL_REVENUE_EXTRA = 1.1;
-/** First turn the NPV boost applies (one half revenue-ramp after phase A). */
-export const STOCK_BOOST_NPV_START_TURN = 1309;
+/** First turn the NPV boost applies (40 turns after phase A). */
+export const STOCK_BOOST_NPV_START_TURN = 1253;
 /** Turns to ramp NPV 1.0 → target. */
 export const STOCK_BOOST_NPV_RAMP_TURNS = 192;
 /** Steady-state sector-NPV multiplier. */
