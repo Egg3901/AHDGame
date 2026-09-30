@@ -1,3 +1,5 @@
+import { prepareFinancialFiscalResponse } from "@/lib/crises/financialCrisisFiscalResponse";
+import { prepareFinancialCrisisBankResponse } from "@/lib/crises/financialCrisisBankResponse";
 import { PANDEMIC_KEY, pandemicResponseOutcome } from "./rules/pandemic";
 import {
   TERRORISM_KEY,
@@ -284,6 +286,8 @@ export async function prepareGlobalResponseOption(
     // under the option. Typed so it reaches them as a 400, not a generic 500.
     throw badRequest(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
   }
+  await prepareFinancialCrisisBankResponse(db, countryId, option);
+  await prepareFinancialFiscalResponse(db, countryId, option);
   return capability;
 }
 
@@ -425,6 +429,8 @@ export async function spendGlobalResponseCost(
   countryId: string,
   option: CrisisDecisionOption
 ): Promise<number> {
+  // The financial rescue journal owns both funding and recipient cash.
+  if (option.action?.kind === "financialCrisisResponse") return 0;
   const pct = option.treasuryCostPctGdp ?? 0;
   if (!(pct > 0)) return 0;
   const budget = await db

@@ -1,3 +1,4 @@
+import { applyFinancialFiscalResponse } from "./financialCrisisFiscalResponse";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Crisis, CrisisDecisionOption, CrisisInteraction } from "@/lib/db/types/crisis";
@@ -937,7 +938,16 @@ export async function runCrisisOptionAction(ctx: CrisisActionContext): Promise<C
         await applyWarEmergencyResponse(ctx, action.response);
         break;
       case "financialCrisisResponse":
-        await applyFinancialCrisisBankResponse(ctx, action.response);
+        if (
+          action.response === "stimulus" ||
+          action.response === "austerity" ||
+          action.response === "restructure" ||
+          action.response === "sovereign_support"
+        ) {
+          await applyFinancialFiscalResponse(ctx, action.response);
+        } else {
+          await applyFinancialCrisisBankResponse(ctx, action.response);
+        }
         break;
       case "livingConflictTrajectory":
         await moveLivingConflictTrajectory(ctx);
