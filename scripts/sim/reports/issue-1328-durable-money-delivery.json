@@ -1,5 +1,5 @@
 {
-  "source": "c59ee19f4f29b7990309514863d71592818b0578",
+  "source": "d0ad45d30542d00536ca1a102e097a47123e1bc0",
   "baselineSource": "f42a6c97885866e4df89e50eed583cbfd5c83918",
   "cases": [
     {
@@ -37,9 +37,9 @@
       "status": "applied",
       "combined": 1100,
       "cost": {
-        "commands": 16,
-        "requestBytes": 4951,
-        "responseBytes": 3556
+        "commands": 14,
+        "requestBytes": 4702,
+        "responseBytes": 2656
       }
     },
     {
@@ -250,6 +250,21 @@
         }
       ],
       "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "foreign_marker",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 1000
+        },
+        {
+          "_id": "destination",
+          "balance": 100
+        }
+      ],
+      "status": "partial",
       "combined": 1100
     }
   ],
