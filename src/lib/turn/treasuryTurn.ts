@@ -68,6 +68,16 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       .toArray(),
   ]);
   const rateByCurrency = new Map(rates.map((r) => [r.currencyCode, r.rate]));
+  // Validate the complete active cohort before any country accrues cash. A
+  // missing rate must not leave an otherwise valid earlier country advanced.
+  for (const budget of budgets) {
+    const currency = resolveCountryCurrencyCode(budget) ?? "USD";
+    const rate = rateByCurrency.get(currency);
+    if (rate === undefined || !Number.isFinite(rate) || rate <= 0) {
+      throw new Error(`Missing valid treasury-accrual exchange rate for ${currency}`);
+    }
+  }
+
   let countriesProcessed = 0;
   for (const initial of budgets) {
     let b = initial;

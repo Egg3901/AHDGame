@@ -95,6 +95,45 @@ async function main() {
     );
     const budgets = () =>
       db.collection<FederalBudget>("federalBudget").find({}).sort({ _id: 1 }).toArray();
+    const savedBudgets = saved.find(([name]) => name === "federalBudget")![1];
+    const excludedUnpricedBudgets = savedBudgets
+      .filter((b) => {
+        const rate = rates.get(String(b.currencyCode));
+        return rate === undefined || !Number.isFinite(rate) || rate <= 0;
+      })
+      .map((b) => ({ countryId: String(b.countryId), currencyCode: String(b.currencyCode) }));
+    const pricedCountries = new Set(
+      savedBudgets
+        .map((b) => String(b.countryId))
+        .filter((id) => !excludedUnpricedBudgets.some((b) => b.countryId === id))
+    );
+    async function selectFiscalCohort(extraCountry?: string) {
+      for (const name of ["federalBudget", "centralBanks"]) {
+        await db.collection(name).deleteMany({});
+        const rows = saved
+          .find(([collection]) => collection === name)![1]
+          .filter((b) => pricedCountries.has(String(b.countryId)) || b.countryId === extraCountry);
+        if (rows.length) await db.collection(name).insertMany(rows);
+      }
+    }
+    const invalidFxRejections: Document[] = [];
+    if (!baseline)
+      for (const excluded of excludedUnpricedBudgets) {
+        await selectFiscalCohort(excluded.countryId);
+        const before = hash(await budgets());
+        await assert.rejects(
+          processTreasuryTurn(startTurn),
+          new RegExp(`exchange rate for ${excluded.currencyCode}`)
+        );
+        assert.equal(
+          hash(await budgets()),
+          before,
+          "Missing FX must not partially advance another treasury"
+        );
+        assert.equal(await db.collection("ledgerEntries").countDocuments({}), 0);
+        invalidFxRejections.push({ ...excluded, rejected: true, allTreasuriesUnchanged: true });
+      }
+    await selectFiscalCohort();
     const balances = (rows: FederalBudget[]) =>
       Object.fromEntries(
         rows.map((b) => {
@@ -180,8 +219,11 @@ async function main() {
       sourceHash,
       sourcePreserved: true,
       scope:
-        "Twelve real treasury phases over all retained budgets; other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
+        "Twelve real treasury phases over the 17 retained budgets with observed valid FX; six unpriced currencies are separate rejection fixtures. Other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
       latestInventory,
+      pricedCountries: [...pricedCountries].sort(),
+      excludedUnpricedBudgets,
+      invalidFxRejections,
       results,
       telemetry: { syntheticCouponStatistic: 1234, addedLedgerEntries },
     };
