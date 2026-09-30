@@ -97,6 +97,7 @@ function safeToRetryBlind(_projection: TransitionProjection): boolean {
 interface JournalExtension {
   atomicDocument?: unknown;
   legacyInterestBatch?: unknown;
+  locSettlement?: unknown;
   status?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
@@ -529,10 +530,20 @@ export async function resumeSettlement(
   options: FinishOptions = {}
 ): Promise<SettlementResult> {
   const record = await db
-    .collection<{ _id: string; atomicDocument?: unknown; legacyInterestBatch?: unknown }>(
-      MONEY_MOVE_COLLECTION
-    )
-    .findOne({ _id: key }, { projection: { atomicDocument: 1, legacyInterestBatch: 1 } });
+    .collection<{
+      _id: string;
+      atomicDocument?: unknown;
+      legacyInterestBatch?: unknown;
+      locSettlement?: unknown;
+    }>(MONEY_MOVE_COLLECTION)
+    .findOne(
+      { _id: key },
+      { projection: { atomicDocument: 1, legacyInterestBatch: 1, locSettlement: 1 } }
+    );
+  if (record?.locSettlement) {
+    const { resumeLocSettlement } = await import("@/lib/lineOfCredit/settlement");
+    return resumeLocSettlement(db, key);
+  }
   if (record?.legacyInterestBatch) return resumeLegacyDepositInterest(db, key);
   if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const moved = await resumeMoneyMove(db, key);
@@ -564,6 +575,10 @@ export async function recoverProjections(
     MONEY_MOVE_COLLECTION
   );
   const record = await journal.findOne({ _id: key });
+  if (record?.locSettlement) {
+    const { resumeLocSettlement } = await import("@/lib/lineOfCredit/settlement");
+    return resumeLocSettlement(db, key);
+  }
   if (record?.legacyInterestBatch) return resumeLegacyDepositInterest(db, key);
   if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const result: SettlementResult = {
