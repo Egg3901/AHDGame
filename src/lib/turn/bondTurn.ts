@@ -1,3 +1,10 @@
+/**
+ * Bond turns settle coupons and principal while preserving holder denominations.
+ * processBondTurn shares one monetary quote snapshot across payout conversions.
+ */
+import { euroSettlementRates } from "@/lib/currency/euro/rules";
+import { purchaseSpreadRate } from "@/lib/currency/rules/purchaseConversion";
+import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
@@ -34,7 +41,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP, MARKET_MAKER_SPREAD } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { fireBondDefaultPulse } from "@/lib/corporations/sentimentEvents";
@@ -83,7 +90,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // #1198: gates default DETECTION only, in Phase 3. Coupon and maturity
   // settlement runs regardless — see the comment there for why the two are
   // treated differently.
-  const corporationActionsPaused = (await getGameState(db))?.corporationActionsPaused === true;
+  const gameState = await getGameState(db);
+  const corporationActionsPaused = gameState?.corporationActionsPaused === true;
 
   await db
     .collection("corporations")
@@ -147,7 +155,28 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   // FX rates for converting ₳-denominated coupon/face values into each corp's
   // liquidCapital home currency before $inc. Loaded once per turn.
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const quoteContext = forexEnabled
+    ? await loadConversionQuoteContext(db, gameState?.euroMonetaryUnion)
+    : undefined;
+  const fxByCurrency = quoteContext
+    ? euroSettlementRates(
+        quoteContext.union,
+        Object.fromEntries(
+          [...quoteContext.quotes].map(([currency, quote]) => [currency, quote.rate])
+        )
+      )
+    : await loadFxRatesByCurrency(db);
+  if (quoteContext?.union && !fxByCurrency.has(quoteContext.union.anchorCurrency)) {
+    throw new Error("Bond settlement requires the common monetary anchor quote.");
+  }
+  // USD remains the shared accounting anchor when no explicit quote is stored.
+  if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
+  const spreadStrengths = Object.fromEntries(
+    [...(quoteContext?.quotes ?? [])].map(([currency, quote]) => [
+      currency,
+      quote.forexSpreadStrength,
+    ])
+  );
 
   // Primary market: place unsold units from earlier issues as the pools'
   // cash allows, and fund the issuers for them. Runs after this turn's
@@ -409,15 +438,22 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         const holderCurrency = (resolveCorpLiquidCurrencyCode(holderCorp) ?? "USD") as CurrencyCode;
         // Foreign coupon income converts into the corp's home currency — charge
         // the same FX spread players pay, skimmed before crediting.
-        const couponSpreadAnchor =
-          forexEnabled && bondCcy !== holderCurrency ? paymentAnchor * MARKET_MAKER_SPREAD : 0;
+        const couponSpreadRate = forexEnabled
+          ? purchaseSpreadRate(
+              bondCcy,
+              holderCurrency,
+              gameState?.euroMonetaryUnion,
+              spreadStrengths
+            )
+          : 0;
+        const couponSpreadAnchor = paymentAnchor * couponSpreadRate;
         const netCouponAnchor = paymentAnchor - couponSpreadAnchor;
         corpPayments.set(key, (corpPayments.get(key) ?? 0) + netCouponAnchor);
         if (couponSpreadAnchor > 0) {
           corpCouponSpreadFees.push({
             fromCurrency: bondCcy,
             toCurrency: holderCurrency,
-            fee: localAmountForTx * MARKET_MAKER_SPREAD,
+            fee: localAmountForTx * couponSpreadRate,
           });
         }
         const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
@@ -1224,6 +1260,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
             amount,
             turn,
             source: "auto_coupon",
+            quoteContext,
           });
         }
       }

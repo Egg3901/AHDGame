@@ -13,7 +13,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
-import { getBankId } from "@/lib/centralBank/helpers";
+import { getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createSystemNewsPost } from "@/lib/news";
@@ -44,7 +44,11 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const db = await getDb();
-    const fx = await db.collection<ExchangeRate>("exchangeRates").findOne({ countryId });
+    const scope = await getMonetaryPolicyScope(db, countryId);
+    const fxCountryId = scope.currencyCode === "EUR" ? "DE" : countryId;
+    const fx = await db
+      .collection<ExchangeRate>("exchangeRates")
+      .findOne({ countryId: fxCountryId });
     const regime: FxRegime = fx?.fxRegime ?? (fx?.interventionPolicy ? "band" : "float");
     const capitalControls = fx?.capitalControls === true;
     const trinity = resolveTrinity(regime, capitalControls);
@@ -76,13 +80,19 @@ export async function POST(request: Request, context: RouteContext) {
     if (!config) return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const db = await getDb();
+    const scope = await getMonetaryPolicyScope(db, countryId);
+    const fxCountryId = scope.currencyCode === "EUR" ? "DE" : countryId;
     const bank = await db
       .collection<CentralBank>("centralBanks")
-      .findOne({ _id: getBankId(countryId) }, { projection: { chairCharacterId: 1 } });
+      .findOne(
+        { _id: scope.bankId },
+        { projection: { chairCharacterId: 1, chairControlsLocked: 1 } }
+      );
     if (!bank)
       return NextResponse.json(notFound("Central bank not found").toJson(), { status: 404 });
 
     if (
+      bank.chairControlsLocked ||
       !bank.chairCharacterId ||
       bank.chairCharacterId.toString() !== auth.user.character._id.toString()
     )
@@ -101,7 +111,9 @@ export async function POST(request: Request, context: RouteContext) {
     if (regime === "peg" && !(pegTarget && pegTarget > 0))
       return NextResponse.json({ error: "A peg needs a target rate." }, { status: 400 });
 
-    const fx = await db.collection<ExchangeRate>("exchangeRates").findOne({ countryId });
+    const fx = await db
+      .collection<ExchangeRate>("exchangeRates")
+      .findOne({ countryId: fxCountryId });
     if (!fx)
       return NextResponse.json(notFound("No exchange rate for this country").toJson(), {
         status: 404,
@@ -120,7 +132,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     await db.collection<ExchangeRate>("exchangeRates").updateOne(
-      { countryId },
+      { countryId: fxCountryId },
       {
         $set: {
           fxRegime: regime,

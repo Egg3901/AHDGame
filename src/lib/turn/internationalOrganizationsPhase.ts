@@ -1,3 +1,8 @@
+import {
+  ensureEuropeanIntegrationState,
+  reconcileEuropeanTreatyLive,
+} from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { withEuropeanInstitution } from "@/lib/internationalOrganizations/europeanIntegration/definition";
 import { ObjectId, type Db } from "mongodb";
 import {
   getOrganizationLeadershipCollection,
@@ -53,7 +58,10 @@ import {
   INTERNATIONAL_ORGANIZATION_ORDER,
   SANCTIONS_DURATION_TURNS,
 } from "@/lib/constants/internationalOrganizations";
-import { loadOrgFoundingContext } from "@/lib/internationalOrganizations/founding";
+import {
+  loadOrgFoundingContext,
+  type OrgFoundingContext,
+} from "@/lib/internationalOrganizations/founding";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { DIRECTIVE_DURATION_TURNS, getDirectiveDef } from "@/lib/constants/orgDirectives";
 import { JOINT_STATEMENT_DURATION_TURNS } from "@/lib/internationalOrganizations/jointStatement";
@@ -194,6 +202,7 @@ export async function processInternationalOrganizationsTurn(
   autonomousVotesCast: number;
   closeTimeBallotsCast?: number;
 }> {
+  await reconcileEuropeanTreatyLive(db, currentTurn);
   // Auto-found orgs whose founding year has arrived BEFORE any vote/proposal
   // handling, so a newly founded org exists for this turn's steps.
   const organizationsFounded = await foundDueOrganizations(db, currentTurn);
@@ -235,14 +244,21 @@ export async function processInternationalOrganizationsTurn(
  * Broadcasts a founding news event to every player-enabled country.
  */
 export async function foundDueOrganizations(db: Db, currentTurn: number): Promise<number> {
-  const { liveYear, preset } = await loadOrgFoundingContext(db);
+  const { liveYear, preset, europeanIntegration } = await loadOrgFoundingContext(db);
   if (liveYear == null) return 0; // era-awareness unavailable (legacy rows)
   const startingYear = getStartingYearForPreset(preset);
   const leadershipCol = await getOrganizationLeadershipCollection(db);
+  const european =
+    europeanIntegration ??
+    (await ensureEuropeanIntegrationState(
+      db,
+      preset,
+      (await db.collection("organizationMemberships").countDocuments({ organizationId: "EU" })) > 0
+    ));
 
   let founded = 0;
   for (const id of INTERNATIONAL_ORGANIZATION_ORDER) {
-    const def = INTERNATIONAL_ORGANIZATIONS[id];
+    const def = withEuropeanInstitution(INTERNATIONAL_ORGANIZATIONS[id], european);
     if (def.foundedYear == null || def.foundedYear <= startingYear) continue; // seeded at reset
     if (def.dissolvedYear != null && liveYear >= def.dissolvedYear) continue; // window closed — never auto-found
     if (liveYear < def.foundedYear) continue; // not yet due
@@ -576,6 +592,9 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
     .find({ status: "pending", closesOnTurn: { $lte: currentTurn } })
     .toArray();
   if (expired.length === 0) return 0;
+  const foundingContext = expired.some((row) => row.organizationId === "EU")
+    ? await loadOrgFoundingContext(db)
+    : {};
 
   let resolved = 0;
   const now = new Date();
@@ -663,7 +682,8 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
         effectMembers,
         currentTurn,
         sanctionsExpiresOnTurn,
-        legislating
+        legislating,
+        foundingContext
       );
       if (item.type === "free_trade_agreement") {
         const partyNames = parties
@@ -718,6 +738,9 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     .find({ status: "pending", closesOnTurn: { $lte: currentTurn } })
     .toArray();
   if (expired.length === 0) return 0;
+  const foundingContext = expired.some((row) => row.organizationId === "EU")
+    ? await loadOrgFoundingContext(db)
+    : {};
 
   let resolved = 0;
   const now = new Date();
@@ -752,7 +775,7 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
     const elected = ballotPasses("leadership_election", members.length, yes);
 
     if (elected) {
-      const orgDef = await loadOrganizationDef(db, election.organizationId);
+      const orgDef = await loadOrganizationDef(db, election.organizationId, foundingContext);
       const termTurns = orgDef?.leadership.termTurns ?? 96;
       await leadershipCol.updateOne(
         { organizationId: election.organizationId },
@@ -797,7 +820,7 @@ async function resolveExpiredLeadershipElections(db: Db, currentTurn: number): P
           },
         }
       );
-      const orgDef = await loadOrganizationDef(db, election.organizationId);
+      const orgDef = await loadOrganizationDef(db, election.organizationId, foundingContext);
       if (election.candidateCountryId in COUNTRY_CONFIGS) {
         await recordOrgHistoryEvent(
           db,
@@ -839,7 +862,8 @@ async function applyResolutionEffect(
    * war the bloc voted for. Callers for other resolution types pass the ballot,
    * which for those coincides with this roll.
    */
-  votingMemberIds: CountryId[] = []
+  votingMemberIds: CountryId[] = [],
+  foundingContext: Pick<OrgFoundingContext, "europeanIntegration"> = {}
 ): Promise<void> {
   switch (resolution.type) {
     case "free_trade_agreement":
@@ -901,7 +925,11 @@ async function applyResolutionEffect(
       const theaterId = resolution.joinConflictTheaterId;
       const side = resolution.joinConflictSide;
       if (!theaterId || !side) return;
-      const warEntryOrganization = await loadOrganizationDef(db, resolution.organizationId);
+      const warEntryOrganization = await loadOrganizationDef(
+        db,
+        resolution.organizationId,
+        foundingContext
+      );
 
       // A resolution sits for 24 turns; the war it was about can end inside that
       // window. Mirrors declareWar, which re-runs findWarBetween at enactment.

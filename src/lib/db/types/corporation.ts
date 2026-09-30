@@ -163,6 +163,8 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Monotonic generation for atomic proprietary book settlement. */
+  bankPropBookRevision?: number;
   /**
    * Crash-recovery plan for an in-flight bank-charter transfer
    * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before

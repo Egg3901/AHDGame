@@ -4,12 +4,12 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
+import { processBankSupervision } from "../supervision";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
 vi.mock("@/lib/news", () => ({ createSystemNewsPost: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
-vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 
 const TURN = 118;
 // 12 turns back == RECAP_GRACE_TURNS, so the recap deadline has just expired.
@@ -42,10 +42,6 @@ function seedActiveCharters(db: MockDb, corps: Corporation[]) {
     project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue(corps),
   } as never);
-}
-
-async function importSupervision() {
-  return import("../supervision");
 }
 
 describe("processBankSupervision — revoke refunds capital (ticket 1093)", () => {
@@ -111,6 +107,25 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     };
   }
 
+  it("settles one supervisory unwind when two assessments share the same book", async () => {
+    const { memory } = revokeWorld({
+      cashReserves: 100_000,
+      propBookMarkValue: 10_000_000,
+      propBook: [{ asset: "equity", ref: "synthetic", units: 1, costBasis: 9_000_000 }],
+      totalLoans: 0,
+      totalDeposits: 0,
+      undercapitalizedSinceTurn: BREACHED_SINCE,
+    });
+    await Promise.all([
+      processBankSupervision(memory as unknown as Db, TURN),
+      processBankSupervision(memory as unknown as Db, TURN),
+    ]);
+    const corp = corpState(memory);
+    expect(corp.liquidCapital).toBe(10_100_000);
+    expect(corp.bankCharter.cashReserves).toBe(0);
+    expect(corp.bankCharter.status).toBe("revoked");
+  });
+
   it("unwinds the prop book into cash and pays the whole balance to the shareholder", async () => {
     // Investment bank, no depositors: value sits in the prop book plus cash.
     // cashReserves (100k) against a 10M book is a 1% capital ratio, well under
@@ -126,7 +141,6 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
       undercapitalizedSinceTurn: BREACHED_SINCE,
     } as Partial<BankCharter>);
 
-    const { processBankSupervision } = await importSupervision();
     const summary = await processBankSupervision(memory as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(1);
@@ -140,9 +154,8 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     expect(corp.bankCharter.cashReserves).toBe(0);
     expect(corpId.equals((corp as unknown as { _id: ObjectId })._id)).toBe(true);
 
-    const { emitTx } = await import("@/lib/financialTxLog/emit");
-    expect(emitTx).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(emitTx).mock.calls[0][1]).toMatchObject({
+    expect(memory.collection("financialTxLog").docs).toHaveLength(1);
+    expect(memory.collection("financialTxLog").docs[0]).toMatchObject({
       type: "bank_prop_trade_sell",
       amount: propBookMarkValue,
       meta: { reason: "supervision_revoke_unwind" },
@@ -159,14 +172,12 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
       undercapitalizedSinceTurn: BREACHED_SINCE,
     } as Partial<BankCharter>);
 
-    const { processBankSupervision } = await importSupervision();
     const summary = await processBankSupervision(memory as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(1);
     expect(corpState(memory).liquidCapital).toBe(cashReserves);
 
-    const { emitTx } = await import("@/lib/financialTxLog/emit");
-    expect(emitTx).not.toHaveBeenCalled();
+    expect(memory.collection("financialTxLog").docs).toHaveLength(0);
   });
 
   it("pays the household deposit book back before the shareholder", async () => {
@@ -181,7 +192,6 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
       { npcDeposits: 8_000_000 }
     );
 
-    const { processBankSupervision } = await importSupervision();
     const summary = await processBankSupervision(memory as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(1);
@@ -205,7 +215,6 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     } as Partial<BankCharter>);
     seedActiveCharters(db, [corp]);
 
-    const { processBankSupervision } = await importSupervision();
     const summary = await processBankSupervision(db as unknown as Db, TURN);
 
     expect(summary.chartersRevoked).toBe(0);

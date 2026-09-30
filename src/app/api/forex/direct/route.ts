@@ -1,3 +1,5 @@
+import { euroLedgerCrossRate } from "@/lib/currency/euro/rules";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 // POST: send a direct trade request to a specific character
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 403 (forex disabled), 404 (target not found)
@@ -62,6 +64,11 @@ export async function POST(request: Request) {
     }
 
     const db = await getDb();
+    if (euroLedgerCrossRate(await loadEuroMonetaryUnion(db), fromCurrency, toCurrency) != null) {
+      throw badRequest(
+        "These denominations share a fixed euro rate. Use currency conversion instead of a direct FX trade."
+      );
+    }
 
     // Verify target exists
     const target = await db
