@@ -4,7 +4,8 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { Bond } from "@/lib/db/types/bond";
 import { generateCountryOwnedSeedData } from "@/lib/seeds/reference/budgets";
-import { createMockDb } from "@/lib/test-utils/mockDb";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { createMockDb as createEmptyMockDb } from "@/lib/test-utils/mockDb";
 import {
   applySovereignDebtAdjustment,
   calculateQuarterlyIssuanceAmount,
@@ -21,6 +22,19 @@ import {
   SOVEREIGN_ISSUANCE_INTERVAL_TURNS,
 } from "./sovereign";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+
+function createMockDb() {
+  const db = createEmptyMockDb();
+  db.collection("exchangeRates")
+    .find()
+    .toArray.mockResolvedValue(
+      [...new Set(Object.values(COUNTRY_CURRENCY_MAP)), "EUR"].map((currencyCode) => ({
+        currencyCode,
+        rate: 1,
+      }))
+    );
+  return db;
+}
 
 describe("shouldIssueQuarterlySovereignBondSeries", () => {
   it("issues every 12 turns", () => {

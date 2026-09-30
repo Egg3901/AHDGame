@@ -9,6 +9,7 @@ import { monetizeUnsoldSovereignUnits } from "@/lib/bonds/primaryMarket";
 
 function world() {
   const db = createInMemoryDb();
+  db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1 }]);
   const snapshots = db.collection("moneySupplySnapshots");
   Object.assign(snapshots, {
     replaceOne: (

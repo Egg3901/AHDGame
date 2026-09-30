@@ -1,4 +1,5 @@
 /** Funded sovereign issues conserve cash, ownership and debt across retries. */
+import { commitSovereignPrimary } from "./sovereignPrimarySettlement";
 import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
@@ -308,5 +309,56 @@ describe("sovereign primary settlement", () => {
     expect(principal(db)).toBe(2000);
     expect(budget(db).debtToGdpRatio).toBe(0.002);
     expect(db.collection("centralBanks").docs[0].externalBroadMoney).toBe(500000);
+  });
+  it.each(["USD", "GBP", "DEM"])(
+    "rejects missing or invalid %s FX before cash or journal mutation",
+    async (currency) => {
+      for (const rate of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        const db = world();
+        const before = cash(db);
+        await expect(
+          commitSovereignPrimary(
+            db as unknown as Db,
+            {
+              key: `fx:${currency}`,
+              turn: TURN,
+              currency,
+              countryId: "US",
+              budgetId: "federal",
+              poolCash: 1000,
+              monetaryCash: 0,
+              face: 1000,
+              annualCoupon: 50,
+              now: NOW,
+            },
+            [],
+            {
+              ledgerShadow: true,
+              turnLengthMinutes: 30,
+              rates: rate === undefined ? new Map() : new Map([[currency, rate]]),
+            }
+          )
+        ).rejects.toThrow("exchange rate");
+        expect(cash(db)).toBe(before);
+        expect(principal(db)).toBe(0);
+        expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
+        expect(db.collection("financialTxLog").docs).toHaveLength(0);
+        expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+      }
+    }
+  );
+
+  it("uses the live floating USD rate for both cash witnesses", async () => {
+    const db = world();
+    await db.collection("exchangeRates").updateOne({ _id: "USD" }, { $set: { rate: 1.25 } });
+    await issueAdminSovereignBondSeries(db as unknown as Db, {
+      countryId: "US",
+      turn: TURN,
+      now: NOW,
+      faceValue: 10000,
+      useQuarterDeficit: false,
+    });
+    const legs = db.collection("ledgerEntries").docs[0].legs as { anchorAmount: number }[];
+    expect(legs.map((l) => l.anchorAmount)).toEqual([8000, -8000]);
   });
 });

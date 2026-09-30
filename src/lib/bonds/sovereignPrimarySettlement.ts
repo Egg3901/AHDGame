@@ -62,8 +62,15 @@ export async function commitSovereignPrimary(
 ): Promise<void> {
   const transition = sovereignPrimaryTransition(input);
   transition.projections.push(...projections);
-  const observedRate = accounting.rates.get(input.currency) ?? 1;
-  const rate = Number.isFinite(observedRate) && observedRate > 0 ? observedRate : 1;
+  const observedRate = accounting.rates.get(input.currency);
+  if (
+    input.poolCash + input.monetaryCash > 0 &&
+    (observedRate === undefined || !Number.isFinite(observedRate) || observedRate <= 0)
+  ) {
+    throw new Error(`Missing valid primary-financing exchange rate for ${input.currency}`);
+  }
+  // Unfunded offers have no cash receipt or anchor witness to convert.
+  const rate = observedRate ?? 1;
   if (input.poolCash + input.monetaryCash > 0) {
     transition.projections.push({
       collection: "financialTxLog",
