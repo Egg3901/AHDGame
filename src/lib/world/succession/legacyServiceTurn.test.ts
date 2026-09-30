@@ -102,6 +102,39 @@ function scenario(shortfall = false) {
 }
 
 describe("legacy federation service transaction", () => {
+  it("recovers a missed call only from the successor that owes it", async () => {
+    const { db } = scenario();
+    await db
+      .collection("macroCountries")
+      .updateOne({ _id: "SK" as never }, { $set: { federationTreasuryMinor: -1000 } });
+    const shortfall = await materializeLegacyFederationServiceTurn({
+      db,
+      session,
+      applicationId,
+      turn: 91,
+      now: new Date(1000),
+    });
+    expect(shortfall).toMatchObject({
+      successorContributionsMinor: { CZ2: 100, SK: 0 },
+      successorArrearsMinor: { CZ2: 0, SK: 50 },
+      bridgeOutstandingMinor: 50,
+    });
+    await db
+      .collection("macroCountries")
+      .updateOne({ _id: "SK" as never }, { $set: { federationTreasuryMinor: 1000 } });
+    const recovery = await materializeLegacyFederationServiceTurn({
+      db,
+      session,
+      applicationId,
+      turn: 92,
+      now: new Date(2000),
+    });
+    expect(recovery).toMatchObject({
+      successorContributionsMinor: { CZ2: 100, SK: 100 },
+      successorArrearsMinor: { CZ2: 0, SK: 0 },
+      bridgeOutstandingMinor: 0,
+    });
+  });
   it("funds the bond turn's frozen holder snapshot when later placements change live float", async () => {
     const { db, bondId } = scenario();
     const snapshot = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
