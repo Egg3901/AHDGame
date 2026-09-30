@@ -99,4 +99,54 @@ describe("federation fiscal materialization", () => {
     ).rejects.toThrow("source cash changed");
     expect(await db.collection("federationFiscalAccounts").countDocuments({})).toBe(0);
   });
+
+  it("keeps the dissolved issuer for creditor service while assigning deficit shares", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("federalBudget", [
+      { _id: "CS", countryId: "CS", currencyCode: "SUR", treasuryBalance: -40 },
+    ]);
+    mem.seed(
+      "macroCountries",
+      ["CZ2", "SK"].map((entityId) => ({
+        _id: entityId,
+        entityId,
+        presetId: "1991-default",
+        simulationTier: "background-macro",
+        dataQuality: { provenance: "succession-derived" },
+      }))
+    );
+    const db = mem as unknown as Db;
+    const shares: SuccessionFiscalShare[] = [
+      {
+        ...share("CZ2", "background-successor", 0, 12_000, 0),
+        cashDeficitResponsibilityMinor: 1200,
+      },
+      { ...share("SK", "background-successor", 0, 8000, 0), cashDeficitResponsibilityMinor: 800 },
+      share("CS", "legacy-administration", 0, 0, 20_000),
+    ];
+    const accounts = await materializeFederationFiscalAccounts({
+      db,
+      session,
+      applicationId: "1991-default:cs-split:1",
+      sourceCountryId: "CS",
+      accounting: {
+        ...accounting,
+        signedCashMinor: -2000,
+        financialAssetsMinor: 0,
+        cashDeficitMinor: 2000,
+      },
+      shares,
+    });
+    expect(accounts.map((account) => [account.entityId, account.openingCashMinor])).toEqual([
+      ["CZ2", -1200],
+      ["SK", -800],
+      ["CS", 0],
+    ]);
+    expect(await db.collection("federalBudget").findOne({ _id: "CS" as never })).toMatchObject({
+      treasuryBalance: 0,
+    });
+    expect(await db.collection("macroCountries").findOne({ _id: "CZ2" as never })).toMatchObject({
+      federationTreasuryMinor: -1200,
+    });
+  });
 });

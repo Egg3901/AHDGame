@@ -41,10 +41,12 @@ export async function materializeFederationFiscalAccounts(input: {
     new Set(shares.map((share) => share.entityId)).size !== shares.length ||
     participants.length < 2 ||
     (continuing
-      ? continuing.entityId !== sourceCountryId
+      ? continuing.entityId !== sourceCountryId ||
+        shares.some((share) => share.kind === "legacy-administration")
       : shares.filter((share) => share.kind === "legacy-administration").length !== 1) ||
     !shares.some((share) => share.entityId === sourceCountryId) ||
     !issuer ||
+    issuer.kind !== (continuing ? "continuing-state" : "legacy-administration") ||
     issuer.servicingCreditorPrincipalMinor !== accounting.creditorDebtMinor ||
     shares.some(
       (share) => share.entityId !== sourceCountryId && share.servicingCreditorPrincipalMinor !== 0
