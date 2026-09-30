@@ -32,7 +32,13 @@ function world(response: "recapitalize" | "guarantee" | "resolve", treasury = 10
     },
   ]);
   db.seed("federalBudget", [
-    { _id: "US", countryId: "US", currencyCode: "USD", gdp: 10_000, treasuryBalance: treasury },
+    {
+      _id: "national-budget-us",
+      countryId: "US",
+      currencyCode: "USD",
+      gdp: 10_000,
+      treasuryBalance: treasury,
+    },
   ]);
   const ctx = {
     db: db as unknown as Db,

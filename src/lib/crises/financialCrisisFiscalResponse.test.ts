@@ -16,7 +16,7 @@ function world(response: FinancialFiscalResponse) {
   const memory = createInMemoryDb();
   memory.seed("federalBudget", [
     {
-      _id: "US",
+      _id: "national-budget-us",
       countryId: "US",
       currencyCode: "USD",
       gdp: 10000,
@@ -104,7 +104,7 @@ describe("financial crisis fiscal transmission", () => {
     );
     memory.seed("federalBudget", [
       {
-        _id: "IE",
+        _id: "national-budget-ie",
         countryId: "IE",
         currencyCode: "USD",
         treasuryBalance: 50,
