@@ -158,11 +158,15 @@ export async function seedColdWarFoundations(
         countries.add(row.entityId);
         populations[row.entityId] = Math.max(0, row.population ?? 0);
       }
+      const playablePopulations: Record<string, number> = {};
       for (const row of regions) {
         countries.add(row.countryId);
-        populations[row.countryId] =
-          (populations[row.countryId] ?? 0) + Math.max(0, row.population ?? 0);
+        playablePopulations[row.countryId] =
+          (playablePopulations[row.countryId] ?? 0) + Math.max(0, row.population ?? 0);
       }
+      // Match the ordinary Arab driver: a playable country replaces its macro
+      // aggregate rather than counting the same residents twice.
+      Object.assign(populations, playablePopulations);
     }
     await db.collection<LivingConflictState>("livingConflicts").bulkWrite(
       missingConflicts.map((definition) => ({

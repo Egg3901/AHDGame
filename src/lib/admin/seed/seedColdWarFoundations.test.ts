@@ -74,6 +74,7 @@ describe("seedColdWarFoundations", () => {
       toArray: async () => [
         { countryId: "IE", population: 5_000_000 },
         { countryId: "UKR", population: 30_000_000 },
+        { countryId: "EG", population: 99_000_000 },
       ],
     } as never);
     db.collectionMocks.macroCountries = db.collection("macroCountries");
@@ -109,6 +110,7 @@ describe("seedColdWarFoundations", () => {
       openingDisposition: "not_applicable",
     });
     expect(stored.get("arab_uprisings")?.arabRegional?.origins.YE?.population).toBe(30_000_000);
+    expect(stored.get("arab_uprisings")?.arabRegional?.origins.EG?.population).toBe(99_000_000);
     const prior = structuredClone(stored.get("northern_ireland"));
     const writes = db.collectionMocks.livingConflicts!.bulkWrite.mock.calls.length;
     await seedColdWarFoundations(db as unknown as Db, 2027, 1248, { presetId: "2027-default" });
