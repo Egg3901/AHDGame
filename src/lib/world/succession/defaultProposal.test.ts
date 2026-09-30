@@ -30,7 +30,7 @@ describe("1991 default federation proposals", () => {
           currentTurn: 96,
         },
       ]);
-      mem.seed("states", row.states);
+      mem.seed("states", row.states as unknown as Record<string, unknown>[]);
       const proposal = await openDefaultFederationPoliticalProposal({
         db: mem as unknown as Db,
         sourceCountryId: row.sourceCountryId,
