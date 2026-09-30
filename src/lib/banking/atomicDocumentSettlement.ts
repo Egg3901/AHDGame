@@ -24,6 +24,7 @@ interface AtomicPlan {
   receipt: string;
   receiptGuard: unknown;
   nonCashMode?: "central_bank_bond_exchange";
+  cashMode?: "central_bank_reserve_pool";
 }
 interface AtomicRecord extends Document {
   _id: string;
@@ -62,6 +63,7 @@ export async function settleAtomicDocumentTransition(
     identity: Record<string, unknown>;
     guard?: Record<string, unknown>;
     nonCashMode?: "central_bank_bond_exchange";
+    cashMode?: "central_bank_reserve_pool";
     /** Receipt generation captured with the caller's quote. Null means absent. */
     expectedSettledKeys?: readonly string[] | null;
   }
@@ -121,6 +123,29 @@ export async function settleAtomicDocumentTransition(
     )
       return bad("Noncash bond exchanges may update only the permitted asset fields");
   }
+  if (target.cashMode === "central_bank_reserve_pool") {
+    const debit = realLegs.find((leg) => leg.kind === "debit");
+    const credit = realLegs.find((leg) => leg.kind === "credit");
+    const poolPaths = new Set(["forexRevenue", "reserveBalance"]);
+    if (
+      projection.collection !== "centralBanks" ||
+      target.nonCashMode ||
+      transition.legs.length !== 2 ||
+      realLegs.length !== 2 ||
+      !debit ||
+      !credit ||
+      debit.amount !== credit.amount ||
+      debit.path === credit.path ||
+      !poolPaths.has(debit.path ?? "") ||
+      !poolPaths.has(credit.path ?? "") ||
+      Object.keys(projection.update).some((key) => !["$inc", "$set"].includes(key)) ||
+      Object.keys(projection.update.$inc ?? {}).some((path) => !poolPaths.has(path)) ||
+      Object.keys(projection.update.$set ?? {}).some(
+        (path) => !["updatedAt", "lastReservePoolTransferTurn"].includes(path)
+      )
+    )
+      return bad("Reserve pool mode permits only a balanced central-bank pool exchange");
+  }
   if (transition.legs.some((leg) => !Number.isFinite(leg.amount) || leg.amount <= 0))
     return bad("Atomic legs need finite positive amounts");
   if (
@@ -173,6 +198,7 @@ export async function settleAtomicDocumentTransition(
       ? original?.[SETTLED_KEYS_FIELD]
       : target.expectedSettledKeys) ?? { $exists: false },
     ...(assetOnly ? { nonCashMode: target.nonCashMode } : {}),
+    ...(target.cashMode ? { cashMode: target.cashMode } : {}),
   };
   const extension = {
     transitionKind: transition.kind,
@@ -282,7 +308,7 @@ export async function resumeAtomicDocumentSettlement(
         if (
           !Number.isFinite(before) ||
           !Number.isFinite(after) ||
-          after < 0 ||
+          (after < 0 && !(plan.cashMode === "central_bank_reserve_pool" && delta > 0)) ||
           Math.abs(after - before - delta) >
             Math.max(
               1e-7,

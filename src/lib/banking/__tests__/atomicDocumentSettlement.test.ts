@@ -364,3 +364,90 @@ describe("explicit noncash central-bank bond exchange", () => {
     });
   });
 });
+
+describe("explicit central-bank reserve pool exchange", () => {
+  function poolTransfer(): BankingTransition {
+    return {
+      key: "reserve-pool-credit",
+      kind: "reserve_pool_transfer",
+      turn: 5,
+      currency: "USD",
+      legs: [
+        {
+          kind: "debit",
+          amount: 100,
+          collection: "centralBanks",
+          filter: { _id: "US" },
+          path: "forexRevenue",
+        },
+        {
+          kind: "credit",
+          amount: 100,
+          collection: "centralBanks",
+          filter: { _id: "US" },
+          path: "reserveBalance",
+        },
+      ],
+      projections: [
+        {
+          collection: "centralBanks",
+          filter: { _id: "US" },
+          update: {
+            $inc: { forexRevenue: -100, reserveBalance: 100 },
+            $set: { lastReservePoolTransferTurn: 5 },
+          },
+          note: "pool exchange",
+        },
+      ],
+      event: { kind: "monetary.executed", command: "monetary.reserve_pool_transfer" },
+    };
+  }
+  const poolTarget = { identity: { _id: "US" }, cashMode: "central_bank_reserve_pool" as const };
+  it("permits an improving credit to a negative destination and recovers exactly once", async () => {
+    const memory = createInMemoryDb(),
+      db = memory as unknown as Db;
+    memory.seed("centralBanks", [{ _id: "US", forexRevenue: 200, reserveBalance: -1000 }]);
+    const fault = withInjectedCrash(memory, {
+      collection: "centralBanks",
+      op: "updateOne",
+      onCall: 1,
+      afterWrite: true,
+    });
+    await expect(
+      settleAtomicDocumentTransition(fault.db, poolTransfer(), poolTarget)
+    ).rejects.toThrow();
+    fault.disarm();
+    await resumeSettlement(db, poolTransfer().key);
+    await resumeSettlement(db, poolTransfer().key);
+    expect(memory.collection("centralBanks").docs[0]).toMatchObject({
+      forexRevenue: 100,
+      reserveBalance: -900,
+      lastReservePoolTransferTurn: 5,
+    });
+  });
+  it("never permits an overdraft from the debited source", async () => {
+    const memory = createInMemoryDb(),
+      db = memory as unknown as Db;
+    memory.seed("centralBanks", [{ _id: "US", forexRevenue: 50, reserveBalance: -1000 }]);
+    expect((await settleAtomicDocumentTransition(db, poolTransfer(), poolTarget)).status).toBe(
+      "rejected"
+    );
+    expect(memory.collection("centralBanks").docs[0]).toMatchObject({
+      forexRevenue: 50,
+      reserveBalance: -1000,
+    });
+  });
+  it("cannot use the allowance for another field or an additional cash update", async () => {
+    const memory = createInMemoryDb(),
+      db = memory as unknown as Db;
+    memory.seed("centralBanks", [{ _id: "US", forexRevenue: 200, reserveBalance: -1000 }]);
+    const altered = poolTransfer();
+    altered.projections[0].update!.$inc = {
+      forexRevenue: -100,
+      reserveBalance: 100,
+      externalBroadMoney: 100,
+    };
+    expect((await settleAtomicDocumentTransition(db, altered, poolTarget)).status).toBe("rejected");
+    expect(memory.collection("bankMoneyMoves").docs).toHaveLength(0);
+  });
+});
