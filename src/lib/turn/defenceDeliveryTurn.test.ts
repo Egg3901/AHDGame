@@ -4,6 +4,7 @@ import { canSupply, applyDefenceDeliveries } from "./defenceDeliveryTurn";
 import { lotsFromSector, rawLotsFromSector } from "@/lib/military/arsenal";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
@@ -93,7 +94,57 @@ interface World {
   defenceLine?: number;
 }
 
+const moneyStores = new WeakMap<World, ReturnType<typeof createInMemoryDb>>();
+
 function stubDb(w: World): Db {
+  let money = moneyStores.get(w);
+  if (!money) {
+    money = createInMemoryDb();
+    money.seed("federalBudget", [
+      {
+        _id: "national-budget-us",
+        countryId: "US",
+        gdp: 387_000_000_000,
+        ...(w.defenceLine != null ? { spending: { byCategory: { defense: w.defenceLine } } } : {}),
+        defenseAppropriation: {
+          balance: w.appropriation,
+          encumbered: w.encumbered,
+          accruedThroughTurn: 1,
+          arrearsRatio: 0,
+        },
+      },
+    ]);
+    if (w.corp) money.seed("corporations", [w.corp]);
+    const appropriation = money.collection("federalBudget").docs[0].defenseAppropriation as Record<
+      string,
+      number
+    >;
+    for (const [field, path] of [
+      ["appropriation", "balance"],
+      ["encumbered", "encumbered"],
+    ] as const) {
+      Object.defineProperty(w, field, {
+        get: () => appropriation[path],
+        set: (value: number) => {
+          appropriation[path] = value;
+        },
+        configurable: true,
+      });
+    }
+    const corporations = money.collection("corporations");
+    const write = corporations.updateOne.bind(corporations);
+    vi.spyOn(corporations, "updateOne").mockImplementation(async (filter, update, options) => {
+      const cash = !Array.isArray(update)
+        ? (update.$inc as Record<string, number> | undefined)?.liquidCapital
+        : undefined;
+      if (cash !== undefined && w.failCorpCredit) throw new Error("corp credit failed");
+      const result = await write(filter, update, options);
+      if (result.modifiedCount && cash !== undefined) w.corpCredits.push(cash);
+      return result;
+    });
+    moneyStores.set(w, money);
+  }
+  const moneyDb = money;
   return {
     collection: (name: string) => {
       if (name === "defenceContracts") {
@@ -134,16 +185,7 @@ function stubDb(w: World): Db {
           },
         };
       }
-      if (name === "corporations") {
-        return {
-          findOne: async () => w.corp,
-          updateOne: async (_f: unknown, u: Record<string, unknown>) => {
-            if (w.failCorpCredit) throw new Error("corp credit failed");
-            w.corpCredits.push(((u.$inc ?? {}) as Record<string, number>).liquidCapital ?? 0);
-            return { matchedCount: 1, modifiedCount: 1 };
-          },
-        };
-      }
+      if (name === "corporations") return moneyDb.collection(name);
       if (name === "nationalArsenal") {
         return {
           findOne: async () => ({ countryId: "US", stock: w.stock, grade: {} }),
@@ -177,82 +219,10 @@ function stubDb(w: World): Db {
           find: () => ({ toArray: async () => w.commodityPrices ?? [] }),
         };
       }
-      if (name === MONEY_MOVE_COLLECTION) {
-        // The shared money primitive's claim record. A unique `_id` insert is the only atomic
-        // guarantee it relies on, so the stub models exactly that and nothing else.
-        return {
-          findOne: async (f: { _id: string }) => w.claims.get(f._id) ?? null,
-          insertOne: async (doc: { _id: string }) => {
-            if (w.claims.has(doc._id)) {
-              throw Object.assign(new Error("duplicate key"), { code: 11000 });
-            }
-            // The FULL document, exactly as Mongo would keep it: completeMoneyMove reads the
-            // claim back and maps over its legs, so a stub that stored only the key made
-            // every completion throw and every delivery reverse itself.
-            w.claims.set(doc._id, doc as unknown as Record<string, unknown>);
-            return { insertedId: doc._id };
-          },
-          updateOne: async () => ({ matchedCount: 1, modifiedCount: 1 }),
-          deleteOne: async (f: { _id: string }) => {
-            w.claims.delete(f._id);
-            return { deletedCount: 1 };
-          },
-        };
-      }
-      // federalBudget — the appropriation.
-      return {
-        findOne: async () => ({
-          countryId: "US",
-          gdp: 387_000_000_000,
-          // The per-turn payout cap is a rate against the enacted defence line, so the stub has
-          // to be able to state one. Omitted, `resolveDefenseLineFrom` falls back to the GDP
-          // fraction, which is what every case written before the cap existed assumes.
-          ...(w.defenceLine != null
-            ? { spending: { byCategory: { defense: w.defenceLine } } }
-            : {}),
-          defenseAppropriation: {
-            balance: w.appropriation,
-            encumbered: w.encumbered,
-            accruedThroughTurn: 1,
-            arrearsRatio: 0,
-          },
-        }),
-        updateOne: async (f: Record<string, unknown>, u: Record<string, unknown>) => {
-          // Three filter shapes reach this collection, and the stub honours all three or the
-          // guards it is meant to be testing are not being tested at all:
-          //   1. `$expr` uncommitted check - a new obligation must fit inside balance minus
-          //      what is already committed;
-          //   2. explicit `$gte` on balance and/or encumbered - a settlement drawing a
-          //      commitment down;
-          //   3. no guard - a refund, which must never be refused.
-          const expr = f.$expr as { $gte?: [unknown, number] } | undefined;
-          if (expr?.$gte) {
-            const need = expr.$gte[1];
-            if (w.appropriation - w.encumbered < need) {
-              return { matchedCount: 0, modifiedCount: 0 };
-            }
-          }
-          const needBalance = (f["defenseAppropriation.balance"] as { $gte?: number } | undefined)
-            ?.$gte;
-          if (needBalance != null && w.appropriation < needBalance) {
-            return { matchedCount: 0, modifiedCount: 0 };
-          }
-          const needEncumbered = (
-            f["defenseAppropriation.encumbered"] as { $gte?: number } | undefined
-          )?.$gte;
-          if (needEncumbered != null && w.encumbered < needEncumbered) {
-            return { matchedCount: 0, modifiedCount: 0 };
-          }
-          const inc = (u.$inc ?? {}) as Record<string, number>;
-          if (inc["defenseAppropriation.balance"]) {
-            w.appropriation += inc["defenseAppropriation.balance"];
-          }
-          if (inc["defenseAppropriation.encumbered"]) {
-            w.encumbered += inc["defenseAppropriation.encumbered"];
-          }
-          return { matchedCount: 1, modifiedCount: 1 };
-        },
-      };
+      // Persist guarded cash, receipts and journal acknowledgements together.
+      if (name === MONEY_MOVE_COLLECTION || name === "federalBudget")
+        return moneyDb.collection(name);
+      throw new Error(`Unexpected collection ${name}`);
     },
   } as unknown as Db;
 }

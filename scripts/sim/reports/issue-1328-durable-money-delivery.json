@@ -1,0 +1,342 @@
+{
+  "source": "d0ad45d30542d00536ca1a102e097a47123e1bc0",
+  "baselineSource": "f42a6c97885866e4df89e50eed583cbfd5c83918",
+  "cases": [
+    {
+      "name": "baseline",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100,
+      "cost": {
+        "commands": 6,
+        "requestBytes": 1993,
+        "responseBytes": 195
+      }
+    },
+    {
+      "name": "fixed",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100,
+      "cost": {
+        "commands": 14,
+        "requestBytes": 4702,
+        "responseBytes": 2656
+      }
+    },
+    {
+      "name": "source_cash_after",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "source_journal_before",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "source_journal_after",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "source_cleanup_before",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "source_cleanup_after",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "destination_cash_after",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "destination_journal_before",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "destination_journal_after",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "destination_cleanup_before",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "destination_cleanup_after",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "source_stale",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "destination_stale",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "refusal",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 1000
+        },
+        {
+          "_id": "destination",
+          "balance": 100
+        }
+      ],
+      "status": "rejected",
+      "combined": 1100
+    },
+    {
+      "name": "owner_waiter",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 980
+        },
+        {
+          "_id": "destination",
+          "balance": 120
+        }
+      ],
+      "status": "applied",
+      "combined": 1100
+    },
+    {
+      "name": "foreign_marker",
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 1000
+        },
+        {
+          "_id": "destination",
+          "balance": 100
+        }
+      ],
+      "status": "partial",
+      "combined": 1100
+    }
+  ],
+  "scope": "Synthetic generic money-movement parity and recovery. No full-world or production rollout acceptance.",
+  "operatorReconciliationProof": {
+    "source": "5a2d39434cc72b61e6bfc31f03bc10794d92759a",
+    "result": {
+      "name": "fixed",
+      "result": {
+        "status": "applied",
+        "applied": []
+      },
+      "accounts": [
+        {
+          "_id": "source",
+          "balance": 990
+        },
+        {
+          "_id": "destination",
+          "balance": 110
+        }
+      ]
+    }
+  },
+  "selectorCompatibility": {
+    "source": "1e638f6a43ccc95b28df992035ceccc9e364d82f",
+    "cases": [
+      {
+        "mode": "mutable",
+        "status": "applied",
+        "balances": [
+          {
+            "_id": "national-budget-us",
+            "balance": 990
+          },
+          {
+            "_id": "national-budget-ie",
+            "balance": 110
+          }
+        ],
+        "combined": 1100
+      },
+      {
+        "mode": "missing",
+        "status": "rejected",
+        "balances": [
+          {
+            "_id": "national-budget-us",
+            "balance": 1000
+          },
+          {
+            "_id": "national-budget-ie",
+            "balance": 100
+          }
+        ],
+        "combined": 1100
+      },
+      {
+        "mode": "missing_lost_claim",
+        "status": "rejected",
+        "balances": [
+          {
+            "_id": "national-budget-us",
+            "balance": 1000
+          },
+          {
+            "_id": "national-budget-ie",
+            "balance": 100
+          }
+        ],
+        "combined": 1100
+      }
+    ]
+  }
+}

@@ -33,7 +33,8 @@
  * with the legs that landed, which an operator can see and finish.
  */
 
-import type { Db, Filter, UpdateFilter, Document } from "mongodb";
+import { isDeepStrictEqual } from "node:util";
+import { ObjectId, type Db, type Filter } from "mongodb";
 import { NET_TOLERANCE, legsNet, type ValueLegKind } from "@/lib/banking/rules/invariants";
 import { countBankingEvent } from "@/lib/banking/telemetry";
 
@@ -116,6 +117,7 @@ export interface MoneyMoveRecordLeg {
   amount: number;
   note: string;
   applied: boolean;
+  refusal?: string;
   /**
    * The leg's target, kept on the record so a move that crashed between two
    * legs can be finished from the record alone. Absent on `mint` / `burn` and
@@ -128,6 +130,8 @@ export interface MoneyMoveRecordLeg {
 }
 
 interface MoneyMoveRecord {
+  genericMoneyMoveVersion?: number;
+  moneyMoveBindingError?: string;
   atomicDocument?: unknown;
   legacyInterestBatch?: unknown;
   locSettlement?: unknown;
@@ -242,7 +246,7 @@ export async function completeMoneyMove(
     appliedLegs.map((index) => [`legs.${index}.applied`, true])
   );
   await records.updateOne(
-    { _id: key },
+    { _id: key, status: "partial" },
     {
       $set: {
         status,
@@ -261,7 +265,66 @@ export async function completeMoneyMove(
  * which is what makes every caller safe to retry.
  */
 export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMoveResult> {
-  const claim = await claimMoneyMove(db, move);
+  const invalid = move.legs.find((leg) => {
+    if (!Number.isFinite(leg.amount) || leg.amount < 0) return true;
+    if (leg.kind === "mint" || leg.kind === "burn" || leg.amount === 0) return false;
+    return (
+      !leg.collection ||
+      !leg.path ||
+      !leg.filter ||
+      [leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath)
+    );
+  });
+  if (invalid)
+    return {
+      status: "rejected",
+      applied: [],
+      error:
+        "Money movement requires finite amounts, target selectors and unreserved balance fields.",
+    };
+  const prepared = move.legs.map((leg) => ({ ...leg }));
+  const unbound = prepared.filter(
+    (leg) =>
+      leg.amount > 0 &&
+      (leg.kind === "debit" || leg.kind === "credit") &&
+      !(
+        typeof leg.filter?._id === "string" ||
+        typeof leg.filter?._id === "number" ||
+        leg.filter?._id instanceof ObjectId
+      )
+  );
+  let bindingError: string | undefined;
+  if (unbound.length) {
+    // Preserve selectors such as countryId in the public API, but freeze the
+    // selected document before claiming cash. Replays use the original binding
+    // even if a previous write changed the caller's selector fields.
+    const prior = await db
+      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: move.key }, { projection: { _id: 1 } });
+    if (prior) {
+      if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
+      return { status: "replayed", applied: [] };
+    }
+    for (const leg of unbound) {
+      const target = await db
+        .collection(leg.collection!)
+        .findOne(leg.filter!, { projection: { _id: 1 } });
+      if (!target) {
+        bindingError = `Money move ${move.key} (${leg.note}) has no matching target.`;
+        break;
+      }
+      leg.filter = { ...leg.filter, _id: target._id };
+    }
+  }
+  const claim = await claimMoneyMove(db, {
+    ...move,
+    legs: prepared,
+    record: {
+      ...move.record,
+      genericMoneyMoveVersion: 2,
+      ...(bindingError ? { moneyMoveBindingError: bindingError } : {}),
+    },
+  });
   if (claim.status === "replayed") {
     if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
     return { status: "replayed", applied: [] };
@@ -270,60 +333,12 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     if (move.turn !== undefined) countBankingEvent(db, move.turn, "rejectedSettlements");
     return { status: "rejected", applied: [], error: claim.error };
   }
-  const legs = claim.legs;
-  if (legs.length === 0) return { status: "applied", applied: [] };
-
-  const applied: number[] = [];
-  let failure: string | undefined;
-
-  // Guarded debits go first: if a debit is going to fail its $gte guard, it
-  // must fail before any credit lands, so a partial move can only ever be
-  // "money not yet delivered", never "money created". Original leg indices are
-  // kept so the repair queue reads the caller's order.
-  const order = [...legs.keys()].sort((a, b) => {
-    const rank = (k: number) => (legs[k].kind === "debit" ? 0 : 1);
-    return rank(a) - rank(b) || a - b;
-  });
-
-  for (const i of order) {
-    const failed = await applyLeg(db, move.key, i, legs[i]);
-    if (failed) {
-      failure = failed;
-      break;
-    }
-    applied.push(i);
+  if (bindingError) {
+    await completeMoneyMove(db, move.key, [], bindingError, "rejected");
+    return { status: "rejected", applied: [], error: bindingError };
   }
-
-  // A move whose FIRST leg refused (a guard that did not match) moved nothing,
-  // and nothing is not a repair: the key stays claimed so the same attempt
-  // cannot be made twice, but the record is `rejected`, not `partial`, and the
-  // recovery worker leaves it alone. Only a move that landed some legs and not
-  // others is a hole to finish.
-  const status: MoneyMoveStatus = failure
-    ? applied.length === 0
-      ? "rejected"
-      : "partial"
-    : "applied";
-  // Cash delivery is not settlement completion when projections remain.
-  // Keep the record in the automatic recovery queue across a crash here.
-  const hasProjections =
-    Array.isArray(move.record?.projections) && move.record.projections.length > 0;
-  await completeMoneyMove(
-    db,
-    move.key,
-    applied,
-    failure,
-    status === "applied" && hasProjections ? "partial" : status
-  );
-  if (failure && move.turn !== undefined) {
-    countBankingEvent(
-      db,
-      move.turn,
-      status === "rejected" ? "rejectedSettlements" : "partialSettlements"
-    );
-  }
-
-  return { status, applied, error: failure };
+  if (claim.legs.length === 0) return { status: "applied", applied: [] };
+  return executeMoneyMove(db, move.key, false);
 }
 
 /**
@@ -349,76 +364,184 @@ function legOrder(legs: { kind: MoneyMoveLegKind }[]): number[] {
   });
 }
 
+/** Target evidence cannot expire until the original journal acknowledges it. */
+const PENDING_LEG = "pendingMoneyMoveReceipt";
+const LEG_REVISION = "moneyMoveRevision";
+function reservedLegPath(path: string): boolean {
+  return [PENDING_LEG, LEG_REVISION, SETTLED_KEYS_FIELD, "_id"].some(
+    (reserved) => path === reserved || path.startsWith(`${reserved}.`)
+  );
+}
+interface LegReceipt {
+  key: string;
+  index: number;
+  generation: number;
+  outcome: "applied" | "rejected";
+  error?: string;
+}
+interface LegTarget {
+  _id: unknown;
+  settledKeys?: string[];
+  pendingMoneyMoveReceipt?: LegReceipt;
+  moneyMoveRevision?: number;
+}
+
+/** Acknowledge one immutable target outcome, then release only its own receipt. */
+async function acknowledgeLeg(
+  db: Db,
+  collection: string,
+  id: unknown,
+  receipt: LegReceipt
+): Promise<void> {
+  const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
+  const path = `legs.${receipt.index}`;
+  const field = receipt.outcome === "applied" ? `${path}.applied` : `${path}.refusal`;
+  const acknowledged = await records.updateOne(
+    {
+      _id: receipt.key,
+      status: "partial",
+      [`${path}.collection`]: collection,
+      [`${path}.filter._id`]: id,
+      [`${path}.applied`]: false,
+      [`${path}.refusal`]: { $exists: false },
+    },
+    { $set: { [field]: receipt.outcome === "applied" ? true : receipt.error } }
+  );
+  if (!acknowledged.matchedCount) {
+    const saved = await records.findOne({ _id: receipt.key }, { projection: { legs: 1 } });
+    const leg = saved?.legs[receipt.index];
+    if (
+      !leg ||
+      leg.collection !== collection ||
+      !isDeepStrictEqual(leg.filter?._id, id) ||
+      (receipt.outcome === "applied" ? !leg.applied : leg.refusal !== receipt.error)
+    )
+      throw new Error("Money movement target outcome requires journal reconciliation");
+  }
+  await db
+    .collection<LegTarget>(collection)
+    .updateOne({ _id: id, [PENDING_LEG]: receipt } as Filter<LegTarget>, {
+      $unset: { [PENDING_LEG]: "" },
+    });
+}
+
 /**
- * Write one leg and stamp it on the record. Returns the failure text, or null
- * when the leg landed. Shared by the first attempt and by resumption, so the
- * two can never disagree about what a leg does.
+ * Read the target generation BEFORE reading the journal. If another worker
+ * acknowledges and releases delivery after that read, its generation change
+ * defeats our cash CAS. If it finished before that read, the fresh journal
+ * already records the outcome. A bounded history is never the sole witness.
  */
 async function applyLeg(
   db: Db,
   key: string,
   i: number,
-  leg: Pick<MoneyMoveLeg, "kind" | "amount" | "note" | "collection" | "filter" | "path" | "set">
+  leg: MoneyMoveRecordLeg
 ): Promise<string | null> {
-  const amount = Math.max(0, leg.amount);
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
+  const path = `legs.${i}`;
   if (leg.kind === "mint" || leg.kind === "burn") {
-    await records.updateOne({ _id: key }, { $set: { [`legs.${i}.applied`]: true } });
+    await records.updateOne(
+      { _id: key, status: "partial" },
+      { $set: { [`${path}.applied`]: true } }
+    );
     return null;
   }
-  if (!leg.collection || !leg.path || !leg.filter) {
-    return `Leg ${i} of ${key} (${leg.note}) is missing a target.`;
-  }
+  if (!leg.collection || !leg.path || leg.filter?._id === undefined)
+    return `Leg ${i} of ${key} requires a stable target id; reconcile by hand.`;
+  if ([leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath))
+    return `Leg ${i} of ${key} attempts to change reserved settlement metadata.`;
 
+  const target = db.collection<LegTarget>(leg.collection);
+  const id = { _id: leg.filter._id } as Filter<LegTarget>;
   const stamp = legStamp(key, i);
-  const filter = {
-    ...leg.filter,
-    // The guard is the whole point: a debit that would overdraw does not
-    // match, so it does not apply, so the balance cannot go negative on a
-    // stale read.
-    ...(leg.kind === "debit" ? { [leg.path]: { $gte: amount } } : {}),
-    // And a leg that already landed on this document does not match either,
-    // so a resumed or racing write of the same leg moves nothing twice.
-    [SETTLED_KEYS_FIELD]: { $ne: stamp },
-  } as Filter<Document>;
-
-  const update = {
-    $inc: { [leg.path]: leg.kind === "debit" ? -amount : amount },
-    $set: { updatedAt: new Date(), ...(leg.set ?? {}) },
-    $push: { [SETTLED_KEYS_FIELD]: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
-  } as unknown as UpdateFilter<Document>;
-
-  const res = await db.collection(leg.collection).updateOne(filter, update);
-  if (res.matchedCount !== 1) {
-    const landed = await db
-      .collection(leg.collection)
-      .findOne({ ...leg.filter, [SETTLED_KEYS_FIELD]: stamp } as Filter<Document>, {
-        projection: { _id: 1 },
-      });
-    if (!landed) {
-      return `Leg ${i} of ${key} (${leg.note}) did not apply: the balance moved or the guard failed.`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await target.findOne(id, {
+      projection: { [PENDING_LEG]: 1, [LEG_REVISION]: 1, settledKeys: 1 },
+    });
+    const record = await records.findOne(
+      { _id: key },
+      { projection: { status: 1, genericMoneyMoveVersion: 1, legs: 1 } }
+    );
+    const saved = record?.legs[i];
+    if (!saved) return `Leg ${i} of ${key} is missing from its journal.`;
+    const receipt = current?.pendingMoneyMoveReceipt;
+    if (receipt) {
+      // A completed cash leg may belong to a command outside this queue page.
+      // Help acknowledge that exact leg, so older waiters cannot starve it.
+      await acknowledgeLeg(db, leg.collection, leg.filter._id, receipt);
+      if (receipt.key === key && receipt.index === i)
+        return receipt.outcome === "applied" ? null : receipt.error!;
+      continue;
     }
-    // Landed on an earlier attempt that crashed before stamping the record.
+    if (saved.applied) return null;
+    if (saved.refusal) return saved.refusal;
+    if (record?.status !== "partial") return `Money move ${key} is already ${record?.status}.`;
+    if (!current) return `Leg ${i} of ${key} has no target; reconciliation is required.`;
+    if (record.genericMoneyMoveVersion !== 2) {
+      if (current.settledKeys?.includes(stamp)) {
+        await records.updateOne(
+          { _id: key, status: "partial" },
+          { $set: { [`${path}.applied`]: true } }
+        );
+        return null;
+      }
+      return `Legacy leg ${i} of ${key} has no surviving delivery proof; reconcile by hand.`;
+    }
+    const revision = current.moneyMoveRevision ?? 0;
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision >= Number.MAX_SAFE_INTEGER)
+      return `Leg ${i} of ${key} has an invalid target generation.`;
+    const guard = {
+      ...id,
+      [LEG_REVISION]: current.moneyMoveRevision ?? { $exists: false },
+      [PENDING_LEG]: { $exists: false },
+    };
+    const amount = Math.max(0, leg.amount);
+    const delivered: LegReceipt = { key, index: i, generation: revision + 1, outcome: "applied" };
+    const write = await target.updateOne(
+      {
+        $and: [
+          leg.filter,
+          guard,
+          ...(leg.kind === "debit" ? [{ [leg.path]: { $gte: amount } }] : []),
+        ],
+      } as Filter<LegTarget>,
+      {
+        $inc: { [leg.path]: leg.kind === "debit" ? -amount : amount, [LEG_REVISION]: 1 },
+        $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered },
+        $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } },
+      }
+    );
+    if (write.matchedCount) {
+      await acknowledgeLeg(db, leg.collection, leg.filter._id, delivered);
+      return null;
+    }
+    // Refusal competes on the same unconsumed generation as delivery. A late
+    // worker cannot reject cash that another worker has already delivered.
+    const refused: LegReceipt = {
+      key,
+      index: i,
+      generation: revision + 1,
+      outcome: "rejected",
+      error: `Leg ${i} of ${key} (${leg.note}) did not apply: the balance moved or the guard failed.`,
+    };
+    const stopped = await target.updateOne(guard, {
+      $inc: { [LEG_REVISION]: 1 },
+      $set: { [PENDING_LEG]: refused },
+    });
+    if (stopped.matchedCount) {
+      await acknowledgeLeg(db, leg.collection, leg.filter._id, refused);
+      return refused.error!;
+    }
   }
-  // Stamp the leg the moment it lands. Recording applied legs only at
-  // completion meant a crash between two legs left a record saying nothing
-  // had moved when the debit already had, and the repair queue is only worth
-  // having if it says exactly which half landed.
-  await records.updateOne({ _id: key }, { $set: { [`legs.${i}.applied`]: true } });
-  return null;
+  return `Leg ${i} of ${key} changed during delivery; retry this command.`;
 }
 
-/**
- * Finish a move that crashed between two legs, from the record alone.
- *
- * The legs that landed are stamped on the record and are not touched again;
- * the legs that did not are written exactly as the first attempt would have
- * written them, guards included, so a resumed debit that would now overdraw
- * still refuses and the record stays `partial` for an operator. Only the
- * recovery worker calls this, and only for a record nobody else is running:
- * a live settlement that finds the key owned reports a replay and stops.
- */
+/** Finish from the original journal, without reinterpreting terminal outcomes. */
 export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveResult> {
+  return executeMoneyMove(db, key, true);
+}
+
+async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise<MoneyMoveResult> {
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const record = await records.findOne({ _id: key });
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
@@ -433,47 +556,63 @@ export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveRes
       applied: [],
       error: "Atomic document settlement requires journal recovery",
     };
-  const legs = record.legs ?? [];
-  const already = legs.flatMap((leg, i) => (leg.applied ? [i] : []));
-  const completionStatus = record.projections?.some(
-    (projection) => !projection.applied && !projection.appliedAt
-  )
-    ? "partial"
-    : "applied";
-  if (legs.every((leg) => leg.applied)) {
-    if (record.status !== completionStatus)
-      await completeMoneyMove(db, key, already, undefined, completionStatus);
-    return { status: "applied", applied: already };
-  }
-  if (
-    legs.some(
-      (leg) => !leg.applied && leg.kind !== "mint" && leg.kind !== "burn" && !leg.collection
-    )
-  ) {
+  // An operator may have reconciled an older record whose individual leg
+  // acknowledgements are incomplete. Its terminal disposition is authoritative.
+  if (record.status === "applied")
     return {
-      status: "partial",
-      applied: already,
-      error: `move ${key} predates recorded leg targets; repair by hand`,
+      status: "applied",
+      applied: record.legs.flatMap((leg, i) => (leg.applied ? [i] : [])),
     };
+  if (record.moneyMoveBindingError) {
+    await completeMoneyMove(db, key, [], record.moneyMoveBindingError, "rejected");
+    return { status: "rejected", applied: [], error: record.moneyMoveBindingError };
   }
-
-  const applied = [...already];
   let failure: string | undefined;
-  for (const i of legOrder(legs)) {
-    if (legs[i].applied) continue;
-    const failed = await applyLeg(db, key, i, legs[i]);
+  for (const i of legOrder(record.legs)) {
+    const leg = record.legs[i];
+    if (record.genericMoneyMoveVersion !== 2 && leg.applied) continue;
+    if (record.status === "rejected" && !leg.applied && !leg.refusal) continue;
+    const failed = await applyLeg(db, key, i, leg);
     if (failed) {
       failure = failed;
       break;
     }
-    applied.push(i);
   }
-  applied.sort((a, b) => a - b);
-  await completeMoneyMove(db, key, applied, failure, failure ? "partial" : completionStatus);
-  if (record.turn !== undefined) {
-    countBankingEvent(db, record.turn, failure ? "partialSettlements" : "resumedSettlements");
-  }
-  return { status: failure ? "partial" : "applied", applied, error: failure };
+  const latest = await records.findOne({ _id: key });
+  if (!latest) throw new Error(`Money move ${key} disappeared during recovery`);
+  const applied = latest.legs.flatMap((leg, i) => (leg.applied ? [i] : []));
+  const refusal = latest.legs.find((leg) => leg.refusal)?.refusal;
+  const status =
+    latest.status === "rejected"
+      ? "rejected"
+      : applied.length === latest.legs.length
+        ? "applied"
+        : refusal && applied.length === 0
+          ? "rejected"
+          : "partial";
+  const pendingProjections = latest.projections?.some((p) => !p.applied && !p.appliedAt);
+  await completeMoneyMove(
+    db,
+    key,
+    applied,
+    status === "applied" ? undefined : (refusal ?? failure),
+    status === "applied" && pendingProjections ? "partial" : status
+  );
+  if (record.turn !== undefined && (resuming || status !== "applied"))
+    countBankingEvent(
+      db,
+      record.turn,
+      status === "applied"
+        ? "resumedSettlements"
+        : status === "rejected"
+          ? "rejectedSettlements"
+          : "partialSettlements"
+    );
+  return {
+    status,
+    applied,
+    error: status === "applied" ? undefined : (refusal ?? failure ?? latest.error),
+  };
 }
 
 export interface MoneyMoveRepairRow {
