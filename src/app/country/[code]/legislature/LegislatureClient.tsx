@@ -83,7 +83,7 @@ export default function LegislatureClient({ countryId, legislatureName, generic 
     );
   }
 
-  if (countryId === "CS" || countryId === "YU") {
+  if (countryId === "CS" || countryId === "YU" || (countryId === "RU" && generic)) {
     return <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />;
   }
 

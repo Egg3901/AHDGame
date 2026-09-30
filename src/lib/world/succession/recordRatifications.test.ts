@@ -75,6 +75,24 @@ async function scenario() {
 }
 
 describe("federation ratification records", () => {
+  it("skips an applied source after its detailed territory has moved", async () => {
+    const { db, proposal } = await scenario();
+    await db.collection("bills").updateOne(
+      { _id: proposal.billId },
+      {
+        $set: { status: "signed", enactedAt: new Date(1) },
+      }
+    );
+    await db.collection("federationSettlementApplications").insertOne({
+      _id: "1991-default:ussr-1:1" as never,
+      presetId: "1991-default",
+      sourceEntityId: "RU",
+      status: "applied",
+    });
+    await db.collection("states").deleteMany({ countryId: "RU" });
+    expect(await processFederationRatifications(db, "1991-default", 121)).toBe(0);
+    expect(await db.collection("federationRatifications").countDocuments({})).toBe(0);
+  });
   it("runs from the turn path only after the ordinary bill is enacted", async () => {
     const { db, proposal } = await scenario();
     expect(await processFederationRatifications(db, "1991-default", 120)).toBe(0);

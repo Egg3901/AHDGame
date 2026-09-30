@@ -26,7 +26,7 @@ const bodySchema = z.object({
 
 function sourceForCode(code: string): DefaultFederationSource | null {
   const upper = code.toUpperCase();
-  return upper === "CS" || upper === "YU" ? upper : null;
+  return upper === "CS" || upper === "YU" || upper === "RU" ? upper : null;
 }
 
 // GET shows the dated choice, existing bill and assets requiring negotiation.

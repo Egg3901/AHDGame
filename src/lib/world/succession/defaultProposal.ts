@@ -7,11 +7,18 @@ import { planSuccessionFinances } from "./rules/financialSettlement";
 import { planSuccessionTerritories } from "./rules/territory";
 import type { SuccessionCustodyAsset } from "./rules/custody";
 import type { SuccessorTerritory } from "./rules/territory";
+import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 
 /** The complete 1991 federal regions, including Serbia's two provinces.
  * Proposals are drawn from live region populations and GDP, so pre-vote
  * demographic change does not freeze the opening census. */
 const DEFAULT_TERRITORY = {
+  RU: Object.fromEntries(
+    sovietUnionRegions1991.map((region) => [
+      region._id,
+      region._id.startsWith("SU_") ? region._id.slice(3) : "RU",
+    ])
+  ),
   CS: {
     CS_PRG: "CZ2",
     CS_BOH: "CZ2",
@@ -98,7 +105,10 @@ export async function openDefaultFederationPoliticalProposal(input: {
         consents: [],
       },
       source: getWorldEntityOrThrow("1991-default", sourceCountryId),
-      successors: participants.map((id) => getWorldEntityOrThrow("1991-default", id)),
+      ...(sourceCountryId === "RU" ? { continuingDisplayName: "Russia" } : {}),
+      successors: participants
+        .filter((id) => id !== sourceCountryId)
+        .map((id) => getWorldEntityOrThrow("1991-default", id)),
       territories,
       finances: planSuccessionFinances({
         settlementId,

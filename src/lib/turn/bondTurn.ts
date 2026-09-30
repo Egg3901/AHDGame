@@ -82,7 +82,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // #1198: gates default DETECTION only, in Phase 3. Coupon and maturity
   // settlement runs regardless — see the comment there for why the two are
   // treated differently.
-  const corporationActionsPaused = (await getGameState(db))?.corporationActionsPaused === true;
+  const gameState = await getGameState(db);
+  const corporationActionsPaused = gameState?.corporationActionsPaused === true;
 
   await db
     .collection("corporations")
@@ -104,6 +105,15 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   await processSovereignLegislativeTurn(db, Date.now(), turn);
 
   const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+
+  // Fund the exact holder snapshot this bond turn will pay. A funding failure
+  // stops this payout phase before any creditor credits can escape its journal.
+  // Recovery of an earlier bridge continues even after the last bond matures.
+  if (gameState?.preset === "1991-default") {
+    const { processLegacyFederationServiceTurn } =
+      await import("@/lib/world/succession/legacyServiceTurn");
+    await processLegacyFederationServiceTurn(db, turn, now, activeBonds);
+  }
 
   if (activeBonds.length === 0) {
     return {

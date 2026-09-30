@@ -44,9 +44,7 @@ async function ruLegislaturePresentation(): Promise<{
       .findOne({ _id: "RU" }),
   ]);
   const config = getCountryConfigForRuntime("RU", preset, country);
-  const generic =
-    preset === "1991-default" &&
-    (country?.ruCongressDissolvedSinceTurn != null || country?.ruFederalAssemblySinceTurn != null);
+  const generic = preset === "1991-default";
   const seats = generic
     ? await getLiveLowerChamberSeats(db, "RU")
     : config.legislature.lowerChamber.seats;

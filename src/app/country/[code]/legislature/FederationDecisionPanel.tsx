@@ -16,7 +16,7 @@ export default function FederationDecisionPanel({
   countryId,
   legislatureName,
 }: {
-  countryId: "CS" | "YU";
+  countryId: "CS" | "YU" | "RU";
   legislatureName: string;
 }) {
   const [decision, setDecision] = useState<Decision | null>(null);
@@ -76,7 +76,9 @@ export default function FederationDecisionPanel({
           )}
           {decision?.proposal && (
             <p>
-              A settlement mandate is {decision.proposal.billStatus ?? decision.proposal.status}.{" "}
+              {decision.proposal.status === "applied"
+                ? "The federation settlement has taken effect."
+                : `A settlement mandate is ${decision.proposal.billStatus ?? decision.proposal.status}.`}{" "}
               <a className="underline" href={`/congress/bills/${decision.proposal.billId}`}>
                 View the bill
               </a>

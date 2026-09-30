@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
+import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getCountryConfig } from "@/lib/constants/countries";
 
@@ -59,6 +60,38 @@ describe("federation proposal action", () => {
     const response = await POST(request(), params);
     expect(response.status).toBe(403);
     expect(await mem.collection("bills").countDocuments({})).toBe(0);
+  });
+
+  it("opens the Soviet split through the seated Union Congress and lists all republics", async () => {
+    mem.seed("states", sovietUnionRegions1991 as unknown as Record<string, unknown>[]);
+    const chamber = getCountryConfig("RU", "1991-default").legislature.lowerChamber.key;
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        characterId,
+        countryId: "RU",
+        officeType: getOfficeTypeForChamber("RU", chamber, "1991-default"),
+      },
+    ]);
+    const ruParams = { params: Promise.resolve({ code: "ru" }) };
+    const response = await POST(
+      new Request("http://localhost/api/country/ru/federation/proposal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ negotiatedCustodians: {} }),
+      }),
+      ruParams
+    );
+    expect(response.status).toBe(201);
+    const listed = await GET(
+      new Request("http://localhost/api/country/ru/federation/proposal"),
+      ruParams
+    );
+    const body = await listed.json();
+    expect(body.participants).toHaveLength(15);
+    expect(body.participants).toContain("RU");
+    expect(body.proposal.billStatus).toBe("active");
+    expect(await mem.collection("federationSettlementApplications").countDocuments({})).toBe(0);
   });
 
   it("opens one normal bill for a seated legislator and exposes its status", async () => {

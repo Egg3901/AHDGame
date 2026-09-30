@@ -3,10 +3,20 @@ import type { Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { yuRegions1991 } from "@/lib/countries/yu/data/yuRegions1991";
+import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
+import { SOVIET_REPUBLIC_REFERENCE_1990 } from "@/lib/seeds/reference/sovietRepublics1990";
 import { openDefaultFederationPoliticalProposal } from "./defaultProposal";
 
 describe("1991 default federation proposals", () => {
   for (const row of [
+    {
+      sourceCountryId: "RU" as const,
+      year: 1991,
+      states: sovietUnionRegions1991,
+      successors: Object.keys(SOVIET_REPUBLIC_REFERENCE_1990)
+        .filter((id) => id !== "RU")
+        .sort(),
+    },
     {
       sourceCountryId: "CS" as const,
       year: 1992,
@@ -43,6 +53,13 @@ describe("1991 default federation proposals", () => {
         row.states.map(({ _id }) => _id).sort()
       );
       expect(proposal.terms.assetBasis).toBe("population");
+      if (row.sourceCountryId === "RU") {
+        expect(proposal.terms.continuingDisplayName).toBe("Russia");
+        expect(proposal.terms.participants).toHaveLength(15);
+        expect(
+          proposal.terms.territories.find((territory) => territory.entityId === "RU")?.regionIds
+        ).toHaveLength(10);
+      }
       expect(await mem.collection("bills").countDocuments({ status: "active" })).toBe(1);
     });
   }
