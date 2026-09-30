@@ -25,6 +25,8 @@ export interface BankCharter {
   charteredTurn: number;
   /** Capital posted at charter; absorbs losses before depositors do. */
   postedCapital: number;
+  /** Cumulative taxpayer capital delivered through funded financial-crisis rescues. */
+  publicRescueCapital?: number;
   /** CEO-set offsets against prime, bounded by the Regulation Q corridor. */
   depositOffset: number;
   lendingOffset: number;

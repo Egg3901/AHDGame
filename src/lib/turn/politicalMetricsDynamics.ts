@@ -1,3 +1,5 @@
+import { loadPandemicSignal } from "@/lib/livingConflict/pandemicSignal";
+import { pandemicPoliticalEffects } from "@/lib/livingConflict/rules/pandemic";
 import { loadTerrorismSignal } from "@/lib/livingConflict/terrorismSignal";
 import { terrorismPoliticalEffects } from "@/lib/livingConflict/rules/transnationalTerrorism";
 import { loadNorthernIrelandSignal } from "@/lib/countries/uk/northernIreland/service";
@@ -174,6 +176,10 @@ export async function processPoliticalMetricsDynamics(
     db,
     eraGameState?.livingConflictsEnabled === true
   );
+  const pandemicSignal = await loadPandemicSignal(
+    db,
+    eraGameState?.livingConflictsEnabled === true
+  );
   // Era-aware only while the era system is on, matching every other consumer:
   // a metric's realistic span moves with the era, so scoring a 1953 outcome
   // against modern thresholds would read it as bottom-of-scale.
@@ -318,6 +324,12 @@ export async function processPoliticalMetricsDynamics(
         const cabinetOf = (id: PoliticalMetricId) => nextCabinet[id] ?? 0;
         const labourChanged = !sameNums(doc.labourResiduals ?? {}, nextLabour);
         const nextConflict = { ...terrorismPoliticalEffects(terrorismSignal, countryId) };
+        for (const [id, delta] of Object.entries(
+          pandemicPoliticalEffects(pandemicSignal, countryId)
+        )) {
+          const key = id as PoliticalMetricId;
+          nextConflict[key] = (nextConflict[key] ?? 0) + delta;
+        }
         if (northernIrelandRegion(countryId, String(doc._id))) {
           for (const [id, delta] of Object.entries(northernIrelandEffects)) {
             const key = id as PoliticalMetricId;

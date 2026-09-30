@@ -29,7 +29,7 @@ function role(ctx: RoleContext): ConflictRole {
 }
 
 function trees(key: string): RoleDecisionTrees {
-  return {
+  const result: RoleDecisionTrees = {
     belligerent: choiceNode(
       `${key}_exposed`,
       "The financial system is under stress",
@@ -39,7 +39,7 @@ function trees(key: string): RoleDecisionTrees {
           ...responseOpt(
             "recapitalize",
             "Recapitalize distressed banks",
-            "Inject public capital with ownership and oversight conditions.",
+            "Inject taxpayer capital, recording the public contribution on the bank balance sheet.",
             { rescue: 4, coordination: 2 },
             [cfx("tick", "approval", "government", "overall", -0.01, "Bank rescue backlash")],
             0.02
@@ -212,6 +212,84 @@ function trees(key: string): RoleDecisionTrees {
       ]
     ),
   };
+  // Every charged option names a real funded recipient. Diplomatic consent
+  // remains a public policy position and never burns an unallocated payment.
+  const responses = {
+    national_backstop: "guarantee",
+    fiscal_stimulus: "stimulus",
+    fiscal_consolidation: "austerity",
+    coordinated_stimulus: "stimulus",
+    countercyclical_budget: "stimulus",
+    creditor_facility: "sovereign_support",
+    reserve_support: "stimulus",
+    swap_lines: "guarantee",
+    multilateral_support: "stimulus",
+  } as const;
+  for (const tree of Object.values(result))
+    for (const option of tree.options ?? []) {
+      const response = responses[option.optionId as keyof typeof responses];
+      if (response) option.action = { kind: "financialCrisisResponse", response };
+      if (option.optionId === "imf_support") {
+        delete option.treasuryCostPctGdp;
+        option.label = "Seek multilateral lending support";
+        option.description =
+          "Coordinate a monitored lending proposal; any loan still requires the sovereign resolution process.";
+      }
+      if (option.optionId === "creditor_facility") {
+        option.label = "Fund a shared-currency rescue grant";
+        option.description =
+          "Transfer funded treasury cash to the most stressed member using the same currency.";
+      }
+      if (option.optionId === "reserve_support" || option.optionId === "multilateral_support") {
+        option.label = "Fund coordinated household support";
+        option.description =
+          "Support global demand by delivering funded fiscal transfers to domestic households.";
+      }
+      if (option.optionId === "swap_lines") {
+        option.label = "Guarantee domestic bank funding";
+        option.description =
+          "Reserve treasury cash against domestic bank failures without directing an independent central bank.";
+      }
+      if (option.optionId === "creditor_haircut") {
+        option.label = "Consent to negotiated restructuring";
+        option.description =
+          "Support creditor losses and maturity extensions, subject to the debtor's sovereign resolution process.";
+      }
+    }
+  for (const role of ["belligerent", "neighbor"] as const) {
+    result[role]!.options!.push({
+      ...responseOpt(
+        "sovereign_restructure",
+        "Propose sovereign restructuring",
+        "Submit an existing sovereign funding crisis to parliamentary ratification before creditors take losses.",
+        { restructuring: 4, coordination: 2 }
+      ),
+      action: { kind: "financialCrisisResponse", response: "restructure" },
+    });
+  }
+  result.belligerent!.options!.push(
+    {
+      ...responseOpt(
+        "fiscal_stimulus",
+        "Fund household stimulus",
+        "Transfer funded treasury cash into household demand.",
+        { stimulus: 4, rescue: 1 },
+        [],
+        0.018
+      ),
+      action: { kind: "financialCrisisResponse", response: "stimulus" },
+    },
+    {
+      ...responseOpt(
+        "fiscal_consolidation",
+        "Consolidate primary spending",
+        "Limit primary spending for one year while honoring existing debt service.",
+        { austerity: 4 }
+      ),
+      action: { kind: "financialCrisisResponse", response: "austerity" },
+    }
+  );
+  return result;
 }
 
 const outcomes: GlobalResponseOutcome[] = [
@@ -268,6 +346,7 @@ const outcomes: GlobalResponseOutcome[] = [
     conditions: [{ axis: "restructuring", min: 7 }],
     intensityDelta: -3,
     trackDeltas: {
+      creditorConsent: 15,
       bankSolvency: 10,
       financialFragility: -10,
       liquidityStress: 6,
@@ -352,7 +431,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
   type: "geopolitical",
   name: "Global Financial and Euro Sovereign-Debt Crisis",
   fromYear: 2007,
-  untilYear: 2020,
+  untilYear: 2010,
   autoOpen: true,
   minimumOpeningPressure: 60,
   hostCountry: "US",
@@ -375,6 +454,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
     unemployment: { initial: 10 },
     marketConfidence: { initial: 75 },
     sovereignSpreads: { initial: 10 },
+    euroSovereignExposure: { initial: 0 },
     creditorConsent: { initial: 35 },
     recovery: { initial: 5 },
   },
@@ -458,6 +538,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       toPhase: "sovereign_stress",
       conditions: [
         { track: "sovereignSpreads", min: 45 },
+        { track: "euroSovereignExposure", min: 10 },
         { track: "bankSolvency", max: 55 },
       ],
     },
@@ -491,6 +572,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       priority: 100,
       conditions: [
         { track: "sovereignSpreads", min: 60 },
+        { track: "euroSovereignExposure", min: 10 },
         { track: "contagion", min: 45 },
       ],
     },
@@ -501,7 +583,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       key: "credit_boom",
       label: "Credit boom at the limit",
       summary: "Leverage and weak market absorption leave the financial system vulnerable.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
@@ -516,7 +598,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       key: "liquidity_stress",
       label: "Liquidity stress",
       summary: "Funding markets seize while governments and central banks assess solvency.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
@@ -531,7 +613,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       key: "institutional_failure",
       label: "Institutional failure or rescue",
       summary: "A major institution must fail, restructure, or receive public support.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
@@ -546,7 +628,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       key: "banking_panic",
       label: "Global banking panic",
       summary: "Cross-border exposures transmit bank failures and freeze credit.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
@@ -561,7 +643,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       key: "recession",
       label: "Recession and fiscal response",
       summary: "Credit contraction reaches employment, firms, households, budgets, and elections.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
@@ -577,7 +659,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       label: "Sovereign-bank feedback",
       summary:
         "Bank rescues and recession weaken sovereigns whose debt anchors bank balance sheets.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
@@ -593,7 +675,7 @@ export const GLOBAL_FINANCIAL_CRISIS_DEF: LivingConflictDef = {
       label: "Stabilization and repair",
       summary:
         "Balance-sheet repair and recovery proceed while debt, unemployment, and backlash persist.",
-      advancePressure: 100,
+      advancePressure: 101,
       decisionTrees: {},
       events: [
         event(
