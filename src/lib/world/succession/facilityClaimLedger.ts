@@ -3,7 +3,10 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { PrivateFacilityClaim, PrivateFirmSuccessionPlan } from "./rules/privateFacilities";
 import {
   FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
+  WORLD_ENTITY_STATES_COLLECTION,
   type FederationSettlementApplicationRecord,
+  type RuntimeWorldEntityState,
+  validateAppliedEntityStates,
 } from "./runtimeEntities";
 
 export const FEDERATION_FACILITY_CLAIMS_COLLECTION = "federationFacilityClaims";
@@ -100,6 +103,11 @@ export async function activateFederationFacilityClaim(
     )
     .findOne({ _id: applicationId, status: "applied" });
   if (!application) throw new Error("Facility claim cannot activate before its settlement");
+  const entityStates = await db
+    .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
+    .find({ applicationId })
+    .toArray();
+  validateAppliedEntityStates(application.presetId, [application], entityStates);
   const _id = `${applicationId}:${claimId}`;
   const collection = db.collection<FederationFacilityClaimRecord>(
     FEDERATION_FACILITY_CLAIMS_COLLECTION

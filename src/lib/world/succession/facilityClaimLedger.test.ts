@@ -73,14 +73,33 @@ describe("contingent facility claim ledger", () => {
   it("requires an applied settlement and an explicit creditor before making a claim payable", async () => {
     const mem = createInMemoryDb();
     const db = mem as unknown as Db;
-    await stageFederationFacilityClaims(db, "1991:split:1", [plan], new Date(0));
+    const applicationId = "1991-default:split:1";
+    await stageFederationFacilityClaims(db, applicationId, [plan], new Date(0));
     await expect(
-      activateFederationFacilityClaim(db, "1991:split:1", plan.claims[0].claimId, "firm-1", "RU")
+      activateFederationFacilityClaim(db, applicationId, plan.claims[0].claimId, "firm-1", "RU")
     ).rejects.toThrow("before its settlement");
-    mem.seed("federationSettlementApplications", [{ _id: "1991:split:1", status: "applied" }]);
+    mem.seed("federationSettlementApplications", [
+      {
+        _id: applicationId,
+        presetId: "1991-default",
+        settlementId: "split",
+        revision: 1,
+        sourceEntityId: "RU",
+        entityIds: ["RU", "UA"],
+        status: "applied",
+        appliedOnTurn: 96,
+      },
+    ]);
+    await expect(
+      activateFederationFacilityClaim(db, applicationId, plan.claims[0].claimId, "firm-1", "RU")
+    ).rejects.toThrow("missing entity states");
+    mem.seed("worldEntityStates", [
+      { _id: "1991-default:RU", applicationId, entityId: "RU", appliedOnTurn: 96 },
+      { _id: "1991-default:UA", applicationId, entityId: "UA", appliedOnTurn: 96 },
+    ]);
     const payable = await activateFederationFacilityClaim(
       db,
-      "1991:split:1",
+      applicationId,
       plan.claims[0].claimId,
       "firm-1",
       "RU"
@@ -89,14 +108,14 @@ describe("contingent facility claim ledger", () => {
     expect(
       await activateFederationFacilityClaim(
         db,
-        "1991:split:1",
+        applicationId,
         plan.claims[0].claimId,
         "firm-1",
         "RU"
       )
     ).toEqual(payable);
     await expect(
-      activateFederationFacilityClaim(db, "1991:split:1", plan.claims[0].claimId, "firm-1", "PL")
+      activateFederationFacilityClaim(db, applicationId, plan.claims[0].claimId, "firm-1", "PL")
     ).rejects.toThrow("another creditor");
   });
 });
