@@ -3,6 +3,9 @@
  * observations. processNppMonetaryOperations excludes legacy accounting and
  * incomplete observation windows from the money-growth signal.
  */
+import { aggregateEuroPolicyIndicators, euroPolicyBankId } from "@/lib/currency/euro/rules";
+import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
+import { euroMoneyGrowth } from "./rules/euroGrowth";
 import { currentMoneyGrowth } from "./rules/growthSignal";
 import { MONEY_ACCOUNTING_VERSION } from "./calculate";
 import type { Db } from "mongodb";
@@ -19,7 +22,7 @@ import type {
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
-import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -124,34 +127,106 @@ export async function processNppMonetaryOperations(
     return { banksProcessed: 0, evaluationsRecorded: 0, operationsExecuted: 0 };
   const banks = await db
     .collection<CentralBank>("centralBanks")
-    .find({ chairMode: "npp", chairControlsLocked: { $ne: true } })
+    .find(
+      {},
+      {
+        projection: {
+          countryId: 1,
+          chairMode: 1,
+          chairControlsLocked: 1,
+          governmentControlled: 1,
+          lastMonetaryOperationTurn: 1,
+          reserveBalance: 1,
+        },
+      }
+    )
     .toArray();
   // Era START year for the government-control gate below, resolved once for the
   // whole sweep — `isBankGovernmentControlledLive` costs an uncached gameState
   // read per call.
   const gameState = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { startingYear: 1, preset: 1 } });
+    .findOne(
+      { _id: "current" },
+      { projection: { startingYear: 1, preset: 1, euroMonetaryUnion: 1 } }
+    );
   const startingYear =
     gameState?.startingYear ?? getStartingYearForPreset(gameState?.preset ?? DEFAULT_SEED_PRESET);
+  const union = gameState?.euroMonetaryUnion;
+  const bankById = new Map(banks.map((bank) => [bank._id, bank]));
+  const budgets = await db
+    .collection<FederalBudget>("federalBudget")
+    .find(
+      {},
+      {
+        projection: { gdp: 1, economicFactors: 1, treasuryBalance: 1, "debt.principal": 1 },
+      }
+    )
+    .toArray();
+  const budgetById = new Map(budgets.map((budget) => [String(budget._id), budget]));
+  const common = union
+    ? aggregateEuroPolicyIndicators(
+        Object.keys(union.members).map((id) => {
+          const country = id as CountryId;
+          const budget = budgetById.get(getNationalBudgetId(country));
+          return {
+            gdpAnchor: (budget?.gdp ?? NaN) * getGdpAnchorRate(country, gameState?.preset),
+            inflationRate: budget?.economicFactors?.inflationRate ?? NaN,
+            gdpGrowth: budget?.economicFactors?.gdpGrowth ?? NaN,
+            targetInflation: getInflationTarget(country, currentYear),
+            neutralRate: 0,
+          };
+        })
+      )
+    : undefined;
+  const commonMoneyGrowth = union
+    ? euroMoneyGrowth(
+        union,
+        await db
+          .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
+          .find(
+            {
+              currencyCode: {
+                $in: [
+                  ...new Set(
+                    Object.values(union.members).flatMap((member) =>
+                      member ? [member.ledgerCurrency] : []
+                    )
+                  ),
+                ],
+              },
+              turn: { $gte: Math.max(0, turn - TURNS_PER_YEAR), $lte: turn },
+              accountingVersion: MONEY_ACCOUNTING_VERSION,
+            },
+            { projection: { currencyCode: 1, turn: 1, accountingVersion: 1, m2: 1 } }
+          )
+          .toArray(),
+        turn
+      )
+    : null;
+  let banksProcessed = 0;
   let operationsExecuted = 0;
   let evaluationsRecorded = 0;
   for (const bank of banks) {
+    const countryId = bank.countryId as CountryId;
+    const member = union?.members[countryId];
+    const authority = member ? bankById.get(euroPolicyBankId(countryId, union)) : bank;
+    if (!authority || authority.chairMode !== "npp" || authority.chairControlsLocked) continue;
+    if (member && !common) continue;
+    banksProcessed++;
     if (
       bank.lastMonetaryOperationTurn != null &&
       turn - bank.lastMonetaryOperationTurn < MONETARY_OPERATION_COOLDOWN_TURNS
     )
       continue;
-    const countryId = bank.countryId as CountryId;
     // A government-controlled bank runs no autonomous open-market operations,
     // for the same reason it sets no autonomous rate: monetary policy is the
     // Treasury's, and the technocrat chair holds no authority to act on its own.
-    if (isBankGovernmentControlled(bank, countryId, startingYear)) continue;
+    if (isBankGovernmentControlled(authority, authority.countryId as CountryId, startingYear))
+      continue;
     const currencyCode = COUNTRY_CURRENCY_MAP[bank.countryId] ?? "USD";
-    const [budget, bond, moneySupply] = await Promise.all([
-      db
-        .collection<FederalBudget>("federalBudget")
-        .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }),
+    const budget = budgetById.get(getNationalBudgetId(countryId));
+    const [bond, moneySupply] = await Promise.all([
       db
         .collection<Bond>("bonds")
         .find({
@@ -164,19 +239,23 @@ export async function processNppMonetaryOperations(
         .sort({ maturityTurn: -1 })
         .limit(1)
         .next(),
-      db
-        .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
-        .findOne(
-          { currencyCode, turn: { $lte: turn } },
-          { sort: { turn: -1 }, projection: { accountingVersion: 1, annualizedM2GrowthPct: 1 } }
-        ),
+      member
+        ? Promise.resolve(null)
+        : db
+            .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
+            .findOne(
+              { currencyCode, turn: { $lte: turn } },
+              { sort: { turn: -1 }, projection: { accountingVersion: 1, annualizedM2GrowthPct: 1 } }
+            ),
     ]);
     if (!budget) continue;
     const inflation =
-      budget.economicFactors?.inflationRate ?? getInflationTarget(countryId, currentYear);
-    const targetInflation = getInflationTarget(countryId, currentYear);
-    const gdpGrowth = budget.economicFactors?.gdpGrowth ?? 2;
-    const moneyGrowth = currentMoneyGrowth(moneySupply);
+      (member ? common?.inflationRate : budget.economicFactors?.inflationRate) ??
+      getInflationTarget(countryId, currentYear);
+    const targetInflation =
+      (member ? common?.targetInflation : undefined) ?? getInflationTarget(countryId, currentYear);
+    const gdpGrowth = (member ? common?.gdpGrowth : budget.economicFactors?.gdpGrowth) ?? 2;
+    const moneyGrowth = member ? commonMoneyGrowth : currentMoneyGrowth(moneySupply);
     const decision = chooseNppMonetaryOperation({
       inflation,
       targetInflation,
@@ -214,7 +293,7 @@ export async function processNppMonetaryOperations(
             ? { amount: decision.amount }
             : {}),
         turn,
-        actorName: `${bank._id} Monetary Committee`,
+        actorName: `${authority._id} Monetary Committee`,
         reason: decision.rationale,
       });
       operationsExecuted++;
@@ -224,5 +303,5 @@ export async function processNppMonetaryOperations(
       .updateOne({ _id: bank._id }, { $set: { lastMonetaryPolicyEvaluation: evaluation } });
     evaluationsRecorded++;
   }
-  return { banksProcessed: banks.length, evaluationsRecorded, operationsExecuted };
+  return { banksProcessed, evaluationsRecorded, operationsExecuted };
 }

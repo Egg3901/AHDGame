@@ -1,5 +1,6 @@
 "use client";
 
+import { MaastrichtPanel } from "./MaastrichtPanel";
 import { Badge } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
@@ -265,6 +266,7 @@ export function OverviewTab({
         onChange={onChange}
       />
 
+      {org.europeanIntegration && <MaastrichtPanel org={org} />}
       {org.def.charter && (
         <div className="rounded-xl border border-card-border bg-card p-4">
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">

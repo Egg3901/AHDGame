@@ -1,3 +1,4 @@
+import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
@@ -72,6 +73,8 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  europeanIntegration?: import("@/lib/internationalOrganizations/europeanIntegration/rules").EuropeanIntegrationState;
+
   _id: string;
   /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
   singleplayerConfig?: SingleplayerConfig;
@@ -531,6 +534,10 @@ export interface GameState {
    * Defaults to true when absent so existing 2019-default rows are unaffected.
    */
   eurozoneEnabled?: boolean;
+  /** Value-preserving legacy-unit locks and the explicit common monetary jurisdiction. */
+  euroMonetaryUnion?: EuroMonetaryUnion;
+  /** Signed national bills authorizing entry, including authorizations still awaiting settlement. */
+  euroAdoptionAuthorizations?: Partial<Record<CountryId, { billId: string; turn: number }>>;
   /**
    * Countries that have enacted an EuroAdoptionProvision bill. When this
    * includes all EU_EUROZONE_MEMBERS, eurozoneEnabled flips to true.

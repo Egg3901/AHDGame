@@ -1,8 +1,15 @@
+/**
+ * Purchase affordability estimates conversion spending and fees from current
+ * quotes and monetary-authority spread settings, including fixed euro settlement.
+ */
+import { purchaseSpreadRate } from "./rules/purchaseConversion";
 import {
-  FOREX_ACTIVE_CURRENCIES,
-  MARKET_MAKER_SPREAD,
-  type CurrencyCode,
-} from "@/lib/constants/currencies";
+  euroCurrencyRate,
+  euroLedgerCrossRate,
+  euroLedgerSpendForTarget,
+  type EuroMonetaryUnion,
+} from "./euro/rules";
+import { FOREX_ACTIVE_CURRENCIES, type CurrencyCode } from "@/lib/constants/currencies";
 
 type RateMap = Partial<Record<CurrencyCode, number>>;
 type BalanceMap = Partial<Record<CurrencyCode, number>>;
@@ -26,10 +33,17 @@ export function getMarketMakerTolerance(currency: CurrencyCode): number {
   return currency === "JPY" ? 1 : 0.02;
 }
 
-function getCrossRate(rates: RateMap, fromCurrency: CurrencyCode, toCurrency: CurrencyCode) {
+function getCrossRate(
+  rates: RateMap,
+  fromCurrency: CurrencyCode,
+  toCurrency: CurrencyCode,
+  union?: EuroMonetaryUnion
+) {
   if (fromCurrency === toCurrency) return 1;
-  const fromRate = rates[fromCurrency];
-  const toRate = rates[toCurrency];
+  const fixedRate = euroLedgerCrossRate(union, fromCurrency, toCurrency);
+  if (fixedRate != null) return fixedRate;
+  const fromRate = euroCurrencyRate(union, fromCurrency, rates);
+  const toRate = euroCurrencyRate(union, toCurrency, rates);
   if (!fromRate || !toRate) return null;
   return toRate / fromRate;
 }
@@ -38,7 +52,9 @@ function estimateDeliveredAmount(
   spendAmount: number,
   fromCurrency: CurrencyCode,
   toCurrency: CurrencyCode,
-  rates: RateMap
+  rates: RateMap,
+  union?: EuroMonetaryUnion,
+  spreadStrengths?: RateMap | null
 ) {
   if (fromCurrency === toCurrency) {
     return {
@@ -46,14 +62,18 @@ function estimateDeliveredAmount(
       spreadFee: 0,
     };
   }
-  const crossRate = getCrossRate(rates, fromCurrency, toCurrency);
+  const crossRate = getCrossRate(rates, fromCurrency, toCurrency, union);
   if (!crossRate) {
     return {
       deliveredAmount: 0,
       spreadFee: 0,
     };
   }
-  const spreadFee = Math.round(spendAmount * MARKET_MAKER_SPREAD);
+  if (euroLedgerCrossRate(union, fromCurrency, toCurrency) != null)
+    return { deliveredAmount: Math.floor(spendAmount * crossRate), spreadFee: 0 };
+  const spreadFee = Math.round(
+    spendAmount * purchaseSpreadRate(fromCurrency, toCurrency, union, spreadStrengths)
+  );
   const deliveredAmount = Math.round((spendAmount - spreadFee) * crossRate);
   return { deliveredAmount, spreadFee };
 }
@@ -72,20 +92,25 @@ function bumpSpendUntilDelivered(params: {
   fromCurrency: CurrencyCode;
   toCurrency: CurrencyCode;
   rates: RateMap;
+  union?: EuroMonetaryUnion;
+  spreadStrengths?: RateMap | null;
   minDelivered: number;
   maxIterations?: number;
 }): { spendAmount: number; deliveredAmount: number; spreadFee: number } {
-  const { sourceBalance, fromCurrency, toCurrency, rates, minDelivered } = params;
+  const { sourceBalance, fromCurrency, toCurrency, rates, minDelivered, union, spreadStrengths } =
+    params;
   let spendAmount = params.spendAmount;
   let { deliveredAmount, spreadFee } = estimateDeliveredAmount(
     spendAmount,
     fromCurrency,
     toCurrency,
-    rates
+    rates,
+    union,
+    spreadStrengths
   );
   if (deliveredAmount >= minDelivered) return { spendAmount, deliveredAmount, spreadFee };
 
-  const crossRate = getCrossRate(rates, fromCurrency, toCurrency);
+  const crossRate = getCrossRate(rates, fromCurrency, toCurrency, union);
   if (!crossRate || crossRate <= 0) return { spendAmount, deliveredAmount, spreadFee };
 
   // One source unit at this rate covers ~crossRate target units. Step by enough
@@ -96,7 +121,14 @@ function bumpSpendUntilDelivered(params: {
   for (let i = 0; i < cap; i++) {
     if (spendAmount >= sourceBalance) break;
     spendAmount = Math.min(sourceBalance, spendAmount + step);
-    const next = estimateDeliveredAmount(spendAmount, fromCurrency, toCurrency, rates);
+    const next = estimateDeliveredAmount(
+      spendAmount,
+      fromCurrency,
+      toCurrency,
+      rates,
+      union,
+      spreadStrengths
+    );
     deliveredAmount = next.deliveredAmount;
     spreadFee = next.spreadFee;
     if (deliveredAmount >= minDelivered) break;
@@ -110,8 +142,18 @@ export function estimateExplicitPayCoverage(params: {
   toCurrency: CurrencyCode;
   availableBalance: number;
   rates: RateMap;
+  union?: EuroMonetaryUnion;
+  spreadStrengths?: RateMap | null;
 }): ExplicitPayEstimate | null {
-  const { requiredAmount, fromCurrency, toCurrency, availableBalance, rates } = params;
+  const {
+    requiredAmount,
+    fromCurrency,
+    toCurrency,
+    availableBalance,
+    rates,
+    union,
+    spreadStrengths,
+  } = params;
   if (fromCurrency === toCurrency) {
     const spendAmount = Math.min(requiredAmount, availableBalance);
     return {
@@ -124,10 +166,14 @@ export function estimateExplicitPayCoverage(params: {
     };
   }
 
-  const crossRate = getCrossRate(rates, fromCurrency, toCurrency);
+  const crossRate = getCrossRate(rates, fromCurrency, toCurrency, union);
   if (!crossRate) return null;
 
-  const requiredFromAmount = requiredAmount / ((1 - MARKET_MAKER_SPREAD) * crossRate);
+  const requiredFromAmount =
+    euroLedgerCrossRate(union, fromCurrency, toCurrency) != null
+      ? euroLedgerSpendForTarget(requiredAmount, crossRate)
+      : requiredAmount /
+        ((1 - purchaseSpreadRate(fromCurrency, toCurrency, union, spreadStrengths)) * crossRate);
   const tolerance = getMarketMakerTolerance(fromCurrency);
   const initialSpend =
     requiredFromAmount <= availableBalance + tolerance
@@ -141,6 +187,8 @@ export function estimateExplicitPayCoverage(params: {
     fromCurrency,
     toCurrency,
     rates,
+    union,
+    spreadStrengths,
     minDelivered: requiredAmount,
   });
   const { spendAmount, deliveredAmount, spreadFee } = bumped;
@@ -161,9 +209,18 @@ export function estimateImplicitAutoConvertCoverage(params: {
   targetCurrency: CurrencyCode;
   balances: BalanceMap;
   rates: RateMap;
+  union?: EuroMonetaryUnion;
+  spreadStrengths?: RateMap | null;
   maxIterations?: number;
 }): ImplicitAutoConvertEstimate | null {
-  const { requiredAmount, targetCurrency, rates, maxIterations = 48 } = params;
+  const {
+    requiredAmount,
+    targetCurrency,
+    rates,
+    union,
+    spreadStrengths,
+    maxIterations = 48,
+  } = params;
   const balances = { ...params.balances } as Partial<Record<CurrencyCode, number>>;
 
   let spendableInTarget = balances[targetCurrency] ?? 0;
@@ -192,11 +249,15 @@ export function estimateImplicitAutoConvertCoverage(params: {
       const sourceBalance = balances[code] ?? 0;
       if (sourceBalance <= 0) continue;
 
-      const crossRate = getCrossRate(rates, code, targetCurrency);
+      const crossRate = getCrossRate(rates, code, targetCurrency, union);
       if (!crossRate) continue;
 
       const shortfall = requiredAmount - spendableInTarget;
-      const idealSpend = shortfall / ((1 - MARKET_MAKER_SPREAD) * crossRate);
+      const idealSpend =
+        euroLedgerCrossRate(union, code, targetCurrency) != null
+          ? euroLedgerSpendForTarget(shortfall, crossRate)
+          : shortfall /
+            ((1 - purchaseSpreadRate(code, targetCurrency, union, spreadStrengths)) * crossRate);
       const initialSpend = Math.min(sourceBalance, idealSpend);
       if (initialSpend <= 0) continue;
 
@@ -211,6 +272,8 @@ export function estimateImplicitAutoConvertCoverage(params: {
         fromCurrency: code,
         toCurrency: targetCurrency,
         rates,
+        union,
+        spreadStrengths,
         minDelivered: shortfall,
       });
       if (deliveredAmount <= 0 && spreadFee <= 0) continue;
@@ -234,9 +297,12 @@ export function estimateMaxConvertibleAmount(params: {
   toCurrency: CurrencyCode;
   balance: number;
   rates: RateMap;
+  union?: EuroMonetaryUnion;
+  spreadStrengths?: RateMap | null;
 }) {
-  const { fromCurrency, toCurrency, balance, rates } = params;
-  return estimateDeliveredAmount(balance, fromCurrency, toCurrency, rates).deliveredAmount;
+  const { fromCurrency, toCurrency, balance, rates, union, spreadStrengths } = params;
+  return estimateDeliveredAmount(balance, fromCurrency, toCurrency, rates, union, spreadStrengths)
+    .deliveredAmount;
 }
 
 export function refineMaxAffordableInteger(params: {

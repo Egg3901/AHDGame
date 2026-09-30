@@ -1,3 +1,4 @@
+import { planEuroSettlement } from "./euro/rules";
 import { describe, expect, it } from "vitest";
 import {
   estimateExplicitPayCoverage,
@@ -150,4 +151,91 @@ describe("purchaseAffordability", () => {
 
     expect(foundRequirement).not.toBeNull();
   });
+});
+
+it("quotes the same fee-free euro settlement as purchase execution", () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const rates = { GBP: 99, EUR: 99 };
+  const explicit = estimateExplicitPayCoverage({
+    requiredAmount: 1000,
+    fromCurrency: "GBP",
+    toCurrency: "EUR",
+    availableBalance: 750,
+    rates,
+    union,
+  });
+  expect(explicit?.canAfford).toBe(true);
+  expect(explicit?.spreadFee).toBe(0);
+  expect(explicit?.deliveredAmount).toBe(1000);
+  const implicit = estimateImplicitAutoConvertCoverage({
+    requiredAmount: 1000,
+    targetCurrency: "EUR",
+    balances: { GBP: 750 },
+    rates,
+    union,
+  });
+  expect(implicit?.spendableInTarget).toBe(1000);
+  expect(implicit?.spreadFees.GBP).toBe(0);
+  expect(
+    estimateExplicitPayCoverage({
+      requiredAmount: 1000.1,
+      fromCurrency: "GBP",
+      toCurrency: "EUR",
+      availableBalance: 750,
+      rates,
+      union,
+    })?.canAfford
+  ).toBe(false);
+});
+
+it("ignores stale member external quotes in purchase estimates", () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const input = {
+    requiredAmount: 1000,
+    fromCurrency: "GBP" as const,
+    toCurrency: "USD" as const,
+    availableBalance: 2000,
+    union,
+  };
+  expect(estimateExplicitPayCoverage({ ...input, rates: { EUR: 1.6, GBP: 99, USD: 1 } })).toEqual(
+    estimateExplicitPayCoverage({ ...input, rates: { EUR: 1.6, GBP: 1.2, USD: 1 } })
+  );
+  expect(estimateExplicitPayCoverage({ ...input, rates: { GBP: 99, USD: 1 } })).toBeNull();
+});
+
+it("uses common spread policy in displayed external purchase coverage", () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const quote = estimateExplicitPayCoverage({
+    requiredAmount: 100000,
+    fromCurrency: "GBP",
+    toCurrency: "USD",
+    availableBalance: 200000,
+    rates: { EUR: 1.6, GBP: 99, USD: 1 },
+    spreadStrengths: { EUR: 1.5, GBP: 0.5 },
+    union,
+  });
+  expect(quote?.requiredFromAmount).toBeCloseTo((100000 * 1.2) / (1 - MARKET_MAKER_SPREAD * 1.5));
+  expect(quote?.spreadFee).toBe(Math.round(quote!.spendAmount * MARKET_MAKER_SPREAD * 1.5));
+  expect(quote?.canAfford).toBe(true);
 });

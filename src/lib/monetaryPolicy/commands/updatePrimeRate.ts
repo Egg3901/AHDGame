@@ -9,6 +9,7 @@ import type { CentralBank, GameConfig } from "@/lib/db/types";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { loadEuroMonetaryUnion, syncEuroMonetaryPolicy } from "@/lib/currency/euro/service";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
 import {
@@ -47,7 +48,11 @@ export async function updatePrimeRate(params: {
   currentYear?: number | null;
 }) {
   const result = await updatePrimeRateInner(params);
-  const bankId = getBankId(params.countryId);
+  const bankId = result.ok ? result.bankId : getBankId(params.countryId);
+  if (result.ok && bankId === "ECB") {
+    const union = await loadEuroMonetaryUnion(params.db);
+    if (union) await syncEuroMonetaryPolicy(params.db, union);
+  }
   emitBankingAuditEvent(
     {
       kind: "policy.rate_changed",

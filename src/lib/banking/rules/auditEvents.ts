@@ -16,6 +16,7 @@
 
 export type BankingAuditEventKind =
   | "sovereign.primary_placed"
+  | "prop.traded"
   | "charter.issued"
   | "charter.revoked"
   | "charter.switched"
@@ -38,6 +39,7 @@ export type BankingAuditEventKind =
 
 export const BANKING_AUDIT_EVENT_KINDS: readonly BankingAuditEventKind[] = [
   "sovereign.primary_placed",
+  "prop.traded",
   "charter.issued",
   "charter.revoked",
   "charter.switched",

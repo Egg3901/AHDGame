@@ -26,7 +26,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/contexts/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock("@/hooks/useGameEvents", () => ({ useGameTurnStatus: () => null }));
+vi.mock("@/hooks/useGameEvents", () => ({
+  useGameTurnStatus: () => null,
+  useGameEvents: () => undefined,
+}));
 
 // The subject is which props these two receive, so they record and render
 // nothing. Everything else on the page is stubbed to keep the tree cheap.

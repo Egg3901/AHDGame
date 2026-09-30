@@ -889,3 +889,11 @@ describe("internationalOrganizationsPhase", () => {
     );
   });
 });
+
+// Treaty persistence has its own integration suite; these fixtures isolate bloc ballot resolution.
+vi.mock("@/lib/internationalOrganizations/europeanIntegration/service", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/internationalOrganizations/europeanIntegration/service")
+  >()),
+  reconcileEuropeanTreatyLive: vi.fn().mockResolvedValue(false),
+}));

@@ -38,10 +38,15 @@ import { resolveForcedDisplay } from "@/lib/currency/resolveForcedDisplay";
  */
 type RateMap = Partial<Record<CurrencyCode, number>>;
 
-type RatesState = { data: RateMap | null; baseRates: RateMap | null; loading: boolean };
+type RatesState = {
+  data: RateMap | null;
+  baseRates: RateMap | null;
+  spreadStrengths: RateMap | null;
+  loading: boolean;
+};
 type RatesAction =
   | { type: "FETCH_START" }
-  | { type: "FETCH_SUCCESS"; rates: RateMap; baseRates: RateMap }
+  | { type: "FETCH_SUCCESS"; rates: RateMap; baseRates: RateMap; spreadStrengths: RateMap }
   | { type: "FETCH_DONE" }
   | { type: "FETCH_ERROR" }; // preserves cached data on refetch failure
 
@@ -71,13 +76,19 @@ function ratesReducer(state: RatesState, action: RatesAction): RatesState {
       if (
         !state.loading &&
         rateMapsEqual(state.data, action.rates) &&
-        rateMapsEqual(state.baseRates, action.baseRates)
+        rateMapsEqual(state.baseRates, action.baseRates) &&
+        rateMapsEqual(state.spreadStrengths, action.spreadStrengths)
       ) {
         return state;
       }
-      return { data: action.rates, baseRates: action.baseRates, loading: false };
+      return {
+        data: action.rates,
+        baseRates: action.baseRates,
+        spreadStrengths: action.spreadStrengths,
+        loading: false,
+      };
     case "FETCH_DONE":
-      return { data: null, baseRates: null, loading: false };
+      return { data: null, baseRates: null, spreadStrengths: null, loading: false };
     case "FETCH_ERROR":
       return { ...state, loading: false }; // keep whatever was cached
     default:
@@ -222,6 +233,8 @@ interface CurrencyContextValue {
   baseRates: RateMap | null;
   /** Live rates map (same keys as `/api/forex/rates`). Null when forex is off or not yet loaded. */
   forexRates: RateMap | null;
+  /** Source-authority spread settings used for purchase estimates. */
+  forexSpreadStrengths?: RateMap | null;
   /** True when the multi-currency system is enabled for the viewing player. */
   forexEnabled: boolean;
 }
@@ -263,6 +276,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [ratesState, dispatchRates] = useReducer(ratesReducer, {
     data: null,
     baseRates: null,
+    spreadStrengths: null,
     loading: false,
   });
   // Local override set when the player manually changes preference mid-session.
@@ -319,6 +333,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         return res.json() as Promise<{
           rates: Partial<Record<CurrencyCode, number>>;
           baseRates?: Partial<Record<CurrencyCode, number>>;
+          spreadStrengths?: RateMap;
         }>;
       })
       .then((data) => {
@@ -327,6 +342,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
             type: "FETCH_SUCCESS",
             rates: data.rates,
             baseRates: data.baseRates ?? {},
+            spreadStrengths: data.spreadStrengths ?? {},
           });
         } else {
           dispatchRates({ type: "FETCH_DONE" });
@@ -609,6 +625,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       ratesLoading: ratesState.loading,
       baseRates: effectiveBaseRates,
       forexRates: effectiveRates,
+      forexSpreadStrengths: forexEnabled ? ratesState.spreadStrengths : null,
       forexEnabled,
     }),
     [
@@ -634,6 +651,7 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
       formatFullFn,
       formatPriceOrderFn,
       ratesState.loading,
+      ratesState.spreadStrengths,
       effectiveBaseRates,
       effectiveRates,
       forexEnabled,
