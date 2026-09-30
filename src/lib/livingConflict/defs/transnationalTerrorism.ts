@@ -288,7 +288,6 @@ const outcomes: GlobalResponseOutcome[] = [
       attributionConfidence: 6,
       publicFear: -4,
     },
-    nextConflictStatus: "active",
     campaignDelta: { civilianStrain: -4, settlementMomentum: 8 },
     tensionDelta: -3,
     wireMessage: "International intelligence cooperation disrupts a major transnational plot.",

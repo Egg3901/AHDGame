@@ -208,3 +208,10 @@ describe("counterterrorism response rules", () => {
     }
   });
 });
+
+it("routine vigilance preserves a settled normalization until a real relapse", () => {
+  const state = { ...stateAt("normalization"), status: "settled" as const };
+  expect(
+    applyConflictOutcome(TRANSNATIONAL_TERRORISM_DEF, state, outcome("plot_disrupted")).status
+  ).toBe("settled");
+});

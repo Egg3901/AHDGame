@@ -463,9 +463,10 @@ async function main() {
         }
       }
       if (finalTurn >= 1776) {
-        if (strategy !== "inaction")
+        if (strategy !== "inaction") {
           assert.equal(state.phaseLevel, 7, `${strategy}: final normalization`);
-        else assert((state.tracks?.threatCapability ?? 0) > 40, "Unanswered threat persists");
+          assert.equal(state.status, "settled", `${strategy}: durable normalization`);
+        } else assert((state.tracks?.threatCapability ?? 0) > 40, "Unanswered threat persists");
         if (strategy === "limited") assert(outcomes.some((o) => o.outcomeId === "limited_attack"));
         if (strategy === "policing")
           assert(
