@@ -184,7 +184,7 @@ export async function processRatifiedFederationSettlements(
         });
         return true;
       },
-      { timeoutMS: 60_000, maxCommitTimeMS: 30_000 }
+      { client: db.client, timeoutMS: 60_000, maxCommitTimeMS: 30_000 }
     );
     if (didApply) applied += 1;
   }

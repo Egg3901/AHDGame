@@ -1,4 +1,4 @@
-import { BSON, ObjectId, type ClientSession, type Db } from "mongodb";
+import { BSON, ObjectId, type ClientSession, type Db, type MongoClient } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
@@ -19,6 +19,8 @@ beforeEach(() => vi.clearAllMocks());
 
 async function scenario() {
   const mem = createInMemoryDb();
+  const client = {} as MongoClient;
+  Object.defineProperty(mem, "client", { value: client });
   mem.seed("gameState", [
     { _id: "current", preset: "1991-default", currentYear: 1992, currentTurn: 180 },
   ]);
@@ -113,6 +115,7 @@ async function scenario() {
   });
   return {
     db,
+    client,
     characterId,
     setReceiptFailure: (value: boolean) => {
       failReceipt = value;
@@ -122,7 +125,7 @@ async function scenario() {
 
 describe("ratified federation turn application", () => {
   it("applies the live settlement once and preserves an affected resident pending choice", async () => {
-    const { db, characterId } = await scenario();
+    const { db, client, characterId } = await scenario();
     expect(
       await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
     ).toBe(1);
@@ -130,6 +133,10 @@ describe("ratified federation turn application", () => {
       await processRatifiedFederationSettlements(db, "1991-default", 182, 1992, new Date(3))
     ).toBe(0);
     expect(runRequiredTransaction).toHaveBeenCalledTimes(1);
+    expect(runRequiredTransaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ client })
+    );
     expect(await db.collection("characters").findOne({ _id: characterId })).toMatchObject({
       cash: 50,
       homeState: "CS_SVK",

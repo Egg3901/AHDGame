@@ -341,15 +341,17 @@ export async function processLegacyFederationServiceTurn(
     .find({ kind: "legacy-administration" }, { projection: { applicationId: 1 } })
     .toArray();
   for (const application of applications) {
-    await runRequiredTransaction((session) =>
-      materializeLegacyFederationServiceTurn({
-        db,
-        session,
-        applicationId: application.applicationId,
-        turn,
-        now,
-        bondSnapshot,
-      })
+    await runRequiredTransaction(
+      (session) =>
+        materializeLegacyFederationServiceTurn({
+          db,
+          session,
+          applicationId: application.applicationId,
+          turn,
+          now,
+          bondSnapshot,
+        }),
+      { client: db.client }
     );
   }
   return applications.length;
