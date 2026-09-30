@@ -335,6 +335,26 @@ export async function loadConditionsSignal(
   });
 }
 
+/** France's directly seated president is its NPP executive even when this
+ * semi-presidential world has no parliamentary GovernmentFormation row. A
+ * player-held presidency never triggers autonomous treaty sponsorship. */
+export async function loadFrenchEuropeanExecutiveParty(db: Db): Promise<string | undefined> {
+  const presidents = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .find(
+      { countryId: "FR", officeType: "president" },
+      { projection: { characterId: 1, nppId: 1, party: 1 } }
+    )
+    .toArray();
+  if (presidents.length !== 1 || presidents[0].characterId || !presidents[0].nppId)
+    return undefined;
+  const npp = await db
+    .collection<NPP>("npps")
+    .findOne({ _id: presidents[0].nppId }, { projection: { party: 1 } });
+  if (!npp?.party || (presidents[0].party && presidents[0].party !== npp.party)) return undefined;
+  return npp.party;
+}
+
 /**
  * Load the governing party's policy agenda (V1.5) + fiscal posture (V1.6) for
  * agenda-driven sponsorship, plus the formation's party makeup so the opposition
@@ -369,7 +389,11 @@ async function loadGovernmentDirectives(
       },
     }
   );
-  if (!gov || gov.status !== "formed") return {};
+  if (!gov)
+    return countryId === "FR"
+      ? { europeanGovernmentParty: await loadFrenchEuropeanExecutiveParty(db) }
+      : {};
+  if (gov.status !== "formed") return {};
   const items = gov.governingAgenda?.items;
   // Tallied live from electedOfficials rather than the (removed-from-
   // projection) `gov.seatsByParty` — a write-triggered cache refreshed only

@@ -12,7 +12,10 @@ import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { selectNppBill, buildConditionsSignal } from "../selectNppBill";
-import { processNppBillSponsorship } from "../../turn/npp/billSponsorship";
+import {
+  loadFrenchEuropeanExecutiveParty,
+  processNppBillSponsorship,
+} from "../../turn/npp/billSponsorship";
 import type { NPPContext } from "../../turn/npp/context";
 import type { NPP } from "../../db/types";
 import type { ElectedOfficial } from "../../db/types/officials";
@@ -119,6 +122,7 @@ interface MockDbOptions {
    *  now derives via `tallySeatsByParty` instead of trusting
    *  `governmentFormation.seatsByParty` (a write-triggered cache). */
   electedOfficials?: Array<Record<string, unknown>>;
+  npps?: NPP[];
 }
 
 function makeMockDb(opts: MockDbOptions = {}) {
@@ -135,6 +139,7 @@ function makeMockDb(opts: MockDbOptions = {}) {
     nppAutonomyLevel,
     governmentFormation = null,
     electedOfficials = [],
+    npps = [],
   } = opts;
 
   const billsCollection = {
@@ -178,13 +183,29 @@ function makeMockDb(opts: MockDbOptions = {}) {
       if (name === "organizationMemberships") {
         return {
           find: () => ({
-            toArray: async () => [{ _id: new ObjectId(), countryId: "UK", joinedTurn: 1 }],
+            toArray: async () =>
+              ["UK", "FR"].map((countryId) => ({
+                _id: new ObjectId(),
+                countryId,
+                joinedTurn: 1,
+              })),
           }),
         };
       }
       if (name === "electedOfficials") {
         return {
-          find: () => ({ toArray: async () => electedOfficials }),
+          find: (filter: Record<string, unknown> = {}) => ({
+            toArray: async () =>
+              electedOfficials.filter((official) =>
+                Object.entries(filter).every(([key, value]) => official[key] === value)
+              ),
+          }),
+        };
+      }
+      if (name === "npps") {
+        return {
+          findOne: async (filter: { _id: ObjectId }) =>
+            npps.find((npp) => npp._id.equals(filter._id)) ?? null,
         };
       }
       if (name === "governmentFormations") {
@@ -844,6 +865,26 @@ describe("selectNppBill", () => {
 });
 
 describe("European government decisions", () => {
+  it("lets France's seated NPP president open a Maastricht vote without a formation row", async () => {
+    const npp = makeNpp({ party: "2" });
+    const deputy = makeOfficial(npp._id, "FR", getLowerChamberOfficeType("FR"), "2", 7);
+    const president = makeOfficial(npp._id, "FR", "president", "2", 1);
+    const { db, insertSpy } = makeMockDb({
+      europeanStage: "community",
+      electedOfficials: [deputy, president],
+      npps: [npp],
+    });
+    expect(await loadFrenchEuropeanExecutiveParty(db)).toBe("2");
+    const ctx = makeCtx(db, [deputy, president], new Map([[String(npp._id), npp]]));
+    expect(await processNppBillSponsorship(ctx)).toBe(1);
+    expect(insertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "FR",
+        provisions: [{ type: "european_treaty", treaty: "maastricht", action: "ratify" }],
+      })
+    );
+  });
+
   it.each([
     { name: "NPC government", player: false, pending: false, cap: 0, cooldown: null, expected: 1 },
     {
