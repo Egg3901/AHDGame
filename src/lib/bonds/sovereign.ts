@@ -50,13 +50,19 @@ import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { sovereignCredibilitySpread } from "@/lib/centralBank/marketEffects";
 import {
-  debitPoolForPrimary,
-  monetizeUnsoldSovereignUnits,
   planSovereignMonetization,
   planSovereignUnderwriting,
   readPoolForPrimary,
-  recordSovereignPrimaryFill,
 } from "@/lib/bonds/primaryMarket";
+import {
+  commitSovereignPrimary,
+  loadPrimaryAccounting,
+  primaryDocumentId,
+  primarySettlementExists,
+  type PrimaryAccountingContext,
+} from "./sovereignPrimarySettlement";
+import type { TransitionProjection } from "@/lib/banking/rules/boundary";
+import { treasuryAdvanceMoneyDelta } from "@/lib/moneySupply/rules/assemble";
 import { createNotifications } from "@/lib/notifications";
 import {
   sovereignBondOutstanding,
@@ -200,6 +206,8 @@ export function getBondIssuerDisplayName(
 
 export interface SovereignBondIssueResult {
   countryId: CountryId;
+  requestedAmount: number;
+  unsoldAmount: number;
   issueAmount: number;
   couponRate: number;
   bondId: ObjectId;
@@ -317,6 +325,7 @@ async function issueSovereignBondSeries(
     now: Date;
     issueAmount: number;
     maturityTurns?: BondMaturityTurns;
+    issuanceKey: string;
   }
 ): Promise<SovereignBondIssueResult | null> {
   const { countryId, turn, now, issueAmount } = params;
@@ -326,9 +335,18 @@ async function issueSovereignBondSeries(
   const budgetId = getNationalBudgetId(countryId);
   const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-    db
-      .collection<CentralBank>("centralBanks")
-      .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
+    db.collection<CentralBank>("centralBanks").findOne(
+      { _id: getBankId(countryId) },
+      {
+        projection: {
+          primeRate: 1,
+          chairInfamy: 1,
+          chairMode: 1,
+          chairControlsLocked: 1,
+          chairCharacterId: 1,
+        },
+      }
+    ),
     findPrimaryNationalCorporation(db, countryId),
     loadDemocraticSovereignSpread(db, countryId),
   ]);
@@ -341,7 +359,7 @@ async function issueSovereignBondSeries(
   const primeRate =
     centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
 
-  const { bondDoc, annualCouponCost } = buildSovereignBondDoc({
+  const { bondDoc } = buildSovereignBondDoc({
     countryId,
     currencyCode: resolveCountryCurrencyCode(budget),
     turn,
@@ -356,31 +374,33 @@ async function issueSovereignBondSeries(
     democraticSpreadPp,
   });
 
-  const budgetUpdate = applySovereignDebtAdjustment(budget, bondDoc.totalIssued, annualCouponCost);
-
-  const insertResult = await db.collection<Omit<Bond, "_id">>("bonds").insertOne(bondDoc);
-  await db.collection<FederalBudget>("federalBudget").updateOne(
-    { _id: budgetId },
-    {
-      $set: {
-        debt: budgetUpdate.debt,
-        spending: budgetUpdate.spending,
-        surplus: budgetUpdate.surplus,
-        debtToGdpRatio: budgetUpdate.debtToGdpRatio,
-        creditRating: budgetUpdate.creditRating,
-        updatedAt: now,
-      },
-    }
-  );
-
+  const key = params.issuanceKey;
+  const accounting = await loadPrimaryAccounting(db);
+  const funded = await fundSovereignSeries(db, {
+    key,
+    countryId,
+    turn,
+    now,
+    budget,
+    centralBank,
+    bondDocs: [bondDoc],
+    accounting,
+  });
+  const updatedBudget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: budgetId });
+  const issued = funded[0];
+  if (!issued || !updatedBudget) return null;
   return {
     countryId,
-    issueAmount: bondDoc.totalIssued,
-    couponRate: bondDoc.couponRate,
-    bondId: insertResult.insertedId,
-    newPrincipal: budgetUpdate.debt.principal,
-    newDebtInterest: budgetUpdate.spending.debtInterest,
-    newSurplus: budgetUpdate.surplus,
+    issueAmount: issued.totalIssued,
+    requestedAmount: (issued.requestedUnits ?? 0) * BOND_UNIT_FACE_VALUE,
+    unsoldAmount: (issued.unsoldUnits ?? 0) * BOND_UNIT_FACE_VALUE,
+    couponRate: issued.couponRate,
+    bondId: issued._id,
+    newPrincipal: updatedBudget.debt.principal,
+    newDebtInterest: updatedBudget.spending.debtInterest,
+    newSurplus: updatedBudget.surplus,
   };
 }
 
@@ -409,7 +429,14 @@ export async function issueAdminSovereignBondSeries(
     issueAmount = calculateQuarterlyIssuanceAmount(Math.max(0, -federalSurplus(budget)));
   }
 
-  return issueSovereignBondSeries(db, { countryId, turn, now, issueAmount, maturityTurns });
+  return issueSovereignBondSeries(db, {
+    countryId,
+    turn,
+    now,
+    issueAmount,
+    maturityTurns,
+    issuanceKey: `sovereign-primary:admin:${countryId}:${turn}:${maturityTurns ?? SOVEREIGN_BOND_MATURITY_TURNS}:${faceValue && faceValue > 0 ? faceValue : "quarter-deficit"}`,
+  });
 }
 
 /**
@@ -496,6 +523,7 @@ export async function issueScheduledSovereignBondSeries(
     budgetByCountry.set(countryId, budget);
   }
 
+  const accounting = await loadPrimaryAccounting(db);
   let issuancesCreated = 0;
   const sovereignCountries = configuredCountries.filter((countryId) =>
     budgetByCountry.has(countryId)
@@ -503,6 +531,8 @@ export async function issueScheduledSovereignBondSeries(
   for (const countryId of sovereignCountries) {
     const budget = budgetByCountry.get(countryId);
     if (!budget) continue;
+    const key = `sovereign-primary:scheduled:${countryId}:${turn}`;
+    if (await primarySettlementExists(db, key)) continue;
 
     // Derived, not read: `surplus` is a cache of `revenue.total - spending.total`
     // that drifts intra-turn through every writer's read-modify-write (same
@@ -536,9 +566,18 @@ export async function issueScheduledSovereignBondSeries(
     const budgetId = getNationalBudgetId(countryId);
     const [budgetDoc, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
       db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-      db
-        .collection<CentralBank>("centralBanks")
-        .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
+      db.collection<CentralBank>("centralBanks").findOne(
+        { _id: getBankId(countryId) },
+        {
+          projection: {
+            primeRate: 1,
+            chairInfamy: 1,
+            chairMode: 1,
+            chairControlsLocked: 1,
+            chairCharacterId: 1,
+          },
+        }
+      ),
       findPrimaryNationalCorporation(db, countryId),
       loadDemocraticSovereignSpread(db, countryId),
     ]);
@@ -548,8 +587,6 @@ export async function issueScheduledSovereignBondSeries(
       centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
     const distribution = budgetDoc.sovereignBondProfile ?? SOVEREIGN_RECONCILE_DISTRIBUTION;
 
-    let totalIssued = 0;
-    let totalAnnualCouponCost = 0;
     const bondDocs: Omit<Bond, "_id">[] = [];
 
     // Primary market: the currency's pool underwrites each tranche at par with
@@ -557,12 +594,6 @@ export async function issueScheduledSovereignBondSeries(
     // No pool for the currency (seeds, pre-migration) keeps full placement.
     const poolCurrency: CurrencyCode =
       resolveCountryCurrencyCode(budgetDoc) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
-    const pool = await readPoolForPrimary(db, poolCurrency);
-    let poolCashRemaining = pool ? Math.max(0, pool.cashLocal) : Number.POSITIVE_INFINITY;
-    const appetite = pool?.appetiteByCountry?.[countryId];
-    let requestedUnitsTotal = 0;
-    let placedUnitsTotal = 0;
-
     // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
     // before pool underwriting sees them. Gate off: the same rungs, same order.
     const tranchePlans = consolidateSovereignTranches(
@@ -584,83 +615,20 @@ export async function issueScheduledSovereignBondSeries(
         countryCorporation,
         democraticSpreadPp,
       });
-      const requestedUnits = Math.floor(bondDoc.totalIssued / BOND_UNIT_FACE_VALUE);
-      let placedUnits = requestedUnits;
-      if (pool) {
-        const plan = planSovereignUnderwriting({
-          requestedUnits,
-          poolCashLocal: poolCashRemaining,
-          appetite,
-          pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
-        });
-        placedUnits = plan.placedUnits;
-        if (placedUnits > 0) {
-          const paid = await debitPoolForPrimary(
-            db,
-            poolCurrency,
-            placedUnits,
-            BOND_UNIT_FACE_VALUE,
-            now
-          );
-          if (paid <= 0) placedUnits = 0;
-          poolCashRemaining = Math.max(0, poolCashRemaining - paid);
-        }
-      }
-      bondDoc.totalIssued = placedUnits * BOND_UNIT_FACE_VALUE;
-      bondDoc.publicFloat = placedUnits;
-      bondDoc.requestedUnits = requestedUnits;
-      bondDoc.unsoldUnits = requestedUnits - placedUnits;
-      bondDoc.primaryFillRatio = requestedUnits > 0 ? placedUnits / requestedUnits : 1;
-      requestedUnitsTotal += requestedUnits;
-      placedUnitsTotal += placedUnits;
-
       bondDocs.push(bondDoc);
-      totalIssued += bondDoc.totalIssued;
-      totalAnnualCouponCost += (bondDoc.couponRate / 100) * bondDoc.totalIssued;
-      issuancesCreated++;
     }
-
     if (bondDocs.length > 0) {
-      const inserted = await db.collection<Omit<Bond, "_id">>("bonds").insertMany(bondDocs);
-      if (pool) {
-        const fillRatio = requestedUnitsTotal > 0 ? placedUnitsTotal / requestedUnitsTotal : 1;
-        await recordSovereignPrimaryFill(db, budgetId, fillRatio, turn, now);
-        const unsoldTotal = requestedUnitsTotal - placedUnitsTotal;
-        if (unsoldTotal > 0) {
-          const monetized = await handleSovereignShortfall(db, {
-            countryId,
-            centralBank,
-            budget: budgetDoc,
-            bondDocs,
-            insertedIds: Object.values(inserted.insertedIds),
-            unsoldTotal,
-            requestedTotal: requestedUnitsTotal,
-            turn,
-            now,
-          });
-          totalIssued += monetized.face;
-          totalAnnualCouponCost += monetized.annualCoupon;
-        }
-      }
-
-      const budgetUpdate = applySovereignDebtAdjustment(
-        budgetDoc,
-        totalIssued,
-        totalAnnualCouponCost
-      );
-      await db.collection<FederalBudget>("federalBudget").updateOne(
-        { _id: budgetId },
-        {
-          $set: {
-            debt: budgetUpdate.debt,
-            spending: budgetUpdate.spending,
-            surplus: budgetUpdate.surplus,
-            debtToGdpRatio: budgetUpdate.debtToGdpRatio,
-            creditRating: budgetUpdate.creditRating,
-            updatedAt: now,
-          },
-        }
-      );
+      const funded = await fundSovereignSeries(db, {
+        key,
+        countryId,
+        turn,
+        now,
+        budget: budgetDoc,
+        centralBank,
+        bondDocs,
+        accounting,
+      });
+      issuancesCreated += funded.length;
     }
   }
 
@@ -730,9 +698,18 @@ export async function reconcileSovereignDebt(
   const budgetId = getNationalBudgetId(countryId);
   const [budget, centralBank, countryCorporation, democraticSpreadPp] = await Promise.all([
     db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
-    db
-      .collection<CentralBank>("centralBanks")
-      .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
+    db.collection<CentralBank>("centralBanks").findOne(
+      { _id: getBankId(countryId) },
+      {
+        projection: {
+          primeRate: 1,
+          chairInfamy: 1,
+          chairMode: 1,
+          chairControlsLocked: 1,
+          chairCharacterId: 1,
+        },
+      }
+    ),
     findPrimaryNationalCorporation(db, countryId),
     loadDemocraticSovereignSpread(db, countryId),
   ]);
@@ -1009,38 +986,8 @@ async function handleSovereignShortfall(
   }
 ): Promise<{ face: number; annualCoupon: number }> {
   const bank = args.centralBank;
-  let face = 0;
-  let annualCoupon = 0;
-  if (bank?.chairMode === "npp" && bank.chairControlsLocked !== true) {
-    let gdpBudget = planSovereignMonetization({
-      unsoldUnits: args.unsoldTotal,
-      gdpLocal:
-        args.budget.gdpSmoothed && args.budget.gdpSmoothed > 0
-          ? args.budget.gdpSmoothed
-          : (args.budget.gdp ?? 0),
-      pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
-    }).units;
-    for (let index = 0; index < args.bondDocs.length && gdpBudget > 0; index++) {
-      const doc = args.bondDocs[index]!;
-      const bondId = args.insertedIds[index];
-      const unsold = doc.unsoldUnits ?? 0;
-      if (!bondId || unsold <= 0) continue;
-      const units = Math.min(unsold, gdpBudget);
-      const ok = await monetizeUnsoldSovereignUnits(db, {
-        bondId,
-        bank,
-        units,
-        considerationLocal: units * BOND_UNIT_FACE_VALUE,
-        turn: args.turn,
-        now: args.now,
-      });
-      if (!ok) continue;
-      gdpBudget -= units;
-      face += units * BOND_UNIT_FACE_VALUE;
-      annualCoupon += (doc.couponRate / 100) * units * BOND_UNIT_FACE_VALUE;
-    }
-    return { face, annualCoupon };
-  }
+  const face = 0;
+  const annualCoupon = 0;
 
   if (bank?.chairCharacterId) {
     const chair = await db
@@ -1065,4 +1012,167 @@ async function handleSovereignShortfall(
     }
   }
   return { face, annualCoupon };
+}
+
+/** One durable intent owns the complete ladder, including autonomous funding. */
+async function fundSovereignSeries(
+  db: Db,
+  args: {
+    key: string;
+    countryId: CountryId;
+    turn: number;
+    now: Date;
+    budget: FederalBudget;
+    centralBank: CentralBank | null;
+    bondDocs: Omit<Bond, "_id">[];
+    accounting: PrimaryAccountingContext;
+  }
+): Promise<Bond[]> {
+  if (await primarySettlementExists(db, args.key)) {
+    return db
+      .collection<Bond>("bonds")
+      .find({ _id: { $in: args.bondDocs.map((_, i) => primaryDocumentId(`${args.key}:${i}`)) } })
+      .toArray();
+  }
+  const currency =
+    resolveCountryCurrencyCode(args.budget) ?? COUNTRY_CURRENCY_MAP[args.countryId] ?? "USD";
+  const pool = await readPoolForPrimary(db, currency);
+  let available = Math.max(0, pool?.cashLocal ?? 0);
+  const requested = args.bondDocs.reduce(
+    (sum, doc) => sum + Math.floor(doc.totalIssued / BOND_UNIT_FACE_VALUE),
+    0
+  );
+  let monetaryCapacity =
+    args.centralBank?.chairMode === "npp" && args.centralBank.chairControlsLocked !== true
+      ? planSovereignMonetization({
+          unsoldUnits: requested,
+          gdpLocal: args.budget.gdpSmoothed || args.budget.gdp,
+          pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
+        }).units
+      : 0;
+  let poolCash = 0,
+    monetaryCash = 0,
+    face = 0,
+    annualCoupon = 0,
+    placedByPool = 0;
+  const funded = args.bondDocs.map((doc, index): Bond => {
+    const requestedUnits = Math.floor(doc.totalIssued / BOND_UNIT_FACE_VALUE);
+    const placed = planSovereignUnderwriting({
+      requestedUnits,
+      poolCashLocal: available,
+      appetite: pool?.appetiteByCountry?.[args.countryId],
+      pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
+    }).placedUnits;
+    const monetized = Math.min(requestedUnits - placed, monetaryCapacity);
+    available -= placed * BOND_UNIT_FACE_VALUE;
+    monetaryCapacity -= monetized;
+    poolCash += placed * BOND_UNIT_FACE_VALUE;
+    monetaryCash += monetized * BOND_UNIT_FACE_VALUE;
+    placedByPool += placed;
+    const issuedFace = (placed + monetized) * BOND_UNIT_FACE_VALUE;
+    face += issuedFace;
+    annualCoupon += (issuedFace * doc.couponRate) / 100;
+    return {
+      ...doc,
+      _id: primaryDocumentId(`${args.key}:${index}`),
+      totalIssued: issuedFace,
+      publicFloat: placed,
+      centralBankHoldings: monetized,
+      requestedUnits,
+      unsoldUnits: requestedUnits - placed - monetized,
+      primaryFillRatio: requestedUnits ? placed / requestedUnits : 1,
+      qeSupportRatio: placed + monetized > 0 ? monetized / (placed + monetized) : 0,
+    };
+  });
+  const projections: TransitionProjection[] = funded.map((doc) => ({
+    collection: "bonds",
+    insert: doc as unknown as Record<string, unknown>,
+    note: "Issued sovereign tranche",
+  }));
+  projections.push({
+    collection: "federalBudget",
+    filter: { _id: args.budget._id },
+    update: {
+      $set: {
+        lastPrimaryFillRatio: requested
+          ? Math.round((placedByPool / requested) * 10000) / 10000
+          : 1,
+        lastPrimaryAuctionTurn: args.turn,
+        updatedAt: args.now,
+      },
+    },
+    note: "Primary auction result",
+  });
+  if (monetaryCash > 0)
+    projections.push({
+      collection: "centralBanks",
+      filter: { _id: args.centralBank!._id },
+      update: {
+        $push: {
+          monetaryOperations: {
+            $each: [
+              {
+                type: "qe",
+                turn: args.turn,
+                amount: monetaryCash,
+                moneySupplyDelta: treasuryAdvanceMoneyDelta(
+                  args.budget.treasuryBalance + poolCash,
+                  monetaryCash
+                ),
+                reserveDelta: 0,
+                actorName: "Autonomous chair",
+                reason: "Primary auction funding credited to issuer treasury",
+                createdAt: args.now,
+              },
+            ],
+            $slice: -100,
+          },
+        },
+      },
+      note: "Monetary auction receipt",
+    });
+  await commitSovereignPrimary(
+    db,
+    {
+      key: args.key,
+      countryId: args.countryId,
+      turn: args.turn,
+      currency,
+      budgetId: args.budget._id,
+      poolCash,
+      monetaryCash,
+      centralBankId: args.centralBank?._id,
+      face,
+      annualCoupon,
+      now: args.now,
+    },
+    projections,
+    args.accounting
+  );
+  const refreshed = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: args.budget._id });
+  if (refreshed) {
+    const terms = applySovereignDebtAdjustment(refreshed, 0, 0);
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: args.budget._id },
+      {
+        $set: {
+          "debt.interestRate": terms.debt.interestRate,
+          debtToGdpRatio: terms.debtToGdpRatio,
+          creditRating: terms.creditRating,
+        },
+      }
+    );
+  }
+  const unsold = funded.reduce((sum, doc) => sum + (doc.unsoldUnits ?? 0), 0);
+  if (unsold > 0)
+    await handleSovereignShortfall(db, {
+      ...args,
+      bondDocs: funded,
+      insertedIds: funded.map((doc) => doc._id),
+      unsoldTotal: unsold,
+      requestedTotal: requested,
+    });
+  return funded;
 }

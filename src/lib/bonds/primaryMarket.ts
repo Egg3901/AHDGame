@@ -34,8 +34,14 @@ import {
   corpCapitalToAnchor,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { applySovereignDebtAdjustment, getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
+import {
+  commitSovereignPrimary,
+  loadPrimaryAccounting,
+  primarySettlementExists,
+} from "./sovereignPrimarySettlement";
+import { treasuryAdvanceMoneyDelta } from "@/lib/moneySupply/rules/assemble";
 import { ObjectId as MongoObjectId } from "mongodb";
 
 /** Share of the pool's cash one corporate issue may take at issuance. */
@@ -240,6 +246,7 @@ export async function placeUnsoldBondUnits(
   const placing = bonds.filter((bond) => (bond.unsoldUnits ?? 0) > 0 && !bond.matured);
   if (placing.length === 0) return result;
 
+  const accounting = await loadPrimaryAccounting(db);
   const budgetByCurrency = new Map<CurrencyCode, number>();
   // The pool docs read for the budgets double as the quote snapshot for the
   // pass; each placement's debit is mirrored onto them so later quotes see it.
@@ -266,6 +273,48 @@ export async function placeUnsoldBondUnits(
     );
     const units = Math.min(cap, Math.floor(budget / price));
     if (units <= 0) continue;
+
+    if (bond.issuerType === "sovereign" && bond.countryId) {
+      const key = `sovereign-primary:placement:${bond._id}:${turn}`;
+      if (await primarySettlementExists(db, key)) continue;
+      const paid = Math.round(units * price * 100) / 100;
+      await commitSovereignPrimary(
+        db,
+        {
+          key,
+          countryId: bond.countryId,
+          turn,
+          currency,
+          budgetId: getNationalBudgetId(bond.countryId),
+          poolCash: paid,
+          monetaryCash: 0,
+          face: units * BOND_UNIT_FACE_VALUE,
+          annualCoupon: (units * BOND_UNIT_FACE_VALUE * (bond.couponRate ?? 0)) / 100,
+          now,
+        },
+        [
+          {
+            collection: "bonds",
+            filter: { _id: bond._id, unsoldUnits: { $gte: units } },
+            update: {
+              $inc: {
+                unsoldUnits: -units,
+                publicFloat: units,
+                totalIssued: units * BOND_UNIT_FACE_VALUE,
+              },
+              $set: { updatedAt: now },
+            },
+            note: "Funded units move from unplaced offer to pool inventory",
+          },
+        ],
+        accounting
+      );
+      advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
+      budgetByCurrency.set(currency, budget - paid);
+      result.bondsTouched++;
+      result.unitsPlaced += units;
+      continue;
+    }
 
     const paid = await debitPoolForPrimary(db, currency, units, price, now);
     if (paid <= 0) continue;
@@ -348,52 +397,78 @@ export async function monetizeUnsoldSovereignUnits(
   }
 ): Promise<boolean> {
   if (args.units <= 0) return false;
+  const key = `sovereign-primary:placement:${args.bondId}:${args.turn}`;
+  if (await primarySettlementExists(db, key)) return true;
+  const bond = await db.collection<Bond>("bonds").findOne({ _id: args.bondId });
+  if (!bond?.countryId || args.units > (bond.unsoldUnits ?? 0)) return false;
+  const currency = bondPoolCurrency(bond);
   const face = args.units * BOND_UNIT_FACE_VALUE;
-  const claim = await db.collection<Bond>("bonds").updateOne(
-    { _id: args.bondId, unsoldUnits: { $gte: args.units } },
+  const accounting = await loadPrimaryAccounting(db);
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ _id: getNationalBudgetId(bond.countryId) }, { projection: { treasuryBalance: 1 } });
+  if (!budget) return false;
+  await commitSovereignPrimary(
+    db,
     {
-      $inc: { unsoldUnits: -args.units, centralBankHoldings: args.units, totalIssued: face },
-      $set: { updatedAt: args.now },
-    }
-  );
-  if (claim.modifiedCount === 0) return false;
-  const refreshed = await db
-    .collection<Bond>("bonds")
-    .findOne({ _id: args.bondId }, { projection: { totalIssued: 1, centralBankHoldings: 1 } });
-  const totalUnits = Math.max(1, (refreshed?.totalIssued ?? face) / BOND_UNIT_FACE_VALUE);
-  const qeSupportRatio = Math.min(
-    1,
-    Math.max(0, (refreshed?.centralBankHoldings ?? args.units) / totalUnits)
-  );
-  await db.collection<Bond>("bonds").updateOne({ _id: args.bondId }, { $set: { qeSupportRatio } });
-  await db.collection<CentralBank>("centralBanks").updateOne(
-    { _id: args.bank._id },
-    {
-      $inc: {
-        externalBroadMoney: args.considerationLocal,
-        netMoneyCreatedLifetime: args.considerationLocal,
-      },
-      $set: { lastMonetaryOperationTurn: args.turn, updatedAt: args.now },
-      $push: {
-        monetaryOperations: {
-          $each: [
-            {
-              type: "qe" as const,
-              turn: args.turn,
-              amount: args.considerationLocal,
-              moneySupplyDelta: args.considerationLocal,
-              reserveDelta: 0,
-              bondId: args.bondId.toString(),
-              units: args.units,
-              actorName: "Autonomous chair",
-              reason: "Primary auction shortfall: bank took the unsold tranche at par",
-              createdAt: args.now,
-            },
-          ],
-          $slice: -100,
+      key,
+      countryId: bond.countryId,
+      turn: args.turn,
+      currency,
+      budgetId: getNationalBudgetId(bond.countryId),
+      poolCash: 0,
+      monetaryCash: args.considerationLocal,
+      centralBankId: args.bank._id,
+      face,
+      annualCoupon: (face * (bond.couponRate ?? 0)) / 100,
+      now: args.now,
+    },
+    [
+      {
+        collection: "bonds",
+        filter: { _id: bond._id, unsoldUnits: { $gte: args.units } },
+        update: {
+          $inc: { unsoldUnits: -args.units, centralBankHoldings: args.units, totalIssued: face },
+          $set: {
+            qeSupportRatio:
+              ((bond.centralBankHoldings ?? 0) + args.units) /
+              Math.max(1, (bond.totalIssued + face) / BOND_UNIT_FACE_VALUE),
+            updatedAt: args.now,
+          },
         },
+        note: "Central-bank ownership of funded sovereign units",
       },
-    }
+      {
+        collection: "centralBanks",
+        filter: { _id: args.bank._id },
+        update: {
+          $push: {
+            monetaryOperations: {
+              $each: [
+                {
+                  type: "qe",
+                  turn: args.turn,
+                  amount: args.considerationLocal,
+                  moneySupplyDelta: treasuryAdvanceMoneyDelta(
+                    budget.treasuryBalance,
+                    args.considerationLocal
+                  ),
+                  reserveDelta: 0,
+                  bondId: args.bondId.toString(),
+                  units: args.units,
+                  actorName: "Autonomous chair",
+                  reason: "Primary auction funding credited to issuer treasury",
+                  createdAt: args.now,
+                },
+              ],
+              $slice: -100,
+            },
+          },
+        },
+        note: "Monetary financing receipt",
+      },
+    ],
+    accounting
   );
   return true;
 }
@@ -449,24 +524,5 @@ export async function settlePlacementProceeds(
       .collection("corporations")
       .updateOne({ _id: corp._id }, { $inc: { liquidCapital: local }, $set: { updatedAt: now } });
   }
-  for (const [countryId, row] of placement.sovereignFaceByCountry) {
-    if (!(row.face > 0)) continue;
-    const budgetId = getNationalBudgetId(countryId);
-    const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
-    if (!budget) continue;
-    const update = applySovereignDebtAdjustment(budget, row.face, row.annualCoupon);
-    await db.collection<FederalBudget>("federalBudget").updateOne(
-      { _id: budgetId },
-      {
-        $set: {
-          debt: update.debt,
-          spending: update.spending,
-          surplus: update.surplus,
-          debtToGdpRatio: update.debtToGdpRatio,
-          creditRating: update.creditRating,
-          updatedAt: now,
-        },
-      }
-    );
-  }
+  // Sovereign proceeds and obligations already settled atomically with units.
 }

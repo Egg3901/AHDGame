@@ -1,0 +1,310 @@
+/** Funded sovereign issues conserve cash, ownership and debt across retries. */
+import { describe, expect, it, vi } from "vitest";
+import { ObjectId, type Db } from "mongodb";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { resumeSettlement } from "@/lib/banking/settlementJournal";
+import {
+  issueAdminSovereignBondSeries,
+  issueScheduledSovereignBondSeries,
+  reconcileSovereignDebt,
+} from "./sovereign";
+import {
+  placeUnsoldBondUnits,
+  settlePlacementProceeds,
+  monetizeUnsoldSovereignUnits,
+} from "./primaryMarket";
+
+vi.mock("@/lib/bonds/marketPool", async (original) => ({
+  ...(await original<typeof import("@/lib/bonds/marketPool")>()),
+  loadBondQuote: vi.fn().mockResolvedValue({ askPerUnit: 1020 }),
+}));
+
+const TURN = 240;
+const NOW = new Date("2026-09-30T00:00:00Z");
+function world(poolCash = 1_000_000): InMemoryDb {
+  const db = createInMemoryDb();
+  db.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
+  db.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
+  db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1 }]);
+  db.seed("federalBudget", [
+    {
+      _id: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      revenue: { total: 600_000 },
+      spending: { total: 1_000_000, debtInterest: 0, byCategory: {}, stateGrants: 0 },
+      debt: { principal: 0, interestRate: 0.05, ceiling: 100_000_000 },
+      treasuryBalance: 100,
+      surplus: -400_000,
+      gdp: 1_000_000,
+      creditRating: "AAA",
+    },
+  ]);
+  db.seed("centralBanks", [
+    {
+      _id: "US",
+      countryId: "US",
+      primeRate: 5,
+      externalBroadMoney: 500_000,
+      netMoneyCreatedLifetime: 0,
+    },
+  ]);
+  db.seed("bondMarketPools", [{ _id: "USD", cashLocal: poolCash, targetCashLocal: 0 }]);
+  return db;
+}
+function budget(db: InMemoryDb) {
+  return db.collection("federalBudget").docs[0];
+}
+function pool(db: InMemoryDb) {
+  return db.collection("bondMarketPools").docs[0];
+}
+function cash(db: InMemoryDb) {
+  return Number(budget(db).treasuryBalance) + Number(pool(db)?.cashLocal ?? 0);
+}
+function principal(db: InMemoryDb) {
+  return (budget(db).debt as { principal: number }).principal;
+}
+function face(db: InMemoryDb) {
+  return db.collection("bonds").docs.reduce((n, b) => n + Number(b.totalIssued), 0);
+}
+function assertLedger(db: InMemoryDb) {
+  for (const row of db.collection("ledgerEntries").docs) {
+    const legs = row.legs as { anchorAmount: number }[];
+    expect(legs.reduce((n, l) => n + l.anchorAmount, 0)).toBeCloseTo(0);
+  }
+}
+
+describe("sovereign primary settlement", () => {
+  it("conserves funded scheduled cash and retries without another unit or debt", async () => {
+    const db = world();
+    const before = cash(db);
+    expect(await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW)).toBe(3);
+    expect(cash(db)).toBe(before);
+    expect(budget(db).treasuryBalance).toBe(100_100);
+    expect(principal(db)).toBe(100_000);
+    expect(face(db)).toBe(100_000);
+    expect(await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW)).toBe(0);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(100_000);
+    expect(db.collection("ledgerEntries").docs).toHaveLength(1);
+    assertLedger(db);
+  });
+
+  it("concurrent identical admin requests cannot issue or collect twice", async () => {
+    const db = world();
+    const before = cash(db);
+    const input = {
+      countryId: "US" as const,
+      turn: TURN,
+      now: NOW,
+      faceValue: 25_000,
+      useQuarterDeficit: false,
+    };
+    const attempts = await Promise.allSettled([
+      issueAdminSovereignBondSeries(db as unknown as Db, input),
+      issueAdminSovereignBondSeries(db as unknown as Db, input),
+    ]);
+    expect(attempts.some((result) => result.status === "fulfilled")).toBe(true);
+    await issueAdminSovereignBondSeries(db as unknown as Db, input);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(25_000);
+    expect(face(db)).toBe(25_000);
+    expect(db.collection("bonds").docs).toHaveLength(1);
+  });
+
+  it("rollover financing preserves the old holders until ordinary maturity", async () => {
+    const db = world();
+    const holder = new ObjectId();
+    await db.collection("federalBudget").updateOne(
+      { _id: "federal" },
+      {
+        $set: {
+          "spending.total": 600_000,
+          surplus: 0,
+          "debt.principal": 100_000,
+        },
+      }
+    );
+    const id = new ObjectId();
+    db.seed("bonds", [
+      {
+        _id: id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        totalIssued: 100_000,
+        publicFloat: 60,
+        holders: [{ holderType: "character", holderId: holder, units: 40 }],
+        matured: false,
+        defaulted: false,
+        issuedAtTurn: 192,
+        maturityTurn: 245,
+        couponRate: 5,
+      },
+    ]);
+    const before = cash(db);
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(200_000);
+    expect(face(db)).toBe(200_000);
+    expect((await db.collection("bonds").findOne({ _id: id }))?.holders).toEqual([
+      { holderType: "character", holderId: holder, units: 40 },
+    ]);
+  });
+
+  it("funds admin issuance once and preserves both cash sides", async () => {
+    const db = world();
+    const before = cash(db);
+    const input = {
+      countryId: "US" as const,
+      turn: TURN,
+      now: NOW,
+      faceValue: 25_000,
+      useQuarterDeficit: false,
+    };
+    const first = await issueAdminSovereignBondSeries(db as unknown as Db, input);
+    const second = await issueAdminSovereignBondSeries(db as unknown as Db, input);
+    expect(second?.bondId).toEqual(first?.bondId);
+    expect(first?.issueAmount).toBe(25_000);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(25_000);
+    expect(budget(db).treasuryBalance).toBe(25_100);
+    expect(face(db)).toBe(25_000);
+    assertLedger(db);
+  });
+
+  it.each([0, 10_000])("books only paid face with %i of pool cash", async (poolCash) => {
+    const db = world(poolCash);
+    const before = cash(db);
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(face(db));
+    expect(principal(db)).toBeLessThanOrEqual(poolCash);
+    expect(Number(budget(db).treasuryBalance) - 100).toBe(principal(db));
+    expect(db.collection("bonds").docs.reduce((n, b) => n + Number(b.unsoldUnits), 0)).toBe(
+      100 - face(db) / 1000
+    );
+  });
+
+  it("does not invent a funded pool when the currency has none", async () => {
+    const db = world();
+    await db.collection("bondMarketPools").deleteMany({});
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW);
+    expect(face(db)).toBe(0);
+    expect(principal(db)).toBe(0);
+    expect(budget(db).treasuryBalance).toBe(100);
+  });
+
+  it("mints autonomous financing into the treasury only", async () => {
+    const db = world(0);
+    await db.collection("centralBanks").updateOne({ _id: "US" }, { $set: { chairMode: "npp" } });
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW);
+    expect(principal(db)).toBe(20_000);
+    expect(face(db)).toBe(20_000);
+    expect(budget(db).treasuryBalance).toBe(20_100);
+    expect(db.collection("centralBanks").docs[0].externalBroadMoney).toBe(500_000);
+    expect(db.collection("centralBanks").docs[0].netMoneyCreatedLifetime).toBe(20_000);
+    expect(db.collection("bonds").docs.reduce((n, b) => n + Number(b.centralBankHoldings), 0)).toBe(
+      20
+    );
+    assertLedger(db);
+  });
+
+  it("later unsold placement credits ask proceeds but books face only", async () => {
+    const db = world(100_000);
+    const before = cash(db);
+    const id = new ObjectId();
+    db.seed("bonds", [
+      {
+        _id: id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        totalIssued: 0,
+        publicFloat: 0,
+        unsoldUnits: 500,
+        requestedUnits: 500,
+        couponRate: 5,
+        marketPrice: 1,
+        matured: false,
+        defaulted: false,
+        issuedAtTurn: TURN - 1,
+      },
+    ]);
+    const placed = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
+    await settlePlacementProceeds(db as unknown as Db, placed, new Map([["USD", 1]]), NOW);
+    expect(placed.unitsPlaced).toBe(9);
+    expect(cash(db)).toBe(before);
+    expect(budget(db).treasuryBalance).toBe(9280);
+    expect(principal(db)).toBe(9000);
+    expect(face(db)).toBe(9000);
+    expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(9000);
+  });
+
+  it.each([
+    { collection: "bondMarketPools", op: "updateOne" as const, onCall: 1, afterWrite: true },
+    { collection: "federalBudget", op: "updateOne" as const, onCall: 1, afterWrite: true },
+    { collection: "federalBudget", op: "updateOne" as const, onCall: 2, afterWrite: true },
+    { collection: "bonds", op: "insertOne" as const, onCall: 1, afterWrite: true },
+  ])("recovers exactly once after $collection $op #$onCall", async (fault) => {
+    const db = world();
+    const before = cash(db);
+    const broken = withInjectedCrash(db, fault);
+    await expect(issueScheduledSovereignBondSeries(broken.db, TURN, NOW)).rejects.toThrow();
+    broken.disarm();
+    expect(
+      (await resumeSettlement(db as unknown as Db, "sovereign-primary:scheduled:US:240")).status
+    ).toBe("applied");
+    expect(await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, NOW)).toBe(0);
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(100_000);
+    expect(face(db)).toBe(100_000);
+    expect(budget(db).treasuryBalance).toBe(100_100);
+    assertLedger(db);
+  });
+
+  it("historical debt securitization stays cash neutral", async () => {
+    const db = world();
+    await db
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { "debt.principal": 100_000 } });
+    const before = cash(db);
+    await reconcileSovereignDebt(db as unknown as Db, { countryId: "US", turn: TURN, now: NOW });
+    expect(cash(db)).toBe(before);
+    expect(principal(db)).toBe(100_000);
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
+  });
+
+  it("standalone monetization owns cash, debt and units under one key", async () => {
+    const db = world(0);
+    const id = new ObjectId();
+    db.seed("bonds", [
+      {
+        _id: id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        totalIssued: 0,
+        unsoldUnits: 10,
+        centralBankHoldings: 0,
+        couponRate: 5,
+      },
+    ]);
+    const args = {
+      bondId: id,
+      bank: { _id: "US" as const },
+      units: 2,
+      considerationLocal: 2000,
+      turn: TURN,
+      now: NOW,
+    };
+    expect(await monetizeUnsoldSovereignUnits(db as unknown as Db, args)).toBe(true);
+    expect(await monetizeUnsoldSovereignUnits(db as unknown as Db, args)).toBe(true);
+    expect(budget(db).treasuryBalance).toBe(2100);
+    expect(principal(db)).toBe(2000);
+    expect(db.collection("centralBanks").docs[0].externalBroadMoney).toBe(500000);
+  });
+});

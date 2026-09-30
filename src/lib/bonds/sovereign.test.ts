@@ -779,7 +779,10 @@ describe("issueScheduledSovereignBondSeries", () => {
       }
     );
 
-    db.collectionMocks["federalBudget"]!.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks["federalBudget"]!.updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
 
     db.collectionMocks["centralBanks"] = db.collection("centralBanks") as ReturnType<
       typeof db.collection
@@ -818,8 +821,9 @@ describe("issueScheduledSovereignBondSeries", () => {
       }
     );
 
-    db.collectionMocks["bonds"]!.insertMany.mockResolvedValue({ insertedIds: {} });
+    db.collectionMocks["bonds"]!.insertOne.mockResolvedValue({ insertedIds: {} });
 
+    db.collection("bondMarketPools").findOne.mockResolvedValue({ cashLocal: 1e18 });
     return { db, budget };
   }
 
@@ -836,9 +840,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
     expect(count).toBe(3); // three tranches
 
-    const insertCalls = db.collectionMocks["bonds"]!.insertMany.mock.calls;
+    const insertCalls = db.collectionMocks["bonds"]!.insertOne.mock.calls;
     expect(insertCalls.length).toBeGreaterThanOrEqual(1);
-    const bondDocs = insertCalls[0][0] as Omit<Bond, "_id">[];
+    const bondDocs = insertCalls.map(([doc]) => doc as Omit<Bond, "_id">);
     expect(bondDocs).toHaveLength(3);
 
     const byMaturity = Object.fromEntries(bondDocs.map((b) => [b.maturityTurns, b]));
@@ -858,12 +862,13 @@ describe("issueScheduledSovereignBondSeries", () => {
       Math.floor((225_000_000_000 * 0.4) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE
     );
 
-    // Single budget update despite 3 tranches
-    expect(db.collectionMocks["federalBudget"]!.updateOne).toHaveBeenCalledTimes(1);
-    const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
-    expect(updateCall[0]).toEqual({ _id: budget._id });
-    expect(updateCall[1]).toHaveProperty("$set.debt");
-    expect(updateCall[1]).toHaveProperty("$set.spending");
+    // One obligation projection covers all tranches; cash has its own journal leg.
+    const debtWrites = db.collectionMocks["federalBudget"]!.updateOne.mock.calls.filter(
+      ([, update]) => update.$inc?.["debt.principal"] !== undefined
+    );
+    expect(debtWrites).toHaveLength(1);
+    expect(debtWrites[0][0]).toEqual(expect.objectContaining({ _id: budget._id }));
+    expect(debtWrites[0][1].$inc["debt.principal"]).toBe(225_000_000_000);
   });
 
   it("issues scheduled tranches for every configured country with a national budget", async () => {
@@ -884,9 +889,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     };
     expect(findQuery._id.$in).toContain(getNationalBudgetId(COUNTRY_CONFIGS.DE.id));
 
-    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls.flatMap(
-      ([docs]) => docs as Omit<Bond, "_id">[]
-    );
+    const bondDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.flatMap(([doc]) => [
+      doc as Omit<Bond, "_id">,
+    ]);
     expect(bondDocs.filter((bond) => bond.countryId === COUNTRY_CONFIGS.US.id)).toHaveLength(3);
     const deBondDocs = bondDocs.filter((bond) => bond.countryId === COUNTRY_CONFIGS.DE.id);
     expect(deBondDocs).toHaveLength(3);
@@ -895,7 +900,7 @@ describe("issueScheduledSovereignBondSeries", () => {
     const updatedBudgetIds = db.collectionMocks["federalBudget"]!.updateOne.mock.calls.map(
       ([filter]) => (filter as { _id: string })._id
     );
-    expect(updatedBudgetIds).toEqual([
+    expect([...new Set(updatedBudgetIds)]).toEqual([
       getNationalBudgetId(COUNTRY_CONFIGS.US.id),
       getNationalBudgetId(COUNTRY_CONFIGS.DE.id),
     ]);
@@ -910,9 +915,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     });
     const { db } = setupScheduledMocks({ budgets: [frBudget] });
     await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
-    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls.flatMap(
-      ([docs]) => docs as Omit<Bond, "_id">[]
-    );
+    const bondDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.flatMap(([doc]) => [
+      doc as Omit<Bond, "_id">,
+    ]);
     expect(bondDocs).toHaveLength(3);
     expect(bondDocs.every((bond) => bond.currencyCode === "EUR")).toBe(true);
     expect(bondDocs.reduce((sum, bond) => sum + bond.totalIssued, 0)).toBeGreaterThan(0);
@@ -944,10 +949,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     const { db } = setupScheduledMocks({ primeRate: 5.0 });
     await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
 
-    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls[0][0] as Omit<
-      Bond,
-      "_id"
-    >[];
+    const bondDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.map(
+      ([doc]) => doc as Omit<Bond, "_id">
+    );
     const byMaturity = Object.fromEntries(bondDocs.map((b) => [b.maturityTurns, b]));
 
     expect(byMaturity[48].couponRate).toBe(5.0); // +0pp
@@ -966,7 +970,7 @@ describe("issueScheduledSovereignBondSeries", () => {
     });
     const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
     expect(count).toBe(0);
-    expect(db.collectionMocks["bonds"]!.insertMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["federalBudget"]!.updateOne).not.toHaveBeenCalled();
   });
 
@@ -985,7 +989,7 @@ describe("issueScheduledSovereignBondSeries", () => {
     const { db } = setupScheduledMocks({ budget });
     const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
     expect(count).toBe(0);
-    expect(db.collectionMocks["bonds"]!.insertMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
   });
 
   it("respects a custom sovereignBondProfile when set on the budget", async () => {
@@ -996,10 +1000,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
     expect(count).toBe(2); // only 48 and 96 tranches
 
-    const bondDocs = db.collectionMocks["bonds"]!.insertMany.mock.calls[0][0] as Omit<
-      Bond,
-      "_id"
-    >[];
+    const bondDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.map(
+      ([doc]) => doc as Omit<Bond, "_id">
+    );
     expect(bondDocs).toHaveLength(2);
     const maturities = bondDocs.map((b) => b.maturityTurns).sort((a, b) => a - b);
     expect(maturities).toEqual([48, 96]);
@@ -1029,9 +1032,9 @@ describe("issueScheduledSovereignBondSeries", () => {
     }
 
     function issuedDocs(db: ReturnType<typeof createMockDb>): Omit<Bond, "_id">[] {
-      return db.collectionMocks["bonds"]!.insertMany.mock.calls.flatMap(
-        ([docs]) => docs as Omit<Bond, "_id">[]
-      );
+      return db.collectionMocks["bonds"]!.insertOne.mock.calls.flatMap(([doc]) => [
+        doc as Omit<Bond, "_id">,
+      ]);
     }
 
     it("keeps the historical ladder when the gate is absent", async () => {
@@ -1089,10 +1092,10 @@ describe("issueScheduledSovereignBondSeries", () => {
 
     await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
 
-    const insertCalls = db.collectionMocks["bonds"]!.insertMany.mock.calls;
-    const issuedCountries = insertCalls.flatMap((c) =>
-      (c[0] as Array<{ countryId?: string }>).map((b) => b.countryId)
-    );
+    const insertCalls = db.collectionMocks["bonds"]!.insertOne.mock.calls;
+    const issuedCountries = insertCalls.flatMap((c) => [
+      (c[0] as { countryId?: string }).countryId,
+    ]);
     expect(issuedCountries).toContain("US");
     expect(issuedCountries).not.toContain("DD");
   });
