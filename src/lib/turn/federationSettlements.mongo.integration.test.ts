@@ -1,10 +1,11 @@
-import { MongoClient, ObjectId } from "mongodb";
+import { MongoClient, ObjectId, type CommandStartedEvent } from "mongodb";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { openDefaultFederationPoliticalProposal } from "@/lib/world/succession/defaultProposal";
 import { recordFederationRatifications } from "@/lib/world/succession/recordRatifications";
 import { processLegacyFederationServiceTurn } from "@/lib/world/succession/legacyServiceTurn";
 import { processRatifiedFederationSettlements } from "./federationSettlements";
+import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
@@ -177,6 +178,71 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       defaulted: false,
       currencyCode: "CSK",
     });
+  });
+
+  it("keeps activation below 140 commands with one hundred protected residents", async () => {
+    const db = client.db(databaseName);
+    await db.collection("characters").insertMany(
+      Array.from({ length: 99 }, () => ({
+        _id: new ObjectId(),
+        countryId: "CS",
+        homeState: "CS_SVK",
+        cash: 50,
+        currentOffice: null,
+      }))
+    );
+    commands = 0;
+    expect(
+      await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
+    ).toBe(1);
+    const activationCommands = commands;
+    expect(activationCommands).toBeLessThanOrEqual(140);
+    expect(
+      await db.collection("characters").countDocuments({
+        cash: 50,
+        federationPendingResidenceId: "1991-default:cs-1991-default:1",
+      })
+    ).toBe(100);
+    expect(await db.collection("federationResidentHolds").countDocuments({})).toBe(100);
+    expect(
+      await db
+        .collection("federationRelocations")
+        .countDocuments({ kind: "resident", status: "pending-choice" })
+    ).toBe(100);
+    console.info(
+      `Federation replica-set qualification: 100-resident activation=${activationCommands} commands`
+    );
+  });
+
+  it("continues an ordinary cursor under the transaction deadline without illegal maxTimeMS", async () => {
+    const db = client.db(databaseName);
+    await db
+      .collection("characters")
+      .insertOne({ _id: new ObjectId(), countryId: "CS", homeState: "CS_SVK" });
+    const observed: Array<{ name: string; maxTimeMS: unknown }> = [];
+    const observe = (event: CommandStartedEvent) => {
+      if (event.commandName === "find" || event.commandName === "getMore")
+        observed.push({ name: event.commandName, maxTimeMS: event.command.maxTimeMS });
+    };
+    client.on("commandStarted", observe);
+    try {
+      await runRequiredTransaction(
+        async (session) => {
+          const rows = await db
+            .collection("characters")
+            .find({}, { session, batchSize: 1 })
+            .toArray();
+          expect(rows).toHaveLength(2);
+        },
+        { client }
+      );
+    } finally {
+      client.off("commandStarted", observe);
+    }
+    expect(observed.find((event) => event.name === "find")?.maxTimeMS).toBeGreaterThan(0);
+    const continuations = observed.filter((event) => event.name === "getMore");
+    expect(continuations.length).toBeGreaterThan(0);
+    expect(continuations.every((event) => event.maxTimeMS == null)).toBe(true);
   });
 
   it("keeps an individual successor's arrears with that successor on recovery", async () => {
