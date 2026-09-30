@@ -21,6 +21,8 @@ export interface FederationPublicationPlan {
   residencePlans: LiveSettlementSnapshot["residencePlans"];
   privateFirmPlans: LiveSettlementSnapshot["privateFirmPlans"];
   fiscalShares: LiveSettlementSnapshot["fiscalShares"];
+  sourceResidents: LiveSettlementSnapshot["residents"];
+  sourceFirms: LiveSettlementSnapshot["firms"];
 }
 
 export function buildFederationPublicationPlan(
@@ -54,7 +56,15 @@ export function buildFederationPublicationPlan(
       activationPlan.successorEntities.length +
         (activationPlan.sourceEntity.status === "dissolved" ? 0 : 1) ||
     fiscalShares.filter((share) => share.kind === "legacy-administration").length !==
-      (activationPlan.sourceEntity.status === "dissolved" ? 1 : 0)
+      (activationPlan.sourceEntity.status === "dissolved" ? 1 : 0) ||
+    privateFirmPlans.length !== snapshot.firms.length ||
+    privateFirmPlans.some(
+      (firm) => !snapshot.firms.some((source) => source.corporationId === firm.corporationId)
+    ) ||
+    residencePlans.some(
+      (resident) =>
+        !snapshot.residents.some((source) => source.characterId === resident.characterId)
+    )
   )
     throw new Error("Federation publication inventory disagrees with approved entities");
   const receipt: FederationSettlementApplicationRecord = {
@@ -84,5 +94,7 @@ export function buildFederationPublicationPlan(
     residencePlans,
     privateFirmPlans,
     fiscalShares,
+    sourceResidents: snapshot.residents,
+    sourceFirms: snapshot.firms,
   };
 }

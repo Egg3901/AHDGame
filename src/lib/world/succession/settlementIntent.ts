@@ -10,6 +10,8 @@ import { loadPersistedFederationApproval } from "./ratificationStore";
 import { stageFederationFacilityClaims } from "./facilityClaimLedger";
 import { loadLiveSuccessionResidents } from "./loadLiveResidents";
 import { loadLivePrivateSuccessionFirms } from "./loadLivePrivateFirms";
+import type { SuccessionResident } from "./rules/residency";
+import type { PrivateSuccessionFirm } from "./rules/privateFacilities";
 import {
   planLiveFederationStateTransfers,
   type FederationStateTransferPlan,
@@ -46,6 +48,8 @@ export interface LiveSettlementSnapshot {
   privateFirmPlans: ReturnType<typeof planPrivateFirmSuccession>;
   fiscalShares: ReturnType<typeof planSuccessionFiscalShares>;
   stateTransfers: FederationStateTransferPlan[];
+  residents: SuccessionResident[];
+  firms: PrivateSuccessionFirm[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -197,6 +201,8 @@ export async function buildLiveFederationSettlementSnapshot(input: {
     privateFirmPlans,
     fiscalShares,
     stateTransfers,
+    residents,
+    firms,
   };
 }
 
