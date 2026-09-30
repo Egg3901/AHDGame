@@ -1,131 +1,203 @@
 import { describe, expect, it } from "vitest";
+import type { LivingConflictState } from "./types";
 import {
   applyConflictOutcome,
   evaluateConflictTransitions,
   normalizeConflictState,
-  scheduledPressureDeltas,
 } from "./engine";
-import { PANDEMIC_DEF } from "./defs/pandemic";
+import { PANDEMIC_DEF as def } from "./defs/pandemic";
+import {
+  advancePandemicState,
+  pandemicResponseOutcome,
+  pandemicVaccineReady,
+  pandemicMortality,
+  pandemicPoliticalEffects,
+  pandemicParticipants,
+  pandemicOpeningYear,
+} from "./rules/pandemic";
+import { advanceCohort } from "@/lib/demographics/cohortFlows";
 
-function stateAt(phaseKey: string, tracks: Record<string, number> = {}) {
-  const phase = PANDEMIC_DEF.phases.find((candidate) => candidate.key === phaseKey);
-  if (!phase) throw new Error(`Unknown pandemic phase: ${phaseKey}`);
-  return normalizeConflictState(PANDEMIC_DEF, {
-    defKey: PANDEMIC_DEF.key,
+const response = def.phases[0].events[0].response!;
+const options = Object.values(response.decisionTrees).flatMap((n) => n?.options ?? []);
+function state(tracks: Record<string, number> = {}, phaseLevel = 1) {
+  return normalizeConflictState(def, {
+    defKey: "pandemic",
     hasOpened: true,
-    openedYear: 2019,
-    phaseLevel: phase.level,
+    phaseLevel,
+    openedYear: 2027,
     tracks,
   });
 }
-
-function outcome(id: string) {
-  for (const phase of PANDEMIC_DEF.phases) {
-    for (const event of phase.events) {
-      const found = event.response?.outcomes.find((candidate) => candidate.outcomeId === id);
-      if (found) return found;
+function run(strategy: "cooperation" | "delay" | "inaction" | "nationalism" | "relapse") {
+  let s = state();
+  const events: Array<{ turn: number; transition: string }> = [];
+  let firstVaccine: number | null = null;
+  for (let turn = 1; turn <= 768; turn++) {
+    s = { ...s, totalTurns: turn, phaseTurns: s.phaseTurns + 1 };
+    if (turn % 12 === 0) {
+      let chosen = [
+        "restrict",
+        "targeted_controls",
+        "research_pool",
+        "expand_manufacturing",
+        "covax",
+      ];
+      if (turn > 144)
+        chosen = ["targeted_controls", "covax", "covax", "expand_manufacturing", "research_pool"];
+      if (
+        strategy === "inaction" ||
+        (strategy === "delay" && turn < 120) ||
+        (strategy === "relapse" && turn > 288 && turn < 672)
+      )
+        chosen = Array<string>(5).fill("defer");
+      if (strategy === "nationalism")
+        chosen = [
+          "targeted_controls",
+          "domestic_priority",
+          "domestic_priority",
+          "research_pool",
+          "expand_manufacturing",
+        ];
+      const scores: Record<string, number> = {};
+      for (const id of chosen) {
+        const option = options.find((o) => o.optionId === id)!;
+        for (const [key, value] of Object.entries(option.responseScores ?? {}))
+          scores[key] = (scores[key] ?? 0) + value;
+      }
+      s = applyConflictOutcome(def, s, pandemicResponseOutcome(s, scores, 5, response.outcomes[0]));
     }
+    s = advancePandemicState(s);
+    if (pandemicVaccineReady(s) && firstVaccine === null) firstVaccine = turn;
+    const result = evaluateConflictTransitions(def, s, 2027 + turn / 48);
+    s = result.state;
+    if (result.appliedTransitionKey) events.push({ turn, transition: result.appliedTransitionKey });
+    for (const value of Object.values(s.tracks ?? {})) expect(value).toBeGreaterThanOrEqual(0);
+    for (const value of Object.values(s.tracks ?? {})) expect(value).toBeLessThanOrEqual(100);
   }
-  throw new Error(`Unknown pandemic outcome: ${id}`);
+  return { s, events, firstVaccine };
 }
 
-describe("pandemic living conflict", () => {
-  it("preserves the stored definition key and phase levels", () => {
-    const legacy = normalizeConflictState(PANDEMIC_DEF, {
-      defKey: "pandemic",
-      hasOpened: true,
-      phaseLevel: 3,
-      openedYear: 2020,
-    });
-
-    expect(PANDEMIC_DEF.key).toBe("pandemic");
-    expect(PANDEMIC_DEF.phases.map((phase) => [phase.key, phase.level])).toEqual([
-      ["emergence", 1],
-      ["outbreak", 2],
-      ["pandemic", 3],
-      ["containment", 4],
-      ["endemic", 5],
-    ]);
-    expect(legacy.tracks).toMatchObject({ transmission: 28, healthCapacity: 68, immunity: 0 });
-    expect(PANDEMIC_DEF.participantFallbacks).toMatchObject({
-      CN: ["IN", "JP"],
-      US: ["UK", "DE", "FR"],
-    });
+describe("pandemic mechanics", () => {
+  it("normalizes stored keys and levels without resetting observed disease", () => {
+    expect(def.phases.map((p) => p.level)).toEqual([1, 2, 3, 4, 5]);
+    const legacy = state({ transmission: 100, healthCapacity: 68, immunity: 28 }, 2);
+    expect(legacy.tracks).toMatchObject({ transmission: 100, researchInvestment: 0 });
+    const next = advancePandemicState(legacy);
+    expect(next.campaign!.consequences.casualties).toBeGreaterThan(0);
+    expect(evaluateConflictTransitions(def, next, 2032).state.phaseLevel).toBe(3);
   });
-
-  it("allows surveillance and containment to stop the first cluster", () => {
-    const coordinated = applyConflictOutcome(
-      PANDEMIC_DEF,
-      stateAt("emergence", { transmission: 28, surveillance: 48 }),
-      outcome("contained_cluster")
-    );
-    const result = evaluateConflictTransitions(PANDEMIC_DEF, coordinated, 2020);
-
-    expect(result.appliedTransitionKey).toBe("early_containment");
-    expect(result.state.phaseLevel).toBe(4);
-    expect(result.state.status).toBe("ceasefire");
+  it("offers research, manufacturing and access to every materialized role", () => {
+    for (const node of Object.values(response.decisionTrees)) {
+      const ids = (node!.options ?? []).map((o) => o.optionId);
+      for (const id of ["research_pool", "expand_manufacturing", "covax", "defer"])
+        expect(ids).toContain(id);
+    }
+    expect(Object.values(response.defaultOptionIdByRole).every((id) => id === "defer")).toBe(true);
   });
-
-  it("lets an uncontrolled wave overwhelm capacity and become a pandemic", () => {
-    const outbreak = applyConflictOutcome(
-      PANDEMIC_DEF,
-      stateAt("outbreak", { transmission: 62, healthCapacity: 50 }),
-      outcome("uncontrolled_wave")
-    );
-    const result = evaluateConflictTransitions(PANDEMIC_DEF, outbreak, 2021);
-
-    expect(result.appliedTransitionKey).toBe("global_spread");
-    expect(result.state.phaseLevel).toBe(3);
-    expect(result.state.tracks?.healthCapacity).toBe(38);
+  it("requires clinical time, research and manufacturing before vaccination", () => {
+    const ready = { ...state({ vaccineResearch: 100, manufacturing: 100 }), totalTurns: 47 };
+    expect(pandemicVaccineReady(ready)).toBe(false);
+    expect(pandemicVaccineReady({ ...ready, totalTurns: 48 })).toBe(true);
+    expect(
+      pandemicVaccineReady({
+        ...ready,
+        totalTurns: 100,
+        tracks: { vaccineResearch: 69, manufacturing: 100 },
+      })
+    ).toBe(false);
+    const unfunded = advancePandemicState(state({ cooperation: 100 }));
+    expect(unfunded.tracks?.vaccineResearch).toBe(0);
   });
-
-  it("distinguishes cooperative research from an unequal rollout", () => {
-    const researched = applyConflictOutcome(
-      PANDEMIC_DEF,
-      stateAt("pandemic", { vaccineResearch: 20, manufacturing: 10 }),
-      outcome("research_acceleration")
+  it("cooperation reduces harm and reaches endemic management; delay permits global spread", () => {
+    const early = run("cooperation"),
+      late = run("delay");
+    expect(early.events.some((e) => e.transition === "early_containment")).toBe(true);
+    expect(late.events.some((e) => e.transition === "global_spread")).toBe(true);
+    expect(early.s.campaign!.consequences.casualties).toBeLessThan(
+      late.s.campaign!.consequences.casualties
     );
-    const nationalized = applyConflictOutcome(
-      PANDEMIC_DEF,
-      researched,
-      outcome("vaccine_nationalism")
-    );
-
-    expect(researched.tracks).toMatchObject({ vaccineResearch: 38, manufacturing: 22 });
-    expect(nationalized.tracks).toMatchObject({ vaccineResearch: 46, manufacturing: 29 });
-    expect(nationalized.tracks?.distributionEquity).toBe(2);
-    expect(nationalized.tracks?.transmission).toBe(32);
+    expect(early.s.phaseLevel).toBe(5);
+    expect(late.s.phaseLevel).toBe(5);
+    expect(early.firstVaccine).toBeGreaterThanOrEqual(48);
   });
-
-  it("supports an equitable endemic transition and a later immune-escape wave", () => {
-    const rollout = applyConflictOutcome(
-      PANDEMIC_DEF,
-      stateAt("containment", { transmission: 24, immunity: 60, distributionEquity: 30 }),
-      outcome("equitable_rollout")
-    );
-    const endemic = evaluateConflictTransitions(PANDEMIC_DEF, rollout, 2023);
-    const relapse = evaluateConflictTransitions(
-      PANDEMIC_DEF,
-      stateAt("endemic", { transmission: 82, immunity: 50 }),
-      2026
-    );
-
-    expect(endemic.appliedTransitionKey).toBe("endemic_transition");
-    expect(endemic.state.status).toBe("settled");
-    expect(relapse.appliedTransitionKey).toBe("endemic_escape");
-    expect(relapse.state.phaseLevel).toBe(3);
-    expect(relapse.state.status).toBe("active");
+  it("inaction remains dangerous without manufacturing free vaccines", () => {
+    const result = run("inaction");
+    expect(result.firstVaccine).toBeNull();
+    expect(result.s.campaign!.consequences.casualties).toBeGreaterThan(0);
+    expect(result.s.tracks?.variantWaves).toBe(8);
   });
-
-  it("keeps background learning and repeated-wave pressure deterministic", () => {
-    const pandemic = { ...stateAt("pandemic"), totalTurns: 12 };
-
-    expect(scheduledPressureDeltas(PANDEMIC_DEF, pandemic, 2021)).toEqual({
-      transmission: 4,
-      restrictionFatigue: 3,
-      supplyChainStrain: 2,
-      vaccineResearch: 4,
-      manufacturing: 2,
-    });
+  it("waning protection and variants can reopen a settled emergency", () => {
+    const result = run("relapse");
+    expect(result.events.some((e) => e.transition === "endemic_transition")).toBe(true);
+    expect(result.events.some((e) => e.transition === "endemic_escape")).toBe(true);
+  });
+  it("unequal vaccination leaves more harm and different national access", () => {
+    const equal = run("cooperation"),
+      unequal = run("nationalism");
+    expect(unequal.s.tracks?.distributionEquity).toBeLessThan(equal.s.tracks!.distributionEquity);
+    expect(unequal.s.campaign!.consequences.casualties).toBeGreaterThan(
+      equal.s.campaign!.consequences.casualties
+    );
+    const signal = {
+      ...state({
+        transmission: 60,
+        immunity: 40,
+        vaccineResearch: 100,
+        manufacturing: 100,
+        distributionEquity: 0,
+        "vaccinePriority:US": 100,
+      }),
+      totalTurns: 100,
+    };
+    expect(pandemicMortality(signal, "US")).toBeLessThan(pandemicMortality(signal, "IE"));
+  });
+  it("restriction costs recover instead of accumulating permanent economic damage", () => {
+    const restricted = advancePandemicState(
+      state({ containmentPolicy: 100, supplyChainStrain: 70, restrictionFatigue: 70 })
+    );
+    expect(pandemicPoliticalEffects(restricted)["economy.productivity"]).toBeLessThan(0);
+    let recovered: LivingConflictState = {
+      ...restricted,
+      tracks: { ...restricted.tracks, containmentPolicy: 0, transmission: 1, immunity: 100 },
+    };
+    for (let i = 0; i < 100; i++) recovered = advancePandemicState(recovered);
+    expect(recovered.tracks!.supplyChainStrain).toBeLessThan(restricted.tracks!.supplyChainStrain);
+  });
+  it("excess mortality reaches actual cohort headcounts with a bounded death fraction", () => {
+    const vector = { male: Array<number>(101).fill(1000), female: Array<number>(101).fill(1000) };
+    const inputs = {
+      replacementTFR: 2.06,
+      birthRateIndex: 50,
+      healthcare: {},
+      netInternationalMigrants: 0,
+      migrantShareMale: 0.5,
+    };
+    const ordinary = advanceCohort(vector, inputs, 1, 48);
+    const pandemic = advanceCohort(vector, { ...inputs, excessMortalityAnnual: 0.012 }, 1, 48);
+    expect(pandemic.flows.deaths).toBeGreaterThan(ordinary.flows.deaths);
+    expect(pandemic.flows.deaths - ordinary.flows.deaths).toBeLessThanOrEqual(
+      (202000 * 0.012) / 48
+    );
+    expect(pandemic.vector.male[50]).toBeLessThan(ordinary.vector.male[50]);
+  });
+  it("bounds malformed legacy inputs and disables closed outbreaks", () => {
+    const malformed = {
+      ...state(),
+      tracks: { transmission: NaN, immunity: Infinity, healthCapacity: -20 },
+    };
+    expect(Number.isFinite(pandemicMortality(malformed))).toBe(true);
+    expect(pandemicMortality({ ...malformed, status: "closed" })).toBe(0);
+    expect(pandemicPoliticalEffects({ ...malformed, hasOpened: false })).toEqual({});
+  });
+  it("chooses an available stable origin without forcing China", () => {
+    const available = new Set(["US", "UK", "DE", "IE"]);
+    const selected = pandemicParticipants(available, 2027);
+    expect(selected.belligerents).toHaveLength(1);
+    expect(pandemicOpeningYear(selected)).toBeGreaterThanOrEqual(2018);
+    expect(pandemicOpeningYear(selected)).toBeLessThanOrEqual(2020);
+    expect(selected.belligerents).not.toContain("CN");
+    expect(pandemicParticipants(available, 2032, selected.belligerents[0]).belligerents).toEqual(
+      selected.belligerents
+    );
   });
 });

@@ -54,10 +54,12 @@ export async function createCrisisFromTemplate(
   // pacing mechanic (Vietnam authors 8/10/12/14/16 escalating turns and a
   // 4-turn commitment window), and flooring every rung to 24 flattened all of
   // it into one uniform day per rung. Standalone crises keep the floor so their
-  // effects have room to taper.
-  const resolvedDuration = template.chain
-    ? authoredDuration
-    : floorCrisisDuration(authoredDuration);
+  // effects have room to taper. Shared response windows likewise keep their
+  // authored deadline, so the next policy window is not blocked by that floor.
+  const resolvedDuration =
+    template.chain || params.globalResponse || template.globalResponse
+      ? authoredDuration
+      : floorCrisisDuration(authoredDuration);
 
   // Bake the real affected place name into flavor/wire text so notifications,
   // metadata and the detail page all read with the location, not "{location}".

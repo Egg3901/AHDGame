@@ -1,3 +1,4 @@
+import { PANDEMIC_KEY, pandemicParticipants } from "./rules/pandemic";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type {
@@ -87,7 +88,7 @@ function eventTemplate(driven: DrivenEvent, countryIds: string[]): CrisisTemplat
   };
 }
 
-async function materializeEvent(
+export async function materializeLivingConflictEvent(
   db: Db,
   def: ReturnType<typeof allLivingConflictDefs>[number],
   participants: ConflictParticipants,
@@ -237,10 +238,16 @@ export async function processLivingConflictsTurn(
       }
     }
     conflictsProcessed++;
-    const participants: ConflictParticipants = resolveConflictParticipants(
-      def,
-      availableCountryIds
-    );
+    let participants: ConflictParticipants = resolveConflictParticipants(def, availableCountryIds);
+    if (def.key === PANDEMIC_KEY) {
+      const previous = await loadConflictState(db, def.key);
+      participants = pandemicParticipants(
+        availableCountryIds,
+        previous.openedYear ?? currentYear ?? 2018,
+        previous.pandemicOriginCountryId ??
+          (previous.hasOpened ? participants.belligerents[0] : undefined)
+      );
+    }
     let externalPressure =
       def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0;
     let openingTrackDeltas: Record<string, number> = {};
@@ -270,7 +277,13 @@ export async function processLivingConflictsTurn(
     }
     let retryPhaseEntry = false;
     for (const event of result.events) {
-      const materialized = await materializeEvent(db, def, participants, event, currentTurn);
+      const materialized = await materializeLivingConflictEvent(
+        db,
+        def,
+        participants,
+        event,
+        currentTurn
+      );
       if (materialized.opened) eventsOpened++;
       if (materialized.blockedByActiveWindow && event.fired.event.trigger?.onPhaseEnter) {
         retryPhaseEntry = true;
