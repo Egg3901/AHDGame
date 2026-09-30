@@ -141,6 +141,44 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     );
   });
 
+  it("bridges an unfunded creditor call, records arrears and recovers without default", async () => {
+    const db = client.db(databaseName);
+    await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2));
+    await db
+      .collection("macroCountries")
+      .updateMany({}, { $set: { federationTreasuryMinor: -1000, fiscalCapacity: 0 } });
+    await processLegacyFederationServiceTurn(db, 182, new Date(3));
+    const shortfall = await db.collection("federationLegacyServiceTurns").findOne({ turn: 182 });
+    expect(shortfall).toMatchObject({
+      creditorDueMinor: 150,
+      bridgeOutstandingMinor: 150,
+      administrationCashAfterMinor: -150,
+    });
+    expect(
+      Object.values(shortfall!.successorArrearsMinor).reduce<number>(
+        (sum, value) => sum + Number(value),
+        0
+      )
+    ).toBe(150);
+    expect(await db.collection<Fixture>("federalBudget").findOne({ _id: "CS" })).toMatchObject({
+      treasuryBalance: -3,
+    });
+    expect(await db.collection("bonds").findOne({ _id: bondId })).toMatchObject({
+      defaulted: false,
+    });
+    await db
+      .collection("macroCountries")
+      .updateMany({}, { $set: { federationTreasuryMinor: 1000, fiscalCapacity: 0.5 } });
+    await processLegacyFederationServiceTurn(db, 183, new Date(4));
+    expect(
+      await db.collection("federationLegacyServiceTurns").findOne({ turn: 183 })
+    ).toMatchObject({ bridgeOutstandingMinor: 0, administrationCashAfterMinor: 0 });
+    expect(await db.collection("bonds").findOne({ _id: bondId })).toMatchObject({
+      defaulted: false,
+      currencyCode: "CSK",
+    });
+  });
+
   it("rolls back a late receipt failure and can apply on a later turn", async () => {
     const db = client.db(databaseName);
     await db.createCollection("federationSettlementApplications", {

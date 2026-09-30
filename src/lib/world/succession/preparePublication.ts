@@ -174,12 +174,13 @@ export async function prepareFederationPublication(
   const collection = db.collection<FederationPreparedEffect>(
     FEDERATION_PREPARED_EFFECTS_COLLECTION
   );
+  // Approval hashes omit absent fields; preserve that representation in BSON.
   if (effects.length)
     await collection.bulkWrite(
       effects.map((effect) => ({
         updateOne: { filter: { _id: effect._id }, update: { $setOnInsert: effect }, upsert: true },
       })),
-      { session }
+      { session, ignoreUndefined: true }
     );
   const savedEffects = await collection
     .find({ applicationId: plan.receipt._id }, { session })
@@ -206,7 +207,7 @@ export async function prepareFederationPublication(
       plan.entityStates.map((state) => ({
         updateOne: { filter: { _id: state._id }, update: { $setOnInsert: state }, upsert: true },
       })),
-      { session }
+      { session, ignoreUndefined: true }
     );
   const savedStates = await states.find({ applicationId: plan.receipt._id }, { session }).toArray();
   const statesById = new Map(savedStates.map((state) => [state._id, state]));
