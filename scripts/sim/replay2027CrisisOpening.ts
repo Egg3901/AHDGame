@@ -6,11 +6,18 @@ import {
   nuclearProgramBaselines,
 } from "../../src/lib/admin/seed/seedColdWarFoundations";
 import { allLivingConflictDefs } from "../../src/lib/livingConflict/registry";
-import { AUTHORED_2027_FAMILIES } from "../../src/lib/livingConflict/initialState2027";
+import {
+  AUTHORED_2027_FAMILIES,
+  build2027ConflictOpening,
+} from "../../src/lib/livingConflict/initialState2027";
 import { driveConflictTurn } from "../../src/lib/livingConflict/driver";
+import { materializeLivingConflictEvent } from "../../src/lib/livingConflict/processTurn";
+import { resolveGlobalResponse } from "../../src/lib/livingConflict/globalResponse";
+import { autoResolveCrisisInteraction } from "../../src/lib/crises/interactionEngine";
 import { resolveConflictParticipants } from "../../src/lib/livingConflict/rules/participants";
 import { reconcileNorthernIrelandRatification } from "../../src/lib/livingConflict/northernIrelandRatification";
 import type { LivingConflictState } from "../../src/lib/livingConflict/types";
+import type { Crisis, CrisisInteraction } from "../../src/lib/db/types/crisis";
 import type { NuclearProgram } from "../../src/lib/db/types/nuclearProgram";
 
 async function main(): Promise<void> {
@@ -20,6 +27,11 @@ async function main(): Promise<void> {
     "Dedicated loopback sandbox Mongo on port 27018 required"
   );
   const dbName = `ahd_sim_issue2159_crisis2027_${Date.now()}`;
+  Object.assign(process.env, {
+    NODE_ENV: "test",
+    MONGODB_URI: uri,
+    MONGODB_DB: dbName,
+  });
   const client = new MongoClient(uri);
   await client.connect();
   try {
@@ -106,9 +118,160 @@ async function main(): Promise<void> {
         provenance: opening.openingProvenance,
       });
     }
+    const continuation: Record<string, { opened: number; resolved: number; eventKeys: string[] }> =
+      Object.fromEntries(
+        AUTHORED_2027_FAMILIES.map((key) => [key, { opened: 0, resolved: 0, eventKeys: [] }])
+      );
+    const defs = allLivingConflictDefs().filter((item) =>
+      AUTHORED_2027_FAMILIES.includes(item.key)
+    );
+    for (let turn = 1250; turn <= 1300; turn++) {
+      const year = 2027 + Math.floor((turn - 1248) / 48);
+      await db
+        .collection("gameState")
+        .updateOne(
+          { _id: "current" as never },
+          { $set: { currentTurn: turn, currentYear: year, crisisInteractionEnabled: true } }
+        );
+      const expiring = await db
+        .collection<Crisis>("crises")
+        .find({ status: "active", livingConflictEventId: { $exists: true } })
+        .toArray();
+      for (const crisis of expiring) {
+        if (turn < crisis.startTurn + (crisis.durationTurns ?? 24)) continue;
+        const key =
+          crisis.globalResponse?.conflictKey ?? crisis.livingConflictEventId?.split(":")[0];
+        assert(key && continuation[key]);
+        const interaction = await db
+          .collection<CrisisInteraction>("crisisInteractions")
+          .findOne({ crisisId: crisis._id });
+        assert(interaction, `Missing interaction for ${key}`);
+        if (crisis.globalResponse) {
+          const resolved = await resolveGlobalResponse(db, crisis._id);
+          assert(resolved, `Missing response resolution for ${key}`);
+          assert.deepEqual(await resolveGlobalResponse(db, crisis._id), resolved);
+        } else {
+          for (let node = 0; node < interaction.decisionTree.length + 1; node++) {
+            const latest = await db
+              .collection<CrisisInteraction>("crisisInteractions")
+              .findOne({ _id: interaction._id });
+            if (latest?.resolvedAt) break;
+            await autoResolveCrisisInteraction(db, interaction._id);
+          }
+          assert(
+            (
+              await db.collection<CrisisInteraction>("crisisInteractions").findOne({
+                _id: interaction._id,
+              })
+            )?.resolvedAt,
+            `Unresolved default interaction for ${key}`
+          );
+        }
+        await db
+          .collection<Crisis>("crises")
+          .updateOne(
+            { _id: crisis._id },
+            { $set: { status: "resolved", endTurn: turn, resolvedAt: new Date() } }
+          );
+        continuation[key].resolved++;
+      }
+      for (const def of defs) {
+        const participants = resolveConflictParticipants(def, available);
+        const result = await driveConflictTurn(db, def, participants, turn, year);
+        assert.deepEqual((await driveConflictTurn(db, def, participants, turn, year)).events, []);
+        for (const event of result.events) {
+          const materialized = await materializeLivingConflictEvent(
+            db,
+            def,
+            participants,
+            event,
+            turn
+          );
+          if (!materialized.opened) continue;
+          assert.equal(
+            (await materializeLivingConflictEvent(db, def, participants, event, turn)).opened,
+            false
+          );
+          continuation[def.key].opened++;
+          continuation[def.key].eventKeys.push(event.fired.phaseKey);
+        }
+      }
+    }
+    for (const key of [
+      "northern_ireland",
+      "transnational_terrorism",
+      "pandemic",
+      "arab_uprisings",
+      "russia_ukraine_security",
+    ]) {
+      assert(continuation[key].opened > 0, `No inherited-phase window for ${key}`);
+      assert(continuation[key].resolved > 0, `No inherited-phase resolution for ${key}`);
+    }
+    assert.equal(continuation.yugoslav_dissolution.opened, 0);
+    assert.equal(continuation.global_financial_crisis.opened, 0);
+    // The ordinary world lacks YU. Run the surviving federation in a separate
+    // sandbox database at its actual 2027 start turn, without rewriting history.
+    const counterfactualDb = client.db(`${dbName}_counterfactual`);
+    const survivingCountries = new Set([...available, "YU"]);
+    const yugoslavDef = defs.find((def) => def.key === "yugoslav_dissolution")!;
+    const yugoslavOpening = build2027ConflictOpening(yugoslavDef, {
+      countries: survivingCountries,
+      populations: { YU: 1_000_000 },
+    });
+    assert.equal(yugoslavOpening.openingDisposition, "counterfactual");
+    await counterfactualDb
+      .collection<LivingConflictState>("livingConflicts")
+      .insertOne(yugoslavOpening);
+    const yugoslavParticipants = resolveConflictParticipants(yugoslavDef, survivingCountries);
+    const yugoslavTurn = await driveConflictTurn(
+      counterfactualDb,
+      yugoslavDef,
+      yugoslavParticipants,
+      1249,
+      2027
+    );
+    assert.equal(yugoslavTurn.state.openedYear, 2027);
+    assert.equal(yugoslavTurn.state.openingDisposition, "counterfactual");
+    assert(yugoslavTurn.events.some((event) => event.fired.phaseKey === "federal_crisis"));
+
+    // A present Russian primary actor retains its own role when Ukraine is
+    // unavailable; the explicit fallback chooses Poland instead.
+    const missingUkraineCountries = new Set([...available].filter((id) => id !== "UKR"));
+    const securityDef = defs.find((def) => def.key === "russia_ukraine_security")!;
+    const fallback = resolveConflictParticipants(securityDef, missingUkraineCountries);
+    assert(fallback.belligerents.includes("PL"));
+    assert(!fallback.belligerents.includes("RU"));
+    await counterfactualDb.collection<LivingConflictState>("livingConflicts").insertOne(
+      build2027ConflictOpening(securityDef, {
+        countries: missingUkraineCountries,
+        populations: {},
+      })
+    );
+    const securityTurn = await driveConflictTurn(
+      counterfactualDb,
+      securityDef,
+      fallback,
+      1249,
+      2027
+    );
+    assert.equal(securityTurn.state.representedActors?.[0]?.representsCountryId, "UKR");
+    assert.equal(securityTurn.state.representedActors?.[0]?.countryId, "PL");
     console.log(
       JSON.stringify(
-        { dbName, sourceSha: process.env.SOURCE_SHA ?? null, first, retry, rows },
+        {
+          dbName,
+          sourceSha: process.env.SOURCE_SHA ?? null,
+          first,
+          retry,
+          rows,
+          continuation,
+          counterfactual: {
+            yugoslavOpeningYear: yugoslavTurn.state.openedYear,
+            yugoslavEvents: yugoslavTurn.events.map((event) => event.fired.phaseKey),
+            missingUkraineBelligerents: fallback.belligerents,
+            missingUkraineRepresentedActors: securityTurn.state.representedActors,
+          },
+        },
         null,
         2
       )
