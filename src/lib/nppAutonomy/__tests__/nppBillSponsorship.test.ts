@@ -871,7 +871,7 @@ describe("European government decisions", () => {
     const president = makeOfficial(npp._id, "FR", "president", "2", 1);
     const { db, insertSpy } = makeMockDb({
       europeanStage: "community",
-      electedOfficials: [deputy, president],
+      electedOfficials: [{ ...deputy }, { ...president }],
       npps: [npp],
     });
     expect(await loadFrenchEuropeanExecutiveParty(db)).toBe("2");
