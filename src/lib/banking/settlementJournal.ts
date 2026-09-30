@@ -1,3 +1,4 @@
+import { resumeTreasuryReserveTransfer } from "@/lib/budget/treasuryReserveTransfer";
 /**
  * The Settlement Journal: apply a banking transition exactly once.
  *
@@ -529,10 +530,17 @@ export async function resumeSettlement(
   options: FinishOptions = {}
 ): Promise<SettlementResult> {
   const record = await db
-    .collection<{ _id: string; atomicDocument?: unknown; legacyInterestBatch?: unknown }>(
-      MONEY_MOVE_COLLECTION
-    )
-    .findOne({ _id: key }, { projection: { atomicDocument: 1, legacyInterestBatch: 1 } });
+    .collection<{
+      _id: string;
+      atomicDocument?: unknown;
+      legacyInterestBatch?: unknown;
+      treasuryReserveTransfer?: unknown;
+    }>(MONEY_MOVE_COLLECTION)
+    .findOne(
+      { _id: key },
+      { projection: { atomicDocument: 1, legacyInterestBatch: 1, treasuryReserveTransfer: 1 } }
+    );
+  if (record?.treasuryReserveTransfer) return resumeTreasuryReserveTransfer(db, key);
   if (record?.legacyInterestBatch) return resumeLegacyDepositInterest(db, key);
   if (record?.atomicDocument) return resumeAtomicDocumentSettlement(db, key);
   const moved = await resumeMoneyMove(db, key);

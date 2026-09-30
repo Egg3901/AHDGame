@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
@@ -13,7 +13,7 @@ interface Props {
 
 /**
  * Treasury Secretary (or country equivalent) action panel for transferring
- * federal surplus into the Central Bank's FX reserve pool. Rendered on the
+ * treasury cash into the Central Bank's FX reserve pool. Rendered on the
  * finance-minister cabinet office page.
  */
 export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props) {
@@ -22,6 +22,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
   const [amount, setAmount] = useState<string>("");
   const [justification, setJustification] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const pending = useRef<{ input: string; id: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
     null
   );
@@ -31,6 +32,12 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
 
   async function submit() {
     if (!valid || !canAct) return;
+    const input = JSON.stringify({
+      amount: parsedAmount,
+      justification: justification || undefined,
+    });
+    if (pending.current?.input !== input) pending.current = { input, id: crypto.randomUUID() };
+    const operationId = pending.current.id;
     setSubmitting(true);
     setFeedback(null);
     try {
@@ -39,10 +46,12 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: parsedAmount,
+          operationId,
           justification: justification || undefined,
         }),
       });
       const json = await res.json();
+      if (res.ok || (res.status >= 400 && res.status < 500)) pending.current = null;
       if (!res.ok) {
         setFeedback({ type: "error", message: json.error ?? "Transfer failed." });
       } else {
@@ -68,8 +77,9 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
     <section className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
       <h2 className="mb-2 text-lg font-semibold">FX Reserve Transfer</h2>
       <p className="mb-4 text-sm text-muted">
-        Move funds from the federal surplus to the Central Bank&apos;s FX reserve pool. Capped at
-        0.5% of annual revenue per turn. One transfer per turn.
+        Move treasury cash to the Central Bank&apos;s FX reserve pool. This is a one-time transfer,
+        not a change to annual spending. Capped at 0.5% of annual revenue per turn. One transfer per
+        turn.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
