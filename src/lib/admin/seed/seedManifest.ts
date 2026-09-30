@@ -504,6 +504,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "bankMoneyMoves", category: "runtime" },
   { name: "bankLiquidityOperations", category: "runtime" },
   { name: "monetaryOperationCommands", category: "runtime" },
+  { name: "reservePoolTransferCommands", category: "runtime" },
   {
     name: "savingsAccounts",
     category: "runtime",

@@ -24,7 +24,7 @@ import { resumeTreasuryReserveTransfer } from "@/lib/budget/treasuryReserveTrans
  *    Publishing is the caller's job because the caller knows the actor.
  */
 
-import { type Db, type Document, type Filter, type UpdateFilter } from "mongodb";
+import { type Db, type Document } from "mongodb";
 import {
   MONEY_MOVE_COLLECTION,
   applyMoneyMove,
@@ -44,6 +44,11 @@ import { countBankingEvent } from "@/lib/banking/telemetry";
 import { reviveObjectIds } from "./settlementEncoding";
 import { resumeLegacyDepositInterest } from "./legacyDepositInterest";
 import { resumeAtomicDocumentSettlement } from "./atomicDocumentSettlement";
+import {
+  applyProtectedProjection,
+  bindProjectionTargets,
+  invalidProjectionTarget,
+} from "./projectionSettlement";
 export { reviveObjectIds } from "./settlementEncoding";
 
 export type SettlementStatus = "applied" | "replayed" | "rejected" | "partial";
@@ -66,6 +71,7 @@ export interface SettlementResult {
 }
 
 interface JournalProjectionRecord {
+  receiptProtocol?: "protected_v1";
   collection: string;
   note: string;
   /**
@@ -83,9 +89,8 @@ interface JournalProjectionRecord {
 }
 
 /**
- * Every projection can be retried blind: an insert is idempotent by id, and
- * an update carries its stamp (see `projectionStamp`), so a re-run of a
- * write that already landed matches nothing and reads as applied.
+ * Retry enters the publication protocol: inserts use their id, while updates
+ * require protected target proof and a fresh journal/generation check.
  */
 function safeToRetryBlind(_projection: TransitionProjection): boolean {
   return true;
@@ -100,6 +105,7 @@ interface JournalExtension {
   legacyInterestBatch?: unknown;
   locSettlement?: unknown;
   status?: string;
+  error?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
   currency?: string;
@@ -108,11 +114,8 @@ interface JournalExtension {
 }
 
 /**
- * Update projections stamp the document they touch with `settledKeys`, so a
- * re-run of the same projection matches nothing and is read as already
- * applied. That is what makes a claimed-but-unfinished update safe to retry:
- * the stamp, not the journal, is the witness that the write landed. Capped so
- * a long-lived document does not carry every key it ever saw.
+ * Bounded stamps remain compatibility evidence. New update projections also
+ * keep a protected target outcome until the original journal acknowledges it.
  */
 
 export function projectionStamp(key: string, index: number): string {
@@ -132,15 +135,13 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
 }
 
 /**
- * Apply one projection. Inserts are idempotent by `_id`: a duplicate-key
- * error means a previous attempt already landed it. Updates are applied as
- * given; the rules make them idempotent where it matters (status flips are
- * guarded on the prior status, counters carry the key in the journal).
+ * Apply an immutable insert projection. Update projections must use the
+ * journal-aware target publication protocol below.
  */
 export async function applyProjection(
   db: Db,
   projection: TransitionProjection,
-  stamp?: string
+  _stamp?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const collection = db.collection(projection.collection);
   if (projection.insert) {
@@ -156,37 +157,8 @@ export async function applyProjection(
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (projection.filter && projection.update) {
-    const filter = reviveObjectIds(projection.filter) as Record<string, unknown>;
-    const update = reviveObjectIds(projection.update) as Record<string, unknown>;
-    const stampedFilter = stamp ? { ...filter, [SETTLED_KEYS_FIELD]: { $ne: stamp } } : filter;
-    const stampedUpdate = stamp
-      ? {
-          ...update,
-          $push: {
-            ...((update.$push as Record<string, unknown> | undefined) ?? {}),
-            [SETTLED_KEYS_FIELD]: { $each: [stamp], $slice: -SETTLED_KEYS_CAP },
-          },
-        }
-      : update;
-    const res = await collection.updateOne(
-      stampedFilter as Filter<Document>,
-      stampedUpdate as UpdateFilter<Document>
-    );
-    if (res.matchedCount === 1) return { ok: true };
-    if (stamp) {
-      // No match with the stamp excluded. Either the document carries the
-      // stamp already (the write landed on an earlier attempt) or it is
-      // genuinely not there. Distinguish, so a replay is a no-op and a bad
-      // target is still an error.
-      const already = await collection.findOne(
-        { ...filter, [SETTLED_KEYS_FIELD]: stamp } as Filter<Document>,
-        { projection: { _id: 1 } }
-      );
-      if (already) return { ok: true };
-    }
-    return { ok: false, error: `projection "${projection.note}" matched no document` };
-  }
+  if (projection.update)
+    return { ok: false, error: "Update projections require durable journal publication" };
   return { ok: false, error: `projection "${projection.note}" has neither insert nor update` };
 }
 
@@ -227,7 +199,44 @@ export async function settleTransition(
     }
   }
 
+  const bound = await bindProjectionTargets(db, transition.key, transition.projections);
+  if ("error" in bound) {
+    if (bound.status) return { ...result, status: bound.status, error: bound.error };
+    try {
+      await journal.insertOne({
+        _id: transition.key,
+        kind: transition.kind,
+        turn: transition.turn,
+        status: "rejected",
+        error: bound.error,
+        createdAt: new Date(),
+        legs: transition.legs.map((leg) => ({ ...toMoneyLeg(leg), applied: false })),
+        projections: transition.projections.map((projection) => ({
+          collection: projection.collection,
+          note: projection.note,
+          applied: false,
+          projection,
+        })),
+      } as never);
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === 11000))
+        throw error;
+      // A competing claimant owns the outcome; load its original plan again.
+      return settleTransition(db, transition);
+    }
+    return { ...result, status: "rejected", error: bound.error };
+  }
+  transition = { ...transition, projections: bound.projections };
+  if (transition.projections.some(invalidProjectionTarget)) {
+    return {
+      ...result,
+      status: "rejected",
+      error: "Update projections require stable target ids and unreserved fields",
+    };
+  }
+
   const records: JournalProjectionRecord[] = transition.projections.map((projection) => ({
+    receiptProtocol: "protected_v1",
     collection: projection.collection,
     note: projection.note,
     claimedAt: null,
@@ -269,6 +278,12 @@ export async function settleTransition(
     // Judged on the legs themselves, not the record's status: a record can be
     // `partial` because a PROJECTION failed after every leg landed, and that
     // is exactly the case a replay must go on to finish.
+    if (owned?.status === "rejected")
+      return {
+        ...result,
+        status: "rejected",
+        error: owned.error ?? "Original settlement was rejected",
+      };
     const ownedLegs = owned?.legs ?? [];
     const legsOutstanding = !owned || ownedLegs.some((leg) => !leg.applied);
     if (legsOutstanding) {
@@ -304,7 +319,17 @@ export async function settleTransition(
           ? (error as { code?: unknown }).code
           : undefined;
       if (code === 11000) {
-        // Someone already owns this key: it is a replay.
+        // Someone already owns this key: its original outcome is authoritative.
+        const prior = await journal.findOne(
+          { _id: transition.key },
+          { projection: { status: 1, error: 1 } }
+        );
+        if (prior?.status === "rejected")
+          return {
+            ...result,
+            status: "rejected",
+            error: prior.error ?? "Original settlement was rejected",
+          };
         return finishProjections(db, transition, { ...result, status: "replayed" });
       }
       throw error;
@@ -361,6 +386,7 @@ async function finishProjections(
   let records = ownedRecords ?? existing?.projections;
   if (records === undefined) {
     records = transition.projections.map((projection) => ({
+      receiptProtocol: "protected_v1",
       collection: projection.collection,
       note: projection.note,
       claimedAt: null,
@@ -403,10 +429,23 @@ async function finishProjections(
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
+      if (record.projection.update)
+        await applyProtectedProjection(db, transition.key, i, record.projection);
       result.appliedProjections.push(i);
       continue;
     }
     const projection = record.projection;
+    if (projection.update && !record.receiptProtocol && !record.claimedAt) {
+      await journal.updateOne(
+        {
+          _id: transition.key,
+          [`projections.${i}.claimedAt`]: null,
+          [`projections.${i}.applied`]: false,
+          [`projections.${i}.receiptProtocol`]: { $exists: false },
+        },
+        { $set: { [`projections.${i}.receiptProtocol`]: "protected_v1" } }
+      );
+    }
     if (record?.claimedAt && !safeToRetryBlind(projection) && !options.force) {
       stuck = `projection "${projection.note}" was claimed by an earlier attempt and cannot be retried blind`;
       continue;
@@ -428,30 +467,34 @@ async function finishProjections(
       continue;
     }
 
-    const outcome = await applyProjection(db, projection, projectionStamp(transition.key, i));
+    const outcome = projection.update
+      ? await applyProtectedProjection(db, transition.key, i, projection)
+      : await applyProjection(db, projection, projectionStamp(transition.key, i));
     if (!outcome.ok) {
-      // A refused write is a KNOWN non-application, so the claim is released:
-      // recovery may retry it once the cause is fixed. Only a crash between
-      // claim and write leaves an ambiguous claim behind.
+      // Keep update claims intact: a legacy ambiguity must never become a
+      // fresh admission on the next recovery attempt. New protocols may retry
+      // their original guard without losing the protected outcome.
       result.status = "partial";
       result.error = outcome.error;
       if (Number.isFinite(transition.turn)) {
         countBankingEvent(db, transition.turn, "partialSettlements");
       }
       await journal.updateOne(
-        { _id: transition.key },
+        { _id: transition.key, [`projections.${i}.applied`]: { $ne: true } },
         {
           $set: {
             status: "partial",
             error: outcome.error,
-            [`projections.${i}.claimedAt`]: null,
+            ...(!projection.update ? { [`projections.${i}.claimedAt`]: null } : {}),
           },
         }
       );
       return result;
     }
     result.appliedProjections.push(i);
-    result.newlyAppliedProjections.push(i);
+    if (!("newlyApplied" in outcome) || outcome.newlyApplied)
+      result.newlyAppliedProjections.push(i);
+    if (projection.update) continue;
     await journal.updateOne(
       { _id: transition.key },
       {
@@ -598,6 +641,12 @@ export async function recoverProjections(
     appliedProjections: [],
     newlyAppliedProjections: [],
   };
+  if (record?.status === "rejected")
+    return {
+      ...result,
+      status: "rejected",
+      error: record.error ?? "Original settlement was rejected",
+    };
   if (!record || !record.projections) {
     return { ...result, status: "rejected", error: "no journal record with projections" };
   }

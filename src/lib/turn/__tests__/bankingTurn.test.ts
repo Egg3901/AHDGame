@@ -318,48 +318,6 @@ describe("processBankingTurn", () => {
       return { matchedCount: 1, modifiedCount: 1 };
     });
 
-    db.collectionMocks.bankLoans!.find.mockImplementation(() => findCursor([...loans]));
-    db.collectionMocks.bankLoans!.findOne.mockImplementation(
-      async (filter: Record<string, unknown>) => {
-        if (filter.borrowerType === "npcBulk") {
-          return loans.find((l) => l.borrowerType === "npcBulk" && l.status !== "repaid") ?? null;
-        }
-        return loans.find((l) => filter._id && l._id.equals(filter._id as ObjectId)) ?? null;
-      }
-    );
-    db.collectionMocks.bankLoans!.insertOne.mockImplementation(async (doc: BankLoan) => {
-      loans.push(doc);
-      return { insertedId: doc._id };
-    });
-    // The household book is written as ONE bulkWrite of per-band tranches. Without
-    // this the inserts vanished and every assertion about the book was vacuous.
-    db.collectionMocks.bankLoans!.bulkWrite.mockImplementation(async (ops: unknown[]) => {
-      for (const op of ops as Array<{
-        insertOne?: { document: BankLoan };
-        updateOne?: { filter: { _id?: ObjectId }; update: { $set?: Partial<BankLoan> } };
-      }>) {
-        if (op.insertOne) {
-          loans.push(op.insertOne.document);
-          continue;
-        }
-        if (op.updateOne) {
-          const id = op.updateOne.filter._id;
-          const idx = loans.findIndex((l) => id && l._id.equals(id));
-          if (idx >= 0) loans[idx] = { ...loans[idx], ...op.updateOne.update.$set };
-        }
-      }
-      return { insertedCount: 0, modifiedCount: 0 };
-    });
-    db.collectionMocks.bankLoans!.updateOne.mockImplementation(async (filter, update) => {
-      const f = filter as { _id?: ObjectId };
-      const idx = loans.findIndex((l) => f._id && l._id.equals(f._id));
-      if (idx >= 0) {
-        const u = update as { $set?: Partial<BankLoan> };
-        loans[idx] = { ...loans[idx], ...u.$set };
-      }
-      return { matchedCount: 1, modifiedCount: 1 };
-    });
-
     // GDP: 1_000_000 millions → $1T face (keeps NPC book non-zero but tests can ignore)
     db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 1_000_000 }]));
 
@@ -404,7 +362,10 @@ describe("processBankingTurn", () => {
       _id: characterState._id,
       currencyBalances: { savings, personal, savingsHolder: holder },
     });
-    for (const name of ["bankMoneyMoves", "financialTxLog"]) {
+    // Tests replace the current loan cohort. Keep that handle, but apply real
+    // filters, projection receipts and cleanup instead of assuming filter._id.
+    Object.defineProperty(persisted.collection("bankLoans"), "docs", { get: () => loans });
+    for (const name of ["bankMoneyMoves", "financialTxLog", "bankLoans"]) {
       db.collection(name);
       const backing = persisted.collection(name);
       for (const method of ["find", "findOne", "insertOne", "updateOne", "bulkWrite"] as const)
@@ -419,6 +380,9 @@ describe("processBankingTurn", () => {
           backing[method].bind(backing) as never
         );
     }
+    db.collectionMocks.corporations!.find.mockImplementation(
+      persisted.collection("corporations").find.bind(persisted.collection("corporations")) as never
+    );
     db.collectionMocks.characters!.find.mockImplementation(
       persisted.collection("characters").find.bind(persisted.collection("characters")) as never
     );
@@ -482,11 +446,6 @@ describe("processBankingTurn", () => {
     const first = await processBankingTurn(db as unknown as Db, TURN);
     expect(first.banksProcessed).toBe(1);
     expect(liveCorp.bankCharter!.lastBankingTurn).toBe(TURN);
-
-    // Refresh the find() seed so the second pass still sees the bank,
-    // but live findOne carries lastBankingTurn.
-    bankCorp.bankCharter!.lastBankingTurn = TURN;
-    db.collectionMocks.corporations!.find.mockReturnValue(findCursor([bankCorp]));
 
     const cbBefore = cbState.externalBroadMoney;
     const liqBefore = liveCorp.bankCharter!.cashReserves;
