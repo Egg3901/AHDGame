@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getGameState: vi.fn(),
   executeMonetaryOperation: vi.fn(),
   existingLiquidityAdvance: vi.fn(),
+  existingMonetaryOperation: vi.fn(),
   snapshotMoneySupply: vi.fn(),
 }));
 
@@ -24,6 +25,10 @@ vi.mock("@/lib/moneySupply/operations", () => ({
 vi.mock("@/lib/moneySupply/liquidityAdvance", () => ({
   existingLiquidityAdvance: mocks.existingLiquidityAdvance,
   LiquidityAdvanceRejected: class extends Error {},
+}));
+vi.mock("@/lib/moneySupply/monetaryOperationJournal", () => ({
+  existingMonetaryOperation: mocks.existingMonetaryOperation,
+  MonetaryOperationRejected: class extends Error {},
 }));
 vi.mock("@/lib/moneySupply/snapshot", () => ({
   snapshotMoneySupply: mocks.snapshotMoneySupply,
@@ -101,6 +106,7 @@ beforeEach(() => {
   });
   mocks.snapshotMoneySupply.mockResolvedValue({});
   mocks.existingLiquidityAdvance.mockResolvedValue(false);
+  mocks.existingMonetaryOperation.mockResolvedValue(false);
 });
 
 describe("POST /api/country/[code]/central-bank/monetary-operation", () => {
@@ -157,10 +163,13 @@ describe("POST /api/country/[code]/central-bank/monetary-operation", () => {
       type: "qe",
       turn: 20,
       actorName: "Chair One",
+      actorClass: "player",
       reason: "Support demand",
       amount: 0,
       bondId: "bond-1",
       units: 10,
+      operationId: undefined,
+      bypassCooldown: false,
     });
     expect(mocks.snapshotMoneySupply).toHaveBeenCalledWith(db, 20);
   });
@@ -227,3 +236,30 @@ describe("euro monetary-operation authority", () => {
     }
   );
 });
+
+it.each(["qe", "qt", "treasury_advance"])(
+  "allows an authorized exact %s retry after cooldown",
+  async (type) => {
+    const db = configureDb({ lastMonetaryOperationTurn: 20 });
+    mocks.existingMonetaryOperation.mockResolvedValue(true);
+    const response = await POST(
+      request({
+        type,
+        amount: 500,
+        bondId: "bond-1",
+        units: 10,
+        operationId: "original-operation",
+      }),
+      context()
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.existingMonetaryOperation).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ type, operationId: "original-operation" })
+    );
+    expect(mocks.executeMonetaryOperation).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ type, operationId: "original-operation", bypassCooldown: false })
+    );
+  }
+);

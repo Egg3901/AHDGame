@@ -1,0 +1,720 @@
+{
+  "sourceCommit": "3d67b68752145f9494433ff9da34e400cbe222b0",
+  "scope": "Five synthetic native Mongo fixtures using production loader, planner, journal and migration; not live migration or full-world proof",
+  "results": [
+    {
+      "case": "completed_retry",
+      "faultInjected": false,
+      "initialPlan": {
+        "ok": true,
+        "backingRequired": 700,
+        "existingAccounts": 0
+      },
+      "before": {
+        "pool": 700,
+        "vault": 500,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [],
+        "journals": []
+      },
+      "first": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 1,
+            "replayed": 0,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "interrupted": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "observedPendingPlan": {
+        "ok": true,
+        "backingRequired": 0,
+        "invariantFailures": []
+      },
+      "resumed": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "final": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "retry": {
+        "ok": true,
+        "backingRequired": 0,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "dryRunReadOnly": true
+    },
+    {
+      "case": "after_pool_debit",
+      "faultInjected": true,
+      "initialPlan": {
+        "ok": true,
+        "backingRequired": 700,
+        "existingAccounts": 0
+      },
+      "before": {
+        "pool": 700,
+        "vault": 500,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [],
+        "journals": []
+      },
+      "first": {
+        "error": "Injected saved-world interruption: after_pool_debit"
+      },
+      "interrupted": {
+        "pool": 0,
+        "vault": 500,
+        "cash": 500,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "partial",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": false
+              }
+            ],
+            "projections": [
+              {
+                "applied": false,
+                "acknowledged": false
+              },
+              {
+                "applied": false,
+                "acknowledged": false
+              }
+            ],
+            "completed": false
+          }
+        ]
+      },
+      "observedPendingPlan": {
+        "ok": false,
+        "backingRequired": 700,
+        "invariantFailures": ["USD: household pool short by 700 for the backing transfers"]
+      },
+      "resumed": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "final": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "retry": {
+        "ok": true,
+        "backingRequired": 0,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "dryRunReadOnly": true
+    },
+    {
+      "case": "vault_ack_lost",
+      "faultInjected": true,
+      "initialPlan": {
+        "ok": true,
+        "backingRequired": 700,
+        "existingAccounts": 0
+      },
+      "before": {
+        "pool": 700,
+        "vault": 500,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [],
+        "journals": []
+      },
+      "first": {
+        "error": "Injected saved-world interruption: vault_ack_lost"
+      },
+      "interrupted": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "partial",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": false
+              }
+            ],
+            "projections": [
+              {
+                "applied": false,
+                "acknowledged": false
+              },
+              {
+                "applied": false,
+                "acknowledged": false
+              }
+            ],
+            "completed": false
+          }
+        ]
+      },
+      "observedPendingPlan": {
+        "ok": false,
+        "backingRequired": 700,
+        "invariantFailures": ["USD: household pool short by 700 for the backing transfers"]
+      },
+      "resumed": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "final": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "retry": {
+        "ok": true,
+        "backingRequired": 0,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "dryRunReadOnly": true
+    },
+    {
+      "case": "projection_interrupted",
+      "faultInjected": true,
+      "initialPlan": {
+        "ok": true,
+        "backingRequired": 700,
+        "existingAccounts": 0
+      },
+      "before": {
+        "pool": 700,
+        "vault": 500,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [],
+        "journals": []
+      },
+      "first": {
+        "error": "Injected saved-world interruption: projection_interrupted"
+      },
+      "interrupted": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "partial",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": false,
+                "acknowledged": false
+              }
+            ],
+            "completed": false
+          }
+        ]
+      },
+      "observedPendingPlan": {
+        "ok": false,
+        "backingRequired": 700,
+        "invariantFailures": ["USD: household pool short by 700 for the backing transfers"]
+      },
+      "resumed": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "final": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "retry": {
+        "ok": true,
+        "backingRequired": 0,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "dryRunReadOnly": true
+    },
+    {
+      "case": "existing_shadow_account",
+      "faultInjected": false,
+      "initialPlan": {
+        "ok": true,
+        "backingRequired": 700,
+        "existingAccounts": 1
+      },
+      "before": {
+        "pool": 700,
+        "vault": 500,
+        "cash": 1200,
+        "playerLiability": 0,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": []
+      },
+      "first": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 1,
+            "replayed": 0,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "interrupted": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "observedPendingPlan": {
+        "ok": true,
+        "backingRequired": 0,
+        "invariantFailures": []
+      },
+      "resumed": {
+        "ok": true,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "final": {
+        "pool": 0,
+        "vault": 1200,
+        "cash": 1200,
+        "playerLiability": 700,
+        "legacySavings": 700,
+        "accounts": [
+          {
+            "balance": 700,
+            "holderMatches": true,
+            "status": "open"
+          }
+        ],
+        "journals": [
+          {
+            "kind": "savings_migration",
+            "status": "applied",
+            "legs": [
+              {
+                "kind": "debit",
+                "amount": 700,
+                "applied": true
+              },
+              {
+                "kind": "credit",
+                "amount": 700,
+                "applied": true
+              }
+            ],
+            "projections": [
+              {
+                "applied": true,
+                "acknowledged": true
+              },
+              {
+                "applied": true,
+                "acknowledged": true
+              }
+            ],
+            "completed": true
+          }
+        ]
+      },
+      "retry": {
+        "ok": true,
+        "backingRequired": 0,
+        "batches": [
+          {
+            "currency": "USD",
+            "applied": 0,
+            "replayed": 1,
+            "failed": 0,
+            "reconciled": true,
+            "discrepancies": 0
+          }
+        ]
+      },
+      "dryRunReadOnly": true
+    }
+  ]
+}

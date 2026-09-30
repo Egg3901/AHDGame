@@ -1,0 +1,164 @@
+{
+  "sourceCommit": "b82b6e9051886eb546f803e4017185d6dd9feb3f",
+  "copiedSourceHash": "b56216b6a692db427d0948baf2c790cfbec94923c566c37908ca44edc24cf750",
+  "counts": {
+    "actionAuditLog": 41,
+    "bankCharterHistory": 2,
+    "bankLoans": 6,
+    "bankMoneyMoves": 31,
+    "bankingTelemetry": 3,
+    "centralBanks": 18,
+    "characters": 2,
+    "corporateSectors": 1,
+    "corporationHistory": 12,
+    "corporations": 2,
+    "countryGameStates": 29,
+    "countryState": 2,
+    "depositInsuranceFunds": 1,
+    "exchangeRates": 18,
+    "federalBudget": 16,
+    "financialTxLog": 14,
+    "gameConfig": 1,
+    "gameState": 2,
+    "ledgerEntries": 14,
+    "macroMetrics": 178,
+    "playerMail": 1,
+    "savingsAccounts": 1,
+    "savingsLedger": 3,
+    "users": 2
+  },
+  "inheritedBook": {
+    "counter": 67013.92174453675,
+    "principal": 197144.70680312152,
+    "namedPrincipal": 81818.18181818182,
+    "npcPrincipal": 115326.52498493974
+  },
+  "reissuedBook": {
+    "counter": 197144.70680312152,
+    "principal": 197144.70680312152,
+    "namedPrincipal": 81818.18181818182,
+    "npcPrincipal": 115326.52498493974
+  },
+  "refusedCredit": "Principal exceeds lendable headroom (max 0)",
+  "fundingBook": {
+    "counter": 208992.79279975125,
+    "principal": 208992.79279975127,
+    "namedPrincipal": 71818.18181818182,
+    "npcPrincipal": 137174.61098156948
+  },
+  "fundingPhases": {
+    "banking": {
+      "banksProcessed": 1,
+      "depositInterestPaid": 1136.88,
+      "depositInterestShortfall": 0,
+      "loanInterestCollected": 304.8559443909508,
+      "loanPrincipalRepaid": 10000,
+      "defaultsWrittenOff": 30.48161369667858,
+      "npcDepositDelta": 1559143.4120409368,
+      "npcBulkShortfall": 0,
+      "premiumShortfall": 0,
+      "interbankInterestPaid": 0,
+      "interbankDefaultsWrittenOff": 0,
+      "cbMarginInterestPaid": 0,
+      "cbMarginInterestShortfall": 0,
+      "deadBankLoansServiced": 0,
+      "deadBankRecoveredToEstate": 0,
+      "deadBankRecoveredToInsurer": 0,
+      "unfinishedSettlements": 0,
+      "recovery": {
+        "resumedSettlements": 0,
+        "stillPartial": 0,
+        "estatesRecovered": 0,
+        "estatesStillResolving": 0
+      }
+    },
+    "solvency": {
+      "banksEvaluated": 1,
+      "fled": 0,
+      "failures": 0,
+      "contagionTriggered": 0,
+      "depositorsResolved": 0,
+      "insurancePaid": 0,
+      "haircutsApplied": 0,
+      "forcedLiquidations": 0
+    },
+    "meetings": {
+      "banksProcessed": 1,
+      "meetingsOpened": 0,
+      "meetingsResolved": 0,
+      "ratesChanged": 0,
+      "seatsReplaced": 0
+    }
+  },
+  "originatedBook": {
+    "counter": 209992.79279975125,
+    "principal": 209992.79279975127,
+    "namedPrincipal": 72818.18181818182,
+    "npcPrincipal": 137174.61098156948
+  },
+  "servicedBook": {
+    "counter": 244959.6355550757,
+    "principal": 244959.6355550757,
+    "namedPrincipal": 62727.27272727274,
+    "npcPrincipal": 182232.362827803
+  },
+  "postedCapital": 5000000,
+  "successfulReissues": 1,
+  "treasuryBefore": 11322429.355715364,
+  "treasuryAfter": 6322429.355715364,
+  "phases": {
+    "banking": {
+      "banksProcessed": 1,
+      "depositInterestPaid": 2274.38,
+      "depositInterestShortfall": 0,
+      "loanInterestCollected": 355.65681506485384,
+      "loanPrincipalRepaid": 10090.90909090909,
+      "defaultsWrittenOff": 40.60856673534664,
+      "npcDepositDelta": 1558865.1568364946,
+      "npcBulkShortfall": 0,
+      "premiumShortfall": 0,
+      "interbankInterestPaid": 0,
+      "interbankDefaultsWrittenOff": 0,
+      "cbMarginInterestPaid": 0,
+      "cbMarginInterestShortfall": 0,
+      "deadBankLoansServiced": 0,
+      "deadBankRecoveredToEstate": 0,
+      "deadBankRecoveredToInsurer": 0,
+      "unfinishedSettlements": 0,
+      "recovery": {
+        "resumedSettlements": 0,
+        "stillPartial": 0,
+        "estatesRecovered": 0,
+        "estatesStillResolving": 0
+      }
+    },
+    "solvency": {
+      "banksEvaluated": 1,
+      "fled": 0,
+      "failures": 0,
+      "contagionTriggered": 0,
+      "depositorsResolved": 0,
+      "insurancePaid": 0,
+      "haircutsApplied": 0,
+      "forcedLiquidations": 0
+    },
+    "meetings": {
+      "banksProcessed": 1,
+      "meetingsOpened": 0,
+      "meetingsResolved": 0,
+      "ratesChanged": 0,
+      "seatsReplaced": 0
+    }
+  },
+  "cash": {
+    "before": 5394306676867.324,
+    "afterRevoke": 5394306676867.324,
+    "afterIssue": 5394306676867.324,
+    "afterFundingTurn": 5394306676867.323,
+    "afterOrigination": 5394306676867.323,
+    "afterTurn": 5394306676867.323
+  },
+  "turns": [568, 570],
+  "appliedJournals": 45,
+  "rejectedWithoutMoney": 1
+}

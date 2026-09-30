@@ -57,6 +57,36 @@ async function state(db: Db) {
   return db.collection("corporations").findOne({ _id: id });
 }
 describe("atomic document settlement", () => {
+  it.each([null, ["prior-receipt"]])(
+    "rejects a generation changed since quote assembly before creating a claim (%j)",
+    async (quotedGeneration) => {
+      const memory = world();
+      const db = memory as unknown as Db;
+      await db
+        .collection("corporations")
+        .updateOne(
+          { _id: id },
+          { $set: { settledKeys: [...(quotedGeneration ?? []), "concurrent-book-change"] } }
+        );
+      const result = await settleAtomicDocumentTransition(db, transition(), {
+        ...target,
+        expectedSettledKeys: quotedGeneration,
+      });
+      expect(result.status).toBe("rejected");
+      expect(await state(db)).toMatchObject({ liquidCapital: 100, bankCharter: null });
+      expect(memory.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+    }
+  );
+  it("replays the original claim with the original caller generation", async () => {
+    const memory = world();
+    const db = memory as unknown as Db;
+    const quoted = { ...target, expectedSettledKeys: null };
+    expect((await settleAtomicDocumentTransition(db, transition(), quoted)).status).toBe("applied");
+    expect((await settleAtomicDocumentTransition(db, transition(), quoted)).status).toBe(
+      "replayed"
+    );
+    expect(await state(db)).toMatchObject({ liquidCapital: 60, bankCharter: { cashReserves: 40 } });
+  });
   it("publishes capital and the complete charter together and ignores changed retry quotes", async () => {
     const memory = world();
     const db = memory as unknown as Db;
@@ -236,5 +266,101 @@ describe("atomic settlement transaction receipts", () => {
     await expect(settleAtomicDocumentTransition(db, original, target)).rejects.toThrow("conflicts");
     await expect(resumeSettlement(db, original.key)).rejects.toThrow("conflicts");
     expect(await state(db)).toMatchObject({ liquidCapital: 60, bankCharter: { cashReserves: 40 } });
+  });
+});
+
+describe("explicit noncash central-bank bond exchange", () => {
+  const bondTarget = {
+    identity,
+    nonCashMode: "central_bank_bond_exchange" as const,
+    guard: { publicFloat: 100, centralBankHoldings: 10 },
+  };
+  function exchange(key = "bond-exchange"): BankingTransition {
+    return {
+      key,
+      kind: "monetary_bond_exchange",
+      turn: 5,
+      currency: "USD",
+      legs: [],
+      projections: [
+        {
+          collection: "bonds",
+          filter: identity,
+          update: {
+            $inc: { publicFloat: -5, centralBankHoldings: 5 },
+            $set: { marketPrice: 1.01, qeSupportRatio: 15 / 110 },
+          },
+          note: "central-bank bond inventory exchange",
+        },
+      ],
+      event: { kind: "account.deposited", command: "monetary.qe" },
+    };
+  }
+  function bondWorld() {
+    const memory = createInMemoryDb();
+    memory.seed("bonds", [{ _id: id, publicFloat: 100, centralBankHoldings: 10, marketPrice: 1 }]);
+    return memory;
+  }
+  it("conserves units on concurrent delivery and replays the original quote", async () => {
+    const memory = bondWorld(),
+      db = memory as unknown as Db;
+    await Promise.all([
+      settleAtomicDocumentTransition(db, exchange(), bondTarget),
+      settleAtomicDocumentTransition(db, exchange(), bondTarget),
+    ]);
+    const changed = exchange();
+    changed.projections[0].update = { $inc: { publicFloat: -80, centralBankHoldings: 80 } };
+    await settleAtomicDocumentTransition(db, changed, bondTarget);
+    expect(memory.collection("bonds").docs[0]).toMatchObject({
+      publicFloat: 95,
+      centralBankHoldings: 15,
+      marketPrice: 1.01,
+    });
+  });
+  it.each([false, true])(
+    "recovers the original exchange around publication (after=%s)",
+    async (afterWrite) => {
+      const memory = bondWorld(),
+        db = memory as unknown as Db;
+      const fault = withInjectedCrash(memory, {
+        collection: "bonds",
+        op: "updateOne",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(
+        settleAtomicDocumentTransition(fault.db, exchange(), bondTarget)
+      ).rejects.toThrow();
+      fault.disarm();
+      await resumeSettlement(db, exchange().key);
+      await resumeSettlement(db, exchange().key);
+      expect(memory.collection("bonds").docs[0]).toMatchObject({
+        publicFloat: 95,
+        centralBankHoldings: 15,
+      });
+      expect(memory.collection(MONEY_MOVE_COLLECTION).docs[0].status).toBe("applied");
+    }
+  );
+  it("rejects cash updates and undeclared empty-leg operations", async () => {
+    const memory = bondWorld(),
+      db = memory as unknown as Db;
+    const bad = exchange();
+    bad.projections[0].update = { $inc: { cashLocal: 500 } };
+    expect((await settleAtomicDocumentTransition(db, bad, bondTarget)).status).toBe("rejected");
+    expect((await settleAtomicDocumentTransition(db, exchange(), { identity })).status).toBe(
+      "rejected"
+    );
+    expect(memory.collection("bonds").docs[0]).not.toHaveProperty("cashLocal");
+  });
+  it("rejects unit creation without changing the asset", async () => {
+    const memory = bondWorld(),
+      db = memory as unknown as Db;
+    const bad = exchange();
+    bad.projections[0].update = { $inc: { publicFloat: -5, centralBankHoldings: 6 } };
+    expect((await settleAtomicDocumentTransition(db, bad, bondTarget)).status).toBe("rejected");
+    expect(memory.collection("bonds").docs[0]).toMatchObject({
+      publicFloat: 100,
+      centralBankHoldings: 10,
+    });
   });
 });
