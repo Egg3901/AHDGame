@@ -592,6 +592,14 @@ export async function resolveOneGeneralElection(
       }
     }
 
+    const officeAnalytics: Array<{
+      officeType: string;
+      transitionType: "gained" | "left" | "lost";
+      partyId: string;
+      careerStage: number;
+      nationId: string;
+    }> = [];
+
     // For generic single-seat elections, clear the incumbent's currentOffice if
     // they are not the winner. This includes incumbents who do not run again.
     const singleSeatTypes = ["governor", "senate", "uachtaran"];
@@ -637,6 +645,13 @@ export async function resolveOneGeneralElection(
                 { _id: incumbent.characterId, ...officeFilter },
                 { $set: { currentOffice: null, updatedAt: now } }
               );
+            officeAnalytics.push({
+              officeType: incumbent.officeType,
+              transitionType: "lost",
+              partyId: incumbent.party ?? "unknown",
+              careerStage: 0,
+              nationId: election.countryId ?? "US",
+            });
             console.log(
               `[Turn] Cleared currentOffice for character ${incumbent.characterName} ` +
                 `(${election.electionType}/${election.state}${election.senateClass ? ` Class ${election.senateClass}` : ""}) — did not win re-election`
@@ -704,13 +719,6 @@ export async function resolveOneGeneralElection(
       nationId: string;
       turn: number;
       winnerOrdinal: number;
-    }> = [];
-    const officeAnalytics: Array<{
-      officeType: string;
-      transitionType: "gained" | "lost";
-      partyId: string;
-      careerStage: number;
-      nationId: string;
     }> = [];
     const rankedVotes = Object.entries(effectiveVotes).sort((a, b) => b[1] - a[1]);
 
@@ -881,6 +889,15 @@ export async function resolveOneGeneralElection(
               (currentSenateClass === 1 || currentSenateClass === 2 || currentSenateClass === 3)
             ) {
               await notifyGovernorOfSenateVacancy(db, currentState, currentSenateClass);
+            }
+            if (!getExecutiveOfficeKeys().has(currentOffice.type)) {
+              officeAnalytics.push({
+                officeType: currentOffice.type,
+                transitionType: "left",
+                partyId: char.party ?? "unknown",
+                careerStage: char.careerHistory?.length ?? 0,
+                nationId: election.countryId ?? "US",
+              });
             }
             console.log(
               `[Turn] ${candidate.characterName} vacated ${currentOffice.type}${currentSenateClass ? ` Class ${currentSenateClass}` : ""} (${currentState}) for new ${officeType.type}${election.senateClass ? ` Class ${election.senateClass}` : ""} (${newState})`
