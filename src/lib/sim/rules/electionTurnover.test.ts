@@ -38,6 +38,8 @@ describe("standing election turnover denominators", () => {
     ]);
     expect(r.uniqueControlFlips).toEqual({ count: 0, comparableCycles: 0, per100: null });
     expect(r.tiedControlComparison.per100).toBe(100);
+    expect(r.tiedControlCycles.count).toBe(1);
+    expect(r.tiedControlCycles.comparableCycles).toBe(3);
   });
   it("does not bridge missing outcomes, duplicate cycles, changed capacity or different scopes", () => {
     const [r] = summarizeElectionTurnover([

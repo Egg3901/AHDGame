@@ -17,11 +17,36 @@ type CandidateRow = Omit<CandidateRecord, "_id" | "electionId" | "characterId" |
 };
 type TallyRow = Omit<TallyRecord, "electionId"> & { electionId: ObjectId };
 type SnapshotRow = Omit<SnapshotRecord, "electionId"> & { electionId: ObjectId };
-export async function collectElectionTurnoverReport(db: Db) {
+export interface ElectionTurnoverWindow {
+  scheduledEndTurnFrom?: number;
+  scheduledEndTurnThrough?: number;
+  countryId?: string;
+  electionFamily?: string;
+}
+export async function collectElectionTurnoverReport(db: Db, window: ElectionTurnoverWindow = {}) {
   const elections = await db
     .collection<ElectionRow>("elections")
     .find(
-      { status: "resolved", electionType: { $nin: ["president", "vicePresident"] } },
+      {
+        status: "resolved",
+        electionType: window.electionFamily
+          ? { $eq: window.electionFamily, $nin: ["president", "vicePresident"] }
+          : { $nin: ["president", "vicePresident"] },
+        ...(window.countryId ? { countryId: window.countryId } : {}),
+        ...(window.scheduledEndTurnFrom !== undefined ||
+        window.scheduledEndTurnThrough !== undefined
+          ? {
+              endTurn: {
+                ...(window.scheduledEndTurnFrom !== undefined
+                  ? { $gte: window.scheduledEndTurnFrom }
+                  : {}),
+                ...(window.scheduledEndTurnThrough !== undefined
+                  ? { $lte: window.scheduledEndTurnThrough }
+                  : {}),
+              },
+            }
+          : {}),
+      },
       {
         projection: {
           _id: 1,
@@ -180,6 +205,17 @@ export async function collectElectionTurnoverReport(db: Db) {
       "Each rate carries its own comparableCycles. Seat/person metrics compare consecutive races with unchanged capacity in the same scope. Win and resolver shares count resolved outcome cycles. Player/NPP win-cycle rates can overlap in mixed multi-seat races.",
     legacyLimit:
       "Missing historical person identity, actor kind and executed resolver remain unknown. Present-day flags are context only.",
+    selection: {
+      ...window,
+      timeBasis:
+        "Scheduled election endTurn among currently resolved records; old finalization timestamps are unavailable. This is not an as-of database reconstruction.",
+      firstScheduledEndTurn: elections.length
+        ? Math.min(...elections.map((row) => row.endTurn ?? Infinity))
+        : null,
+      lastScheduledEndTurn: elections.length
+        ? Math.max(...elections.map((row) => row.endTurn ?? -Infinity))
+        : null,
+    },
     provenance: {
       run: runs[0] ?? null,
       bootstrapFeatureManifest: seedDiagnostics[0]?.featureManifest ?? null,

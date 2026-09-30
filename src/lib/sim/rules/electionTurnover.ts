@@ -128,6 +128,10 @@ export function summarizeElectionTurnover(input: readonly TurnoverCycle[]) {
         uniqueControlFlips: rate(flips, unique),
         uniqueControlHolds: rate(unique - flips, unique),
         tiedControlComparison: rate(tied, comparable),
+        tiedControlCycles: rate(
+          rows.filter((row) => row.seats !== null && leader(row.seats) === null).length,
+          rows.filter((row) => row.seats !== null).length
+        ),
         personReplacement: rate(replaced, personPairs),
         completeIncumbentHold: rate(fullHolds, personPairs),
         anyIncumbentRetained: rate(someRetained, personPairs),
