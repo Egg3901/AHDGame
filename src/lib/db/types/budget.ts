@@ -479,6 +479,10 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Temporary executive crisis consolidation, consumed by normal fiscal recalculation. */
+  financialCrisisAusterityUntilTurn?: number;
+  /** Latest ordinary appropriations restored when temporary consolidation expires. */
+  financialCrisisAusterityBaseSpending?: FederalSpending;
   /**
    * Audit stamp written by `mergeNationalFisc` when this country dissolved into
    * another and its treasury, debt and bonds were assumed by the successor. The
