@@ -127,3 +127,12 @@ it("counts same-party person turnover from the seeded office and preserves missi
   ).toEqual({ personTurnover: 1, knownTurns: 4, unknownTurns: 1 });
   expect(presidentialPersonTurnover([{ ...row, turn: 1 }]).personTurnover).toBeNull();
 });
+
+it("reports the margin when every electoral vote goes to one candidate", () => {
+  expect(
+    qualifyPresidentialRace("sweep", snapshot, {
+      ...tally,
+      electoralVotesByCandidate: { a: 5 },
+    }).evMargin
+  ).toBe(5);
+});

@@ -50,7 +50,7 @@ export function qualifyPresidentialRace(
   const popularMarginPct =
     votes.length >= 2 && totalVotes > 0 ? (100 * (votes[0][1] - votes[1][1])) / totalVotes : null;
   const ev = Object.entries(tally?.electoralVotesByCandidate ?? {}).sort((a, b) => b[1] - a[1]);
-  const evMargin = ev.length >= 2 ? ev[0][1] - ev[1][1] : null;
+  const evMargin = ev.length >= 1 && votes.length >= 2 ? ev[0][1] - (ev[1]?.[1] ?? 0) : null;
   const winnerId =
     tally?.contingentResult?.presidentWinnerId ??
     (ev.length && snapshot?.evNeeded && ev[0][1] >= snapshot.evNeeded ? ev[0][0] : null);
