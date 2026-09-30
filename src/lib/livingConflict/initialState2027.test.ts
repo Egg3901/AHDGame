@@ -60,6 +60,10 @@ describe("fresh 2027 crisis opening", () => {
     expect(states.arab_uprisings.arabRegional?.origins.YE?.trajectory).toBe("civil_war");
     expect(states.arab_uprisings.arabRegional?.origins.SY?.trajectory).toBe("transition");
     expect(states.arab_uprisings.arabRegional?.origins.LY?.trajectory).toBe("frozen");
+    for (const origin of Object.values(states.arab_uprisings.arabRegional?.origins ?? {})) {
+      expect(origin?.openingSourceUrl).toMatch(/^https:\/\//);
+      expect(origin?.openingEvidenceAsOf).toBe("2026-09-30");
+    }
     expect(states.arab_uprisings.arabRegional?.hosts.TR?.refugeePeople).toBeGreaterThan(0);
     for (const def of defs) {
       const state = states[def.key];

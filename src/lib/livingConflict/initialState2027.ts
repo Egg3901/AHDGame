@@ -35,6 +35,9 @@ const sources: Record<string, string[]> = {
     "https://dppa.un.org/en/speeches-and-statements/asg-khiaris-remarks-to-the-security-council-on-developments-in-yemen",
     "https://transcripts.un.org/en/ecosoc/2026/33?t=41%3A38",
     "https://egypt.un.org/en/317774-government-egypt-united-nations-partners-reaffirm-shared-commitment-under-joint-platform",
+    "https://spcommreports.ohchr.org/TmSearch/RelCom?code=TUN+4%2F2026",
+    "https://spcommreports.ohchr.org/TmSearch/RelCom?code=TUN+1%2F2026",
+    "https://spcommreports.ohchr.org/TmSearch/RelCom?code=EGY+7%2F2025",
   ],
   russia_ukraine_security: [
     "https://ukraine.un.org/en/323454-protection-civilians-armed-conflict-%E2%80%94-august-2026",
@@ -49,16 +52,21 @@ export interface Opening2027Context {
 /** Trajectories are dated continuity assumptions; values are bounded game scales. */
 const ARAB_OPENING: Record<ArabOriginId, Partial<ArabOriginState>> = {
   TN: {
-    policy: "reform",
-    trajectory: "reform",
-    legitimacy: 60,
+    openingSourceUrl: "https://spcommreports.ohchr.org/TmSearch/RelCom?code=TUN+4%2F2026",
+    openingEvidenceAsOf: AS_OF,
+    policy: "unchanged",
+    trajectory: "authoritarian",
+    legitimacy: 45,
     mobilization: 25,
-    repression: 30,
-    cohesion: 60,
-    settlement: 65,
-    reconstruction: 50,
+    repression: 62,
+    cohesion: 65,
+    opposition: 15,
+    settlement: 25,
+    reconstruction: 25,
   },
   EG: {
+    openingSourceUrl: "https://spcommreports.ohchr.org/TmSearch/RelCom?code=EGY+7%2F2025",
+    openingEvidenceAsOf: AS_OF,
     policy: "unchanged",
     trajectory: "authoritarian",
     legitimacy: 45,
@@ -70,6 +78,8 @@ const ARAB_OPENING: Record<ArabOriginId, Partial<ArabOriginState>> = {
     reconstruction: 35,
   },
   LY: {
+    openingSourceUrl: "https://unsmil.unmissions.org/en/news/unsmil-welcomes-agreement-on-next-steps-towards-national-elections",
+    openingEvidenceAsOf: AS_OF,
     policy: "transition",
     trajectory: "frozen",
     legitimacy: 42,
@@ -85,6 +95,8 @@ const ARAB_OPENING: Record<ArabOriginId, Partial<ArabOriginState>> = {
     reconstruction: 30,
   },
   SY: {
+    openingSourceUrl: "https://dppa.un.org/en/node/136734",
+    openingEvidenceAsOf: AS_OF,
     policy: "transition",
     trajectory: "transition",
     legitimacy: 50,
@@ -99,6 +111,8 @@ const ARAB_OPENING: Record<ArabOriginId, Partial<ArabOriginState>> = {
     reconstruction: 32,
   },
   YE: {
+    openingSourceUrl: "https://dppa.un.org/en/speeches-and-statements/asg-khiaris-remarks-to-the-security-council-on-developments-in-yemen",
+    openingEvidenceAsOf: AS_OF,
     policy: "unchanged",
     trajectory: "civil_war",
     legitimacy: 30,
