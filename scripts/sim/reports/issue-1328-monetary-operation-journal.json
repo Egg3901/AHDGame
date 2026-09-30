@@ -86,6 +86,25 @@
             ]
           }
         ]
+      },
+      "liquidity_injection": {
+        "reserve": 350,
+        "external": 1000,
+        "created": 0,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 100,
+        "holdings": 10,
+        "marketPrice": 1,
+        "support": null,
+        "poolCash": 10000,
+        "poolFlows": {
+          "qeIn": 0,
+          "qtOut": 0
+        },
+        "treasury": -1000,
+        "principal": 1000,
+        "ledger": []
       }
     },
     "performance": {
@@ -101,6 +120,10 @@
         "commands": 7,
         "readBsonBytes": 286
       },
+      "liquidity_injection": {
+        "commands": 23,
+        "readBsonBytes": 1407
+      },
       "idleBankingPhase": {
         "commands": 2,
         "readBsonBytes": 46
@@ -110,10 +133,14 @@
     "concurrentCases": 0,
     "refundRecovery": false,
     "auditRecoveryCases": 0,
+    "admissionAuditRecoveryCases": 0,
+    "legacyHoldingsCases": 0,
+    "quoteGenerationCases": 0,
+    "admissionInterleavingCases": 0,
     "pendingIndexProbe": null
   },
   "treatment": {
-    "sourceCommit": "6f053f3b0ab0893997dced317e7498118c2785f6",
+    "sourceCommit": "c25b572e8a370fa25487ca717ba6afc58df6fd03",
     "mode": "treatment",
     "cohort": {
       "syntheticCentralBanks": 1,
@@ -198,20 +225,43 @@
             ]
           }
         ]
+      },
+      "liquidity_injection": {
+        "reserve": 350,
+        "external": 1000,
+        "created": 0,
+        "history": 1,
+        "lastOperation": 300,
+        "publicFloat": 100,
+        "holdings": 10,
+        "marketPrice": 1,
+        "support": null,
+        "poolCash": 10000,
+        "poolFlows": {
+          "qeIn": 0,
+          "qtOut": 0
+        },
+        "treasury": -1000,
+        "principal": 1000,
+        "ledger": []
       }
     },
     "performance": {
       "qe": {
-        "commands": 37,
-        "readBsonBytes": 3719
+        "commands": 38,
+        "readBsonBytes": 3776
       },
       "qt": {
-        "commands": 34,
-        "readBsonBytes": 5488
+        "commands": 35,
+        "readBsonBytes": 5545
       },
       "treasury_advance": {
         "commands": 33,
         "readBsonBytes": 2528
+      },
+      "liquidity_injection": {
+        "commands": 25,
+        "readBsonBytes": 1718
       },
       "idleBankingPhase": {
         "commands": 3,
@@ -222,6 +272,10 @@
     "concurrentCases": 3,
     "refundRecovery": true,
     "auditRecoveryCases": 2,
+    "admissionAuditRecoveryCases": 2,
+    "legacyHoldingsCases": 2,
+    "quoteGenerationCases": 1,
+    "admissionInterleavingCases": 4,
     "pendingIndexProbe": {
       "historicalCompletedCommands": 1000,
       "documentsExamined": 0,
@@ -229,7 +283,8 @@
     }
   },
   "normalEconomicParity": true,
-  "fixtureSha256": "b0fb25d0a49848fec350eba1fd7b8b927e32837c1274176bc2321422fe5e7ed0",
+  "baselineFixtureSha256": "e852989c1369232567431d8a378c087757428e5048f1fc5035f385675450064c",
+  "treatmentFixtureSha256": "9985d6f6a2f6b843f1889aa2d97b838ca7bacb0efc1c4654c87d7fda4ffb1e1d",
   "scope": "Synthetic isolated Mongo subsystem qualification. Normal operations and normal banking recovery; no full world or production activation.",
   "performanceScope": "Per-command measurements plus private-banking-disabled recovery phase. Returned cursor BSON only."
 }
