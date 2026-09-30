@@ -107,6 +107,26 @@ describe("buildSectorPlantsSection", () => {
     expect(s.labourStaffingFactor).toBe(0.25);
   });
 
+  it("includes national dominance in the player-facing build quote", () => {
+    const ordinary = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: sectorFixture(),
+    });
+    const nationallyDominant = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      nationalMarketSharePercent: 60,
+      sector: sectorFixture(),
+    });
+
+    expect(ordinary.buildQuote.dominanceMultiplier).toBe(1);
+    expect(nationallyDominant.buildQuote.dominanceMultiplier).toBeGreaterThan(1);
+    expect(nationallyDominant.buildQuote.perUnitAnchor).toBeGreaterThan(
+      ordinary.buildQuote.perUnitAnchor
+    );
+  });
+
   it("attributes idle capacity exactly — named causes plus other sum to idleUnits", () => {
     const s = buildSectorPlantsSection({
       eraUnitScale: 1,
