@@ -124,7 +124,10 @@ describe("banking audit accounting", () => {
   it("preserves margin-first payment priority across a recovered facility projection", async () => {
     const memory = await world();
     memory.collection("gameConfig").docs[0].bankPropTradingEnabled = true;
-    const charter = memory.collection("corporations").docs[0].bankCharter;
+    const charter = memory.collection("corporations").docs[0].bankCharter as Record<
+      string,
+      unknown
+    >;
     Object.assign(charter, {
       lastBankingTurn: TURN,
       cbMarginDebt: 100_000,

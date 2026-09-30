@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { BankCharter } from "@/lib/db/types/bank";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/banking/featureFlag", () => ({
@@ -187,7 +188,9 @@ describe("non-QE monetary operations", () => {
         operationId: "wrapper-liquidity",
       });
       expect(
-        memory.collection("corporations").docs.map((bank) => bank.bankCharter.cashReserves)
+        memory
+          .collection("corporations")
+          .docs.map((bank) => (bank.bankCharter as BankCharter).cashReserves)
       ).toEqual(expected);
       expect(result.reserveDelta).toBe(reserve);
       expect(result.banksCredited).toBe(expected.length);

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { BankCharter } from "@/lib/db/types/bank";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import { executeLiquidityAdvance, resumeLiquidityAdvances } from "./liquidityAdvance";
@@ -39,7 +40,9 @@ function world() {
 }
 function snapshot(memory: ReturnType<typeof world>) {
   return {
-    banks: memory.collection("corporations").docs,
+    banks: memory
+      .collection("corporations")
+      .docs.map((row) => ({ ...row, bankCharter: row.bankCharter as BankCharter })),
     central: memory.collection("centralBanks").docs,
     logs: memory.collection("financialTxLog").docs,
   };
@@ -102,7 +105,7 @@ describe("durable liquidity advance commands", () => {
     expect(snapshot(memory).logs).toHaveLength(2);
     for (const tx of snapshot(memory).logs) {
       expect(tx.anchorAmount).toBeUndefined();
-      expect(tx.meta.anchorValuation).toBe("unavailable");
+      expect((tx.meta as Record<string, unknown>).anchorValuation).toBe("unavailable");
     }
   });
   it("uses the original command across concurrent same-ID delivery", async () => {
@@ -142,7 +145,7 @@ describe("durable liquidity advance commands", () => {
       afterWrite: true,
     });
     await expect(executeLiquidityAdvance(fault.db, command, 6)).rejects.toThrow();
-    memory.collection("corporations").docs[0].bankCharter.status = "failed";
+    snapshot(memory).banks[0].bankCharter.status = "failed";
     fault.disarm();
     const result = await executeLiquidityAdvance(memory as unknown as Db, command, 6);
     expect(result).toMatchObject({ amount: 100, banksCredited: 1 });
