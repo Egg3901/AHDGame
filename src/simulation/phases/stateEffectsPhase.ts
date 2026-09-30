@@ -4,6 +4,7 @@
  * it back into the registry array at the exact same position, so phase
  * registration ORDER — which is behavior — is unchanged.
  */
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { processStatePolicyEffects } from "@/lib/policyEffects";
 import { processAllStateDemographics } from "@/lib/demographicEffects";
 import { processEraCheckpointsTurn } from "@/lib/turn/eraCheckpointTurn";
@@ -648,8 +649,11 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
 
     const [metricHistResult, approvalSnapshotResult] = await Promise.all([
       runtime.runPhase("metricHistory", async () => {
+        const steps = substepMarker();
         await snapshotMetricHistory(db, newTurn);
+        steps.mark("metricArrays");
         if (longHorizonCtx) await appendMacroTelemetry(db, longHorizonCtx, newTurn);
+        steps.mark("macroTelemetry");
       }),
       // Covers the active countries plus any belligerent that is not one of
       // them, so a war block is computed for every country actually fighting.
