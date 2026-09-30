@@ -1,5 +1,5 @@
 import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
-import type { Db } from "mongodb";
+import { MongoServerError, type Db } from "mongodb";
 import type { Character, GameState, User } from "@/lib/db/types";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { resolveResetStartDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
@@ -229,14 +229,28 @@ export async function resetGameWorld(
   // recreated by seedIndexes() in the bootstrap that follows every reset path
   // (bootstrapGameWorld runs it before the seedOnly short-circuit). Ignore
   // NamespaceNotFound for collections that don't exist yet.
-  await Promise.all(
-    sweepCollections.map((name) =>
-      db
-        .collection(name)
-        .drop()
-        .catch(() => {})
-    )
+  const wipeResults = await Promise.allSettled(
+    sweepCollections.map(async (name) => {
+      try {
+        await db.collection(name).drop();
+      } catch (error) {
+        if (error instanceof MongoServerError && error.code === 26) return;
+        throw error;
+      }
+    })
   );
+  const failedWipes: Array<{ collection: string; error: unknown }> = [];
+  for (const [index, result] of wipeResults.entries()) {
+    if (result.status === "rejected") {
+      failedWipes.push({ collection: sweepCollections[index], error: result.reason });
+    }
+  }
+  if (failedWipes.length > 0) {
+    throw new AggregateError(
+      failedWipes.map((failure) => failure.error),
+      `Required reset cleanup failed for: ${failedWipes.map((failure) => failure.collection).join(", ")}`
+    );
+  }
   log(
     `Wiped ${sweepCollections.length} runtime collections ` +
       `(${officialsResult.deletedCount} officials, ${electionsResult.deletedCount} elections, ` +

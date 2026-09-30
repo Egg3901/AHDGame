@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { MongoServerError } from "mongodb";
 import { createMockDb, type MockDb, assertSetFields } from "@/lib/test-utils/mockDb";
 import { resetGameWorld, RUNTIME_WIPE_SPECIAL_CASES } from "@/lib/admin/resetGameWorld";
 import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
@@ -196,6 +197,67 @@ describe("resetGameWorld", () => {
         `runtime collection "${name}" was not wiped on reset — add it to the sweep or to RUNTIME_WIPE_SPECIAL_CASES`
       ).toHaveBeenCalled();
     }
+  });
+
+  it("allows missing runtime collections on clean and repeat resets", async () => {
+    db.collection("conflicts");
+    db.collectionMocks.conflicts.drop.mockRejectedValue(
+      new MongoServerError({ message: "namespace not found", code: 26 })
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await resetGameWorld(db as never, {
+        deleteProfiles: true,
+        preset: "1991-default",
+        seedHistorical: false,
+      });
+    }
+    expect(db.collectionMocks.conflicts.drop).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalled();
+  });
+
+  it.each([
+    new MongoServerError({ message: "not authorized to drop collection", code: 13 }),
+    new Error("connection interrupted"),
+  ])("refuses a successful reset when required conflict cleanup fails: %s", async (error) => {
+    db.collection("conflicts");
+    db.collection("gameState");
+    db.collectionMocks.conflicts.drop.mockRejectedValue(error);
+    const log = vi.fn();
+    await expect(
+      resetGameWorld(db as never, {
+        deleteProfiles: true,
+        preset: "1991-default",
+        seedHistorical: false,
+        log,
+      })
+    ).rejects.toThrow("Required reset cleanup failed for: conflicts");
+    expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
+    expect(log.mock.calls.some(([message]) => String(message).includes("Wiped "))).toBe(false);
+  });
+
+  it("waits for all cleanup operations and reports every failed collection", async () => {
+    for (const name of ["conflicts", "peaceOffers", "navairChannels"]) db.collection(name);
+    const first = new Error("conflict drop denied");
+    const second = new Error("peace offer drop denied");
+    db.collectionMocks.conflicts.drop.mockRejectedValue(first);
+    db.collectionMocks.peaceOffers.drop.mockRejectedValue(second);
+    let cleanupFinished = false;
+    db.collectionMocks.navairChannels.drop.mockImplementation(async () => {
+      await Promise.resolve();
+      cleanupFinished = true;
+    });
+    const failure = await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+    }).catch((error: unknown) => error);
+    expect(cleanupFinished).toBe(true);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure).toHaveProperty(
+      "message",
+      "Required reset cleanup failed for: conflicts, peaceOffers"
+    );
+    expect(failure).toHaveProperty("errors", [first, second]);
   });
 
   it("handles every special-cased runtime collection explicitly", async () => {
