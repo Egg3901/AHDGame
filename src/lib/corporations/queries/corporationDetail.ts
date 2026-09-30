@@ -243,6 +243,7 @@ export async function loadCorporationDetailView(args: {
       currentTurn,
       typeLabel: CORPORATION_TYPE_LABELS[corporation.type],
       headquartersState: corporation.headquartersState,
+      federationPendingHeadquartersId: corporation.federationPendingHeadquartersId,
       headquartersStateName:
         stateNameMap.get(corporation.headquartersState) ?? corporation.headquartersState,
       liquidCapital: Math.round(corporation.liquidCapital),
