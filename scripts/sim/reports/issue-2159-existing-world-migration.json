@@ -1,0 +1,114 @@
+{
+  "sourceCommit": "b0fb427bb2260e1719c19f94c8c11c53642b6a55",
+  "source": {
+    "runId": "559d9701-e07f-48c8-ade1-294bc926820a",
+    "generatorCommit": "b4eb48872d6b17d64cd91a85202619f181797713",
+    "savedTurn": 13,
+    "sourceHash": "d7e0f0e0aeb85207963c35e4cf7211960181d2e1af8d65e67592536d33f07559",
+    "finalSourceHash": "d7e0f0e0aeb85207963c35e4cf7211960181d2e1af8d65e67592536d33f07559"
+  },
+  "copiedCohorts": [
+    {
+      "collection": "gameConfig",
+      "count": 1
+    },
+    {
+      "collection": "gameState",
+      "count": 1
+    },
+    {
+      "collection": "migrationsRun",
+      "count": 5
+    },
+    {
+      "collection": "campaigns",
+      "count": 0
+    },
+    {
+      "collection": "shareTradeHistory",
+      "count": 128
+    }
+  ],
+  "syntheticFixtures": [
+    "one purchased and one legacy campaign lever with cash",
+    "one stale split row",
+    "retained config with absent gate and sentinel; target clock explicitly set to turn 500",
+    "six explicit flag/age cases"
+  ],
+  "preview": {
+    "ids": [
+      "2026-08-08-adopt-reference-gameconfig-gates",
+      "2026-08-18-campaign-ops-trees",
+      "2026-09-18-normalize-share-corporate-actions"
+    ],
+    "unchanged": true
+  },
+  "applied": {
+    "ids": [
+      "2026-08-08-adopt-reference-gameconfig-gates",
+      "2026-08-18-campaign-ops-trees",
+      "2026-09-18-normalize-share-corporate-actions"
+    ],
+    "results": {
+      "2026-08-08-adopt-reference-gameconfig-gates": {
+        "documentsScanned": 1,
+        "documentsUpdated": 1
+      },
+      "2026-08-18-campaign-ops-trees": {
+        "documentsScanned": 1,
+        "documentsUpdated": 1
+      },
+      "2026-09-18-normalize-share-corporate-actions": {
+        "documentsScanned": 1,
+        "documentsUpdated": 1
+      }
+    }
+  },
+  "markerRetryUnchanged": true,
+  "forcedRetryWorldDataUnchanged": true,
+  "rejectedSelectionsWithoutMutation": 4,
+  "campaignCashAndPurchasedBranchesPreserved": true,
+  "splitStructureMovementPreserved": true,
+  "flagCases": [
+    {
+      "turn": 2,
+      "legacyFlag": "absent",
+      "migrationAndTopUpPreserved": true,
+      "resetEnabled": true
+    },
+    {
+      "turn": 2,
+      "legacyFlag": false,
+      "migrationAndTopUpPreserved": true,
+      "resetEnabled": true
+    },
+    {
+      "turn": 2,
+      "legacyFlag": true,
+      "migrationAndTopUpPreserved": true,
+      "resetEnabled": true
+    },
+    {
+      "turn": 500,
+      "legacyFlag": "absent",
+      "migrationAndTopUpPreserved": true,
+      "resetEnabled": true
+    },
+    {
+      "turn": 500,
+      "legacyFlag": false,
+      "migrationAndTopUpPreserved": true,
+      "resetEnabled": true
+    },
+    {
+      "turn": 500,
+      "legacyFlag": true,
+      "migrationAndTopUpPreserved": true,
+      "resetEnabled": true
+    }
+  ],
+  "freshInsertEnabled": true,
+  "explicitGameStateFlagsPreserved": true,
+  "migrationMarkersClassifiedPreserved": true,
+  "scope": "Three selected real migrations, bounded retained cohorts and explicit stale fixtures. No full registry apply, full world reset, or gameplay turn is claimed. Source preservation covers exactly the copied cohorts."
+}
