@@ -1,4 +1,5 @@
 import type { ElectionDetail } from "./wikiElectionTypes";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 
 export function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -59,7 +60,7 @@ export function typeLabel(type: string, plural = false): string {
     case "localCouncil":
       return plural ? "Local Councils" : "Local Council";
     default:
-      return type;
+      return formatElectionTypeLabel(type);
   }
 }
 
