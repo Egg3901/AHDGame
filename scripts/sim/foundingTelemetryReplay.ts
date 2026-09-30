@@ -27,7 +27,7 @@ async function main() {
   const approval = await source
     .collection<GovernmentApproval>("governmentApprovals")
     .findOne({ _id: "US" });
-  if (!game || !state || !approval || game.preIterationTurns !== 48) {
+  if (!game || !state || !approval || game.preIterationTurns !== 48 || !game.preIteration) {
     throw new Error("Retained 1953 founding fixture unavailable or changed");
   }
   const sample = approval.history?.at(-1);
