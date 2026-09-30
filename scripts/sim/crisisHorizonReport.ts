@@ -116,6 +116,12 @@ export function buildCrisisHorizonReport(
     if (years.size > 1) reasons.push(`mixed year at turn ${turn}`);
   }
   const sorted = [...points].sort((a, b) => a.turn - b.turn || a.defKey.localeCompare(b.defKey));
+  if (expectedTurns >= 1700) {
+    const years = new Set(sorted.map((point) => point.year));
+    if (!years.has(1991) || !years.has(2027)) {
+      reasons.push("long horizon does not include both 1991 and 2027 game years");
+    }
+  }
   let peakOpenFamilies = 0;
   let turnsWithTwoOrMoreOpen = 0;
   let peakNewResponsesPerTurn = 0;

@@ -112,6 +112,12 @@ interface SimRunDoc {
   nppForeignPolicyStage?: NppForeignPolicyStage;
   /** Simulation actor mode (#1993): pure NPP autonomy vs synthetic actors. */
   actorMode?: SimActorMode;
+  crisisHorizonTelemetry?: {
+    schemaVersion: number;
+    expectedFirstTurn: number;
+    expectedLastTurn: number;
+    families: number;
+  };
   /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
   actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
@@ -1229,8 +1235,8 @@ async function main() {
         $set: {
           crisisHorizonTelemetry: {
             schemaVersion: 1,
-            expectedFirstTurn: startTurn + 1,
-            expectedLastTurn: targetTurn,
+            expectedFirstTurn: existing?.crisisHorizonTelemetry?.expectedFirstTurn ?? startTurn + 1,
+            expectedLastTurn: existing?.crisisHorizonTelemetry?.expectedLastTurn ?? targetTurn,
             families: 7,
           },
         },
