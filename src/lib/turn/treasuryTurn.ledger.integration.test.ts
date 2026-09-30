@@ -149,14 +149,12 @@ describe("treasury accrual stock-flow ownership", () => {
   );
   it("prevalidates the full cohort before advancing any earlier valid treasury", async () => {
     const db = world();
-    await db
-      .collection("federalBudget")
-      .insertOne({
-        ...db.collection("federalBudget").docs[0],
-        _id: "UK",
-        countryId: "UK",
-        currencyCode: "GBP",
-      });
+    await db.collection("federalBudget").insertOne({
+      ...db.collection("federalBudget").docs[0],
+      _id: "UK",
+      countryId: "UK",
+      currencyCode: "GBP",
+    });
     await expect(processTreasuryTurn(10)).rejects.toThrow("GBP");
     for (const budget of db.collection("federalBudget").docs) {
       expect(budget.treasuryBalance).toBe(-1000);

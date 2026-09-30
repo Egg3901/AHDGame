@@ -91,7 +91,7 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + bond-ledg
     memory = createInMemoryDb();
     memory.seed(
       "exchangeRates",
-      ["USD", "RUB", "GRD", "EUR"].map((currencyCode) => ({
+      ["USD", "RUB", "SUR", "GRD", "EUR"].map((currencyCode) => ({
         _id: currencyCode,
         currencyCode,
         rate: 1,
