@@ -47,6 +47,10 @@ export interface SavingsAccount {
   lastSettlementKey?: string;
   lastSettledTurn?: number;
   openedTurn: number;
+  /** Durable owner-departure freeze; absent on existing accounts. */
+  closureClaimedTurn?: number;
+  /** Unfunded historical claim closed after both owner and holder disappeared. */
+  closureWriteOff?: number;
   /** Set when the record was materialized from legacy character fields. */
   migratedFromLegacyAt?: Date;
   createdAt: Date;
