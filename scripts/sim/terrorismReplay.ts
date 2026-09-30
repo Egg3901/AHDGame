@@ -23,7 +23,12 @@ import {
 import { calculateFederalSpending } from "../../src/lib/budget/spending";
 import { processTreasuryTurn } from "../../src/lib/turn/treasuryTurn";
 import { processPoliticalMetricsDynamics } from "../../src/lib/turn/politicalMetricsDynamics";
-import type { Crisis, CrisisInteraction } from "../../src/lib/db/types/crisis";
+import type {
+  Crisis,
+  CrisisInteraction,
+  CrisisDecisionNode,
+  CrisisDecisionOption,
+} from "../../src/lib/db/types/crisis";
 import type { FederalBudget } from "../../src/lib/db/types";
 
 const arg = (name: string) =>
@@ -306,9 +311,9 @@ async function main() {
           );
           retries++;
           for (const actor of leaders) {
-            const node = interaction.decisionTree[0],
+            const node: CrisisDecisionNode = interaction.decisionTree[0],
               role = crisis.globalResponse!.roleByCountry[actor.countryId];
-            const options = node.optionsByRole?.[role] ?? [];
+            const options: CrisisDecisionOption[] = node.optionsByRole?.[role] ?? [];
             let id = "defer_response";
             const attackSeen = outcomes.some((o) =>
               ["limited_attack", "attack_breakthrough"].includes(o.outcomeId)
@@ -350,10 +355,12 @@ async function main() {
                     ? "draw_down"
                     : "restore_law";
             }
-            const option = options.find((o) => o.optionId === id);
+            const option: CrisisDecisionOption | undefined = options.find((o) => o.optionId === id);
             assert(option, `${actor.countryId}: ${id}`);
             if (actor.countryId === "US" && windows === 1) {
-              const military = options.find((o) => o.optionId === "military_response")!;
+              const military: CrisisDecisionOption = options.find(
+                (o) => o.optionId === "military_response"
+              )!;
               const availability = await optionAvailabilityForGlobalResponder(
                 db,
                 crisis,
