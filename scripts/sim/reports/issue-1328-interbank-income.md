@@ -8,6 +8,8 @@ Refs #1328, #2159. This completes the interbank income-projection adoption lane.
 - Treatment: `92be3347279d23a1b6e4e5d49c30799ca5b13e57`.
 - Both checkouts were clean during execution. The companion JSON records the private fixture runner's hash. Later evidence and fixture-typing changes do not alter this game runtime. The inherited nullable cooldown read type also leaves its original query unchanged.
 
+The final integration includes development `c5ff9130b77dcb2d515bd455a6eabc76b6ad8a76` after #2637 merged. The only merge conflict was the settlement-journal import list; the interbank recovery imports were retained. All six focused interbank phase regressions passed again. The recorded Mongo measurements remain attributed to the executed source above.
+
 ## Scope and results
 
 Production `processBankingTurn` ran against isolated Mongo with ten synthetic investment banks and five USD interbank loans. Each loan has principal 48,000 and annual rate 10%, producing 100 interest per turn. Unrelated banking stages were explicitly pre-stamped complete at turn 300.
