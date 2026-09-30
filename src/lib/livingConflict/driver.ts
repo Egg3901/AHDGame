@@ -1,3 +1,4 @@
+import { advancePandemicState, pandemicOpeningYear, PANDEMIC_KEY } from "./rules/pandemic";
 import type { Db } from "mongodb";
 import { hasRequiredBelligerents } from "./rules/participants";
 import type {
@@ -120,7 +121,8 @@ export async function driveConflictTurn(
   turn: number,
   year: number | null | undefined,
   externalPressure = 0,
-  openingTrackDeltas: Record<string, number> = {}
+  openingTrackDeltas: Record<string, number> = {},
+  observedTrackValues: Record<string, number> = {}
 ): Promise<DriveResult> {
   let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
@@ -130,6 +132,12 @@ export async function driveConflictTurn(
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
+    if (
+      def.key === PANDEMIC_KEY &&
+      typeof year === "number" &&
+      year < pandemicOpeningYear(participants)
+    )
+      return { state, events: [] };
     if (!inWindow(def, year) || !hasRequiredBelligerents(def, participants)) {
       return { state, events: [] };
     }
@@ -164,7 +172,29 @@ export async function driveConflictTurn(
   }
 
   if (wasOpen && state.hasOpened) {
-    state = { ...state, campaign: advanceCampaignTurn(state.campaign) };
+    const campaign = normalizeCampaignState(state.campaign);
+    state = {
+      ...state,
+      campaign:
+        def.key === PANDEMIC_KEY
+          ? { ...campaign, stageTurns: campaign.stageTurns + 1 }
+          : advanceCampaignTurn(campaign),
+    };
+  }
+
+  // Authoritative observations replace their prior values each turn. They
+  // cannot accumulate solely because the driver runs again.
+  if (Object.keys(observedTrackValues).length > 0) {
+    state = applyTrackDeltas(
+      def,
+      state,
+      Object.fromEntries(
+        Object.entries(observedTrackValues).map(([key, value]) => [
+          key,
+          value - (state.tracks?.[key] ?? def.tracks?.[key]?.initial ?? 0),
+        ])
+      )
+    );
   }
 
   const trackDeltas = scheduledPressureDeltas(
@@ -174,6 +204,12 @@ export async function driveConflictTurn(
   );
   if (Object.keys(trackDeltas).length > 0) {
     state = applyTrackDeltas(def, state, trackDeltas);
+  }
+  if (def.key === PANDEMIC_KEY) {
+    state = advancePandemicState({
+      ...state,
+      pandemicOriginCountryId: state.pandemicOriginCountryId ?? participants.belligerents[0],
+    });
   }
   state = evaluateConflictTransitions(
     def,

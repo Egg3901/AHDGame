@@ -14,6 +14,8 @@ export interface CohortInputs {
   /** `population.birthRate` metric, 0-100 index. */
   birthRateIndex: number;
   healthcare: HealthcareInputs;
+  /** Bounded annual excess death fraction from an active pandemic. */
+  excessMortalityAnnual?: number;
   /** National international NET migrants allocated to THIS region this turn (may be <0). */
   netInternationalMigrants: number;
   /** Sex skew of the migrant corridor (0.5 balanced). */
@@ -55,6 +57,15 @@ export function advanceCohort(
   const modifier = healthcareMortalityModifier(inputs.healthcare);
   const mort = applyMortality(v, modifier, turnsPerYear);
   v = mort.survivors;
+  const excessRate = Math.max(0, Math.min(0.012, inputs.excessMortalityAnnual ?? 0)) / turnsPerYear;
+  let excessDeaths = 0;
+  for (const sex of ["male", "female"] as const) {
+    for (let age = 0; age <= 100; age++) {
+      const deaths = (v[sex][age] ?? 0) * excessRate;
+      v[sex][age] = (v[sex][age] ?? 0) - deaths;
+      excessDeaths += deaths;
+    }
+  }
 
   // Fertility → newborns into age 0 (split by sex at birth).
   const tfr = birthRateIndexToTFR(inputs.birthRateIndex, inputs.replacementTFR);
@@ -69,5 +80,8 @@ export function advanceCohort(
   const mig = applyInternationalMigration(v, inputs.netInternationalMigrants, profile);
   v = mig.vector;
 
-  return { vector: v, flows: { births, deaths: mort.deaths, netMigration: mig.applied } };
+  return {
+    vector: v,
+    flows: { births, deaths: mort.deaths + excessDeaths, netMigration: mig.applied },
+  };
 }
