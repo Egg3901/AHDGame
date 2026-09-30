@@ -179,6 +179,28 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     });
   });
 
+  it("keeps an individual successor's arrears with that successor on recovery", async () => {
+    const db = client.db(databaseName);
+    await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2));
+    await db
+      .collection<Fixture>("macroCountries")
+      .updateOne({ _id: "SK" }, { $set: { federationTreasuryMinor: -1000, fiscalCapacity: 0 } });
+    await processLegacyFederationServiceTurn(db, 182, new Date(3));
+    const shortfall = await db.collection("federationLegacyServiceTurns").findOne({ turn: 182 });
+    expect(shortfall?.successorArrearsMinor.CZ2).toBe(0);
+    expect(shortfall?.successorArrearsMinor.SK).toBeGreaterThan(0);
+    await db
+      .collection<Fixture>("macroCountries")
+      .updateOne({ _id: "SK" }, { $set: { federationTreasuryMinor: 1000, fiscalCapacity: 0.5 } });
+    await processLegacyFederationServiceTurn(db, 183, new Date(4));
+    const recovery = await db.collection("federationLegacyServiceTurns").findOne({ turn: 183 });
+    expect(recovery?.successorContributionsMinor.CZ2).toBe(
+      shortfall?.successorContributionsMinor.CZ2
+    );
+    expect(recovery?.successorContributionsMinor.SK).toBe(2 * shortfall!.successorArrearsMinor.SK);
+    expect(recovery?.bridgeOutstandingMinor).toBe(0);
+  });
+
   it("rolls back a late receipt failure and can apply on a later turn", async () => {
     const db = client.db(databaseName);
     await db.createCollection("federationSettlementApplications", {

@@ -199,10 +199,26 @@ export async function materializeLegacyFederationServiceTurn(input: {
     administrationCashMinor: Math.max(0, startingCashMinor),
     availableMinorBySuccessor,
   });
-  const bridgeCalls = allocateSuccessionAmount(
-    Math.max(0, -startingCashMinor),
-    finances.debtWeights
-  );
+  const bridgeMinor = Math.max(0, -startingCashMinor);
+  const previous =
+    bridgeMinor > 0
+      ? (
+          await receipts
+            .find(
+              { applicationId, turn: { $lt: turn } },
+              { session, projection: { successorArrearsMinor: 1 } }
+            )
+            .sort({ turn: -1 })
+            .limit(1)
+            .toArray()
+        )[0]
+      : undefined;
+  // A paid successor must not inherit another successor's missed contribution.
+  // Revalue the issuer's overdraft at current FX while preserving its debtors.
+  const bridgeWeights = previous?.successorArrearsMinor ?? finances.debtWeights;
+  if (Object.keys(bridgeWeights).sort().join(",") !== ids.join(","))
+    throw new Error("Legacy bridge debtors disagree with the successor accounts");
+  const bridgeCalls = allocateSuccessionAmount(bridgeMinor, bridgeWeights);
   const contributionsBySuccessor: Record<string, number> = {};
   const arrearsBySuccessor: Record<string, number> = {};
   for (const id of ids) {
