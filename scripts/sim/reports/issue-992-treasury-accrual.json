@@ -1,6 +1,6 @@
 {
   "treatment": {
-    "sourceCommit": "26167a5e4e960ac69959bc179e4c1d53173d4e7b",
+    "sourceCommit": "067b35969eb25860251d7232f8c8c1e84c937c19",
     "sourceDirty": false,
     "baseline": false,
     "retainedRun": {
@@ -10,7 +10,7 @@
     },
     "sourceHash": "5dfdc74d7da666c70ad252c0e7badaa3998fea93ea8ef6e7f6685d483b235f18",
     "sourcePreserved": true,
-    "scope": "Twelve real treasury phases over all retained budgets; other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
+    "scope": "Twelve real treasury phases over the 17 retained budgets with observed valid FX; six unpriced currencies are separate rejection fixtures. Other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
     "latestInventory": {
       "turn": 13,
       "bankingMode": null,
@@ -38,13 +38,96 @@
         ]
       }
     },
+    "pricedCountries": [
+      "AT",
+      "BR",
+      "CN",
+      "DE",
+      "ES",
+      "FI",
+      "FR",
+      "GR",
+      "IE",
+      "IT",
+      "JP",
+      "NG",
+      "RU",
+      "SE",
+      "TR",
+      "UK",
+      "US"
+    ],
+    "excludedUnpricedBudgets": [
+      {
+        "countryId": "BG",
+        "currencyCode": "BGL"
+      },
+      {
+        "countryId": "CS",
+        "currencyCode": "CSK"
+      },
+      {
+        "countryId": "HU",
+        "currencyCode": "HUF"
+      },
+      {
+        "countryId": "PL",
+        "currencyCode": "PLZ"
+      },
+      {
+        "countryId": "RO",
+        "currencyCode": "ROL"
+      },
+      {
+        "countryId": "YU",
+        "currencyCode": "YUD"
+      }
+    ],
+    "invalidFxRejections": [
+      {
+        "countryId": "BG",
+        "currencyCode": "BGL",
+        "rejected": true,
+        "allTreasuriesUnchanged": true
+      },
+      {
+        "countryId": "CS",
+        "currencyCode": "CSK",
+        "rejected": true,
+        "allTreasuriesUnchanged": true
+      },
+      {
+        "countryId": "HU",
+        "currencyCode": "HUF",
+        "rejected": true,
+        "allTreasuriesUnchanged": true
+      },
+      {
+        "countryId": "PL",
+        "currencyCode": "PLZ",
+        "rejected": true,
+        "allTreasuriesUnchanged": true
+      },
+      {
+        "countryId": "RO",
+        "currencyCode": "ROL",
+        "rejected": true,
+        "allTreasuriesUnchanged": true
+      },
+      {
+        "countryId": "YU",
+        "currencyCode": "YUD",
+        "rejected": true,
+        "allTreasuriesUnchanged": true
+      }
+    ],
     "results": [
       {
         "turn": 14,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 69,
-          "readBsonBytes": 124227
+          "commands": 57,
+          "readBsonBytes": 106206
         },
         "stockVsFlow": {
           "status": "green",
@@ -86,34 +169,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -165,34 +220,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -327,34 +354,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -452,62 +451,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -616,34 +559,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -680,36 +595,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -177892904115,
-          "BG": -49417520175,
           "BR": -457740142398,
           "CN": -69558907586,
-          "CS": -250358446835,
           "DE": -472081353147,
           "ES": -16938166775315,
           "FI": -3381506509,
           "FR": -1359687948539,
           "GR": -240609272757,
-          "HU": -1813022189273,
           "IE": -30637352957,
           "IT": -921225177751722,
           "JP": -152194397018230,
           "NG": -381113131187,
-          "PL": -625095220384933,
-          "RO": -429949613860,
           "RU": -319357991961,
           "SE": -371909023255,
           "TR": -1684526945425,
           "UK": -162555374325,
-          "YU": -555507523551,
           "US": -3736042882388
         }
       },
       {
         "turn": 15,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -751,34 +660,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -830,34 +711,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -992,34 +845,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -1117,62 +942,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -1281,34 +1050,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -1345,36 +1086,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -170406836643,
-          "BG": -49482764186,
           "BR": -454520883689,
           "CN": -65743741914,
-          "CS": -250550848977,
           "DE": -462259267009,
           "ES": -16924723720197,
           "FI": -2177547444,
           "FR": -1316501151700,
           "GR": -233700198695,
-          "HU": -1812159578245,
           "IE": -30531673615,
           "IT": -914365680475079,
           "JP": -151043737345040,
           "NG": -379651707944,
-          "PL": -624452395158135,
-          "RO": -429106553211,
           "RU": -322513080384,
           "SE": -362036332046,
           "TR": -1660163973273,
           "UK": -160087146225,
-          "YU": -554087987499,
           "US": -3741822629165
         }
       },
       {
         "turn": 16,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -1416,34 +1151,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -1495,34 +1202,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -1657,34 +1336,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -1782,62 +1433,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -1946,34 +1541,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -2010,36 +1577,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -162920769171,
-          "BG": -49548008197,
           "BR": -451301624980,
           "CN": -61928576242,
-          "CS": -250743251119,
           "DE": -452437180871,
           "ES": -16911280665079,
           "FI": -973588379,
           "FR": -1273314354861,
           "GR": -226791124633,
-          "HU": -1811296967217,
           "IE": -30425994273,
           "IT": -907506183198436,
           "JP": -149893077671850,
           "NG": -378190284701,
-          "PL": -623809569931337,
-          "RO": -428263492562,
           "RU": -325668168807,
           "SE": -352163640837,
           "TR": -1635801001121,
           "UK": -157618918125,
-          "YU": -552668451447,
           "US": -3747602375942
         }
       },
       {
         "turn": 17,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133611
+          "commands": 74,
+          "readBsonBytes": 114170
         },
         "stockVsFlow": {
           "status": "green",
@@ -2081,34 +1642,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -2160,34 +1693,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -2322,34 +1827,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -2447,62 +1924,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -2611,34 +2032,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -2675,36 +2068,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -155434701699,
-          "BG": -49613252208,
           "BR": -448082366271,
           "CN": -58113410570,
-          "CS": -250935653261,
           "DE": -442615094733,
           "ES": -16897837609961,
           "FI": 230370686,
           "FR": -1230127558022,
           "GR": -219882050571,
-          "HU": -1810434356189,
           "IE": -30320314931,
           "IT": -900646685921793,
           "JP": -148742417998660,
           "NG": -376728861458,
-          "PL": -623166744704539,
-          "RO": -427420431913,
           "RU": -328823257230,
           "SE": -342290949628,
           "TR": -1611438028969,
           "UK": -155150690025,
-          "YU": -551248915395,
           "US": -3753382122719
         }
       },
       {
         "turn": 18,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133603
+          "commands": 74,
+          "readBsonBytes": 114162
         },
         "stockVsFlow": {
           "status": "green",
@@ -2746,34 +2133,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -2825,34 +2184,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -2987,34 +2318,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -3112,62 +2415,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -3276,34 +2523,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -3340,36 +2559,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -147948634227,
-          "BG": -49678496219,
           "BR": -444863107562,
           "CN": -54298244898,
-          "CS": -251128055403,
           "DE": -432793008595,
           "ES": -16884394554843,
           "FI": 1434329751,
           "FR": -1186940761183,
           "GR": -212972976509,
-          "HU": -1809571745161,
           "IE": -30214635589,
           "IT": -893787188645150,
           "JP": -147591758325470,
           "NG": -375267438215,
-          "PL": -622523919477741,
-          "RO": -426577371264,
           "RU": -331978345653,
           "SE": -332418258419,
           "TR": -1587075056817,
           "UK": -152682461925,
-          "YU": -549829379343,
           "US": -3759161869496
         }
       },
       {
         "turn": 19,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133603
+          "commands": 74,
+          "readBsonBytes": 114162
         },
         "stockVsFlow": {
           "status": "green",
@@ -3411,34 +2624,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -3490,34 +2675,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -3652,34 +2809,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -3777,62 +2906,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -3941,34 +3014,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -4005,36 +3050,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -140462566755,
-          "BG": -49743740230,
           "BR": -441643848853,
           "CN": -50483079226,
-          "CS": -251320457545,
           "DE": -422970922457,
           "ES": -16870951499725,
           "FI": 2638288816,
           "FR": -1143753964344,
           "GR": -206063902447,
-          "HU": -1808709134133,
           "IE": -30108956247,
           "IT": -886927691368507,
           "JP": -146441098652280,
           "NG": -373806014972,
-          "PL": -621881094250943,
-          "RO": -425734310615,
           "RU": -335133434076,
           "SE": -322545567210,
           "TR": -1562712084665,
           "UK": -150214233825,
-          "YU": -548409843291,
           "US": -3764941616273
         }
       },
       {
         "turn": 20,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133611
+          "commands": 74,
+          "readBsonBytes": 114170
         },
         "stockVsFlow": {
           "status": "green",
@@ -4076,34 +3115,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -4155,34 +3166,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -4317,34 +3300,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -4442,62 +3397,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -4606,34 +3505,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -4670,36 +3541,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -132976499283,
-          "BG": -49808984241,
           "BR": -438424590144,
           "CN": -46667913554,
-          "CS": -251512859687,
           "DE": -413148836319,
           "ES": -16857508444607,
           "FI": 3842247881,
           "FR": -1100567167505,
           "GR": -199154828385,
-          "HU": -1807846523105,
           "IE": -30003276905,
           "IT": -880068194091864,
           "JP": -145290438979090,
           "NG": -372344591729,
-          "PL": -621238269024145,
-          "RO": -424891249966,
           "RU": -338288522499,
           "SE": -312672876001,
           "TR": -1538349112513,
           "UK": -147746005725,
-          "YU": -546990307239,
           "US": -3770721363050
         }
       },
       {
         "turn": 21,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -4741,34 +3606,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -4820,34 +3657,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -4982,34 +3791,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -5107,62 +3888,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -5271,34 +3996,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -5335,36 +4032,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -125490431811,
-          "BG": -49874228252,
           "BR": -435205331435,
           "CN": -42852747882,
-          "CS": -251705261829,
           "DE": -403326750181,
           "ES": -16844065389489,
           "FI": 5046206946,
           "FR": -1057380370666,
           "GR": -192245754323,
-          "HU": -1806983912077,
           "IE": -29897597563,
           "IT": -873208696815221,
           "JP": -144139779305900,
           "NG": -370883168486,
-          "PL": -620595443797347,
-          "RO": -424048189317,
           "RU": -341443610922,
           "SE": -302800184792,
           "TR": -1513986140361,
           "UK": -145277777625,
-          "YU": -545570771187,
           "US": -3776501109827
         }
       },
       {
         "turn": 22,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -5406,34 +4097,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -5485,34 +4148,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -5647,34 +4282,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -5772,62 +4379,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -5936,34 +4487,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -6000,36 +4523,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -118004364339,
-          "BG": -49939472263,
           "BR": -431986072726,
           "CN": -39037582210,
-          "CS": -251897663971,
           "DE": -393504664043,
           "ES": -16830622334371,
           "FI": 6250166011,
           "FR": -1014193573827,
           "GR": -185336680261,
-          "HU": -1806121301049,
           "IE": -29791918221,
           "IT": -866349199538578,
           "JP": -142989119632710,
           "NG": -369421745243,
-          "PL": -619952618570549,
-          "RO": -423205128668,
           "RU": -344598699345,
           "SE": -292927493583,
           "TR": -1489623168209,
           "UK": -142809549525,
-          "YU": -544151235135,
           "US": -3782280856604
         }
       },
       {
         "turn": 23,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -6071,34 +4588,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -6150,34 +4639,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -6312,34 +4773,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -6437,62 +4870,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -6601,34 +4978,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -6665,36 +5014,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -110518296867,
-          "BG": -50004716274,
           "BR": -428766814017,
           "CN": -35222416538,
-          "CS": -252090066113,
           "DE": -383682577905,
           "ES": -16817179279253,
           "FI": 7454125076,
           "FR": -971006776988,
           "GR": -178427606199,
-          "HU": -1805258690021,
           "IE": -29686238879,
           "IT": -859489702261935,
           "JP": -141838459959520,
           "NG": -367960322000,
-          "PL": -619309793343751,
-          "RO": -422362068019,
           "RU": -347753787768,
           "SE": -283054802374,
           "TR": -1465260196057,
           "UK": -140341321425,
-          "YU": -542731699083,
           "US": -3788060603381
         }
       },
       {
         "turn": 24,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -6736,34 +5079,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -6815,34 +5130,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -6977,34 +5264,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -7102,62 +5361,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -7266,34 +5469,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.1985284427390058
-                }
-              ]
-            },
-            {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
                 }
               ]
             },
@@ -7330,36 +5505,30 @@
         "unattributed": [],
         "closingCash": {
           "AT": -103032229395,
-          "BG": -50069960285,
           "BR": -425547555308,
           "CN": -31407250866,
-          "CS": -252282468255,
           "DE": -373860491767,
           "ES": -16803736224135,
           "FI": 8658084141,
           "FR": -927819980149,
           "GR": -171518532137,
-          "HU": -1804396078993,
           "IE": -29580559537,
           "IT": -852630204985292,
           "JP": -140687800286330,
           "NG": -366498898757,
-          "PL": -618666968116953,
-          "RO": -421519007370,
           "RU": -350908876191,
           "SE": -273182111165,
           "TR": -1440897223905,
           "UK": -137873093325,
-          "YU": -541312163031,
           "US": -3793840350158
         }
       },
       {
         "turn": 25,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 92,
-          "readBsonBytes": 133619
+          "commands": 74,
+          "readBsonBytes": 114178
         },
         "stockVsFlow": {
           "status": "green",
@@ -7401,34 +5570,6 @@
                   "reason": "fiscal_cash_rounding",
                   "mint": 0,
                   "sink": 0.02127064669952572
-                }
-              ]
-            },
-            {
-              "currencyCode": "BGL",
-              "minted": 611930946.2916667,
-              "sunk": 677174957.2916667,
-              "netDrift": -65244011,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 611930945.8323394,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 651873520.8333334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 25301436.458333332
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.459327295422554,
-                  "sink": 0
                 }
               ]
             },
@@ -7480,34 +5621,6 @@
                   "reason": "fiscal_debt_service",
                   "mint": 0,
                   "sink": 9064659.221110262
-                }
-              ]
-            },
-            {
-              "currencyCode": "CSK",
-              "minted": 14234210936.666668,
-              "sunk": 14426613078.666668,
-              "netDrift": -192402142,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 14234210936.44657,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 14323348121.583334
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 103264957.08333333
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.2200978398323059,
-                  "sink": 0
                 }
               ]
             },
@@ -7642,34 +5755,6 @@
               ]
             },
             {
-              "currencyCode": "HUF",
-              "minted": 30422247966.125,
-              "sunk": 29559636938.125,
-              "netDrift": 862611028,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 30422247965.764465,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 28609602693.854168
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 950034244.2708334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.36053597927093506,
-                  "sink": 0
-                }
-              ]
-            },
-            {
               "currencyCode": "IEP",
               "minted": 238926849.75448644,
               "sunk": 115638911.34613842,
@@ -7767,62 +5852,6 @@
                 {
                   "reason": "fiscal_cash_rounding",
                   "mint": 0.03810731785055138,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "PLZ",
-              "minted": 6031197856413.625,
-              "sunk": 5388372629615.625,
-              "netDrift": 642825226798,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 6031197856413.378,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 5058385819166.667
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 329986810448.9583
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.247314453125,
-                  "sink": 0
-                }
-              ]
-            },
-            {
-              "currencyCode": "ROL",
-              "minted": 18841577315.666664,
-              "sunk": 17998516666.666664,
-              "netDrift": 843060649,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 18841577315.58536,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 17814858333.333332
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 183658333.33333334
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0.08130395412445068,
                   "sink": 0
                 }
               ]
@@ -7935,34 +5964,6 @@
               ]
             },
             {
-              "currencyCode": "YUD",
-              "minted": 10267060843.960215,
-              "sunk": 8847524791.960215,
-              "netDrift": 1419536052,
-              "byReason": [
-                {
-                  "reason": "fiscal_revenue",
-                  "mint": 10267060843.960215,
-                  "sink": 0
-                },
-                {
-                  "reason": "fiscal_primary_spending",
-                  "mint": 0,
-                  "sink": 8608402500
-                },
-                {
-                  "reason": "fiscal_debt_service",
-                  "mint": 0,
-                  "sink": 239122291.66666666
-                },
-                {
-                  "reason": "fiscal_cash_rounding",
-                  "mint": 0,
-                  "sink": 0.2935478687286377
-                }
-              ]
-            },
-            {
               "currencyCode": "USD",
               "minted": 18439844635.21335,
               "sunk": 24040594679.433453,
@@ -7995,27 +5996,21 @@
         "unattributed": [],
         "closingCash": {
           "AT": -95546161923,
-          "BG": -50135204296,
           "BR": -422328296599,
           "CN": -27592085194,
-          "CS": -252474870397,
           "DE": -364038405629,
           "ES": -16790293169017,
           "FI": 9862043206,
           "FR": -884633183310,
           "GR": -164609458075,
-          "HU": -1803533467965,
           "IE": -29474880195,
           "IT": -845770707708649,
           "JP": -139537140613140,
           "NG": -365037475514,
-          "PL": -618024142890155,
-          "RO": -420675946721,
           "RU": -354063964614,
           "SE": -263309419956,
           "TR": -1416534251753,
           "UK": -135404865225,
-          "YU": -539892626979,
           "US": -3799620096935
         }
       }
@@ -8026,7 +6021,7 @@
     }
   },
   "baseline": {
-    "sourceCommit": "462134d876f48f1d498ca7f03a43a9fc217d3cf9",
+    "sourceCommit": "8e0545560b64c4acd730a5519e2c23fd7593aeca",
     "sourceDirty": false,
     "baseline": true,
     "retainedRun": {
@@ -8036,7 +6031,7 @@
     },
     "sourceHash": "5dfdc74d7da666c70ad252c0e7badaa3998fea93ea8ef6e7f6685d483b235f18",
     "sourcePreserved": true,
-    "scope": "Twelve real treasury phases over all retained budgets; other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
+    "scope": "Twelve real treasury phases over the 17 retained budgets with observed valid FX; six unpriced currencies are separate rejection fixtures. Other economic phases held fixed. Explicit synthetic bond-service statistic only for emitter ownership. No authoritative whole-economy gate.",
     "latestInventory": {
       "turn": 13,
       "bankingMode": null,
@@ -8064,27 +6059,65 @@
         ]
       }
     },
+    "pricedCountries": [
+      "AT",
+      "BR",
+      "CN",
+      "DE",
+      "ES",
+      "FI",
+      "FR",
+      "GR",
+      "IE",
+      "IT",
+      "JP",
+      "NG",
+      "RU",
+      "SE",
+      "TR",
+      "UK",
+      "US"
+    ],
+    "excludedUnpricedBudgets": [
+      {
+        "countryId": "BG",
+        "currencyCode": "BGL"
+      },
+      {
+        "countryId": "CS",
+        "currencyCode": "CSK"
+      },
+      {
+        "countryId": "HU",
+        "currencyCode": "HUF"
+      },
+      {
+        "countryId": "PL",
+        "currencyCode": "PLZ"
+      },
+      {
+        "countryId": "RO",
+        "currencyCode": "ROL"
+      },
+      {
+        "countryId": "YU",
+        "currencyCode": "YUD"
+      }
+    ],
+    "invalidFxRejections": [],
     "results": [
       {
         "turn": 14,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -8150,30 +6183,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751637,
               "ledgerDelta": 0,
@@ -8222,14 +6231,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.1619997,
               "ledgerDelta": 0,
@@ -8252,22 +6253,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.632034,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -8283,50 +6276,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -177892904115,
-          "BG": -49417520175,
           "BR": -457740142398,
           "CN": -69558907586,
-          "CS": -250358446835,
           "DE": -472081353147,
           "ES": -16938166775315,
           "FI": -3381506509,
           "FR": -1359687948539,
           "GR": -240609272757,
-          "HU": -1813022189273,
           "IE": -30637352957,
           "IT": -921225177751722,
           "JP": -152194397018230,
           "NG": -381113131187,
-          "PL": -625095220384933,
-          "RO": -429949613860,
           "RU": -319357991961,
           "SE": -371909023255,
           "TR": -1684526945425,
           "UK": -162555374325,
-          "YU": -555507523551,
           "US": -3736042882388
         }
       },
       {
         "turn": 15,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -8392,30 +6371,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751617,
               "ledgerDelta": 0,
@@ -8464,14 +6419,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -8494,22 +6441,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6311,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63136,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -8525,50 +6464,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -170406836643,
-          "BG": -49482764186,
           "BR": -454520883689,
           "CN": -65743741914,
-          "CS": -250550848977,
           "DE": -462259267009,
           "ES": -16924723720197,
           "FI": -2177547444,
           "FR": -1316501151700,
           "GR": -233700198695,
-          "HU": -1812159578245,
           "IE": -30531673615,
           "IT": -914365680475079,
           "JP": -151043737345040,
           "NG": -379651707944,
-          "PL": -624452395158135,
-          "RO": -429106553211,
           "RU": -322513080384,
           "SE": -362036332046,
           "TR": -1660163973273,
           "UK": -160087146225,
-          "YU": -554087987499,
           "US": -3741822629165
         }
       },
       {
         "turn": 16,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034546,
@@ -8634,30 +6559,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751637,
               "ledgerDelta": 0,
@@ -8706,14 +6607,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -8736,22 +6629,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63198,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -8767,50 +6652,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -162920769171,
-          "BG": -49548008197,
           "BR": -451301624980,
           "CN": -61928576242,
-          "CS": -250743251119,
           "DE": -452437180871,
           "ES": -16911280665079,
           "FI": -973588379,
           "FR": -1273314354861,
           "GR": -226791124633,
-          "HU": -1811296967217,
           "IE": -30425994273,
           "IT": -907506183198436,
           "JP": -149893077671850,
           "NG": -378190284701,
-          "PL": -623809569931337,
-          "RO": -428263492562,
           "RU": -325668168807,
           "SE": -352163640837,
           "TR": -1635801001121,
           "UK": -157618918125,
-          "YU": -552668451447,
           "US": -3747602375942
         }
       },
       {
         "turn": 17,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123228
+          "commands": 38,
+          "readBsonBytes": 105207
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -8876,30 +6747,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751617,
               "ledgerDelta": 0,
@@ -8948,14 +6795,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -8978,22 +6817,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.6321,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -9009,50 +6840,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -155434701699,
-          "BG": -49613252208,
           "BR": -448082366271,
           "CN": -58113410570,
-          "CS": -250935653261,
           "DE": -442615094733,
           "ES": -16897837609961,
           "FI": 230370686,
           "FR": -1230127558022,
           "GR": -219882050571,
-          "HU": -1810434356189,
           "IE": -30320314931,
           "IT": -900646685921793,
           "JP": -148742417998660,
           "NG": -376728861458,
-          "PL": -623166744704539,
-          "RO": -427420431913,
           "RU": -328823257230,
           "SE": -342290949628,
           "TR": -1611438028969,
           "UK": -155150690025,
-          "YU": -551248915395,
           "US": -3753382122719
         }
       },
       {
         "turn": 18,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123228
+          "commands": 38,
+          "readBsonBytes": 105207
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -9118,30 +6935,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751637,
               "ledgerDelta": 0,
@@ -9190,14 +6983,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.1619997,
               "ledgerDelta": 0,
@@ -9220,22 +7005,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63199,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -9251,50 +7028,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -147948634227,
-          "BG": -49678496219,
           "BR": -444863107562,
           "CN": -54298244898,
-          "CS": -251128055403,
           "DE": -432793008595,
           "ES": -16884394554843,
           "FI": 1434329751,
           "FR": -1186940761183,
           "GR": -212972976509,
-          "HU": -1809571745161,
           "IE": -30214635589,
           "IT": -893787188645150,
           "JP": -147591758325470,
           "NG": -375267438215,
-          "PL": -622523919477741,
-          "RO": -426577371264,
           "RU": -331978345653,
           "SE": -332418258419,
           "TR": -1587075056817,
           "UK": -152682461925,
-          "YU": -549829379343,
           "US": -3759161869496
         }
       },
       {
         "turn": 19,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123228
+          "commands": 38,
+          "readBsonBytes": 105207
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034546,
@@ -9360,30 +7123,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751617,
               "ledgerDelta": 0,
@@ -9432,14 +7171,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -9462,22 +7193,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6313,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63148,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -9493,50 +7216,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -140462566755,
-          "BG": -49743740230,
           "BR": -441643848853,
           "CN": -50483079226,
-          "CS": -251320457545,
           "DE": -422970922457,
           "ES": -16870951499725,
           "FI": 2638288816,
           "FR": -1143753964344,
           "GR": -206063902447,
-          "HU": -1808709134133,
           "IE": -30108956247,
           "IT": -886927691368507,
           "JP": -146441098652280,
           "NG": -373806014972,
-          "PL": -621881094250943,
-          "RO": -425734310615,
           "RU": -335133434076,
           "SE": -322545567210,
           "TR": -1562712084665,
           "UK": -150214233825,
-          "YU": -548409843291,
           "US": -3764941616273
         }
       },
       {
         "turn": 20,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -9602,30 +7311,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751627,
               "ledgerDelta": 0,
@@ -9674,14 +7359,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -9704,22 +7381,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6316,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63184,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -9735,50 +7404,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -132976499283,
-          "BG": -49808984241,
           "BR": -438424590144,
           "CN": -46667913554,
-          "CS": -251512859687,
           "DE": -413148836319,
           "ES": -16857508444607,
           "FI": 3842247881,
           "FR": -1100567167505,
           "GR": -199154828385,
-          "HU": -1807846523105,
           "IE": -30003276905,
           "IT": -880068194091864,
           "JP": -145290438979090,
           "NG": -372344591729,
-          "PL": -621238269024145,
-          "RO": -424891249966,
           "RU": -338288522499,
           "SE": -312672876001,
           "TR": -1538349112513,
           "UK": -147746005725,
-          "YU": -546990307239,
           "US": -3770721363050
         }
       },
       {
         "turn": 21,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -9844,30 +7499,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751627,
               "ledgerDelta": 0,
@@ -9916,14 +7547,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -9946,22 +7569,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63195,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -9977,50 +7592,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -125490431811,
-          "BG": -49874228252,
           "BR": -435205331435,
           "CN": -42852747882,
-          "CS": -251705261829,
           "DE": -403326750181,
           "ES": -16844065389489,
           "FI": 5046206946,
           "FR": -1057380370666,
           "GR": -192245754323,
-          "HU": -1806983912077,
           "IE": -29897597563,
           "IT": -873208696815221,
           "JP": -144139779305900,
           "NG": -370883168486,
-          "PL": -620595443797347,
-          "RO": -424048189317,
           "RU": -341443610922,
           "SE": -302800184792,
           "TR": -1513986140361,
           "UK": -145277777625,
-          "YU": -545570771187,
           "US": -3776501109827
         }
       },
       {
         "turn": 22,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034546,
@@ -10086,30 +7687,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751627,
               "ledgerDelta": 0,
@@ -10158,14 +7735,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.1619997,
               "ledgerDelta": 0,
@@ -10188,22 +7757,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63201,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -10219,50 +7780,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -118004364339,
-          "BG": -49939472263,
           "BR": -431986072726,
           "CN": -39037582210,
-          "CS": -251897663971,
           "DE": -393504664043,
           "ES": -16830622334371,
           "FI": 6250166011,
           "FR": -1014193573827,
           "GR": -185336680261,
-          "HU": -1806121301049,
           "IE": -29791918221,
           "IT": -866349199538578,
           "JP": -142989119632710,
           "NG": -369421745243,
-          "PL": -619952618570549,
-          "RO": -423205128668,
           "RU": -344598699345,
           "SE": -292927493583,
           "TR": -1489623168209,
           "UK": -142809549525,
-          "YU": -544151235135,
           "US": -3782280856604
         }
       },
       {
         "turn": 23,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -10328,30 +7875,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751627,
               "ledgerDelta": 0,
@@ -10400,14 +7923,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -10430,22 +7945,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63195,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -10461,50 +7968,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -110518296867,
-          "BG": -50004716274,
           "BR": -428766814017,
           "CN": -35222416538,
-          "CS": -252090066113,
           "DE": -383682577905,
           "ES": -16817179279253,
           "FI": 7454125076,
           "FR": -971006776988,
           "GR": -178427606199,
-          "HU": -1805258690021,
           "IE": -29686238879,
           "IT": -859489702261935,
           "JP": -141838459959520,
           "NG": -367960322000,
-          "PL": -619309793343751,
-          "RO": -422362068019,
           "RU": -347753787768,
           "SE": -283054802374,
           "TR": -1465260196057,
           "UK": -140341321425,
-          "YU": -542731699083,
           "US": -3788060603381
         }
       },
       {
         "turn": 24,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034485,
@@ -10570,30 +8063,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751627,
               "ledgerDelta": 0,
@@ -10642,14 +8111,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199875,
               "ledgerDelta": 0,
@@ -10672,22 +8133,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6313,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63149,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -10703,50 +8156,36 @@
         "unattributed": [],
         "closingCash": {
           "AT": -103032229395,
-          "BG": -50069960285,
           "BR": -425547555308,
           "CN": -31407250866,
-          "CS": -252282468255,
           "DE": -373860491767,
           "ES": -16803736224135,
           "FI": 8658084141,
           "FR": -927819980149,
           "GR": -171518532137,
-          "HU": -1804396078993,
           "IE": -29580559537,
           "IT": -852630204985292,
           "JP": -140687800286330,
           "NG": -366498898757,
-          "PL": -618666968116953,
-          "RO": -421519007370,
           "RU": -350908876191,
           "SE": -273182111165,
           "TR": -1440897223905,
           "UK": -137873093325,
-          "YU": -541312163031,
           "US": -3793840350158
         }
       },
       {
         "turn": 25,
-        "countriesProcessed": 23,
+        "countriesProcessed": 17,
         "performance": {
-          "commands": 44,
-          "readBsonBytes": 123236
+          "commands": 38,
+          "readBsonBytes": 105215
         },
         "stockVsFlow": {
           "status": "amber",
           "skipped": false,
-          "divergentCount": 23,
+          "divergentCount": 17,
           "findings": [
-            {
-              "account": "government:PL:PLZ",
-              "actualDelta": 642825226798,
-              "ledgerDelta": 0,
-              "divergence": -642825226798,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
             {
               "account": "government:DE:EUR",
               "actualDelta": 11307802476.034546,
@@ -10812,30 +8251,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:YU:YUD",
-              "actualDelta": 1419536052,
-              "ledgerDelta": 0,
-              "divergence": -1419536052,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:HU:HUF",
-              "actualDelta": 862611028,
-              "ledgerDelta": 0,
-              "divergence": -862611028,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
-              "account": "government:RO:ROL",
-              "actualDelta": 843060649,
-              "ledgerDelta": 0,
-              "divergence": -843060649,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:CN:CNY",
               "actualDelta": 691663533.7751627,
               "ledgerDelta": 0,
@@ -10884,14 +8299,6 @@
               "candidateEmitSites": []
             },
             {
-              "account": "government:CS:CSK",
-              "actualDelta": -192402142,
-              "ledgerDelta": 0,
-              "divergence": 192402142,
-              "uninstrumented": true,
-              "candidateEmitSites": []
-            },
-            {
               "account": "government:GR:GRD",
               "actualDelta": 174424687.16199923,
               "ledgerDelta": 0,
@@ -10914,22 +8321,14 @@
               "divergence": -123287938.40834808,
               "uninstrumented": true,
               "candidateEmitSites": []
-            },
-            {
-              "account": "government:BG:BGL",
-              "actualDelta": -65244011,
-              "ledgerDelta": 0,
-              "divergence": 65244011,
-              "uninstrumented": true,
-              "candidateEmitSites": []
             }
           ],
           "byKind": [
             {
               "kind": "government",
-              "divergentCount": 23,
-              "absDivergence": 700872403355.6318,
-              "uninstrumentedCount": 23
+              "divergentCount": 17,
+              "absDivergence": 54664322675.63197,
+              "uninstrumentedCount": 17
             }
           ]
         },
@@ -10945,27 +8344,21 @@
         "unattributed": [],
         "closingCash": {
           "AT": -95546161923,
-          "BG": -50135204296,
           "BR": -422328296599,
           "CN": -27592085194,
-          "CS": -252474870397,
           "DE": -364038405629,
           "ES": -16790293169017,
           "FI": 9862043206,
           "FR": -884633183310,
           "GR": -164609458075,
-          "HU": -1803533467965,
           "IE": -29474880195,
           "IT": -845770707708649,
           "JP": -139537140613140,
           "NG": -365037475514,
-          "PL": -618024142890155,
-          "RO": -420675946721,
           "RU": -354063964614,
           "SE": -263309419956,
           "TR": -1416534251753,
           "UK": -135404865225,
-          "YU": -539892626979,
           "US": -3799620096935
         }
       }
@@ -10976,5 +8369,6 @@
     }
   },
   "exactNativeCashParityEveryTurn": true,
-  "baselineRuntimeCommit": "89b20b09716801d3d952d9a3698ffe08b2d23b0a"
+  "baselineRuntimeCommit": "89b20b09716801d3d952d9a3698ffe08b2d23b0a",
+  "qualification": "Only 17 budgets with observed valid FX qualify. Six missing-rate currencies reject before any treasury mutation. Earlier 23-budget monetary figures are superseded. Historical latestInventory monetary totals are unqualified because they include missing-rate accounts."
 }
