@@ -20,7 +20,9 @@ export const BALANCE_CHECKPOINTS_COLLECTION = "balanceSnapshotCheckpoints";
  *
  * Balances are stored in ₳ (anchor) units — local balance / FX rate — to match
  * the ledger legs' `anchorAmount`. Missing rate ⇒ treated 1:1 (mirrors
- * financialTxLog/emit.ts's amountToAnchor fallback). See plan §2.
+ * financialTxLog/emit.ts's amountToAnchor fallback). Government treasury cash
+ * instead uses the receipt valuation contract below, with account-specific
+ * provenance and no fabricated rate for a missing active currency. See plan §2.
  *
  * Scope: every financialTxLog subject kind plus the fund cash its holders move
  * against — character personal + savings wallets, corporation liquidCapital,
@@ -56,9 +58,7 @@ export async function collectBalances(db: Db): Promise<Record<string, number>> {
   return (await collectBalanceState(db)).balances;
 }
 
-async function collectBalanceState(
-  db: Db
-): Promise<{
+async function collectBalanceState(db: Db): Promise<{
   balances: Record<string, number>;
   anchorRates: Record<string, number>;
   accountValuations: NonNullable<BalanceSnapshot["accountValuations"]>;
