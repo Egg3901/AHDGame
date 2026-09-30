@@ -14,6 +14,9 @@ interface Decision {
     status: string;
     billId: string;
     billStatus: string | null;
+    revision: number;
+    canRevise: boolean;
+    consents: { entityId: string; choice: string; reason: string }[];
     financialTerms?: {
       assetBasis: string;
       debtBasis: string;
@@ -91,6 +94,7 @@ export default function FederationDecisionPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          revision: decision?.proposal?.canRevise ? decision.proposal.revision + 1 : 1,
           negotiatedCustodians: custodians,
           ...(assetMode === "negotiated" ? { assetSharesBps: assetShares } : {}),
           ...(debtMode === "negotiated" ? { debtSharesBps: debtShares } : {}),
@@ -158,12 +162,24 @@ export default function FederationDecisionPanel({
                 </div>
               );
             })}
-          {decision?.available && !decision.proposal && (
+          {decision?.proposal?.consents?.map((consent) => (
+            <div key={consent.entityId} className="rounded border border-border p-3 text-sm">
+              <p className="font-semibold">
+                {t("consentStatus", {
+                  entity: consent.entityId,
+                  choice: t(consent.choice === "approve" ? "approved" : "rejected"),
+                })}
+              </p>
+              <p>{consent.reason}</p>
+            </div>
+          ))}
+          {decision?.available && (!decision.proposal || decision.proposal.canRevise) && (
             <>
               <p>
                 A seated federal legislator can open a vote on a settlement. Every successor must
                 consent before sovereignty changes.
               </p>
+              {decision.proposal?.canRevise && <p>{t("freshVote")}</p>}
               {financialSections.map(({ key, mode, setMode, shares, setShares }) => (
                 <fieldset key={key} className="space-y-2 rounded border border-border p-3">
                   <legend className="px-1 font-semibold">{t(key)}</legend>
