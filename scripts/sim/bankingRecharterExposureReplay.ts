@@ -103,6 +103,30 @@ async function main() {
       (await db.collection("corporations").findOne({ _id: BANK }))?.liquidCapital
     );
     near(treasuryBefore - treasuryAfter, issued.postedCapital, "capital debited only once");
+    const refused = await originateLoan(db, BANK, { type: "corporation", id: BORROWER }, 1000, 12);
+    assert(!refused.ok && refused.error.includes("lendable headroom"));
+    const afterRefusal = await journeySnapshot(db);
+    near(afterRefusal.cash, afterIssue.cash, "unfunded request moves no cash");
+    assert.deepEqual(await book(db), reissuedBook, "refused credit leaves loan book unchanged");
+    const initialGame = await db.collection("gameState").findOne({ _id: "current" as never });
+    assert(initialGame);
+    const fundingPhases = await advanceJourney(
+      db,
+      initialGame.currentTurn + 1,
+      initialGame.currentYear
+    );
+    const afterFundingTurn = await journeySnapshot(db),
+      fundingBook = await book(db);
+    near(
+      fundingBook.counter,
+      fundingBook.principal,
+      "first turn counts surviving and NPC loans once"
+    );
+    near(
+      afterFundingTurn.cash - afterIssue.cash,
+      afterFundingTurn.mint - afterIssue.mint - (afterFundingTurn.burn - afterIssue.burn),
+      "normal deposit and servicing turn conserves cash"
+    );
     const loan = await originateLoan(db, BANK, { type: "corporation", id: BORROWER }, 1000, 12);
     assert(loan.ok, loan.ok ? "" : loan.error);
     assert(!loan.pending);
@@ -113,8 +137,8 @@ async function main() {
       originatedBook.principal,
       "new origination adds to surviving exposure"
     );
-    near(originatedBook.principal - reissuedBook.principal, 1000, "one funded loan");
-    near(afterOrigination.cash, afterIssue.cash, "loan cash conservation");
+    near(originatedBook.principal - fundingBook.principal, 1000, "one funded loan");
+    near(afterOrigination.cash, afterFundingTurn.cash, "loan cash conservation");
     const game = await db.collection("gameState").findOne({ _id: "current" as never });
     assert(game);
     const phases = await advanceJourney(db, game.currentTurn + 1, game.currentYear);
@@ -155,6 +179,9 @@ async function main() {
           counts,
           inheritedBook,
           reissuedBook,
+          refusedCredit: refused.error,
+          fundingBook,
+          fundingPhases,
           originatedBook,
           servicedBook,
           postedCapital: issued.postedCapital,
@@ -166,6 +193,7 @@ async function main() {
             before: before.cash,
             afterRevoke: afterRevoke.cash,
             afterIssue: afterIssue.cash,
+            afterFundingTurn: afterFundingTurn.cash,
             afterOrigination: afterOrigination.cash,
             afterTurn: afterTurn.cash,
           },
