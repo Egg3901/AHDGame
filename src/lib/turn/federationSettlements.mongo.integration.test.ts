@@ -336,26 +336,22 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     });
     const retained = sovietUnionRegions1991.find((row) => !row._id.startsWith("SU_"))!;
     const retainedFirmId = new ObjectId();
-    await db
-      .collection("corporations")
-      .insertOne({
-        _id: retainedFirmId,
-        countryId: "RU",
-        headquartersState: retained._id,
-        liquidCapital: 200,
-        suspended: false,
-      });
-    await db
-      .collection("corporateSectors")
-      .insertOne({
-        _id: new ObjectId(),
-        corporationId: retainedFirmId,
-        countryId: "RU",
-        stateId: "SU_UKR",
-        sectorType: "manufacturing",
-        capacityBookAnchor: 1000,
-        capitalStock: 10,
-      });
+    await db.collection("corporations").insertOne({
+      _id: retainedFirmId,
+      countryId: "RU",
+      headquartersState: retained._id,
+      liquidCapital: 200,
+      suspended: false,
+    });
+    await db.collection("corporateSectors").insertOne({
+      _id: new ObjectId(),
+      corporationId: retainedFirmId,
+      countryId: "RU",
+      stateId: "SU_UKR",
+      sectorType: "manufacturing",
+      capacityBookAnchor: 1000,
+      capitalStock: 10,
+    });
     const playerId = new ObjectId();
     const slateId = new ObjectId();
     await db.collection("characters").insertOne({
