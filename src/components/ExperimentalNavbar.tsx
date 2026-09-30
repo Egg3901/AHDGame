@@ -615,7 +615,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         target="_blank"
         rel="noopener noreferrer"
         onClick={closeAll}
-        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
+        className="store-purchase-cta flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
         {t("help.patreon")}
       </a>
@@ -624,7 +624,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         target="_blank"
         rel="noopener noreferrer"
         onClick={closeAll}
-        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
+        className="store-purchase-cta flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
         {t("help.supporterWall")}
       </a>

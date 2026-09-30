@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { isClientShellUserAgent, isInAppWebViewUserAgent } from "@/lib/displayMode";
+import {
+  isClientShellUserAgent,
+  isInAppWebViewUserAgent,
+  isStoreAppUserAgent,
+} from "@/lib/displayMode";
 import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import Script from "next/script";
@@ -202,6 +206,7 @@ export default async function RootLayout({
   // consent prompts, no cookie banner inside an app webview.
   const isNativeApp = isInAppWebViewUserAgent(userAgent);
   const isClientShell = isClientShellUserAgent(userAgent);
+  const isStoreApp = isStoreAppUserAgent(userAgent);
   const host = requestHeaders.get("host");
   const pathname = requestHeaders.get("x-pathname") ?? "/";
   const displayMode = cookieStore.get("ahd-display-mode")?.value as
@@ -294,7 +299,7 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-store-app={isStoreApp ? "true" : undefined}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}
       >
