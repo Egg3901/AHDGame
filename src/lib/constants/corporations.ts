@@ -1015,21 +1015,19 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
 // are the tuning hooks. Judgment-call magnitudes: validate with a worldsim
 // A/B before treating as final.
 //
-// DEPLOY NOTE: confirm both START turns are above the live `currentTurn` at
-// merge so phase A opens the sequence instead of landing mid-ramp. If the
-// live turn has already passed a START, the lerp still behaves (it lands
-// part-ramped, never stepped), but the phase ordering guarantee is lost.
+// Owner-approved acceleration: at turn 1253 phase A is 40/192 complete.
+// Phase B keeps its 96-turn lag so operating earnings still lead valuation.
 
 /** First turn the operating-revenue boost applies (ramps from 1.0). */
-export const STOCK_BOOST_REVENUE_START_TURN = 1350;
+export const STOCK_BOOST_REVENUE_START_TURN = 1213;
 /** Turns to ramp revenue 1.0 → target (192 = 4 game years = ~8 real days). */
 export const STOCK_BOOST_REVENUE_RAMP_TURNS = 192;
 /** Steady-state operating-revenue multiplier (all sectors). */
-export const STOCK_BOOST_REVENUE_TARGET = 1.15;
+export const STOCK_BOOST_REVENUE_TARGET = 1.2;
 /** Extra steady-state revenue multiplier compounding on financial sectors. */
 export const STOCK_BOOST_FINANCIAL_REVENUE_EXTRA = 1.1;
 /** First turn the NPV boost applies (one half revenue-ramp after phase A). */
-export const STOCK_BOOST_NPV_START_TURN = 1446;
+export const STOCK_BOOST_NPV_START_TURN = 1309;
 /** Turns to ramp NPV 1.0 → target. */
 export const STOCK_BOOST_NPV_RAMP_TURNS = 192;
 /** Steady-state sector-NPV multiplier. */
