@@ -210,4 +210,26 @@ describe("live federation settlement intent", () => {
     );
     expect(await args.db.collection("federationFacilityClaims").find({}).toArray()).toHaveLength(0);
   });
+
+  it("refuses to stage a second settlement for an already partitioned federation", async () => {
+    const { mem, args } = scenario();
+    mem.seed("federationSettlementApplications", [
+      {
+        _id: "1991-default:older:1",
+        presetId: "1991-default",
+        settlementId: "older",
+        revision: 1,
+        sourceEntityId: "RU",
+        status: "applied",
+        entityIds: ["RU", "UKR"],
+        appliedOnTurn: 96,
+      },
+    ]);
+    await expect(stageLiveFederationSettlementIntent(args)).rejects.toThrow(
+      "already has an applied"
+    );
+    expect(await args.db.collection("federationSettlementIntents").find({}).toArray()).toHaveLength(
+      0
+    );
+  });
 });

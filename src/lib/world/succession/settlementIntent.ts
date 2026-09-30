@@ -9,6 +9,10 @@ import { stageFederationFacilityClaims } from "./facilityClaimLedger";
 import { loadLiveSuccessionResidents } from "./loadLiveResidents";
 import { loadLivePrivateSuccessionFirms } from "./loadLivePrivateFirms";
 import { planLiveSuccessionActivation, type SuccessionActivationInput } from "./planActivation";
+import {
+  FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
+  type FederationSettlementApplicationRecord,
+} from "./runtimeEntities";
 
 export const FEDERATION_SETTLEMENT_INTENTS_COLLECTION = "federationSettlementIntents";
 
@@ -76,6 +80,12 @@ export async function stageLiveFederationSettlementIntent(input: {
     Object.values(activation.macroTerms).some((terms) => terms.currentTurn !== appliedOnTurn)
   )
     throw new Error("Federation intent needs a valid 1991 turn and approved revision");
+  const applied = await db
+    .collection<FederationSettlementApplicationRecord>(
+      FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
+    )
+    .findOne({ presetId, sourceEntityId: sourceCountryId, status: "applied" });
+  if (applied) throw new Error("Federation source already has an applied settlement");
 
   const plan = await planLiveSuccessionActivation(db, sourceCountryId, activation);
   const residents = await loadLiveSuccessionResidents(db, sourceCountryId);
