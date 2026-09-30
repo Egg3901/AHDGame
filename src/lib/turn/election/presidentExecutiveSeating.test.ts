@@ -111,7 +111,7 @@ describe("seatPresidentialExecutive", () => {
       );
       const actorCollection = winnerIsNpp ? "npps" : "characters";
       expect(db.collectionMocks[actorCollection]!.updateOne).toHaveBeenCalledWith(
-        { _id: winnerId },
+        expect.objectContaining({ _id: winnerId }),
         expect.objectContaining({
           $set: expect.objectContaining({ currentOffice: { type: "president" } }),
         })

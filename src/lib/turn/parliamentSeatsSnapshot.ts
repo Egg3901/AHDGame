@@ -21,6 +21,7 @@ interface ParliamentSeatsSnapshot {
   turn: number;
   seats: number;
   createdAt: Date;
+  executiveHolder?: string | null;
 }
 
 /**
@@ -47,7 +48,11 @@ interface ParliamentSeatsSnapshot {
 export async function snapshotParliamentSeats(db: Db, turn: number): Promise<number> {
   const rows = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .aggregate<{ _id: { countryId: string; officeType: string; party: string }; seats: number }>([
+    .aggregate<{
+      _id: { countryId: string; officeType: string; party: string };
+      seats: number;
+      executiveHolder?: string | null;
+    }>([
       { $match: { $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true } }] } },
       {
         $group: {
@@ -57,6 +62,21 @@ export async function snapshotParliamentSeats(db: Db, turn: number): Promise<num
             party: { $ifNull: ["$party", "independent"] },
           },
           seats: { $sum: { $ifNull: ["$seatsHeld", 1] } },
+          executiveHolder: {
+            $first: {
+              $cond: [
+                { $in: ["$officeType", ["president", "vicePresident"]] },
+                {
+                  $cond: [
+                    { $ne: [{ $ifNull: ["$characterId", null] }, null] },
+                    { $concat: ["player:", { $toString: "$characterId" }] },
+                    { $concat: ["npp:", { $toString: "$nppId" }] },
+                  ],
+                },
+                null,
+              ],
+            },
+          },
         },
       },
     ])
@@ -79,6 +99,9 @@ export async function snapshotParliamentSeats(db: Db, turn: number): Promise<num
             party,
             turn,
             seats: row.seats,
+            ...(["president", "vicePresident"].includes(officeType)
+              ? { executiveHolder: row.seats === 1 ? (row.executiveHolder ?? null) : null }
+              : {}),
             createdAt: now,
           },
         },
