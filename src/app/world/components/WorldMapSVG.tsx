@@ -383,6 +383,14 @@ export default function WorldMapSVG({
     setPaths(new Map(livePathsRef.current));
   }, []);
 
+  const selectMacro = useCallback(
+    (entityId: string | null) => {
+      commitLivePaths();
+      setSelectedMacro(entityId);
+    },
+    [commitLivePaths]
+  );
+
   // --- Sync React paths state with current projection (view/zoom changes) ---
   const syncPathsState = useCallback(() => {
     const d3 = d3Ref.current;
@@ -948,6 +956,7 @@ export default function WorldMapSVG({
     const touch = e.touches[0];
     const svg = svgRef.current;
     if (svg && svg.contains(e.target as Node)) {
+      commitLivePaths();
       isDraggingRef.current = true;
       setIsDragging(true);
       lastPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -1049,7 +1058,7 @@ export default function WorldMapSVG({
   const handleCountryClick = (id: string) => {
     if (isAnimatingRef.current) return;
     if (inspectableFeatureIds.has(id)) {
-      setSelectedMacro(worldEntities.byFeatureId[id].entityId);
+      selectMacro(worldEntities.byFeatureId[id].entityId);
       return;
     }
     // Region-overlay feature → its live owner's country map (any manifest shard).
@@ -1268,7 +1277,7 @@ export default function WorldMapSVG({
       <BackgroundMacroInspector
         snapshot={worldEntities}
         selectedEntityId={selectedMacro}
-        onSelect={setSelectedMacro}
+        onSelect={selectMacro}
         fullscreen={isFullscreen}
       />
     </>

@@ -129,6 +129,43 @@ import * as tw from "tailwindcss";
       await page.goto(`http://127.0.0.1:${server.address().port}`, { waitUntil: "networkidle" });
       await page.getByRole("combobox", { name: "Inspect a background country" }).waitFor();
       assert.equal(await page.getByRole("combobox").locator("option").count(), 156);
+      await page
+        .getByRole("button", { name: "Inspect Canada background macro" })
+        .waitFor({ state: "attached" });
+      await page.evaluate(() => {
+        const nativeRaf = window.requestAnimationFrame.bind(window);
+        const pending = [];
+        window.__freezeMapAnimation = true;
+        window.requestAnimationFrame = (callback) =>
+          nativeRaf((time) => {
+            if (window.__freezeMapAnimation) pending.push(callback);
+            else callback(time);
+          });
+        window.__releaseMapAnimation = () => {
+          window.__freezeMapAnimation = false;
+          for (const callback of pending.splice(0)) window.requestAnimationFrame(callback);
+        };
+      });
+      await page.waitForTimeout(80);
+      const beforePicker = await page
+        .locator('svg path[role="button"]')
+        .evaluateAll((paths) =>
+          paths
+            .filter((path) => getComputedStyle(path).opacity !== "0" && path.getAttribute("d"))
+            .map((path) => ({ label: path.getAttribute("aria-label"), d: path.getAttribute("d") }))
+        );
+      await page.getByRole("combobox").selectOption("CA");
+      await page.getByRole("complementary", { name: "Canada macro summary" }).waitFor();
+      const afterPicker = await page
+        .locator('svg path[role="button"]')
+        .evaluateAll((paths) =>
+          paths
+            .filter((path) => getComputedStyle(path).opacity !== "0" && path.getAttribute("d"))
+            .map((path) => ({ label: path.getAttribute("aria-label"), d: path.getAttribute("d") }))
+        );
+      assert.deepEqual(afterPicker, beforePicker);
+      await page.getByRole("button", { name: "Close macro summary" }).click();
+      await page.evaluate(() => window.__releaseMapAnimation());
       await page.getByRole("button", { name: "Map settings" }).click();
       await page.getByRole("button", { name: "Map", exact: true }).click();
       await page.getByRole("button", { name: "Globe", exact: true }).waitFor();
@@ -274,6 +311,7 @@ import * as tw from "tailwindcss";
         mapClickOrTap: true,
         countryPickerCount: 155,
         keyboardInspection: true,
+        pickerPreservesGlobeGeometry: true,
         summaryAndProvenance: true,
         noPoliticalNavigation: true,
         fullCountryNavigation: true,

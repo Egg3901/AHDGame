@@ -10,10 +10,10 @@ The inspector labels its simulation tier and coarse estimate provenance. It offe
 
 - 27 focused tests passed across the inspector, shared SVG renderer, bloc mode, existing landing tiers and the world map model. The final inspector/model subset also passed after the complete entity index was added.
 - Four native Mongo cases passed through the real read-model loader. The fixture seeds 155 background countries, maps 153 features across 151 countries, and makes all 155 countries inspectable. Retired and wrong-preset data, forged full-country macro data and stale data in a later preset are excluded.
-- Actual WorldMapSVG, D3 projections, SVG renderer, map controls and inspector passed browser checks at 1280x900, 390x844 and 320x740. Checks cover real geometric clicks/taps, keyboard activation, the 155-country picker, countries without shapes, full-country navigation, fullscreen inspection, no horizontal overflow and no page errors.
+- Actual WorldMapSVG, D3 projections, SVG renderer, map controls and inspector passed browser checks at 1280x900, 390x844 and 320x740. Checks cover real geometric clicks/taps, keyboard activation, the 155-country picker, countries without shapes, full-country navigation, fullscreen inspection, preservation of visible globe geometry during picker updates, no horizontal overflow and no page errors.
 - Mobile cases cover cumulative small-step drags without selection and native finger scrolling of the fullscreen inspector. The tap handler consumes a tap once using the geometry at touch start, preventing a second compatibility click from navigating to a different country.
 
-The browser fixture supplies application context, theme variables and empty structural overlays. It compiles the actual component sources and their Tailwind classes. It does not qualify authentication, remote deployment or historical overlays.
+The browser fixture supplies application context, theme variables and empty structural overlays. A controlled animation clock checks globe geometry preservation. It compiles the actual component sources and their Tailwind classes. It does not qualify authentication, remote deployment or historical overlays.
 
 ## Reproduction
 
