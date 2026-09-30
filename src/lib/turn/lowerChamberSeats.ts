@@ -81,19 +81,17 @@ export async function getLiveLowerChamberSeats(db: Db, countryId: CountryId): Pr
     }
   }
   if (countryId === "RU" && preset === "1991-default") {
-    const countryState = await db
-      .collection<CountryGameState>("countryGameStates")
-      .findOne(
-        { _id: "RU" },
-        {
-          projection: {
-            ruSovietSuccessionSinceTurn: 1,
-            ruProvisionalCongressSeats: 1,
-            ruCongressDissolvedSinceTurn: 1,
-            ruFederalAssemblySinceTurn: 1,
-          },
-        }
-      );
+    const countryState = await db.collection<CountryGameState>("countryGameStates").findOne(
+      { _id: "RU" },
+      {
+        projection: {
+          ruSovietSuccessionSinceTurn: 1,
+          ruProvisionalCongressSeats: 1,
+          ruCongressDissolvedSinceTurn: 1,
+          ruFederalAssemblySinceTurn: 1,
+        },
+      }
+    );
     if (countryState?.ruFederalAssemblySinceTurn != null) return 450;
     if (countryState?.ruCongressDissolvedSinceTurn != null) return 0;
     if (
