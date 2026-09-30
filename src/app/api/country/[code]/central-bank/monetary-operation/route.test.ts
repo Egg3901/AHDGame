@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import { planEuroSettlement } from "@/lib/currency/euro/rules";
 import { NextResponse } from "next/server";
 
 const mocks = vi.hoisted(() => ({
@@ -185,4 +187,43 @@ it("keeps a fresh command subject to the existing cooldown", async () => {
   );
   expect(response.status).toBe(409);
   expect(mocks.executeMonetaryOperation).not.toHaveBeenCalled();
+});
+describe("euro monetary-operation authority", () => {
+  it.each([false, true])(
+    "requires the common chair while retaining UK accounting (common chair: %s)",
+    async (commonChair) => {
+      const db = createMockDb();
+      mocks.getDb.mockResolvedValue(db);
+      mocks.getGameState.mockResolvedValue({ currentTurn: 400 });
+      const union = planEuroSettlement({
+        year: 1999,
+        turn: 385,
+        preset: "1991-default",
+        europeanMembers: ["DE", "IE", "UK"],
+        consentedCountries: ["DE", "IE", "UK"],
+        rates: { EUR: 0.85, IEP: 0.7, GBP: 0.6 },
+      }).union;
+      db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+      db.collection("gameConfig").findOne.mockResolvedValue({ moneySupplyEnabled: true });
+      db.collection("federalBudget").findOne.mockResolvedValue({ gdp: 1000000 });
+      db.collection("centralBanks").findOne.mockImplementation(
+        async ({ _id }: { _id: string }) => ({
+          _id,
+          countryId: _id === "ECB" ? "DE" : "UK",
+          chairCharacterId: _id === "ECB" ? (commonChair ? CHAIR_ID : "common-chair") : CHAIR_ID,
+        })
+      );
+      const response = await POST(
+        request({ type: "liquidity_injection", amount: 1000 }),
+        context("UK")
+      );
+      expect(response.status).toBe(commonChair ? 200 : 403);
+      if (commonChair)
+        expect(mocks.executeMonetaryOperation).toHaveBeenCalledWith(
+          db,
+          expect.objectContaining({ countryId: "UK", amount: 1000 })
+        );
+      else expect(mocks.executeMonetaryOperation).not.toHaveBeenCalled();
+    }
+  );
 });

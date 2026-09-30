@@ -270,6 +270,8 @@ export interface TreasuryTransferRecord {
 }
 
 export interface CentralBank {
+  /** Common policy authority; this document retains its national financial accounts. */
+  monetaryAuthorityId?: string;
   /** Country ID (e.g. "US", "UK") — used as _id */
   _id: string;
   countryId: CountryId;

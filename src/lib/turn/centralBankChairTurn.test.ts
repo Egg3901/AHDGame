@@ -1,3 +1,4 @@
+import { processCentralBankChairTurn } from "./centralBankChairTurn";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 
@@ -38,7 +39,7 @@ vi.mock("@/lib/constants/nationalScope", () => ({
 
 // Spy on the NPP auto-rate module so we can assert it is invoked for npp chairs
 // and NOT invoked for character chairs.
-const processNppChairAutoRateMock = vi.fn().mockResolvedValue(undefined);
+const processNppChairAutoRateMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/nppAutonomy/nppChairAutoRate", () => ({
   processNppChairAutoRate: processNppChairAutoRateMock,
 }));
@@ -145,7 +146,6 @@ describe("processCentralBankChairTurn", () => {
   });
 
   it("does not change infamy at target inflation and target growth", async () => {
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     const result = await processCentralBankChairTurn(mockDb as never, 100);
 
     expect(result.banksProcessed).toBe(1);
@@ -175,7 +175,6 @@ describe("processCentralBankChairTurn", () => {
   it("increases infamy with high inflation", async () => {
     testBudgetInflation = 8.0;
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     // delta = (8-2)*0.5 + (2-2)*0.5 = 3.0
@@ -189,7 +188,6 @@ describe("processCentralBankChairTurn", () => {
   it("increases infamy with low growth", async () => {
     testGdpGrowth = -1.0;
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     // delta = (2-2)*0.5 + (2-(-1))*0.5 = 1.5
@@ -212,7 +210,6 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     const result = await processCentralBankChairTurn(mockDb as never, 100);
 
     // After decay: 30 * 0.95 = 28.5 (still > 25), so penalty applies
@@ -241,7 +238,6 @@ describe("processCentralBankChairTurn", () => {
     testBudgetInflation = 1.0;
     testGdpGrowth = 4.0;
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     // decay: 20 * 0.95 = 19
@@ -271,7 +267,6 @@ describe("processCentralBankChairTurn", () => {
     testBudgetInflation = 0.5;
     testGdpGrowth = 5.0;
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     // decay: 1 * 0.95 = 0.95
@@ -298,7 +293,6 @@ describe("processCentralBankChairTurn", () => {
     testBudgetInflation = 1.95;
     testGdpGrowth = 0.483;
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     const result = await processCentralBankChairTurn(mockDb as never, 100);
 
     const centralBanksMock = getCollectionMock("centralBanks");
@@ -334,7 +328,6 @@ describe("processCentralBankChairTurn", () => {
     testBudgetInflation = 2.0;
     testGdpGrowth = 2.0;
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     const centralBanksMock = getCollectionMock("centralBanks");
@@ -363,7 +356,6 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     const result = await processCentralBankChairTurn(mockDb as never, 100);
 
     expect(result.banksProcessed).toBe(1);
@@ -389,7 +381,6 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     const result = await processCentralBankChairTurn(mockDb as never, 100);
 
     expect(result.banksProcessed).toBe(1);
@@ -433,7 +424,6 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     // Existing character-chair path runs (characters.bulkWrite called once).
@@ -470,7 +460,6 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     expect(processNppChairAutoRateMock).toHaveBeenCalledTimes(1);
@@ -502,9 +491,65 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
+    expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
+  });
+
+  it("sets one common NPP rate from member GDP weights while retaining national governor offices", async () => {
+    const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+    const { getGdpAnchorRate } = await import("@/lib/currency/gdpAnchorRate");
+    const { getNationalBudgetId } = await import("@/lib/bonds/sovereign");
+    const union = planEuroSettlement({
+      year: 1999,
+      turn: 385,
+      preset: "1991-default",
+      europeanMembers: ["DE", "IE"],
+      consentedCountries: ["DE", "IE"],
+      rates: { EUR: 0.85, IEP: 0.7 },
+    }).union;
+    testBanks = [
+      { _id: "ECB", countryId: "DE", chairMode: "npp", primeRate: 3 },
+      { _id: "IE", countryId: "IE", chairMode: "npp", primeRate: 5 },
+    ];
+    getCollectionMock("gameState").findOne.mockResolvedValue({
+      currentYear: 1999,
+      startingYear: 1991,
+      preset: "1991-default",
+      euroMonetaryUnion: union,
+    });
+    getCollectionMock("federalBudget").find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: getNationalBudgetId("DE"),
+          gdp: 100 / getGdpAnchorRate("DE", "1991-default"),
+          economicFactors: { inflationRate: 2 },
+        },
+        {
+          _id: getNationalBudgetId("IE"),
+          gdp: 300 / getGdpAnchorRate("IE", "1991-default"),
+          economicFactors: { inflationRate: 6 },
+        },
+      ],
+    });
+    getCollectionMock("macroMetrics").find.mockReturnValue({
+      toArray: async () => [
+        { _id: "de_national", economic: { gdpGrowth: { value: 4 } } },
+        { _id: "ie_national", economic: { gdpGrowth: { value: 0 } } },
+      ],
+    });
+    getCollectionMock("centralBanks").findOne.mockResolvedValue({ _id: "ECB", primeRate: 3 });
+    const result = await processCentralBankChairTurn(mockDb as never, 385);
+    expect(result.banksProcessed).toBe(2);
+    expect(processNppChairAutoRateMock).toHaveBeenCalledTimes(1);
+    expect(processNppChairAutoRateMock.mock.calls[0][1]._id).toBe("ECB");
+    expect(processNppChairAutoRateMock.mock.calls[0][7]).toMatchObject({
+      inflationRate: 5,
+      gdpGrowth: 1,
+    });
+    processNppChairAutoRateMock.mockClear();
+    getCollectionMock("federalBudget").find.mockReturnValue({ toArray: async () => [] });
+    await processCentralBankChairTurn(mockDb as never, 386);
     expect(processNppChairAutoRateMock).not.toHaveBeenCalled();
   });
 
@@ -521,7 +566,6 @@ describe("processCentralBankChairTurn", () => {
       },
     ];
 
-    const { processCentralBankChairTurn } = await import("./centralBankChairTurn");
     await processCentralBankChairTurn(mockDb as never, 100);
 
     const charMock = getCollectionMock("characters");

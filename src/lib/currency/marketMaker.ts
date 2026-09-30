@@ -1,4 +1,10 @@
-// src/lib/currency/marketMaker.ts
+/**
+ * Market-maker conversion exchanges balances at live quotes with a spread fee.
+ * executeMarketMakerTrade uses fixed, fee-free settlement within the euro area.
+ */
+import { resolveEuroConversionQuotes, type ConversionQuoteContext } from "./euro/quotes";
+import { euroLedgerCrossRate } from "./euro/rules";
+import { loadEuroMonetaryUnion } from "./euro/service";
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -29,6 +35,8 @@ interface MarketMakerTradeParams {
   source?: TradeSource;
   /** Optional reference to the originating entity (corp id, bond id, etc.). */
   sourceRef?: string;
+  /** One quote snapshot per turn phase, avoiding quote reads for each payout. */
+  quoteContext?: ConversionQuoteContext;
 }
 
 interface MarketMakerTradeResult {
@@ -247,11 +255,25 @@ export async function executeMarketMakerTrade(
   }
   const spendAmount = spendResolution.spend;
 
-  const [fromExRate, toExRate] = await Promise.all([
-    db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
-    db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
-  ]);
+  const [rawFromExRate, rawToExRate, union] = params.quoteContext
+    ? ([
+        params.quoteContext.quotes.get(fromCurrency) ?? null,
+        params.quoteContext.quotes.get(toCurrency) ?? null,
+        params.quoteContext.union,
+      ] as const)
+    : await Promise.all([
+        db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
+        db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
+        loadEuroMonetaryUnion(db),
+      ]);
 
+  const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
+    db,
+    rawFromExRate,
+    rawToExRate,
+    union,
+    params.quoteContext?.quotes
+  );
   if (!fromExRate || !toExRate) {
     return {
       success: false,
@@ -263,6 +285,8 @@ export async function executeMarketMakerTrade(
     };
   }
 
+  const fixedCrossRate = euroLedgerCrossRate(union, fromCurrency, toCurrency);
+
   // Guard against malformed rate documents. If either `.rate` is non-finite
   // or non-positive, getCrossRate() returns NaN/Infinity and Math.floor of
   // that propagates into the $inc update — the source balance still gets
@@ -272,10 +296,11 @@ export async function executeMarketMakerTrade(
   // drained ~$41M from a single bond-maturity payout. Reject up front so
   // the source balance is never touched on a broken rate.
   if (
-    !Number.isFinite(fromExRate.rate) ||
-    fromExRate.rate <= 0 ||
-    !Number.isFinite(toExRate.rate) ||
-    toExRate.rate <= 0
+    fixedCrossRate == null &&
+    (!Number.isFinite(fromExRate.rate) ||
+      fromExRate.rate <= 0 ||
+      !Number.isFinite(toExRate.rate) ||
+      toExRate.rate <= 0)
   ) {
     return {
       success: false,
@@ -291,10 +316,16 @@ export async function executeMarketMakerTrade(
   // The source currency chair's spread-strength (0.5–1.5×) scales the fee; read
   // from the already-loaded fromExRate doc so the hot path takes no extra query.
   const spreadStrength = clampForexSpreadStrength(fromExRate.forexSpreadStrength);
-  const spreadFee = calculateSpreadFee(spendAmount, MARKET_MAKER_SPREAD * spreadStrength);
+  const spreadFee =
+    fixedCrossRate == null
+      ? calculateSpreadFee(spendAmount, MARKET_MAKER_SPREAD * spreadStrength)
+      : 0;
   const netAmount = spendAmount - spreadFee;
-  const crossRate = getCrossRate(fromExRate.rate, toExRate.rate);
-  const toAmount = Math.round(netAmount * crossRate);
+  const crossRate = fixedCrossRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
+  // Whole ledger units round down within the union so repeated conversions
+  // cannot manufacture value from rounding now that there is no FX spread.
+  const toAmount =
+    fixedCrossRate == null ? Math.round(netAmount * crossRate) : Math.floor(netAmount * crossRate);
 
   // Belt-and-braces: guard against non-finite derived values even when the
   // rate inputs passed the check above (extreme denormals, etc.). Fail before
@@ -309,6 +340,16 @@ export async function executeMarketMakerTrade(
       spreadCharged: 0,
     };
   }
+
+  if (fixedCrossRate != null && toAmount <= 0)
+    return {
+      success: false,
+      error: "Amount is too small to convert into whole ledger units",
+      fromAmount: amount,
+      toAmount: 0,
+      effectiveRate: 0,
+      spreadCharged: 0,
+    };
 
   // Atomic balance update with race-condition guard:
   // The filter checks the character has sufficient fromCurrency before deducting.

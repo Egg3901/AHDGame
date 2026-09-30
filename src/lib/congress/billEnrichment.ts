@@ -479,6 +479,17 @@ export async function resolveBillProvisions(
           continue;
         }
 
+        if (provision.type === "european_treaty") {
+          provisionsResolved.push({
+            legislationTypeName: "Maastricht Treaty",
+            proposed: {
+              name: provision.action === "ratify" ? "Ratify Maastricht" : "Reject Maastricht",
+            },
+            effectDirection: 0,
+            directionLabel: "Center",
+          });
+          continue;
+        }
         if (provision.type === "euro_adoption") {
           provisionsResolved.push({
             legislationTypeName: "Currency Adoption",

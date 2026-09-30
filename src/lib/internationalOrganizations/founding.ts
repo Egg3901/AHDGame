@@ -1,3 +1,4 @@
+import type { EuropeanIntegrationState } from "./europeanIntegration/rules";
 import type { Db } from "mongodb";
 import type { InternationalOrganizationDef } from "@/lib/constants/internationalOrganizations";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
@@ -17,6 +18,7 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
  */
 
 export interface OrgFoundingContext {
+  europeanIntegration?: EuropeanIntegrationState;
   /** Live in-game year; null = era-awareness unavailable (legacy gameState). */
   liveYear: number | null;
   /** Active reset preset id; "2019-default" when unset (legacy rows). */
@@ -24,14 +26,21 @@ export interface OrgFoundingContext {
 }
 
 export async function loadOrgFoundingContext(db: Db): Promise<OrgFoundingContext> {
-  const gs = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      { projection: { currentYear: 1, currentTurn: 1, startingYear: 1, preset: 1 } }
-    );
+  const gs = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        currentYear: 1,
+        currentTurn: 1,
+        startingYear: 1,
+        preset: 1,
+        europeanIntegration: 1,
+      },
+    }
+  );
   return {
     liveYear: gs ? resolveGameYear(gs) : null,
+    europeanIntegration: gs?.europeanIntegration,
     preset: gs?.preset ?? DEFAULT_SEED_PRESET,
   };
 }
@@ -66,8 +75,12 @@ export async function isOrganizationFoundedLive(
   def: Pick<InternationalOrganizationDef, "id" | "foundedYear" | "dissolvedYear">
 ): Promise<boolean> {
   if (def.foundedYear == null) return true;
-  const { liveYear } = await loadOrgFoundingContext(db);
+  const { liveYear, europeanIntegration } = await loadOrgFoundingContext(db);
   const membershipsCol = await getOrganizationMembershipsCollection(db);
   const memberCount = await membershipsCol.countDocuments({ organizationId: def.id });
-  return isOrganizationFounded({ def, liveYear, hasMembers: memberCount > 0 });
+  const effectiveDef =
+    def.id === "EU" && europeanIntegration?.stage === "community"
+      ? { ...def, foundedYear: 1958 }
+      : def;
+  return isOrganizationFounded({ def: effectiveDef, liveYear, hasMembers: memberCount > 0 });
 }

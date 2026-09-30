@@ -57,6 +57,7 @@ function makeDb(opts: {
   const charsFindOne = vi.fn().mockResolvedValue(opts.chairDoc ?? null);
 
   const collections: Record<string, Record<string, unknown>> = {
+    gameState: { findOne: async () => null },
     centralBanks: { find: bankFind, updateOne: bankUpdateOne },
     characters: {
       find: () => cursor(opts.characters ?? []),

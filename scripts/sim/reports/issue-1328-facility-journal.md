@@ -8,6 +8,8 @@ Baseline: `56b969b464488ddf615caf4a1e528027bf2b0844`.
 Treatment: `005d1178c52d5e3b1aec86aa9f917b300261ae21`.
 Both executions used clean checkouts and isolated Mongo databases. The companion JSON records the private runner's SHA-256. Later evidence and CI fixture-typing commits do not change the executed game runtime. The nullable legacy cooldown read type was aligned with the existing query; its query and effects are unchanged.
 
+Integration commit `19f2a15a787f063ec96f8c51e11ee31460baccf3` subsequently includes development `8c7b4188f4e89fc08395a642cb1306a11a90aa20`, including separately qualified European monetary authority and proprietary-trading settlements. The only textual merge conflict joined their authority tests with these retry tests; both sets are retained. The original Mongo results above remain pinned to their stated source, not relabeled as a rerun of the integration head.
+
 The fixture contains ten synthetic USD banks at turn 100, a central bank with prime rate 4, and an observed native-per-anchor FX rate of 2. Ordinary deposit and loan-book work is explicitly pre-stamped complete to isolate facility servicing. This is actual production subsystem code against Mongo, not a new world simulation or retained-player-world qualification.
 
 ## Verified outcomes

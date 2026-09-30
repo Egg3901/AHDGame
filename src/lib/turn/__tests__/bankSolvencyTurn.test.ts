@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter, BankLoan, DepositInsuranceFund } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
 import {
@@ -669,32 +670,37 @@ describe("processBankSolvencyTurn", () => {
       }),
       { liquidCapital: 50_000 }
     );
-    seedBanks([ib]);
-
-    db.collectionMocks.corporations!.findOne.mockImplementation(
-      async (filter: { _id?: ObjectId }) => {
-        if (!filter?._id) return null;
-        if (filter._id.equals(targetId)) {
-          return {
-            _id: targetId,
-            sharePrice: 10,
-            liquidCurrencyCode: "USD",
-            countryId: "US",
-          };
-        }
-        const live = liveCorps.get(filter._id.toString());
-        if (!live) return null;
-        return {
-          ...live,
-          bankCharter: live.bankCharter ? { ...live.bankCharter } : undefined,
-        };
-      }
-    );
-
-    const summary = await processBankSolvencyTurn(db as unknown as Db, TURN);
+    const memory = createInMemoryDb();
+    memory.seed("gameConfig", [
+      {
+        _id: "default",
+        privateBankingEnabled: true,
+        bankPropTradingEnabled: true,
+        bankContagionEnabled: true,
+      },
+    ]);
+    memory.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
+    memory.seed("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+    memory.seed("centralBanks", [
+      { _id: "US", reserveRequirementRatio: 0.1, externalBroadMoney: 100_000_000 },
+    ]);
+    memory.seed("corporations", [
+      { ...ib },
+      {
+        _id: targetId,
+        sharePrice: 10,
+        liquidCurrencyCode: "USD",
+        countryId: "US",
+      },
+    ]);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(memory as unknown as Db);
+    const summary = await processBankSolvencyTurn(memory as unknown as Db, TURN);
     expect(summary.banksEvaluated).toBe(1);
     expect(summary.forcedLiquidations).toBe(1);
-    const live = liveCorps.get(ib._id.toString())!;
+    const live = (await memory
+      .collection("corporations")
+      .findOne({ _id: ib._id })) as unknown as Corporation;
     const equity =
       (live.bankCharter!.cashReserves ?? 0) +
       (live.bankCharter!.propBookMarkValue ?? 0) -

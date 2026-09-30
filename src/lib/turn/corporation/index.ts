@@ -1,3 +1,8 @@
+/**
+ * Corporation turns settle operating results and distribute shareholder income.
+ * processCorporationTurn shares monetary quotes across automatic dividend conversions.
+ */
+import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { Character } from "@/lib/db/types";
@@ -1251,6 +1256,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             .toArray()
         : [];
     const charById = new Map(divChars.map((c) => [c._id.toString(), c]));
+    const quoteContext = await loadConversionQuoteContext(db, gameState?.euroMonetaryUnion);
 
     for (const [charIdStr, currMap] of dividendPayments) {
       if (charIdStr.startsWith("imperial:") || charIdStr.startsWith("npp:")) continue;
@@ -1267,6 +1273,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           amount,
           turn,
           source: "auto_dividend",
+          quoteContext,
         });
       }
     }

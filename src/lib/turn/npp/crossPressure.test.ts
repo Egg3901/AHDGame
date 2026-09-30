@@ -451,3 +451,32 @@ describe("computeCrossPressureForces (integration)", () => {
     expect(verdictFromForces(forces)).toBe("for");
   });
 });
+
+describe("European integration votes", () => {
+  it("lets opposing policy positions support or oppose the same treaty", () => {
+    const bill = makeBill({
+      provisions: [{ type: "european_treaty", treaty: "maastricht", action: "ratify" }],
+    });
+    const integration = makeNPP({ policies: { economic: 2, social: -3 } });
+    const sovereignty = makeNPP({ policies: { economic: -3, social: 5 } });
+    expect(computeIdeologyForce(integration, bill)).toBeGreaterThan(0);
+    expect(computeIdeologyForce(sovereignty, bill)).toBeLessThan(0);
+    const rejection = makeBill({
+      provisions: [{ type: "european_treaty", treaty: "maastricht", action: "reject" }],
+    });
+    expect(computeIdeologyForce(integration, rejection)).toBeLessThan(0);
+    expect(computeIdeologyForce(sovereignty, rejection)).toBeGreaterThan(0);
+  });
+  it("keeps euro policy preference subject to ordinary party whips", () => {
+    const bill = makeBill({ provisions: [{ type: "euro_adoption" }] });
+    const npp = makeNPP({
+      policies: { economic: 5, social: -5 },
+      personality: { loyalty: 100, ambition: 50, stubbornness: 0 },
+    });
+    const ideology = computeIdeologyForce(npp, bill);
+    expect(ideology).toBeGreaterThan(0);
+    expect(
+      ideology + computeWhipForce(npp, { partyWhip: makeWhip("against", "hard"), caucusWhip: null })
+    ).toBeLessThan(0);
+  });
+});
