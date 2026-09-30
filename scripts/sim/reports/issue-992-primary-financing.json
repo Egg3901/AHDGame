@@ -1,0 +1,968 @@
+{
+  "treatment": {
+    "sourceCommit": "aca1b636a9fb197f7272d9df3f50f28ecd344adf",
+    "sourceDirty": false,
+    "baseline": false,
+    "retainedRun": {
+      "id": "4d943526-e75f-48c7-b46f-6a10d5aeff64",
+      "sourceCommit": "2aa9c18195207a1726a04afae60e5a8f913045fd",
+      "sourceTurn": 241
+    },
+    "sourceHash": "76aafccbc5f63601cadab11ec931e5a9c597694f15051f282c1a56ea766cbe3e",
+    "sourcePreserved": true,
+    "countries": ["US", "UK", "DE", "JP", "IE"],
+    "scope": "Retained fiscal/currency context; explicitly controlled offers, buyer cash and policy. Actual subsystem commands, not whole-economy qualification.",
+    "results": [
+      {
+        "label": "retained_five_country_scheduled",
+        "cashResiduals": {
+          "EUR": 0,
+          "IEP": 0,
+          "JPY": 0,
+          "GBP": 0,
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GRD": 0,
+          "ITL": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 2,
+        "ledgerCount": 2,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "DE": 0,
+          "IE": 0,
+          "JP": 2043801529000,
+          "UK": 0,
+          "US": 729544829000
+        }
+      },
+      {
+        "label": "admin:1",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "partial:1",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 4000
+        },
+        "fundedFace": 4000
+      },
+      {
+        "label": "unfunded:1",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 0,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 0
+        },
+        "fundedFace": 0
+      },
+      {
+        "label": "monetary:1",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {
+          "USD": 10000
+        },
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "retry_after_credit:1",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:1",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:2",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:3",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:4",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:5",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:6",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:7",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:8",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:9",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:10",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:11",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "twelve_turn_cohort:12",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 10000
+        },
+        "fundedFace": 10000
+      },
+      {
+        "label": "later_unsold",
+        "cashResiduals": {
+          "USD": 0,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "EUR": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GBP": 0,
+          "GRD": 0,
+          "IEP": 0,
+          "ITL": 0,
+          "JPY": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 1,
+        "ledgerCount": 1,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "US": 9000
+        },
+        "placedUnits": 9
+      }
+    ],
+    "performance": [
+      {
+        "label": "retainedFiveCountryScheduled",
+        "commands": 90,
+        "readBsonBytes": 182099
+      },
+      {
+        "label": "fixture_admin",
+        "commands": 33,
+        "readBsonBytes": 16130
+      },
+      {
+        "label": "fixture_partial",
+        "commands": 33,
+        "readBsonBytes": 16138
+      },
+      {
+        "label": "fixture_unfunded",
+        "commands": 20,
+        "readBsonBytes": 15928
+      },
+      {
+        "label": "fixture_monetary",
+        "commands": 34,
+        "readBsonBytes": 16127
+      },
+      {
+        "label": "fixture_retry_after_credit",
+        "commands": 12,
+        "readBsonBytes": 13477
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 16130
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 16594
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 17044
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 17498
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 17956
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 18415
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 18874
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 19333
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 19792
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 20251
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 20710
+      },
+      {
+        "label": "fixture_twelve_turn_cohort",
+        "commands": 33,
+        "readBsonBytes": 21169
+      },
+      {
+        "label": "fixture_laterUnsold",
+        "commands": 25,
+        "readBsonBytes": 4760
+      }
+    ]
+  },
+  "baseline": {
+    "sourceCommit": "322a2b0b7bd4171d7bd4c4d8a7839eeb027be303",
+    "sourceDirty": false,
+    "baseline": true,
+    "retainedRun": {
+      "id": "4d943526-e75f-48c7-b46f-6a10d5aeff64",
+      "sourceCommit": "2aa9c18195207a1726a04afae60e5a8f913045fd",
+      "sourceTurn": 241
+    },
+    "sourceHash": "76aafccbc5f63601cadab11ec931e5a9c597694f15051f282c1a56ea766cbe3e",
+    "sourcePreserved": true,
+    "countries": ["US", "UK", "DE", "JP", "IE"],
+    "scope": "Retained fiscal/currency context; explicitly controlled offers, buyer cash and policy. Actual subsystem commands, not whole-economy qualification.",
+    "results": [
+      {
+        "label": "retained_five_country_scheduled",
+        "cashResiduals": {
+          "EUR": 0,
+          "IEP": 0,
+          "JPY": -2043801529000,
+          "GBP": 0,
+          "USD": -729544829000,
+          "ATS": 0,
+          "BRL": 0,
+          "CNY": 0,
+          "ESP": 0,
+          "FIM": 0,
+          "FRF": 0,
+          "GRD": 0,
+          "ITL": 0,
+          "NGN": 0,
+          "SEK": 0,
+          "TRL": 0
+        },
+        "minted": {},
+        "journalCount": 0,
+        "ledgerCount": 0,
+        "trialBalance": {
+          "status": "green",
+          "unbalancedCount": 0,
+          "findings": []
+        },
+        "stockVsFlow": {
+          "status": "green",
+          "skipped": false,
+          "divergentCount": 0,
+          "findings": [],
+          "byKind": []
+        },
+        "unattributed": [],
+        "principalDeltaByCountry": {
+          "DE": 0,
+          "IE": 0,
+          "JP": 2043801529000,
+          "UK": 0,
+          "US": 729544829000
+        }
+      }
+    ],
+    "performance": [
+      {
+        "label": "retainedFiveCountryScheduled",
+        "commands": 41,
+        "readBsonBytes": 174169
+      }
+    ]
+  },
+  "baselineRuntimeCommit": "7d7ecad06dde93bf51ee6550f18cfc19ef1731a3",
+  "baselineScope": "Same runner committed on the unmodified baseline runtime; baseline src diff is empty."
+}
