@@ -115,17 +115,7 @@ describe("federation ratification records", () => {
       { _id: "CZECHLANDS", countryId: "CS", population: 10, gdp: 100 },
       { _id: "SLOVAKIA", countryId: "CS", population: 5, gdp: 50 },
     ]);
-    mem.seed(
-      "macroCountries",
-      ["CZ2", "SK"].map((entityId) => ({
-        _id: entityId,
-        entityId,
-        presetId: "1991-default",
-        stability: 0.7,
-        fiscalCapacity: 0.5,
-        retiredAt: null,
-      }))
-    );
+    // Emergent successor economies are not seeded until the split is applied.
     const db = mem as unknown as Db;
     const territories = [
       { entityId: "CZ2", regionIds: ["CZECHLANDS"], population: 10, annualGdpAnchor: 100 },
@@ -178,6 +168,7 @@ describe("federation ratification records", () => {
       ["CZ2", "autonomous"],
       ["SK", "autonomous"],
     ]);
+    expect(await db.collection("macroCountries").countDocuments({})).toBe(0);
     expect(await db.collection("federationRatifications").countDocuments({})).toBe(2);
   });
 });
