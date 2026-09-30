@@ -135,7 +135,7 @@ export async function buildRatifiedFederationActivation(input: {
     settlementId,
     approval,
     source: getWorldEntityOrThrow("1991-default", sourceCountryId),
-    continuingDisplayName: proposal.terms.continuingDisplayName,
+    continuingDisplayName: proposal.terms.continuingDisplayName ?? undefined,
     successors,
     territories,
     finances,

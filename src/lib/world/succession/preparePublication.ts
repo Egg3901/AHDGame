@@ -116,7 +116,8 @@ function enumerateEffects(plan: FederationPublicationPlan, now: Date): Federatio
 export async function prepareFederationPublication(
   db: Db,
   plan: FederationPublicationPlan,
-  now: Date
+  now: Date,
+  session?: ClientSession
 ): Promise<FederationPublicationPreparation> {
   if (
     !Number.isFinite(now.getTime()) ||
@@ -129,11 +130,14 @@ export async function prepareFederationPublication(
     .collection<FederationSettlementApplicationRecord>(
       FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
     )
-    .findOne({
-      presetId: plan.receipt.presetId,
-      sourceEntityId: plan.receipt.sourceEntityId,
-      status: "applied",
-    });
+    .findOne(
+      {
+        presetId: plan.receipt.presetId,
+        sourceEntityId: plan.receipt.sourceEntityId,
+        status: "applied",
+      },
+      { session }
+    );
   if (applied && applied._id !== plan.receipt._id)
     throw new Error("Federation source already has another applied settlement");
   overlayRuntimeWorldEntities(
@@ -153,8 +157,12 @@ export async function prepareFederationPublication(
   const preparations = db.collection<FederationPublicationPreparation>(
     FEDERATION_PUBLICATION_PREPARATIONS_COLLECTION
   );
-  await preparations.updateOne({ _id: intended._id }, { $setOnInsert: intended }, { upsert: true });
-  const stored = await preparations.findOne({ _id: intended._id });
+  await preparations.updateOne(
+    { _id: intended._id },
+    { $setOnInsert: intended },
+    { upsert: true, session }
+  );
+  const stored = await preparations.findOne({ _id: intended._id }, { session });
   if (
     !stored ||
     stored.applicationId !== intended.applicationId ||
@@ -166,9 +174,19 @@ export async function prepareFederationPublication(
   const collection = db.collection<FederationPreparedEffect>(
     FEDERATION_PREPARED_EFFECTS_COLLECTION
   );
+  if (effects.length)
+    await collection.bulkWrite(
+      effects.map((effect) => ({
+        updateOne: { filter: { _id: effect._id }, update: { $setOnInsert: effect }, upsert: true },
+      })),
+      { session }
+    );
+  const savedEffects = await collection
+    .find({ applicationId: plan.receipt._id }, { session })
+    .toArray();
+  const effectsById = new Map(savedEffects.map((effect) => [effect._id, effect]));
   for (const effect of effects) {
-    await collection.updateOne({ _id: effect._id }, { $setOnInsert: effect }, { upsert: true });
-    const saved = await collection.findOne({ _id: effect._id });
+    const saved = effectsById.get(effect._id);
     if (
       !saved ||
       saved.applicationId !== effect.applicationId ||
@@ -183,9 +201,17 @@ export async function prepareFederationPublication(
   // Staging them here permits standalone Mongo retries without making a
   // partial federation visible as sovereign.
   const states = db.collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION);
+  if (plan.entityStates.length)
+    await states.bulkWrite(
+      plan.entityStates.map((state) => ({
+        updateOne: { filter: { _id: state._id }, update: { $setOnInsert: state }, upsert: true },
+      })),
+      { session }
+    );
+  const savedStates = await states.find({ applicationId: plan.receipt._id }, { session }).toArray();
+  const statesById = new Map(savedStates.map((state) => [state._id, state]));
   for (const state of plan.entityStates) {
-    await states.updateOne({ _id: state._id }, { $setOnInsert: state }, { upsert: true });
-    const saved = await states.findOne({ _id: state._id });
+    const saved = statesById.get(state._id);
     if (!saved || hashSettlementPayload(saved) !== hashSettlementPayload(state))
       throw new Error("Federation runtime entity state conflicts with its approved plan");
   }
