@@ -5,6 +5,7 @@ import { getWorldEntityOrThrow } from "@/lib/world/worldEntityManifest";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import { openFederationPoliticalProposal } from "./politicalProposal";
 import { recordFederationRatifications } from "./recordRatifications";
+import { processFederationRatifications } from "@/lib/turn/federationRatifications";
 
 async function scenario() {
   const mem = createInMemoryDb();
@@ -72,6 +73,20 @@ async function scenario() {
 }
 
 describe("federation ratification records", () => {
+  it("runs from the turn path only after the ordinary bill is enacted", async () => {
+    const { db, proposal } = await scenario();
+    expect(await processFederationRatifications(db, "1991-default", 120)).toBe(0);
+    expect(await db.collection("federationRatifications").countDocuments({})).toBe(0);
+    await db.collection("bills").updateOne(
+      { _id: proposal.billId },
+      {
+        $set: { status: "signed", enactedAt: new Date(1) },
+      }
+    );
+    expect(await processFederationRatifications(db, "1991-default", 120)).toBe(1);
+    expect(await db.collection("federationRatifications").countDocuments({})).toBe(2);
+  });
+
   it("waits for the enacted bill, then persists source and autonomous consent exactly once", async () => {
     const { db, proposal, args } = await scenario();
     await expect(recordFederationRatifications(args)).rejects.toThrow("enacted");
@@ -89,5 +104,80 @@ describe("federation ratification records", () => {
       { entityId: "UKR", mode: "autonomous", choice: "approve", termsHash: proposal.termsHash },
     ]);
     expect(first.every((row) => row.reason.length > 20)).toBe(true);
+  });
+
+  it("records only successor consents when the source federation disappears", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("gameState", [
+      { _id: "current", preset: "1991-default", currentYear: 1992, currentTurn: 180 },
+    ]);
+    mem.seed("states", [
+      { _id: "CZECHLANDS", countryId: "CS", population: 10, gdp: 100 },
+      { _id: "SLOVAKIA", countryId: "CS", population: 5, gdp: 50 },
+    ]);
+    mem.seed(
+      "macroCountries",
+      ["CZ2", "SK"].map((entityId) => ({
+        _id: entityId,
+        entityId,
+        presetId: "1991-default",
+        stability: 0.7,
+        fiscalCapacity: 0.5,
+        retiredAt: null,
+      }))
+    );
+    const db = mem as unknown as Db;
+    const territories = [
+      { entityId: "CZ2", regionIds: ["CZECHLANDS"], population: 10, annualGdpAnchor: 100 },
+      { entityId: "SK", regionIds: ["SLOVAKIA"], population: 5, annualGdpAnchor: 50 },
+    ];
+    const proposal = await openFederationPoliticalProposal({
+      db,
+      sourceCountryId: "CS",
+      now: new Date(0),
+      activation: {
+        settlementId: "cs-1",
+        approval: {
+          settlementId: "cs-1",
+          revision: 1,
+          availableFromYear: 1992,
+          currentYear: 1992,
+          requiredParticipants: ["CZ2", "SK"],
+          parentMandate: null,
+          consents: [],
+        },
+        source: getWorldEntityOrThrow("1991-default", "CS"),
+        successors: ["CZ2", "SK"].map((id) => getWorldEntityOrThrow("1991-default", id)),
+        territories,
+        finances: planSuccessionFinances({
+          settlementId: "cs-1",
+          sourceEntityId: "CS",
+          participants: territories.map(({ entityId, population }) => ({ entityId, population })),
+          financialAssetsMinor: 0,
+          creditorDebtMinor: 0,
+        }),
+        negotiatedCustodians: {},
+        macroTerms: {},
+        now: new Date(0),
+      },
+    });
+    await db.collection("bills").updateOne(
+      { _id: proposal.billId },
+      {
+        $set: { status: "signed", enactedAt: new Date(1) },
+      }
+    );
+    const records = await recordFederationRatifications({
+      db,
+      sourceCountryId: "CS",
+      settlementId: "cs-1",
+      revision: 1,
+      currentTurn: 181,
+    });
+    expect(records.map(({ entityId, mode }) => [entityId, mode])).toEqual([
+      ["CZ2", "autonomous"],
+      ["SK", "autonomous"],
+    ]);
+    expect(await db.collection("federationRatifications").countDocuments({})).toBe(2);
   });
 });

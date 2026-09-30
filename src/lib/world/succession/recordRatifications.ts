@@ -53,7 +53,7 @@ export async function recordFederationRatifications(input: {
     throw new Error("Federation ratification awaits an enacted source mandate");
 
   const participants = proposal.terms.participants;
-  if (!participants.includes(sourceCountryId) || participants.length < 2)
+  if (participants.length < 2)
     throw new Error("Federation ratification has invalid participants");
   const regions = [...new Set(proposal.terms.territories.flatMap((entry) => entry.regionIds))];
   const states = await db
