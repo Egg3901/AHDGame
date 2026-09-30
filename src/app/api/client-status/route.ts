@@ -1,3 +1,4 @@
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
@@ -529,6 +530,7 @@ export async function GET(request: Request) {
       db
         .collection<{
           _id: string;
+          campaignEraPriceLevelEnabled?: boolean;
           chairActionBonus?: number;
           baseActionsPerTurn?: number;
           officeActionBonus?: Record<string, number>;
@@ -539,6 +541,7 @@ export async function GET(request: Request) {
           { _id: "default" },
           {
             projection: {
+              campaignEraPriceLevelEnabled: 1,
               chairActionBonus: 1,
               baseActionsPerTurn: 1,
               officeActionBonus: 1,
@@ -566,7 +569,8 @@ export async function GET(request: Request) {
       homeState?.gdp,
       character.countryId,
       character.politicalInfluence ?? 0,
-      preset
+      preset,
+      resolveCampaignPriceLevel(gameConfigDoc?.campaignEraPriceLevelEnabled, preset)
     );
     const populationTier = getPopulationTier(statePopulation);
     // fundDistribution is anchor; campaign funds display in LOCAL at the frozen

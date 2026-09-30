@@ -14,8 +14,11 @@
  */
 import type { EconomicModelState } from "@/lib/constants/economicModels";
 import type { StateMetrics, StateMetricValue } from "./stateMetrics";
+import type { CrisisEconomicExposure } from "@/lib/livingConflict/rules/economicExposure";
 
 export interface MacroMetricsDoc {
+  /** Bounded crisis pressure feeding actual civilian labour and GDP potential. */
+  livingConflictExposure?: CrisisEconomicExposure;
   /** stateId, or a national-scope rollup id ("federal", "uk_national", …). */
   _id: string;
   countryId?: string;

@@ -14,6 +14,7 @@ import { RESET_DATE_MAX_YEAR, RESET_DATE_MIN_YEAR } from "@/lib/admin/resetStart
 const resetSchema = z.object({
   bootstrap: z.boolean().optional(),
   mode: z.enum(["vacant", "historical"]).optional(),
+  startingParties: z.enum(["default", "none"]).optional(),
   skipRegionalCouncil: z.boolean().optional(),
   /**
    * Start the world in a live pre-iteration "founding" phase (chambers vacant +
@@ -90,6 +91,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const body = parsed.data;
+    if (body.startingParties === "none" && preset !== "1991-default") {
+      return NextResponse.json(
+        { error: "No starting parties is available for the 1991 preset" },
+        { status: 400 }
+      );
+    }
     const bootstrap = body.bootstrap === true || bootstrapFromQuery;
     const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
     const skipRegionalCouncil = body.skipRegionalCouncil === true;
@@ -102,10 +109,11 @@ export async function POST(request: Request) {
     const preIteration = resolvePreIterationOption(body, searchParams);
 
     const db = await getDb();
-    const { reset, logs } = await resetAndBootstrapGameWorld({
+    const { reset, logs, status, readiness } = await resetAndBootstrapGameWorld({
       db,
       mode: bootstrap ? mode : "historical",
       preset,
+      startingParties: body.startingParties,
       skipRegionalCouncil,
       resetReference: true,
       deleteProfiles,
@@ -122,8 +130,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ...reset,
+      resetStatus: status,
+      readiness,
       bootstrap,
       bootstrapMode: bootstrap ? mode : null,
+      startingParties: body.startingParties ?? (preset === "2019-no-parties" ? "none" : "default"),
       logs,
     });
   } catch (error) {
@@ -171,6 +182,13 @@ async function handleStreamingReset(
     );
   }
 
+  if (body.startingParties === "none" && preset !== "1991-default") {
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", message: "No starting parties is available for the 1991 preset" })}\n\n`,
+      { status: 400, headers: { "Content-Type": "text/event-stream" } }
+    );
+  }
+
   const { admin } = auth;
 
   const stream = new ReadableStream({
@@ -184,10 +202,11 @@ async function handleStreamingReset(
       try {
         const db = await getDb();
 
-        const { reset, logs } = await resetAndBootstrapGameWorld({
+        const { reset, logs, status, readiness } = await resetAndBootstrapGameWorld({
           db,
           mode: bootstrap ? mode : "historical",
           preset,
+          startingParties: body.startingParties,
           skipRegionalCouncil,
           resetReference: true,
           deleteProfiles,
@@ -205,7 +224,16 @@ async function handleStreamingReset(
 
         send({
           type: "done",
-          data: { ...reset, bootstrap, bootstrapMode: bootstrap ? mode : null, logs },
+          data: {
+            ...reset,
+            resetStatus: status,
+            readiness,
+            bootstrap,
+            bootstrapMode: bootstrap ? mode : null,
+            startingParties:
+              body.startingParties ?? (preset === "2019-no-parties" ? "none" : "default"),
+            logs,
+          },
         });
       } catch (error) {
         send({

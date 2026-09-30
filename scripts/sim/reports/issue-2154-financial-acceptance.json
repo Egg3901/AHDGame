@@ -1,0 +1,1033 @@
+{
+  "main": {
+    "sourceCommit": "a6cca21537b4119ad9ae358fe9999b738f0089f2",
+    "replayCommit": "1184cdd81dd0da3b7137afac72496a80a681c77d",
+    "dirty": false,
+    "retainedHash": "c2c66d28672e21fdd8e9c51c69f3aebdbff13991af27cdb54e47be6068b9e654",
+    "scope": "Focused retained-world financial phases, not a whole-world simulation",
+    "setup": [
+      "Enabled banking, crisis interactions and household demand in the isolated target",
+      "Installed four synthetic executive actors",
+      "Opened a controlled 2008 financial policy window",
+      "Retained original fiscal, monetary, corporate and debt stocks",
+      "Controlled 10M household deposit funded from the monetary pool with an equal bank liability",
+      "Controlled borrower operating loss paid to the household monetary pool through balanced settlement after real loan origination"
+    ],
+    "sourceCounts": {
+      "gameState": 2,
+      "gameConfig": 1,
+      "countryGameStates": 29,
+      "states": 170,
+      "stateBudgets": 170,
+      "statePolicies": 2782,
+      "stateDemographics": 170,
+      "stateBaselines": 170,
+      "stateMetrics": 0,
+      "macroMetrics": 178,
+      "politicalMetrics": 170,
+      "governmentApprovals": 16,
+      "corporations": 321,
+      "corporateSectors": 1756,
+      "corporationHistory": 3897,
+      "centralBanks": 18,
+      "federalBudget": 16,
+      "bonds": 2679,
+      "bondMarketPools": 16,
+      "exchangeRates": 18,
+      "bankLoans": 0,
+      "interbankLoans": 0,
+      "depositInsuranceFunds": 0,
+      "savingsAccounts": 0,
+      "characters": 0,
+      "npps": 2911,
+      "politicalParties": 85,
+      "electedOfficials": 1361,
+      "governmentFormations": 22,
+      "commodityPrices": 28,
+      "enactedLaws": 827,
+      "indexFunds": 46,
+      "systemSettings": 0,
+      "macroCountries": 156
+    },
+    "results": {
+      "recapitalization": {
+        "before": {
+          "treasury": 1086100471358,
+          "debt": 0,
+          "bankCash": 5000000,
+          "loans": 0,
+          "publicCapital": 0,
+          "escrow": 0,
+          "householdCash": 222300000000,
+          "primarySpending": 128468043319.38025
+        },
+        "after": {
+          "treasury": 1072423381846,
+          "debt": 0,
+          "bankCash": 13682089512,
+          "loans": 0,
+          "publicCapital": 13677089512,
+          "escrow": 0,
+          "householdCash": 222300000000,
+          "primarySpending": 128468043319.38025
+        },
+        "duplicateRejected": true,
+        "approvalBefore": 45,
+        "approvalAfter": 44.7,
+        "electedOfficesUnchanged": true
+      },
+      "stimulus": {
+        "before": {
+          "treasury": 1064217128139,
+          "debt": 0,
+          "bankCash": 13682089512,
+          "loans": 0,
+          "publicCapital": 13677089512,
+          "escrow": 8206253707,
+          "householdCash": 222300000000,
+          "primarySpending": 128468043319.38025
+        },
+        "after": {
+          "treasury": 1051907747578,
+          "debt": 0,
+          "bankCash": 13682089512,
+          "loans": 0,
+          "publicCapital": 13677089512,
+          "escrow": 8206253707,
+          "householdCash": 234609380561,
+          "primarySpending": 128468043319.38025
+        },
+        "demandMultiplier": 1.0719999999988072,
+        "controlFood": 140.8975489144652,
+        "stimulusFood": 151.04217243613863
+      },
+      "banking": {
+        "banking": {
+          "banksProcessed": 27,
+          "depositInterestPaid": 243323.38,
+          "depositInterestShortfall": 0,
+          "loanInterestCollected": 1813.2712863922684,
+          "loanPrincipalRepaid": 0,
+          "defaultsWrittenOff": 972.9996040537688,
+          "npcDepositDelta": 335506376.23295426,
+          "npcBulkShortfall": 0,
+          "premiumShortfall": 0,
+          "interbankInterestPaid": 0,
+          "interbankDefaultsWrittenOff": 0,
+          "cbMarginInterestPaid": 0,
+          "cbMarginInterestShortfall": 0,
+          "deadBankLoansServiced": 0,
+          "deadBankRecoveredToEstate": 0,
+          "deadBankRecoveredToInsurer": 0,
+          "unfinishedSettlements": 0,
+          "recovery": {
+            "resumedSettlements": 0,
+            "stillPartial": 0,
+            "estatesRecovered": 0,
+            "estatesStillResolving": 0
+          }
+        },
+        "solvency": {
+          "banksEvaluated": 27,
+          "fled": 0,
+          "failures": 0,
+          "contagionTriggered": 0,
+          "depositorsResolved": 0,
+          "insurancePaid": 0,
+          "haircutsApplied": 0,
+          "forcedLiquidations": 0
+        },
+        "after": {
+          "treasury": 1051907747578,
+          "debt": 0,
+          "bankCash": 13691038768.135332,
+          "loans": 136121.49574263502,
+          "publicCapital": 13677089512,
+          "escrow": 8206253707,
+          "householdCash": 234600430926.05734,
+          "primarySpending": 128468043319.38025
+        }
+      },
+      "failedBank": {
+        "fundedLoan": 6000000,
+        "borrowerOperatingOutlay": 42416134.37886479,
+        "failureTurns": [
+          {
+            "turn": 486,
+            "defaults": 2930.511474493079,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.7940567179419628
+          },
+          {
+            "turn": 487,
+            "defaults": 5861.030581078559,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.7979613062798844
+          },
+          {
+            "turn": 488,
+            "defaults": 9764.52041672092,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.8024244566003201
+          },
+          {
+            "turn": 489,
+            "defaults": 14640.924685920676,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.8073626734032263
+          },
+          {
+            "turn": 490,
+            "defaults": 20490.167033587535,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.8126904305755955
+          },
+          {
+            "turn": 491,
+            "defaults": 27312.15076640104,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.8183232351896113
+          },
+          {
+            "turn": 492,
+            "defaults": 35106.75858521981,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 0,
+              "contagionTriggered": 0,
+              "depositorsResolved": 0,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "active",
+            "confidence": 0.8241801874310098
+          },
+          {
+            "turn": 493,
+            "defaults": 6043896.821066716,
+            "failures": {
+              "banksEvaluated": 27,
+              "fled": 0,
+              "failures": 1,
+              "contagionTriggered": 0,
+              "depositorsResolved": 1,
+              "insurancePaid": 0,
+              "haircutsApplied": 0,
+              "forcedLiquidations": 0
+            },
+            "status": "failed",
+            "confidence": 0.9099999999999999
+          }
+        ],
+        "claimsPaid": 2608861.9495015405
+      },
+      "creditTransmission": {
+        "afterLoss": 0.9999844143494072,
+        "market": {
+          "commoditiesUpdated": 28,
+          "statesWithActivity": 170,
+          "tradeClearedVolume": 246627497.3204206
+        },
+        "recovered": 1
+      },
+      "macro": {
+        "scope": "One real producer phase, four commodity passes and fourteen macro passes; no full-world simulation or GDP/unemployment patches",
+        "before": {
+          "regions": 16,
+          "totalRegionalGdp": 1929502.2544816711,
+          "growthMinimum": -5.322,
+          "growthMaximum": 11.953,
+          "unemploymentMinimum": 6.17,
+          "unemploymentMaximum": 14.99
+        },
+        "corporate": {
+          "corporationsProcessed": 321,
+          "sectorsProcessed": 1756,
+          "totalRevenueGenerated": 66961762,
+          "totalIncomeGenerated": 12293304,
+          "currencyIncomeInternalByCharacterId": {},
+          "currencyIncomeFaceByCharacterId": {},
+          "turnWarnings": []
+        },
+        "samples": [
+          {
+            "turn": 494,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1930324.4036808494,
+            "growthMinimum": -3.61,
+            "growthMaximum": 6.635,
+            "unemploymentMinimum": 6.04,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 495,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1930920.345931702,
+            "growthMinimum": -3.435,
+            "growthMaximum": 6.018,
+            "unemploymentMinimum": 5.98,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 496,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1931291.5309191481,
+            "growthMinimum": -3.283,
+            "growthMaximum": 5.761,
+            "unemploymentMinimum": 6.01,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 497,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1931443.0189205098,
+            "growthMinimum": -3.137,
+            "growthMaximum": 5.639,
+            "unemploymentMinimum": 6.12,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 498,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1931410.4652833198,
+            "growthMinimum": -3.35,
+            "growthMaximum": 5.521,
+            "unemploymentMinimum": 6.3,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 499,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1931416.7377987073,
+            "growthMinimum": -2.97,
+            "growthMaximum": 6.33,
+            "unemploymentMinimum": 6.46,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 500,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1931544.9516689056,
+            "growthMinimum": -3.17,
+            "growthMaximum": 7.618,
+            "unemploymentMinimum": 6.57,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 501,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1931821.382118406,
+            "growthMinimum": -3.378,
+            "growthMaximum": 8.265,
+            "unemploymentMinimum": 6.61,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 502,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1932250.8235661406,
+            "growthMinimum": -3.581,
+            "growthMaximum": 8.638,
+            "unemploymentMinimum": 6.58,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 503,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1932829.346861353,
+            "growthMinimum": -3.717,
+            "growthMaximum": 8.839,
+            "unemploymentMinimum": 6.5,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 504,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1933540.823107669,
+            "growthMinimum": -3.812,
+            "growthMaximum": 8.948,
+            "unemploymentMinimum": 6.37,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 505,
+            "regionsProcessed": 170,
+            "demandMultiplier": 0.9999844143494072,
+            "regions": 16,
+            "totalRegionalGdp": 1934365.0691884747,
+            "growthMinimum": -3.875,
+            "growthMaximum": 9.001,
+            "unemploymentMinimum": 6.2,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 506,
+            "regionsProcessed": 170,
+            "demandMultiplier": 1,
+            "regions": 16,
+            "totalRegionalGdp": 1935288.7223581718,
+            "growthMinimum": -3.911,
+            "growthMaximum": 9.014,
+            "unemploymentMinimum": 5.99,
+            "unemploymentMaximum": 14.97
+          },
+          {
+            "turn": 507,
+            "regionsProcessed": 170,
+            "demandMultiplier": 1,
+            "regions": 16,
+            "totalRegionalGdp": 1936180.6014934392,
+            "growthMinimum": -3.727,
+            "growthMaximum": 8.526,
+            "unemploymentMinimum": 5.78,
+            "unemploymentMaximum": 14.97
+          }
+        ]
+      },
+      "austerity": {
+        "before": {
+          "treasury": 1051907824327,
+          "debt": 0,
+          "bankCash": 13757721521.13693,
+          "loans": 6131973.053257538,
+          "publicCapital": 13677089512,
+          "escrow": 8206253707,
+          "householdCash": 234533731477.0918,
+          "primarySpending": 110642564657.86111
+        },
+        "after": {
+          "treasury": 1051907824327,
+          "debt": 0,
+          "bankCash": 13757721521.13693,
+          "loans": 6131973.053257538,
+          "publicCapital": 13677089512,
+          "escrow": 8206253707,
+          "householdCash": 234533731477.0918,
+          "primarySpending": 110642564657.86111
+        },
+        "afterAccrual": {
+          "treasury": 1055035915444,
+          "debt": 0,
+          "bankCash": 13757721521.13693,
+          "loans": 6131973.053257538,
+          "publicCapital": 13677089512,
+          "escrow": 8206253707,
+          "householdCash": 234533731477.0918,
+          "primarySpending": 110642564657.86111
+        }
+      },
+      "defaultDetection": [
+        {
+          "issuance": null,
+          "observed": {
+            "countryCode": "US",
+            "outcome": "failed",
+            "demandRatio": 1.1632758156081373,
+            "newConsecutiveFailedCount": 1,
+            "nextState": "warning",
+            "firedThisEvaluation": false
+          }
+        },
+        {
+          "issuance": null,
+          "observed": {
+            "countryCode": "US",
+            "outcome": "failed",
+            "demandRatio": 1.165276750122774,
+            "newConsecutiveFailedCount": 2,
+            "nextState": "warning",
+            "firedThisEvaluation": false
+          }
+        },
+        {
+          "issuance": null,
+          "observed": {
+            "countryCode": "US",
+            "outcome": "failed",
+            "demandRatio": 1.1681012169250395,
+            "newConsecutiveFailedCount": 3,
+            "nextState": "crisisPending",
+            "firedThisEvaluation": true
+          }
+        }
+      ],
+      "guaranteeExpiry": {
+        "paid": 0,
+        "refunded": 30274493564.0505
+      },
+      "sovereignResolution": {
+        "before": {
+          "treasury": -2318224476419,
+          "debt": 1667820297962,
+          "bankCash": 34897545.176191844,
+          "loans": 2035005.1078410624,
+          "publicCapital": 0,
+          "escrow": 0,
+          "householdCash": 5343895172825.4375,
+          "primarySpending": 802254643691.0267
+        },
+        "after": {
+          "treasury": -2318224476419,
+          "debt": 821225947200,
+          "bankCash": 34897545.176191844,
+          "loans": 2035005.1078410624,
+          "publicCapital": 0,
+          "escrow": 0,
+          "householdCash": 5343895172825.4375,
+          "primarySpending": 802254643691.0267
+        },
+        "first": {
+          "decisionsEvaluated": 1,
+          "ratified": [],
+          "rejected": [],
+          "advanced": ["US"]
+        },
+        "second": {
+          "decisionsEvaluated": 1,
+          "ratified": ["US"],
+          "rejected": [],
+          "advanced": []
+        }
+      },
+      "exposure": {
+        "rows": [
+          {
+            "countryId": "AT",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 4352014092276
+          },
+          {
+            "countryId": "BR",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 605808045423
+          },
+          {
+            "countryId": "CN",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 5739325261124
+          },
+          {
+            "countryId": "DE",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 2920967584106.0503
+          },
+          {
+            "countryId": "ES",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": -19801763260304
+          },
+          {
+            "countryId": "FI",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 738068478790
+          },
+          {
+            "countryId": "FR",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 20923384254724
+          },
+          {
+            "countryId": "GR",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 4139143585834
+          },
+          {
+            "countryId": "IE",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 63649955052
+          },
+          {
+            "countryId": "IT",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 2723392744946134
+          },
+          {
+            "countryId": "JP",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 684128367631266
+          },
+          {
+            "countryId": "NG",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 320353214725
+          },
+          {
+            "countryId": "SE",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 5087549763880
+          },
+          {
+            "countryId": "TR",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 10933842498395
+          },
+          {
+            "countryId": "UK",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": 1063242169151
+          },
+          {
+            "countryId": "US",
+            "euroMember": false,
+            "sovereignStress": 0,
+            "bankStress": 0,
+            "euroSovereignExposure": 0,
+            "exposedBankAssets": 0,
+            "treasuryBalance": -2318224476419
+          }
+        ],
+        "participants": {
+          "belligerents": [],
+          "neighbors": [],
+          "blocMembers": [],
+          "bystanders": [
+            "AT",
+            "BR",
+            "CN",
+            "DE",
+            "ES",
+            "FI",
+            "FR",
+            "GR",
+            "IE",
+            "IT",
+            "JP",
+            "NG",
+            "SE",
+            "TR",
+            "UK",
+            "US"
+          ]
+        },
+        "euroExposure": 0
+      }
+    },
+    "journal": {
+      "completed": 8,
+      "partial": 0
+    }
+  },
+  "euro": {
+    "sourceCommit": "47bb364e1f605c895d186e51f6a19b6ed4de5ff3",
+    "replayCommit": "abfc2058a7e1aa45a834f830063b26a9e6ed9a50",
+    "dirty": false,
+    "retainedHash": "0a7886ed130fe81f4e77fff58c2cf7bdcec6888a465b9f8c18eab648a7be046a",
+    "scope": "Focused later-era retained euro subsystem qualification; not a historical opening or whole-world run",
+    "results": {
+      "setup": [
+        "A funded bank investment reserved 3,000 existing sovereign units from the pool",
+        "Euro membership, debt and failed primary-fill history retained unchanged",
+        "A controlled 12%-of-GDP deficit appropriation tested the public austerity response without changing any cash stock"
+      ],
+      "purchase": {
+        "units": 3000,
+        "cost": 2923800,
+        "beforeUnits": 857500000,
+        "afterUnits": 857500000,
+        "conservedCash": true
+      },
+      "exposure": {
+        "before": {
+          "rows": [
+            {
+              "countryId": "DE",
+              "euroMember": true,
+              "sovereignStress": 0,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -1134209656667,
+              "bankingSystemPresent": true
+            },
+            {
+              "countryId": "IE",
+              "euroMember": true,
+              "sovereignStress": 0,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -199260824377,
+              "bankingSystemPresent": true
+            },
+            {
+              "countryId": "UK",
+              "euroMember": false,
+              "sovereignStress": 16.453227933407245,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -2320542921197,
+              "bankingSystemPresent": true
+            },
+            {
+              "countryId": "US",
+              "euroMember": false,
+              "sovereignStress": 28.061441951620125,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -42168533017718,
+              "bankingSystemPresent": true
+            }
+          ],
+          "participants": {
+            "belligerents": ["DE", "IE"],
+            "neighbors": [],
+            "blocMembers": [],
+            "bystanders": ["UK", "US"]
+          },
+          "euroExposure": 0
+        },
+        "stressed": {
+          "rows": [
+            {
+              "countryId": "DE",
+              "euroMember": true,
+              "sovereignStress": 100,
+              "bankStress": 0,
+              "euroSovereignExposure": 9938838.977571685,
+              "exposedBankAssets": 16991285.424339905,
+              "treasuryBalance": -1134209656667,
+              "bankingSystemPresent": true
+            },
+            {
+              "countryId": "IE",
+              "euroMember": true,
+              "sovereignStress": 0,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -199260824377,
+              "bankingSystemPresent": true
+            },
+            {
+              "countryId": "UK",
+              "euroMember": false,
+              "sovereignStress": 16.453227933407245,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -2320542921197,
+              "bankingSystemPresent": true
+            },
+            {
+              "countryId": "US",
+              "euroMember": false,
+              "sovereignStress": 28.061441951620125,
+              "bankStress": 0,
+              "euroSovereignExposure": 0,
+              "exposedBankAssets": 0,
+              "treasuryBalance": -42168533017718,
+              "bankingSystemPresent": true
+            }
+          ],
+          "participants": {
+            "belligerents": ["DE", "IE"],
+            "neighbors": [],
+            "blocMembers": [],
+            "bystanders": ["UK", "US"]
+          },
+          "euroExposure": 58.493743877284075
+        },
+        "membershipOff": 0
+      },
+      "detection": [
+        {
+          "countryCode": "DE",
+          "outcome": "failed",
+          "demandRatio": 0.9830342474044005,
+          "newConsecutiveFailedCount": 1,
+          "nextState": "warning",
+          "firedThisEvaluation": false
+        },
+        {
+          "countryCode": "DE",
+          "outcome": "failed",
+          "demandRatio": 0.8530404702417056,
+          "newConsecutiveFailedCount": 2,
+          "nextState": "warning",
+          "firedThisEvaluation": false
+        },
+        {
+          "countryCode": "DE",
+          "outcome": "failed",
+          "demandRatio": 0.8530404702417056,
+          "newConsecutiveFailedCount": 3,
+          "nextState": "crisisPending",
+          "firedThisEvaluation": true
+        }
+      ],
+      "legislative": {
+        "lower": {
+          "decisionsEvaluated": 1,
+          "ratified": [],
+          "rejected": [],
+          "advanced": ["DE"]
+        },
+        "upper": {
+          "decisionsEvaluated": 1,
+          "ratified": [],
+          "rejected": ["DE"],
+          "advanced": []
+        }
+      },
+      "default": {
+        "debtBefore": 2087278829000,
+        "debtAfter": 0,
+        "treasuryBefore": -1134209656667,
+        "treasuryAfter": -1134209656667,
+        "bankAssetBefore": 2923800,
+        "bankAssetAfter": 150000,
+        "cashUnchanged": true
+      },
+      "austerity": {
+        "before": {
+          "byCategory": {
+            "environment": 10621436818.473438,
+            "healthcare": 237574442093.43323,
+            "education": 38035543710.11944,
+            "welfare": 65578462628.48212,
+            "defense": 28928303529.988632,
+            "other": 1893976976888.7268,
+            "transport": 21329226781.81251,
+            "sectorSubsidies": 0
+          },
+          "stateGrants": 41750556000,
+          "debtInterest": 42160545330,
+          "total": 2379955493781.036
+        },
+        "after": {
+          "byCategory": {
+            "environment": 8267437877.185885,
+            "healthcare": 184921491770.15475,
+            "education": 29605833949.082977,
+            "welfare": 51044493803.264435,
+            "defense": 22517005600.465622,
+            "other": 1474220226967.2178,
+            "transport": 16602090696.462711,
+            "sectorSubsidies": 0
+          },
+          "stateGrants": 32497498593.375793,
+          "debtInterest": 42160545330,
+          "total": 1861836624587.21
+        },
+        "demandBefore": {
+          "steel": 0,
+          "electronics": 0,
+          "energy": 0,
+          "chemicals": 0,
+          "pharmaceuticals": 0,
+          "fertilizers": 0,
+          "food": 0,
+          "building_materials": 0,
+          "construction_services": 0,
+          "healthcare_services": 21140.798809298074,
+          "real_estate_services": 0,
+          "software": 0,
+          "financial_services": 0,
+          "advertising": 0,
+          "vehicles": 0,
+          "retail": 0,
+          "freight": 0,
+          "consulting_services": 0,
+          "iron": 0,
+          "coal": 0,
+          "oil": 0,
+          "rare_earth": 0,
+          "timber": 0,
+          "natural_gas": 0,
+          "ordnance": 476.7062884567978,
+          "plastics": 0,
+          "network_services": 0,
+          "entertainment_services": 0
+        },
+        "demandAfter": {
+          "steel": 0,
+          "electronics": 0,
+          "energy": 0,
+          "chemicals": 0,
+          "pharmaceuticals": 0,
+          "fertilizers": 0,
+          "food": 0,
+          "building_materials": 0,
+          "construction_services": 0,
+          "healthcare_services": 16455.42348149818,
+          "real_estate_services": 0,
+          "software": 0,
+          "financial_services": 0,
+          "advertising": 0,
+          "vehicles": 0,
+          "retail": 0,
+          "freight": 0,
+          "consulting_services": 0,
+          "iron": 0,
+          "coal": 0,
+          "oil": 0,
+          "rare_earth": 0,
+          "timber": 0,
+          "natural_gas": 0,
+          "ordnance": 371.0552247155267,
+          "plastics": 0,
+          "network_services": 0,
+          "entertainment_services": 0
+        }
+      },
+      "recovery": {
+        "processed": 53,
+        "state": "normal",
+        "debt": 0
+      },
+      "journals": [
+        {
+          "kind": "replay_bond_purchase",
+          "status": "applied",
+          "net": 0
+        }
+      ]
+    }
+  }
+}

@@ -71,7 +71,9 @@ const ACTOR = "system:migration";
  * economy numbers are already `$set` by every core seed, and back-filling them
  * onto a running world would silently retune a live economy.
  */
-const NOT_A_GATE = new Set(["_id"]);
+// Campaign era pricing is fresh-world only. An absent or false flag on a
+// retained world means legacy pricing, including during its first game day.
+const NOT_A_GATE = new Set(["_id", "campaignEraPriceLevelEnabled"]);
 
 export async function runAdoptReferenceGameConfigGates(
   db: Db,

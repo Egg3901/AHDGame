@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BankingHubClient } from "./BankingHubClient";
 
+const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast }),
 }));
 
 vi.mock("@/components/CountryFlag", () => ({
@@ -154,6 +155,7 @@ const payload = {
 };
 
 beforeEach(() => {
+  showToast.mockClear();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
 });
 
@@ -330,6 +332,91 @@ describe("BankingHubClient", () => {
         })
       )
     );
+  });
+
+  it.each([true, false])(
+    "closes a completed deposit before a delayed refresh (holder routed=%s)",
+    async (holderRouted) => {
+      let reads = 0;
+      let finishRefresh!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        finishRefresh = resolve;
+      });
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        if (url === "/api/banking/hub" && ++reads > 1) await pending;
+        if (url === "/api/character/savings/deposit")
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              holderRouted,
+              holderError: "Bank no longer accepts deposits",
+            }),
+          };
+        return { ok: true, json: async () => payload };
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      render(<BankingHubClient />);
+      await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+      fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
+        target: { value: "500" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings" }));
+      try {
+        await waitFor(() => expect(reads).toBe(2));
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("dialog", { name: "Deposit with Continental Trust" })
+          ).toBeNull()
+        );
+        expect(
+          fetchMock.mock.calls.filter(([url]) => url === "/api/character/savings/deposit")
+        ).toHaveLength(1);
+        expect(showToast).toHaveBeenCalledWith(
+          expect.stringContaining(holderRouted ? "Deposited" : "could not route"),
+          holderRouted ? "success" : "error"
+        );
+      } finally {
+        finishRefresh();
+      }
+    }
+  );
+
+  it("shows a recovery message and releases the holder selector when delivery fails", async () => {
+    let attempts = 0;
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === "/api/character/savings-holder") {
+        attempts++;
+        if (attempts === 1) throw new TypeError("Network request failed");
+        return { ok: true, json: async () => ({ success: true }) };
+      }
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BankingHubClient />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Your accounts" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
+    fireEvent.change(screen.getByLabelText("Savings holder for USD"), {
+      target: { value: "centralBank" },
+    });
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        "Could not move savings. Check your connection and try again.",
+        "error"
+      )
+    );
+    expect((screen.getByLabelText("Savings holder for USD") as HTMLSelectElement).disabled).toBe(
+      false
+    );
+    expect(attempts).toBe(1);
+    fireEvent.change(screen.getByLabelText("Savings holder for USD"), {
+      target: { value: "centralBank" },
+    });
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("Savings holder updated", "success")
+    );
+    expect(attempts).toBe(2);
   });
 
   it("keeps private banking surfaces hidden behind the feature flag", async () => {

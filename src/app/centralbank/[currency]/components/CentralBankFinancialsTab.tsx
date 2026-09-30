@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import {
@@ -451,6 +451,7 @@ export function CentralBankFinancialsTab({
   const canTransferPools = canExchange;
   const [transferDirection, setTransferDirection] = useState<"toLending" | "toForex">("toLending");
   const [transferAmount, setTransferAmount] = useState("");
+  const transferCommand = useRef<{ signature: string; id: string } | null>(null);
   const [transferSubmitting, setTransferSubmitting] = useState(false);
   const [transferMessage, setTransferMessage] = useState<string | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
@@ -471,6 +472,10 @@ export function CentralBankFinancialsTab({
       setTransferError("Enter a positive transfer amount.");
       return;
     }
+    const signature = JSON.stringify([countryId, transferDirection, Math.floor(parsedAmount)]);
+    if (transferCommand.current?.signature !== signature) {
+      transferCommand.current = { signature, id: crypto.randomUUID() };
+    }
     setTransferSubmitting(true);
     try {
       const response = await fetch(`/api/country/${countryId}/central-bank/reserve-pool-transfer`, {
@@ -479,13 +484,16 @@ export function CentralBankFinancialsTab({
         body: JSON.stringify({
           direction: transferDirection,
           amount: Math.floor(parsedAmount),
+          operationId: transferCommand.current.id,
         }),
       });
       const json = await response.json();
       if (!response.ok) {
+        if ([400, 403, 409, 422].includes(response.status)) transferCommand.current = null;
         setTransferError(json.error ?? "Reserve pool transfer failed.");
         return;
       }
+      transferCommand.current = null;
       const moved = formatNativeCurrency(json.amount, homeCurrency);
       setTransferMessage(
         transferDirection === "toLending"

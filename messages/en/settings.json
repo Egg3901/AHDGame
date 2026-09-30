@@ -80,6 +80,14 @@
         "failed": "Google linking failed. Please try again.",
         "expired": "Google linking expired. Please try again.",
         "denied": "Google authorization was denied."
+      },
+      "apple": {
+        "linked": "Apple ID linked successfully.",
+        "notConfigured": "Apple linking is not configured on this server.",
+        "alreadyLinked": "This Apple ID is already linked to another user.",
+        "failed": "Apple linking failed. Please try again.",
+        "expired": "Apple linking expired. Please try again.",
+        "denied": "Apple authorization was denied."
       }
     },
     "sections": {
@@ -356,6 +364,7 @@
       "comingSoon": "Coming Soon",
       "googleDev": "Google sign-in is under development",
       "discordLinked": "Discord account linked",
+      "appleLinked": "Apple ID linked",
       "link": "Link {provider}",
       "unlink": "Unlink",
       "unlinking": "Unlinking...",

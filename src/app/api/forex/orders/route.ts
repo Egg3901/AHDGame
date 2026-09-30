@@ -1,3 +1,4 @@
+import { euroLedgerCrossRate } from "@/lib/currency/euro/rules";
 // POST: create a public limit order (escrow funds from personal balance)
 // GET: list the authenticated player's own open/partial orders
 // Auth: requireAuthWithCharacter
@@ -118,6 +119,11 @@ export async function POST(request: Request) {
     const db = await getDb();
     const gs = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     const currentTurn = gs?.currentTurn ?? 0;
+    if (euroLedgerCrossRate(gs?.euroMonetaryUnion, fromCurrency, toCurrency) != null) {
+      throw badRequest(
+        "These denominations share a fixed euro rate. Use currency conversion instead of an FX order."
+      );
+    }
 
     // Non-convertible command currencies cannot be limit-traded on the open market.
     const gameConfig = await db

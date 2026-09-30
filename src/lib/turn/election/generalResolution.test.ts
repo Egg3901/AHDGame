@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
+import { resolveOneGeneralElection } from "./generalResolution";
 import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -153,7 +154,6 @@ describe("resolveOneGeneralElection", () => {
     const election = makeElection({ electionType: "senate", state: "CA" });
     const tally = makeTally(election._id, {}, { finalized: true });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -176,11 +176,48 @@ describe("resolveOneGeneralElection", () => {
     expect(db.collectionMocks["electedOfficials"]!.insertOne).not.toHaveBeenCalled();
   });
 
+  it("routes finalized presidential results back through pending executive seating", async () => {
+    const election = makeElection({ electionType: "president", status: "completed" });
+    const tally = makeTally(election._id, {}, { finalized: true, executiveSeatingPending: true });
+    const { resolvePresidentElection } = await import("./presidentResolution");
+    await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    expect(resolvePresidentElection).toHaveBeenCalledWith(db, election, tally, NOW);
+    expect(db.collectionMocks.electionCandidates!.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("withdraws stale candidacies after a finalized result resumes", async () => {
+    const election = makeElection({ status: "completed" });
+    const winner = makeCandidate(election._id);
+    const loser = makeCandidate(election._id);
+    const tally = makeTally(
+      election._id,
+      { [winner._id.toString()]: 70, [loser._id.toString()]: 30 },
+      {
+        finalized: true,
+        seatsEstimate: { [winner._id.toString()]: 1, [loser._id.toString()]: 0 },
+      }
+    );
+    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor([winner, loser]));
+    await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
+    expect(db.collectionMocks.electionCandidates!.updateMany).toHaveBeenCalledWith(
+      { electionId: election._id, status: "active" },
+      { $set: { status: "withdrawn", withdrawnAt: NOW } }
+    );
+    expect(db.collectionMocks.electionCandidates!.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        electionId: { $ne: election._id },
+        status: "active",
+        $or: [{ characterId: { $in: [winner.characterId] } }, { nppId: { $in: [] } }],
+      }),
+      { $set: { status: "withdrawn", withdrawnAt: NOW } }
+    );
+    expect(db.collectionMocks.electedOfficials!.insertOne).not.toHaveBeenCalled();
+  });
+
   it("spawns next house election cycle when recovering a finalized house tally", async () => {
     const election = makeElection({ electionType: "house", state: "CA" });
     const tally = makeTally(election._id, {}, { finalized: true });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { spawnHouseElection } = await import("@/lib/turn/election/electionSpawning");
@@ -191,7 +228,6 @@ describe("resolveOneGeneralElection", () => {
     const election = makeElection({ electionType: "commons", state: "Bristol North West" });
     const tally = makeTally(election._id, {}, { finalized: true });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { spawnCommonsElection } = await import("@/lib/turn/election/electionSpawning");
@@ -206,7 +242,6 @@ describe("resolveOneGeneralElection", () => {
     });
     const tally = makeTally(election._id, {}, { finalized: true });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { spawnCommonsElection } = await import("@/lib/turn/election/electionSpawning");
@@ -218,7 +253,6 @@ describe("resolveOneGeneralElection", () => {
   it("marks election resolved (not a win) when tally is null", async () => {
     const election = makeElection({ electionType: "senate", state: "TX" });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -246,7 +280,6 @@ describe("resolveOneGeneralElection", () => {
     // sweepStaleOffice reads electedOfficials — return empty so no sweep updates fire
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, null, CURRENT_TURN, NOW);
 
     // Should delete old officials for this constituency
@@ -261,7 +294,6 @@ describe("resolveOneGeneralElection", () => {
   it("reopens House leadership and spawns the next cycle when a House election resolves with no tally", async () => {
     const election = makeElection({ electionType: "house", state: "CA-12" });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, null, CURRENT_TURN, NOW);
 
     const { spawnHouseElection } = await import("@/lib/turn/election/electionSpawning");
@@ -281,7 +313,6 @@ describe("resolveOneGeneralElection", () => {
     // No matching candidate in DB
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -306,7 +337,6 @@ describe("resolveOneGeneralElection", () => {
     const tally = makeTally(election._id, {});
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { triggerLeadershipElectionsAfterChamberVote } =
@@ -319,7 +349,6 @@ describe("resolveOneGeneralElection", () => {
     const tally = makeTally(election._id, {});
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { spawnHouseElection } = await import("@/lib/turn/election/electionSpawning");
@@ -334,7 +363,6 @@ describe("resolveOneGeneralElection", () => {
     const tally = makeTally(election._id, { [new ObjectId().toString()]: 25 });
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { triggerLeadershipElectionsAfterChamberVote } =
@@ -347,7 +375,6 @@ describe("resolveOneGeneralElection", () => {
     const tally = makeTally(election._id, { [new ObjectId().toString()]: 25 });
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { spawnHouseElection } = await import("@/lib/turn/election/electionSpawning");
@@ -408,7 +435,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([candidate]));
     db.collectionMocks["characters"]!.find.mockReturnValue(makeCursor([character]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -471,7 +497,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([winner, loser]));
     db.collectionMocks["characters"]!.find.mockReturnValue(makeCursor([winnerChar, loserChar]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -573,7 +598,6 @@ describe("resolveOneGeneralElection", () => {
       isNPP: true,
     });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -625,7 +649,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([candidate]));
     db.collectionMocks["npps"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -658,7 +681,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([winner]));
     db.collectionMocks["characters"]!.find.mockReturnValue(makeCursor([winnerChar]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { createNotifications } = await import("@/lib/notifications");
@@ -696,7 +718,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([winner, loser]));
     db.collectionMocks["characters"]!.find.mockReturnValue(makeCursor([winnerChar, loserChar]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const { createNotifications } = await import("@/lib/notifications");
@@ -748,7 +769,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([newWinner]));
     db.collectionMocks["characters"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     // Incumbent's currentOffice should be cleared
@@ -785,7 +805,6 @@ describe("resolveOneGeneralElection", () => {
     db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([candidate]));
     db.collectionMocks["characters"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     // Should NOT have cleared the incumbent's office
@@ -827,7 +846,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: charId, userId: new ObjectId(), currentOffice }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const charUpdateCalls = db.collectionMocks["characters"]!.updateOne.mock.calls;
@@ -877,7 +895,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: charId, userId: new ObjectId(), currentOffice }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const vacateCall = db.collectionMocks["electedOfficials"]!.updateMany.mock.calls.find(
@@ -913,7 +930,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: charId, userId: new ObjectId(), currentOffice }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const charUpdateCalls = db.collectionMocks["characters"]!.updateOne.mock.calls;
@@ -960,7 +976,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: nppId, currentOffice: null }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -1035,7 +1050,6 @@ describe("resolveOneGeneralElection", () => {
       ])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -1105,7 +1119,6 @@ describe("resolveOneGeneralElection", () => {
       hasLeaderConfidenceModel: false,
     });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
@@ -1182,7 +1195,6 @@ describe("resolveOneGeneralElection", () => {
         hasLeaderConfidenceModel: false,
       });
 
-      const { resolveOneGeneralElection } = await import("./generalResolution");
       const result = await resolveOneGeneralElection(
         db as unknown as Db,
         election,
@@ -1245,7 +1257,6 @@ describe("resolveOneGeneralElection", () => {
     const election = makeElection({ electionType: "president", state: "US" });
     const tally = makeTally(election._id, { [new ObjectId().toString()]: 1000 });
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -1275,7 +1286,6 @@ describe("resolveOneGeneralElection", () => {
     const { resolvePresidentElection } = await import("@/lib/turn/election/presidentResolution");
     vi.mocked(resolvePresidentElection).mockResolvedValueOnce(false);
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -1324,7 +1334,6 @@ describe("resolveOneGeneralElection", () => {
       ])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     const result = await resolveOneGeneralElection(
       db as unknown as Db,
       election,
@@ -1375,7 +1384,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: charId, userId: new ObjectId() }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const officialInsertCalls = db.collectionMocks["electedOfficials"]!.insertOne.mock.calls;
@@ -1414,7 +1422,6 @@ describe("resolveOneGeneralElection", () => {
     );
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     // Multi-seat inserts the winner into electedOfficials via insertOne
@@ -1443,7 +1450,6 @@ describe("resolveOneGeneralElection", () => {
     // null tally path so multiSeatOfficialFilter gets exercised for the sweep
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, null, CURRENT_TURN, NOW);
 
     const deleteCalls = db.collectionMocks["electedOfficials"]!.deleteMany.mock.calls;
@@ -1481,7 +1487,6 @@ describe("resolveOneGeneralElection", () => {
     );
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue(makeCursor([]));
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const inserts = db.collectionMocks["electedOfficials"]!.insertOne.mock.calls;
@@ -1523,7 +1528,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: liveRunnerUpId, userId: new ObjectId() }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const inserts = db.collectionMocks["electedOfficials"]!.insertOne.mock.calls;
@@ -1557,7 +1561,6 @@ describe("resolveOneGeneralElection", () => {
       makeCursor([{ _id: winnerId, userId: new ObjectId() }])
     );
 
-    const { resolveOneGeneralElection } = await import("./generalResolution");
     await resolveOneGeneralElection(db as unknown as Db, election, tally, CURRENT_TURN, NOW);
 
     const updates = db.collectionMocks["electionCandidates"]!.updateMany.mock.calls;

@@ -1,3 +1,4 @@
+import { validateBillProvisions } from "./billProposal";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -13,7 +14,6 @@ beforeEach(() => {
 
 describe("validateBillProvisions — embargo", () => {
   it("accepts a block embargo in a trade bill", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [
@@ -43,7 +43,6 @@ describe("validateBillProvisions — embargo", () => {
   });
 
   it("keeps the cap on a capped embargo", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [
@@ -65,7 +64,6 @@ describe("validateBillProvisions — embargo", () => {
   });
 
   it("rejects a capped embargo with no cap", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "embargo", targetCountry: "CN", commodity: "all", direction: "both", mode: "cap" }],
@@ -76,7 +74,6 @@ describe("validateBillProvisions — embargo", () => {
   });
 
   it("rejects an embargo outside a trade bill", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "end_embargo", targetCountry: "UK", commodity: "oil", direction: "export" }],
@@ -87,7 +84,6 @@ describe("validateBillProvisions — embargo", () => {
   });
 
   it("rejects an embargo targeting the bill's own country", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [
@@ -107,7 +103,6 @@ describe("validateBillProvisions — embargo", () => {
   });
 
   it("defaults mode to block when omitted", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "embargo", targetCountry: "JP", commodity: "vehicles", direction: "import" }],
@@ -195,7 +190,6 @@ describe("snapshotBillPolicyProvisions", () => {
 
 describe("validateBillProvisions — union_law ban action (player suggestion #93)", () => {
   it("accepts a ban provision in an industry bill (bias normalized to 0)", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "union_law", bias: 30, banAction: "ban" }],
@@ -208,7 +202,6 @@ describe("validateBillProvisions — union_law ban action (player suggestion #93
   });
 
   it("accepts a repeal_ban provision", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "union_law", bias: 0, banAction: "repeal_ban" }],
@@ -223,7 +216,6 @@ describe("validateBillProvisions — union_law ban action (player suggestion #93
   });
 
   it("rejects an unknown banAction value", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "union_law", bias: 0, banAction: "abolish" }],
@@ -234,7 +226,6 @@ describe("validateBillProvisions — union_law ban action (player suggestion #93
   });
 
   it("still restricts ban provisions to industry bills", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "union_law", bias: 0, banAction: "ban" }],
@@ -250,7 +241,6 @@ describe("declare-war provisions are refused on the legislator path", () => {
     // This route only checks that the proposer holds a seat. Accepting a
     // declaration here would let any backbencher bypass the executive gate on
     // /executive/declare-war by hand-rolling the provision.
-    const { validateBillProvisions } = await import("./billProposal");
     const r = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "declare_war", targetCountry: "CN", warGoal: "punitive" }],
@@ -262,7 +252,6 @@ describe("declare-war provisions are refused on the legislator path", () => {
   });
 
   it("refuses it whatever the category", async () => {
-    const { validateBillProvisions } = await import("./billProposal");
     const r = await validateBillProvisions(
       db as unknown as Db,
       [{ type: "declare_war", targetCountry: "CN", warGoal: "punitive" }],
@@ -281,7 +270,6 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
       policyDomain: "healthcare",
       policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
     });
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ legislationTypeId: "uk_healthcare", effectDirection: -1, economic: 0, social: 0 }],
@@ -303,7 +291,6 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
       policyDomain: "healthcare",
       policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
     });
-    const { validateBillProvisions } = await import("./billProposal");
     const result = await validateBillProvisions(
       db as unknown as Db,
       [{ legislationTypeId: "uk_healthcare", effectDirection: -1, economic: -2, social: 0 }],
@@ -317,5 +304,111 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
         economic: -2,
       });
     }
+  });
+});
+
+describe("validateBillProvisions: euro adoption", () => {
+  beforeEach(() => {
+    db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999 });
+    db.collection("organizationMemberships").find.mockReturnValue({
+      toArray: async () => [{ countryId: "DE" }, { countryId: "IE" }, { countryId: "UK" }],
+    });
+  });
+  it.each(["DE", "IE", "UK"] as const)(
+    "retains a standalone adoption vote for %s",
+    async (country) => {
+      const { validateBillProvisions } = await import("./billProposal");
+      const result = await validateBillProvisions(
+        db as unknown as Db,
+        [{ type: "euro_adoption" }],
+        "economy",
+        country
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.euroAdoptionProvisions).toEqual([{ type: "euro_adoption" }]);
+        expect(result.policyProvisions).toEqual([]);
+      }
+    }
+  );
+  it("rejects ineligible countries and missing jurisdiction", async () => {
+    const { validateBillProvisions } = await import("./billProposal");
+    for (const country of ["US", undefined] as const) {
+      expect(
+        (
+          await validateBillProvisions(
+            db as unknown as Db,
+            [{ type: "euro_adoption" }],
+            "economy",
+            country
+          )
+        ).ok
+      ).toBe(false);
+    }
+  });
+  it("rejects the wrong category and duplicate adoption provisions", async () => {
+    const { validateBillProvisions } = await import("./billProposal");
+    expect(
+      (
+        await validateBillProvisions(
+          db as unknown as Db,
+          [{ type: "euro_adoption" }],
+          "social",
+          "DE"
+        )
+      ).ok
+    ).toBe(false);
+    expect(
+      (
+        await validateBillProvisions(
+          db as unknown as Db,
+          [{ type: "euro_adoption" }, { type: "euro_adoption" }],
+          "economy",
+          "DE"
+        )
+      ).ok
+    ).toBe(false);
+  });
+  it.each([{ eurozoneEnabled: true }, { euroAdoptedCountries: ["DE"] }])(
+    "rejects a country whose adoption is already recorded",
+    async (state) => {
+      db.collection("gameState").findOne.mockResolvedValue({ currentYear: 1999, ...state });
+      const { validateBillProvisions } = await import("./billProposal");
+      expect(
+        (
+          await validateBillProvisions(
+            db as unknown as Db,
+            [{ type: "euro_adoption" }],
+            "economy",
+            "DE"
+          )
+        ).ok
+      ).toBe(false);
+    }
+  );
+});
+
+it("rejects a national rate-setting independence proposal after euro accession", async () => {
+  const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+  const { validateBillProvisions } = await import("./billProposal");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  const result = await validateBillProvisions(
+    db as unknown as Db,
+    [{ type: "central_bank_independence", action: "revoke" }],
+    "economy",
+    "UK"
+  );
+  expect(result).toMatchObject({
+    ok: false,
+    status: 400,
+    error: expect.stringContaining("shared institution"),
   });
 });

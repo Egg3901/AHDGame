@@ -26,6 +26,7 @@ import {
   refreshEquityLiquidityFacility,
   type EquityLiquidityListing,
 } from "./equityLiquidityFacility";
+import { equityLiquidityBidHeadroom } from "./equityLiquidity/rules";
 
 function fund(corporationIds: ObjectId[]): IndexFund {
   return {
@@ -96,6 +97,47 @@ beforeEach(() => {
 });
 
 describe("planEquityLiquidityQuotes", () => {
+  it("keeps cash and bond reserves intact even if every bid fills", () => {
+    const corporationId = new ObjectId();
+    const provider = fund([corporationId]);
+    provider.cashAnchor = 7_120_196;
+    provider.holdings[0]!.lastValueAnchor = 53_024_996;
+    const headroom = equityLiquidityBidHeadroom({
+      cashAnchor: provider.cashAnchor,
+      bondValueAnchor: 10_942_229,
+      holdingValueAnchor: 53_024_996,
+      openBidEscrowAnchor: 0,
+    });
+    expect(headroom).toBeGreaterThan(0);
+    expect(headroom).toBeLessThan(400_000);
+
+    const ids = Array.from({ length: 40 }, () => new ObjectId());
+    provider.targetConstituents = ids.map((id) => ({
+      corporationId: id,
+      targetWeight: 0.025,
+      marketCapAnchor: 1_000_000,
+    }));
+    const plans = planEquityLiquidityQuotes({
+      funds: [provider],
+      listings: ids.map(listing),
+      totalListings: ids.length,
+      turn: 74,
+      bidHeadroomByFundId: new Map([[provider._id.toString(), headroom]]),
+    });
+    expect(plans.length).toBeGreaterThan(0);
+    expect(plans.reduce((sum, plan) => sum + plan.bidNotionalAnchor, 0)).toBeLessThanOrEqual(
+      headroom
+    );
+
+    const exhausted = equityLiquidityBidHeadroom({
+      cashAnchor: 5_730_599,
+      bondValueAnchor: 10_942_229,
+      holdingValueAnchor: 53_024_996,
+      openBidEscrowAnchor: 1_781_493,
+    });
+    expect(exhausted).toBe(0);
+  });
+
   it("creates symmetric executable quotes inside every risk cap", () => {
     const corporationId = new ObjectId();
     const provider = fund([corporationId]);

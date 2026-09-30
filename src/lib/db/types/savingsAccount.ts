@@ -22,7 +22,7 @@ export type SavingsAccountOwnerType = "character" | "npp";
 export type SavingsAccountStatus =
   /** Normal. Deposits, withdrawals and transfers allowed. */
   | "open"
-  /** The holder is being resolved; no movements until the resolution lands. */
+  /** Holder resolution or owner departure is settling; new movements are refused. */
   | "frozen"
   /** Closed with a zero balance. Kept for history. */
   | "closed";
@@ -47,6 +47,10 @@ export interface SavingsAccount {
   lastSettlementKey?: string;
   lastSettledTurn?: number;
   openedTurn: number;
+  /** Durable owner-departure freeze; absent on existing accounts. */
+  closureClaimedTurn?: number;
+  /** Unfunded historical claim closed after both owner and holder disappeared. */
+  closureWriteOff?: number;
   /** Set when the record was materialized from legacy character fields. */
   migratedFromLegacyAt?: Date;
   createdAt: Date;

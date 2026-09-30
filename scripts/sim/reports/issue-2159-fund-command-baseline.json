@@ -1,0 +1,64 @@
+{
+  "sourceCommit": "65511a1316408d25ec74b375b48c6ad01eb615e7",
+  "scope": "Original player fund routes; same operation ID submitted twice to real Mongo",
+  "cases": [
+    {
+      "case": "subscribe",
+      "before": {
+        "wallet": 10000,
+        "fundCash": 100,
+        "supply": 10,
+        "units": 10,
+        "transactions": 0,
+        "queued": 0
+      },
+      "after": {
+        "wallet": 9980,
+        "fundCash": 120,
+        "supply": 12,
+        "units": 12,
+        "transactions": 1,
+        "queued": 0
+      },
+      "afterRetry": {
+        "wallet": 9960,
+        "fundCash": 140,
+        "supply": 14,
+        "units": 14,
+        "transactions": 2,
+        "queued": 0
+      },
+      "repeatedUserIntent": true,
+      "moneyConserved": true
+    },
+    {
+      "case": "redeem",
+      "before": {
+        "wallet": 9960,
+        "fundCash": 140,
+        "supply": 14,
+        "units": 14,
+        "transactions": 2,
+        "queued": 0
+      },
+      "after": {
+        "wallet": 9980,
+        "fundCash": 120,
+        "supply": 12,
+        "units": 12,
+        "transactions": 3,
+        "queued": 0
+      },
+      "afterRetry": {
+        "wallet": 10000,
+        "fundCash": 100,
+        "supply": 10,
+        "units": 10,
+        "transactions": 4,
+        "queued": 0
+      },
+      "repeatedUserIntent": true,
+      "moneyConserved": true
+    }
+  ]
+}

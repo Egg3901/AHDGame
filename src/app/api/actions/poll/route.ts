@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
@@ -66,6 +67,7 @@ async function handleGET(request: NextRequest) {
     const pollType = request.nextUrl.searchParams.get("type") === "large" ? "large" : "small";
 
     const db = await getDb();
+    const priceLevel = await loadCampaignPriceLevel(db);
     const campaignRates = await loadCampaignCurrencyRates(db);
 
     // Resolve active character (admin accounts may have multiple characters)
@@ -111,8 +113,16 @@ async function handleGET(request: NextRequest) {
     // base keeps the price displayable; commissioning is still blocked and
     // POST rejects with the quote reason.
     const pollTier: PollTier = pollType === "large" ? "large" : "small";
-    const smallQuote = quotePollAction({ intellect: character.stats?.intellect }, "small");
-    const largeQuote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+    const smallQuote = quotePollAction(
+      { intellect: character.stats?.intellect },
+      "small",
+      priceLevel
+    );
+    const largeQuote = quotePollAction(
+      { intellect: character.stats?.intellect },
+      "large",
+      priceLevel
+    );
 
     // Look up party organization for the character's party in their home state
     const partyOrgRecord = statePartyOrgs.find((po) => po.partyId === character.party);
@@ -284,6 +294,7 @@ export async function POST(request: NextRequest) {
     const tier: PollTier = pollType === "large" ? "large" : "small";
 
     const db = await getDb();
+    const priceLevel = await loadCampaignPriceLevel(db);
     const campaignRates = await loadCampaignCurrencyRates(db);
 
     // Resolve active character (admin accounts may have multiple characters)
@@ -301,7 +312,7 @@ export async function POST(request: NextRequest) {
 
     // Price the debit from the same quote the effect and validation use. A
     // missing intellect rejects here before any state is read or charged.
-    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier, priceLevel);
     if (!quote.ok) {
       return NextResponse.json({ error: quote.error }, { status: 400 });
     }
@@ -318,6 +329,7 @@ export async function POST(request: NextRequest) {
     const validation = canPerformAction(character, actionKey, undefined, {
       forexEnabled,
       homeFxRate: campaignRate,
+      priceLevel,
     });
     if (!validation.canPerform) {
       return NextResponse.json({ error: validation.reason }, { status: 400 });

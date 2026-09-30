@@ -968,6 +968,21 @@ h1 {
   }
 }
 
+/* App Store / Play builds of AHDClient: no calls to buy perks outside the
+   store. Set on <html> by the root layout from the user agent. */
+html[data-store-app="true"] .store-purchase-cta {
+  display: none !important;
+}
+/* Sign-in buttons that cannot work in the phone app: Google refuses OAuth
+   inside app webviews (disallowed_useragent), and Lakeside sign-in only
+   serves accounts already moved to the unified issuer. */
+html[data-store-app="true"] .store-app-hidden {
+  display: none !important;
+}
+html:not([data-store-app="true"]) .store-app-only {
+  display: none !important;
+}
+
 /* Device accessibility preferences. The explicit setting complements the OS
    media query for players who need less motion or stronger control outlines. */
 html[data-reduce-motion="true"] *,

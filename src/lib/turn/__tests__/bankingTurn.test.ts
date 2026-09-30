@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter, BankLoan, DepositInsuranceFund } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -317,48 +318,6 @@ describe("processBankingTurn", () => {
       return { matchedCount: 1, modifiedCount: 1 };
     });
 
-    db.collectionMocks.bankLoans!.find.mockImplementation(() => findCursor([...loans]));
-    db.collectionMocks.bankLoans!.findOne.mockImplementation(
-      async (filter: Record<string, unknown>) => {
-        if (filter.borrowerType === "npcBulk") {
-          return loans.find((l) => l.borrowerType === "npcBulk" && l.status !== "repaid") ?? null;
-        }
-        return loans.find((l) => filter._id && l._id.equals(filter._id as ObjectId)) ?? null;
-      }
-    );
-    db.collectionMocks.bankLoans!.insertOne.mockImplementation(async (doc: BankLoan) => {
-      loans.push(doc);
-      return { insertedId: doc._id };
-    });
-    // The household book is written as ONE bulkWrite of per-band tranches. Without
-    // this the inserts vanished and every assertion about the book was vacuous.
-    db.collectionMocks.bankLoans!.bulkWrite.mockImplementation(async (ops: unknown[]) => {
-      for (const op of ops as Array<{
-        insertOne?: { document: BankLoan };
-        updateOne?: { filter: { _id?: ObjectId }; update: { $set?: Partial<BankLoan> } };
-      }>) {
-        if (op.insertOne) {
-          loans.push(op.insertOne.document);
-          continue;
-        }
-        if (op.updateOne) {
-          const id = op.updateOne.filter._id;
-          const idx = loans.findIndex((l) => id && l._id.equals(id));
-          if (idx >= 0) loans[idx] = { ...loans[idx], ...op.updateOne.update.$set };
-        }
-      }
-      return { insertedCount: 0, modifiedCount: 0 };
-    });
-    db.collectionMocks.bankLoans!.updateOne.mockImplementation(async (filter, update) => {
-      const f = filter as { _id?: ObjectId };
-      const idx = loans.findIndex((l) => f._id && l._id.equals(f._id));
-      if (idx >= 0) {
-        const u = update as { $set?: Partial<BankLoan> };
-        loans[idx] = { ...loans[idx], ...u.$set };
-      }
-      return { matchedCount: 1, modifiedCount: 1 };
-    });
-
     // GDP: 1_000_000 millions → $1T face (keeps NPC book non-zero but tests can ignore)
     db.collectionMocks.states!.find.mockReturnValue(findCursor([{ _id: "CA", gdp: 1_000_000 }]));
 
@@ -367,6 +326,66 @@ describe("processBankingTurn", () => {
       matchedCount: 0,
       modifiedCount: 0,
     });
+
+    // Settlement effects need durable document receipts, not write-count stubs.
+    // Keep the phase's mutable fixture handles while delegating affected storage.
+    const persisted = createInMemoryDb();
+    liveCorp = bankCorp;
+    persisted.collection("corporations").docs.push({ ...liveCorp });
+    liveCorp = persisted.collection("corporations").docs[0] as unknown as Corporation;
+    bankCorp = liveCorp;
+    const savings = {},
+      personal = {},
+      holder = {};
+    Object.defineProperty(savings, "USD", {
+      enumerable: true,
+      get: () => characterState.savings,
+      set: (value: number) => {
+        characterState.savings = value;
+      },
+    });
+    Object.defineProperty(personal, "USD", {
+      enumerable: true,
+      get: () => characterState.personal,
+      set: (value: number) => {
+        characterState.personal = value;
+      },
+    });
+    Object.defineProperty(holder, "USD", {
+      enumerable: true,
+      get: () => characterState.holder,
+      set: (value: string) => {
+        characterState.holder = value;
+      },
+    });
+    persisted.collection("characters").docs.push({
+      _id: characterState._id,
+      currencyBalances: { savings, personal, savingsHolder: holder },
+    });
+    // Tests replace the current loan cohort. Keep that handle, but apply real
+    // filters, projection receipts and cleanup instead of assuming filter._id.
+    Object.defineProperty(persisted.collection("bankLoans"), "docs", { get: () => loans });
+    for (const name of ["bankMoneyMoves", "financialTxLog", "bankLoans"]) {
+      db.collection(name);
+      const backing = persisted.collection(name);
+      for (const method of ["find", "findOne", "insertOne", "updateOne", "bulkWrite"] as const)
+        db.collectionMocks[name]![method].mockImplementation(
+          backing[method].bind(backing) as never
+        );
+    }
+    for (const name of ["characters", "corporations"]) {
+      const backing = persisted.collection(name);
+      for (const method of ["findOne", "updateOne", "bulkWrite"] as const)
+        db.collectionMocks[name]![method].mockImplementation(
+          backing[method].bind(backing) as never
+        );
+    }
+    db.collectionMocks.corporations!.find.mockImplementation(
+      persisted.collection("corporations").find.bind(persisted.collection("corporations")) as never
+    );
+    db.collectionMocks.characters!.find.mockImplementation(
+      persisted.collection("characters").find.bind(persisted.collection("characters")) as never
+    );
 
     // Default: large financial capacity so ceiling does not bind existing tests
     // (250_000 units × 0.5 × 1.2M = 150B).
@@ -427,11 +446,6 @@ describe("processBankingTurn", () => {
     const first = await processBankingTurn(db as unknown as Db, TURN);
     expect(first.banksProcessed).toBe(1);
     expect(liveCorp.bankCharter!.lastBankingTurn).toBe(TURN);
-
-    // Refresh the find() seed so the second pass still sees the bank,
-    // but live findOne carries lastBankingTurn.
-    bankCorp.bankCharter!.lastBankingTurn = TURN;
-    db.collectionMocks.corporations!.find.mockReturnValue(findCursor([bankCorp]));
 
     const cbBefore = cbState.externalBroadMoney;
     const liqBefore = liveCorp.bankCharter!.cashReserves;

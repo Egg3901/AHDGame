@@ -62,15 +62,20 @@ describe("seedInternationalOrganizations — founding-year gate", () => {
     ]);
   });
 
-  it("skips the EU for 1979 and 1991 presets", async () => {
+  it("seeds the existing Community in 1979 and 1991, including the UK", async () => {
     const { seedInternationalOrganizations } = await import("./seedInternationalOrganizations");
-    for (const preset of ["1979-default", "1991-default"]) {
+    for (const [preset, count] of [
+      ["1979-default", 9],
+      ["1991-default", 12],
+    ] as const) {
       db = freshDb();
       await seedInternationalOrganizations(db as unknown as Db, vi.fn(), preset);
-      expect(inserted("organizationMemberships").some((r) => r.organizationId === "EU")).toBe(
-        false
+      const members = inserted("organizationMemberships").filter((r) => r.organizationId === "EU");
+      expect(members).toHaveLength(count);
+      expect(members.map((r) => r.countryId)).toEqual(
+        expect.arrayContaining(["UK", "IE", "DE", "BE", "NL", "LU"])
       );
-      expect(inserted("organizationLeadership").some((r) => r.organizationId === "EU")).toBe(false);
+      expect(inserted("organizationLeadership").some((r) => r.organizationId === "EU")).toBe(true);
     }
   });
 
@@ -164,12 +169,13 @@ describe("seedInternationalOrganizations — founding-year gate", () => {
     expect(result.leadershipInserted).toBe(inserted("organizationLeadership").length);
   });
 
-  it("seeds the EU (DE, IE) plus leadership for the 2019 preset", async () => {
+  it("seeds the 28-member EU plus leadership for a fresh 2019 preset", async () => {
     const { seedInternationalOrganizations } = await import("./seedInternationalOrganizations");
     await seedInternationalOrganizations(db as unknown as Db, vi.fn(), "2019-default");
 
     const eu = inserted("organizationMemberships").filter((r) => r.organizationId === "EU");
-    expect(eu.map((r) => r.countryId).sort()).toEqual(["DE", "IE"]);
+    expect(eu).toHaveLength(28);
+    expect(eu.map((r) => r.countryId)).toEqual(expect.arrayContaining(["UK", "HR", "DE", "IE"]));
     expect(inserted("organizationLeadership").some((r) => r.organizationId === "EU")).toBe(true);
   });
 

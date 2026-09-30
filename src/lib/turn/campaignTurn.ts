@@ -1,4 +1,7 @@
-import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
+} from "@/lib/campaigns/campaignCurrency";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -49,6 +52,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
     async () => {
       const db = await getDb();
       const campaignRates = await loadCampaignCurrencyRates(db);
+      const priceLevel = await loadCampaignPriceLevel(db);
 
       let campaignsProcessed = 0;
       let totalFundsGenerated = 0;
@@ -494,8 +498,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             const campaignCountryId = electionData?.countryId ?? "US";
             // Frozen base local rate — never the live exchangeRates.
             const campaignRate = campaignLocalRate(campaignCountryId, campaignRates);
-            const fundsAnchorForCalc =
-              campaignRate !== 1 ? campaign.funds / campaignRate : campaign.funds;
+            const fundsAnchorForCalc = campaign.funds / (campaignRate * priceLevel);
 
             // Look up pre-fetched endorsement counts
             const eKey = endorsementKey(campaign.electionId, campaign.candidateId);
@@ -548,9 +551,13 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               downgrade.downgrades.length > 0 ? downgrade.newMaintenance : preDowngradeMaintenance;
             // Convert anchor income / maintenance to the campaign's local currency
             // for the treasury write (funds is stored local).
-            const incomeLocal = campaignAnchorToLocal(income, campaignCountryId, campaignRates);
+            const incomeLocal = campaignAnchorToLocal(
+              income * priceLevel,
+              campaignCountryId,
+              campaignRates
+            );
             const maintenanceLocal = campaignAnchorToLocal(
-              effectiveMaintenance,
+              effectiveMaintenance * priceLevel,
               campaignCountryId,
               campaignRates
             );

@@ -1,3 +1,5 @@
+import { loadPandemicSignal } from "@/lib/livingConflict/pandemicSignal";
+import { pandemicMortality } from "@/lib/livingConflict/rules/pandemic";
 import type { Db, AnyBulkWriteOperation } from "mongodb";
 import type { State } from "@/lib/db/types/state";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
@@ -163,6 +165,7 @@ export async function runDemographicFlows(
         currentTurn?: number;
         startingYear?: number;
         conscription?: Record<string, Partial<ConscriptionPolicy>>;
+        livingConflictsEnabled?: boolean;
       }>({}),
       // v2: read the labour mode via the SAME db (so tests' mock db is honored) and
       // feed it as preloaded — never let getLabourSystemMode hit its own getDb.
@@ -176,6 +179,8 @@ export async function runDemographicFlows(
       loadPoliticalMacroInputs(db),
     ]
   );
+
+  const pandemic = await loadPandemicSignal(db, gameState?.livingConflictsEnabled === true);
 
   // Configurable age thresholds (defaults 18 / 18 / 64; future laws write gameState).
   // Voting age is resolved per country because electoral-law enactment writes the
@@ -304,6 +309,7 @@ export async function runDemographicFlows(
 
     const inputs: CohortInputs = {
       replacementTFR: REPLACEMENT_TFR,
+      excessMortalityAnnual: pandemicMortality(pandemic, p.countryId),
       birthRateIndex,
       healthcare: {
         // Real-unit neutral defaults (years / per-100k) — the 0-100/centered-50

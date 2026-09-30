@@ -848,6 +848,7 @@ describe("system-generated placeholder emails are not a family signal", () => {
 
   it("flags the placeholder domains", () => {
     expect(isSystemGeneratedEmail("discord123@discord.local")).toBe(true);
+    expect(isSystemGeneratedEmail("apple_001_abc_002@apple.local")).toBe(true);
     expect(isSystemGeneratedEmail("someone@gmail.com")).toBe(false);
     expect(isSystemGeneratedEmail(undefined)).toBe(false);
   });

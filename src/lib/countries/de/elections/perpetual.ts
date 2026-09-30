@@ -3,11 +3,10 @@ import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import { DE_WAHLKREIS_SEATS } from "@/lib/constants/states";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
-import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
-import { electionToLarpYear } from "@/lib/utils/formatters";
+import { turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { getSeatIdFromElection } from "@/lib/seats";
 import { generateLandeslistenForCycle } from "@/lib/elections/germanyLandesliste";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   endTimeToLarpTurn,
   getCurrentTurnAndCtx,
@@ -69,20 +68,18 @@ export async function ensureDEElections(now: Date, inFlightTurn?: number): Promi
 
     const prev = lastCompleted(landId);
 
-    // Snap shift: only the immediate post-snap regular inherits the snap's
-    // endTurn as its anchor. Regular-to-regular transitions use pure canonical
-    // LARP to keep admin edits from dragging the calendar.
-    const snapAnchor = snapAnchorEndTime(prev, "snap_bundestag");
-    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-    const spawn = pickNextCanonicalCycle({
+    // A called snap, and every regular spawned on its shifted term clock,
+    // anchors the next regular. See `planNextLowerChamberCycle`.
+    const plan = planNextLowerChamberCycle({
       electionType: "bundestag",
-      prevCycle: prev?.cycle ?? 0,
+      snapType: "snap_bundestag",
+      prev,
       currentTurn,
-      priorEndTurn,
       ctx,
+      endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
     });
-    if (!spawn) continue;
+    if (!plan) continue;
+    const { spawn } = plan;
 
     const primaryEndTime = turnToWallClock(spawn.primaryEndTurn, now, currentTurn);
     const endTime = turnToWallClock(spawn.endTurn, now, currentTurn);
@@ -97,7 +94,10 @@ export async function ensureDEElections(now: Date, inFlightTurn?: number): Promi
         state: landId,
       }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear("bundestag", spawn.cycle, undefined, undefined, ctx),
+      electionYear: plan.electionYear,
+      ...(plan.shiftedScheduleEndTurn != null && {
+        shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+      }),
       status: "active",
       totalSeats: prev?.totalSeats ?? DE_WAHLKREIS_SEATS[landId] ?? 1,
       startTime: now,

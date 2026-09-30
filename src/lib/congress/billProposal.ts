@@ -1,10 +1,15 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 // src/lib/congress/billProposal.ts
 // Provision validation for bill proposals. Called by the congress/bills POST route.
 // Returns a typed result (ok/error) to preserve the route's logRequest pattern.
 
+import { loadEuropeanTreatyContext } from "@/lib/internationalOrganizations/europeanIntegration/service";
+import { canRatifyMaastricht } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
+  EuropeanTreatyProvision,
   CentralBankIndependenceProvision,
+  EuroAdoptionProvision,
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
@@ -16,7 +21,9 @@ import type {
   EndEmbargoProvision,
   UnionLawProvision,
 } from "@/lib/db/types/legislation";
-import type { CountryId } from "@/lib/constants/countries";
+import { loadEuroAdoptionConditions } from "@/lib/currency/euro/adoption";
+import { euroAdoptionRefusal } from "@/lib/currency/euro/rules";
+import { type CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
@@ -74,6 +81,8 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
+      euroAdoptionProvisions: EuroAdoptionProvision[];
+      europeanTreatyProvisions: EuropeanTreatyProvision[];
     }
   | { ok: false; status: number; error: string };
 
@@ -106,6 +115,8 @@ export async function validateBillProvisions(
   const validatedUnionLawProvisions: UnionLawProvision[] = [];
   const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
   const validatedCentralBankProvisions: CentralBankIndependenceProvision[] = [];
+  const validatedEuroAdoptionProvisions: EuroAdoptionProvision[] = [];
+  const validatedEuropeanTreatyProvisions: EuropeanTreatyProvision[] = [];
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
 
   for (const rawP of rawProvisions) {
@@ -115,6 +126,44 @@ export async function validateBillProvisions(
     // accepting one here would let any backbencher take the country to war by
     // hand-rolling a provision. Refused outright rather than validated.
     const rawType = "type" in (rawP as object) ? (rawP as { type: unknown }).type : undefined;
+    if (rawType === "european_treaty") {
+      const provision = rawP as Partial<EuropeanTreatyProvision>;
+      if (
+        category !== "foreign policy" ||
+        provision.treaty !== "maastricht" ||
+        (provision.action !== "ratify" && provision.action !== "reject")
+      )
+        return {
+          ok: false,
+          status: 400,
+          error:
+            "Maastricht decisions require a foreign policy bill with a ratify or reject action.",
+        };
+      if (validatedEuropeanTreatyProvisions.length)
+        return {
+          ok: false,
+          status: 400,
+          error: "A bill can contain only one Maastricht decision.",
+        };
+      const context = await loadEuropeanTreatyContext(db);
+      if (
+        !sourceCountry ||
+        !context ||
+        !context.members.includes(sourceCountry) ||
+        !canRatifyMaastricht(context.date, context.state.stage)
+      )
+        return {
+          ok: false,
+          status: 400,
+          error: "Maastricht ratification is not open to this country.",
+        };
+      validatedEuropeanTreatyProvisions.push({
+        type: "european_treaty",
+        treaty: "maastricht",
+        action: provision.action,
+      });
+      continue;
+    }
     if (rawType === "declare_war") {
       return {
         ok: false,
@@ -243,6 +292,26 @@ export async function validateBillProvisions(
       continue;
     }
 
+    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "euro_adoption") {
+      if (category !== "economy") {
+        return { ok: false, status: 400, error: "Euro adoption belongs in an economy bill." };
+      }
+      if (!sourceCountry) {
+        return { ok: false, status: 400, error: "This country is not eligible for euro adoption." };
+      }
+      if (validatedEuroAdoptionProvisions.length > 0) {
+        return {
+          ok: false,
+          status: 400,
+          error: "A bill can contain only one euro-adoption provision.",
+        };
+      }
+      const refusal = euroAdoptionRefusal(await loadEuroAdoptionConditions(db, sourceCountry));
+      if (refusal) return { ok: false, status: 400, error: refusal };
+      validatedEuroAdoptionProvisions.push({ type: "euro_adoption" });
+      continue;
+    }
+
     // Central bank independence: grant hands rate-setting to the bank, revoke
     // returns it to the government. Economy bills only, and only for countries
     // whose bank is their own — a shared bank (ECB) is a treaty institution one
@@ -270,7 +339,11 @@ export async function validateBillProvisions(
           error: 'Central-bank-independence action must be "grant" or "revoke".',
         };
       }
-      if (sourceCountry && !canLegislateBankIndependence(sourceCountry)) {
+      if (
+        sourceCountry &&
+        (!canLegislateBankIndependence(sourceCountry) ||
+          (await loadEuroMonetaryUnion(db))?.members[sourceCountry])
+      ) {
         return {
           ok: false,
           status: 400,
@@ -477,5 +550,7 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    euroAdoptionProvisions: validatedEuroAdoptionProvisions,
+    europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
   };
 }

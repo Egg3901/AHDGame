@@ -66,6 +66,8 @@ export interface PoliticalMetricsDoc {
    * empty means the channel contributed nothing.
    */
   labourResiduals?: Record<PoliticalMetricId, number>;
+  /** Standing conflict effects, recalculated each turn and removed after closure. */
+  livingConflictResiduals?: Partial<Record<PoliticalMetricId, number>>;
   lastUpdated: Date;
 }
 

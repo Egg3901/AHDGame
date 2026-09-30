@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { Db } from "mongodb";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import { loadActiveFtaPairs } from "./ftaOverrides";
 import { ObjectId } from "mongodb";
 import { buildFtaCoverageLookup, ftaPairKey, isFtaActive, type FtaPairSet } from "./ftaOverrides";
 import { getEffectiveTariffRate, getForeignTariffMarginModifier } from "./tariffEffects";
@@ -198,4 +201,43 @@ describe("buildFtaCoverageLookup", () => {
     // Only the JP foreign sector counts (500/500), not the US domestic sector
     expect(coverage.byCountryEconomyWide.get("US")).toBeCloseTo(1.0);
   });
+});
+
+it("keeps common-market trade during treaty rejection and removes it on membership withdrawal", async () => {
+  const db = createMockDb();
+  let members = ["DE", "UK", "BE"];
+  db.collection("organizationMemberships").find.mockReturnValue({
+    toArray: async () => members.map((countryId) => ({ countryId })),
+  });
+  db.collection("organizationLegislation").find.mockReturnValue({
+    toArray: async () => [{ parties: ["UK", "US"] }],
+  });
+  const before = await loadActiveFtaPairs(db as unknown as Db);
+  expect(isFtaActive(before, "DE", "UK")).toBe(true);
+  expect(isFtaActive(before, "BE", "UK")).toBe(true);
+  expect(
+    getEffectiveTariffRate(
+      [tariff(40, { countryId: "DE" })],
+      "DE",
+      "automobiles",
+      "UK",
+      undefined,
+      before
+    )
+  ).toBe(0);
+  members = ["DE", "BE"];
+  const after = await loadActiveFtaPairs(db as unknown as Db);
+  expect(isFtaActive(after, "DE", "UK")).toBe(false);
+  expect(isFtaActive(after, "DE", "BE")).toBe(true);
+  expect(isFtaActive(after, "UK", "US")).toBe(true);
+  expect(
+    getEffectiveTariffRate(
+      [tariff(40, { countryId: "DE" })],
+      "DE",
+      "automobiles",
+      "UK",
+      undefined,
+      after
+    )
+  ).toBe(40);
 });

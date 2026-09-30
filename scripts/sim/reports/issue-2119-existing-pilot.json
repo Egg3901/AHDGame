@@ -1,0 +1,46 @@
+[
+  {
+    "arm": "off",
+    "runId": "2c23be7d-1d1c-4333-ba3f-87e2ee9cf7f3",
+    "status": "completed",
+    "sourceCommit": "d54c42626ad0e560c68c5eb2de977f43a5d2e83e",
+    "preset": "1991-default",
+    "currentTurn": 13,
+    "campaignEraPriceLevelEnabled": false,
+    "health": {
+      "severity": "ok",
+      "warningCount": 0,
+      "errorCount": 0,
+      "processingWarningCount": 0,
+      "processingErrorCount": 0,
+      "integrityWarningCount": 0,
+      "integrityErrorCount": 0,
+      "integrityChecked": true,
+      "qualification": "passing"
+    },
+    "nppCount": 2729,
+    "campaignCount": 0
+  },
+  {
+    "arm": "on",
+    "runId": "0a36f6ac-cad6-41cb-8c98-aa91df948e9b",
+    "status": "completed",
+    "sourceCommit": "d54c42626ad0e560c68c5eb2de977f43a5d2e83e",
+    "preset": "1991-default",
+    "currentTurn": 13,
+    "campaignEraPriceLevelEnabled": true,
+    "health": {
+      "severity": "ok",
+      "warningCount": 0,
+      "errorCount": 0,
+      "processingWarningCount": 0,
+      "processingErrorCount": 0,
+      "integrityWarningCount": 0,
+      "integrityErrorCount": 0,
+      "integrityChecked": true,
+      "qualification": "passing"
+    },
+    "nppCount": 2729,
+    "campaignCount": 0
+  }
+]

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
+import { emitCorporationTurnTx } from "./corporationTurnPhases";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { CorporationLookups, CorpSnapshot } from "./types";
@@ -84,7 +85,6 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
   });
 
   async function run(currencyCode: string, fxRate: number, snapshot = makeSnapshot()) {
-    const { emitCorporationTurnTx } = await import("./corporationTurnPhases");
     await emitCorporationTurnTx({
       db: db as unknown as Db,
       lookups: makeLookups(currencyCode, fxRate),
@@ -126,7 +126,7 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
       .reduce((sum, r) => sum + r.amount, 0);
 
     expect(net).toBeGreaterThan(0);
-    expect(net).toBe(Math.round(200 * 639.12) - Math.round(120 * 639.12));
+    expect(net).toBeCloseTo(80 * 639.12, 8);
   });
 
   it("still emits a credit when tax wipes out the whole post-tax income", async () => {
@@ -143,11 +143,8 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
     expect((revenue?.amount ?? 0) + (tax?.amount ?? 0)).toBe(0);
   });
 
-  it("emits no zero-amount rows when the grossed-up inflow rounds away", async () => {
-    // A sub-half-unit inflow clears a bare `> 0` gate but rounds to 0, which is
-    // noise the reconciler has to read past. Suppressing it is correct as well
-    // as tidy: when the gross rounds away, income ~= -tax, so the lone tax
-    // debit already nets to the right figure.
+  it("preserves sub-unit cash instead of rounding away its witness", async () => {
+    // The cash owner persists fractional amounts, so both entries must too.
     await run(
       "USD",
       1,
@@ -161,6 +158,7 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
       })
     );
 
+    expect(corpRows().reduce((sum, row) => sum + row.amount, 0)).toBeCloseTo(-0.1, 12);
     for (const row of corpRows()) {
       expect(row.amount, `${row.type} must never be a zero-amount row`).not.toBe(0);
     }
@@ -185,5 +183,6 @@ describe("emitCorporationTurnTx — corporate tax is booked once (ticket #1260)"
     const rows = corpRows();
     expect(rows.find((r) => r.type === "corp_revenue")).toBeUndefined();
     expect(rows.find((r) => r.type === "corp_tax_paid")).toBeUndefined();
+    expect(rows.find((r) => r.type === "corp_operating_loss")?.amount).toBe(-50);
   });
 });

@@ -23,6 +23,7 @@ export type FinancialTxType =
 
   // Corp & shares
   | "corp_revenue"
+  | "corp_operating_loss"
   | "corp_dividend"
   | "corp_salary"
   | "corp_tax_paid"
@@ -134,6 +135,7 @@ export type FinancialTxType =
   | "caucus_tax_debit"
 
   // Government & subsidies
+  | "gov_fiscal_accrual"
   | "gov_tax_revenue"
   | "gov_bond_issuance"
   | "gov_coupon_payment"

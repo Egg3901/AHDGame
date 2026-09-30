@@ -12,6 +12,7 @@
 // Incident response scripts (heal-*, inspect-*, audit-*, fix-*) live in
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
+import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -93,6 +94,9 @@ import { migration as normalizeShareCorporateActions } from "./entries/2026-09-1
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
+import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
+import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-30-financial-tx-log-counterparty-index";
+import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -302,6 +306,14 @@ export const MIGRATIONS: Migration[] = [
   // Heal existing true NPP-owned corporations; the founding path now stamps
   // these nodes for future spawns.
   backfillNppTechBaselines,
+  locRecoveryOwnerIndex,
+  // #2688: also in the startup allowlist; listed here so `npm run migrate`
+  // reports it and `--only ... --force` can rerun it.
+  longHorizonTelemetryIndexes,
+  // #2693: deletion stamping scanned the whole ledger on the counterparty side.
+  financialTxLogCounterpartyIndex,
+  // Also in the startup allowlist, like longHorizonTelemetryIndexes.
+  appleProviderIdentityIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

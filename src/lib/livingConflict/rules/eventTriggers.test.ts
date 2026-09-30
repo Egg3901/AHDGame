@@ -68,7 +68,17 @@ describe("crisis event timing", () => {
         for (const beat of phase.events) {
           if (!beat.trigger?.onPhaseEnter || !beat.trigger.everyTurns) continue;
           checked++;
-          const state = { ...opened, defKey: def.key, phaseLevel: phase.level };
+          const state = {
+            ...opened,
+            defKey: def.key,
+            phaseLevel: phase.level,
+            tracks: Object.fromEntries(
+              (beat.trigger.trackConditions ?? []).map((condition) => [
+                condition.track,
+                condition.min ?? condition.max ?? 0,
+              ])
+            ),
+          };
           for (const timing of [
             { phaseTurns: 0, totalTurns: 0 },
             { phaseTurns: beat.trigger.everyTurns, totalTurns: beat.trigger.everyTurns },
@@ -86,4 +96,29 @@ describe("crisis event timing", () => {
     }
     expect(checked).toBeGreaterThan(0);
   });
+});
+
+it("enforces every track condition before both phase-entry and recurring windows", () => {
+  const gated = {
+    ...event,
+    trigger: {
+      ...event.trigger,
+      trackConditions: [
+        { track: "publicConsent", min: 1 },
+        { track: "violence", max: 55 },
+      ],
+    },
+  };
+  for (const phaseTurns of [0, 24]) {
+    const state = { ...opened, phaseTurns, totalTurns: 24 };
+    expect(triggerMatches(gated, { ...state, tracks: { publicConsent: 0, violence: 10 } })).toBe(
+      false
+    );
+    expect(triggerMatches(gated, { ...state, tracks: { publicConsent: 1, violence: 70 } })).toBe(
+      false
+    );
+    expect(triggerMatches(gated, { ...state, tracks: { publicConsent: 1, violence: 10 } })).toBe(
+      true
+    );
+  }
 });

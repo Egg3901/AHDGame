@@ -274,4 +274,27 @@ describe("bulkWrite update/delete many", () => {
       db.collection("things").bulkWrite([{ replaceMany: { filter: {}, replacement: {} } } as never])
     ).rejects.toThrow(/unsupported bulk op/);
   });
+
+  it("appends another collection's pipeline output with $unionWith", async () => {
+    const db = createInMemoryDb();
+    db.seed("history", [
+      { corporationId: "a", turn: 10 },
+      { corporationId: "a", turn: 2 },
+      { corporationId: "b", turn: 1 },
+    ]);
+    const rows = await db
+      .collection("history")
+      .aggregate([
+        { $match: { turn: { $gte: 5 } } },
+        {
+          $unionWith: {
+            coll: "history",
+            pipeline: [{ $match: { turn: { $lt: 5 } } }, { $sort: { turn: -1 } }, { $limit: 1 }],
+          },
+        },
+        { $sort: { turn: -1 } },
+      ])
+      .toArray();
+    expect(rows.map((r) => r.turn)).toEqual([10, 2]);
+  });
 });

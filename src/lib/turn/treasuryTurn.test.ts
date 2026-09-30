@@ -9,6 +9,9 @@ beforeEach(async () => {
   vi.clearAllMocks();
   db = createMockDb();
   db.collection("federalBudget");
+  db.collection("exchangeRates")
+    .find()
+    .toArray.mockResolvedValue([{ currencyCode: "CNY", rate: 1 }]);
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 });

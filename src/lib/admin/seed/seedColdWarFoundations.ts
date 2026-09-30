@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
 import { allLivingConflictDefs } from "@/lib/livingConflict/registry";
 import { emptyConflictState } from "@/lib/livingConflict/engine";
+import { build2027ConflictOpening } from "@/lib/livingConflict/initialState2027";
 import { normalizeCampaignState } from "@/lib/livingConflict/campaign";
 import { DEFAULT_ADOPTED, DEFAULT_POINTS, keyOf } from "@/lib/military/doctrineTree";
 import { tensionPressureBreakdown } from "@/lib/coldwar/tension";
@@ -59,7 +60,7 @@ export async function seedColdWarFoundations(
   db: Db,
   year: number,
   turn: number,
-  opts: { dryRun?: boolean } = {}
+  opts: { dryRun?: boolean; presetId?: string } = {}
 ): Promise<ColdWarFoundationResult> {
   const baselines = nuclearProgramBaselines(year);
   const programIds = baselines.map((program) => program._id);
@@ -140,11 +141,45 @@ export async function seedColdWarFoundations(
   }
 
   if (missingConflicts.length > 0) {
+    const countries = new Set<string>();
+    const populations: Record<string, number> = {};
+    if (opts.presetId === "2027-default") {
+      const [regions, macroCountries] = await Promise.all([
+        db
+          .collection<{ countryId: string; population?: number }>("states")
+          .find({}, { projection: { countryId: 1, population: 1 } })
+          .toArray(),
+        db
+          .collection<{ entityId: string; population?: number }>("macroCountries")
+          .find({ retiredAt: null }, { projection: { entityId: 1, population: 1 } })
+          .toArray(),
+      ]);
+      for (const row of macroCountries) {
+        countries.add(row.entityId);
+        populations[row.entityId] = Math.max(0, row.population ?? 0);
+      }
+      const playablePopulations: Record<string, number> = {};
+      for (const row of regions) {
+        countries.add(row.countryId);
+        playablePopulations[row.countryId] =
+          (playablePopulations[row.countryId] ?? 0) + Math.max(0, row.population ?? 0);
+      }
+      // Match the ordinary Arab driver: a playable country replaces its macro
+      // aggregate rather than counting the same residents twice.
+      Object.assign(populations, playablePopulations);
+    }
     await db.collection<LivingConflictState>("livingConflicts").bulkWrite(
       missingConflicts.map((definition) => ({
         updateOne: {
           filter: { defKey: definition.key },
-          update: { $setOnInsert: { ...emptyConflictState(definition.key), updatedAt: now } },
+          update: {
+            $setOnInsert: {
+              ...(opts.presetId === "2027-default"
+                ? build2027ConflictOpening(definition, { countries, populations })
+                : emptyConflictState(definition.key)),
+              updatedAt: now,
+            },
+          },
           upsert: true,
         },
       }))

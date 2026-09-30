@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameState, NppAutonomyLevel } from "@/lib/db/types/gameState";
@@ -36,11 +37,28 @@ export function nppAutonomyLevelAtLeast(level: NppAutonomyLevel, min: NppAutonom
  * with the legacy boolean `nppAutonomyEnabled === true` reads as "v0".
  */
 export async function getNppAutonomyLevel(db: Db): Promise<NppAutonomyLevel> {
+  const snapshot = nppAutonomyLevelSnapshot.getStore();
+  if (snapshot) return snapshot;
   const doc = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { nppAutonomyLevel: 1, nppAutonomyEnabled: 1 } });
   if (doc?.nppAutonomyLevel) return doc.nppAutonomyLevel;
   return doc?.nppAutonomyEnabled === true ? "v0" : "off";
+}
+
+/**
+ * Autonomy level read once and served to every `getNppAutonomyLevel` call inside
+ * `fn` (#2690). The per-country gates call it once per actor, which re-read the
+ * `gameState` singleton about a hundred times a turn.
+ *
+ * AsyncLocalStorage, not a module cache: the value exists only for the dynamic
+ * extent of `fn` and cannot outlive an admin changing the level. Only valid
+ * where nothing inside `fn` writes `gameState.nppAutonomyLevel`.
+ */
+const nppAutonomyLevelSnapshot = new AsyncLocalStorage<NppAutonomyLevel>();
+
+export async function withNppAutonomySnapshot<T>(db: Db, fn: () => Promise<T>): Promise<T> {
+  return nppAutonomyLevelSnapshot.run(await getNppAutonomyLevel(db), fn);
 }
 
 /** Global gate: is the smarter-NPP autonomy system switched on at all (any level)? */

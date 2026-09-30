@@ -29,6 +29,16 @@ function oid(): ObjectId {
 type Doc = Record<string, unknown>;
 
 function matchClause(doc: Doc, key: string, val: unknown): boolean {
+  if (key.includes(".")) {
+    const value = key
+      .split(".")
+      .reduce<unknown>(
+        (current, part) =>
+          current && typeof current === "object" ? (current as Doc)[part] : undefined,
+        doc
+      );
+    return matchClause({ value }, "value", val);
+  }
   if (val && typeof val === "object" && !(val instanceof ObjectId) && !Array.isArray(val)) {
     const cond = val as Record<string, unknown>;
     if ("$in" in cond) {
@@ -109,6 +119,27 @@ function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
         if (!d) return { matchedCount: 0, modifiedCount: 0 };
         Object.assign(d, update.$set ?? {});
         return { matchedCount: 1, modifiedCount: 1 };
+      },
+      updateMany: async (query: Doc, update: { $set?: Doc; $unset?: Doc }) => {
+        const matched = docs().filter((d) => matches(d, query));
+        for (const d of matched) {
+          Object.assign(d, update.$set ?? {});
+          for (const key of Object.keys(update.$unset ?? {})) delete d[key];
+        }
+        return { matchedCount: matched.length, modifiedCount: matched.length };
+      },
+      bulkWrite: async (
+        ops: Array<{
+          updateOne?: { filter: Doc; update: { $set?: Doc } };
+          updateMany?: { filter: Doc; update: { $set?: Doc; $unset?: Doc } };
+        }>
+      ) => {
+        for (const op of ops) {
+          if (op.updateOne)
+            await makeCollection(name).updateOne(op.updateOne.filter, op.updateOne.update);
+          if (op.updateMany)
+            await makeCollection(name).updateMany(op.updateMany.filter, op.updateMany.update);
+        }
       },
       deleteMany: async (query: Doc) => {
         const keep = docs().filter((d) => !matches(d, query));

@@ -19,13 +19,14 @@ import { getColdWarDials } from "@/lib/coldwar/dials";
 import { listNuclearPrograms } from "@/lib/db/collections/nuclearPrograms";
 import { NUCLEAR_NODES } from "@/lib/military/nuclearProgram";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import type { Crisis } from "@/lib/db/types/crisis";
+import type { Crisis, CrisisInteraction } from "@/lib/db/types/crisis";
 import { GlobalResponseCrisisStrip } from "./_coldwar/GlobalResponseCrisisStrip";
 import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import type { LivingConflictState } from "@/lib/livingConflict/types";
 import { livingConflictDef } from "@/lib/livingConflict/registry";
-import { normalizeConflictState, phaseFor } from "@/lib/livingConflict/engine";
-import { LivingConflictStrip, livingConflictTrackView } from "./_coldwar/LivingConflictStrip";
+import { publicLivingConflictView } from "@/lib/livingConflict/rules/publicView";
+import { ACTIVE_MACRO_COUNTRY_FILTER } from "@/lib/world/macro/retirement";
+import { LivingConflictStrip } from "./_coldwar/LivingConflictStrip";
 
 /** How many concluded wars the hub lists, newest first. Older ones keep their record page. */
 const HISTORY_LIMIT = 24;
@@ -75,7 +76,13 @@ export default async function ConflictsPage() {
       listNuclearPrograms(db),
       db
         .collection<Crisis>("crises")
-        .find({ status: "active", globalResponse: { $exists: true } })
+        .find({
+          status: "active",
+          $or: [
+            { "globalResponse.conflictKey": { $type: "string" } },
+            { livingConflictEventId: { $type: "string" } },
+          ],
+        })
         .sort({ startTurn: -1 })
         .toArray(),
       db.collection<Crisis>("crises").countDocuments({ status: "active" }),
@@ -85,38 +92,44 @@ export default async function ConflictsPage() {
         .toArray(),
     ]);
 
+  const [stateCountries, macroCountries, interactions] = await Promise.all([
+    db
+      .collection<{ countryId: string }>("states")
+      .find({}, { projection: { countryId: 1, _id: 0 } })
+      .toArray(),
+    db
+      .collection<{ entityId: string }>("macroCountries")
+      .find(ACTIVE_MACRO_COUNTRY_FILTER, { projection: { entityId: 1, _id: 0 } })
+      .toArray(),
+    db
+      .collection<CrisisInteraction>("crisisInteractions")
+      .find(
+        { crisisId: { $in: responseCrisisDocs.map((crisis) => crisis._id) } },
+        { projection: { crisisId: 1, currentNodeId: 1, resolvedAt: 1, leaderResponses: 1 } }
+      )
+      .toArray(),
+  ]);
+  const availableCountries = new Set([
+    ...stateCountries.map((row) => row.countryId),
+    ...macroCountries.map((row) => row.entityId),
+  ]);
+  const interactionByCrisis = new Map(interactions.map((row) => [row.crisisId.toString(), row]));
+  const windows = responseCrisisDocs.map((crisis) => ({
+    crisis,
+    interaction: interactionByCrisis.get(crisis._id.toString()),
+  }));
   const livingConflicts = livingRows.flatMap((row) => {
     const def = livingConflictDef(row.defKey);
     if (!def) return [];
-    const state = normalizeConflictState(def, row);
-    const phase = phaseFor(def, state.phaseLevel);
-    if (!phase) return [];
-    return [
-      {
-        key: def.key,
-        name: def.name,
-        phase: phase.label,
-        status: state.status!,
-        participants: [
-          ...def.participants.belligerents,
-          ...(def.participants.backerA ? [def.participants.backerA] : []),
-          ...(def.participants.backerB ? [def.participants.backerB] : []),
-          ...def.participants.neighbors,
-          ...def.participants.blocMembers,
-        ].map(countryNameOf),
-        nextPhases: [
-          ...new Set(
-            (def.transitions ?? [])
-              .filter((transition) => transition.fromPhase === phase.key)
-              .map(
-                (transition) => def.phases.find((item) => item.key === transition.toPhase)?.label
-              )
-              .filter((label): label is string => Boolean(label))
-          ),
-        ],
-        tracks: livingConflictTrackView(state.tracks ?? {}),
-      },
-    ];
+    const view = publicLivingConflictView(
+      def,
+      row,
+      availableCountries,
+      windows,
+      currentYear ?? startingYear,
+      countryNameOf
+    );
+    return view ? [view] : [];
   });
 
   // Response scope answers who owns the decision, not how far the crisis reaches.

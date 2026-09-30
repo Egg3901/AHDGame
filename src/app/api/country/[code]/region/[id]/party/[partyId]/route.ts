@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
@@ -226,8 +227,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Campaign-fund estimate is LOCAL at the frozen world-seeded currency basis
     // (mirrors the turn processors) — never live forex. This region is single-country.
     const campaignRates = await loadCampaignCurrencyRates(db);
+    const priceLevel = await loadCampaignPriceLevel(db);
     const campaignRate = campaignLocalRate(countryId, campaignRates);
-    const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, countryId, campaignRates);
+    const toLocal = (anchor: number) =>
+      campaignAnchorToLocal(anchor * priceLevel, countryId, campaignRates);
 
     // GDP-baseline era for income math: the world's reset preset, so
     // historical worlds estimate in their own denomination (issue #798).
@@ -257,7 +260,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       const grossAnchor = projectNppGeneration({
         population: statePopulation,
         donorBaseLevel: npp.donorBaseLevel ?? 0,
-        currentFundsLocal: campaignRate > 0 ? (npp.funds ?? 0) / campaignRate : (npp.funds ?? 0),
+        currentFundsLocal:
+          campaignRate > 0 ? (npp.funds ?? 0) / (campaignRate * priceLevel) : (npp.funds ?? 0),
         nppEconomyEnabled,
       });
       expectedHourlyIncome += calculateTaxAmount(toLocal(grossAnchor), stateTaxRate);

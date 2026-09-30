@@ -14,6 +14,8 @@ import {
   getSavingsBalance,
   isSavingsAccountOpened,
 } from "@/lib/currency/characterFunds";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { ensureSavingsAccount } from "@/lib/savings/accountsShell";
 import { insertSavingsLedgerEntry } from "@/lib/savings/ledger";
 import { getGameState } from "@/lib/gameState";
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
@@ -62,7 +64,22 @@ export async function POST(request: Request) {
       }
     }
 
-    if (isSavingsAccountOpened(character, currency)) {
+    const gameState = await getGameState();
+    const turn = gameState?.currentTurn ?? 0;
+    const policy = await loadBankingPolicy(db);
+    // Authoritative accounts must exist as soon as the opening flag is visible,
+    // including a retry after an older opening created only the legacy flag.
+    const alreadyOpened = isSavingsAccountOpened(character, currency);
+    if (alreadyOpened && policy.savingsAccounts === "authoritative") {
+      const account = await ensureSavingsAccount(db, character._id, currency, turn);
+      if (!account) {
+        return NextResponse.json(
+          { error: "Savings account could not be opened. Try again." },
+          { status: 409 }
+        );
+      }
+    }
+    if (alreadyOpened) {
       return NextResponse.json(
         badRequest("Savings account already open for this currency").toJson(),
         {
@@ -79,6 +96,16 @@ export async function POST(request: Request) {
       );
     }
 
+    if (policy.savingsAccounts === "authoritative") {
+      const account = await ensureSavingsAccount(db, character._id, currency, turn);
+      if (!account) {
+        return NextResponse.json(
+          { error: "Savings account could not be opened. Try again." },
+          { status: 409 }
+        );
+      }
+    }
+
     const now = new Date();
     await db
       .collection<Character>("characters")
@@ -87,8 +114,6 @@ export async function POST(request: Request) {
         { $set: { [`savingsAccountsOpened.${currency}`]: true, updatedAt: now } }
       );
 
-    const gameState = await getGameState();
-    const turn = gameState?.currentTurn ?? 0;
     const after = await db.collection<Character>("characters").findOne({ _id: character._id });
     if (after) {
       await insertSavingsLedgerEntry(db, {

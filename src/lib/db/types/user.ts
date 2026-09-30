@@ -120,6 +120,16 @@ export interface User {
   googleName?: string;
   googleAvatar?: string;
   googleLinkedAt?: Date;
+  /** Sign in with Apple subject (`sub`), stable per Apple ID and Services ID team. */
+  appleId?: string;
+  /** Email Apple shared at sign-in; often a private relay address. */
+  appleEmail?: string;
+  appleLinkedAt?: Date;
+  /**
+   * Sealed Apple refresh token (see `sealAppleRefreshToken`). Kept only so
+   * account deletion can revoke the grant, which App Store review requires.
+   */
+  appleRefreshToken?: string;
   theme?:
     | "light"
     | "default"

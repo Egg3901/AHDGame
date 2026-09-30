@@ -1,4 +1,7 @@
-import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
+} from "@/lib/campaigns/campaignCurrency";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
@@ -141,9 +144,10 @@ export async function getCampaignDetail(
   // exchangeRates).
   const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
   const campaignRates = await loadCampaignCurrencyRates(db);
+  const priceLevel = await loadCampaignPriceLevel(db);
   const campaignRate = campaignLocalRate(electionCountryId, campaignRates); // frozen base rate, for the fxRate payload field
   const toLocal = (anchor: number) =>
-    campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
+    campaignAnchorToLocal(anchor * priceLevel, electionCountryId, campaignRates);
   const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)
@@ -232,6 +236,7 @@ export async function getCampaignDetail(
     ...(runningMateSurrogate ? { runningMateSurrogate } : {}),
     currencyCode: campaignCurrencyCode,
     fxRate: campaignRate,
+    priceLevel,
     campaignStrength: campaign.campaignStrength ?? 0,
     ...(campaignStrengthMaxBonus !== CAMPAIGN_STRENGTH_MAX_BONUS
       ? {

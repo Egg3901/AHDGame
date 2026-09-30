@@ -35,6 +35,12 @@ export async function runMigrations(db: Db, opts: RunOpts): Promise<RunSummary> 
   const summary: RunSummary = { ranIds: [], skippedIds: [], results: {}, dryRun: opts.dryRun };
 
   const ordered = selectMigrations(opts);
+  // Validate the entire selection before executing any migration. A bad later
+  // entry must not leave an earlier migration applied on a rejected request.
+  if (opts.force) {
+    const unsafe = ordered.find((migration) => !migration.idempotent);
+    if (unsafe) throw new Error(`Cannot force non-idempotent migration: ${unsafe.id}`);
+  }
   for (const migration of ordered) {
     const existing = await db
       .collection<MigrationMarker>(COLLECTION)
@@ -72,9 +78,14 @@ export async function runMigrations(db: Db, opts: RunOpts): Promise<RunSummary> 
 }
 
 function selectMigrations(opts: RunOpts): Migration[] {
+  if (opts.only && opts.from) throw new Error("--only and --from are mutually exclusive");
+  if (opts.only && opts.only.length === 0) throw new Error("--only requires a migration id");
+  if (opts.force && !opts.only) throw new Error("--force requires --only");
   if (opts.only && opts.only.length > 0) {
     const order = new Map(opts.migrations.map((m, i) => [m.id, i]));
-    return opts.only
+    const unknown = opts.only.filter((id) => !order.has(id));
+    if (unknown.length) throw new Error(`Unknown --only migration ids: ${unknown.join(", ")}`);
+    return [...new Set(opts.only)]
       .map((id) => opts.migrations.find((m) => m.id === id))
       .filter((m): m is Migration => m != null)
       .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));

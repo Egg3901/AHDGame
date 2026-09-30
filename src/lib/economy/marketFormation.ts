@@ -1,3 +1,8 @@
+/**
+ * Market formation compares active firms with calibrated local demand and
+ * available facility capacity. computeMarketFormationSnapshot counts every
+ * observed cell before sampling examples, so missing demand stays unknown.
+ */
 import type { CorporateSector } from "@/lib/db/types";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
@@ -7,6 +12,7 @@ import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
 import { bucketKey } from "@/lib/nationalization/stateControlledBuckets";
 import type {
+  CellDemandCoverage,
   CommoditySupplyBreadth,
   CountrySectorCoverage,
   EmptyMarketCell,
@@ -278,7 +284,10 @@ export function computeMarketFormationSnapshot(args: {
   // cell-summed base-price-weighted anchors: one commodity's use is counted
   // once per sector type whose outputs include it, so rows compare states to
   // each other but do not reconcile to accounting totals.
-  const coverageAccum = new Map<string, StateSectorCoverage & { corps: Set<string> }>();
+  const coverageAccum = new Map<
+    string,
+    StateSectorCoverage & { corps: Set<string>; demandCoverage: CellDemandCoverage }
+  >();
   for (const cell of cellStats) {
     const stateKey = `${cell.pool.countryId}\u0000${cell.pool.stateId}`;
     let row = coverageAccum.get(stateKey);
@@ -297,6 +306,7 @@ export function computeMarketFormationSnapshot(args: {
         localProducerDemandValue: 0,
         inboundSupplyValue: 0,
         outputValue: 0,
+        demandCoverage: { observedCells: 0, positiveUseCells: 0, emptyPositiveUseCells: 0 },
         corps: new Set<string>(),
       };
       coverageAccum.set(stateKey, row);
@@ -311,6 +321,11 @@ export function computeMarketFormationSnapshot(args: {
       row.openHeadroomUnits += Math.max(0, cell.headroomUnits);
     }
     if (cell.market.observations > 0) {
+      row.demandCoverage.observedCells += 1;
+      if (cell.market.demand > 0) {
+        row.demandCoverage.positiveUseCells += 1;
+        if (!cell.active) row.demandCoverage.emptyPositiveUseCells += 1;
+      }
       row.residentDemandValue += cell.market.demand;
       row.localProducerDemandValue += cell.localProducerDemand;
       row.inboundSupplyValue += cell.inbound;
@@ -324,7 +339,10 @@ export function computeMarketFormationSnapshot(args: {
   const coverageByState: StateSectorCoverage[] = [...coverageAccum.values()]
     .map(({ corps, ...row }) => ({ ...row, activeCorps: corps.size }))
     .sort((a, b) => b.emptyCells - a.emptyCells || a.stateId.localeCompare(b.stateId));
-  const countryAccum = new Map<string, CountrySectorCoverage & { corps: Set<string> }>();
+  const countryAccum = new Map<
+    string,
+    CountrySectorCoverage & { corps: Set<string>; demandCoverage: CellDemandCoverage }
+  >();
   for (const row of coverageAccum.values()) {
     let country = countryAccum.get(row.countryId);
     if (!country) {
@@ -342,6 +360,7 @@ export function computeMarketFormationSnapshot(args: {
         localProducerDemandValue: 0,
         inboundSupplyValue: 0,
         outputValue: 0,
+        demandCoverage: { observedCells: 0, positiveUseCells: 0, emptyPositiveUseCells: 0 },
         corps: new Set<string>(),
       };
       countryAccum.set(row.countryId, country);
@@ -357,6 +376,9 @@ export function computeMarketFormationSnapshot(args: {
     country.localProducerDemandValue += row.localProducerDemandValue;
     country.inboundSupplyValue += row.inboundSupplyValue;
     country.outputValue += row.outputValue;
+    country.demandCoverage.observedCells += row.demandCoverage.observedCells;
+    country.demandCoverage.positiveUseCells += row.demandCoverage.positiveUseCells;
+    country.demandCoverage.emptyPositiveUseCells += row.demandCoverage.emptyPositiveUseCells;
     for (const corpId of row.corps) country.corps.add(corpId);
   }
   const coverageByCountry: CountrySectorCoverage[] = [...countryAccum.values()]
