@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMockDb, type MockDb, assertSetFields } from "@/lib/test-utils/mockDb";
 import { resetGameWorld, RUNTIME_WIPE_SPECIAL_CASES } from "@/lib/admin/resetGameWorld";
 import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
-import { getPresetById } from "@/lib/constants/historicalSeats";
 
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({
   seedAllCountryData: vi.fn().mockResolvedValue(undefined),
@@ -55,6 +54,34 @@ describe("resetGameWorld", () => {
   beforeEach(() => {
     db = createMockDb();
   });
+
+  it.each(["none", "default"] as const)(
+    "overwrites the previous starting-party mode with %s",
+    async (startingParties) => {
+      db.collection("gameState");
+      db.collectionMocks.gameState.findOne.mockResolvedValue({
+        _id: "current",
+        currentYear: 1991,
+        iteration: 1,
+        startingPartiesMode: startingParties === "none" ? "default" : "none",
+      });
+      await resetGameWorld(db as never, {
+        deleteProfiles: true,
+        preset: "1991-default",
+        startingParties,
+        seedHistorical: false,
+        preIteration: true,
+      });
+      assertSetFields(db.collectionMocks.gameState.updateOne, {
+        startingPartiesMode: startingParties,
+        preset: "1991-default",
+      });
+      if (startingParties === "none") {
+        const updates = db.collectionMocks.gameState.updateOne.mock.calls;
+        expect(updates.some((call) => call[1].$unset?.preIteration === "")).toBe(true);
+      }
+    }
+  );
 
   it("clears corporation world collections before resetting counters", async () => {
     await resetGameWorld(db as never, {

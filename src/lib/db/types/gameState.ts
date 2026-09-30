@@ -138,6 +138,8 @@ export interface GameState {
    * election years per era. Defaults to `"2019-default"` when undefined.
    */
   preset?: string;
+  /** Reset choice (#2679). Missing means default; overwritten on every reset. */
+  startingPartiesMode?: "default" | "none";
   /**
    * Pre-iteration "founding" election phase (see foundingElections). When
    * `active`, every political nation is running a one-off full-seating election

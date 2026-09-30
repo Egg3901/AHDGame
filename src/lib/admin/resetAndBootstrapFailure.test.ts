@@ -70,6 +70,50 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
   const closeUpdate = () =>
     db.collectionMocks.adminLogs!.updateOne.mock.calls[0]![1] as { $set: Record<string, unknown> };
 
+  it("threads explicit 1991 none through every phase and disables founding", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const { resetGameWorld } = await import("./resetGameWorld");
+    const { bootstrapGameWorld } = await import("./bootstrapGameWorld");
+    const { finalizeResetGameWorld } = await import("./finalizeResetGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      startingParties: "none",
+      preIteration: true,
+    });
+    expect(resetGameWorld).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        preset: "1991-default",
+        startingParties: "none",
+        preIteration: false,
+      })
+    );
+    expect(bootstrapGameWorld).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preset: "1991-default",
+        startingParties: "none",
+        preIteration: false,
+      })
+    );
+    expect(finalizeResetGameWorld).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ preset: "1991-default", startingParties: "none" })
+    );
+  });
+
+  it("rejects unsupported empty starts before sealing or touching the database", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "2019-default",
+        startingParties: "none",
+      })
+    ).rejects.toThrow("1991-default");
+    expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+  });
+
   it("opens the audit row BEFORE teardown runs", async () => {
     // If this inverts, the design reproduces the exact bug it fixes: a reset
     // that dies in teardown leaves no trace at all.
