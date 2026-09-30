@@ -94,6 +94,7 @@ import { migration as normalizeShareCorporateActions } from "./entries/2026-09-1
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
+import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -304,6 +305,9 @@ export const MIGRATIONS: Migration[] = [
   // these nodes for future spawns.
   backfillNppTechBaselines,
   locRecoveryOwnerIndex,
+  // #2688: also in the startup allowlist; listed here so `npm run migrate`
+  // reports it and `--only ... --force` can rerun it.
+  longHorizonTelemetryIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

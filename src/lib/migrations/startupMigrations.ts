@@ -3,6 +3,7 @@ import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-re
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-central-bank-pricing-phase-in";
+import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -20,6 +21,9 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   repairOrphanIndexFundState,
   providerIdentityIndexes,
   centralBankPricingPhaseIn,
+  // #2688: without these, every per-turn telemetry upsert scans its collection,
+  // a cost that grows each turn until the index exists.
+  longHorizonTelemetryIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {
