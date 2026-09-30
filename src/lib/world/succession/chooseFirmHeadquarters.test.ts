@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type Db, type Document } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types/corporation";
@@ -98,7 +98,7 @@ describe("explicit federation firm headquarters choice", () => {
     });
     expect(
       await db
-        .collection("federationFacilityClaims")
+        .collection<Document & { _id: string }>("federationFacilityClaims")
         .findOne({ _id: `${applicationId}:${claimId}` })
     ).toMatchObject({ status: "payable", creditorCountryId: "RU", amountAnchor: 1200 });
     await expect(

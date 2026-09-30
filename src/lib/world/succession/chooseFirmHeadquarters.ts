@@ -97,7 +97,7 @@ async function lockConversion(
     fromCurrency,
     toCurrency,
     fromRate: fromCurrency ? byCode.get(fromCurrency)! : 1,
-    toRate: byCode.get(toCurrency)!,
+    toRate: byCode.get(toCurrency as CurrencyCode)!,
   };
   await db
     .collection<FederationPrivateFirmHold>(FEDERATION_PRIVATE_FIRM_HOLDS_COLLECTION)

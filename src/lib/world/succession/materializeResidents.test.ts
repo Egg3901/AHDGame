@@ -1,4 +1,4 @@
-import { ObjectId, type ClientSession, type Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db, type Document } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Character } from "@/lib/db/types/character";
@@ -66,7 +66,9 @@ describe("federation protected resident hold", () => {
       federationPendingResidenceId: applicationId,
       currencyBalances: { campaign: 100, personal: { RUB: 200 } },
     });
-    expect(await db.collection("electedOfficials").findOne({ _id: "office" })).toMatchObject({
+    expect(
+      await db.collection<Document & { _id: string }>("electedOfficials").findOne({ _id: "office" })
+    ).toMatchObject({
       characterId: null,
     });
     expect(await db.collection("federationResidentHolds").countDocuments({})).toBe(1);
