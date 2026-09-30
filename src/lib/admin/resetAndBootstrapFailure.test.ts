@@ -7,7 +7,8 @@
  * opened BEFORE anything is destroyed.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
+import type { SeedDiagnosticReport } from "@/lib/admin/seedDiagnostic/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -49,6 +50,26 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    const { runSeedDiagnostic, captureSeedBaseline } = await import("@/lib/admin/seedDiagnostic");
+    vi.mocked(runSeedDiagnostic).mockResolvedValue({
+      _id: new ObjectId(),
+      ranAt: new Date("2026-09-30"),
+      mode: "conformance",
+      trigger: "post-reset",
+      preset: "1953-default",
+      turn: 1,
+      calendarTurn: 1,
+      summary: { ok: 1, warn: 0, critical: 0 },
+      checks: [],
+    });
+    vi.mocked(captureSeedBaseline).mockResolvedValue({
+      _id: "current",
+      preset: "1953-default",
+      capturedAt: new Date("2026-09-30"),
+      turn: 1,
+      calendarTurn: 1,
+      metrics: {},
+    });
     db = createMockDb();
     const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
     const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
@@ -69,6 +90,50 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
 
   const closeUpdate = () =>
     db.collectionMocks.adminLogs!.updateOne.mock.calls[0]![1] as { $set: Record<string, unknown> };
+
+  it("threads explicit 1991 none through every phase and disables founding", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const { resetGameWorld } = await import("./resetGameWorld");
+    const { bootstrapGameWorld } = await import("./bootstrapGameWorld");
+    const { finalizeResetGameWorld } = await import("./finalizeResetGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      startingParties: "none",
+      preIteration: true,
+    });
+    expect(resetGameWorld).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        preset: "1991-default",
+        startingParties: "none",
+        preIteration: false,
+      })
+    );
+    expect(bootstrapGameWorld).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preset: "1991-default",
+        startingParties: "none",
+        preIteration: false,
+      })
+    );
+    expect(finalizeResetGameWorld).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ preset: "1991-default", startingParties: "none" })
+    );
+  });
+
+  it("rejects unsupported empty starts before sealing or touching the database", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "2019-default",
+        startingParties: "none",
+      })
+    ).rejects.toThrow("1991-default");
+    expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+  });
 
   it("opens the audit row BEFORE teardown runs", async () => {
     // If this inverts, the design reproduces the exact bug it fixes: a reset
@@ -112,9 +177,93 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
 
   it("marks a clean run succeeded and captures the baseline", async () => {
     const { captureSeedBaseline } = await import("@/lib/admin/seedDiagnostic");
-    await run();
+    const result = await run();
+    expect(result.status).toBe("succeeded");
+    expect(result.readiness).toEqual({
+      status: "healthy",
+      criticalChecks: [],
+      baselineCaptured: true,
+    });
     expect(closeUpdate().$set["resetRun.status"]).toBe("succeeded");
     expect(captureSeedBaseline).toHaveBeenCalled();
+  });
+
+  it("records critical checks as partial readiness, skips baseline and remains sealed", async () => {
+    const { runSeedDiagnostic, captureSeedBaseline } = await import("@/lib/admin/seedDiagnostic");
+    const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+    const check: SeedDiagnosticReport["checks"][number] = {
+      id: "partyRoster.RU",
+      scope: "RU",
+      metric: "starting parties",
+      expected: 1,
+      actual: 0,
+      severity: "critical",
+      note: "missing authored roster",
+    };
+    vi.mocked(runSeedDiagnostic).mockResolvedValue({
+      _id: new ObjectId(),
+      ranAt: new Date("2026-09-30"),
+      mode: "conformance",
+      trigger: "post-reset",
+      preset: "1953-default",
+      turn: 1,
+      calendarTurn: 1,
+      summary: { ok: 489, warn: 83, critical: 1 },
+      checks: [check],
+    });
+    const result = await run();
+    expect(result.status).toBe("partial");
+    expect(result.readiness).toEqual({
+      status: "blocked",
+      criticalChecks: [check],
+      baselineCaptured: false,
+    });
+    expect(captureSeedBaseline).not.toHaveBeenCalled();
+    expect(closeUpdate().$set["resetRun.status"]).toBe("partial");
+    expect(closeUpdate().$set["resetRun.failures"]).toEqual([
+      { phase: "audit", name: check.id, error: expect.stringContaining("missing authored roster") },
+    ]);
+    expect(enableMaintenanceMode).toHaveBeenLastCalledWith(
+      db,
+      expect.objectContaining({ enabledBy: "arlebina" })
+    );
+  });
+
+  it.each(["diagnostic", "baseline"])("blocks readiness when %s execution fails", async (phase) => {
+    const { runSeedDiagnostic, captureSeedBaseline } = await import("@/lib/admin/seedDiagnostic");
+    if (phase === "diagnostic")
+      vi.mocked(runSeedDiagnostic).mockRejectedValue(new Error("audit unavailable"));
+    else vi.mocked(captureSeedBaseline).mockRejectedValue(new Error("audit unavailable"));
+    const result = await run();
+    expect(result.status).toBe("partial");
+    expect(result.readiness).toEqual({
+      status: "blocked",
+      criticalChecks: [],
+      baselineCaptured: false,
+      error: "audit unavailable",
+    });
+    expect(closeUpdate().$set["resetRun.status"]).toBe("partial");
+    expect(closeUpdate().$set["resetRun.failures"]).toEqual([
+      { phase: "audit", name: "seedDiagnostic", error: "audit unavailable" },
+    ]);
+  });
+
+  it("does not claim a skipped audit as healthy", async () => {
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const { runSeedDiagnostic, captureSeedBaseline } = await import("@/lib/admin/seedDiagnostic");
+    const result = await resetAndBootstrapGameWorld({
+      db: db as never,
+      preset: "1953-default",
+      skipDiagnostic: true,
+    });
+    expect(result.status).toBe("succeeded");
+    expect(result.readiness).toEqual({
+      status: "not-checked",
+      criticalChecks: [],
+      baselineCaptured: false,
+    });
+    expect(runSeedDiagnostic).not.toHaveBeenCalled();
+    expect(captureSeedBaseline).not.toHaveBeenCalled();
   });
 
   it("threads the run record into the build phase so its blocks can be contained", async () => {

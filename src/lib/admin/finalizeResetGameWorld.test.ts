@@ -56,6 +56,27 @@ describe("finalizeResetGameWorld", () => {
     vi.mocked(getPresetById).mockReturnValue({ deleteDefaultParties: true } as never);
   });
 
+  it("restores background defaults then applies scoped cleanup to a persisted 1991 empty start", async () => {
+    const { ensureDefaultParties } = await import("@/lib/seeds/ensureDefaultParties");
+    vi.mocked(ensureDefaultParties).mockClear();
+    vi.mocked(getPresetById).mockReturnValue({ deleteDefaultParties: false } as never);
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      startingPartiesMode: "none",
+    });
+    await finalizeResetGameWorld(db as never, {
+      preset: "1991-default",
+      teardown: TEARDOWN,
+      deleteProfiles: true,
+    });
+    expect(ensureDefaultParties).toHaveBeenCalled();
+    expect(db.collectionMocks.politicalParties.deleteMany).not.toHaveBeenCalledWith({});
+    expect(db.collectionMocks.governmentFormations.deleteMany).not.toHaveBeenCalledWith({});
+    expect(db.collectionMocks.electionCandidates.deleteMany).not.toHaveBeenCalledWith({});
+  });
+
   it("seeds an IMF Corp placeholder after corp wipe", async () => {
     // Pre-condition: corporations.findOne returns null (no IMF after wipe).
     db.collection("corporations"); // instantiate the lazy mock

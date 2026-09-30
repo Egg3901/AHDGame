@@ -24,6 +24,7 @@ import { applyTariffProvision, fireTariffProvisionSentiment } from "@/lib/tariff
 import { applySubsidyProvision, applyEndSubsidyProvision } from "@/lib/subsidies/subsidyEffects";
 import { applyNationalizeProvision } from "@/lib/nationalization/legislativeNationalize";
 import { computeNationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
+import { recordEnactedMaastricht } from "@/lib/internationalOrganizations/europeanIntegration/service";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { declareWar } from "@/lib/military/declareWar";
 import { allianceBarBetween } from "@/lib/military/allianceBar";
@@ -213,6 +214,16 @@ export async function applyLegislationEffect(
             scope,
             bill.stateId,
             p as EndSubsidyProvision
+          );
+        } else if (p.type === "european_treaty") {
+          if (getNonPolicyProvisionScope(bill.stateId) !== "national")
+            throw new Error("European treaties require national legislation");
+          await recordEnactedMaastricht(
+            db,
+            countryId,
+            p.action === "ratify",
+            String(bill._id),
+            await getCurrentTurn(db)
           );
         } else if (p.type === "international_organization") {
           // International-organization membership actions (Foreign Policy). Fund

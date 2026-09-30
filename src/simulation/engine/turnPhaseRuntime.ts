@@ -16,6 +16,7 @@ import {
   roundTripCountsAvailable,
 } from "@/lib/observability/mongoRoundTrips";
 import { roundTripBudgetFor } from "./turnPhaseBudgets";
+import { discardPhaseSubsteps, takePhaseSubsteps } from "@/lib/observability/phaseSubsteps";
 import { withSpan } from "@/lib/observability/spans";
 import type { CompletedTurnPhaseObservation, TurnPhaseRuntime } from "@/simulation/engine/types";
 import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
@@ -33,6 +34,9 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
  * `*Snapshot` phase plus the existing scan/detection/logging/reconcile
  * phases. Everything else that reaches `runPhase` is treated as mutating.
  */
+/** Phases below this many round trips do not record their top collections. */
+export const TOP_COLLECTIONS_MIN_ROUND_TRIPS = 100;
+
 const READ_ONLY_PHASES = new Set<string>([
   "financialSuspectScan",
   "activityLogging",
@@ -133,6 +137,8 @@ export function createTurnPhaseRuntime(input: {
       touchHeartbeat?: boolean;
       roundTrips?: number;
       roundTripBudget?: number;
+      topCollections?: TurnPhaseTelemetry["topCollections"];
+      substeps?: TurnPhaseTelemetry["substeps"];
     } = {}
   ): Promise<void> {
     const now = new Date();
@@ -146,6 +152,8 @@ export function createTurnPhaseRuntime(input: {
             overBudget: options.roundTrips > options.roundTripBudget,
           }
         : {}),
+      ...(options.topCollections?.length ? { topCollections: options.topCollections } : {}),
+      ...(options.substeps ? { substeps: options.substeps } : {}),
       status,
       updatedAt: now,
       startedAt:
@@ -330,11 +338,16 @@ export function createTurnPhaseRuntime(input: {
           data: { phase: name, roundTrips, roundTripBudget },
         });
       }
-      void setPhaseStatus(
-        name,
-        "completed",
-        roundTrips == null ? {} : { roundTrips, roundTripBudget }
-      ).catch((err) => console.warn(`[Turn] Failed to mark phase "${name}" completed`, err));
+      const substeps = takePhaseSubsteps(name);
+      const topCollections =
+        roundTrips != null && roundTrips >= TOP_COLLECTIONS_MIN_ROUND_TRIPS
+          ? phaseTopCollectionsByRoundTrips(name, 3)
+          : undefined;
+      void setPhaseStatus(name, "completed", {
+        ...(roundTrips == null ? {} : { roundTrips, roundTripBudget }),
+        ...(topCollections ? { topCollections } : {}),
+        ...(substeps ? { substeps } : {}),
+      }).catch((err) => console.warn(`[Turn] Failed to mark phase "${name}" completed`, err));
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -354,6 +367,7 @@ export function createTurnPhaseRuntime(input: {
           reason: message,
         });
       }
+      discardPhaseSubsteps(name);
       void setPhaseStatus(name, "failed", { reason: "other", message }).catch((setErr) =>
         console.warn(`[Turn] Failed to mark phase "${name}" failed`, setErr)
       );

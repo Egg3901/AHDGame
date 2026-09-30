@@ -38,6 +38,19 @@ const GOOGLE_ERROR_KEYS: Record<string, string> = {
   already_linked: "googleAlreadyLinked",
 };
 
+const APPLE_ERROR_KEYS: Record<string, string> = {
+  not_configured: "appleNotConfigured",
+  exchange_failed: "appleFailed",
+};
+
+const LAKESIDE_ERROR_KEYS: Record<string, string> = {
+  unified_unavailable: "lakesideUnavailable",
+  unified_state: "lakesideExpired",
+  unified_exchange: "lakesideFailed",
+  unified_identity: "lakesideFailed",
+  unified_cohort: "lakesideNotMoved",
+};
+
 interface LoginPageClientProps {
   initialMaintenanceMode: boolean;
   wireframeColor?: string;
@@ -87,10 +100,15 @@ export default function LoginPageClient({
     const reason = searchParams.get("reason") || searchParams.get("error");
     const discordStatus = searchParams.get("discord");
     const googleStatus = searchParams.get("google");
+    const appleStatus = searchParams.get("apple");
     if ((discordStatus === "error" && reason) || reason === "discord_not_configured") {
       setError(t(`errors.${DISCORD_ERROR_KEYS[reason] || "discordFailed"}`));
     } else if (googleStatus === "error" && reason) {
       setError(t(`errors.${GOOGLE_ERROR_KEYS[reason] || "googleFailed"}`));
+    } else if (reason && LAKESIDE_ERROR_KEYS[reason]) {
+      setError(t(`errors.${LAKESIDE_ERROR_KEYS[reason]}`));
+    } else if (appleStatus === "error" && reason) {
+      setError(t(`errors.${APPLE_ERROR_KEYS[reason] || "appleFailed"}`));
     }
   }, [searchParams, t]);
 
@@ -102,7 +120,9 @@ export default function LoginPageClient({
     setDeviceKey(getOrCreateDeviceKey());
   }, []);
 
-  const oauthLoginUrl = (path: "/api/auth/discord/login" | "/api/auth/google/login") => {
+  const oauthLoginUrl = (
+    path: "/api/auth/discord/login" | "/api/auth/google/login" | "/api/auth/apple/login"
+  ) => {
     const returnTo = readReturnTo();
     if (!returnTo) return path;
     const url = new URL(path, window.location.origin);
@@ -121,6 +141,19 @@ export default function LoginPageClient({
       document.cookie = `${OAUTH_DEVICE_KEY_COOKIE}=${encodeURIComponent(deviceKey)}${cookieSuffix}`;
     }
     window.location.href = oauthLoginUrl("/api/auth/discord/login");
+  };
+
+  const beginAppleOAuth = () => {
+    const cookieSuffix = `; max-age=${OAUTH_FINGERPRINT_MAX_AGE_SECONDS}; path=/; samesite=lax${
+      window.location.protocol === "https:" ? "; secure" : ""
+    }`;
+    if (fingerprint) {
+      document.cookie = `${OAUTH_FINGERPRINT_COOKIE}=${encodeURIComponent(fingerprint)}${cookieSuffix}`;
+    }
+    if (deviceKey) {
+      document.cookie = `${OAUTH_DEVICE_KEY_COOKIE}=${encodeURIComponent(deviceKey)}${cookieSuffix}`;
+    }
+    window.location.href = oauthLoginUrl("/api/auth/apple/login");
   };
 
   const beginGoogleOAuth = () => {
@@ -455,7 +488,7 @@ export default function LoginPageClient({
               <button
                 type="button"
                 onClick={beginLakesideLogin}
-                className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-body font-semibold text-primary shadow-card transition-colors hover:bg-primary/20"
+                className="store-app-hidden flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-body font-semibold text-primary shadow-card transition-colors hover:bg-primary/20"
               >
                 <Image
                   src="/lakeside-mark.svg"
@@ -470,8 +503,19 @@ export default function LoginPageClient({
 
               <button
                 type="button"
+                onClick={beginAppleOAuth}
+                className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-black bg-black px-4 py-3 text-body font-semibold text-white shadow-card transition-colors hover:bg-black/85"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.8-1.287-1.82-2.323-4.63-2.323-7.28 0-4.28 2.797-6.55 5.552-6.55 1.448 0 2.675.95 3.6.95.865 0 2.222-1.01 3.902-1.01.613 0 2.886.06 4.374 2.19-.13.09-2.383 1.37-2.383 4.19 0 3.26 2.854 4.42 2.955 4.45z" />
+                </svg>
+                {t("continueWithApple")}
+              </button>
+
+              <button
+                type="button"
                 onClick={beginGoogleOAuth}
-                className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-card-border bg-card px-4 py-3 text-body font-medium text-foreground shadow-card transition-colors hover:bg-card-muted"
+                className="store-app-hidden flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-card-border bg-card px-4 py-3 text-body font-medium text-foreground shadow-card transition-colors hover:bg-card-muted"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />

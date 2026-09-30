@@ -153,7 +153,17 @@ export async function driveConflictTurn(
       year < pandemicOpeningYear(participants)
     )
       return { state, events: [] };
-    if (!inWindow(def, year) || !hasRequiredBelligerents(def, participants)) {
+    // A surviving federation in the authored 2027 world is an explicit
+    // counterfactual, not a replay of the historical 1991-2010 window.
+    const survivingFederation =
+      def.key === "yugoslav_dissolution" &&
+      state.openingProvenance?.preset === "2027-default" &&
+      state.openingDisposition === "counterfactual" &&
+      year === 2027;
+    if (
+      (!inWindow(def, year) && !survivingFederation) ||
+      !hasRequiredBelligerents(def, participants)
+    ) {
       return { state, events: [] };
     }
     if (def.minimumOpeningPressure !== undefined && externalPressure < def.minimumOpeningPressure) {

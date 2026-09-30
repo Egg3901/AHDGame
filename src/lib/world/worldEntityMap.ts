@@ -5,6 +5,16 @@ import {
   type WorldSimulationTier,
 } from "./worldEntityManifest";
 
+export interface BackgroundMacroSummary {
+  population: number;
+  economicSystem: "market" | "planned";
+  stability: number;
+  tradeExposure: number;
+  lastMacroTickTurn: number | null;
+  contributionComputedOnTurn: number;
+  provenance: "authored-1953" | "estimated-background";
+}
+
 export interface WorldEntityMapItem {
   entityId: string;
   countryId?: string;
@@ -14,11 +24,14 @@ export interface WorldEntityMapItem {
   simulationTier: WorldSimulationTier;
   autonomousReady: boolean;
   playerReady: boolean;
+  macroSummary?: BackgroundMacroSummary;
 }
 
 export interface WorldEntityMapSnapshot {
   presetId: string;
   byFeatureId: Record<string, WorldEntityMapItem>;
+  /** Includes entities without map geometry so the inspection picker can reach them. */
+  byEntityId?: Record<string, WorldEntityMapItem>;
   unmappedEntityIds: string[];
 }
 
@@ -42,16 +55,13 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
   }
 
   const byFeatureId: Record<string, WorldEntityMapItem> = {};
+  const byEntityId: Record<string, WorldEntityMapItem> = {};
   const unmappedEntityIds: string[] = [];
 
   for (const entry of manifest.entries) {
     const fromCountry = entry.countryId ? (featureIdsByCountry.get(entry.countryId) ?? []) : [];
     const featureIds =
       entry.mapFeatureIds && entry.mapFeatureIds.length > 0 ? entry.mapFeatureIds : fromCountry;
-    if (featureIds.length === 0) {
-      unmappedEntityIds.push(entry.entityId);
-      continue;
-    }
     const item: WorldEntityMapItem = {
       entityId: entry.entityId,
       countryId: entry.countryId,
@@ -62,6 +72,11 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
       autonomousReady: entry.readiness.autonomous === "ready",
       playerReady: entry.readiness.player === "ready",
     };
+    byEntityId[entry.entityId] = item;
+    if (featureIds.length === 0) {
+      unmappedEntityIds.push(entry.entityId);
+      continue;
+    }
     for (const featureId of featureIds) {
       // First writer wins when multiple entities claim the same modern proxy
       // (e.g. North Vietnam + modern Vietnam feature). Later claimants stay
@@ -73,6 +88,9 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
   return {
     presetId,
     byFeatureId,
+    byEntityId,
     unmappedEntityIds: unmappedEntityIds.sort(),
   };
 }
+
+export { backgroundMacroFeatureIds } from "./worldEntityMapInspection";

@@ -35,6 +35,7 @@ export interface SourceSecuritySnapshotUser {
   readonly password?: string | null;
   readonly googleId?: string | null;
   readonly discordId?: string | null;
+  readonly appleId?: string | null;
   readonly role?: string | null;
   readonly isAdmin?: boolean | null;
   readonly isBanned?: boolean | null;
@@ -236,6 +237,12 @@ export function captureSourceSecuritySnapshot(
     enrollmentOperationId,
   };
   for (const key of SNAPSHOT_KEY_ORDER) canonicalValue[key] = encoded[key];
+  // Sign in with Apple arrived after digests were already issued. Appending
+  // the field only when present keeps every existing account's digest stable
+  // while still binding an Apple link into the snapshot.
+  if (hasField(user, "appleId")) {
+    canonicalValue.appleId = encodeSecretField("provider", readField(user, "appleId"), true);
+  }
   const canonicalEncoding = JSON.stringify(canonicalValue);
   const snapshotDigest = sha256Hex(canonicalEncoding);
   return Object.freeze({

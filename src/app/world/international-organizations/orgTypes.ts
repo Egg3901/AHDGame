@@ -1,3 +1,4 @@
+import type { EuropeanIntegrationState } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { CountryId } from "@/lib/constants/countries";
@@ -22,6 +23,7 @@ import type {
 
 /** Public summary returned by GET /api/world/international-organizations. */
 export interface OrgSummary {
+  europeanIntegration?: EuropeanIntegrationState;
   id: InternationalOrganizationId;
   def: {
     id: InternationalOrganizationId;

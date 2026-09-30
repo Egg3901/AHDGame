@@ -14,6 +14,7 @@ export type DisplayRates = Partial<Record<CurrencyCode, number>>;
 export interface CurrencyDisplayContext {
   preset: string;
   eurozoneEnabled: boolean;
+  euroMemberCurrencies?: readonly CurrencyCode[];
 }
 
 // Matches the normalization of INITIAL_RATES_1991 and the other German era rates.
@@ -43,7 +44,9 @@ export function displayQuote(params: {
       : homeCurrency
     : preference;
   // The IEP ledger stays IEP. Displaying euros reads the actual EUR quotation.
-  if (local && code === "IEP" && context.eurozoneEnabled) code = "EUR";
+  const memberCurrencies =
+    context.euroMemberCurrencies ?? (context.eurozoneEnabled ? ["EUR", "IEP"] : []);
+  if (local && memberCurrencies.includes(code)) code = "EUR";
   const live = rates[code];
   const rate = validDisplayRate(live) ? live : baseRates?.[code];
   if (!validDisplayRate(rate)) return { rate: 1, symbol: "₳" };

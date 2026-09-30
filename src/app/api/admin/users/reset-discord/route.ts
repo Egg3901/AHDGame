@@ -74,10 +74,11 @@ export const POST = withNoStore(async (request: Request) => {
     }
 
     // Never strand an account: unlinking Discord requires another usable login
-    // method (non-empty password or a linked Google account) to remain.
+    // method (non-empty password or a linked Google or Apple account) to remain.
     const hasPassword = typeof targetUser.password === "string" && targetUser.password.length > 0;
     const hasGoogle = typeof targetUser.googleId === "string" && targetUser.googleId.length > 0;
-    if (!hasPassword && !hasGoogle) {
+    const hasApple = typeof targetUser.appleId === "string" && targetUser.appleId.length > 0;
+    if (!hasPassword && !hasGoogle && !hasApple) {
       return NextResponse.json(
         {
           error:
@@ -115,6 +116,9 @@ export const POST = withNoStore(async (request: Request) => {
             ? { googleId: { $exists: false } }
             : { googleId: targetUser.googleId }),
           discordId,
+          ...(targetUser.appleId === undefined
+            ? { appleId: { $exists: false } }
+            : { appleId: targetUser.appleId }),
           ...authRevocationSnapshotFilter(targetUser.authRevokedAt),
           ...authMigrationFenceAbsentFilter(),
         },

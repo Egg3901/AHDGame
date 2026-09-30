@@ -1,0 +1,287 @@
+{
+  "sourceCommit": "47af9ac9224668e220a7098d9d6d2959cd1cc192",
+  "sourceDirty": false,
+  "scope": "Synthetic native Mongo player fund routes, production accounting and fund turn; synthetic auth, selected sandbox DB and transport rate limiter",
+  "cases": [
+    {
+      "case": "subscribe",
+      "first": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "units": 2,
+          "costAnchor": 20,
+          "nav": 10,
+          "balanceAfter": 9980,
+          "spreadPaid": 0
+        }
+      },
+      "retry": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "units": 2,
+          "costAnchor": 20,
+          "nav": 10,
+          "balanceAfter": 9980,
+          "spreadPaid": 0
+        }
+      },
+      "before": {
+        "wallet": 10000,
+        "fundCash": 100,
+        "supply": 10,
+        "units": 10,
+        "transactions": 0,
+        "queued": 0
+      },
+      "after": {
+        "wallet": 9980,
+        "fundCash": 120,
+        "supply": 12,
+        "units": 12,
+        "transactions": 1,
+        "queued": 0
+      },
+      "changedRequestRejected": true,
+      "newIntentAllowed": true
+    },
+    {
+      "case": "redeem",
+      "first": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "redeemedUnits": 2,
+          "paidAmountAnchor": 20,
+          "queuedUnits": 0,
+          "queuedAmountAnchor": 0,
+          "status": "paid"
+        }
+      },
+      "retry": {
+        "status": 200,
+        "body": {
+          "success": true,
+          "redeemedUnits": 2,
+          "paidAmountAnchor": 20,
+          "queuedUnits": 0,
+          "queuedAmountAnchor": 0,
+          "status": "paid"
+        }
+      },
+      "before": {
+        "wallet": 9960,
+        "fundCash": 140,
+        "supply": 14,
+        "units": 14,
+        "transactions": 2,
+        "queued": 0
+      },
+      "after": {
+        "wallet": 9980,
+        "fundCash": 120,
+        "supply": 12,
+        "units": 12,
+        "transactions": 3,
+        "queued": 0
+      },
+      "changedRequestRejected": true,
+      "newIntentAllowed": true
+    },
+    {
+      "case": "concurrent",
+      "statuses": [409, 200],
+      "before": {
+        "wallet": 10000,
+        "fundCash": 100,
+        "supply": 10,
+        "units": 10,
+        "transactions": 4,
+        "queued": 0
+      },
+      "after": {
+        "wallet": 9990,
+        "fundCash": 110,
+        "supply": 11,
+        "units": 11,
+        "transactions": 5,
+        "queued": 0
+      }
+    },
+    {
+      "case": "completion_ack",
+      "lostStatus": 409,
+      "recoveredStatus": 200,
+      "committed": {
+        "wallet": 10000,
+        "fundCash": 100,
+        "supply": 10,
+        "units": 10,
+        "transactions": 6,
+        "queued": 0
+      }
+    },
+    {
+      "case": "financialTxLog_lost_ack",
+      "concurrentReplay": true,
+      "financialState": {
+        "wallet": 9990,
+        "fundCash": 110,
+        "supply": 11,
+        "units": 11,
+        "transactions": 7,
+        "queued": 0
+      },
+      "plannedRows": 4,
+      "aftercareComplete": true
+    },
+    {
+      "case": "ledgerEntries_lost_ack",
+      "concurrentReplay": true,
+      "financialState": {
+        "wallet": 9980,
+        "fundCash": 120,
+        "supply": 12,
+        "units": 12,
+        "transactions": 8,
+        "queued": 0
+      },
+      "plannedRows": 4,
+      "aftercareComplete": true
+    },
+    {
+      "case": "actionAuditLog_lost_ack",
+      "concurrentReplay": true,
+      "financialState": {
+        "wallet": 9970,
+        "fundCash": 130,
+        "supply": 13,
+        "units": 13,
+        "transactions": 9,
+        "queued": 0
+      },
+      "plannedRows": 4,
+      "aftercareComplete": true
+    },
+    {
+      "case": "standalone_before_completion",
+      "knownIncompleteRecovery": true,
+      "financialState": {
+        "wallet": 9960,
+        "fundCash": 140,
+        "supply": 14,
+        "units": 14,
+        "transactions": 10,
+        "queued": 0
+      },
+      "retryStatus": 409,
+      "noSecondExecution": true
+    },
+    {
+      "case": "unknown_standalone_outcome",
+      "status": 409,
+      "noReexecution": true
+    },
+    {
+      "case": "actual_fund_turn",
+      "turn": {
+        "fundsProcessed": 1,
+        "navUpdates": 1,
+        "floatPurchases": 0,
+        "rebalances": 0,
+        "crossFundTransfers": 0,
+        "redemptionsPaid": 0,
+        "redemptionsQueued": 0,
+        "bondDeployments": 0,
+        "domesticCoverageFundsEnsured": 0,
+        "nppsProcessed": 0,
+        "nppInvested": 0,
+        "expenseFeesCharged": 0,
+        "expenseFeeAnchor": 0,
+        "windDownsAdvanced": 0,
+        "windDownsCompleted": 0,
+        "equityLiquidityQuotePairs": 0,
+        "equityLiquidityDepthAnchor": 0,
+        "deadHoldingsWrittenOff": 0,
+        "deadHoldingsWrittenOffAnchor": 0,
+        "unsellableHoldings": 0,
+        "errors": []
+      },
+      "postTurn": {
+        "wallet": 9960,
+        "fundCash": 140,
+        "supply": 14,
+        "units": 14,
+        "transactions": 10,
+        "queued": 0
+      },
+      "readModelMatches": true
+    }
+  ],
+  "financialRows": [
+    {
+      "_id": "6abd1a6943d3db4d3bdd11ca",
+      "amount": -20,
+      "anchorAmount": -20,
+      "currencyCode": "USD",
+      "type": "index_fund_subscribe"
+    },
+    {
+      "_id": "6abd1a6a43d3db4d3bdd11d1",
+      "amount": -20,
+      "anchorAmount": -20,
+      "currencyCode": "USD",
+      "type": "index_fund_subscribe"
+    },
+    {
+      "_id": "6abd1a6b43d3db4d3bdd11d9",
+      "amount": 20,
+      "anchorAmount": 20,
+      "currencyCode": "USD",
+      "type": "index_fund_redeem"
+    },
+    {
+      "_id": "6abd1a6b43d3db4d3bdd11e1",
+      "amount": 20,
+      "anchorAmount": 20,
+      "currencyCode": "USD",
+      "type": "index_fund_redeem"
+    },
+    {
+      "_id": "6abd1a6b43d3db4d3bdd11e7",
+      "amount": -10,
+      "anchorAmount": -10,
+      "currencyCode": "USD",
+      "type": "index_fund_subscribe"
+    },
+    {
+      "_id": "6abd1a6c43d3db4d3bdd11f0",
+      "amount": 10,
+      "anchorAmount": 10,
+      "currencyCode": "USD",
+      "type": "index_fund_redeem"
+    },
+    {
+      "_id": "6abd1a6c43d3db4d3bdd11f5",
+      "amount": -10,
+      "anchorAmount": -10,
+      "currencyCode": "USD",
+      "type": "index_fund_subscribe"
+    },
+    {
+      "_id": "6abd1a6c43d3db4d3bdd11fb",
+      "amount": -10,
+      "anchorAmount": -10,
+      "currencyCode": "USD",
+      "type": "index_fund_subscribe"
+    },
+    {
+      "_id": "6abd1a6c43d3db4d3bdd1203",
+      "amount": -10,
+      "anchorAmount": -10,
+      "currencyCode": "USD",
+      "type": "index_fund_subscribe"
+    }
+  ]
+}

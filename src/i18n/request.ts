@@ -38,6 +38,7 @@ const NAMESPACES = [
   "elections",
   "corporations",
   "worldConflicts",
+  "worldOrganizations",
   "centralBank",
 ] as const;
 

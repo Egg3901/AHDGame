@@ -152,7 +152,7 @@ export async function applyFinancialFiscalResponse(
         kind: "debit",
         amount,
         collection: "federalBudget",
-        filter: { countryId: ctx.countryId },
+        filter: { _id: budget._id, countryId: ctx.countryId },
         path: "treasuryBalance",
         note: "Fund the household fiscal transfer",
       },
@@ -169,7 +169,7 @@ export async function applyFinancialFiscalResponse(
     const spending = financialAusteritySpending(budget.spending, budget.revenue.total);
     transition.projections.push({
       collection: "federalBudget",
-      filter: { countryId: ctx.countryId },
+      filter: { _id: budget._id, countryId: ctx.countryId },
       update: {
         $set: {
           spending,
@@ -189,13 +189,13 @@ export async function applyFinancialFiscalResponse(
       kind: "credit",
       amount,
       collection: "federalBudget",
-      filter: { countryId: recipient.countryId },
+      filter: { _id: recipient._id, countryId: recipient.countryId },
       path: "treasuryBalance",
       note: "Deliver the same-currency sovereign rescue grant",
     };
     transition.projections.push({
       collection: "federalBudget",
-      filter: { countryId: recipient.countryId },
+      filter: { _id: recipient._id, countryId: recipient.countryId },
       update: { $inc: { financialCrisisGrantsReceived: amount } },
       note: "Record the grant separately from bond-owned principal",
     });

@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import {
+  executeMarketMakerTrade,
   getCountryForCurrency,
   distributeConversionSpread,
   distributeConversionSpreadsBatch,
@@ -389,4 +390,140 @@ describe("executeMarketMakerTrade", () => {
       [`currencyBalances.personal.GBP`]: { $gte: stored },
     });
   });
+});
+
+it("converts euro ledger denominations at their locked quote without FX fees or rounding gains", async () => {
+  const { planEuroSettlement } = await import("./euro/rules");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const db = createMockDb();
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  db.collection("characters").findOne.mockResolvedValue({
+    currencyBalances: { personal: { GBP: 10000 } },
+  });
+  db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+  // A stale FX materialization must not change the accepted conversion ratio.
+  db.collection("exchangeRates").findOne.mockResolvedValue({ rate: 99, forexSpreadStrength: 1.5 });
+  const result = await executeMarketMakerTrade(db as unknown as Db, {
+    characterId: new ObjectId(),
+    countryId: "UK",
+    fromCurrency: "GBP",
+    toCurrency: "EUR",
+    amount: 1000,
+    turn: 386,
+  });
+  expect(result.success).toBe(true);
+  expect(result.spreadCharged).toBe(0);
+  expect(result.toAmount).toBe(1333);
+  expect(result.toAmount * (0.6 / 0.8)).toBeLessThanOrEqual(1000);
+  expect(db.collectionMocks.centralBanks?.updateOne).toBeUndefined();
+});
+
+it.each([true, false])(
+  "uses the common external quote and fee, or rejects a missing anchor (%s)",
+  async (anchorAvailable) => {
+    const { planEuroSettlement } = await import("./euro/rules");
+    const { MARKET_MAKER_SPREAD } = await import("@/lib/constants/currencies");
+    const { calculateSpreadFee } = await import("./spreadFees");
+    const union = planEuroSettlement({
+      year: 1999,
+      turn: 385,
+      preset: "1991-default",
+      europeanMembers: ["DE", "IE", "UK"],
+      consentedCountries: ["DE", "IE", "UK"],
+      rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+    }).union;
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+    db.collection("characters").findOne.mockResolvedValue({
+      currencyBalances: { personal: { GBP: 10000 } },
+    });
+    db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("exchangeRates").findOne.mockImplementation(async ({ _id }: { _id: string }) => {
+      if (_id === "DE")
+        return anchorAvailable
+          ? { _id, currencyCode: "EUR", rate: 1.6, forexSpreadStrength: 1.5 }
+          : null;
+      return {
+        _id,
+        currencyCode: _id === "UK" ? "GBP" : "USD",
+        rate: _id === "UK" ? 99 : 1,
+        forexSpreadStrength: 0.5,
+      };
+    });
+    const result = await executeMarketMakerTrade(db as unknown as Db, {
+      characterId: new ObjectId(),
+      countryId: "UK",
+      fromCurrency: "GBP",
+      toCurrency: "USD",
+      amount: 1000,
+      turn: 386,
+    });
+    expect(result.success).toBe(anchorAvailable);
+    if (anchorAvailable) {
+      const fee = calculateSpreadFee(1000, MARKET_MAKER_SPREAD * 1.5);
+      expect(result.spreadCharged).toBe(fee);
+      expect(result.toAmount).toBe(Math.round((1000 - fee) / 1.2));
+    } else expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  }
+);
+
+it("reuses one projected quote snapshot for multiple turn payouts", async () => {
+  const { loadConversionQuoteContext } = await import("./euro/quotes");
+  const { planEuroSettlement } = await import("./euro/rules");
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const db = createMockDb();
+  db.collection("characters").findOne.mockResolvedValue({
+    currencyBalances: { personal: { GBP: 10000 } },
+  });
+  db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 1 });
+  db.collection("exchangeRates")
+    .find()
+    .toArray.mockResolvedValue([
+      { currencyCode: "EUR", rate: 1.6, forexSpreadStrength: 1.5 },
+      { currencyCode: "GBP", rate: 99, forexSpreadStrength: 0.5 },
+      { currencyCode: "USD", rate: 1 },
+    ]);
+  db.collection("exchangeRates").find.mockClear();
+  const quoteContext = await loadConversionQuoteContext(db as unknown as Db, union);
+  for (let i = 0; i < 2; i++) {
+    const result = await executeMarketMakerTrade(db as unknown as Db, {
+      characterId: new ObjectId(),
+      countryId: "UK",
+      fromCurrency: "GBP",
+      toCurrency: "USD",
+      amount: 1000,
+      turn: 386,
+      quoteContext,
+    });
+    expect(result.success).toBe(true);
+    expect(result.effectiveRate).toBeCloseTo(1 / 1.2);
+  }
+  expect(db.collection("exchangeRates").find).toHaveBeenCalledTimes(1);
+  expect(db.collection("exchangeRates").find).toHaveBeenCalledWith(
+    {},
+    {
+      projection: {
+        currencyCode: 1,
+        rate: 1,
+        forexSpreadStrength: 1,
+        forexSpreadStrengthLastChangedTurn: 1,
+      },
+    }
+  );
+  expect(db.collection("exchangeRates").findOne).not.toHaveBeenCalled();
+  expect(db.collection("gameState").findOne).not.toHaveBeenCalled();
 });

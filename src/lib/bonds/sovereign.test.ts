@@ -6,6 +6,7 @@ import type { Bond } from "@/lib/db/types/bond";
 import { generateCountryOwnedSeedData } from "@/lib/seeds/reference/budgets";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { createMockDb as createEmptyMockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import {
   applySovereignDebtAdjustment,
   calculateQuarterlyIssuanceAmount,
@@ -837,7 +838,27 @@ describe("issueScheduledSovereignBondSeries", () => {
 
     db.collectionMocks["bonds"]!.insertOne.mockResolvedValue({ insertedIds: {} });
 
-    db.collection("bondMarketPools").findOne.mockResolvedValue({ cashLocal: 1e18 });
+    // Preserve real cash, projection receipts and the original settlement plan.
+    // A successful no-op journal mock cannot establish recovery or publication.
+    const memory = createInMemoryDb();
+    memory.seed(
+      "federalBudget",
+      budgets.map((row) => ({ ...row }))
+    );
+    memory.seed(
+      "bondMarketPools",
+      [...new Set([...Object.values(COUNTRY_CURRENCY_MAP), "EUR"])].map((_id) => ({
+        _id,
+        cashLocal: 1e18,
+      }))
+    );
+    for (const name of ["bankMoneyMoves", "federalBudget", "bondMarketPools"]) {
+      const state = memory.collection(name);
+      const mock = db.collection(name);
+      mock.findOne.mockImplementation(state.findOne.bind(state));
+      mock.insertOne.mockImplementation(state.insertOne.bind(state));
+      mock.updateOne.mockImplementation(state.updateOne.bind(state));
+    }
     return { db, budget };
   }
 
@@ -881,7 +902,8 @@ describe("issueScheduledSovereignBondSeries", () => {
       ([, update]) => update.$inc?.["debt.principal"] !== undefined
     );
     expect(debtWrites).toHaveLength(1);
-    expect(debtWrites[0][0]).toEqual(expect.objectContaining({ _id: budget._id }));
+    const persisted = await db.collection("federalBudget").findOne({ _id: budget._id });
+    expect(persisted.debt.principal).toBe(budget.debt.principal + 225_000_000_000);
     expect(debtWrites[0][1].$inc["debt.principal"]).toBe(225_000_000_000);
   });
 
@@ -912,7 +934,10 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(deBondDocs.every((bond) => bond.currencyCode === "EUR")).toBe(true);
 
     const updatedBudgetIds = db.collectionMocks["federalBudget"]!.updateOne.mock.calls.map(
-      ([filter]) => (filter as { _id: string })._id
+      ([filter]) => {
+        const selector = filter as { _id?: string; $and?: { _id?: string }[] };
+        return selector._id ?? selector.$and?.find((part) => part._id !== undefined)?._id;
+      }
     );
     expect([...new Set(updatedBudgetIds)]).toEqual([
       getNationalBudgetId(COUNTRY_CONFIGS.US.id),

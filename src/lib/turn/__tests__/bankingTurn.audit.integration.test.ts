@@ -80,6 +80,90 @@ describe("banking audit accounting", () => {
   });
 
   it.each([
+    { fraction: 1, afterWrite: false },
+    { fraction: 0.5, afterWrite: false },
+    { fraction: 1, afterWrite: true },
+    { fraction: 0.5, afterWrite: true },
+  ])(
+    "finishes the original facility charge after projection interruption %j",
+    async ({ fraction, afterWrite }) => {
+      const memory = await world();
+      memory.collection("gameConfig").docs[0].bankPropTradingEnabled = false;
+      const charter = memory.collection("corporations").docs[0].bankCharter as Record<
+        string,
+        unknown
+      >;
+      const due = (100_000 * 0.07) / TURNS_PER_YEAR;
+      charter.lastBankingTurn = TURN;
+      charter.discountWindowDebt = 100_000;
+      charter.cashReserves = due * fraction;
+      charter.lastBankingIncome = 0;
+      charter.lastBankingFacilityInterest = 0;
+      const fault = withInjectedCrash(memory, {
+        collection: "corporations",
+        op: "updateOne",
+        onCall: 1,
+        matches: (args) => {
+          const update = args[1] as { $set?: Record<string, unknown> };
+          return update.$set?.["bankCharter.lastDiscountWindowTurn"] !== undefined;
+        },
+        afterWrite,
+      });
+      await expect(processBankingTurn(fault.db, TURN)).rejects.toThrow();
+      fault.disarm();
+      await processBankingTurn(memory as unknown as Db, TURN);
+      await processBankingTurn(memory as unknown as Db, TURN);
+      expect(charter.cashReserves).toBeCloseTo(0, 8);
+      expect(memory.collection("centralBanks").docs[0].reserveBalance).toBeCloseTo(
+        due * fraction,
+        8
+      );
+      expect(charter.discountWindowArrears).toBeCloseTo(due * (1 - fraction), 8);
+      expect(charter.lastBankingIncome).toBeCloseTo(-due, 8);
+      expect(charter.lastBankingFacilityInterest).toBeCloseTo(due, 8);
+      expect(charter.lastDiscountWindowTurn).toBe(TURN);
+    }
+  );
+
+  it("preserves margin-first payment priority across a recovered facility projection", async () => {
+    const memory = await world();
+    memory.collection("gameConfig").docs[0].bankPropTradingEnabled = true;
+    const charter = memory.collection("corporations").docs[0].bankCharter as Record<
+      string,
+      unknown
+    >;
+    Object.assign(charter, {
+      lastBankingTurn: TURN,
+      cbMarginDebt: 100_000,
+      discountWindowDebt: 100_000,
+      cashReserves: 200,
+      lastBankingIncome: 0,
+      lastBankingFacilityInterest: 0,
+    });
+    const fault = withInjectedCrash(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $set?: Record<string, unknown> };
+        return update.$set?.["bankCharter.lastCbMarginTurn"] !== undefined;
+      },
+      afterWrite: false,
+    });
+    await expect(processBankingTurn(fault.db, TURN)).rejects.toThrow();
+    fault.disarm();
+    await processBankingTurn(memory as unknown as Db, TURN);
+    await processBankingTurn(memory as unknown as Db, TURN);
+    const marginDue = (100_000 * 0.055) / TURNS_PER_YEAR;
+    const windowDue = (100_000 * 0.07) / TURNS_PER_YEAR;
+    expect(charter.cashReserves).toBeCloseTo(0, 8);
+    expect(charter.cbMarginArrears).toBeCloseTo(0, 8);
+    expect(charter.discountWindowArrears).toBeCloseTo(marginDue + windowDue - 200, 8);
+    expect(charter.lastBankingIncome).toBeCloseTo(-marginDue - windowDue, 8);
+    expect(memory.collection("centralBanks").docs[0].reserveBalance).toBeCloseTo(200, 8);
+  });
+
+  it.each([
     { collection: "corporations", onCall: 1 },
     { collection: "bankLoans", onCall: 1 },
     { collection: "corporations", onCall: 2 },

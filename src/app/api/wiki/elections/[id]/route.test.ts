@@ -38,4 +38,33 @@ it("serves a named snap-election recap with its finalized seats and votes", asyn
   expect(data.label).toBe("1978 London Snap Commons");
   expect(data.generalResults.finalized).toBe(true);
   expect(data.generalResults.seatsEstimate).toEqual({ a: 55, b: 36 });
+  expect(db.collection("gameState").findOne).not.toHaveBeenCalled();
+});
+
+it("uses the active preset for a legacy election without a stored year", async () => {
+  const db = createMockDb();
+  vi.mocked(getDb).mockResolvedValue(db as never);
+  const id = new ObjectId();
+  db.collection("elections").findOne.mockResolvedValue({
+    _id: id,
+    electionType: "commons",
+    countryId: "UK",
+    state: "LON",
+    status: "resolved",
+    cycle: 1,
+    endTime: new Date("2026-09-29T13:00:00Z"),
+  });
+  db.collection("states").findOne.mockResolvedValue({ _id: "LON", name: "London" });
+  db.collection("gameState").findOne.mockResolvedValue({
+    _id: "current",
+    preset: "1953-default",
+    startingYear: 1953,
+  });
+
+  const response = await GET(new Request(`http://localhost/api/wiki/elections/${id}`), {
+    params: Promise.resolve({ id: id.toString() }),
+  });
+
+  expect(response.status).toBe(200);
+  expect((await response.json()).label).toBe("1955 London House of Commons");
 });

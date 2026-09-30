@@ -79,8 +79,13 @@ export function PrivateDepositModal({
           "success"
         );
       }
-      await onChanged();
+      // The deposit is committed. A slow read must not keep its form open.
       onClose();
+      try {
+        await onChanged();
+      } catch {
+        showToast("Deposit completed. Reload the page to refresh your balances.", "error");
+      }
     } catch {
       setError("Deposit failed. Try again.");
     } finally {

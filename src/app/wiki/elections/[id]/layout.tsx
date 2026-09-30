@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Election } from "@/lib/db/types/election";
+import type { GameState } from "@/lib/db/types/gameState";
 import { resolveElectionYear } from "@/lib/utils/formatters";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
+import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorContext";
 import { getWikiSiteUrl } from "@/lib/siteMetadata";
 
 interface LayoutProps {
@@ -44,6 +47,7 @@ export async function generateMetadata({
     { _id: new ObjectId(id), status: { $in: ["completed", "resolved"] } },
     {
       projection: {
+        countryId: 1,
         electionType: 1,
         state: 1,
         cycle: 1,
@@ -55,8 +59,25 @@ export async function generateMetadata({
   );
   if (!election) return {};
 
-  const typeLabel = ELECTION_TYPE_LABELS[election.electionType] ?? "Election";
-  const year = resolveElectionYear(election);
+  const gameState =
+    election.electionYear == null
+      ? await db.collection<GameState>("gameState").findOne(
+          { _id: "current" },
+          {
+            projection: {
+              startingYear: 1,
+              preset: 1,
+              preIterationTurns: 1,
+              "preIteration.active": 1,
+            },
+          }
+        )
+      : null;
+
+  const typeLabel =
+    ELECTION_TYPE_LABELS[election.electionType] ??
+    `${formatElectionTypeLabel(election.electionType, election.countryId)} Election`;
+  const year = resolveElectionYear(election, cycleAnchorContextFromGameState(gameState));
   const stateStr =
     election.state &&
     !["president", "commons", "snap_commons", "primeMinister", "uachtaran"].includes(

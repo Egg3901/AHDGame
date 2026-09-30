@@ -130,20 +130,25 @@ export async function logIndexFundSubscribe(
     }),
   });
 
-  if (source === "player") {
-    logIndexFundActivity(db, {
-      actionType: "index_fund_subscribe",
-      holder: params.holder,
-      fund: params.fund,
-      units: params.units,
-      navAnchor: params.navAnchor,
-      amountAnchor: params.amountAnchor,
-      turn,
-      fundsChange: -params.amountAnchor,
-      message: `Subscribed to ${params.units} units of ${params.fund.tickerSymbol} at NAV ${params.navAnchor.toLocaleString()}`,
-      details: { source },
-    });
-  }
+  if (source === "player") logIndexFundSubscribeActivity(db, { ...params, turn });
+}
+
+export function logIndexFundSubscribeActivity(
+  db: Db,
+  params: Parameters<typeof logIndexFundSubscribe>[1] & { turn: number }
+): void {
+  logIndexFundActivity(db, {
+    actionType: "index_fund_subscribe",
+    holder: params.holder,
+    fund: params.fund,
+    units: params.units,
+    navAnchor: params.navAnchor,
+    amountAnchor: params.amountAnchor,
+    turn: params.turn,
+    fundsChange: -params.amountAnchor,
+    message: `Subscribed to ${params.units} units of ${params.fund.tickerSymbol} at NAV ${params.navAnchor.toLocaleString()}`,
+    details: { source: "player" },
+  });
 }
 
 /** Record fund unit redemption proceeds credited to the holder (cash credit). */
@@ -245,8 +250,11 @@ export function buildIndexFundDividendTxEntry(params: {
   units: number;
   /** Fund-currency value actually credited; defaults to the ₳ value. */
   amountNative?: number;
-  corporationId: ObjectId;
+  /** Paying corporation. Omitted for a row that sums several corporations. */
+  corporationId?: ObjectId;
   corporationName?: string;
+  /** Number of paying corporations summed into this row (NPP holder rows, #2693). */
+  corporationCount?: number;
   turn: number;
   createdAt?: Date;
 }): Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged"> {
@@ -273,8 +281,9 @@ export function buildIndexFundDividendTxEntry(params: {
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {
       units: params.units,
-      corporationId: params.corporationId.toString(),
+      ...(params.corporationId ? { corporationId: params.corporationId.toString() } : {}),
       ...(params.corporationName ? { corporationName: params.corporationName } : {}),
+      ...(params.corporationCount != null ? { corporationCount: params.corporationCount } : {}),
       ...(params.holder.holderKind === "imperial_character" ? { imperial: true } : {}),
     }),
   };

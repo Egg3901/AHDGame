@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { Button, useDialogA11y } from "@/components/ui";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -42,8 +43,16 @@ export function BondTradeModal({
   onSuccess: () => void;
 }) {
   const { dialogProps, titleId } = useDialogA11y(onClose);
-  const { formatAmount, formatPrice, formatFull, forexRates, ratesLoading, toInternalFrom } =
-    useCurrency();
+  const {
+    formatAmount,
+    formatPrice,
+    formatFull,
+    forexRates,
+    forexSpreadStrengths,
+    ratesLoading,
+    toInternalFrom,
+  } = useCurrency();
+  const { euroMonetaryUnion } = useWorldFlags();
   const unitsInputId = useId();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [account, setAccount] = useState<"character" | "corporation" | "investmentBank">(
@@ -111,6 +120,8 @@ export function BondTradeModal({
         }
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: cost,
           fromCurrency: code,
           toCurrency: bondCurrency,
@@ -190,6 +201,8 @@ export function BondTradeModal({
   const corpBuyEstimate =
     account === "corporation" && side === "buy" && hasCorp
       ? estimateCorpWalletSpend({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCost,
           availableBalance: corpLiquidBalanceLocal,
           fromCurrency: corpLiquidCurrencyCode,
@@ -200,6 +213,8 @@ export function BondTradeModal({
   const explicitPayEstimate =
     isCharacterBuy && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCost,
           fromCurrency: selectedPayCurrency,
           toCurrency: bondCurrency,
@@ -210,6 +225,8 @@ export function BondTradeModal({
   const implicitAutoConvertEstimate =
     isCharacterBuy && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCost,
           targetCurrency: bondCurrency,
           balances: personalBalances ?? {},
@@ -225,6 +242,8 @@ export function BondTradeModal({
             return (
               total +
               estimateMaxConvertibleAmount({
+                union: euroMonetaryUnion,
+                spreadStrengths: forexSpreadStrengths,
                 fromCurrency: code,
                 toCurrency: bondCurrency,
                 balance,
@@ -236,6 +255,8 @@ export function BondTradeModal({
   const maxExplicitSpendableInTarget =
     isCharacterBuy && !shouldUseImplicitAutoConvert
       ? estimateMaxConvertibleAmount({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           fromCurrency: selectedPayCurrency,
           toCurrency: bondCurrency,
           balance: selectedPayBalance,
@@ -267,6 +288,8 @@ export function BondTradeModal({
         ? costPerUnit > 0
           ? Math.floor(
               estimateCorpMaxSpendableTargetAmount({
+                union: euroMonetaryUnion,
+                spreadStrengths: forexSpreadStrengths,
                 availableBalance: corpLiquidBalanceLocal,
                 fromCurrency: corpLiquidCurrencyCode,
                 toCurrency: bondCurrency,
@@ -297,6 +320,8 @@ export function BondTradeModal({
     if (candidateUnits <= 0) return true;
     if (account === "corporation") {
       const estimate = estimateCorpWalletSpend({
+        union: euroMonetaryUnion,
+        spreadStrengths: forexSpreadStrengths,
         requiredAmount: candidateUnits * costPerUnit,
         availableBalance: corpLiquidBalanceLocal,
         fromCurrency: corpLiquidCurrencyCode,
@@ -314,6 +339,8 @@ export function BondTradeModal({
     const candidateCost = candidateUnits * costPerUnit;
     if (shouldUseImplicitAutoConvert) {
       const estimate = estimateImplicitAutoConvertCoverage({
+        union: euroMonetaryUnion,
+        spreadStrengths: forexSpreadStrengths,
         requiredAmount: candidateCost,
         targetCurrency: bondCurrency,
         balances: personalBalances,
@@ -325,6 +352,8 @@ export function BondTradeModal({
       return selectedPayBalance >= candidateCost;
     }
     const estimate = estimateExplicitPayCoverage({
+      union: euroMonetaryUnion,
+      spreadStrengths: forexSpreadStrengths,
       requiredAmount: candidateCost,
       fromCurrency: selectedPayCurrency,
       toCurrency: bondCurrency,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -49,14 +50,31 @@ export function FundTradePanel({
   onSuccess: () => void;
   defaultMode?: Mode;
 }) {
-  const { formatFull, forexEnabled, forexRates, ratesLoading, toInternalFrom, formatPrice } =
-    useCurrency();
+  const {
+    formatFull,
+    forexEnabled,
+    forexRates,
+    forexSpreadStrengths,
+    ratesLoading,
+    toInternalFrom,
+    formatPrice,
+  } = useCurrency();
+  const { euroMonetaryUnion } = useWorldFlags();
   const fundCurrency = anchorCurrencyCode as CurrencyCode;
 
   const unitsInputId = useId();
   const [mode, setMode] = useState<Mode>(defaultMode);
   const [units, setUnits] = useState("1");
   const [loading, setLoading] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState<string | null>(null);
+  const command = useRef<{
+    operationId: string;
+    fundId: string;
+    mode: Mode;
+    units: number;
+    payCurrency?: CurrencyCode;
+  } | null>(null);
+  const submitting = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [wallet, setWallet] = useState<CharacterWallet | null>(null);
@@ -155,6 +173,8 @@ export function FundTradePanel({
   const explicitPayEstimate =
     showPaymentControls && !shouldUseImplicitAutoConvert
       ? estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCostNative,
           fromCurrency: selectedPayCurrency,
           toCurrency: fundCurrency,
@@ -166,6 +186,8 @@ export function FundTradePanel({
   const implicitAutoConvertEstimate =
     showPaymentControls && shouldUseImplicitAutoConvert
       ? estimateImplicitAutoConvertCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: totalCostNative,
           targetCurrency: fundCurrency,
           balances: personalBalances ?? {},
@@ -187,6 +209,8 @@ export function FundTradePanel({
         }
         if (!exchangeRates) return true;
         const estimate = estimateExplicitPayCoverage({
+          union: euroMonetaryUnion,
+          spreadStrengths: forexSpreadStrengths,
           requiredAmount: cost,
           fromCurrency: code,
           toCurrency: fundCurrency,
@@ -290,82 +314,118 @@ export function FundTradePanel({
     showPaymentControls && !shouldUseImplicitAutoConvert ? selectedPayCurrency : undefined;
 
   const handleSubmit = async () => {
-    if (!parsedUnits) {
-      setError("Enter at least 1 whole unit");
-      return;
-    }
-    if (mode === "redeem" && parsedUnits > myUnits) {
-      setError(`You hold ${myUnits.toLocaleString("en-US")} units`);
-      return;
-    }
-    if (mode === "subscribe" && !canSubscribe) {
-      setError("This fund is not accepting subscriptions");
-      return;
-    }
-    if (mode === "subscribe" && fundsShort) {
-      setError("Insufficient funds");
-      return;
-    }
+    if (submitting.current) return;
+    if (!command.current) {
+      if (!parsedUnits) {
+        setError("Enter at least 1 whole unit");
+        return;
+      }
+      if (mode === "redeem" && parsedUnits > myUnits) {
+        setError(`You hold ${myUnits.toLocaleString("en-US")} units`);
+        return;
+      }
+      if (mode === "subscribe" && !canSubscribe) {
+        setError("This fund is not accepting subscriptions");
+        return;
+      }
+      if (mode === "subscribe" && fundsShort) {
+        setError("Insufficient funds");
+        return;
+      }
 
+      command.current = {
+        operationId: crypto.randomUUID(),
+        fundId,
+        mode,
+        units: parsedUnits,
+        ...(mode === "subscribe" && requestPayCurrency ? { payCurrency: requestPayCurrency } : {}),
+      };
+    }
+    const order = command.current;
+    submitting.current = true;
+    setPendingOrder(order.operationId);
     setLoading(true);
     setError("");
     setMessage("");
 
+    let completed = false;
     try {
       const endpoint =
-        mode === "subscribe"
-          ? `/api/investment-funds/${fundId}/subscribe`
-          : `/api/investment-funds/${fundId}/redeem`;
+        order.mode === "subscribe"
+          ? `/api/investment-funds/${order.fundId}/subscribe`
+          : `/api/investment-funds/${order.fundId}/redeem`;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          units: parsedUnits,
-          ...(mode === "subscribe" && requestPayCurrency
-            ? { payCurrency: requestPayCurrency }
-            : {}),
+          operationId: order.operationId,
+          units: order.units,
+          ...(order.payCurrency ? { payCurrency: order.payCurrency } : {}),
         }),
       });
-      const data = (await res.json()) as { error?: string; status?: string; queuedUnits?: number };
+      const data = (await res.json()) as {
+        error?: string;
+        status?: string;
+        queuedUnits?: number;
+        pending?: boolean;
+      };
 
       if (!res.ok) {
+        if (!data.pending && res.status < 500 && res.status !== 429) {
+          command.current = null;
+          setPendingOrder(null);
+        }
         setError(data.error || "Request failed");
         return;
       }
 
-      if (mode === "subscribe") {
-        setMessage(`Subscribed to ${parsedUnits.toLocaleString("en-US")} unit(s).`);
+      completed = true;
+      command.current = null;
+      setPendingOrder(null);
+      if (order.mode === "subscribe") {
+        setMessage(`Subscribed to ${order.units.toLocaleString("en-US")} unit(s).`);
         void loadWallet();
         requestCharacterStatsRefetch();
       } else if (data.status === "queued") {
         setMessage(
-          `Redemption queued for ${(data.queuedUnits ?? parsedUnits).toLocaleString("en-US")} unit(s) — fund cash will pay out on the next cycle.`
+          `Redemption queued for ${(data.queuedUnits ?? order.units).toLocaleString("en-US")} unit(s) — fund cash will pay out on the next cycle.`
         );
       } else if (data.status === "partial") {
         setMessage("Partial redemption paid; remainder queued for liquidity.");
       } else {
-        setMessage(`Redeemed ${parsedUnits.toLocaleString("en-US")} unit(s).`);
+        setMessage(`Redeemed ${order.units.toLocaleString("en-US")} unit(s).`);
       }
       setUnits("1");
       onSuccess();
     } catch {
-      setError("Network error");
+      setError(
+        completed ? "Order completed. Refresh the page to reload your holdings." : "Network error"
+      );
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
 
   const submitDisabled =
     loading ||
-    ratesNeededButMissing ||
-    (mode === "subscribe" ? !canSubscribe || fundsShort : !canRedeem);
+    (!pendingOrder &&
+      (ratesNeededButMissing || (mode === "subscribe" ? !canSubscribe || fundsShort : !canRedeem)));
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm space-y-4">
+      {pendingOrder && (
+        <p role="status" className="text-xs text-muted">
+          Order {pendingOrder} is unconfirmed. Cash or units may already have moved. Retry this same
+          order to check its status. Do not place a replacement order; contact support with this ID
+          if it stays pending.
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => setMode("subscribe")}
+          disabled={!!pendingOrder}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
             mode === "subscribe"
               ? "bg-primary/15 text-primary border border-primary/30"
@@ -377,7 +437,7 @@ export function FundTradePanel({
         <button
           type="button"
           onClick={() => setMode("redeem")}
-          disabled={!canRedeem}
+          disabled={!!pendingOrder || !canRedeem}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-40 ${
             mode === "redeem"
               ? "bg-secondary/15 text-secondary border border-secondary/30"
@@ -395,6 +455,7 @@ export function FundTradePanel({
             <div className="relative">
               <button
                 type="button"
+                disabled={!!pendingOrder}
                 onClick={(e) => {
                   e.stopPropagation();
                   setCurrencyDropdownOpen((o) => !o);
@@ -422,6 +483,7 @@ export function FundTradePanel({
                       <button
                         key={code}
                         type="button"
+                        disabled={!!pendingOrder}
                         onClick={() => {
                           setSelectedPayCurrency(code);
                           setCurrencyDropdownOpen(false);
@@ -449,6 +511,7 @@ export function FundTradePanel({
               type="button"
               role="switch"
               aria-checked={autoConvertEnabled}
+              disabled={!!pendingOrder}
               onClick={handleAutoConvertToggle}
               className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
                 autoConvertEnabled ? "bg-primary" : "bg-card-border"
@@ -477,6 +540,7 @@ export function FundTradePanel({
           min={1}
           step={1}
           value={units}
+          disabled={!!pendingOrder}
           onChange={(e) => setUnits(e.target.value)}
           className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-mono tabular-nums focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/20"
         />

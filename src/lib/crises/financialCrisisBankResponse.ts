@@ -95,7 +95,7 @@ export async function applyFinancialCrisisBankResponse(
     .collection<FederalBudget>("federalBudget")
     .findOne({ countryId: ctx.countryId as FederalBudget["countryId"] });
   const currency = resolveCountryCurrencyCode(budget);
-  if (!currency) throw new Error("Treasury currency is unavailable");
+  if (!budget || !currency) throw new Error("Treasury currency is unavailable");
   const banks = rankBanksForFinancialIntervention(
     await ctx.db
       .collection<Corporation>("corporations")
@@ -140,6 +140,7 @@ export async function applyFinancialCrisisBankResponse(
   const transition = financialRescueTransition({
     key: actionId,
     countryId: ctx.countryId,
+    treasuryId: budget._id,
     currency,
     turn: ctx.currentTurn,
     amount,

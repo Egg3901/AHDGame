@@ -3,11 +3,13 @@ import type { User } from "@/lib/db/types";
 import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
 import { authMigrationFenceAbsentFilter } from "@/lib/auth/sourceFence";
 
-export type ProviderKind = "google" | "discord";
+export type ProviderKind = "google" | "discord" | "apple";
+
+const PROVIDER_KINDS: readonly ProviderKind[] = ["google", "discord", "apple"];
 
 type CredentialSnapshot = Pick<
   User,
-  "password" | "googleId" | "discordId" | "authRevokedAt" | "authMigrationFence"
+  "password" | "googleId" | "discordId" | "appleId" | "authRevokedAt" | "authMigrationFence"
 >;
 
 /** A stored password counts as a usable login method only when non-empty. */
@@ -17,10 +19,11 @@ export function hasUsablePassword(account: Pick<User, "password">): boolean {
 
 /** The linked provider id, or null when no usable link exists. */
 export function linkedProviderId(
-  account: Pick<User, "googleId" | "discordId">,
+  account: Pick<User, "googleId" | "discordId" | "appleId">,
   kind: ProviderKind
 ): string | null {
-  const raw = kind === "google" ? account.googleId : account.discordId;
+  const raw =
+    kind === "google" ? account.googleId : kind === "discord" ? account.discordId : account.appleId;
   return typeof raw === "string" && raw.length > 0 ? raw : null;
 }
 
@@ -42,6 +45,9 @@ export function providerWriteSnapshotFilter(account: CredentialSnapshot): Filter
     ...(account.discordId === undefined
       ? { discordId: { $exists: false } }
       : { discordId: account.discordId }),
+    ...(account.appleId === undefined
+      ? { appleId: { $exists: false } }
+      : { appleId: account.appleId }),
     isBanned: { $ne: true },
     ...authRevocationSnapshotFilter(account.authRevokedAt),
     ...authMigrationFenceAbsentFilter(),
@@ -57,7 +63,7 @@ export type ProviderLinkDecision =
  * explicit unlink first.
  */
 export function decideProviderLink(
-  account: Pick<User, "googleId" | "discordId">,
+  account: Pick<User, "googleId" | "discordId" | "appleId">,
   kind: ProviderKind,
   incomingId: string
 ): ProviderLinkDecision {
@@ -72,17 +78,19 @@ export type ProviderUnlinkDecision =
 
 /**
  * Unlinking the last remaining usable login method (non-empty password or
- * the other provider) would lock the account out, so it is rejected. An
+ * another provider) would lock the account out, so it is rejected. An
  * already-absent link is idempotent success regardless of other methods.
  */
 export function decideProviderUnlink(
-  account: Pick<User, "password" | "googleId" | "discordId">,
+  account: Pick<User, "password" | "googleId" | "discordId" | "appleId">,
   kind: ProviderKind
 ): ProviderUnlinkDecision {
   const linkedId = linkedProviderId(account, kind);
   if (!linkedId) return { ok: false, reason: "not_linked" };
-  const other = kind === "google" ? "discord" : "google";
-  if (!hasUsablePassword(account) && !linkedProviderId(account, other)) {
+  const otherLinked = PROVIDER_KINDS.some(
+    (other) => other !== kind && linkedProviderId(account, other) !== null
+  );
+  if (!hasUsablePassword(account) && !otherLinked) {
     return { ok: false, reason: "last_method" };
   }
   return { ok: true, linkedId };
