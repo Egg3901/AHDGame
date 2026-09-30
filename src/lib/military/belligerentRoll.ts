@@ -44,10 +44,14 @@ type RollInput = Pick<ConflictDoc, "hostCountry" | "sideA" | "sideB"> &
   Partial<Pick<ConflictDoc, "treatyEntries" | "joinTurns">>;
 
 /** The alliance's readable name, so a row says "Warsaw Pact" and not "WARSAW_PACT". */
-function orgName(organizationId: string): string {
+function orgName(organizationId: string, storedName?: string): string {
+  // Built-in short name first (the roll is a narrow column), then the name stored on
+  // the entry, which is the only place a custom alliance's name reaches this pure
+  // read model.
   return (
     INTERNATIONAL_ORGANIZATIONS[organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
       ?.shortName ??
+    storedName ??
     INTERNATIONAL_ORGANIZATIONS[organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]?.name ??
     organizationId
   );
@@ -76,7 +80,7 @@ function entryFor(
   if (treaty) {
     return {
       ...base,
-      entry: `${orgName(treaty.organizationId)} → ${treaty.defending}`,
+      entry: `${orgName(treaty.organizationId, treaty.organizationName)} → ${treaty.defending}`,
       viaTreaty: true,
     };
   }

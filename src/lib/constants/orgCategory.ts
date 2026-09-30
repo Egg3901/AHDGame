@@ -40,7 +40,20 @@ export interface OrgCategoryMeta {
   blurb: string;
   /** Resolution types orgs of this category may pass (enforced in Phase 2). */
   powers: OrganizationResolutionType[];
+  /**
+   * Which mutual-defence commitments this category can carry. Data, not a list of
+   * org ids: `mutualDefenceBasis` (`mutualDefence.ts`) reads these two switches and
+   * nothing else, so a new defensive category opts in here and every war-entry path
+   * follows.
+   *
+   * - `byPosture`: a posture whose `commitsMembers` is set (Article 5) binds members.
+   * - `honoursStandingCharter`: a def carrying `standingMutualDefence` binds members
+   *   at every posture.
+   */
+  mutualDefence: { byPosture: boolean; honoursStandingCharter: boolean };
 }
+
+const NO_MUTUAL_DEFENCE = { byPosture: false, honoursStandingCharter: false } as const;
 
 export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategoryMeta> = {
   political: {
@@ -50,6 +63,7 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     blurb: "A diplomatic forum — agency funding, joint statements, aid, and coordination.",
     // No FTAs: free trade is an economic/development instrument, not a diplomatic forum's.
     powers: ["fund_agency", "joint_statement", "aid_package"],
+    mutualDefence: NO_MUTUAL_DEFENCE,
   },
   economic: {
     label: "Economic",
@@ -57,16 +71,20 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     flagship: "market",
     blurb: "A trade and economic bloc — directives, free-trade agreements, sanctions, and aid.",
     powers: ["directive", "free_trade_agreement", "sanctions", "aid_package"],
+    mutualDefence: NO_MUTUAL_DEFENCE,
   },
   security: {
     label: "Security",
     flagshipLabel: "Alliance",
     flagship: "alliance",
     blurb:
-      "A defense alliance: collective posture, pledges, and joint statements. Members are not pulled into each other's wars.",
+      "A defense alliance: collective posture, pledges, and joint statements. At the Article 5 posture, an attack on one member brings the others into the war.",
     // A defense alliance has no trade/coercion instruments: no FTAs or sanctions —
     // just collective posture and joint statements (plus the baseline dues).
     powers: ["set_posture", "joint_statement"],
+    // Mutual defence is something the members vote themselves into (Article 5),
+    // not something membership alone imposes.
+    mutualDefence: { byPosture: true, honoursStandingCharter: false },
   },
   development: {
     label: "Development",
@@ -74,6 +92,7 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     flagship: "development",
     blurb: "A development bank — aid packages and trade access for members.",
     powers: ["aid_package", "free_trade_agreement"],
+    mutualDefence: NO_MUTUAL_DEFENCE,
   },
   bloc: {
     label: "Bloc",
@@ -93,6 +112,11 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     // war is the defining act of a bloc, and an ordinary defence pact — which is
     // what `security` models — does not get to make it.
     powers: ["set_posture", "joint_statement", "aid_package", "sanctions", "join_conflict"],
+    // A bloc honours Article 5 like any defence pact, and is also where a standing
+    // charter (NATO, the Warsaw Pact) binds without a vote: those two are `bloc` only
+    // in a world that began in the Cold War, which is exactly when their charters
+    // were enforced before this was data.
+    mutualDefence: { byPosture: true, honoursStandingCharter: true },
   },
 };
 

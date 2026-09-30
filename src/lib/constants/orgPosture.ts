@@ -12,6 +12,8 @@
  * `targetNudges` (smoothed, not hard-set), exactly like directives.
  */
 
+import { ORGANIZATION_CATEGORY_META, type OrganizationCategory } from "@/lib/constants/orgCategory";
+
 export type AlertPosture = "reduced" | "standard" | "heightened" | "article5";
 
 export const ALERT_POSTURES: AlertPosture[] = ["reduced", "standard", "heightened", "article5"];
@@ -23,29 +25,39 @@ export interface PostureMeta {
   blurb: string;
   /** UI tone for the badge/tile. */
   tone: "calm" | "neutral" | "warn" | "alarm";
+  /**
+   * Whether this posture binds members to defend each other. Honoured only by a
+   * category whose `mutualDefence.byPosture` is set (see `orgCategory.ts`); the
+   * rule itself lives in `mutualDefenceBasis` (`mutualDefence.ts`).
+   */
+  commitsMembers: boolean;
 }
 
 export const POSTURE_META: Record<AlertPosture, PostureMeta> = {
   reduced: {
     label: "Reduced",
-    blurb: "Peace footing — lower readiness in exchange for a civil-liberties dividend.",
+    blurb: "Peace footing: lower readiness in exchange for a civil-liberties dividend.",
     tone: "calm",
+    commitsMembers: false,
   },
   standard: {
     label: "Standard",
-    blurb: "Normal posture — no alliance-wide effect.",
+    blurb: "Normal posture: no alliance-wide effect.",
     tone: "neutral",
+    commitsMembers: false,
   },
   heightened: {
     label: "Heightened",
-    blurb: "Elevated alert — higher readiness at some cost to civil liberties.",
+    blurb: "Elevated alert: higher readiness at some cost to civil liberties.",
     tone: "warn",
+    commitsMembers: false,
   },
   article5: {
     label: "Article 5",
     blurb:
-      "Maximum readiness, at a civil-liberties and economic cost. Readiness only: it does not commit members to a war.",
+      "Mutual defence. When a member is declared on, every other member with a government enters the war on its side. Also maximum readiness, at a civil-liberties and economic cost.",
     tone: "alarm",
+    commitsMembers: true,
   },
 };
 
@@ -72,16 +84,31 @@ export function isAlertPosture(value: string): value is AlertPosture {
 }
 
 /**
- * How members actually enter a war, shown beside the posture so a player who sets
- * "Article 5" is not left believing it is a mutual-defence clause. Posture only
- * nudges metrics; war entry is decided by the category (see `treatyDefence.ts`
- * and the `join_conflict` resolution, which only blocs may table).
+ * How members of this organization enter a war, shown beside the posture so the
+ * player reads the actual rule rather than guessing it from the posture's name.
+ * The rule is `mutualDefenceBasis` (`mutualDefence.ts`); this is its copy, and
+ * both read the same category and posture data so they cannot drift apart.
  */
-export function postureWarEntryNote(category: string): string {
-  if (category === "bloc") {
-    return "No posture brings members into a war. A bloc enters a war through a unanimous conflict-entry resolution; NATO and the Warsaw Pact in Cold War worlds also join automatically when a member is declared on.";
+export function postureWarEntryNote(params: {
+  category: OrganizationCategory;
+  posture: AlertPosture;
+  /** The def's `standingMutualDefence`: a charter that binds without any posture. */
+  standingMutualDefence?: boolean;
+}): string {
+  const { category, posture, standingMutualDefence } = params;
+  const rules = ORGANIZATION_CATEGORY_META[category]?.mutualDefence;
+  if (!rules?.byPosture) {
+    return "This organization has no mutual-defence clause. Each member enters a war only through its own declaration of war.";
   }
-  return "No posture brings members into a war. This organization has no mutual-defence clause, so each member enters a war only through its own declaration of war.";
+  if (standingMutualDefence && rules.honoursStandingCharter) {
+    return "This alliance's charter binds its members in any posture. When a member is declared on, every other member with a government enters the war on its side.";
+  }
+  const defence = POSTURE_META[posture]?.commitsMembers
+    ? "At Article 5, a declaration of war on a member brings every other member with a government into the war on its side. Lowering the posture stops new entries but does not take anyone out of a war already joined."
+    : "Only Article 5 commits members to defend each other. At this posture, a declaration of war on a member brings nobody else in.";
+  return category === "bloc"
+    ? `${defence} A bloc can also call its members into any war through a unanimous conflict-entry resolution.`
+    : defence;
 }
 
 /** The alliance defense-spending pledge target, as a percent of GDP (NATO's 2%). */
