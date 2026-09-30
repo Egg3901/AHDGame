@@ -15,6 +15,7 @@ import {
   STALE_MARKET_MODE_STAMP_UNSET,
   STALE_PER_WORLD_GAME_CONFIG_UNSET,
 } from "@/lib/admin/seed/runCoreSeed";
+import { coreGameConfigUpdate } from "./coreGameConfigUpdate";
 import { gameConfig as referenceGameConfig } from "@/lib/seeds/reference/gameConfig";
 
 describe("runSeed reset drops", () => {
@@ -77,19 +78,17 @@ describe("reset adopts the reference market tier", () => {
   // world inherited its predecessor's tier — permanently, because the next
   // reset inherited it again. Observed on prod: a fresh 1953 world sitting on
   // "ledger" two raises of the reference default later.
-  const src = fs.readFileSync(
-    path.resolve(process.cwd(), "src/lib/admin/seed/runCoreSeed.ts"),
-    "utf8"
-  );
-
-  it("writes marketSystemMode through $set on a reset, not only $setOnInsert", () => {
-    const resetBranch = src.indexOf("reset\n      ? {");
-    const setOnInsert = src.indexOf(
-      "$setOnInsert: { marketSystemMode: referenceMarketSystemMode }"
-    );
-    expect(resetBranch).toBeGreaterThan(-1);
-    expect(setOnInsert).toBeGreaterThan(resetBranch);
-    expect(src).toContain("marketSystemMode: referenceMarketSystemMode,");
+  it("writes market and campaign modes on reset, preserving them during top-ups", () => {
+    const reset = coreGameConfigUpdate(true, 1991);
+    const topUp = coreGameConfigUpdate(false, 1991);
+    expect(reset.$set?.marketSystemMode).toBe(referenceGameConfig.marketSystemMode);
+    expect(reset.$set?.campaignEraPriceLevelEnabled).toBe(true);
+    expect(topUp.$set).not.toHaveProperty("marketSystemMode");
+    expect(topUp.$set).not.toHaveProperty("campaignEraPriceLevelEnabled");
+    expect(topUp.$setOnInsert).toEqual({
+      marketSystemMode: referenceGameConfig.marketSystemMode,
+      campaignEraPriceLevelEnabled: true,
+    });
   });
 
   it("clears the provenance stamps naming whoever set the previous world's tier", () => {
