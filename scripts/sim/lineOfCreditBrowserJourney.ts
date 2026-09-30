@@ -36,6 +36,7 @@ async function main() {
   global._mongoClientPromise = Promise.resolve(client);
   const db = client.db(target),
     retained = client.db(source);
+  const sourceHash = (await retained.command({ dbHash: 1 })).md5;
   assert.equal((await db.listCollections().toArray()).length, 0);
   for (const { name } of await retained.listCollections().toArray()) {
     const docs = await retained.collection(name).find({}).toArray();
@@ -59,6 +60,12 @@ async function main() {
     };
   };
   const before = await snapshot();
+  const checkpoints: Array<{ stage: string; state: Awaited<ReturnType<typeof snapshot>> }> = [];
+  const checkpoint = async (stage: string) => {
+    checkpoints.push({ stage, state: await snapshot() });
+    writeFileSync(`${out}.checkpoint.json`, JSON.stringify({ sourceCommit, checkpoints }, null, 2));
+  };
+  await checkpoint("before_browser");
   const app = bankingJourneyApp(uri, target, out, sourceCommit);
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
@@ -178,6 +185,7 @@ async function main() {
       )
       .waitFor({ timeout: 180000 });
     const afterLostResponse = await snapshot();
+    await checkpoint("afterLostResponse");
     assert.equal(afterLostResponse.wallet, before.wallet + 1000);
     assert.equal(afterLostResponse.loc.balances.USD, 1000);
     const [replayed] = await Promise.all([
@@ -188,6 +196,7 @@ async function main() {
     ]);
     assert(replayed.ok());
     const afterRetry = await snapshot();
+    await checkpoint("afterRetry");
     assert.deepEqual(afterRetry, afterLostResponse);
     assert.equal(commands[0].commandId, commands[1].commandId);
     await page.getByPlaceholder("1000", { exact: true }).fill("500");
@@ -200,6 +209,7 @@ async function main() {
     assert(next.ok());
     assert.notEqual(commands[2].commandId, commands[0].commandId);
     const afterNewDraw = await snapshot();
+    await checkpoint("afterNewDraw");
     assert.equal(afterNewDraw.loc.balances.USD, 1500);
     await page.getByPlaceholder("Amount", { exact: true }).fill("1000");
     const [repaid] = await Promise.all([
@@ -210,6 +220,7 @@ async function main() {
     ]);
     assert(repaid.ok());
     const afterRepay = await snapshot();
+    await checkpoint("afterRepay");
     assert.equal(afterRepay.loc.balances.USD, 500);
     assert.equal(afterRepay.wallet, before.wallet + 500);
     const game = await db.collection("gameState").findOne({ _id: "current" as never });
@@ -220,6 +231,7 @@ async function main() {
       .updateOne({ _id: "current" as never }, { $set: { currentTurn: turn } });
     const servicing = await processLineOfCreditTurn(db, turn, new Map(), new Map(), true);
     const afterTurn = await snapshot();
+    await checkpoint("afterTurn");
     assert(afterTurn.loc.balances.USD < 500);
     await page.reload({ waitUntil: "domcontentloaded", timeout: 180000 });
     const read = await context.request.get(`${app.base}/api/country/us/central-bank/loc`);
@@ -227,11 +239,13 @@ async function main() {
     const readModel = await read.json();
     assert.equal(readModel.snapshot.balances.USD, afterTurn.loc.balances.USD);
     assert.deepEqual(errors, []);
+    assert.equal((await retained.command({ dbHash: 1 })).md5, sourceHash);
     writeFileSync(
       out,
       JSON.stringify(
         {
           sourceCommit,
+          retainedSourceUnchanged: true,
           scope:
             "Existing LOC page against copied synthetic retained banking actors; real auth/routes/settlements and one LOC turn",
           before,
@@ -250,6 +264,9 @@ async function main() {
       )
     );
     console.log("LOC browser journey passed");
+  } catch (error) {
+    await checkpoint("stopped_after_error");
+    throw error;
   } finally {
     await browser?.close();
     app.finish(true);

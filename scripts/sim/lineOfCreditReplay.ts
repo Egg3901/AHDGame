@@ -5,11 +5,12 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { MongoClient, ObjectId, type Db } from "mongodb";
+import { BSON, MongoClient, ObjectId, type Db } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { processBondTurn } from "@/lib/turn/bondTurn";
 import { processLineOfCreditTurn } from "@/lib/turn/lineOfCreditTurn";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
-import { settleLocPlan, type LocPlan } from "@/lib/lineOfCredit/settlement";
+import { recoverPendingLoc, settleLocPlan, type LocPlan } from "@/lib/lineOfCredit/settlement";
 
 const arg = (key: string) =>
   process.argv.find((x) => x.startsWith(`--${key}=`))?.slice(key.length + 3);
@@ -90,7 +91,7 @@ async function state(db: Db) {
     campaign: char!.currencyBalances.campaign,
     loc: char!.lineOfCredit,
     banks: banks.map((b) => ({
-      bank: b._id,
+      bank: String(b._id),
       reserves: b.reserveBalance ?? 0,
       pool: b.externalBroadMoney ?? 0,
       savingsLiability: b.householdSavingsLiability ?? 0,
@@ -153,7 +154,32 @@ async function main() {
   );
   const old = await import(pathToFileURL(join(scratch, "baseline.ts")).href);
   Object.assign(process.env, { NODE_ENV: "test", MONGODB_URI: uri });
-  const client = await MongoClient.connect(uri);
+  const client = await MongoClient.connect(uri, { monitorCommands: true });
+  let collecting = false;
+  let commands = 0,
+    requestBytes = 0,
+    responseBytes = 0;
+  client.on("commandStarted", (event) => {
+    if (collecting) {
+      commands++;
+      requestBytes += BSON.calculateObjectSize(event.command);
+    }
+  });
+  client.on("commandSucceeded", (event) => {
+    if (collecting) responseBytes += BSON.calculateObjectSize(event.reply);
+  });
+  const measured = async <T>(work: () => Promise<T>) => {
+    commands = 0;
+    requestBytes = 0;
+    responseBytes = 0;
+    collecting = true;
+    try {
+      const value = await work();
+      return { value, roundTrips: commands, requestBytes, responseBytes };
+    } finally {
+      collecting = false;
+    }
+  };
   global._mongoClientPromise = Promise.resolve(client);
   const select = (name: string) => {
     Object.assign(process.env, { MONGODB_DB: name, MONGO_DB_NAME: name });
@@ -173,12 +199,17 @@ async function main() {
       const income = new Map([[owner.toHexString(), mode === "income_unfreeze" ? 100000 : 0]]);
       const base = select(`${prefix}_${mode}_base`);
       await seed(base, mode);
-      await old.processLineOfCreditTurn(base, 500, income, new Map(), true);
+      const baselineProfile = await measured(() =>
+        old.processLineOfCreditTurn(base, 500, income, new Map(), true)
+      );
       const beforeFix = await state(base);
       const db = select(`${prefix}_${mode}_fixed`);
       await seed(db, mode);
       const before = await state(db);
-      const outcome = await processLineOfCreditTurn(db, 500, income, new Map(), true);
+      const profile = await measured(() =>
+        processLineOfCreditTurn(db, 500, income, new Map(), true)
+      );
+      const outcome = profile.value;
       const after = await state(db);
       if (mode !== "savings_refused") assert.deepEqual(after, beforeFix, `Baseline parity ${mode}`);
       else {
@@ -196,6 +227,10 @@ async function main() {
         beforeFix,
         after,
         outcome,
+        performance: {
+          baseline: { ...baselineProfile, value: undefined },
+          fixed: { ...profile, value: undefined },
+        },
         sameTurnRetryUnchanged: true,
         ledgerCount,
       });
@@ -301,6 +336,85 @@ async function main() {
       trades,
       repeatedAfterUnfreezeUnchanged: true,
       changedIncomeStopped: true,
+    });
+    // Actual source phase, including the issuer cash debit before LOC diversion.
+    const sourceDb = select(`${prefix}_bond_source`);
+    await seed(sourceDb, "wallet");
+    await sourceDb.collection("characters").updateOne(
+      { _id: owner },
+      {
+        $set: {
+          lineOfCredit: { balances: { USD: 1 }, arrears: { USD: 1 }, drawFrozen: true },
+          "currencyBalances.personal": { USD: 0, EUR: 0 },
+        },
+      }
+    );
+    const issuer = new ObjectId("000000000000000000001329");
+    await sourceDb.collection("corporations").insertOne({
+      _id: issuer,
+      countryId: "DE",
+      liquidCurrencyCode: "EUR",
+      liquidCapital: 1000000,
+      name: "Synthetic coupon issuer",
+      status: "active",
+      netAssets: 1000000,
+    });
+    await sourceDb.collection("bonds").insertOne({
+      _id: new ObjectId("000000000000000000001330"),
+      issuerType: "corporation",
+      corporationId: issuer,
+      countryId: "DE",
+      currencyCode: "EUR",
+      couponRate: 5,
+      maturityTurn: 1000,
+      issuedTurn: 1,
+      matured: false,
+      defaulted: false,
+      holders: [{ characterId: owner, units: 200 }],
+      publicFloat: 0,
+      totalUnits: 200,
+      marketPrice: 1000,
+    });
+    const sourceFault = failAfter(sourceDb, "characters");
+    global._mongoClientPromise = Promise.resolve(
+      new Proxy(client, {
+        get(target, prop) {
+          if (prop === "db")
+            return (name?: string) =>
+              name === sourceDb.databaseName ? sourceFault.db : target.db(name);
+          const value = Reflect.get(target, prop);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      })
+    );
+    try {
+      await assert.rejects(processBondTurn(500), /acknowledgement/);
+    } finally {
+      global._mongoClientPromise = Promise.resolve(client);
+    }
+    assert(sourceFault.didFire());
+    const issuerAfterSource = (await sourceDb.collection("corporations").findOne({ _id: issuer }))!
+      .liquidCapital;
+    assert(issuerAfterSource < 1000000, "Actual source must pay the coupon");
+    const sourceAfterCommit = await state(sourceDb);
+    await recoverPendingLoc(sourceDb, 501);
+    const sourceAfterRecovery = await state(sourceDb);
+    assert.equal(
+      (await sourceDb.collection("corporations").findOne({ _id: issuer }))!.liquidCapital,
+      issuerAfterSource
+    );
+    assert.equal(await sourceDb.collection("tradeHistory").countDocuments(), 1);
+    await recoverPendingLoc(sourceDb, 501);
+    assert.deepEqual(await state(sourceDb), sourceAfterRecovery);
+    results.push({
+      case: "actual_bond_source_interruption",
+      issuerBefore: 1000000,
+      issuerAfterSource,
+      sourceAfterCommit,
+      sourceAfterRecovery,
+      durableRecoveryDoesNotRerunSource: true,
+      scope:
+        "Actual processBondTurn through its issuer debit and joined LOC/residual publication, then pending journal recovery; whole bond phase replay is not claimed",
     });
     writeFileSync(
       out,

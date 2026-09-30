@@ -321,10 +321,31 @@ export function locInterestCredits(amounts: Partial<Record<CurrencyCode, number>
     }));
 }
 
-/** Uses the existing status/kind/createdAt index and a fixed recovery budget. */
+/** Prioritize durable bank owners, then the indexed queue, within one fixed budget. */
 export async function recoverPendingLoc(db: Db, turn: number) {
-  const records = await db
-    .collection<LocRecord>(MONEY_MOVE_COLLECTION)
+  const journal = db.collection<LocRecord>(MONEY_MOVE_COLLECTION);
+  const owners = await db
+    .collection<{ _id: string; pendingLocBookMutationId?: string }>("centralBanks")
+    .find(
+      { pendingLocBookMutationId: { $exists: true } },
+      { projection: { pendingLocBookMutationId: 1 } }
+    )
+    .limit(50)
+    .toArray();
+  const owned = owners.length
+    ? await journal
+        .find(
+          {
+            _id: { $in: owners.map((bank) => bank.pendingLocBookMutationId!) },
+            status: "partial",
+            kind: "line_of_credit",
+          },
+          { projection: { _id: 1 } }
+        )
+        .limit(50)
+        .toArray()
+    : [];
+  const records = await journal
     .find(
       { status: "partial", kind: "line_of_credit", turn: { $lt: turn } },
       { projection: { _id: 1 } }
@@ -332,5 +353,23 @@ export async function recoverPendingLoc(db: Db, turn: number) {
     .sort({ createdAt: 1 })
     .limit(50)
     .toArray();
-  for (const record of records) await resumeLocSettlement(db, record._id);
+  const keys = [...new Set([...owned, ...records].map((record) => record._id))].slice(0, 50);
+  const failed: string[] = [];
+  for (const key of keys) {
+    try {
+      await resumeLocSettlement(db, key);
+    } catch (error) {
+      failed.push(key);
+      await journal.updateOne(
+        { _id: key, status: "partial" },
+        {
+          $set: {
+            error: error instanceof Error ? error.message : "LOC recovery remains pending",
+            recoveryAttemptTurn: turn,
+          },
+        }
+      );
+    }
+  }
+  return { attempted: keys.length, failed };
 }
