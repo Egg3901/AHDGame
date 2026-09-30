@@ -33,3 +33,5 @@ export async function loadRuntimeCountryOffices(
       : null;
   return resolveCountryOfficeLayout(getCountryConfigForRuntime(countryId, activePreset, country));
 }
+
+export type RuntimeCountryOffices = Awaited<ReturnType<typeof loadRuntimeCountryOffices>>;
