@@ -10,6 +10,7 @@
  * All data loaded upfront into shared context for consistency.
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { loadNPPContext } from "./npp/context";
 import { getDb } from "@/lib/mongodb";
 import { processNppMortality } from "@/lib/npp/mortality";
@@ -43,7 +44,10 @@ export async function processNPPTurn(
   const timingOn = process.env.SIM_CORP_TIMING === "1";
   const timings: Array<[string, number]> = [];
   let _tPrev = timingOn ? Date.now() : 0;
+  // Always feeds the persisted phase sub-steps (#2689).
+  const steps = substepMarker();
   const mark = (label: string): void => {
+    steps.mark(label);
     if (!timingOn) return;
     const nowMs = Date.now();
     timings.push([label, nowMs - _tPrev]);
