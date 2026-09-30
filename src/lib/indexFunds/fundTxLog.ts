@@ -180,6 +180,9 @@ export async function logIndexFundRedeem(
     currencyCode: params.fund.anchorCurrencyCode as CurrencyCode,
     // `amountAnchor` is ₳; `amount` is the native figure the wallet moved. See
     // logIndexFundSubscribe for why anchorAmount is stated rather than derived.
+    // NPP investment cash is already anchor-valued. Its home-currency suffix
+    // identifies the snapshot account, not a native FX conversion: both amount
+    // and anchorAmount witness the stored nppInvestmentCashAnchor increment.
     counterpartyType: "system",
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {
@@ -263,6 +266,9 @@ export function buildIndexFundDividendTxEntry(params: {
         : params.fund.anchorCurrencyCode,
     // `amountAnchor` is ₳; `amount` is the native figure the wallet moved. See
     // logIndexFundSubscribe for why anchorAmount is stated rather than derived.
+    // NPP investment cash is already anchor-valued. Its home-currency suffix
+    // identifies the snapshot account, not a native FX conversion: both amount
+    // and anchorAmount witness the stored nppInvestmentCashAnchor increment.
     counterpartyType: "system",
     counterpartyName: params.fund.name,
     meta: buildFundMeta(params.fund, {
