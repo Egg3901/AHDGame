@@ -22,6 +22,8 @@ import type { Bill } from "@/lib/db/types/legislation";
 
 const bodySchema = z.object({
   negotiatedCustodians: z.record(z.string(), z.string()).default({}),
+  assetSharesBps: z.record(z.string(), z.number().int().min(0).max(10_000)).optional(),
+  debtSharesBps: z.record(z.string(), z.number().int().min(0).max(10_000)).optional(),
 });
 
 function sourceForCode(code: string): DefaultFederationSource | null {
@@ -67,6 +69,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
             billId: proposal.billId.toString(),
             billStatus: bill?.status ?? null,
             termsHash: proposal.termsHash,
+            financialTerms: {
+              assetBasis: proposal.terms.assetBasis,
+              debtBasis: proposal.terms.debtBasis,
+              assetSharesBps: proposal.terms.assetWeights,
+              debtSharesBps: proposal.terms.debtWeights,
+            },
           }
         : null,
     });
@@ -126,6 +134,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     );
     const assigned = parsed.data.negotiatedCustodians;
     const participants = new Set(defaultFederationParticipants(sourceCountryId));
+    for (const shares of [parsed.data.assetSharesBps, parsed.data.debtSharesBps]) {
+      if (
+        shares !== undefined &&
+        (Object.keys(shares).length !== participants.size ||
+          Object.keys(shares).some((id) => !participants.has(id)) ||
+          Object.values(shares).reduce((sum, share) => sum + share, 0) !== 10_000)
+      )
+        return NextResponse.json(
+          { error: "Financial shares must name every successor and total 10,000 basis points." },
+          { status: 400 }
+        );
+    }
     if (
       Object.keys(assigned).length !== sharedAssets.length ||
       sharedAssets.some(({ assetId }) => !participants.has(assigned[assetId]))
@@ -140,6 +160,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       currentYear,
       now: new Date(),
       negotiatedCustodians: assigned,
+      assetSharesBps: parsed.data.assetSharesBps,
+      debtSharesBps: parsed.data.debtSharesBps,
     });
     return NextResponse.json(
       { billId: proposal.billId.toString(), status: proposal.status },

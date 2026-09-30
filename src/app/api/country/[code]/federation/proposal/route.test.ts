@@ -25,11 +25,11 @@ import { GET, POST } from "./route";
 
 const params = { params: Promise.resolve({ code: "cs" }) };
 const characterId = new ObjectId();
-function request() {
+function request(financialTerms: Record<string, unknown> = {}) {
   return new Request("http://localhost/api/country/cs/federation/proposal", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ negotiatedCustodians: {} }),
+    body: JSON.stringify({ negotiatedCustodians: {}, ...financialTerms }),
   });
 }
 
@@ -61,6 +61,52 @@ describe("federation proposal action", () => {
     expect(response.status).toBe(403);
     expect(await mem.collection("bills").countDocuments({})).toBe(0);
   });
+
+  it("binds separate asset and debt shares into the ordinary mandate", async () => {
+    const chamber = getCountryConfig("CS", "1991-default").legislature.lowerChamber.key;
+    mem.seed("electedOfficials", [
+      {
+        _id: new ObjectId(),
+        characterId,
+        countryId: "CS",
+        officeType: getOfficeTypeForChamber("CS", chamber, "1991-default"),
+      },
+    ]);
+    const response = await POST(
+      request({ assetSharesBps: { CZ2: 6000, SK: 4000 }, debtSharesBps: { CZ2: 7000, SK: 3000 } }),
+      params
+    );
+    expect(response.status).toBe(201);
+    const proposal = await mem
+      .collection("federationPoliticalProposals")
+      .findOne({ sourceEntityId: "CS" });
+    const bill = await mem.collection("bills").findOne({ _id: proposal!.billId });
+    expect(bill?.summary).toContain("Public financial assets use CZ2 60.00%, SK 40.00%");
+    expect(bill?.summary).toContain("Existing debt and any cash deficit use CZ2 70.00%, SK 30.00%");
+    expect(proposal?.terms).toMatchObject({
+      assetBasis: "negotiated",
+      debtBasis: "negotiated",
+      assetWeights: { CZ2: 6000, SK: 4000 },
+      debtWeights: { CZ2: 7000, SK: 3000 },
+    });
+  });
+
+  it.each([{ CZ2: 6000, SK: 3000 }, { CZ2: 6000, RU: 4000 }, { CZ2: 10000 }])(
+    "rejects incomplete or unbalanced financial shares before opening a bill: %j",
+    async (assetSharesBps) => {
+      const chamber = getCountryConfig("CS", "1991-default").legislature.lowerChamber.key;
+      mem.seed("electedOfficials", [
+        {
+          _id: new ObjectId(),
+          characterId,
+          countryId: "CS",
+          officeType: getOfficeTypeForChamber("CS", chamber, "1991-default"),
+        },
+      ]);
+      expect((await POST(request({ assetSharesBps }), params)).status).toBe(400);
+      expect(await mem.collection("bills").countDocuments({})).toBe(0);
+    }
+  );
 
   it("opens the Soviet split through the seated Union Congress and lists all republics", async () => {
     mem.seed("states", sovietUnionRegions1991 as unknown as Record<string, unknown>[]);

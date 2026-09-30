@@ -19,6 +19,15 @@
       "contribution": "Beitrag in dieser Runde",
       "arrears": "Offene Rückstände",
       "risk": "Unbezahlte Beiträge senken die Stabilität der Nachfolgestaaten. Spätere Beiträge tilgen den Überziehungskredit."
+    },
+    "federationDecisions": {
+      "assets": "Anteile am öffentlichen Finanzvermögen",
+      "debt": "Anteile an Staatsschulden und Kassendefizit",
+      "population": "Aktuelle Bevölkerungsanteile verwenden",
+      "negotiated": "Ausgehandelte Anteile vorschlagen",
+      "totalRequired": "Gib jeden Nachfolgestaat an. Jede Aufteilung muss insgesamt 100 Prozent ergeben.",
+      "percentLabel": "Anteil von {entity} (%)",
+      "share": "{entity}: {share}"
     }
   }
 }
