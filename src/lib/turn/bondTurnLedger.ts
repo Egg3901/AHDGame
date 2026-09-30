@@ -200,6 +200,8 @@ export async function emitBondTurnLedger(args: {
       subjectName: `${cid} Government`,
       amount: -total,
       currencyCode: currency,
+      // Holder-service telemetry; the treasury owner accrues debt-service cash.
+      meta: { treasuryCashMovement: false },
     }));
 
     // Bond coupon rows must be durable before the phase returns. The admin

@@ -282,6 +282,13 @@ export function deriveLedgerEntry(
   tx: DerivableTx,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
+  // These marked rows describe tax-base or holder-service statistics. Their
+  // emitters never move treasury cash; the fiscal accrual owner witnesses that.
+  if (
+    (tx.type === "gov_tax_revenue" || tx.type === "gov_coupon_payment") &&
+    tx.meta?.treasuryCashMovement === false
+  )
+    return null;
   // Securitizing historical principal changes its instrument, never treasury cash.
   if (tx.type === "gov_bond_issuance" && tx.meta?.reconcile === true) return null;
   // The settlement already owns a durable multi-leg witness for this receipt.

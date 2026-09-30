@@ -134,6 +134,7 @@ export type FinancialTxType =
   | "caucus_tax_debit"
 
   // Government & subsidies
+  | "gov_fiscal_accrual"
   | "gov_tax_revenue"
   | "gov_bond_issuance"
   | "gov_coupon_payment"
