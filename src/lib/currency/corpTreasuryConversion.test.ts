@@ -20,6 +20,33 @@ describe("corpTreasuryConversion", () => {
     expect(getFxLocalPerInternalForCorpHome(corp, jpFxMap)).toBe(106);
   });
 
+  it("prefers the stamped home currency over the era-blind map", () => {
+    // A 2027 French corp seeds as EUR while the map still says FRF; the
+    // legacy code matches no FX row, so map-first resolution would fall
+    // back to 1.0 and misprice every conversion.
+    const fx = buildFxLocalPerInternalMap([
+      { currencyCode: "EUR", rate: 0.92 },
+      { currencyCode: "FRF", rate: 4.2 },
+    ]);
+    const corp = { countryId: "FR", liquidCurrencyCode: "EUR" } as Pick<
+      Corporation,
+      "countryId" | "liquidCurrencyCode"
+    >;
+    expect(getFxLocalPerInternalForCorpHome(corp, fx)).toBe(0.92);
+  });
+
+  it("keeps map resolution for unstamped corps (1991 passthrough)", () => {
+    const fx = buildFxLocalPerInternalMap([
+      { currencyCode: "EUR", rate: 0.92 },
+      { currencyCode: "FRF", rate: 4.2 },
+    ]);
+    const corp = { countryId: "FR", liquidCurrencyCode: undefined } as Pick<
+      Corporation,
+      "countryId" | "liquidCurrencyCode"
+    >;
+    expect(getFxLocalPerInternalForCorpHome(corp, fx)).toBe(4.2);
+  });
+
   it("internalSectorCostToTreasuryLiquidUnits leaves pre-migration corps unchanged", () => {
     const corp = { countryId: "JP", liquidCurrencyCode: undefined } as Pick<
       Corporation,

@@ -77,6 +77,7 @@ vi.mock("@/lib/constants/countries", () => ({
     officeTypes: [],
   }),
   getExecutiveOfficeKey: vi.fn().mockReturnValue("prime_minister"),
+  getHeadOfGovernmentOfficeKey: vi.fn().mockReturnValue("prime_minister"),
 }));
 
 const NOW = new Date("2025-06-15T12:00:00Z");

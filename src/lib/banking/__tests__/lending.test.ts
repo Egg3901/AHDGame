@@ -152,6 +152,31 @@ describe("banking lending", () => {
     });
   });
 
+  it("underwrites a 2027 French borrower with the live EUR rate", async () => {
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "2027-default",
+      currentTurn: 1,
+    });
+    db.collectionMocks.exchangeRates!.find().toArray.mockResolvedValue([
+      { _id: "EUR", currencyCode: "EUR", rate: 1.2 },
+      { _id: "USD", currencyCode: "USD", rate: 1 },
+    ]);
+    vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(120);
+
+    const { characterIncomeInLoanCurrency } = await importLending();
+    const character = { _id: new ObjectId(), countryId: "FR" } as never;
+    const income = await characterIncomeInLoanCurrency(db as unknown as Db, character, "USD");
+
+    expect(income).toBeCloseTo(100);
+    expect(estimatePerTurnCurrencyIncomeHomeFace).toHaveBeenCalledWith(
+      db,
+      character,
+      expect.objectContaining({ EUR: 1.2 }),
+      expect.objectContaining({ preset: "2027-default" })
+    );
+  });
+
   describe("originateLoan through the boundary and journal", () => {
     const BORROWER_CORP = new ObjectId();
     const BORROWER_CHAR = new ObjectId();

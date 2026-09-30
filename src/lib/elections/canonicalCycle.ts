@@ -92,7 +92,8 @@ const BETA_PARLIAMENT_CYCLES: Record<
       | "frSenat"
       | "ruSupremeSoviet"
       | "ruRepublicSoviet"
-      | "ddVolkskammer";
+      | "ddVolkskammer"
+      | "csFederalAssembly";
     periodHours: number;
   }
 > = {
@@ -148,6 +149,7 @@ const BETA_PARLIAMENT_CYCLES: Record<
   // land. Era-gated OFF outside 1953/1979 via null ddVolkskammer.
   sejm: { anchor: "ddVolkskammer", periodHours: 192 },
   chamberOfThePeople: { anchor: "ddVolkskammer", periodHours: 240 },
+  chamberOfNations: { anchor: "csFederalAssembly", periodHours: 96 },
   nationalAssembly: { anchor: "ddVolkskammer", periodHours: 240 },
   grandNationalAssembly: { anchor: "ddVolkskammer", periodHours: 240 },
   federalAssembly: { anchor: "ddVolkskammer", periodHours: 192 },
@@ -246,6 +248,87 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   const dur = DEFAULT_DURATIONS[electionType];
   if (!dur) return null;
   const anchors = getCycleAnchors(ctx);
+  // Romania's 1990 constituent chambers stood until the September 1992
+  // election. Subsequent parliamentary terms are modeled on a four-year cycle.
+  // The 1992 seat redistribution (341 deputies, 143 senators) still needs a
+  // timed regional/chamber transition; the current regions retain 396/119.
+  // https://legislatie.just.ro/public/DetaliiDocument/94779
+  // https://legislatie.just.ro/public/DetaliiDocument/94780
+  if (
+    countryId === "RO" &&
+    ctx.preset === "1991-default" &&
+    (electionType === "chamberOfDeputies" || electionType === "senat")
+  ) {
+    const endTurn =
+      (1992 - ctx.startingYear + 1) * 48 + (ctx.preIterationTurns ?? 0) + (cycle - 1) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+
+  // The same election law requires both chambers to vote together and begin
+  // and end their terms together. PL has no Senate in the Cold War presets.
+  // https://libr.sejm.gov.pl/tek01/txt/aktpl/e1991-tekst.html
+  if (countryId === "PL" && electionType === "senat" && ctx.preset !== "1991-default") {
+    return null;
+  }
+  if (
+    ctx.preset === "1991-default" &&
+    countryId === "PL" &&
+    (electionType === "sejm" || electionType === "senat")
+  ) {
+    const firstElection = anchors.plSejm;
+    if (firstElection == null) return null;
+    // The Sejm elected on 27 October 1991 was dissolved early; its successor
+    // was elected on 19 September 1993. Model four-year terms after that.
+    // Polish Election Commission notices, as published by the Sejm:
+    // https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WMP19910410288
+    // https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=wmp19930500470
+    // At the turn-1 reset, the 48-turn year-end anchor offers only 23 primary
+    // turns after turn 1. One bootstrap turn keeps the required 24+24 window.
+    const endTurn = cycle === 1 ? firstElection + 1 : firstElection + 96 + (cycle - 2) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+
+  // The 1991 successor parliaments have their own post-1990 election dates.
+  // Cold War lower chambers retain the existing Volkskammer schedule.
+  const bgOrdinaryAssembly =
+    ctx.preset === "1991-default" && countryId === "BG" && electionType === "nationalAssembly";
+  if (bgOrdinaryAssembly) {
+    // 13 October 1991 is the second October game week. The next ordinary
+    // election was December 1994; later cycles use a four-year approximation.
+    const firstTurn = (1991 - ctx.startingYear) * 48 + 38 + (ctx.preIterationTurns ?? 0);
+    const endTurn =
+      cycle === 1
+        ? firstTurn
+        : (1994 - ctx.startingYear + 1) * 48 + (cycle - 2) * 192 + (ctx.preIterationTurns ?? 0);
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+  const successorAnchor =
+    ctx.preset === "1991-default" && countryId === "CS" && electionType === "chamberOfThePeople"
+      ? anchors.csFederalAssembly
+      : ctx.preset === "1991-default" && countryId === "HU" && electionType === "nationalAssembly"
+        ? anchors.huNationalAssembly
+        : null;
+  if (successorAnchor != null) {
+    const periodHours = electionType === "chamberOfThePeople" ? 96 : 192;
+    const endTurn = successorAnchor + (cycle - 1) * periodHours;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
 
   // Concurrent-general countries (NG): President + NASS + Governors share ONE
   // 4-year (192-turn) cycle anchored to `ngGeneral`, dropping the US senate-class

@@ -43,6 +43,7 @@ import {
   getCountryConfig,
   COUNTRY_ORDER,
   getExecutiveOfficeKey,
+  getHeadOfGovernmentOfficeKey,
   isParliamentarySystem,
 } from "@/lib/constants/countries";
 import {
@@ -596,7 +597,7 @@ export async function appointPrimeMinister(
 
   // Scope PM clear to this country — other countries may have their own PM
   const clearPM = { $set: { currentOffice: null, updatedAt: now } };
-  const execKey = getExecutiveOfficeKey(countryId, activePreset);
+  const execKey = getHeadOfGovernmentOfficeKey(countryId, activePreset);
   await Promise.all([
     db
       .collection<Character>("characters")
@@ -1683,7 +1684,7 @@ export async function unformGovernmentAndVacatePM(
   ]);
 
   const clearPM = { $set: { currentOffice: null, updatedAt: now } };
-  const execKeyVacate = getExecutiveOfficeKey(countryId);
+  const execKeyVacate = getHeadOfGovernmentOfficeKey(countryId, await getGameStatePreset(db));
   await Promise.all([
     db
       .collection<Character>("characters")
@@ -1889,7 +1890,15 @@ export async function failInProgressBills(
 
 /** Returns all active/beta/coming-soon parliamentary country IDs. */
 export function getParliamentaryCountryIds(preset?: string): CountryId[] {
-  return COUNTRY_ORDER.filter((id) => isParliamentarySystem(getCountryConfig(id, preset)));
+  return COUNTRY_ORDER.filter((id) => {
+    const config = getCountryConfig(id, preset);
+    return (
+      isParliamentarySystem(config) ||
+      (config.governmentType === "presidential" &&
+        config.electionSystems.headOfGovernment === "parliamentary" &&
+        getHeadOfGovernmentOfficeKey(id, preset) !== getExecutiveOfficeKey(id, preset))
+    );
+  });
 }
 
 /**

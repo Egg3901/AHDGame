@@ -1,8 +1,8 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation, FederalBudget } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
-import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { resolveCountryCurrencyCode, writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
 import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
 
 /**
@@ -35,6 +35,14 @@ async function incTreasuryBalance(
     .updateOne({ countryId }, { $inc: { treasuryBalance: delta }, $set: { updatedAt: now } });
 }
 
+/** Resolve the denomination of the persisted treasury, including 2027 EUR budgets. */
+export async function loadTreasuryCurrency(db: Db, countryId: CountryId): Promise<CurrencyCode> {
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId }, { projection: { countryId: 1, currencyCode: 1 } });
+  return resolveCountryCurrencyCode(budget ?? { countryId }) ?? "USD";
+}
+
 /**
  * Debit `payoutAnchor` (₳) of nationalization compensation from the country's
  * treasury, converting to home currency at `fxByCurrency`. Returns the local
@@ -48,11 +56,12 @@ export async function debitTreasuryCompensation(
   countryId: CountryId,
   payoutAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  treasuryCurrency?: CurrencyCode
 ): Promise<number> {
   if (payoutAnchor <= 0) return 0;
 
-  const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
+  const currency = treasuryCurrency ?? (await loadTreasuryCurrency(db, countryId));
   const rate = fxByCurrency.get(currency) ?? 1;
   const payoutLocal = Math.round(writeGovBudgetLocal(payoutAnchor, currency, rate));
 
@@ -118,7 +127,7 @@ export async function creditTreasuryProceedsFromAnchor(
   now: Date
 ): Promise<number> {
   if (!(proceedsAnchor > 0)) return 0;
-  const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
+  const currency = await loadTreasuryCurrency(db, countryId);
   const rate = await getCurrencyFxRate(db, currency);
   const amount = Math.round(writeGovBudgetLocal(proceedsAnchor, currency, rate));
   if (amount <= 0) return 0;
@@ -137,10 +146,11 @@ export async function coverSoeOperatingLoss(
   countryId: CountryId,
   shortfallAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  treasuryCurrency?: CurrencyCode
 ): Promise<number> {
   if (shortfallAnchor <= 0) return 0;
-  const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
+  const currency = treasuryCurrency ?? (await loadTreasuryCurrency(db, countryId));
   const rate = fxByCurrency.get(currency) ?? 1;
   const local = Math.round(writeGovBudgetLocal(shortfallAnchor, currency, rate));
   await incTreasuryBalance(db, countryId, -local, now);
@@ -165,10 +175,11 @@ export async function debitTreasurySoeCapex(
   countryId: CountryId,
   grantAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  treasuryCurrency?: CurrencyCode
 ): Promise<number> {
   if (!(grantAnchor > 0)) return 0;
-  const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
+  const currency = treasuryCurrency ?? (await loadTreasuryCurrency(db, countryId));
   const rate = fxByCurrency.get(currency) ?? 1;
   const local = Math.round(writeGovBudgetLocal(grantAnchor, currency, rate));
   if (local <= 0) return 0;

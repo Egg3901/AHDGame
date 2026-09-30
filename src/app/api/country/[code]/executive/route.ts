@@ -18,6 +18,7 @@ import {
   isParliamentarySystem,
   supportsSnapElections,
   getHeadOfStateOfficeType,
+  getCountryConfigForRuntime,
   type CountryId,
 } from "@/lib/constants/countries";
 import type { ElectedOfficial, Character, PoliticalParty } from "@/lib/db/types";
@@ -223,7 +224,20 @@ async function handleUS() {
 async function handleParliamentary(countryId: CountryId) {
   const db = await getDb();
   const authUser = await getAuthUser().catch(() => null);
-  const config = COUNTRY_CONFIGS[countryId];
+  const [world, countryState] = await Promise.all([
+    db.collection<{ _id: string; preset?: string }>("gameState").findOne({ _id: "current" }),
+    countryId === "RU"
+      ? db
+          .collection<{
+            _id: string;
+            ruPresidencySinceTurn?: number;
+            ruCongressDissolvedSinceTurn?: number;
+            ruFederalAssemblySinceTurn?: number;
+          }>("countryGameStates")
+          .findOne({ _id: "RU" })
+      : Promise.resolve(null),
+  ]);
+  const config = getCountryConfigForRuntime(countryId, world?.preset, countryState);
   // Office type seated lower-chamber members are stored under. Differs from the
   // chamber key for CN (key "npc" vs office type "npcDelegate"); using the raw
   // key would match zero CN delegates, collapsing seat weights to an unweighted
@@ -396,7 +410,7 @@ async function handleParliamentary(countryId: CountryId) {
       seatsByParty: liveSeatsByParty,
       totalSeats: govFormation.totalSeats,
       formedAt: govFormation.formedAt,
-      ...(COUNTRY_CONFIGS[countryId].headOfStateSelection === "legislatureAppointment"
+      ...(config.headOfStateSelection === "legislatureAppointment"
         ? { hosName: govFormation.hosName ?? null }
         : {}),
     };

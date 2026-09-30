@@ -134,6 +134,12 @@ export interface CorporationDetail {
   sequentialId?: number;
   name: string;
   /**
+   * True when a published, non-private `corp-<sequentialId>` wiki page exists.
+   * The hero only links to Wiki when this is true: an unpublished slug renders
+   * the wiki Not Found page (#2347). Absent on stale payloads; treat as unknown.
+   */
+  wikiPagePublished?: boolean;
+  /**
    * CEO self-acquisition window status — present only for the corp's own CEO.
    * Drives the buy-modal live status + countdown for the 10%/120-turn cap.
    */

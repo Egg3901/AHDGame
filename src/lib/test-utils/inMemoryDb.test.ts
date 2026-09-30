@@ -248,6 +248,7 @@ describe("bulkWrite update/delete many", () => {
     ]);
 
     expect(res.modifiedCount).toBe(2);
+    expect(res.matchedCount).toBe(2);
     expect(await coll.countDocuments({ representingUnionId: "u1" })).toBe(2);
     expect(await coll.countDocuments({ representingUnionId: null })).toBe(1);
   });

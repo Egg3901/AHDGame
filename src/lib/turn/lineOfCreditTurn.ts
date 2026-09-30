@@ -38,6 +38,7 @@ import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
+import { getGameState } from "@/lib/gameState";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -129,6 +130,7 @@ export async function processLineOfCreditTurn(
   // One policy read per turn, like every other banking-aware pass: a flag
   // flipped mid-turn must not split this pass between two models.
   const bankingPolicy = await loadBankingPolicy(db);
+  const gameState = await getGameState(db);
   const centralBankPricing = await loadCentralBankPricingAdjustment(db, turn);
   const rates = await loadExchangeRatesMap(db);
   const banks = await db
@@ -172,7 +174,7 @@ export async function processLineOfCreditTurn(
 
     const incomeInternal = currencyIncomeInternalByCharacterId.get(char._id.toString()) ?? 0;
 
-    const home = getHomeCurrency(char);
+    const home = getHomeCurrency(char, gameState?.preset);
     const rateHome = rates[home] ?? 1;
     const incomeHomeFace = fromInternalUnits(incomeInternal, rateHome);
     const incomeScore = incomeScoreFromPerTurnCurrency(incomeHomeFace);

@@ -38,4 +38,20 @@ describe("party seed registry", () => {
       }
     }
   });
+
+  it("starts the January 1991 successor roster with organizations that already existed", () => {
+    const russian = partySeedsForPreset("RU", "1991-default");
+    const yugoslav = partySeedsForPreset("YU", "1991-default");
+    expect(russian.map((party) => party.name)).toContain("Democratic Party of Russia");
+    expect(russian.map((party) => party.name)).not.toContain(
+      "Liberal Democratic Party of the Soviet Union"
+    );
+    expect(yugoslav.find((party) => party.regimeStatus === "ruling")?.name).toBe(
+      "Alliance of Reform Forces of Yugoslavia"
+    );
+    expect(yugoslav.map((party) => party.name)).toContain("League of Communists of Montenegro");
+    expect(yugoslav.map((party) => party.name)).not.toContain(
+      "Democratic Party of Socialists of Montenegro"
+    );
+  });
 });

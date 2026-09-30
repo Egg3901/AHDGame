@@ -86,15 +86,15 @@ export {
 export { ensureDEElections } from "./perpetualElections/countries/de";
 export {
   ensureBALElections,
-  ensureBGElections,
   ensureBLRElections,
-  ensureCSElections,
-  ensureHUElections,
-  ensurePLElections,
-  ensureROElections,
   ensureUKRElections,
   ensureYUElections,
 } from "./perpetualElections/countries/easternBloc";
+export { ensureHUElections } from "@/lib/countries/hu/perpetualElections";
+export { ensureCSElections, ensureCSNationsElections } from "@/lib/countries/cs/elections";
+export { ensurePLElections, ensurePLSenateElections } from "@/lib/countries/pl/elections";
+export { ensureBGElections } from "@/lib/countries/bg/elections";
+export { ensureROElections } from "@/lib/countries/ro/elections";
 export {
   ensureIECathaoirleachElections,
   ensureIEElections,

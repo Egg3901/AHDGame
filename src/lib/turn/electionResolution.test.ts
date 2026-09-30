@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
+import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -349,6 +350,110 @@ describe("electionResolution", () => {
           }),
         }),
       ]);
+    });
+  });
+
+  describe("Hungary 2014 resolution", () => {
+    it("resolves six regional races from one 106-district and 93-list national plan", async () => {
+      vi.clearAllMocks();
+      const elections = huRegions1991.map((region) => ({
+        _id: new ObjectId(),
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        state: String(region._id),
+        cycle: 6,
+        electionYear: 2014,
+        status: "completed",
+        totalSeats: region.houseDistricts,
+      })) as Election[];
+      const tallies = elections.map((election, index) => {
+        const a = new ObjectId().toString();
+        const b = new ObjectId().toString();
+        return {
+          electionId: election._id,
+          totalVotes: { [a]: index < 3 ? 65_000 : 35_000, [b]: index < 3 ? 35_000 : 65_000 },
+          candidateParties: { [a]: "a", [b]: "b" },
+        };
+      });
+      const electionUpdates = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+      const stateWrites = vi.fn().mockResolvedValue({});
+      const db = {
+        collection: vi.fn((name: string) => {
+          if (name === "elections")
+            return {
+              find: () => ({ toArray: async () => elections }),
+              updateOne: electionUpdates,
+              countDocuments: async () => 0,
+            };
+          if (name === "electionVoteTallies")
+            return { find: () => ({ toArray: async () => tallies }) };
+          if (name === "states")
+            return { find: () => ({ toArray: async () => huRegions1991 }), bulkWrite: stateWrites };
+          if (name === "gameState")
+            return { findOne: async () => ({ currentTurn: 1123, preset: "1991-default" }) };
+          return {};
+        }),
+      };
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      vi.mocked(resolveOneGeneralElection).mockResolvedValue({ resolved: true, newsOutcomes: [] });
+
+      const { resolveGeneralElections } = await import("./electionResolution");
+      expect(await resolveGeneralElections(new Date("2026-01-01T00:00:00Z"))).toBe(6);
+      expect(resolveOneGeneralElection).toHaveBeenCalledTimes(6);
+      const calls = vi.mocked(resolveOneGeneralElection).mock.calls;
+      expect(calls.reduce((sum, call) => sum + (call[1].totalSeats ?? 0), 0)).toBe(199);
+      expect(
+        calls.reduce(
+          (sum, call) => sum + Object.values(call[6] ?? {}).reduce((a, b) => a + b, 0),
+          0
+        )
+      ).toBe(199);
+      const stateOps = stateWrites.mock.calls[0][0] as Array<{
+        updateOne: { update: { $set: { houseDistricts: number } } };
+      }>;
+      expect(stateOps.reduce((sum, op) => sum + op.updateOne.update.$set.houseDistricts, 0)).toBe(
+        199
+      );
+    }, 30_000);
+
+    it("holds completed regions while a peer's tally is still missing", async () => {
+      vi.clearAllMocks();
+      const elections = huRegions1991.map((region) => ({
+        _id: new ObjectId(),
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        state: String(region._id),
+        cycle: 6,
+        electionYear: 2014,
+        status: "completed",
+      })) as Election[];
+      const tallies = elections.slice(1).map((election) => {
+        const candidateId = new ObjectId().toString();
+        return {
+          electionId: election._id,
+          totalVotes: { [candidateId]: 100 },
+          candidateParties: { [candidateId]: "a" },
+        };
+      });
+      const db = {
+        collection: vi.fn((name: string) => {
+          if (name === "elections") return { find: () => ({ toArray: async () => elections }) };
+          if (name === "electionVoteTallies")
+            return { find: () => ({ toArray: async () => tallies }) };
+          if (name === "states") return { find: () => ({ toArray: async () => huRegions1991 }) };
+          if (name === "gameState")
+            return { findOne: async () => ({ currentTurn: 1123, preset: "1991-default" }) };
+          return {};
+        }),
+      };
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      const { resolveGeneralElections } = await import("./electionResolution");
+      expect(await resolveGeneralElections(new Date("2026-01-01T00:00:00Z"))).toBe(0);
+      expect(resolveOneGeneralElection).not.toHaveBeenCalled();
     });
   });
 

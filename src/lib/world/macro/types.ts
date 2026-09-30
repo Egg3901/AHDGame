@@ -35,7 +35,7 @@ export type MacroEconomicSystem = "market" | "planned";
  * seeds are authored per era and must not inherit modern-preset bundles.
  */
 export interface MacroCountryDataQuality {
-  provenance: "authored-1953" | "estimated-background";
+  provenance: "authored-1953" | "estimated-background" | "succession-derived";
   economicSystem: MacroEconomicSystem;
   /** Required fields that were absent or non-positive at seed time. */
   missingFields: string[];

@@ -83,7 +83,9 @@ import {
   ensureFIElections,
   ensureTRSenateElections,
   ensurePLElections,
+  ensurePLSenateElections,
   ensureCSElections,
+  ensureCSNationsElections,
   ensureHUElections,
   ensureROElections,
   ensureBGElections,
@@ -359,11 +361,17 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     { name: "ddLandAssemblyElections", fn: ensureDDLandAssemblyElections },
     { name: "ddGovernorElections", fn: ensureDDGovernorElections },
   ],
-  // Eastern bloc Tier-1 — unicameral assembly cycles (DD regional-delegate
-  // pattern; NPP-governed / beta-active gate). Ride the DD Volkskammer LARP
-  // anchor until dedicated eastern-bloc anchors are authored.
-  PL: [{ name: "plSejmElections", fn: ensurePLElections }],
-  CS: [{ name: "csChamberOfThePeopleElections", fn: ensureCSElections }],
+  // Eastern bloc Tier-1 assembly cycles (DD regional-delegate pattern;
+  // NPP-governed / beta-active gate). Successor-era chambers use their own
+  // anchors; Cold War lower chambers retain the DD Volkskammer schedule.
+  PL: [
+    { name: "plSejmElections", fn: ensurePLElections },
+    { name: "plSenateElections", fn: ensurePLSenateElections },
+  ],
+  CS: [
+    { name: "csChamberOfThePeopleElections", fn: ensureCSElections },
+    { name: "csChamberOfNationsElections", fn: ensureCSNationsElections },
+  ],
   HU: [{ name: "huNationalAssemblyElections", fn: ensureHUElections }],
   RO: [{ name: "roGrandNationalAssemblyElections", fn: ensureROElections }],
   BG: [{ name: "bgNationalAssemblyElections", fn: ensureBGElections }],

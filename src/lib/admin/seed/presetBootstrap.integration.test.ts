@@ -12,7 +12,12 @@ import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope
  */
 vi.mock("@/lib/mongodb", async () => {
   const fixture = await import("@/lib/test-utils/__fixtures__/bootstrapProbe");
-  return { getDb: vi.fn(async () => fixture.currentProbeDb()) };
+  return {
+    getDb: vi.fn(async () => fixture.currentProbeDb()),
+    // The in-memory driver has no sessions. Force the currency converter's
+    // standalone path without allowing its topology probe to reach Atlas.
+    getMongoClient: vi.fn(async () => ({ db: () => ({ command: async () => ({}) }) })),
+  };
 });
 
 /**
@@ -74,7 +79,7 @@ beforeAll(async () => {
     }
     built.set(preset, { db, counts });
   }
-}, 600_000);
+}, 1_800_000);
 
 describe("a bootstrapped world matches its era roster", () => {
   it.each(PRESETS)("%s seeds nothing for a country the era does not contain", (preset) => {

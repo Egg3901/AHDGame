@@ -619,8 +619,10 @@ export async function buildCorporationLookups(
   // PRIOR commodity-price pass, so reading them here is the one-turn lag that
   // breaks the price->revenue->supply->price circularity.
   const priceRatioByCommodity = new Map<CommodityType, number>();
+  const initializedLaggedBooks = new Set<CommodityType>();
   const reachablePriceRatioByCountry = new Map<string, Map<CommodityType, number>>();
   for (const cp of commodityPrices) {
+    if (cp.turn > 0) initializedLaggedBooks.add(cp.commodity);
     globalCommodityBalances.set(cp.commodity, {
       supply: cp.globalSupply,
       demand: cp.globalDemand,
@@ -1222,6 +1224,7 @@ export async function buildCorporationLookups(
     carbonEmissionsByState,
     costOfLivingByState,
     globalCommodityBalances,
+    initializedLaggedBooks,
     stateInputAvailabilityByState,
     statePlacementRatioByState,
     stateDeliveryLimitedRatioByState,

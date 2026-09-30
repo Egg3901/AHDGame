@@ -28,6 +28,13 @@ import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { NG_GEOGRAPHY } from "@/lib/countries/ng/geography";
 import { BR_GEOGRAPHY } from "@/lib/countries/br/geography";
+import { YU_GEOGRAPHY } from "@/lib/countries/yu/geography";
+import { BG_GEOGRAPHY } from "@/lib/countries/bg/geography";
+import { RO_GEOGRAPHY } from "@/lib/countries/ro/geography";
+import { HU_GEOGRAPHY } from "@/lib/countries/hu/geography";
+import { CS_GEOGRAPHY } from "@/lib/countries/cs/geography";
+import { PL_GEOGRAPHY } from "@/lib/countries/pl/geography";
+import { RU_GEOGRAPHY } from "@/lib/countries/ru/geography";
 
 export const FULL_ERA_REGION_BUNDLES: Partial<
   Record<CountryId, Partial<Record<ResetPresetId, State[]>>>
@@ -39,6 +46,13 @@ export const FULL_ERA_REGION_BUNDLES: Partial<
   CN: CN_GEOGRAPHY.regionBundles,
   IE: IE_GEOGRAPHY.regionBundles,
   NG: NG_GEOGRAPHY.regionBundles,
+  RU: RU_GEOGRAPHY.regionBundles,
+  PL: PL_GEOGRAPHY.regionBundles,
+  CS: CS_GEOGRAPHY.regionBundles,
+  HU: HU_GEOGRAPHY.regionBundles,
+  RO: RO_GEOGRAPHY.regionBundles,
+  BG: BG_GEOGRAPHY.regionBundles,
+  YU: YU_GEOGRAPHY.regionBundles,
 };
 
 /**

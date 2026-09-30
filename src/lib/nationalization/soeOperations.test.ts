@@ -315,4 +315,42 @@ describe("processSoeOperations", () => {
     expect(calls.length).toBeGreaterThan(0);
     expect(calls[0][0]).toEqual({ countryId: "DD" });
   });
+
+  it("loads the 2027 EUR treasury denomination once for two French SOEs", async () => {
+    const { loadFxRatesByCurrency } = await import("@/lib/currency/corporationCapital");
+    vi.mocked(loadFxRatesByCurrency).mockResolvedValue(new Map([["EUR", 1.2]]));
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor(
+        [new ObjectId(), new ObjectId()].map((_id) => ({
+          _id,
+          countryId: "FR",
+          countryOwnerId: "FR",
+          ownershipState: "stateOwned",
+          isNationalized: true,
+          liquidCapital: -1000,
+          liquidCurrencyCode: "EUR",
+        }))
+      )
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+    db.collectionMocks.macroMetrics.find.mockReturnValue(cursor([]));
+    db.collectionMocks.politicalMetrics.find.mockReturnValue(cursor([]));
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      countryId: "FR",
+      currencyCode: "EUR",
+    });
+
+    const { processSoeOperations } = await import("./soeOperations");
+    const result = await processSoeOperations(db as unknown as Db, NOW);
+
+    expect(result.soeCorps).toBe(2);
+    expect(db.collectionMocks.federalBudget.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledTimes(2);
+    const treasuryDebits = db.collectionMocks.federalBudget.updateOne.mock.calls.reduce(
+      (sum, call) => sum - call[1].$inc.treasuryBalance,
+      0
+    );
+    const corpCredits = result.backing.reduce((sum, row) => sum + row.coveredLocal, 0);
+    expect(treasuryDebits).toBe(corpCredits);
+  });
 });

@@ -13,6 +13,7 @@ import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import { type CountryId } from "@/lib/constants/countries";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
+import type { CycleAnchorContext } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
 import { snapAnchorEndTime } from "@/lib/elections/snapShift";
@@ -51,9 +52,15 @@ export interface RegionalDelegateSpec {
    * families can size the race the way the seed and the country config do —
    * CN's chamber is 2,980 deputies in the modern eras but 1,226 in 1953 (#3779).
    */
-  seatsForRegions: (regions: State[], preset: string | undefined) => Record<string, number>;
+  seatsForRegions: (
+    regions: State[],
+    preset: string | undefined,
+    ctx: CycleAnchorContext,
+    currentYear: number
+  ) => Record<string, number>;
   /** Open the primary immediately (short window vs multi-year cycle). CN/BR: true. */
   openPrimaryImmediately: boolean;
+  minPrimaryHours?: number;
   /**
    * No-op unless the runtime country status is beta/active. CN/BR are always
    * live and omit this; RU (coming-soon, per-game enabled) sets it in Phase 3.
@@ -153,18 +160,18 @@ export async function ensureRegionalDelegateElections(
     const gate = spec.electionsLiveGate ?? countryElectionsLive;
     if (!(await gate(db, spec.countryId))) return;
   }
-  const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
+  const { currentTurn: persistedTurn, currentYear, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
 
   const regions = await db
     .collection<State>("states")
     .find(
       { countryId: spec.countryId },
-      { projection: { _id: 1, houseDistricts: 1, stateSenateSeats: 1 } }
+      { projection: { _id: 1, population: 1, houseDistricts: 1, stateSenateSeats: 1 } }
     )
     .toArray();
   if (regions.length === 0) return;
-  const seatMap = spec.seatsForRegions(regions as State[], ctx.preset);
+  const seatMap = spec.seatsForRegions(regions as State[], ctx.preset, ctx, currentYear);
 
   const liveElections = await db
     .collection<Election>("elections")
@@ -220,6 +227,7 @@ export async function ensureRegionalDelegateElections(
       fallbackTotalSeats: seatMap[regionId] ?? 1,
       ctx,
       openPrimaryImmediately: spec.openPrimaryImmediately,
+      minPrimaryHours: spec.minPrimaryHours,
     });
     if (!doc) continue;
 

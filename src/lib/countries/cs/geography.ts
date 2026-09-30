@@ -2,6 +2,7 @@ import type { CountryGeography } from "../contract";
 import { csRegionCensusData1953 } from "@/lib/seeds/cs/csRegionCensusData1953";
 import { csRegions } from "./data/csRegions";
 import { csRegions1953 } from "./data/csRegions1953";
+import { csRegions1991 } from "./data/csRegions1991";
 import {
   CS_ADJACENCY_MAP,
   CS_CONTINENT,
@@ -46,6 +47,7 @@ const populationAnchors = {};
 const regionBundles = {
   "1953-default": csRegions1953,
   "1979-default": csRegions,
+  "1991-default": csRegions1991,
   "2019-default": csRegions,
 };
 

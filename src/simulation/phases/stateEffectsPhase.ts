@@ -259,7 +259,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // now reconciles every chair-synced country: it is the identifier turn logs and
       // the phase-history diagnostics are keyed by, and renaming it would read as the
       // phase disappearing and a new one appearing. See the TurnLog field doc.
-      runtime.runPhase("cnPresidentSync", () => syncAllPartyChairHeadsOfState(db, gameNow)),
+      runtime.runPhase("cnPresidentSync", () =>
+        syncAllPartyChairHeadsOfState(db, gameNow, gameState.preset)
+      ),
       runtime.runPhase("topSectorsRecompute", () =>
         processTopSectorsRecompute(db, newTurn, gameNow)
       ),

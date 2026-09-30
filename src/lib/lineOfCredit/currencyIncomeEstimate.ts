@@ -26,11 +26,13 @@ const LOC_RECURRING_INCOME_TX_TYPES: FinancialTxLogEntry["type"][] = [
 export async function estimatePerTurnCurrencyIncomeHomeFace(
   db: Db,
   character: Character,
-  rates: Partial<Record<CurrencyCode, number>>
+  rates: Partial<Record<CurrencyCode, number>>,
+  gameState?: { preset?: string; currentTurn?: number }
 ): Promise<number> {
-  const home = getHomeCurrency(character);
+  const state = gameState ?? (await getGameState(db));
+  const home = getHomeCurrency(character, state?.preset);
   const rateHome = rates[home] ?? 1;
-  const currentTurn = Math.max(1, (await getGameState(db))?.currentTurn ?? 1);
+  const currentTurn = Math.max(1, state?.currentTurn ?? 1);
   const observationTurns = Math.min(LOC_INCOME_AVERAGING_TURNS, currentTurn);
   const windowStartTurn = currentTurn - observationTurns + 1;
 

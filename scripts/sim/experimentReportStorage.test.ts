@@ -53,4 +53,54 @@ describe("experiment report timeline storage (#2287)", () => {
       "expected 4 timeline chunks, found 3"
     );
   });
+
+  it("chunks long-horizon telemetry points while retaining coverage metadata", () => {
+    const source = {
+      seatsTimeline: [],
+      partyOrgTimeline: [],
+      corporationsTimeline: [],
+      longHorizonTelemetry: {
+        availability: "observed-complete",
+        approval: { series: [{ country: "US" }], points: [{ turn: 1 }, { turn: 2 }] },
+        macro: { series: [{ country: "FR" }], points: [{ turn: 1 }] },
+      },
+    };
+    const chunks = planTimelineChunks("run", "generation", source, 100);
+    const stored = {
+      _id: "run",
+      longHorizonTelemetry: {
+        availability: source.longHorizonTelemetry.availability,
+        approval: { series: source.longHorizonTelemetry.approval.series, points: [] },
+        macro: { series: source.longHorizonTelemetry.macro.series, points: [] },
+      },
+      timelineStorage: { version: 1 as const, generation: "generation", chunkCount: chunks.length },
+    };
+
+    expect(chunks.map((chunk) => chunk.field)).toContain("longHorizonTelemetry.approval.points");
+    expect(chunks.map((chunk) => chunk.field)).toContain("longHorizonTelemetry.macro.points");
+    expect(hydrateExperimentReport(stored, chunks).longHorizonTelemetry).toEqual(
+      source.longHorizonTelemetry
+    );
+  });
+
+  it("preserves inline telemetry in reports written before telemetry chunking", () => {
+    const source = {
+      _id: "old-run",
+      longHorizonTelemetry: { approval: { points: [{ turn: 1 }] } },
+      timelineStorage: { version: 1 as const, generation: "old", chunkCount: 1 },
+    };
+    const chunks = [
+      {
+        runId: "old-run",
+        generation: "old",
+        field: "seatsTimeline" as const,
+        sequence: 0,
+        points: [],
+      },
+    ];
+
+    expect(hydrateExperimentReport(source, chunks).longHorizonTelemetry?.approval?.points).toEqual([
+      { turn: 1 },
+    ]);
+  });
 });

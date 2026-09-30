@@ -131,6 +131,7 @@ import { snapshotEconomicVitalSigns } from "@/lib/economy/economicVitalSigns";
 import { runAutoReelectionEntry } from "@/lib/turn/autoReelectionEntry";
 import { withdrawInactiveCandidates } from "@/lib/turn/withdrawInactiveCandidates";
 import { stateEffectsAndNationalAggregationPhase } from "./stateEffectsPhase";
+import { runHuAssemblyReform } from "@/lib/turn/huAssemblyReform";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 
 export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
@@ -1106,7 +1107,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "electionResolutionAndGovernment",
       async execute(context, runtime) {
-        const { db, gameNow, newTurn, phaseResults } = context;
+        const { db, gameNow, newTurn, currentYear, phaseResults } = context;
         // Group 7 is strictly sequential. Reordering any of these steps corrupts
         // elections by dropping final-turn votes or resolving offices from stale tallies.
         await runtime.runPhase("withdrawInactiveCandidates", () =>
@@ -1182,9 +1183,30 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
-        const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", () =>
-          runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0)
-        );
+        if (currentYear >= 2014 && context.gameState.preset === "1991-default") {
+          await runtime.runPhase("huAssemblyReform", () =>
+            runHuAssemblyReform(db, currentYear, gameNow)
+          );
+        }
+        const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", async () => {
+          const { processBgAssemblyTransition } = await import("@/lib/turn/bgAssemblyTransition");
+          await processBgAssemblyTransition(db, context.gameState, newTurn, gameNow);
+          const { processRoParliamentTransition } =
+            await import("@/lib/turn/roParliamentTransition");
+          await processRoParliamentTransition(db, context.gameState, newTurn, gameNow);
+          const { processFederationRatifications } =
+            await import("@/lib/turn/federationRatifications");
+          await processFederationRatifications(db, context.gameState.preset, newTurn);
+          const { processYuDissolution } = await import("@/lib/turn/yuDissolution");
+          await processYuDissolution(db, context.gameState, newTurn, gameNow);
+          const { processRuPresidencyTransition } =
+            await import("@/lib/countries/ru/ruPresidencyTransition");
+          await processRuPresidencyTransition(db, context.gameState, newTurn, gameNow);
+          const { processRuLegislatureTransition } =
+            await import("@/lib/countries/ru/ruLegislatureTransition");
+          await processRuLegislatureTransition(db, context.gameState, newTurn, gameNow);
+          return runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0);
+        });
         const govFormedMap = govResult?.governmentFormed ?? {};
 
         await runtime.runPhase("parliamentaryGovernmentPhases", () =>

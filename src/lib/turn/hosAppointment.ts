@@ -10,7 +10,7 @@ import { computeParliamentaryGovernmentTally } from "@/lib/congress/governmentVo
 import { autoAyeNPPsForParliamentaryAppointment } from "@/lib/turn/parliamentaryGovernment";
 import { createNotifications } from "@/lib/notifications";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
-import type { Character, ElectedOfficial, NPP } from "@/lib/db/types";
+import type { Character, CountryGameState, ElectedOfficial, NPP } from "@/lib/db/types";
 
 /**
  * Resolve an expired head-of-state appointment vote (`office: "headOfState"`,
@@ -34,6 +34,21 @@ export async function resolveHeadOfStateAppointmentVote(
   await autoAyeNPPsForParliamentaryAppointment(db, countryId, voteId);
   const vote = await votesColl.findOne({ _id: voteId });
   if (!vote || vote.status !== "active" || vote.office !== "headOfState") return;
+
+  // The elected presidency supersedes the legislature's Chairman appointment
+  // after the July 1991 inauguration checkpoint.
+  if (countryId === "RU") {
+    const ru = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne({ _id: "RU" }, { projection: { ruPresidencySinceTurn: 1 } });
+    if (ru?.ruPresidencySinceTurn != null) {
+      await votesColl.updateOne(
+        { _id: voteId, status: "active" },
+        { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
+      );
+      return;
+    }
+  }
 
   const tally = await computeParliamentaryGovernmentTally(
     db,

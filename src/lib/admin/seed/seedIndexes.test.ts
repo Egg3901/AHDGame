@@ -70,6 +70,7 @@ const HEADERS = [
   "Watchlist indexes:",
   "Conflict indexes:",
   "Banking money-move indexes:",
+  "Money-flow receipt indexes:",
 ];
 
 describe("seedIndexes", () => {

@@ -224,6 +224,21 @@ describe("queryLegislature", () => {
     expect(result).toBeNull();
   });
 
+  it("reads Bulgaria's chamber name and size from the 1991 transition state", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "BG" });
+    const { queryLegislature } = await import("./economy");
+    const grand = await queryLegislature(db as unknown as Db, "BG");
+    expect(grand).toMatchObject({ chamber: "Grand National Assembly", totalSeats: 400 });
+
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "BG",
+      bgOrdinaryAssemblySinceTurn: 41,
+    });
+    const ordinary = await queryLegislature(db as unknown as Db, "BG");
+    expect(ordinary).toMatchObject({ chamber: "National Assembly", totalSeats: 240 });
+  });
+
   it("limits pendingBills and recentlyPassed to 5 each", async () => {
     db.collectionMocks.electedOfficials!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),

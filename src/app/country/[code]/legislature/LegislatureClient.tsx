@@ -65,15 +65,18 @@ const LEGISLATURE_COMPONENTS: Partial<Record<CountryId, ComponentType<{ countryI
 
 interface Props {
   countryId: CountryId;
+  legislatureName?: string;
+  generic?: boolean;
 }
 
-export default function LegislatureClient({ countryId }: Props) {
+export default function LegislatureClient({ countryId, legislatureName, generic }: Props) {
   const config = COUNTRY_CONFIGS[countryId];
+  const displayedName = legislatureName ?? config.legislature.name;
   const PageComponent = LEGISLATURE_COMPONENTS[countryId];
 
-  if (PageComponent) {
+  if (PageComponent && !generic) {
     return (
-      <Suspense fallback={<LegislatureFallback name={config.legislature.name} />}>
+      <Suspense fallback={<LegislatureFallback name={displayedName} />}>
         <PageComponent countryId={countryId} />
       </Suspense>
     );
@@ -84,7 +87,7 @@ export default function LegislatureClient({ countryId }: Props) {
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
         <p data-coach="nav-legislature" className="text-2xl font-bold text-foreground">
-          {config.legislature.name}
+          {displayedName}
         </p>
         <p className="mt-2 text-muted">{config.name} legislature coming soon.</p>
       </div>

@@ -6,6 +6,7 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { getNationWorldSnapshots } from "@/lib/world/nationWorldSnapshots";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { getWorldEntityMapSnapshot, type WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
+import { loadRuntimeWorldEntities } from "@/lib/world/succession/runtimeEntities";
 import { loadBlocMapData, type BlocMapData } from "@/lib/world/blocMembership";
 import WorldClient from "./WorldClient";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -38,7 +39,10 @@ export default async function WorldPage() {
     ),
   ]);
   const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
-  const worldEntities: WorldEntityMapSnapshot = getWorldEntityMapSnapshot(preset);
+  const worldEntities: WorldEntityMapSnapshot = getWorldEntityMapSnapshot(
+    preset,
+    await loadRuntimeWorldEntities(db, preset)
+  );
   // Bloc mode colours the globe from live membership, so the roll has to come
   // down with the page rather than being re-derived from a static table.
   const blocMapData: BlocMapData = await loadBlocMapData(db, preset);
