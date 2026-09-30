@@ -26,7 +26,7 @@ interface Outcome {
  */
 export async function publishLocTarget(db: Db, key: string, spec: TargetSpec): Promise<Outcome> {
   const journal = db.collection<Document>(MONEY_MOVE_COLLECTION);
-  const target = db.collection<Document>(spec.collection);
+  const target = db.collection<Document & { settledKeys?: string[] }>(spec.collection);
   const journalId = { _id: key as never };
   const targetId = { _id: spec.id as never };
   const outcomePath = `locTargetOutcomes.${spec.token}`;
