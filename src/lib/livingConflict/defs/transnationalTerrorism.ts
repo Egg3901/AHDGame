@@ -262,7 +262,6 @@ const outcomes: GlobalResponseOutcome[] = [
     priority: 30,
     conditions: [{ axis: "drawdown", min: 4 }],
     trackDeltas: {
-      interventionCommitment: -15,
       insurgency: -12,
       warWeariness: -8,
       civilLiberties: 4,
@@ -329,7 +328,6 @@ const outcomes: GlobalResponseOutcome[] = [
     intensityDelta: 8,
     trackDeltas: {
       threatCapability: -8,
-      interventionCommitment: 18,
       insurgency: 14,
       warWeariness: 8,
       civilLiberties: -4,

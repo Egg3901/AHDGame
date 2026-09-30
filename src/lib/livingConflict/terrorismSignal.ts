@@ -18,18 +18,16 @@ export async function loadTerrorismSignal(
           .findOne({ _id: "current" }, { projection: { livingConflictsEnabled: 1 } })
       : null;
   if (!(enabled ?? game?.livingConflictsEnabled)) return null;
-  return db
-    .collection<LivingConflictState>("livingConflicts")
-    .findOne(
-      { defKey: TERRORISM_KEY },
-      {
-        projection: {
-          hasOpened: 1,
-          status: 1,
-          phaseLevel: 1,
-          tracks: 1,
-          "campaign.countryMemory": 1,
-        },
-      }
-    );
+  return db.collection<LivingConflictState>("livingConflicts").findOne(
+    { defKey: TERRORISM_KEY },
+    {
+      projection: {
+        hasOpened: 1,
+        status: 1,
+        phaseLevel: 1,
+        tracks: 1,
+        "campaign.countryMemory": 1,
+      },
+    }
+  );
 }

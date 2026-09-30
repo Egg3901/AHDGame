@@ -12,6 +12,7 @@ import {
   terrorismEmergencyPowers,
   terrorismPoliticalEffects,
   terrorismAttackOutcome,
+  terrorismInterventionCommitment,
 } from "./rules/transnationalTerrorism";
 import { emptyCountryMemory } from "./campaign";
 import { TRANSNATIONAL_TERRORISM_DEF } from "./defs/transnationalTerrorism";
@@ -89,7 +90,7 @@ describe("transnational terrorism living conflict", () => {
 
     expect(changed.tracks).toMatchObject({
       threatCapability: 52,
-      interventionCommitment: 18,
+      interventionCommitment: 0,
       insurgency: 24,
       warWeariness: 8,
     });
@@ -192,7 +193,7 @@ describe("counterterrorism response rules", () => {
     expect(state.tracks).toMatchObject({
       insurgency: 78,
       warWeariness: 72,
-      interventionCommitment: 75,
+      interventionCommitment: 90,
     });
   });
   it("silent governments add no free cooperation or military commitment", () => {
@@ -214,4 +215,14 @@ it("routine vigilance preserves a settled normalization until a real relapse", (
   expect(
     applyConflictOutcome(TRANSNATIONAL_TERRORISM_DEF, state, outcome("plot_disrupted")).status
   ).toBe("settled");
+});
+
+it("national withdrawals remove aggregate intervention despite other governments choosing policing", () => {
+  const state = stateAt("insurgency", { interventionCommitment: 100 });
+  state.campaign!.countryMemory.US = { ...emptyCountryMemory(), militaryCommitment: 25 };
+  state.campaign!.countryMemory.UK = { ...emptyCountryMemory(), militaryCommitment: 15 };
+  expect(terrorismInterventionCommitment(state)).toBe(40);
+  state.campaign!.countryMemory.US.militaryCommitment = 0;
+  state.campaign!.countryMemory.UK.militaryCommitment = 0;
+  expect(terrorismInterventionCommitment(state)).toBe(0);
 });

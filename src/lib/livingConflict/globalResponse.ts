@@ -4,6 +4,7 @@ import {
   terrorismOutcomeId,
   terrorismEmergencyPowers,
   terrorismAttackOutcome,
+  terrorismInterventionCommitment,
 } from "./rules/transnationalTerrorism";
 import type { LivingConflictState } from "./types";
 import { cfx } from "./effects";
@@ -476,6 +477,12 @@ async function applyOutcomeTrajectory(
         : relieveCommitment(def, state, side, Math.abs(amount));
   }
   state = applyConflictOutcome(def, state, outcome);
+  if (def.key === TERRORISM_KEY) {
+    state.tracks = {
+      ...state.tracks,
+      interventionCommitment: terrorismInterventionCommitment(state),
+    };
+  }
   await saveConflictState(db, state);
   if (campaignResult.applied && outcome.tensionDelta) {
     const minimumValue =

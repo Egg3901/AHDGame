@@ -60,6 +60,16 @@ export function terrorismEmergencyPowers(previous: number, optionId: string): nu
   );
 }
 
+/** The aggregate intervention indicator follows actual national deployments. */
+export function terrorismInterventionCommitment(state: TerrorismSignal): number {
+  return clamp(
+    Object.values(state.campaign?.countryMemory ?? {}).reduce(
+      (sum, memory) => sum + clamp(memory.militaryCommitment),
+      0
+    )
+  );
+}
+
 export function terrorismAnnualCost(
   state: TerrorismSignal | null,
   countryId: string,

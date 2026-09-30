@@ -480,6 +480,7 @@ async function main() {
           assert.equal(state.campaign?.countryMemory.DE?.militaryCommitment ?? 0, 0);
           assert.equal(state.tracks?.["emergencyPowers:US"], 0);
           assert.equal(state.campaign?.countryMemory.US?.militaryCommitment, 0);
+          assert.equal(state.tracks?.interventionCommitment, 0);
           assert.equal(snapshots.at(-1)!.annualUSCost, 0);
         }
       }
