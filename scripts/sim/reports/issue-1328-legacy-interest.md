@@ -6,7 +6,7 @@ Refs #1328 and #2159.
 
 Baseline `4f4a853e827f22b65b9224bb034cb2011464483c` and treatment `0ebff93537559a0f7736a26c3749938990b08206` executed from clean source against separate isolated Mongo fixtures. The fixture uses ten synthetic retail banks, twenty legacy savings holders, observed USD FX, the shadow ledger enabled, and the normal banking phase at turn 300. This is subsystem evidence, not a full world or live activation report.
 
-The later development merge incorporates the independently verified proprietary-book settlement change. Its shared journal dispatch is checked with both journal families; the executed legacy-interest source is identified above.
+The integrated runtime `7dd5f20e9300d913367a3d057d09b7b24e7465bf` includes the proprietary-book and central-bank facility settlements. It was exercised again from clean source against a fresh isolated Mongo fixture: all normal balances still exactly match the baseline, all four interruption cases converge after two retries, and no unfinished journal remains. The combined phase uses 486 commands and 67798 returned BSON bytes. The twenty-nine legacy and banking-phase integration tests also pass after the merge. Later changes only record this evidence.
 
 ## Results
 

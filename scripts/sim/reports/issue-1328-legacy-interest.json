@@ -97,5 +97,16 @@
     "after transaction receipt bulk",
     "after ledger receipt bulk"
   ],
-  "repeatedRecoveryStable": true
+  "repeatedRecoveryStable": true,
+  "integratedTreatment": {
+    "sourceCommit": "7dd5f20e9300d913367a3d057d09b7b24e7465bf",
+    "phase": {
+      "commands": 486,
+      "readBsonBytes": 67798
+    },
+    "normalBalancesEqual": true,
+    "recoveryCases": 4,
+    "repeatedRecoveryStable": true,
+    "focusedIntegrationTests": 29
+  }
 }
