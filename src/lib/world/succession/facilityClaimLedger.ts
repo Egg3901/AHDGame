@@ -26,7 +26,8 @@ export async function stageFederationFacilityClaims(
   db: Db,
   applicationId: string,
   plans: readonly PrivateFirmSuccessionPlan[],
-  now: Date
+  now: Date,
+  session?: ClientSession
 ): Promise<FederationFacilityClaimRecord[]> {
   if (!applicationId.trim() || !Number.isFinite(now.getTime()))
     throw new Error("Facility claim staging needs a valid application and time");
@@ -55,19 +56,26 @@ export async function stageFederationFacilityClaims(
   const collection = db.collection<FederationFacilityClaimRecord>(
     FEDERATION_FACILITY_CLAIMS_COLLECTION
   );
+  if (claims.length === 0) return [];
+  const intended = claims.map((claim, index): FederationFacilityClaimRecord => ({
+    ...claim,
+    _id: ids[index],
+    applicationId,
+    status: "contingent",
+    createdAt: now,
+  }));
+  await collection.bulkWrite(
+    intended.map((record) => ({
+      updateOne: { filter: { _id: record._id }, update: { $setOnInsert: record }, upsert: true },
+    })),
+    { session }
+  );
+  const saved = await collection.find({ _id: { $in: ids } }, { session }).toArray();
+  const savedById = new Map(saved.map((record) => [record._id, record]));
   const records: FederationFacilityClaimRecord[] = [];
   for (let index = 0; index < claims.length; index++) {
     const claim = claims[index];
-    const _id = ids[index];
-    const intended: FederationFacilityClaimRecord = {
-      ...claim,
-      _id,
-      applicationId,
-      status: "contingent",
-      createdAt: now,
-    };
-    await collection.updateOne({ _id }, { $setOnInsert: intended }, { upsert: true });
-    const stored = await collection.findOne({ _id });
+    const stored = savedById.get(ids[index]);
     if (
       !stored ||
       stored.applicationId !== applicationId ||

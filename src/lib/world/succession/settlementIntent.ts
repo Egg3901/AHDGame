@@ -93,7 +93,9 @@ export function federationPoliticalTermsFromActivation(activation: LiveActivatio
     successors: activation.successors
       .map((entry) => ({ entityId: entry.entityId, displayName: entry.displayName }))
       .sort((a, b) => a.entityId.localeCompare(b.entityId)),
-    continuingDisplayName: activation.continuingDisplayName,
+    ...(activation.continuingDisplayName === undefined
+      ? {}
+      : { continuingDisplayName: activation.continuingDisplayName }),
     negotiatedCustodians: activation.negotiatedCustodians,
     assetBasis: activation.finances.assetBasis,
     debtBasis: activation.finances.debtBasis,
@@ -291,8 +293,9 @@ export async function stageLiveFederationSettlementIntent(input: {
   residenceChoices: Readonly<Record<string, PlayableResidence>>;
   playableHeadquarters: readonly PlayableResidence[];
   headquartersChoices: Readonly<Record<string, PlayableResidence>>;
+  session?: ClientSession;
 }): Promise<FederationSettlementIntentRecord> {
-  const { db, sourceCountryId, activation, appliedOnTurn, currentYear } = input;
+  const { db, sourceCountryId, activation, appliedOnTurn, currentYear, session } = input;
   const presetId = activation.source.presetId;
   const revision = activation.approval.revision;
   if (
@@ -310,7 +313,7 @@ export async function stageLiveFederationSettlementIntent(input: {
     .collection<FederationSettlementApplicationRecord>(
       FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION
     )
-    .findOne({ presetId, sourceEntityId: sourceCountryId, status: "applied" });
+    .findOne({ presetId, sourceEntityId: sourceCountryId, status: "applied" }, { session });
   if (applied) throw new Error("Federation source already has an applied settlement");
 
   const ratified = await loadPersistedFederationApproval({
@@ -319,6 +322,7 @@ export async function stageLiveFederationSettlementIntent(input: {
     approval: activation.approval,
     termsHash: hashFederationPoliticalTerms(activation),
     appliedOnTurn,
+    session,
   });
   if (!sameApproval(ratified, activation.approval))
     throw new Error("Federation proposal approval differs from recorded votes");
@@ -345,8 +349,8 @@ export async function stageLiveFederationSettlementIntent(input: {
   const collection = db.collection<FederationSettlementIntentRecord>(
     FEDERATION_SETTLEMENT_INTENTS_COLLECTION
   );
-  await collection.updateOne({ _id }, { $setOnInsert: intended }, { upsert: true });
-  const stored = await collection.findOne({ _id });
+  await collection.updateOne({ _id }, { $setOnInsert: intended }, { upsert: true, session });
+  const stored = await collection.findOne({ _id }, { session });
   if (
     !stored ||
     stored.presetId !== presetId ||
@@ -359,6 +363,6 @@ export async function stageLiveFederationSettlementIntent(input: {
     hashSettlementPayload(stored.payload) !== payloadHash
   )
     throw new Error("Federation intent key conflicts with another settlement proposal");
-  await stageFederationFacilityClaims(db, _id, privateFirmPlans, activation.now);
+  await stageFederationFacilityClaims(db, _id, privateFirmPlans, activation.now, session);
   return stored;
 }

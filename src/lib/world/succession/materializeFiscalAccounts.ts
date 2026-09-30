@@ -14,6 +14,8 @@ export interface FederationFiscalAccount extends SuccessionFiscalShare {
   openingCashMinor: number;
   /** Outstanding contribution principal remains internal, not a new bond. */
   remainingContributionMinor: number;
+  cumulativeContributionMinor?: number;
+  cumulativeArrearsMinor?: number;
 }
 
 function sum(values: readonly number[]): bigint {
@@ -87,6 +89,8 @@ export async function materializeFederationFiscalAccounts(input: {
     applicationId,
     openingCashMinor: share.financialAssetEntitlementMinor - share.cashDeficitResponsibilityMinor,
     remainingContributionMinor: share.creditorContributionMinor,
+    cumulativeContributionMinor: 0,
+    cumulativeArrearsMinor: 0,
   }));
   for (const account of accounts) {
     if (account.kind !== "background-successor") continue;
