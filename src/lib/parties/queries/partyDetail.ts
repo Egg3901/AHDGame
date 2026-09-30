@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { ObjectId, type Db } from "mongodb";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
@@ -158,9 +159,10 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
   // (mirrors the turn processors) — never live forex. A party is country-scoped,
   // so one rate applies to every member/NPP.
   const campaignRates = await loadCampaignCurrencyRates(db);
+  const priceLevel = await loadCampaignPriceLevel(db);
   const campaignRate = campaignLocalRate(partyCountry, campaignRates, preset);
   const toLocal = (anchor: number) =>
-    campaignAnchorToLocal(anchor, partyCountry, campaignRates, preset);
+    campaignAnchorToLocal(anchor * priceLevel, partyCountry, campaignRates, preset);
 
   const nationalTaxRate = party.nationalTaxRate ?? 0;
   let expectedHourlyIncome = 0;
@@ -184,7 +186,8 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
     const grossAnchor = projectNppGeneration({
       population: statePop,
       donorBaseLevel: npp.donorBaseLevel ?? 0,
-      currentFundsLocal: campaignRate > 0 ? (npp.funds ?? 0) / campaignRate : (npp.funds ?? 0),
+      currentFundsLocal:
+        campaignRate > 0 ? (npp.funds ?? 0) / (campaignRate * priceLevel) : (npp.funds ?? 0),
       nppEconomyEnabled,
     });
     expectedHourlyIncome += calculateTaxAmount(toLocal(grossAnchor), nationalTaxRate);

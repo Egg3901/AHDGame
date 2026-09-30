@@ -44,6 +44,34 @@ export async function applyReferendumOutcome(
   const now = new Date();
   const result = { ...outcome, resolvedTurn: currentTurn };
 
+  if (ref.kind === "peace_agreement") {
+    // This public mandate concerns institutions, never a territorial transfer.
+    // CAS preserves the first persisted count if a polling turn is retried.
+    const written = await refs.updateOne(
+      { _id: ref._id, status: "polling", result: null },
+      {
+        $set: {
+          status: outcome.passed ? "completed" : "settled",
+          result,
+          yesShare: outcome.finalYesShare,
+          updatedAt: now,
+        },
+      }
+    );
+    if (written.modifiedCount === 0) return;
+    await recordWireEvent(db, {
+      referendumId: ref._id!,
+      countryId: ref.countryId,
+      regionId: ref.regionId,
+      turn: currentTurn,
+      kind: "vote",
+      side: outcome.passed ? "yes" : "no",
+      summary: `Northern Ireland ${outcome.passed ? "ratified" : "rejected"} the peace agreement with ${outcome.finalYesShare.toFixed(1)}% Yes.`,
+    }).catch(() => {});
+    await announceReferendumVoteResult(ref, outcome).catch(() => {});
+    return;
+  }
+
   if (outcome.passed) {
     // Open the conversion window. Only reunification has an actuation engine
     // today, so only it gets an auto-convert deadline; independence sits in

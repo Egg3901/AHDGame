@@ -28,6 +28,20 @@ describe("grantOnboardingReward", () => {
     vi.mocked(isForexEnabled).mockResolvedValue(true);
   });
 
+  it("scales the generated reward with historical campaign prices", async () => {
+    db.collection("gameConfig").findOne.mockResolvedValue({
+      startingFunds: 250_000,
+      campaignEraPriceLevelEnabled: true,
+    });
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1953-default" });
+    const { grantOnboardingReward } = await import("./reward");
+    const result = await grantOnboardingReward(db as unknown as Db, CHARACTER, 900);
+    expect(result.amount).toBe(1837);
+    const [, update] = db.collectionMocks.characters!.updateOne.mock.calls[0];
+    expect(update.$inc.funds).toBe(1837);
+    expect(update.$inc["currencyBalances.campaign"]).toBe(3674);
+  });
+
   it("pays 20% of starting funds, credits both mirrors, and stamps atomically", async () => {
     const { grantOnboardingReward } = await import("./reward");
     const result = await grantOnboardingReward(db as unknown as Db, CHARACTER, 900);

@@ -3,6 +3,7 @@ import {
   campaignLocalRate,
   loadCampaignCurrencyRates,
 } from "@/lib/campaigns/campaignCurrency";
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -242,6 +243,10 @@ export async function POST(request: Request) {
     const forexEnabled = await isForexEnabled();
     const campaignRates = await loadCampaignCurrencyRates(db);
     const startingRate = campaignLocalRate(countryId, campaignRates, worldPreset);
+    const startingCampaignFunds = Math.round(
+      gameConfig.startingFunds *
+        resolveCampaignPriceLevel(gameConfig.campaignEraPriceLevelEnabled, worldPreset)
+    );
     const homeCurrency = getSeedCurrencyCode(countryId as CountryId, worldPreset);
 
     // Block character creation in disabled countries (admins bypass for testing)
@@ -274,7 +279,7 @@ export async function POST(request: Request) {
 
       // Resources (+10 extra actions and personal capital bonus if referred)
       // Wealth level affects personal cash only; campaign funds start flat from gameConfig
-      funds: gameConfig.startingFunds,
+      funds: startingCampaignFunds,
       cashOnHand: wealthBonus + (isReferred ? REFERRAL_PERSONAL_CAPITAL_BONUS : 0),
       actions: isReferred ? gameConfig.startingActions + 10 : gameConfig.startingActions,
       // Dual-write: both legacy fields (funds, cashOnHand) and new currencyBalances are set.
@@ -287,7 +292,7 @@ export async function POST(request: Request) {
       ...(forexEnabled
         ? {
             currencyBalances: {
-              campaign: Math.round(gameConfig.startingFunds * startingRate),
+              campaign: Math.round(startingCampaignFunds * startingRate),
               personal: {
                 [homeCurrency]: Math.round(
                   (wealthBonus + (isReferred ? REFERRAL_PERSONAL_CAPITAL_BONUS : 0)) * startingRate
@@ -467,9 +472,9 @@ export async function POST(request: Request) {
           subject: WELCOME_MAIL_SUBJECT,
           body: buildWelcomeMailBody({
             countryId,
-            startingFunds: character.funds ?? gameConfig.startingFunds,
+            startingFunds: character.funds ?? startingCampaignFunds,
             startingActions: character.actions,
-            rewardAmount: onboardingRewardAmount(gameConfig.startingFunds),
+            rewardAmount: onboardingRewardAmount(startingCampaignFunds),
             turnLengthMinutes: gameConfig.turnLengthMinutes,
             currencyCode: homeCurrency,
             localStartingFunds: campaignAnchorToLocal(
@@ -479,7 +484,7 @@ export async function POST(request: Request) {
               worldPreset
             ),
             localRewardAmount: campaignAnchorToLocal(
-              onboardingRewardAmount(gameConfig.startingFunds),
+              onboardingRewardAmount(startingCampaignFunds),
               countryId,
               campaignRates,
               worldPreset

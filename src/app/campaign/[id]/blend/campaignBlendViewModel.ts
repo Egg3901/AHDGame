@@ -696,7 +696,9 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
       ? me.nationalInfluence * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER
       : 0;
   const costFunds = Math.round(
-    campaignStrengthContributionCost(currentStrength, strengthAdded) * campaign.fxRate
+    campaignStrengthContributionCost(currentStrength, strengthAdded) *
+      campaign.fxRate *
+      (campaign.priceLevel ?? 1)
   );
   const costActions = campaignStrengthContributionActions(strengthAdded);
 

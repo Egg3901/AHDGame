@@ -1,5 +1,8 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { campaignLocalRate, getCampaignCurrency } from "@/lib/campaigns/rules/currency";
+import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -31,7 +34,9 @@ export default function ActionExecuteRow({
   compact,
   forexEnabled = false,
 }: ActionExecuteRowProps) {
-  const { formatAmount } = useCurrency();
+  const { baseRates } = useCurrency();
+  const { preset, campaignPriceLevel } = useWorldFlags();
+  const campaignRate = forexEnabled ? campaignLocalRate(character.countryId ?? "US", baseRates) : 1;
   const [confirmCount, setConfirmCount] = useState<BatchCount | null>(null);
 
   const state = homeState ?? undefined;
@@ -43,13 +48,47 @@ export default function ActionExecuteRow({
 
   const sim5 = useMemo(() => {
     if (!batchable) return null;
-    return simulateActionBatch(character, state, actionType as ActionType, 5, forexEnabled);
-  }, [batchable, character, state, actionType, forexEnabled]);
+    return simulateActionBatch(
+      character,
+      state,
+      actionType as ActionType,
+      5,
+      forexEnabled,
+      campaignRate,
+      { preset, priceLevel: campaignPriceLevel }
+    );
+  }, [
+    batchable,
+    character,
+    state,
+    actionType,
+    forexEnabled,
+    campaignRate,
+    preset,
+    campaignPriceLevel,
+  ]);
 
   const sim10 = useMemo(() => {
     if (!batchable) return null;
-    return simulateActionBatch(character, state, actionType as ActionType, 10, forexEnabled);
-  }, [batchable, character, state, actionType, forexEnabled]);
+    return simulateActionBatch(
+      character,
+      state,
+      actionType as ActionType,
+      10,
+      forexEnabled,
+      campaignRate,
+      { preset, priceLevel: campaignPriceLevel }
+    );
+  }, [
+    batchable,
+    character,
+    state,
+    actionType,
+    forexEnabled,
+    campaignRate,
+    preset,
+    campaignPriceLevel,
+  ]);
 
   const can5 = batchable && sim5?.ok;
   const can10 = batchable && sim10?.ok;
@@ -154,7 +193,10 @@ export default function ActionExecuteRow({
                   className={`font-semibold ${pendingConfirm.netFundsChange >= 0 ? "text-success" : "text-error"}`}
                 >
                   {pendingConfirm.netFundsChange >= 0 ? "+" : ""}
-                  {formatAmount(pendingConfirm.netFundsChange)}
+                  {formatCurrencyFaceAmount(
+                    pendingConfirm.netFundsChange * campaignRate,
+                    getCampaignCurrency(character.countryId ?? "US")
+                  )}
                 </span>
                 .
               </p>

@@ -130,3 +130,21 @@ describe("applyReferendumOutcome", () => {
     expect(event.eventType).toBe("referendum_failed");
   });
 });
+
+it("does not recount a resolved peace ballot on retry", async () => {
+  const db = createMockDb();
+  db.collection("referendums").updateOne.mockResolvedValue({ modifiedCount: 0 });
+  vi.mocked(recordWireEvent).mockClear();
+  await applyReferendumOutcome(
+    db as unknown as Db,
+    refDoc({ kind: "peace_agreement" }),
+    { passed: false, finalYesShare: 35, turnout: 64 },
+    160
+  );
+  expect(db.collection("referendums").updateOne.mock.calls[0][0]).toMatchObject({
+    status: "polling",
+    result: null,
+  });
+  expect(recordWireEvent).not.toHaveBeenCalled();
+  expect(db.collection("macroMetrics").updateOne).not.toHaveBeenCalled();
+});

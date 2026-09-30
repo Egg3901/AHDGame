@@ -12,7 +12,7 @@ export type ReferendumStatus =
   | "settled"
   | "cancelled";
 
-export type ReferendumKind = "independence" | "reunification";
+export type ReferendumKind = "independence" | "reunification" | "peace_agreement";
 
 /** One declared party stance in a referendum (Sub-project D). Independent of
  *  campaign spend — a public position, not a poll mover. */
@@ -42,6 +42,12 @@ export interface Referendum {
   /** null = secession (new country); "IE" = NIR reunification (transfer). */
   targetCountryId: CountryId | null;
   status: ReferendumStatus;
+  /** Exact legislative text authorized for a peace vote; immutable after opening.
+   * Additive and optional so existing territorial referendums need no migration. */
+  peaceAgreement?: {
+    conflictKey: "northern_ireland";
+    agreementKey: string;
+  };
 
   requestedTurn: number;
   /** Turn the PM granted the referendum (opening the campaign). */

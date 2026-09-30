@@ -1,3 +1,8 @@
+import type { LivingConflictState } from "@/lib/livingConflict/types";
+import {
+  crisisEconomicExposure,
+  crisisMacroOutputMultiplier,
+} from "@/lib/livingConflict/rules/economicExposure";
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { computeMacroContribution } from "./kernel";
@@ -35,19 +40,52 @@ export async function processMacroCountryTurn(
     (country) => isActiveMacroCountry(country) && isMacroTickTurn(turn, country.entityId)
   );
   if (due.length > 0) {
+    const config = await db
+      .collection("gameState")
+      .findOne({ _id: "current" as never }, { projection: { livingConflictsEnabled: 1 } });
+    const crisis = config?.livingConflictsEnabled
+      ? await db
+          .collection<LivingConflictState>("livingConflicts")
+          .findOne(
+            { defKey: "yugoslav_dissolution" },
+            { projection: { hasOpened: 1, status: 1, tracks: 1, representedActors: 1 } }
+          )
+      : null;
     await collection.bulkWrite(
-      due.map((country) => ({
-        updateOne: {
-          filter: { _id: country._id },
-          update: {
-            $set: {
-              contribution: computeMacroContribution(country, turn),
-              lastMacroTickTurn: turn,
-              updatedAt: now,
+      due.map((country) => {
+        const exposure = crisisEconomicExposure(
+          crisis,
+          { _id: country.entityId, countryId: country.entityId },
+          country.livingConflictExposure,
+          turn,
+          MACRO_TICK_INTERVAL
+        );
+        const persistExposure =
+          country.livingConflictExposure ||
+          exposure.displacedShare > 0 ||
+          exposure.hostingShare > 0 ||
+          exposure.infrastructureDamage > 0;
+        const baseShock =
+          Number.isFinite(country.shockModifier) && country.shockModifier > 0
+            ? country.shockModifier
+            : 1;
+        return {
+          updateOne: {
+            filter: { _id: country._id },
+            update: {
+              $set: {
+                contribution: computeMacroContribution(
+                  { ...country, shockModifier: baseShock * crisisMacroOutputMultiplier(exposure) },
+                  turn
+                ),
+                ...(persistExposure ? { livingConflictExposure: exposure } : {}),
+                lastMacroTickTurn: turn,
+                updatedAt: now,
+              },
             },
           },
-        },
-      })),
+        };
+      }),
       { ordered: false }
     );
   }

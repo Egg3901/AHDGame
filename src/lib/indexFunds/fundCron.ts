@@ -39,7 +39,7 @@ import {
   setFundStatus,
   insertFundTransactionsBulk,
 } from "@/lib/indexFunds/fundQueries";
-import { INDEX_FUND_INITIAL_NAV, calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
+import { calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
 import {
   buildIndexFundTargetConstituents,
   type IndexFundCandidate,
@@ -61,6 +61,8 @@ import {
   sellFundHoldingShares,
 } from "@/lib/indexFunds/fundRedemptionLiquidity";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
+import { recomputeNav, refreshFundNavAfterBondDeployment, restoreFundCashBuffer } from "./fundNav";
+export { recomputeNav, refreshFundNavAfterBondDeployment, restoreFundCashBuffer } from "./fundNav";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import {
   domesticCoverageEnabled,
@@ -318,35 +320,6 @@ export function shouldRunCrossFundRebalancing(currentTurn: number): boolean {
 }
 
 // ── Pass 1: Recompute NAV ─────────────────────────────────────────────
-
-export function recomputeNav(
-  fund: IndexFund,
-  options?: {
-    bondPrincipalAnchor?: number;
-    openOrdersEscrowAnchor?: number;
-    /**
-     * Units queued for redemption whose supply was already burned. They belong
-     * in the DENOMINATOR: a queued holder is still a holder with a pro-rata
-     * claim, not a creditor owed a fixed sum. Subtracting a cash liability
-     * struck at the NAV locked when the redemption was requested is what
-     * drained GLB50 - assets fell, the liability did not, and the entire
-     * decline was pushed onto the holders who stayed until NAV hit zero.
-     */
-    queuedRedemptionUnits?: number;
-  }
-): number | null {
-  const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
-  const bondPrincipalAnchor = options?.bondPrincipalAnchor ?? 0;
-  const openOrdersEscrowAnchor = options?.openOrdersEscrowAnchor ?? 0;
-  const queuedRedemptionUnits = Math.max(0, options?.queuedRedemptionUnits ?? 0);
-  const totalBacking =
-    fund.cashAnchor + holdingsValueAnchor + bondPrincipalAnchor + openOrdersEscrowAnchor;
-  const totalUnits = fund.unitSupply + queuedRedemptionUnits;
-  if (totalUnits <= 0) return INDEX_FUND_INITIAL_NAV;
-
-  const nav = totalBacking / totalUnits;
-  return Number.isFinite(nav) && nav > 0 ? nav : null;
-}
 
 // ── Pass 3 helper: Absorb public float ────────────────────────────────
 
@@ -1285,12 +1258,37 @@ export async function runIndexFundCron(
         );
         if (bondDeploy.deployedAnchor > 0) {
           result.bondDeployments++;
+          await refreshFundNavAfterBondDeployment(
+            db,
+            preparation.fund._id,
+            preparation.bondPrincipalAnchor + bondDeploy.markedValueAnchor,
+            openOrdersEscrowByFundId.get(preparation.fund._id.toString()) ?? 0
+          );
         }
       }
       navReadyFundIds.push(preparation.fund._id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push(`Fund ${preparation.fund.slug}: ${message}`);
+      // Earlier purchases can settle before a later issue or receipt fails.
+      // Re-read the book and cash so the pre-deployment quote is not left live.
+      try {
+        const settledBondValue = await sumFundBondHoldingsValueAnchor(
+          db,
+          preparation.fund,
+          exchangeRates
+        );
+        await refreshFundNavAfterBondDeployment(
+          db,
+          preparation.fund._id,
+          settledBondValue,
+          openOrdersEscrowByFundId.get(preparation.fund._id.toString()) ?? 0
+        );
+      } catch (refreshError) {
+        result.errors.push(
+          `Fund ${preparation.fund.slug} post-bond NAV: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`
+        );
+      }
     }
   }
 
@@ -1522,12 +1520,28 @@ export async function runIndexFundCron(
   // mutation has settled. Disabling the gate cancels and refunds prior bids in
   // the same pass, providing an immediate rollback path.
   try {
-    const quoteFunds = (await listActiveFunds(db)).filter(
-      (fund) => !queuedUnitsByFundId.has(fund._id.toString())
+    const activeQuoteFunds = await listActiveFunds(db);
+    const quoteBondValueByFundId = await sumFundBondHoldingsByFundId(
+      db,
+      activeQuoteFunds,
+      exchangeRates
     );
-    const quoteBondValueByFundId = equityLiquidityEnabled
-      ? await sumFundBondHoldingsByFundId(db, quoteFunds, exchangeRates)
-      : undefined;
+    const quoteFunds: IndexFund[] = [];
+    const currentQueuedUnits = await loadQueuedRedemptionUnitsByFundId(
+      db,
+      activeQuoteFunds.map((fund) => fund._id)
+    );
+    for (const fund of activeQuoteFunds) {
+      const restored = await restoreFundCashBuffer(
+        db,
+        fund,
+        quoteBondValueByFundId.get(String(fund._id)) ?? 0,
+        exchangeRates,
+        currentTurn
+      );
+      quoteBondValueByFundId.set(String(fund._id), restored.bondPrincipalAnchor);
+      if (!currentQueuedUnits.has(String(fund._id))) quoteFunds.push(restored.fund);
+    }
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
         .filter(([, rate]) => typeof rate === "number" && rate > 0)

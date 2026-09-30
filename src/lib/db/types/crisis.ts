@@ -267,6 +267,8 @@ export interface CrisisDecisionNode {
    * Mongo ObjectIds.
    */
   requiredPartyAbbreviations?: string[];
+  /** Canonical cabinet position IDs, applied to the cabinet responder role. */
+  requiredCabinetPositionIds?: string[];
   timeLimitMinutes: number | null;
 }
 

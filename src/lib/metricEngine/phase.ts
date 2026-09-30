@@ -68,6 +68,13 @@ import {
 } from "@/lib/governanceStyle/score";
 import { democraticHealthEconomicDrag } from "@/lib/governanceStyle/rules/democraticConsequences";
 import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
+import type { LivingConflictState } from "@/lib/livingConflict/types";
+import {
+  crisisEconomicExposure,
+  crisisParticipationMultiplier,
+  crisisPotentialGrowthPenalty,
+  type CrisisEconomicExposure,
+} from "@/lib/livingConflict/rules/economicExposure";
 
 /** Default unemployment when a state has no prior reading (matches gdpGrowth.ts `?? 4.5`). */
 const DEFAULT_UNEMPLOYMENT = 4.5;
@@ -185,6 +192,7 @@ function readMetricPath(
 
 interface PrevMetricsDoc {
   _id: string;
+  livingConflictExposure?: CrisisEconomicExposure;
   /** §6.1 (P7b): the region's LAGGED economic model, for sector GDP concentration. */
   economicModel?: EconomicModelState;
   economic?: {
@@ -222,12 +230,21 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
         eraSystemEnabled: 1,
         macroGrowthV1: 1,
         preset: 1,
+        livingConflictsEnabled: 1,
       },
     }
   );
   const eraYear = eraGameState?.eraSystemEnabled ? resolveGameYear(eraGameState) : null;
   // Macro-growth v1 (design §4): O2 convergence + O3 sector blend on potential.
   const macroGrowthEnabled = eraGameState?.macroGrowthV1 === true;
+  const yugoslavia = eraGameState?.livingConflictsEnabled
+    ? await db
+        .collection<LivingConflictState>("livingConflicts")
+        .findOne(
+          { defKey: "yugoslav_dissolution" },
+          { projection: { hasOpened: 1, status: 1, tracks: 1, representedActors: 1 } }
+        )
+    : null;
 
   // SP5: prev values live in TWO stores post-split — macroMetrics carries
   // economic/population (+ economicModel) for every country; stateMetrics
@@ -235,6 +252,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   // with the same field list (absent fields project to nothing) and merged
   // per region below, so every downstream read keeps its single-doc shape.
   const PREV_PROJECTION = {
+    livingConflictExposure: 1,
     economicModel: 1,
     "economic.sectorGrowth.value": 1,
     "economic.sectorGrowth.simBaseline": 1,
@@ -666,17 +684,24 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // Supply-side POTENTIAL growth (§5.1): αL·g_L + αK·g_K + TFP. Computed BEFORE
     // the registry so it can be threaded to the gdpGrowth/unemployment nodes.
     const priorMetricDoc = prevDocById.get(state._id);
+    const crisisExposure = crisisEconomicExposure(
+      yugoslavia,
+      state,
+      priorMetricDoc?.livingConflictExposure,
+      turn
+    );
     const participationDemandBonus = labourMacroEnabled
       ? nextLabourParticipationBonus(
           readMetricPath(priorMetricDoc, "economic.labourTightness", "value"),
           readMetricPath(priorMetricDoc, "economic.labourParticipationDemandBonus", "value")
         )
       : 0;
-    const effectiveLaborParticipation = Math.min(
-      100,
-      (laborParticipationByState.get(state._id) ?? NEUTRAL_LABOR_PARTICIPATION) +
-        participationDemandBonus
-    );
+    const effectiveLaborParticipation =
+      Math.min(
+        100,
+        (laborParticipationByState.get(state._id) ?? NEUTRAL_LABOR_PARTICIPATION) +
+          participationDemandBonus
+      ) * crisisParticipationMultiplier(crisisExposure);
     const laborForce = computeLaborForce(
       state.workingAgePopulation ?? 0,
       state.militaryServicePopulation ?? 0,
@@ -735,6 +760,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // ceiling. The output-gap path then carries that drag into realized GDP,
     // unemployment, tax bases, and every downstream macro consumer.
     potential -= democraticHealthDragByCountry.get(countryId) ?? 0;
+    potential -= crisisPotentialGrowthPenalty(crisisExposure);
     const prevGap = state.outputGap ?? 0;
 
     // Prev feeds the SECTOR node's EMA + policy delta (P1c-2). `potential` and the
@@ -914,6 +940,11 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       "economic.labourParticipationDemandBonus.value": participationDemandBonus,
       lastUpdated: now,
     };
+    const persistCrisisExposure =
+      priorMetricDoc?.livingConflictExposure ||
+      crisisExposure.displacedShare > 0 ||
+      crisisExposure.hostingShare > 0 ||
+      crisisExposure.infrastructureDamage > 0;
     // Generic nodes (P2+): persist value + simBaseline per node — but ONLY for
     // metrics the region already stores. Approval scores every metric PRESENT
     // (audit-5), so persisting a node a region never had (e.g. UK-only
@@ -955,6 +986,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       if (isMacroMetricPath(key)) macroSet[key] = value;
     }
     if (Object.keys(macroSet).length > 0) {
+      if (persistCrisisExposure) {
+        for (const [key, value] of Object.entries(crisisExposure))
+          macroSet[`livingConflictExposure.${key}`] = value;
+      }
       macroSet.lastUpdated = now;
       macroOps.push({ updateOne: { filter: { _id: state._id }, update: { $set: macroSet } } });
     }

@@ -1,4 +1,7 @@
-import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import {
+  loadCampaignCurrencyRates,
+  loadCampaignPriceLevel,
+} from "@/lib/campaigns/campaignCurrency";
 import { loadOppositionTargets } from "@/lib/campaigns/oppositionTargets";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api/errors";
@@ -66,6 +69,7 @@ export async function upgradeCampaign(params: {
   // Frozen-basis era: euro members price in EUR. One route-path read; the turn
   // phases that price the same costs already carry the preset in memory.
   const upgradePreset = await getGameStatePresetOrDefault(db);
+  const priceLevel = await loadCampaignPriceLevel(db);
   const branch = params.branch ?? null;
   const campaign = await getCampaignOrThrow(db, campaignId);
 
@@ -123,7 +127,7 @@ export async function upgradeCampaign(params: {
     throw badRequest("Max level reached");
   }
 
-  const adjustedFunds = cost.funds;
+  const adjustedFunds = cost.funds * priceLevel;
   const adjustedActions = cost.actions;
   // Campaign treasury is stored in the campaign's local currency; the cost
   // table is anchor. Convert at the frozen base rate (matches campaignTurn).
@@ -147,7 +151,7 @@ export async function upgradeCampaign(params: {
   // Bundlers (incomeLumpOnPurchase) credit a one-time cash infusion, in local $.
   const lumpFundsLocal =
     effectType === "incomeLumpOnPurchase" && cost.lumpSum
-      ? campaignAnchorToLocal(cost.lumpSum, countryId, campaignRates, upgradePreset)
+      ? campaignAnchorToLocal(cost.lumpSum * priceLevel, countryId, campaignRates, upgradePreset)
       : 0;
 
   // Opposition-research target resolution. Required when unlocking the oppo
@@ -747,6 +751,7 @@ export async function contributeCampaignStrength(params: {
   const { db, campaignId, user, clicks: requestedClicks = 1 } = params;
   const campaignRates = await loadCampaignCurrencyRates(db);
   const strengthPreset = await getGameStatePresetOrDefault(db);
+  const priceLevel = await loadCampaignPriceLevel(db);
   const now = new Date();
   const campaign = await getCampaignOrThrow(db, campaignId);
   const election = await db.collection<Election>("elections").findOne({ _id: campaign.electionId });
@@ -804,7 +809,7 @@ export async function contributeCampaignStrength(params: {
 
   const currentCS = campaign.campaignStrength ?? 0;
   const availableLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;
-  const fundsRate = forexEnabled ? campaignRate : 1;
+  const fundsRate = (forexEnabled ? campaignRate : 1) * priceLevel;
 
   // "Max" is resolved HERE, not from the count the client previewed: the funds
   // cost climbs with the campaign's live strength, so any rival contribution

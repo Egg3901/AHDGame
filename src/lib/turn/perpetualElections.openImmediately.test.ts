@@ -79,6 +79,7 @@ async function mount(mock: ReturnType<typeof makeMockDb>) {
       if (name === "elections") return mock.electionsCollection;
       if (name === "states") return mock.statesCollection;
       if (name === "gameState") return mock.gameStateCollection;
+      if (name === "ukDevolution") return { findOne: vi.fn().mockResolvedValue(null) };
       return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
     }),
   } as never);

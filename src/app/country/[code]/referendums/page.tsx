@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { referendumKindLabel } from "@/lib/referendum/sideLabels";
 import { notFound } from "next/navigation";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
@@ -117,8 +118,7 @@ export default async function ReferendumsIndexPage({
                     className="flex items-center justify-between rounded-xl border border-card-border bg-card px-4 py-3 hover:border-primary/50"
                   >
                     <span className="text-sm font-medium">
-                      {regionName(r.regionId)} —{" "}
-                      {r.kind === "reunification" ? "Reunification" : "Independence"}{" "}
+                      {regionName(r.regionId)} — {referendumKindLabel(r.kind)}{" "}
                       <span className="text-xs text-muted">· cycle {r.cycle}</span>
                     </span>
                     <CampaignStatusPill status={r.status} />

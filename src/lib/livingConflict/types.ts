@@ -137,6 +137,8 @@ export interface EventTrigger {
   onPhaseEnter?: boolean;
   /** Fires every N turns the conflict has run (deterministic cadence). */
   everyTurns?: number;
+  /** Every named-track condition must hold for either timing path. */
+  trackConditions?: ConflictTrackCondition[];
   /** Restrict this beat to campaign stages. Omitted keeps legacy behavior. */
   campaignStages?: CampaignStage[];
 }
@@ -207,6 +209,23 @@ export interface RoleContext {
   blocMembers: string[];
 }
 
+/** A local faction retains its identity even without a playable government. */
+export interface ConflictActorDefinition {
+  id: string;
+  name: string;
+  representsCountryId: string;
+  countryCandidates: string[];
+  regionIds: string[];
+}
+
+export interface ConflictActor {
+  id: string;
+  name: string;
+  representsCountryId: string;
+  countryId?: string;
+  regionIds: string[];
+}
+
 /** A full living-conflict definition. Authored once; drives every world. */
 export interface LivingConflictDef {
   key: string;
@@ -232,9 +251,12 @@ export interface LivingConflictDef {
     neighbors: string[];
     blocMembers: string[];
     bystanders: string[];
+    representedActors?: ConflictActor[];
   };
   /** Ordered substitutes for historical participants absent from this world. */
   participantFallbacks?: Record<string, string[]>;
+  /** Local parties to a conflict, independent of whether their state is playable. */
+  actors?: ConflictActorDefinition[];
   /** Optional named progress tracks. Absent keeps legacy ladder behavior. */
   tracks?: Record<string, ConflictTrackDefinition>;
   /** Optional declarative phase transitions. Absent keeps legacy pressure behavior. */
@@ -260,11 +282,17 @@ export interface LivingConflictState {
   /** 0..100 running intensity, moved by events and phase. */
   intensity: number;
   openedYear: number | null;
+  /** Stable origin selected from the countries present when a pandemic opens. */
+  pandemicOriginCountryId?: string;
   /** Accumulated commitment pressure per side bucket ("a" | "b"). */
   pressure: Record<string, number>;
   /** Named negotiated-crisis tracks. Absent on legacy documents and normalized on read. */
   tracks?: Record<string, number>;
   /** Turns spent on the current phase (drives minDwellTurns). */
+  /** Last public rejection applied to this peace process, saved with its consequences. */
+  rejectedPeaceReferendumId?: string;
+  /** Recent actor-free expiry receipts, persisted with the trajectory write. */
+  fallbackResolutionIds?: string[];
   phaseTurns: number;
   /** Turns since the conflict opened (drives everyTurns cadences). */
   totalTurns: number;
@@ -274,6 +302,7 @@ export interface LivingConflictState {
   emitPhaseEntryNextTurn?: boolean;
   /** Persistent multi-window campaign depth. Absent legacy rows normalize on read. */
   campaign?: LivingCampaignState;
+  representedActors?: ConflictActor[];
   updatedAt: Date;
 }
 

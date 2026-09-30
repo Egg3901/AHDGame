@@ -1136,3 +1136,89 @@ describe("submitCrisisDecision — a country with no role in the response", () =
     expect((err as ApiError).message).toMatch(/invalid option/i);
   });
 });
+
+describe("Northern Ireland unanswered decisions", () => {
+  it("applies an actor-free fallback once across a failed navigation retry, without creating a bill", async () => {
+    const { NORTHERN_IRELAND_DEF } = await import("@/lib/livingConflict/defs/northernIreland");
+    const { normalizeConflictState } = await import("@/lib/livingConflict/engine");
+    const tree = NORTHERN_IRELAND_DEF.phases[0].events[0].negotiation!.decisionTree;
+    const interaction = makeInteraction({
+      decisionTree: tree,
+      currentNodeId: "nationalist_position",
+    });
+    db.collection("crisisInteractions").findOne.mockResolvedValue(interaction);
+    let state = normalizeConflictState(NORTHERN_IRELAND_DEF, {
+      defKey: "northern_ireland",
+      hasOpened: true,
+      phaseLevel: 3,
+      status: "ceasefire",
+      tracks: { violence: 79, nationalistConsent: 45, settlementMomentum: 30 },
+    });
+    db.collection("livingConflicts").findOne.mockImplementation(async () => state);
+    db.collection("livingConflicts").updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set: Partial<typeof state> }) => {
+        state = { ...state, ...update.$set };
+        return { matchedCount: 1 };
+      }
+    );
+    db.collection("crisisInteractions").updateOne.mockRejectedValueOnce(new Error("interrupted"));
+    await expect(autoResolveCrisisInteraction(mdb(), interaction._id)).rejects.toThrow(
+      "interrupted"
+    );
+    expect(state).toMatchObject({
+      phaseLevel: 1,
+      status: "active",
+      tracks: { violence: 83, nationalistConsent: 39 },
+    });
+    await autoResolveCrisisInteraction(mdb(), interaction._id);
+    expect(state.tracks?.violence).toBe(83);
+    expect(state.tracks?.nationalistConsent).toBe(39);
+    expect(db.collection("livingConflicts").updateOne).toHaveBeenCalledTimes(1);
+    expect(db.collection("bills").insertOne).not.toHaveBeenCalled();
+    expect(db.collection("crisisInteractions").updateOne.mock.calls.at(-1)?.[1].$set).toMatchObject(
+      {
+        currentNodeId: "regional_executive_position",
+        resolutionPath: ["nationalist_withhold"],
+      }
+    );
+  });
+});
+
+describe("bilateral sequential peace decisions", () => {
+  it("advances from the British to Irish government instead of collecting parallel replies", async () => {
+    const { NORTHERN_IRELAND_DEF } = await import("@/lib/livingConflict/defs/northernIreland");
+    const tree = NORTHERN_IRELAND_DEF.phases[0].events[0].negotiation!.decisionTree.map((node) => ({
+      ...node,
+      options: node.options?.map(({ action: _action, ...option }) => ({ ...option, effects: [] })),
+    }));
+    const interaction = makeInteraction({ decisionTree: tree, currentNodeId: "uk_position" });
+    const crisis = { ...makeCrisis(), scope: "country" as const, countryIds: ["UK", "IE"] };
+    db.collection("crisisInteractions").findOne.mockResolvedValue(interaction);
+    db.collection("crises").findOne.mockResolvedValue(crisis);
+    const uk = await submitCrisisDecision(
+      mdb(),
+      interaction._id,
+      "uk_backchannel",
+      new ObjectId(),
+      "UK",
+      ["headOfState"]
+    );
+    expect(uk.interaction.currentNodeId).toBe("irish_position");
+    expect(uk.interaction.leaderResponses).toBeUndefined();
+    await expect(
+      submitCrisisDecision(mdb(), interaction._id, "ie_coordinate", new ObjectId(), "UK", [
+        "headOfState",
+      ])
+    ).rejects.toThrow();
+    const ie = await submitCrisisDecision(
+      mdb(),
+      interaction._id,
+      "ie_coordinate",
+      new ObjectId(),
+      "IE",
+      ["headOfState"]
+    );
+    expect(ie.interaction.currentNodeId).toBe("unionist_position");
+    expect(ie.interaction.resolutionPath).toEqual(["uk_backchannel", "ie_coordinate"]);
+  });
+});

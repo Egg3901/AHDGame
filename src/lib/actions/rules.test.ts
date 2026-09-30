@@ -1618,13 +1618,13 @@ describe("era price level threading (issue #2119)", () => {
     const modernCampaign = getCampaignFundCost(0, 2_557, 1_000_000, "US", "1953-default");
     const eraCampaign = getCampaignFundCost(0, 2_557, 1_000_000, "US", "1953-default", P1953);
     expect(modernCampaign).toBe(20_000);
-    expect(eraCampaign).toBe(Math.round((20_000 * P1953) / 1_000) * 1_000);
+    expect(eraCampaign).toBe(Math.round(20_000 * P1953));
     expect(eraCampaign).toBeLessThan(modernCampaign);
 
     const modernAdvertise = getAdvertiseFundCost(0, 2_557, 1_000_000, "US", "1953-default");
     const eraAdvertise = getAdvertiseFundCost(0, 2_557, 1_000_000, "US", "1953-default", P1953);
     expect(modernAdvertise).toBe(100_000);
-    expect(eraAdvertise).toBe(Math.round((100_000 * P1953) / 1_000) * 1_000);
+    expect(eraAdvertise).toBe(Math.round(100_000 * P1953));
 
     // Income side: the fundraise L0 yield ($50K base) deflates by the SAME value.
     const modernYield = fundraiseYieldAnchor({ donorBaseLevel: 0, politicalInfluence: 0 });
@@ -1641,7 +1641,7 @@ describe("era price level threading (issue #2119)", () => {
     expect(qModern.ok && qEra.ok).toBe(true);
     if (!qModern.ok || !qEra.ok) return;
     expect(qModern.fundCostAnchor).toBe(20_000);
-    expect(qEra.fundCostAnchor).toBe(Math.round((20_000 * P1953) / 1_000) * 1_000);
+    expect(qEra.fundCostAnchor).toBe(Math.round(20_000 * P1953));
 
     const yieldQuote = quoteFundraiseAction({ donorBaseLevel: 50, politicalInfluence: 0 }, P1953);
     expect(yieldQuote.ok).toBe(true);
@@ -1678,3 +1678,22 @@ describe("era price level threading (issue #2119)", () => {
     );
   });
 });
+
+it("1953 donor-base upgrades remain paid rather than rounding down to free", () => {
+  const price = getBuildDonorBaseFundCost(0, 2557, 1_000_000, "US", "1953-default", 0.03673);
+  expect(price).toBe(110);
+});
+
+it.each(["1953", "1979", "1991", "1999", "2007", "2019", "2023", "2027"])(
+  "preserves campaign purchasing power in %s within one-unit rounding",
+  (era) => {
+    const priceLevel = eraPriceLevelFor(`${era}-default`);
+    // Missing regional input has the same 0.85 floor in both quotes.
+    const cost = getCampaignFundCost(0, 0, 1_000_000, "US", `${era}-default`, priceLevel);
+    const modernCost = getCampaignFundCost(0, 0, 1_000_000, "US", `${era}-default`, 1);
+    const actor = { donorBaseLevel: 25, politicalInfluence: 0 };
+    const income = fundraiseYieldAnchor(actor, priceLevel);
+    const modernIncome = fundraiseYieldAnchor(actor);
+    expect(Math.abs(cost / income - modernCost / modernIncome)).toBeLessThan(1 / income);
+  }
+);
