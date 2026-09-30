@@ -207,5 +207,20 @@ export async function verifyPreparedFederationPublication(
       preparation.effectsHash
   )
     throw new Error("Federation prepared inventory is incomplete or altered");
+  const entityEffects = effects.filter((effect) => effect.kind === "entity-state");
+  const states = await db
+    .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
+    .find({ applicationId })
+    .toArray();
+  const stateById = new Map(states.map((state) => [state._id, state]));
+  if (
+    states.length !== entityEffects.length ||
+    entityEffects.some((effect) => {
+      const stateId = effect.value._id;
+      const state = typeof stateId === "string" ? stateById.get(stateId) : null;
+      return !state || hashSettlementPayload(state) !== effect.valueHash;
+    })
+  )
+    throw new Error("Federation staged sovereign states are incomplete or altered");
   return effects;
 }

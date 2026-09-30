@@ -418,6 +418,11 @@ describe("live federation settlement intent", () => {
     expect(await verifyPreparedFederationPublication(args.db, staged._id)).toHaveLength(
       preparation.effectIds.length
     );
+    await args.db.collection("worldEntityStates").deleteOne({ _id: "1991-default:UKR" });
+    await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
+      "sovereign states are incomplete"
+    );
+    await prepareFederationPublication(args.db, plan, new Date(4));
     await args.db
       .collection("federationPreparedEffects")
       .updateOne({ _id: preparation.effectIds[0] }, { $set: { "value.corrupted": true } });
