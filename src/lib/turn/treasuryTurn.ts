@@ -1,6 +1,6 @@
 import { treasuryAccrualReceipt } from "@/lib/budget/rules/treasuryAccrual";
 import { publishTreasuryAccrualReceipt } from "@/lib/budget/treasuryAccrualReceipt";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudgetPolicy";
 import { advanceTaxRatePhaseIn } from "@/lib/budget/taxRatePhaseIn";
 import { getDb } from "@/lib/mongodb";
@@ -116,14 +116,16 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         b.unionsBanned === true,
         b.unionEnforcementPosture
       );
-      const currencyCode =
-        b.currencyCode ?? COUNTRY_CURRENCY_MAP[b.countryId as CountryId] ?? "USD";
-      const observedRate = rateByCurrency.get(currencyCode) ?? 1;
+      const currencyCode = resolveCountryCurrencyCode(b) ?? "USD";
+      const observedRate = rateByCurrency.get(currencyCode);
+      if (observedRate === undefined || !Number.isFinite(observedRate) || observedRate <= 0) {
+        throw new Error(`Missing valid treasury-accrual exchange rate for ${currencyCode}`);
+      }
       const receipt = treasuryAccrualReceipt({
         turn: _turn,
         openingCash: current,
         currencyCode,
-        anchorRate: Number.isFinite(observedRate) && observedRate > 0 ? observedRate : 1,
+        anchorRate: observedRate,
         ledgerShadow: config?.ledgerShadow === true,
         annualRevenue: revenue,
         annualPrimarySpending: spendingTotal - debtInterest,

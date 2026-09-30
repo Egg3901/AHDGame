@@ -135,4 +135,16 @@ describe("treasury accrual stock-flow ownership", () => {
       expect(deriveLedgerEntry(row)).not.toBeNull();
     }
   );
+  it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses invalid floating USD FX %s before cash accrual",
+    async (rate) => {
+      const db = world();
+      await db.collection("exchangeRates").deleteMany({});
+      if (rate !== undefined) db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate }]);
+      await expect(processTreasuryTurn(10)).rejects.toThrow("exchange rate");
+      expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(-1000);
+      expect(db.collection("federalBudget").docs[0].treasuryAccrual).toBeUndefined();
+      expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+    }
+  );
 });
