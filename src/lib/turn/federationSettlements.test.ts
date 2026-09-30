@@ -72,7 +72,22 @@ async function scenario() {
                 method === "insertOne"
               )
                 throw new Error("injected receipt failure");
-              return value.apply(collection, args);
+              const result = value.apply(collection, args);
+              if (
+                method === "bulkWrite" &&
+                ["federationPreparedEffects", "worldEntityStates"].includes(name)
+              ) {
+                const options = args.at(-1) as { ignoreUndefined?: boolean };
+                return Promise.resolve(result).then((written) => {
+                  collection.docs = collection.docs.map((doc) =>
+                    BSON.deserialize(
+                      BSON.serialize(doc, { ignoreUndefined: options.ignoreUndefined })
+                    )
+                  );
+                  return written;
+                });
+              }
+              return result;
             };
           },
         });
