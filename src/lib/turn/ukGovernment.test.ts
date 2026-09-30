@@ -86,6 +86,10 @@ vi.mock("@/lib/constants/countries", async (importOriginal) => {
 
 const NOW = new Date("2025-06-15T12:00:00Z");
 
+// Resolve the real country exports during module setup, before the first timed
+// test lazily imports government processing and asks the partial mock for them.
+await vi.importActual<typeof import("@/lib/constants/countries")>("@/lib/constants/countries");
+
 function makeCursor(docs: unknown[]) {
   return {
     toArray: vi.fn().mockResolvedValue(docs),
