@@ -37,6 +37,6 @@ export function decideAutonomousFederationConsent(input: {
     };
   return {
     choice: "approve",
-    reason: `The ${unfundedDebtBps}-point net debt exposure is within the ${affordableGapBps}-point fiscal risk limit, and political stability is ${stability.toFixed(2)}.`,
+    reason: `The ${unfundedDebtBps}-point debt-versus-asset share gap is within the ${affordableGapBps}-point fiscal risk limit, and political stability is ${stability.toFixed(2)}.`,
   };
 }
