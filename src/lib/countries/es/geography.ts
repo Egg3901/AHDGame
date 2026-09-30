@@ -3,6 +3,7 @@ import { esMetricPresets1953 } from "./data/esMetricPresets1953";
 import { esRegionCensusData } from "@/lib/seeds/es/esRegionCensusData";
 import { esRegionCensusData1953 } from "@/lib/seeds/es/esRegionCensusData1953";
 import { esRegions } from "./data/esRegions";
+import { esRegions1991 } from "./data/esRegions1991";
 import { esRegions1953 } from "./data/esRegions1953";
 import { esStateMetrics } from "./data/esStateMetrics";
 import {
@@ -30,7 +31,7 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Spain authors 2 census
- * eras, 1 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * eras, 1 metric eras, 0 anchor eras and 4 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
@@ -51,6 +52,7 @@ const metricPresetBundles = {
 const populationAnchors = {};
 
 const regionBundles = {
+  "1991-default": esRegions1991,
   "1953-default": esRegions1953,
   "1979-default": esRegions,
   "2019-default": esRegions,

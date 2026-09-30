@@ -1,9 +1,12 @@
 import type { State } from "@/lib/db/types";
+import { allocatePopulationTotal } from "@/lib/seeds/rules/populationAllocation";
+import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals1991";
 
 /**
  * China macro-regions, 1990 Census + 1991 nominal regional GDP (CNY).
  *
- * Population: 1990 China Census (NBS).
+ * Population shares: existing approximate 1990-era model. Counts are normalized
+ *   to the NBS 1991 year-end mainland total; see populationTotals1991.ts.
  * GDP: 1991 nominal regional GDP, in millions of CNY.
  *   Source: NBS Provincial Statistical Yearbooks 1991 series, aggregated to
  *   the 7-region game scheme.
@@ -11,7 +14,7 @@ import type { State } from "@/lib/db/types";
  *   2,980 model retains the regional weights; minor adjustments to round.
  * CPPCC seat allocation: 7th CPPCC composition.
  */
-export const cnRegions1991: State[] = [
+const cnRegionPopulationWeights1991: State[] = [
   {
     _id: "DB",
     countryId: "CN",
@@ -97,3 +100,9 @@ export const cnRegions1991: State[] = [
     votingSystem: "fptp",
   },
 ];
+
+/** Regional counts are estimates normalized to the dated national anchor, not census observations. */
+export const cnRegions1991 = allocatePopulationTotal(
+  cnRegionPopulationWeights1991,
+  POPULATION_TOTALS_1991.CN.population
+);
