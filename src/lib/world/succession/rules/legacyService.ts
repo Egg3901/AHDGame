@@ -8,7 +8,7 @@ import type { Bond } from "@/lib/db/types/bond";
 import type { CountryId } from "@/lib/constants/countries";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { perTurnCouponPayment } from "@/lib/constants/bonds";
-import { resolveBondCurrency } from "@/lib/turn/bondTurnHelpers";
+import { resolveBondCurrency } from "@/lib/bonds/resolveBondCurrency";
 
 export interface LegacyBondDue {
   bondId: string;
