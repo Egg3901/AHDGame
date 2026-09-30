@@ -5,6 +5,7 @@ import { writeFileSync } from "node:fs";
 import { MongoClient, ObjectId, type Db, type Document } from "mongodb";
 import type { Election, ElectionCandidate, ElectionVoteTally } from "../../src/lib/db/types";
 import type { ElectionResultSnapshot } from "../../src/lib/db/types/electionResultSnapshot";
+import { resolveOneGeneralElection } from "../../src/lib/turn/election/generalResolution";
 import { resolvePresidentElection } from "../../src/lib/turn/election/presidentResolution";
 import { loadApportionment } from "../../src/lib/elections/apportionment";
 import { allocateElectoralVotes } from "../../src/lib/turn/electionCalculations";
@@ -37,6 +38,12 @@ const cases = [
     ledgerFault: true,
   },
 ];
+
+async function resolveFixture(db: Db, election: Election, tally: ElectionVoteTally, now: Date) {
+  return process.argv.includes("--general-dispatch")
+    ? (await resolveOneGeneralElection(db, election, tally, 96, now)).resolved
+    : resolvePresidentElection(db, election, tally, now);
+}
 
 async function main() {
   const uri = process.env.SIM_MONGODB_URI,
@@ -301,7 +308,7 @@ async function main() {
           },
         }) as Db;
         await snapshotParliamentSeats(db, 95);
-        const firstResult = await resolvePresidentElection(wrapped, election, tally, now);
+        const firstResult = await resolveFixture(wrapped, election, tally, now);
         if (scenario.fault || scenario.ledgerFault) {
           assert.equal(firstResult, false);
           assert(faultInjected);
@@ -309,9 +316,7 @@ async function main() {
             .collection<ElectionVoteTally>("electionVoteTallies")
             .findOne({ electionId: election._id });
           assert(pending?.executiveSeatingPending);
-          assert(
-            await resolvePresidentElection(db, election, pending, new Date(now.getTime() + 60000))
-          );
+          assert(await resolveFixture(db, election, pending, new Date(now.getTime() + 60000)));
         } else assert(firstResult);
         const finalTally = await db
           .collection<ElectionVoteTally>("electionVoteTallies")
@@ -381,9 +386,7 @@ async function main() {
         const beforeRetry = JSON.stringify(
           await db.collection("characters").find({}).sort({ _id: 1 }).toArray()
         );
-        assert(
-          await resolvePresidentElection(db, election, finalTally, new Date(now.getTime() + 120000))
-        );
+        assert(await resolveFixture(db, election, finalTally, new Date(now.getTime() + 120000)));
         assert.equal(
           JSON.stringify(await db.collection("characters").find({}).sort({ _id: 1 }).toArray()),
           beforeRetry
@@ -423,7 +426,17 @@ async function main() {
     );
     writeFileSync(
       out,
-      JSON.stringify({ sourceCommit, development, outboundRequests: 0, results }, null, 2)
+      JSON.stringify(
+        {
+          sourceCommit,
+          development,
+          generalDispatcher: process.argv.includes("--general-dispatch"),
+          outboundRequests: 0,
+          results,
+        },
+        null,
+        2
+      )
     );
   } finally {
     await client.close();
