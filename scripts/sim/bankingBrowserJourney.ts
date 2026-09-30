@@ -327,6 +327,11 @@ async function main() {
   }
 }
 main().catch((error: unknown) => {
-  console.error(error);
+  console.error(
+    (error instanceof Error ? error.message : String(error)).replace(
+      /(- cookie: )[^\n]+/gi,
+      "$1[redacted]"
+    )
+  );
   process.exitCode = 1;
 });

@@ -87,6 +87,7 @@ export function bankingJourneyApp(
           ADMIN_REGISTRATION_KEY: "synthetic-local-only",
           CRON_SECRET: "synthetic-local-only",
           DISABLE_DEV_BACKGROUND: "1",
+          AHD_BROWSER_JOURNEY: "1",
           CRON_OWNER: "worker",
           NEXT_TELEMETRY_DISABLED: "1",
           NEXT_PUBLIC_BASE_URL: base,
