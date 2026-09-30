@@ -117,7 +117,6 @@ export async function applyProtectedProjection(
       error: "Update projection requires a stable target id and unreserved fields",
     };
   const filter = reviveObjectIds(projection.filter) as Document;
-  const update = reviveObjectIds(projection.update) as Document;
   const target = db.collection<Target>(projection.collection);
   const journal = db.collection<Journal>(MONEY_MOVE_COLLECTION);
   const id = { _id: filter._id } as Filter<Target>;
@@ -129,6 +128,14 @@ export async function applyProtectedProjection(
     const record = await journal.findOne({ _id: key }, { projection: { projections: 1 } });
     const saved = record?.projections?.[index];
     if (!saved) return { ok: false, error: "Projection is missing from its original journal" };
+    const originalFilter = reviveObjectIds(saved.projection.filter) as Document | undefined;
+    if (
+      saved.projection.collection !== projection.collection ||
+      !isDeepStrictEqual(originalFilter?._id, filter._id) ||
+      invalidProjectionTarget(saved.projection)
+    )
+      return { ok: false, error: "Projection target differs from its original journal" };
+    const update = reviveObjectIds(saved.projection.update) as Document;
     const receipt = current?.pendingSettlementProjection;
     if (receipt) {
       await acknowledge(db, projection.collection, filter._id, receipt);
@@ -160,7 +167,7 @@ export async function applyProtectedProjection(
     };
     const delivered: Receipt = { key, index, generation: revision + 1 };
     const write = await target.updateOne(
-      { $and: [filter, guard] } as Filter<Target>,
+      { $and: [originalFilter!, guard] } as Filter<Target>,
       {
         ...update,
         $inc: { ...update.$inc, [REVISION]: 1 },
