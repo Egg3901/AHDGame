@@ -241,6 +241,31 @@ describe("durable leg outcomes", () => {
     expect(f.journals.docs[0].status).toBe("applied");
   });
 
+  it("binds selector targets once and replays after those selector fields change", async () => {
+    const f = fixture();
+    f.move.legs[0].filter = { state: "open" };
+    f.move.legs[0].set = { state: "closed" };
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("applied");
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("replayed");
+    expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("applied");
+    expect(f.balances()).toEqual([990, 110]);
+    expect(f.journals.docs[0].legs).toMatchObject([
+      { filter: { _id: "source", state: "open" } },
+      {},
+    ]);
+  });
+
+  it("refuses missing selector targets before any other leg delivers cash", async () => {
+    const f = fixture();
+    f.move.legs[1].filter = { state: "not-yet-created" };
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("rejected");
+    expect(f.balances()).toEqual([1000, 100]);
+    f.accounts.docs[1].state = "not-yet-created";
+    expect((await applyMoneyMove(f.db, f.move)).status).toBe("replayed");
+    expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("rejected");
+    expect(f.balances()).toEqual([1000, 100]);
+  });
+
   it("leaves ambiguous legacy delivery for reconciliation", async () => {
     const f = fixture();
     await f.journals.insertOne({
@@ -257,4 +282,18 @@ describe("durable leg outcomes", () => {
     });
     expect(f.balances()).toEqual([990, 100]);
   });
+});
+
+it("retains a missing-selector refusal when its claim acknowledgement is lost", async () => {
+  const f = fixture();
+  f.move.legs[1].filter = { state: "missing" };
+  const insert = f.journals.insertOne.bind(f.journals);
+  vi.spyOn(f.journals, "insertOne").mockImplementationOnce(async (record) => {
+    await insert(record);
+    throw new Error("lost rejected claim acknowledgement");
+  });
+  await expect(applyMoneyMove(f.db, f.move)).rejects.toThrow("lost rejected claim");
+  await f.accounts.updateOne({ _id: "destination" }, { $set: { state: "missing" } });
+  expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("rejected");
+  expect(f.balances()).toEqual([1000, 100]);
 });

@@ -102,7 +102,11 @@ describe("banking audit accounting", () => {
       const fault = withInjectedCrash(memory, {
         collection: "corporations",
         op: "updateOne",
-        onCall: 2,
+        onCall: 1,
+        matches: (args) => {
+          const update = args[1] as { $set?: Record<string, unknown> };
+          return update.$set?.["bankCharter.lastDiscountWindowTurn"] !== undefined;
+        },
         afterWrite,
       });
       await expect(processBankingTurn(fault.db, TURN)).rejects.toThrow();
@@ -139,7 +143,11 @@ describe("banking audit accounting", () => {
     const fault = withInjectedCrash(memory, {
       collection: "corporations",
       op: "updateOne",
-      onCall: 2,
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $set?: Record<string, unknown> };
+        return update.$set?.["bankCharter.lastCbMarginTurn"] !== undefined;
+      },
       afterWrite: false,
     });
     await expect(processBankingTurn(fault.db, TURN)).rejects.toThrow();

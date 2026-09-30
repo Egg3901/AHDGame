@@ -131,6 +131,7 @@ export interface MoneyMoveRecordLeg {
 
 interface MoneyMoveRecord {
   genericMoneyMoveVersion?: number;
+  moneyMoveBindingError?: string;
   atomicDocument?: unknown;
   legacyInterestBatch?: unknown;
   locSettlement?: unknown;
@@ -267,11 +268,10 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   const invalid = move.legs.find((leg) => {
     if (!Number.isFinite(leg.amount) || leg.amount < 0) return true;
     if (leg.kind === "mint" || leg.kind === "burn" || leg.amount === 0) return false;
-    const id = leg.filter?._id;
     return (
       !leg.collection ||
       !leg.path ||
-      !(typeof id === "string" || typeof id === "number" || id instanceof ObjectId) ||
+      !leg.filter ||
       [leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath)
     );
   });
@@ -280,11 +280,50 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       status: "rejected",
       applied: [],
       error:
-        "Money movement requires finite amounts, stable target ids and unreserved balance fields.",
+        "Money movement requires finite amounts, target selectors and unreserved balance fields.",
     };
+  const prepared = move.legs.map((leg) => ({ ...leg }));
+  const unbound = prepared.filter(
+    (leg) =>
+      leg.amount > 0 &&
+      (leg.kind === "debit" || leg.kind === "credit") &&
+      !(
+        typeof leg.filter?._id === "string" ||
+        typeof leg.filter?._id === "number" ||
+        leg.filter?._id instanceof ObjectId
+      )
+  );
+  let bindingError: string | undefined;
+  if (unbound.length) {
+    // Preserve selectors such as countryId in the public API, but freeze the
+    // selected document before claiming cash. Replays use the original binding
+    // even if a previous write changed the caller's selector fields.
+    const prior = await db
+      .collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION)
+      .findOne({ _id: move.key }, { projection: { _id: 1 } });
+    if (prior) {
+      if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
+      return { status: "replayed", applied: [] };
+    }
+    for (const leg of unbound) {
+      const target = await db
+        .collection(leg.collection!)
+        .findOne(leg.filter!, { projection: { _id: 1 } });
+      if (!target) {
+        bindingError = `Money move ${move.key} (${leg.note}) has no matching target.`;
+        break;
+      }
+      leg.filter = { ...leg.filter, _id: target._id };
+    }
+  }
   const claim = await claimMoneyMove(db, {
     ...move,
-    record: { ...move.record, genericMoneyMoveVersion: 2 },
+    legs: prepared,
+    record: {
+      ...move.record,
+      genericMoneyMoveVersion: 2,
+      ...(bindingError ? { moneyMoveBindingError: bindingError } : {}),
+    },
   });
   if (claim.status === "replayed") {
     if (move.turn !== undefined) countBankingEvent(db, move.turn, "replayedSettlements");
@@ -293,6 +332,10 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   if (claim.status === "rejected") {
     if (move.turn !== undefined) countBankingEvent(db, move.turn, "rejectedSettlements");
     return { status: "rejected", applied: [], error: claim.error };
+  }
+  if (bindingError) {
+    await completeMoneyMove(db, move.key, [], bindingError, "rejected");
+    return { status: "rejected", applied: [], error: bindingError };
   }
   if (claim.legs.length === 0) return { status: "applied", applied: [] };
   return executeMoneyMove(db, move.key, false);
@@ -520,6 +563,10 @@ async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise
       status: "applied",
       applied: record.legs.flatMap((leg, i) => (leg.applied ? [i] : [])),
     };
+  if (record.moneyMoveBindingError) {
+    await completeMoneyMove(db, key, [], record.moneyMoveBindingError, "rejected");
+    return { status: "rejected", applied: [], error: record.moneyMoveBindingError };
+  }
   let failure: string | undefined;
   for (const i of legOrder(record.legs)) {
     const leg = record.legs[i];
