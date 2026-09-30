@@ -154,7 +154,7 @@ async function main() {
         loggedBond = 0;
       for (const row of sourceBondTx.filter((r) => String(r.subjectId) === String(fund._id))) {
         const bond = bondById.get(row.meta.bondId)!;
-        const rate = priceCheckpoint.anchorRates[bond.currencyCode];
+        const rate: number = priceCheckpoint.anchorRates[bond.currencyCode];
         assert(Number.isFinite(rate) && rate > 0);
         rawBond +=
           ((row.type === "bond_coupon" ? ((row.meta.couponRate / 100) * 1000) / 48 : 1000) *
