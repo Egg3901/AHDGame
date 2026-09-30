@@ -57,6 +57,7 @@ function makeDb(opts: {
   gameConfig?: Record<string, unknown> | null;
   budgets?: unknown[];
   states?: unknown[];
+  countryGameStates?: unknown[];
   exchangeRates?: unknown[];
   centralBanks?: unknown[];
   enactedLaws?: unknown[];
@@ -99,6 +100,7 @@ function makeDb(opts: {
   };
 
   getColl("gameState").findOne.mockResolvedValue(opts.gameState ?? null);
+  getColl("countryGameStates").find.mockReturnValue(cursorOf(opts.countryGameStates ?? []));
   getColl("gameConfig").findOne.mockResolvedValue(opts.gameConfig ?? null);
   getColl("federalBudget").find.mockReturnValue(cursorOf(opts.budgets ?? []));
   getColl("states").find.mockReturnValue(cursorOf(opts.states ?? []));
@@ -656,5 +658,58 @@ describe("diagnosticErrorReport", () => {
     expect(report.summary.critical).toBe(1);
     expect(report.checks[0]?.id).toBe("diagnostic_error");
     expect(report.checks[0]?.note).toBe("boom");
+  });
+});
+
+describe("explicit no-starting-parties conformance", () => {
+  it("recognizes intended empty politics while preserving structural errors and default roster gaps", async () => {
+    const empty = makeDb({ gameState: { preset: "1991-default", startingPartiesMode: "none" } });
+    const result = await runConformanceChecks(empty.db);
+    expect(
+      result.checks.some((c) => c.id.startsWith("startingParties.") && c.severity === "ok")
+    ).toBe(true);
+    expect(
+      result.checks.some((c) => c.severity === "critical" && !c.id.startsWith("parties."))
+    ).toBe(true);
+    const historical = await runConformanceChecks(
+      makeDb({ gameState: { preset: "1991-default" } }).db
+    );
+    expect(
+      historical.checks.some((c) => c.id.startsWith("parties.") && c.severity === "critical")
+    ).toBe(true);
+  });
+  it("keeps default roster requirements for disabled background countries", async () => {
+    const { db } = makeDb({
+      gameState: { preset: "1991-default", startingPartiesMode: "none" },
+      countryGameStates: [
+        { _id: "UK", enabledForPlayers: false },
+        { _id: "PL", enabledForPlayers: true, status: "active" },
+      ],
+    });
+    const { checks } = await runConformanceChecks(db);
+    expect(checks.find((c) => c.id === "parties.PL.roster")?.severity).toBe("ok");
+    expect(checks.find((c) => c.id === "parties.UK.roster")?.severity).toBe("critical");
+  });
+
+  it("does not apply a stored empty-start waiver to a different preset override", async () => {
+    const { db } = makeDb({ gameState: { preset: "2019-default", startingPartiesMode: "none" } });
+    const result = await runConformanceChecks(db, { preset: "1991-default" });
+    expect(
+      result.checks.some((c) => c.id.startsWith("parties.") && c.severity === "critical")
+    ).toBe(true);
+    expect(result.checks.some((c) => c.id.startsWith("startingParties."))).toBe(false);
+  });
+  it("rejects leaked parties and seeded political officeholders in an empty start", async () => {
+    const { db } = makeDb({
+      gameState: { preset: "1991-default", startingPartiesMode: "none" },
+      counts: { politicalParties: 1, electedOfficials: 1 },
+    });
+    const result = await runConformanceChecks(db);
+    expect(result.checks.find((c) => c.id === "startingParties.politicalParties")?.severity).toBe(
+      "critical"
+    );
+    expect(result.checks.find((c) => c.id === "startingParties.electedOfficials")?.severity).toBe(
+      "critical"
+    );
   });
 });

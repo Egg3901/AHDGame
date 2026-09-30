@@ -26,6 +26,11 @@
  * compares against the ids the new world actually has.
  */
 
+import {
+  clearStartingPolitics,
+  loadStartingPartiesMode,
+  type StartingPartiesMode,
+} from "./startingParties";
 import type { Db, ObjectId } from "mongodb";
 import type { PoliticalParty, StateDemographics, StatePartyOrg } from "@/lib/db/types";
 import { getPresetById } from "@/lib/constants/historicalSeats";
@@ -35,6 +40,8 @@ import { ensureImfInstitutionPlaceholder } from "@/lib/imf/ensureImfInstitutionP
 import type { ResetGameWorldResult } from "@/lib/admin/resetGameWorld";
 
 export interface FinalizeResetOptions {
+  /** 1991 only: leave political offices vacant for player-created parties. */
+  startingParties?: StartingPartiesMode;
   preset: string;
   /** Teardown counts from `resetGameWorld`, folded into `adminDetails`. */
   teardown: ResetGameWorldResult["details"];
@@ -60,6 +67,8 @@ export async function finalizeResetGameWorld(
   options: FinalizeResetOptions
 ): Promise<FinalizeResetResult> {
   const { preset, teardown, deleteProfiles } = options;
+  const noStartingParties =
+    (await loadStartingPartiesMode(db, preset, options.startingParties)) === "none";
   const now = new Date();
   const sink = options.log;
   const finalizeLog: string[] = [];
@@ -74,23 +83,25 @@ export async function finalizeResetGameWorld(
   // (e.g. uk_uup on a 1991 reset coming from a 2019 game) to "independent"
   // and the Commons MPs end up un-partied. Realign party counters first so
   // the new party gets `max(sequentialId) + 1`, never a colliding seqId.
-  await realignPartyCountersToExisting(db);
-  await ensureDefaultParties(db, preset);
-  // Mirror for statePartyOrg: insert rows for newly-added defaults so they
-  // show up on the region Party Organizations page. Non-destructive — never
-  // overwrites existing rows.
-  const { ensureMissingUKStatePartyOrgRows } = await import("@/lib/admin/seed/seedUK");
-  await ensureMissingUKStatePartyOrgRows(db, log, preset);
-  const { ensureMissingDEStatePartyOrgRows } = await import("@/lib/admin/seed/seedDE");
-  await ensureMissingDEStatePartyOrgRows(db, log, preset);
-  const { ensureMissingJPStatePartyOrgRows } = await import("@/lib/admin/seed/seedJP");
-  await ensureMissingJPStatePartyOrgRows(db, log, preset);
-  const { ensureMissingBRStatePartyOrgRows } = await import("@/lib/admin/seed/seedBR");
-  await ensureMissingBRStatePartyOrgRows(db, log, preset);
-  const { ensureMissingIEStatePartyOrgRows } = await import("@/lib/admin/seed/seedIE");
-  await ensureMissingIEStatePartyOrgRows(db, log, preset);
-  const { seedCnStatePartyOrg } = await import("@/lib/admin/seed/seedCnStatePartyOrg");
-  await seedCnStatePartyOrg(db, false, log, preset);
+  if (preset !== "2019-no-parties") {
+    await realignPartyCountersToExisting(db);
+    await ensureDefaultParties(db, preset);
+    // Mirror for statePartyOrg: insert rows for newly-added defaults so they
+    // show up on the region Party Organizations page. Non-destructive — never
+    // overwrites existing rows.
+    const { ensureMissingUKStatePartyOrgRows } = await import("@/lib/admin/seed/seedUK");
+    await ensureMissingUKStatePartyOrgRows(db, log, preset);
+    const { ensureMissingDEStatePartyOrgRows } = await import("@/lib/admin/seed/seedDE");
+    await ensureMissingDEStatePartyOrgRows(db, log, preset);
+    const { ensureMissingJPStatePartyOrgRows } = await import("@/lib/admin/seed/seedJP");
+    await ensureMissingJPStatePartyOrgRows(db, log, preset);
+    const { ensureMissingBRStatePartyOrgRows } = await import("@/lib/admin/seed/seedBR");
+    await ensureMissingBRStatePartyOrgRows(db, log, preset);
+    const { ensureMissingIEStatePartyOrgRows } = await import("@/lib/admin/seed/seedIE");
+    await ensureMissingIEStatePartyOrgRows(db, log, preset);
+    const { seedCnStatePartyOrg } = await import("@/lib/admin/seed/seedCnStatePartyOrg");
+    await seedCnStatePartyOrg(db, false, log, preset);
+  }
 
   let demographicsReset = 0;
   const defaultDemographics = await db
@@ -397,6 +408,11 @@ export async function finalizeResetGameWorld(
   // reset that died in teardown or build left no trace at all — this code never
   // ran. The message text is unchanged, and it is no longer gated on
   // `adminUsername`: that gate meant a script-driven reset was never audited.
+  if (noStartingParties) {
+    await clearStartingPolitics(db, preset);
+    log("Starting parties: none; final political cleanup complete, economic ownership preserved");
+  }
+
   const adminDetails = deleteProfiles
     ? `Full game reset: ${teardown.usersDeleted ?? 0} users, ${teardown.charactersDeleted ?? 0} characters, ${teardown.officialsDeleted} officials deleted, ${teardown.electionsDeleted} elections, ${teardown.nppsDeleted} NPPs deleted, ${teardown.statePartyElectionsDeleted} state party elections, ${teardown.stateBillsDeleted} state bills, ${demographicsReset} demographics reset, ${customPartiesResult.deletedCount} custom parties deleted, ${partyOrgCleanupResult.deletedCount} party org records deleted`
     : `Game reset: ${teardown.charactersRetired ?? 0} characters retired, ${teardown.officialsDeleted} officials deleted, ${teardown.electionsDeleted} elections, ${teardown.nppsDeleted} NPPs deleted, ${teardown.statePartyElectionsDeleted} state party elections, ${teardown.stateBillsDeleted} state bills, ${demographicsReset} demographics reset, ${customPartiesResult.deletedCount} custom parties deleted, ${partyOrgCleanupResult.deletedCount} party org records deleted`;
@@ -406,6 +422,6 @@ export async function finalizeResetGameWorld(
     customPartiesDeleted: customPartiesResult.deletedCount,
     partyOrgRecordsDeleted: partyOrgCleanupResult.deletedCount,
     finalizeLog,
-    adminDetails,
+    adminDetails: `${adminDetails}; starting parties: ${noStartingParties ? "none" : "default"}`,
   };
 }

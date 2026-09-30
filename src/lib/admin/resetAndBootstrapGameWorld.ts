@@ -35,6 +35,11 @@
  * companion classification of which collections each phase touches.
  */
 
+import {
+  clearStartingPolitics,
+  resolveStartingPartiesMode,
+  type StartingPartiesMode,
+} from "./startingParties";
 import type { Db } from "mongodb";
 import { resetGameWorld, type ResetGameWorldResult } from "@/lib/admin/resetGameWorld";
 import { bootstrapGameWorld, type BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
@@ -51,6 +56,8 @@ import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
 
 export interface ResetAndBootstrapOptions {
+  /** 1991 only: leave political offices vacant for player-created parties. */
+  startingParties?: StartingPartiesMode;
   db: Db;
   /** "historical" populates real-world officials/NPPs; "vacant" leaves seats empty. */
   mode?: BootstrapMode;
@@ -138,9 +145,10 @@ export async function resetAndBootstrapGameWorld(
   // cycle-0 races and `detectPreIterationComplete` (which needs at least one
   // RESOLVED founding race) could never end the phase, pinning the calendar to
   // the era start forever.
-  const foundingEligible = !seedOnly && mode === "historical";
+  const startingParties = resolveStartingPartiesMode(preset, options.startingParties);
+  const foundingEligible = startingParties !== "none" && !seedOnly && mode === "historical";
   const atPresetAnchor = isPresetAnchorDate(preset, options.startDate);
-  if (options.preIteration === true && !atPresetAnchor) {
+  if (startingParties !== "none" && options.preIteration === true && !atPresetAnchor) {
     throw new Error("The founding phase can only start at week 1 of an authored era anchor");
   }
   const preIteration =
@@ -154,6 +162,12 @@ export async function resetAndBootstrapGameWorld(
     log(msg);
   };
 
+  collect(`Starting parties: ${startingParties}`);
+  if (startingParties === "none") {
+    collect(
+      "Founding phase disabled: no starting parties; normal player elections advance the calendar."
+    );
+  }
   if (preIteration) {
     collect(
       `Pre-iteration founding phase ON for ${preset}${
@@ -231,6 +245,7 @@ export async function resetAndBootstrapGameWorld(
       iteration,
       startDate: options.startDate,
       preIteration,
+      startingParties,
       log: collect,
     });
     collect(reset.message);
@@ -245,6 +260,7 @@ export async function resetAndBootstrapGameWorld(
       resetReference,
       seedOnly,
       preIteration,
+      startingParties,
       log: collect,
       run,
     });
@@ -264,6 +280,7 @@ export async function resetAndBootstrapGameWorld(
     finalized = await run.step("finalize", "finalizeResetGameWorld", () =>
       finalizeResetGameWorld(db, {
         preset,
+        startingParties,
         teardown: reset.details,
         deleteProfiles,
         log: collect,
@@ -279,7 +296,7 @@ export async function resetAndBootstrapGameWorld(
     // 3) Reset-only path: seed historical officials *after* reference is re-seeded.
     //    On the bootstrap path, bootstrapGameWorld already seeded them internally.
     let postSeedOfficials: ResetAndBootstrapResult["postSeedOfficials"];
-    if (seedOnly) {
+    if (seedOnly && preset !== "2019-no-parties") {
       phaseReached = "officials";
       // CONTAINED: the reference data is already re-seeded by this point, so a
       // failure here degrades the run rather than discarding it.
@@ -293,6 +310,8 @@ export async function resetAndBootstrapGameWorld(
         );
       }
     }
+
+    if (startingParties === "none") await clearStartingPolitics(db, preset);
 
     // 4) Seal the freshly-reset world behind maintenance mode, then run the
     //    seed conformance diagnostic while sealed. Diagnostic failure must NEVER

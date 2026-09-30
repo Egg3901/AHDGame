@@ -3,7 +3,14 @@
  * Epsilon-level tolerances; nothing has run yet at post-reset turn 1.
  */
 
-import type { Db } from "mongodb";
+import {
+  STARTING_POLITICAL_COLLECTIONS,
+  STARTING_POLITICAL_OFFICIAL_FILTER,
+  startingPoliticalCountries,
+  startingCountryFilter,
+  startingArtifactFilters,
+} from "../startingParties";
+import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -818,7 +825,11 @@ async function checkRegions(db: Db, expect: SeedExpectations): Promise<SeedDiagn
   return checks;
 }
 
-async function checkPolitical(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
+async function checkPolitical(
+  db: Db,
+  expect: SeedExpectations,
+  emptyCountries: ReadonlySet<string> | null = new Set()
+): Promise<SeedDiagnosticCheck[]> {
   const checks: SeedDiagnosticCheck[] = [];
   for (const countryId of readinessCountryIds(expect.preset)) {
     const report = await buildCountryReadinessReport(db, countryId, expect.preset);
@@ -836,6 +847,14 @@ async function checkPolitical(db: Db, expect: SeedExpectations): Promise<SeedDia
       continue;
     }
     for (const c of report.checks) {
+      if (
+        (emptyCountries === null || emptyCountries.has(countryId)) &&
+        ["Parties", "StatePartyOrg", "NPPs", "ElectedOfficials", "GovernmentFormation"].includes(
+          c.name
+        )
+      ) {
+        continue; // Explicit empty-start checks below validate these intentional absences.
+      }
       let severity: SeedDiagnosticSeverity =
         c.status === "ok" ? "ok" : c.status === "warning" ? "warn" : "critical";
       let note = c.detail;
@@ -879,7 +898,11 @@ async function checkPolitical(db: Db, expect: SeedExpectations): Promise<SeedDia
  * post-hoc signal: it is zero if and only if nothing in that country's
  * roster was valid for the active preset.
  */
-async function checkPartyRosters(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
+async function checkPartyRosters(
+  db: Db,
+  expect: SeedExpectations,
+  emptyCountries: ReadonlySet<string> | null = new Set()
+): Promise<SeedDiagnosticCheck[]> {
   const checks: SeedDiagnosticCheck[] = [];
   const seeded = new Set(expect.seededCountryIds);
   const electionCountries = Object.keys(COUNTRY_ELECTION_PHASES) as CountryId[];
@@ -888,17 +911,27 @@ async function checkPartyRosters(db: Db, expect: SeedExpectations): Promise<Seed
     if (!seeded.has(countryId)) continue; // not part of this preset's world
     const count = await db.collection("politicalParties").countDocuments({ countryId });
     checks.push(
-      count > 0
-        ? ok(`parties.${countryId}.roster`, countryId, "politicalParties.count", ">0", count)
-        : critical(
+      emptyCountries === null || emptyCountries.has(countryId)
+        ? check(
             `parties.${countryId}.roster`,
             countryId,
             "politicalParties.count",
-            ">0",
+            0,
             count,
-            "spawns founding/perpetual elections (COUNTRY_ELECTION_PHASES) but has zero " +
-              "seeded parties for this preset — every chamber resolves empty forever (#3875)"
+            count === 0 ? "ok" : "critical",
+            "Explicit no-starting-parties reset in player countries"
           )
+        : count > 0
+          ? ok(`parties.${countryId}.roster`, countryId, "politicalParties.count", ">0", count)
+          : critical(
+              `parties.${countryId}.roster`,
+              countryId,
+              "politicalParties.count",
+              ">0",
+              count,
+              "spawns founding/perpetual elections (COUNTRY_ELECTION_PHASES) but has zero " +
+                "seeded parties for this preset — every chamber resolves empty forever (#3875)"
+            )
     );
   }
   return checks;
@@ -1249,6 +1282,12 @@ export async function runConformanceChecks(
   const preset =
     opts?.preset ?? (typeof gs?.preset === "string" ? gs.preset : null) ?? DEFAULT_SEED_PRESET;
   const expect = buildSeedExpectations(preset);
+  const noStartingParties =
+    preset === "2019-no-parties" ||
+    (preset === "1991-default" && gs?.preset === preset && gs?.startingPartiesMode === "none");
+
+  const countries = noStartingParties ? await startingPoliticalCountries(db, preset) : [];
+  const emptyCountries = countries === null ? null : new Set(countries);
 
   // Every group below is READ-ONLY (no write of any kind in this module), and
   // none reads another's output, so they overlap instead of queueing 12 round
@@ -1268,8 +1307,9 @@ export async function runConformanceChecks(
     checkForex(db, expect),
     checkSectors(db, expect),
     checkRegions(db, expect),
-    checkPolitical(db, expect),
-    checkPartyRosters(db, expect),
+    checkPolitical(db, expect, emptyCountries),
+    checkPartyRosters(db, expect, emptyCountries),
+    noStartingParties ? checkEmptyPoliticalStart(db, countries) : Promise.resolve([]),
     checkDemographics(db, expect),
     checkRuntimeCleanliness(db),
     checkConfig(db),
@@ -1279,4 +1319,63 @@ export async function runConformanceChecks(
   const checks: SeedDiagnosticCheck[] = groups.flat();
 
   return { checks, expect };
+}
+
+/** Intentional absence must not conceal a partial cleanup or occupied office. */
+async function checkEmptyPoliticalStart(
+  db: Db,
+  countries: CountryId[] | null
+): Promise<SeedDiagnosticCheck[]> {
+  const checks: SeedDiagnosticCheck[] = [];
+  const countryFilter = startingCountryFilter(countries, true);
+  const npps = await db
+    .collection("npps")
+    .find(countryFilter)
+    .project<{ _id: ObjectId }>({ _id: 1 })
+    .toArray();
+  const nppIds = npps.map((row) => row._id);
+  const artifactFilters = await startingArtifactFilters(db, countries, nppIds);
+  for (const collection of STARTING_POLITICAL_COLLECTIONS) {
+    const count = await db.collection(collection).countDocuments(artifactFilters[collection]);
+    checks.push(
+      check(
+        `startingParties.${collection}`,
+        "global",
+        collection,
+        0,
+        count,
+        count === 0 ? "ok" : "critical",
+        "Explicit no-starting-parties reset in player countries"
+      )
+    );
+  }
+  const occupiedFilters: Array<[string, Record<string, unknown>]> = [
+    ["electedOfficials", STARTING_POLITICAL_OFFICIAL_FILTER],
+    ["countryState", { rulingPartyId: { $exists: true, $ne: null } }],
+    [
+      "npps",
+      { $or: [{ party: { $ne: "independent" } }, { currentOffice: { $exists: true, $ne: null } }] },
+    ],
+  ];
+  for (const [collection, filter] of occupiedFilters) {
+    const scope =
+      collection === "countryState"
+        ? countries === null
+          ? {}
+          : { _id: { $in: countries } }
+        : countryFilter;
+    const count = await db.collection(collection).countDocuments({ $and: [scope, filter] });
+    checks.push(
+      check(
+        `startingParties.${collection}`,
+        "global",
+        collection,
+        0,
+        count,
+        count === 0 ? "ok" : "critical",
+        "No affiliated politicians or occupied political offices"
+      )
+    );
+  }
+  return checks;
 }
