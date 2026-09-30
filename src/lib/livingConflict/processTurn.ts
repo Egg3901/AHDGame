@@ -1,4 +1,5 @@
 import { loadFinancialExposure } from "./financialExposure";
+import { PANDEMIC_KEY, pandemicParticipants } from "./rules/pandemic";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type {
@@ -239,6 +240,15 @@ export async function processLivingConflictsTurn(
     }
     conflictsProcessed++;
     let participants: ConflictParticipants = resolveConflictParticipants(def, availableCountryIds);
+    if (def.key === PANDEMIC_KEY) {
+      const previous = await loadConflictState(db, def.key);
+      participants = pandemicParticipants(
+        availableCountryIds,
+        previous.openedYear ?? currentYear ?? 2018,
+        previous.pandemicOriginCountryId ??
+          (previous.hasOpened ? participants.belligerents[0] : undefined)
+      );
+    }
     let externalPressure =
       def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0;
     let openingTrackDeltas: Record<string, number> = {};

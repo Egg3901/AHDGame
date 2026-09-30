@@ -282,6 +282,8 @@ export interface LivingConflictState {
   /** 0..100 running intensity, moved by events and phase. */
   intensity: number;
   openedYear: number | null;
+  /** Stable origin selected from the countries present when a pandemic opens. */
+  pandemicOriginCountryId?: string;
   /** Accumulated commitment pressure per side bucket ("a" | "b"). */
   pressure: Record<string, number>;
   /** Named negotiated-crisis tracks. Absent on legacy documents and normalized on read. */
