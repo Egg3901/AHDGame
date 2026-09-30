@@ -38,6 +38,7 @@ interface RelocationStatus {
   isCeo: boolean;
   ceoCorpName: string | null;
   homeState: string | null;
+  federationPendingResidenceId: string | null;
   activeCandidacies: { generalElections: number; statePartyElections: number };
   corpRelocation: CorpRelocation | null;
 }
@@ -108,6 +109,7 @@ export function RelocateButton({
           isCeo: data.isCeo ?? false,
           ceoCorpName: data.ceoCorpName ?? null,
           homeState: data.homeState ?? null,
+          federationPendingResidenceId: data.federationPendingResidenceId ?? null,
           activeCandidacies: data.activeCandidacies ?? {
             generalElections: 0,
             statePartyElections: 0,
@@ -140,10 +142,14 @@ export function RelocateButton({
     !!corp && !corp.isImperialCeo && (payment === "cash" ? canPayCash : canIssueBond);
 
   const remainingTurns = status?.remainingTurns ?? 0;
-  const cooldownActive = remainingTurns > 0 || status?.cooldownRemainingDays != null;
-  const cooldownLabel = cooldownActive
-    ? relocationCooldownButtonLabel(remainingTurns, status?.cooldownRemainingDays ?? null)
-    : "Relocate here";
+  const pendingResidenceId = status?.federationPendingResidenceId ?? null;
+  const cooldownActive =
+    !pendingResidenceId && (remainingTurns > 0 || status?.cooldownRemainingDays != null);
+  const cooldownLabel = pendingResidenceId
+    ? "Choose new home"
+    : cooldownActive
+      ? relocationCooldownButtonLabel(remainingTurns, status?.cooldownRemainingDays ?? null)
+      : "Relocate here";
   const cooldownWaitCopy = cooldownActive
     ? relocationCooldownWaitCopy(remainingTurns, status?.cooldownRemainingDays ?? null)
     : "";
@@ -169,7 +175,27 @@ export function RelocateButton({
     setLoading(true);
     setError(null);
     try {
-      if (mode === "character-only") {
+      if (pendingResidenceId) {
+        const destinationCountryId = targetCountryId ?? userCountryId;
+        if (!destinationCountryId) {
+          setError("This region has no playable-country destination.");
+          return;
+        }
+        const res = await fetch("/api/federation/relocation/residence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicationId: pendingResidenceId,
+            targetCountryId: destinationCountryId,
+            targetStateId,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "Residence choice failed");
+          return;
+        }
+      } else if (mode === "character-only") {
         const res = await fetch("/api/character/relocate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -242,7 +268,7 @@ export function RelocateButton({
           setCorpChoice(null);
           setConfirming(true);
         }}
-        aria-label={cooldownActive ? `${cooldownLabel}. ${cooldownWaitCopy}` : "Relocate here"}
+        aria-label={cooldownActive ? `${cooldownLabel}. ${cooldownWaitCopy}` : cooldownLabel}
         className="h-9 min-w-0 shrink-0 border-card-border/80 bg-card/80 text-foreground shadow-panel backdrop-blur-sm hover:bg-card-elevated"
       >
         {cooldownLabel}
@@ -273,7 +299,44 @@ export function RelocateButton({
         </div>
       )}
 
-      {confirming && !cooldownActive && (
+      {confirming && pendingResidenceId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !loading && resetConfirmState()}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-card-border bg-card p-6 shadow-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose a new playable home"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-foreground">
+              Choose {targetName} as your new home?
+            </h3>
+            <p className="mt-3 text-sm text-muted">
+              Your former home became a background country in the federation settlement. This choice
+              has no relocation fee. Your character, starting nationality, and wallet stay intact. A
+              held corporation needs its own headquarters choice.
+            </p>
+            {error && (
+              <p role="alert" className="mt-3 text-sm text-error">
+                {error}
+              </p>
+            )}
+            <div className="mt-4 flex gap-2">
+              <Button variant="secondary" onClick={resetConfirmState} disabled={loading}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => submit("character-only")} disabled={loading}>
+                {loading ? "Choosing..." : "Choose this home"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirming && !cooldownActive && !pendingResidenceId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => !loading && resetConfirmState()}
