@@ -14,6 +14,7 @@ import { RESET_DATE_MAX_YEAR, RESET_DATE_MIN_YEAR } from "@/lib/admin/resetStart
 const resetSchema = z.object({
   bootstrap: z.boolean().optional(),
   mode: z.enum(["vacant", "historical"]).optional(),
+  startingParties: z.enum(["default", "none"]).optional(),
   skipRegionalCouncil: z.boolean().optional(),
   /**
    * Start the world in a live pre-iteration "founding" phase (chambers vacant +
@@ -90,8 +91,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const body = parsed.data;
+    if (body.startingParties === "none" && preset !== "1991-default") {
+      return NextResponse.json(
+        { error: "No starting parties is available for the 1991 preset" },
+        { status: 400 }
+      );
+    }
     const bootstrap = body.bootstrap === true || bootstrapFromQuery;
-    const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
+    const mode: BootstrapMode =
+      body.startingParties === "none" || body.mode === "vacant" ? "vacant" : "historical";
     const skipRegionalCouncil = body.skipRegionalCouncil === true;
     const iteration = body.iteration;
     const startDate = body.startDate;
@@ -106,6 +114,7 @@ export async function POST(request: Request) {
       db,
       mode: bootstrap ? mode : "historical",
       preset,
+      startingParties: body.startingParties,
       skipRegionalCouncil,
       resetReference: true,
       deleteProfiles,
@@ -124,6 +133,7 @@ export async function POST(request: Request) {
       ...reset,
       bootstrap,
       bootstrapMode: bootstrap ? mode : null,
+      startingParties: body.startingParties ?? (preset === "2019-no-parties" ? "none" : "default"),
       logs,
     });
   } catch (error) {
@@ -151,7 +161,8 @@ async function handleStreamingReset(
   const preset = searchParams.get("preset") ?? DEFAULT_SEED_PRESET;
   const bootstrapFromQuery = searchParams.get("bootstrap") === "true";
   const bootstrap = body.bootstrap === true || bootstrapFromQuery;
-  const mode: BootstrapMode = body.mode === "vacant" ? "vacant" : "historical";
+  const mode: BootstrapMode =
+    body.startingParties === "none" || body.mode === "vacant" ? "vacant" : "historical";
   const skipRegionalCouncil = body.skipRegionalCouncil === true;
   const iteration = body.iteration;
   const startDate = body.startDate;
@@ -167,6 +178,13 @@ async function handleStreamingReset(
   if (!isKnownPreset(preset)) {
     return new Response(
       `data: ${JSON.stringify({ type: "error", message: `Unknown preset "${preset}"` })}\n\n`,
+      { status: 400, headers: { "Content-Type": "text/event-stream" } }
+    );
+  }
+
+  if (body.startingParties === "none" && preset !== "1991-default") {
+    return new Response(
+      `data: ${JSON.stringify({ type: "error", message: "No starting parties is available for the 1991 preset" })}\n\n`,
       { status: 400, headers: { "Content-Type": "text/event-stream" } }
     );
   }
@@ -188,6 +206,7 @@ async function handleStreamingReset(
           db,
           mode: bootstrap ? mode : "historical",
           preset,
+          startingParties: body.startingParties,
           skipRegionalCouncil,
           resetReference: true,
           deleteProfiles,
@@ -205,7 +224,14 @@ async function handleStreamingReset(
 
         send({
           type: "done",
-          data: { ...reset, bootstrap, bootstrapMode: bootstrap ? mode : null, logs },
+          data: {
+            ...reset,
+            bootstrap,
+            bootstrapMode: bootstrap ? mode : null,
+            startingParties:
+              body.startingParties ?? (preset === "2019-no-parties" ? "none" : "default"),
+            logs,
+          },
         });
       } catch (error) {
         send({

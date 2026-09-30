@@ -30,9 +30,12 @@ async function main() {
   );
   // Seeders that use getDb() must select the same world as explicit Db callers.
   process.env.MONGODB_DB = databaseName;
-  const db = await connectDb(databaseName);
   const mode = getMode();
   const preset = getPreset();
+  const startingParties = hasFlag("--no-starting-parties") ? "none" : undefined;
+  if (startingParties === "none" && preset !== "1991-default") {
+    throw new Error("--no-starting-parties requires --preset=1991-default");
+  }
   const skipRegionalCouncil = hasFlag("--skip-regional-council");
   // Default: drop + re-seed reference collections so schema drift can't linger
   // (e.g. a removed seed entry that's still in the database). --preserve-reference
@@ -53,8 +56,11 @@ async function main() {
 
   // Mirrors resolution inside resetAndBootstrapGameWorld — for logging only.
   const foundingEffective =
-    mode === "historical" && (preIteration ?? presetDefaultsToFoundingPhase(preset));
+    startingParties !== "none" &&
+    mode === "historical" &&
+    (preIteration ?? presetDefaultsToFoundingPhase(preset));
 
+  const db = await connectDb(databaseName);
   try {
     console.log(`Reset target database: ${db.databaseName}`);
     if (hasFlag("--check-target")) {
@@ -62,7 +68,7 @@ async function main() {
       return;
     }
     console.log(
-      `Resetting and bootstrapping game world (mode=${mode}, preset=${preset}${
+      `Resetting and bootstrapping game world (mode=${mode}, preset=${preset}, startingParties=${startingParties ?? "preset defaults"}${
         foundingEffective ? ", pre-iteration founding" : ""
       })`
     );
@@ -84,6 +90,7 @@ async function main() {
       db,
       mode,
       preset,
+      startingParties,
       skipRegionalCouncil,
       resetReference,
       deleteProfiles: false,

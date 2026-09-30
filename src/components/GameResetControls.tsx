@@ -152,6 +152,7 @@ export function GameResetControls() {
   const [resetStage, setResetStage] = useState("");
   const [presets, setPresets] = useState<ResetPreset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState("2019-default");
+  const [startingParties, setStartingParties] = useState<"default" | "none">("default");
   const [startYear, setStartYear] = useState(2019);
   const [startWeek, setStartWeek] = useState(1);
   const [currentIteration, setCurrentIteration] = useState<{
@@ -189,8 +190,22 @@ export function GameResetControls() {
   }, []);
 
   const handleReset = async (type: ResetType) => {
-    const config = RESET_CONFIG[type];
-    const presetName = presets.find((p) => p.id === selectedPreset)?.name ?? selectedPreset;
+    const noStartingParties = selectedPreset === "1991-default" && startingParties === "none";
+    const config =
+      noStartingParties && type === "resetAndBootstrap"
+        ? {
+            ...RESET_CONFIG[type],
+            title: "Reset + No Parties",
+            warningLines: [
+              ...RESET_CONFIG[type].warningLines.slice(0, 2),
+              "Starts with no political parties or political NPP officeholders. Offices are vacant for player elections.",
+            ],
+            successPrefix: "Reset + no parties bootstrap completed",
+          }
+        : RESET_CONFIG[type];
+    const presetName = noStartingParties
+      ? "1991 Start Date - No starting parties"
+      : (presets.find((p) => p.id === selectedPreset)?.name ?? selectedPreset);
     const firstConfirm = [
       `${config.title}`,
       "",
@@ -232,6 +247,7 @@ export function GameResetControls() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...config.body,
+          ...(selectedPreset === "1991-default" ? { startingParties } : {}),
           iteration,
           startDate: { year: startYear, week: startWeek },
         }),
@@ -309,9 +325,23 @@ export function GameResetControls() {
   // exists for the selected year with that variant suffix.
   const variants = [...new Set(sortedPresets.map(presetVariant))];
   const selectedYear = selectedPresetData ? presetStartYear(selectedPresetData) : null;
-  const selectedVariant = selectedPresetData ? presetVariant(selectedPresetData) : null;
+  const noStartingParties = selectedPreset === "1991-default" && startingParties === "none";
+  const selectedVariant = noStartingParties
+    ? "No Parties"
+    : selectedPresetData
+      ? presetVariant(selectedPresetData)
+      : null;
   const findPreset = (year: number, variant: string) =>
-    sortedPresets.find((p) => presetStartYear(p) === year && presetVariant(p) === variant);
+    year === 1991 && variant === "No Parties"
+      ? sortedPresets.find((p) => p.id === "1991-default")
+      : sortedPresets.find((p) => presetStartYear(p) === year && presetVariant(p) === variant);
+
+  const selectConditions = (preset: ResetPreset, variant: string | null) => {
+    setSelectedPreset(preset.id);
+    setStartingParties(
+      preset.id === "1991-default" && variant === "No Parties" ? "none" : "default"
+    );
+  };
 
   const pickYear = (year: number) => {
     // Keep the current condition when the target year offers it; otherwise
@@ -320,7 +350,7 @@ export function GameResetControls() {
     const fallback = sortedPresets.find((p) => presetStartYear(p) === year);
     const next = same ?? fallback;
     if (next) {
-      setSelectedPreset(next.id);
+      selectConditions(next, same ? selectedVariant : presetVariant(next));
       setStartYear(year);
       setStartWeek(1);
     }
@@ -353,7 +383,7 @@ export function GameResetControls() {
     const canonical = findPreset(baseYear, "Default Parties");
     const next =
       sameVariant ?? canonical ?? sortedPresets.find((p) => presetStartYear(p) === baseYear);
-    if (next) setSelectedPreset(next.id);
+    if (next) selectConditions(next, sameVariant ? selectedVariant : presetVariant(next));
   };
 
   return (
@@ -448,7 +478,7 @@ export function GameResetControls() {
               <button
                 key={variant}
                 type="button"
-                onClick={() => target && setSelectedPreset(target.id)}
+                onClick={() => target && selectConditions(target, variant)}
                 disabled={loading !== null || !target}
                 aria-pressed={active}
                 title={
@@ -471,7 +501,11 @@ export function GameResetControls() {
         </div>
 
         {selectedPresetData && (
-          <p className="mt-3 text-xs text-muted">{selectedPresetData.description}</p>
+          <p className="mt-3 text-xs text-muted">
+            {noStartingParties
+              ? "1991 world data with no starting parties or political NPP officeholders. Offices start vacant for player-created parties and elections."
+              : selectedPresetData.description}
+          </p>
         )}
       </div>
 
@@ -620,15 +654,25 @@ export function GameResetControls() {
       <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-medium">{RESET_CONFIG.resetAndBootstrap.title}</p>
-            <p className="mt-1 text-sm text-muted">{RESET_CONFIG.resetAndBootstrap.description}</p>
+            <p className="font-medium">
+              {noStartingParties ? "Reset + No Parties" : RESET_CONFIG.resetAndBootstrap.title}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {noStartingParties
+                ? "Rebuilds the 1991 world with vacant political offices and no starting parties."
+                : RESET_CONFIG.resetAndBootstrap.description}
+            </p>
           </div>
           <button
             onClick={() => handleReset("resetAndBootstrap")}
             disabled={loading !== null}
             className="min-h-[44px] shrink-0 rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
           >
-            {loading === "resetAndBootstrap" ? "Running..." : "Reset + Historical"}
+            {loading === "resetAndBootstrap"
+              ? "Running..."
+              : noStartingParties
+                ? "Reset + No Parties"
+                : "Reset + Historical"}
           </button>
         </div>
       </div>
