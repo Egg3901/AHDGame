@@ -14,6 +14,12 @@ import {
 import type { SuccessionActivationInput } from "./planActivation";
 import type { FederationRatificationRecord } from "./ratificationStore";
 import { buildFederationPublicationPlan } from "./publicationPlan";
+import {
+  prepareFederationPublication,
+  verifyPreparedFederationPublication,
+  type FederationPreparedEffect,
+} from "./preparePublication";
+import { loadRuntimeWorldEntities, type RuntimeWorldEntityState } from "./runtimeEntities";
 
 const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
@@ -302,6 +308,22 @@ describe("live federation settlement intent", () => {
         payloadHash: "0".repeat(64),
       })
     ).toThrow("publication inventory");
+    const prepared = await prepareFederationPublication(args.db, publication, new Date(2));
+    expect(prepared.effectIds.length).toBeGreaterThan(4);
+    expect(await prepareFederationPublication(args.db, publication, new Date(3))).toEqual(prepared);
+    expect((await verifyPreparedFederationPublication(args.db, intent._id)).length).toBe(
+      prepared.effectIds.length
+    );
+    expect(
+      (await loadRuntimeWorldEntities(args.db, "1991-default"))
+        .filter(({ entityId }) => entityId === "RU" || entityId === "UKR")
+        .map(({ entityId, status }) => [entityId, status])
+        .sort(([a], [b]) => a.localeCompare(b))
+    ).toEqual([
+      ["RU", "sovereign"],
+      ["UKR", "dependent"],
+    ]);
+    expect(await args.db.collection("federationSettlementApplications").countDocuments({})).toBe(0);
     await expect(
       verifyLiveFederationSettlementIntent({
         db: args.db,
@@ -374,6 +396,43 @@ describe("live federation settlement intent", () => {
         appliedOnTurn: 97,
       })
     ).rejects.toThrow("source changed");
+  });
+
+  it("repairs an interrupted inert publication stage and rejects changed effect values", async () => {
+    const { args } = scenario();
+    const staged = await stageLiveFederationSettlementIntent(args);
+    const { intent, snapshot } = await verifyLiveFederationSettlementIntent({
+      db: args.db,
+      intentId: staged._id,
+      sourceCountryId: "RU",
+      appliedOnTurn: 97,
+    });
+    const plan = buildFederationPublicationPlan(intent, snapshot);
+    const preparation = await prepareFederationPublication(args.db, plan, new Date(2));
+    await args.db
+      .collection<FederationPreparedEffect>("federationPreparedEffects")
+      .deleteOne({ _id: preparation.effectIds[0] });
+    await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
+      "incomplete or altered"
+    );
+    await prepareFederationPublication(args.db, plan, new Date(3));
+    expect(await verifyPreparedFederationPublication(args.db, staged._id)).toHaveLength(
+      preparation.effectIds.length
+    );
+    await args.db
+      .collection<RuntimeWorldEntityState>("worldEntityStates")
+      .deleteOne({ _id: "1991-default:UKR" });
+    await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
+      "sovereign states are incomplete"
+    );
+    await prepareFederationPublication(args.db, plan, new Date(4));
+    await args.db
+      .collection<FederationPreparedEffect>("federationPreparedEffects")
+      .updateOne({ _id: preparation.effectIds[0] }, { $set: { value: { corrupted: true } } });
+    await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
+      "incomplete or altered"
+    );
+    expect(await args.db.collection("federationSettlementApplications").countDocuments({})).toBe(0);
   });
 
   it("rejects changed player choices and terms under the same application key", async () => {
