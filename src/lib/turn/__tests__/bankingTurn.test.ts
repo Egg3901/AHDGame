@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter, BankLoan, DepositInsuranceFund } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
@@ -367,6 +368,62 @@ describe("processBankingTurn", () => {
       matchedCount: 0,
       modifiedCount: 0,
     });
+
+    // Settlement effects need durable document receipts, not write-count stubs.
+    // Keep the phase's mutable fixture handles while delegating affected storage.
+    const persisted = createInMemoryDb();
+    liveCorp = bankCorp;
+    persisted.collection("corporations").docs.push({ ...liveCorp });
+    liveCorp = persisted.collection("corporations").docs[0] as unknown as Corporation;
+    bankCorp = liveCorp;
+    const savings = {},
+      personal = {},
+      holder = {};
+    Object.defineProperty(savings, "USD", {
+      enumerable: true,
+      get: () => characterState.savings,
+      set: (value: number) => {
+        characterState.savings = value;
+      },
+    });
+    Object.defineProperty(personal, "USD", {
+      enumerable: true,
+      get: () => characterState.personal,
+      set: (value: number) => {
+        characterState.personal = value;
+      },
+    });
+    Object.defineProperty(holder, "USD", {
+      enumerable: true,
+      get: () => characterState.holder,
+      set: (value: string) => {
+        characterState.holder = value;
+      },
+    });
+    persisted
+      .collection("characters")
+      .docs.push({
+        _id: characterState._id,
+        currencyBalances: { savings, personal, savingsHolder: holder },
+      });
+    for (const name of ["bankMoneyMoves", "financialTxLog"]) {
+      db.collection(name);
+      const backing = persisted.collection(name);
+      for (const method of ["find", "findOne", "insertOne", "updateOne", "bulkWrite"] as const)
+        db.collectionMocks[name]![method].mockImplementation(
+          backing[method].bind(backing) as never
+        );
+    }
+    for (const name of ["characters", "corporations"]) {
+      const backing = persisted.collection(name);
+      for (const method of ["findOne", "updateOne", "bulkWrite"] as const)
+        db.collectionMocks[name]![method].mockImplementation(
+          backing[method].bind(backing) as never
+        );
+    }
+    db.collectionMocks.characters!.find.mockImplementation(
+      persisted.collection("characters").find.bind(persisted.collection("characters")) as never
+    );
 
     // Default: large financial capacity so ceiling does not bind existing tests
     // (250_000 units × 0.5 × 1.2M = 150B).
