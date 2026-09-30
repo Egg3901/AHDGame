@@ -61,6 +61,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   corp_tax_paid: "taxation",
   gov_tax_revenue: "taxation",
   corp_revenue: "sector_revenue",
+  corp_operating_loss: "corporate_operating_loss",
   // The buyer is the defence appropriation sub-account, which the stock-check ledger does
   // not yet model as a real account. Name the contra instead of reporting an unexplained mint.
   defence_contract_payment: "defence_procurement",

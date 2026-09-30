@@ -23,6 +23,7 @@ export type FinancialTxType =
 
   // Corp & shares
   | "corp_revenue"
+  | "corp_operating_loss"
   | "corp_dividend"
   | "corp_salary"
   | "corp_tax_paid"
