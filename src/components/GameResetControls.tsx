@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ResetSeedReadiness } from "@/lib/admin/resetAndBootstrapGameWorld";
 
 const MIN_RESET_YEAR = 1953;
 const MAX_RESET_YEAR = 2027;
@@ -106,6 +107,8 @@ const RESET_CONFIG: Record<ResetType, ResetActionConfig> = {
 function buildResultMessage(
   prefix: string,
   data: {
+    resetStatus?: string;
+    readiness?: ResetSeedReadiness;
     details?: {
       officialsDeleted?: number;
       electionsDeleted?: number;
@@ -123,8 +126,14 @@ function buildResultMessage(
   }
 ) {
   const details = data.details ?? {};
+  const blocked = data.readiness?.status === "blocked" || data.resetStatus === "partial";
   const lines = [
-    prefix,
+    blocked ? "Reset completed with blocked readiness. Maintenance remains enabled." : prefix,
+    data.readiness ? `- Seed readiness: ${data.readiness.status}` : null,
+    data.readiness?.error ? `- Audit error: ${data.readiness.error}` : null,
+    ...(data.readiness?.criticalChecks ?? []).map(
+      (check) => `- ${check.id}: ${check.note ?? check.metric}`
+    ),
     `- Officials deleted: ${details.officialsDeleted ?? 0}`,
     `- Elections deleted: ${details.electionsDeleted ?? 0}`,
     `- NPPs deleted: ${details.nppsDeleted ?? 0}`,
@@ -285,8 +294,11 @@ export function GameResetControls() {
               setResetProgress(Math.min(90, Math.round((logCount / 85) * 90)));
             } else if (event.type === "done") {
               setResetProgress(100);
-              setResetStage("Done");
               const data = event.data ?? {};
+              const blocked =
+                (data.readiness as ResetSeedReadiness | undefined)?.status === "blocked" ||
+                data.resetStatus === "partial";
+              setResetStage(blocked ? "Readiness blocked" : "Done");
               setMessage(
                 buildResultMessage(
                   config.successPrefix,
@@ -298,7 +310,7 @@ export function GameResetControls() {
                   ? (data as { logs: string[] }).logs
                   : prev
               );
-              if (type === "fullReset") {
+              if (type === "fullReset" && !blocked) {
                 setTimeout(() => router.push("/register"), 2000);
               }
             } else if (event.type === "error") {
@@ -314,7 +326,10 @@ export function GameResetControls() {
     }
   };
 
-  const isError = message.startsWith("Error") || message.includes("cancelled");
+  const isError =
+    message.startsWith("Error") ||
+    message.includes("cancelled") ||
+    message.includes("blocked readiness");
   const selectedPresetData = presets.find((p) => p.id === selectedPreset);
   // Newest start date first; stable sort keeps same-year variants
   // (e.g. the 2019 Default / No NPPs / No Parties presets) in their original order.

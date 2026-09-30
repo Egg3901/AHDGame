@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     const preIteration = resolvePreIterationOption(body, searchParams);
 
     const db = await getDb();
-    const { reset, logs } = await resetAndBootstrapGameWorld({
+    const { reset, logs, status, readiness } = await resetAndBootstrapGameWorld({
       db,
       mode: bootstrap ? mode : "historical",
       preset,
@@ -130,6 +130,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ...reset,
+      resetStatus: status,
+      readiness,
       bootstrap,
       bootstrapMode: bootstrap ? mode : null,
       startingParties: body.startingParties ?? (preset === "2019-no-parties" ? "none" : "default"),
@@ -200,7 +202,7 @@ async function handleStreamingReset(
       try {
         const db = await getDb();
 
-        const { reset, logs } = await resetAndBootstrapGameWorld({
+        const { reset, logs, status, readiness } = await resetAndBootstrapGameWorld({
           db,
           mode: bootstrap ? mode : "historical",
           preset,
@@ -224,6 +226,8 @@ async function handleStreamingReset(
           type: "done",
           data: {
             ...reset,
+            resetStatus: status,
+            readiness,
             bootstrap,
             bootstrapMode: bootstrap ? mode : null,
             startingParties:

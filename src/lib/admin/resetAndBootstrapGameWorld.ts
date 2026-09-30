@@ -50,7 +50,9 @@ import {
   closeResetRunLog,
   createResetRunRecord,
   openResetRunLog,
+  type ResetRunStatus,
 } from "@/lib/admin/resetRunRecord";
+import type { SeedDiagnosticCheck } from "@/lib/admin/seedDiagnostic/types";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
@@ -114,7 +116,16 @@ export interface ResetAndBootstrapOptions {
   log?: (msg: string) => void;
 }
 
+export interface ResetSeedReadiness {
+  status: "healthy" | "blocked" | "not-checked";
+  criticalChecks: SeedDiagnosticCheck[];
+  baselineCaptured: boolean;
+  error?: string;
+}
+
 export interface ResetAndBootstrapResult {
+  status: ResetRunStatus;
+  readiness: ResetSeedReadiness;
   reset: ResetGameWorldResult;
   /** Bootstrap summary counts (undefined if seedOnly: true). */
   bootstrap: Awaited<ReturnType<typeof bootstrapGameWorld>> | undefined;
@@ -219,6 +230,11 @@ export async function resetAndBootstrapGameWorld(
   const run = createResetRunRecord(collect);
   let phaseReached = "seal";
   let aborted = false;
+  const readiness: ResetSeedReadiness = {
+    status: "not-checked",
+    criticalChecks: [],
+    baselineCaptured: false,
+  };
   let finalized: Awaited<ReturnType<typeof finalizeResetGameWorld>> | null = null;
   const recordRunLog = options.recordRunLog !== false;
   if (recordRunLog) await openResetRunLog(db, run, { preset, mode, adminUsername });
@@ -333,12 +349,32 @@ export async function resetAndBootstrapGameWorld(
           preset,
         });
         collect(formatDiagnosticSummary(report));
+        readiness.criticalChecks = (report.checks ?? []).filter(
+          (check) => check.severity === "critical"
+        );
+        for (const check of readiness.criticalChecks) {
+          run.recordFailure(
+            "audit",
+            check.id,
+            `${check.scope}: ${check.metric}; expected ${check.expected}, actual ${check.actual}${check.note ? `; ${check.note}` : ""}`
+          );
+        }
+        if (report.summary.critical > 0 && readiness.criticalChecks.length === 0) {
+          run.recordFailure(
+            "audit",
+            "seedConformance",
+            `${report.summary.critical} critical seed checks`
+          );
+        }
+        if (run.status(false) !== "succeeded") readiness.status = "blocked";
         // A `partial` run means at least one seeder was contained, so the world is
         // knowingly incomplete. Capturing a baseline from it would make every
         // future drift check compare against a broken reference — the same reason a
         // critical finding skips capture.
         if (report.summary.critical === 0 && run.status(false) === "succeeded") {
           await captureSeedBaseline(db);
+          readiness.status = "healthy";
+          readiness.baselineCaptured = true;
           collect("Seed diagnostic baseline captured");
         } else if (run.status(false) !== "succeeded") {
           collect(
@@ -351,6 +387,9 @@ export async function resetAndBootstrapGameWorld(
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        readiness.status = "blocked";
+        readiness.error = message;
+        run.recordFailure("audit", "seedDiagnostic", err);
         collect(`Seed diagnostic failed: ${message}`);
         try {
           const { diagnosticErrorReport } = await import("@/lib/admin/seedDiagnostic");
@@ -368,7 +407,8 @@ export async function resetAndBootstrapGameWorld(
     }
 
     phaseReached = "complete";
-    return { reset, bootstrap, postSeedOfficials, logs };
+    if (run.status(false) !== "succeeded") readiness.status = "blocked";
+    return { reset, bootstrap, postSeedOfficials, logs, status: run.status(false), readiness };
   } catch (error) {
     aborted = true;
     collect(
