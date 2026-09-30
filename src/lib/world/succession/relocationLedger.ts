@@ -121,14 +121,24 @@ export async function publishFederationRelocations(input: {
       throw new Error("Federation relocation has missing or changed facility claims");
   }
   const collection = db.collection<FederationRelocationRecord>(FEDERATION_RELOCATIONS_COLLECTION);
+  if (records.length === 0) return [];
+  await collection.bulkWrite(
+    records.map((intended) => ({
+      updateOne: {
+        filter: { _id: intended._id },
+        update: { $setOnInsert: intended },
+        upsert: true,
+      },
+    })),
+    { session, ignoreUndefined: true }
+  );
+  const live = await collection
+    .find({ _id: { $in: records.map((record) => record._id) } }, { session })
+    .toArray();
+  const byId = new Map(live.map((record) => [record._id, record]));
   const saved: FederationRelocationRecord[] = [];
   for (const intended of records) {
-    await collection.updateOne(
-      { _id: intended._id },
-      { $setOnInsert: intended },
-      { upsert: true, session }
-    );
-    const stored = await collection.findOne({ _id: intended._id }, { session });
+    const stored = byId.get(intended._id);
     if (
       !stored ||
       stored.applicationId !== applicationId ||

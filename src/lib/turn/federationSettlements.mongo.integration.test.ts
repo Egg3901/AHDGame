@@ -179,6 +179,44 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     });
   });
 
+  it("keeps activation below 140 commands with one hundred protected residents", async () => {
+    const db = client.db(databaseName);
+    await db
+      .collection("characters")
+      .insertMany(
+        Array.from({ length: 99 }, () => ({
+          _id: new ObjectId(),
+          countryId: "CS",
+          homeState: "CS_SVK",
+          cash: 50,
+          currentOffice: null,
+        }))
+      );
+    commands = 0;
+    expect(
+      await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
+    ).toBe(1);
+    const activationCommands = commands;
+    expect(activationCommands).toBeLessThanOrEqual(140);
+    expect(
+      await db
+        .collection("characters")
+        .countDocuments({
+          cash: 50,
+          federationPendingResidenceId: "1991-default:cs-1991-default:1",
+        })
+    ).toBe(100);
+    expect(await db.collection("federationResidentHolds").countDocuments({})).toBe(100);
+    expect(
+      await db
+        .collection("federationRelocations")
+        .countDocuments({ kind: "resident", status: "pending-choice" })
+    ).toBe(100);
+    console.info(
+      `Federation replica-set qualification: 100-resident activation=${activationCommands} commands`
+    );
+  });
+
   it("keeps an individual successor's arrears with that successor on recovery", async () => {
     const db = client.db(databaseName);
     await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2));

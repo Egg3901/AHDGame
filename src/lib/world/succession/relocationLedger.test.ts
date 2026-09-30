@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { publishFederationRelocations } from "./relocationLedger";
 import { stageFederationFacilityClaims } from "./facilityClaimLedger";
@@ -37,6 +37,63 @@ const input = {
 };
 
 describe("federation protected relocation ledger", () => {
+  it("batches one hundred resident records and preserves a later owner choice on retry", async () => {
+    const mem = createInMemoryDb();
+    const db = mem as unknown as Db;
+    mem.seed("federationSettlementApplications", [
+      {
+        _id: applicationId,
+        presetId: "1991-default",
+        settlementId: "split",
+        revision: 1,
+        sourceEntityId: "CS",
+        entityIds: ["CS", "SK"],
+        status: "applied",
+        appliedOnTurn: 96,
+      },
+    ]);
+    mem.seed("worldEntityStates", [
+      { _id: "1991-default:CS", applicationId, entityId: "CS", appliedOnTurn: 96 },
+      { _id: "1991-default:SK", applicationId, entityId: "SK", appliedOnTurn: 96 },
+    ]);
+    const residents = Array.from({ length: 100 }, (_, index) => ({
+      ...input.residents[0],
+      characterId: `person-${index}`,
+    }));
+    const collection = db.collection("federationRelocations");
+    const bulk = vi.spyOn(collection, "bulkWrite");
+    const find = vi.spyOn(collection, "find");
+    const first = await publishFederationRelocations({
+      ...input,
+      db,
+      residents,
+      firms: [],
+      firmOrigins: {},
+    });
+    expect(bulk).toHaveBeenCalledTimes(1);
+    expect(find).toHaveBeenCalledTimes(1);
+    expect(first.map((row) => row.subjectId)).toEqual(residents.map((row) => row.characterId));
+    await collection.updateOne(
+      { _id: first[0]._id },
+      { $set: { status: "selected", destination: { countryId: "PL", stateId: "MAZ" } } }
+    );
+    const replay = await publishFederationRelocations({
+      ...input,
+      db,
+      residents,
+      firms: [],
+      firmOrigins: {},
+      now: new Date(1),
+    });
+    expect(replay[0]).toMatchObject({
+      status: "selected",
+      destination: { countryId: "PL", stateId: "MAZ" },
+      createdAt: new Date(0),
+    });
+    expect(replay.slice(1)).toEqual(first.slice(1));
+    expect(await collection.countDocuments({})).toBe(100);
+  });
+
   it("requires the complete applied entity receipt", async () => {
     const mem = createInMemoryDb();
     const db = mem as unknown as Db;
