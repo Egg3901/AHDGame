@@ -40,6 +40,8 @@ export interface OrgSummary {
     leadership: { title: string; termTurns: number };
     charter: string;
     category: OrganizationCategory;
+    /** A charter that binds members at every posture (see `mutualDefenceBasis`). */
+    standingMutualDefence?: boolean;
     alignment?: {
       poleId: CustomAlignmentPoleId;
       accentToken: CustomAlignmentPoleToken;

@@ -21,9 +21,23 @@ vi.mock("@/lib/military/joinSide", () => ({
 }));
 
 const treatyDefendersSpy = vi.fn();
-vi.mock("@/lib/military/treatyDefence", () => ({
-  resolveTreatyDefenders: (...a: unknown[]) => treatyDefendersSpy(...a),
+vi.mock("@/lib/military/treatyDefence", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/military/treatyDefence")>(
+    "@/lib/military/treatyDefence"
+  );
+  return {
+    toTreatyEntries: actual.toTreatyEntries,
+    resolveTreatyDefenders: (...a: unknown[]) => treatyDefendersSpy(...a),
+  };
+});
+const mobilizeSpy = vi.fn();
+vi.mock("@/lib/nppAutonomy/autonomousWarCommands", () => ({
+  mobilizeImmediateWarEntry: (...a: unknown[]) => {
+    mobilizeSpy(...a);
+    return Promise.resolve(0);
+  },
 }));
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn().mockRejectedValue(new Error("no db in test")) }));
 
 const notifySpy = vi.fn();
 const orgHistorySpy = vi.fn();
@@ -75,6 +89,22 @@ function stubDb(hosted: unknown = null, all?: unknown[]): Db {
     }),
   } as unknown as Db;
 }
+
+/** What the resolver returns for an ally bound by the Warsaw Pact's standing charter. */
+const WP_RU = {
+  countryId: "RU",
+  organizationId: "WARSAW_PACT",
+  organizationName: "Warsaw Pact",
+  basis: "charter",
+};
+const WP_RU_ENTRY = {
+  countryId: "RU",
+  organizationId: "WARSAW_PACT",
+  organizationName: "Warsaw Pact",
+  basis: "charter",
+  defending: "DD",
+  joinedTurn: 40,
+};
 
 const input = {
   declarer: "US" as const,
@@ -197,7 +227,7 @@ describe("declareWar treaty defence", () => {
   const pactDefender = { ...input, defender: "DD" as const };
 
   it("opens a new war with treaty allies already on the defending side", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     const { conflict } = await declareWar(stubDb(), pactDefender);
     expect(conflict.sideB.countries).toEqual(["DD", "RU"]);
     // Allies must be in the roster BEFORE createConflict, or opening forces are never
@@ -207,15 +237,13 @@ describe("declareWar treaty defence", () => {
   });
 
   it("records why each ally is present", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     const { conflict } = await declareWar(stubDb(), pactDefender);
-    expect(conflict.treatyEntries).toEqual([
-      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 40 },
-    ]);
+    expect(conflict.treatyEntries).toEqual([WP_RU_ENTRY]);
   });
 
   it("labels a defended side as a coalition, not a lone state", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     const { conflict } = await declareWar(stubDb(), pactDefender);
     expect(conflict.sideB.kind).toBe("coalition");
   });
@@ -228,7 +256,7 @@ describe("declareWar treaty defence", () => {
   });
 
   it("enrols allies on the defender's side of a war already being fought there", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     const live = {
       _id: "c1",
       hostCountry: "DD",
@@ -257,7 +285,7 @@ describe("declareWar treaty defence", () => {
   // this the peace bar and release would have nothing to read for an ally that entered
   // an existing war, and both would silently do nothing for it.
   it("records provenance when allies join an existing war", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     const live = {
       _id: "c1",
       hostCountry: "DD",
@@ -267,18 +295,62 @@ describe("declareWar treaty defence", () => {
     };
     await declareWar(stubDb(live), pactDefender);
     const push = conflictUpdateSpy.mock.calls.find(
-      (c) => (c[1] as { $push?: unknown })?.$push !== undefined
+      (c) => (c[1] as { $push?: { treatyEntries?: unknown } })?.$push?.treatyEntries !== undefined
     );
     expect(push).toBeDefined();
-    const entries = (push![1] as { $push: { treatyEntries: { $each: Record<string, unknown>[] } } })
-      .$push.treatyEntries.$each;
-    expect(entries).toEqual([
-      { countryId: "RU", organizationId: "WARSAW_PACT", defending: "DD", joinedTurn: 40 },
+    // Guarded on the country so a second writer in the same turn cannot duplicate it.
+    expect(push![0]).toEqual({ _id: "c1", "treatyEntries.countryId": { $ne: "RU" } });
+    expect((push![1] as { $push: { treatyEntries: unknown } }).$push.treatyEntries).toEqual(
+      WP_RU_ENTRY
+    );
+  });
+
+  // The same entry primitive as the per-turn reconciliation and the bloc
+  // collective-defence resolution: an ally pulled into a live war sends a reserve
+  // commitment, exactly as it would on any later turn.
+  it("commits the ally's reserve to the front when it joins an existing war", async () => {
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
+    const live = {
+      _id: "c1",
+      hostCountry: "DD",
+      name: "Battle of Berlin",
+      sideA: { countries: ["UK"], kind: "state" },
+      sideB: { countries: ["DD"], kind: "state" },
+    };
+    await declareWar(stubDb(live), pactDefender);
+    expect(mobilizeSpy).toHaveBeenCalledWith(expect.anything(), "RU", "c1", 40, "WARSAW_PACT");
+  });
+
+  it("treats the declarer's whole side as the attackers when joining a live war", async () => {
+    const live = {
+      _id: "c1",
+      hostCountry: "DD",
+      sideA: { countries: ["UK"], kind: "state" },
+      sideB: { countries: ["DD"], kind: "state" },
+    };
+    await declareWar(stubDb(live), pactDefender);
+    expect(treatyDefendersSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ defender: "DD", attackers: ["US", "UK"] })
+    );
+  });
+
+  it("names a player-founded alliance in the notice, not its id", async () => {
+    treatyDefendersSpy.mockResolvedValue([
+      {
+        countryId: "UK",
+        organizationId: "ndp",
+        organizationName: "Northern Defence Pact",
+        basis: "posture",
+      },
     ]);
+    await declareWar(stubDb(), pactDefender);
+    const inputs = notifySpy.mock.calls[0][0] as Array<{ message: string }>;
+    expect(inputs[0].message).toContain("Northern Defence Pact");
   });
 
   it("does not auto-join when the defender cannot be placed on either side", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     // The defender is on neither roster and has no bloc backer to fall back on, so there
     // is no side to defend. Guessing would enrol the ally AGAINST the country it came to
     // protect.
@@ -299,7 +371,7 @@ describe("declareWar treaty defence", () => {
   });
 
   it("tells an auto-joined ally's government that its treaty took it to war", async () => {
-    treatyDefendersSpy.mockResolvedValue([{ countryId: "RU", organizationId: "WARSAW_PACT" }]);
+    treatyDefendersSpy.mockResolvedValue([WP_RU]);
     await declareWar(stubDb(), pactDefender);
     const inputs = notifySpy.mock.calls[0][0] as Array<{
       userId: unknown;

@@ -217,6 +217,32 @@ describe("JoinConflictPanel", () => {
     expect(screen.getByText(/unanimous consent required/)).toBeTruthy();
   });
 
+  it("says defence is automatic only when the alliance is bound", () => {
+    const bound = { ...org("bloc"), posture: "article5" } as unknown as OrgSummary;
+    render(
+      <JoinConflictPanel
+        org={bound}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/Defence of a member is not voted on/)).toBeTruthy();
+    cleanup();
+
+    render(
+      <JoinConflictPanel
+        org={org("bloc")}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/Defence of a member is not automatic at this posture/)).toBeTruthy();
+  });
+
   it("surfaces the server's refusal reason", async () => {
     postResponse = { ok: false, body: { error: "That conflict is not live." } };
     await openForm();

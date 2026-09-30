@@ -84,6 +84,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "internationalOrganizations",
   "alignment",
   "settlement",
+  "mutualDefence",
   "impeachmentLifecycle",
   "presidentialSuccession",
   "fiscalYear",
