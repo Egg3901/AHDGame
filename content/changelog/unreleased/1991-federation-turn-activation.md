@@ -6,7 +6,7 @@ summary: >-
   Dissolved issuers retain a settlement administration funded by successor contributions.
 tags: [1991, succession, bonds, accounting]
 badges: [minor]
-areas: [engine, backend]
+areas: [engine, fullstack]
 ---
 
 - Apply territory, custody, fiscal balances and protected relocation holds in one transaction with the approved settlement receipt.
@@ -15,3 +15,5 @@ areas: [engine, backend]
 - Keep original creditor contracts under their existing issuer and currency.
 - Collect negotiated successor contributions before legacy bond payments; cover temporary gaps with a visible administration overdraft, successor arrears and stability penalties.
 - Recover prior bridge advances from later successor contributions.
+
+- Show the latest settlement administration overdraft, cash and successor arrears on the World page, in the shared accounting unit.

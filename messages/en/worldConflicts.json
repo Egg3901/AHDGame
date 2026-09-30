@@ -17,6 +17,18 @@
       "pressure": "Background pressure",
       "decisions": "Open decisions",
       "commitments": "Public commitments"
+    },
+    "federationFinances": {
+      "title": "Federation settlement finances",
+      "accounting": "Amounts use the shared accounting unit. Original bonds retain their issuer and currency.",
+      "administration": "{source} settlement administration, turn {turn}",
+      "creditorDue": "Creditor payment due",
+      "overdraft": "Outstanding overdraft",
+      "cash": "Administration cash",
+      "successor": "Successor",
+      "contribution": "Contribution this turn",
+      "arrears": "Outstanding arrears",
+      "risk": "Unpaid contributions reduce successor stability. Later contributions repay the overdraft."
     }
   }
 }
