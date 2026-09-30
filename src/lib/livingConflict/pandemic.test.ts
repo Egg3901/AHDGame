@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LivingConflictState } from "./types";
+import { normalizeCampaignState } from "./campaign";
 import {
   applyConflictOutcome,
   evaluateConflictTransitions,
@@ -179,6 +180,22 @@ describe("pandemic mechanics", () => {
       (202000 * 0.012) / 48
     );
     expect(pandemic.vector.male[50]).toBeLessThan(ordinary.vector.male[50]);
+  });
+  it("retains small cumulative casualties across stored campaign normalization", () => {
+    let current = state({ transmission: 28 });
+    let expected = 0;
+    for (let turn = 1; turn <= 48; turn++) {
+      current = {
+        ...current,
+        totalTurns: turn,
+        campaign: normalizeCampaignState(current.campaign),
+      };
+      expected += pandemicMortality(current) * 18;
+      current = advancePandemicState(current);
+    }
+    expect(current.tracks!.cumulativeMortalityIndex).toBeCloseTo(expected, 10);
+    expect(current.campaign!.consequences.casualties).toBeCloseTo(expected, 10);
+    expect(expected).toBeGreaterThan(0.1);
   });
   it("bounds malformed legacy inputs and disables closed outbreaks", () => {
     const malformed = {

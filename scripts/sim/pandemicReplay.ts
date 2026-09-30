@@ -29,6 +29,7 @@ import type {
   CrisisInteraction,
   CrisisDecisionNode,
   CrisisDecisionOption,
+  GlobalResponseRole,
 } from "../../src/lib/db/types/crisis";
 import type { LivingConflictState } from "../../src/lib/livingConflict/types";
 import type { PoliticalMetricsDoc } from "../../src/lib/db/types/politicalMetrics";
@@ -343,7 +344,7 @@ async function main() {
             const actor = leaders[i],
               id = selection[i];
             const node: CrisisDecisionNode = interaction.decisionTree[0];
-            const role = crisis.globalResponse!.roleByCountry[actor.countryId];
+            const role: GlobalResponseRole = crisis.globalResponse!.roleByCountry[actor.countryId];
             const option: CrisisDecisionOption | undefined = node.optionsByRole?.[role]?.find(
               (o) => o.optionId === id
             );

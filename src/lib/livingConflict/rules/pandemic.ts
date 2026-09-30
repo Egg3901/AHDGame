@@ -132,14 +132,17 @@ export function advancePandemicState(state: LivingConflictState): LivingConflict
     get("supplyChainStrain") + (strainTarget - get("supplyChainStrain")) * 0.06
   );
   if (variant) set("variantWaves", get("variantWaves") + 1);
+  // Campaign normalization rounds displayed consequences to tenths. Preserve
+  // the full accumulated toll in a track so small weekly losses are not erased.
+  const accumulated =
+    state.tracks?.cumulativeMortalityIndex ?? state.campaign?.consequences.casualties ?? 0;
+  set("cumulativeMortalityIndex", accumulated + pandemicMortality(state) * 18);
   const campaign = state.campaign
     ? {
         ...state.campaign,
         consequences: {
           ...state.campaign.consequences,
-          casualties: bounded(
-            state.campaign.consequences.casualties + pandemicMortality(state) * 18
-          ),
+          casualties: t.cumulativeMortalityIndex,
           civilianStrain: bounded(strainTarget),
         },
       }
@@ -217,9 +220,10 @@ export function pandemicParticipants(
 }
 
 /** Emergence lies in a modern risk window, with timing contingent on the world. */
-export function pandemicOpeningYear(
-  participants: import("../types").LivingConflictDef["participants"]
-): number {
+export function pandemicOpeningYear(participants: {
+  belligerents: string[];
+  bystanders?: string[];
+}): number {
   const key = [...participants.belligerents, ...(participants.bystanders ?? [])].sort().join("");
   const seed = [...key].reduce((sum, character) => sum + character.charCodeAt(0), 0);
   return 2018 + (seed % 3);
