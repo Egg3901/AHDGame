@@ -5,8 +5,8 @@ Refs #1328 and #2159. This qualifies the existing reserve-pool transfer adoption
 ## Executed source
 
 - Baseline: `e2858e5c5007a19a1d9c5b7f5dde000b2a1c6efe`.
-- Treatment: `0b40ef17d774a5a5420c17f34ce69c7663b7c1f0`.
-- The baseline and each treatment checkout were clean during execution. Baseline evidence is reused from its original run. Treatment includes the baseline development commit, the LOC journal prerequisite through `a094924920`, and the coordinated reserve quote guard. Later report changes and LOC test/fixture typing corrections through `2bede34381` do not alter runtime game source. The companion JSON records fixture hashes.
+- Treatment: `c6ba13c5fa859976a0fc51bf2217abaee7c1d616`.
+- The baseline and each treatment checkout were clean during execution. Baseline evidence is reused from its original run. Treatment includes the baseline development commit, the LOC journal prerequisite through `5f89f1bc10`, the coordinated reserve quote guard, and atomic durability repair `91cb14360d`. Later LOC reports and concrete Mongo type declarations through `89d4a2e6ef` do not change emitted runtime behavior. The companion JSON records fixture hashes.
 
 ## Outcomes
 
@@ -27,9 +27,12 @@ The narrowly scoped atomic mode permits a credit to improve an existing negative
 
 Five additional native cases use the actual reserve and LOC draw routes, existing underwriting, and production pending recovery. They cover both command orderings, two interrupted admission/publication points and pending-owner recovery priority. All finish with obligations covered, one original cash/debt result and no orphan admission. Fixtures supply authentication and rate-limit admission; no production actor or data is used.
 
+Ten additional native cases qualify protected atomic outcomes, terminal journal acknowledgement, receipt release, refusal, legacy compatibility and a waiting command. Completed or refused commands release only their own target receipt. A legacy unfinished record without surviving target proof remains partial for explicit reconciliation, preserving its cash and withholding an unsupported completion event. The repair does not infer old outcomes from missing evidence.
+
 ## Focused checks
 
-- 22 atomic helper tests, including original quote generation, bond exchanges, restricted reserve credits and interruption recovery.
+- 34 atomic helper tests passed for the durability repair, including original quote generation, bond exchanges, restricted reserve credits, terminal outcome races and interruption recovery.
+- The following unchanged surface checks passed earlier during this branch; the final native runs above use the combined source.
 - 11 reserve command tests and 8 unchanged pure limit/cooldown tests. The command cases include original deposit/revision changes and pending admission.
 - 5 route tests using persisted cash, cooldown and receipts. Their aggregate read retains a fixture stub because the in-memory adapter does not evaluate nested expressions inside `$sum`.
 - 1 specific Financials-tab test verifies request identity through network failure, success and a subsequent deliberate action.
@@ -39,10 +42,10 @@ Five additional native cases use the actual reserve and LOC draw routes, existin
 
 | Scope                       | Baseline commands | Treatment commands | Baseline read BSON | Treatment read BSON |
 | --------------------------- | ----------------: | -----------------: | -----------------: | ------------------: |
-| One transfer to lending     |                 4 |                 19 |                193 |               4,010 |
-| One transfer to forex       |                 4 |                 19 |                193 |               4,004 |
+| One transfer to lending     |                 4 |                 21 |                193 |               5,716 |
+| One transfer to forex       |                 4 |                 21 |                193 |               5,710 |
 | Idle banking recovery phase |                 3 |                  4 |                 46 |                  46 |
 
-Each command includes the original plan, guarded cash/cooldown publication and durable audit. Recovery has an indexed pending query limited to 100 commands. The measured idle phase has private banking disabled, adds one lookup and remains below the existing 1,000-command banking budget. Returned BSON counts cursor documents, excluding transport headers. Active recovery cost depends on pending commands; these figures do not qualify a whole autonomous policy sweep.
+Each command includes the original plan, guarded cash/cooldown publication, protected outcome acknowledgement and durable audit. Recovery has an indexed pending query limited to 100 commands. The measured idle phase has private banking disabled, adds one lookup and remains below the existing 1,000-command banking budget. Returned BSON counts cursor documents, excluding transport headers. Active recovery cost depends on pending commands; these figures do not qualify a whole autonomous policy sweep.
 
 No authority, units, limits, cooldown constants, monetary totals or rollout flags were changed. This report does not establish whole-world accounting closure or production observation.

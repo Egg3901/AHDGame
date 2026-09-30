@@ -114,7 +114,7 @@
     "negativeRecoveryCases": 0
   },
   "treatment": {
-    "sourceCommit": "0b40ef17d774a5a5420c17f34ce69c7663b7c1f0",
+    "sourceCommit": "c6ba13c5fa859976a0fc51bf2217abaee7c1d616",
     "mode": "treatment",
     "scope": "Synthetic isolated Mongo route and banking recovery; auth and rate-limit fixture only",
     "normal": {
@@ -201,20 +201,20 @@
     },
     "performance": {
       "toLending": {
-        "commands": 19,
-        "readBsonBytes": 4010
+        "commands": 21,
+        "readBsonBytes": 5716
       },
       "toForex": {
-        "commands": 19,
-        "readBsonBytes": 4004
+        "commands": 21,
+        "readBsonBytes": 5710
       },
       "negativeLending": {
-        "commands": 19,
-        "readBsonBytes": 4010
+        "commands": 21,
+        "readBsonBytes": 5716
       },
       "negativeForex": {
-        "commands": 19,
-        "readBsonBytes": 4004
+        "commands": 21,
+        "readBsonBytes": 5710
       },
       "idleBankingPhase": {
         "commands": 4,
@@ -232,10 +232,11 @@
   "limitations": [
     "Synthetic isolated subsystem; no world simulation or production activation.",
     "Native route uses synthetic authenticated chair and a permissive rate-limit fixture; real route authorization has separate focused tests.",
-    "Measurements are individual API commands and the idle private-banking-disabled phase, not a full monetary-policy sweep."
+    "Measurements are individual API commands and the idle private-banking-disabled phase, not a full monetary-policy sweep.",
+    "Older unfinished atomic records without surviving target proof remain partial for explicit reconciliation; recovery does not infer an outcome."
   ],
   "admissionQualification": {
-    "sourceCommit": "0b40ef17d774a5a5420c17f34ce69c7663b7c1f0",
+    "sourceCommit": "c6ba13c5fa859976a0fc51bf2217abaee7c1d616",
     "scope": "Synthetic isolated subsystem using actual reserve and credit routes, original underwriting, and production recovery. Authentication and rate-limit fixtures are synthetic.",
     "orderingCases": 2,
     "interruptedAdmissionCases": 2,
@@ -249,7 +250,16 @@
     "reserve-pool-rate-limit.ts": "8fb11b116e6077a943ee9d35b4078fe40ef8af15fcc399d460b900b04c1848f1"
   },
   "postRunSourceChanges": {
-    "throughCommit": "2bede34381",
-    "scope": "LOC test fixture typing and separate qualification scripts only; runtime game source unchanged from executed source"
+    "throughCommit": "89d4a2e6ef5bece0ea8f6ec7a8e8e3b8862c8722",
+    "scope": "LOC reports and concrete Mongo target type declarations only; emitted runtime game behavior unchanged from executed source"
+  },
+  "atomicQualification": {
+    "sourceCommit": "c6ba13c5fa859976a0fc51bf2217abaee7c1d616",
+    "scope": "Synthetic isolated Mongo using actual reserve command and production recovery; protected outcome, completion, release, legacy compatibility and pending-owner cases.",
+    "cases": 10,
+    "allCasesPassed": true,
+    "completedOrRefusedCases": 9,
+    "legacyAmbiguousCasesRetainedForReconciliation": 1,
+    "fixtureSha256": "b5aea7366b0068a8d0ab5d85de35e5c6cfb8f386dcad3674548dd7ed0cb2f885"
   }
 }
