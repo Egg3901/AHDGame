@@ -136,10 +136,13 @@ export async function sweepStaleOffice(
   electionType: string,
   state: string,
   now: Date,
-  chamberClass?: 1 | 2
+  chamberClass?: 1 | 2,
+  countryId?: Election["countryId"]
 ): Promise<void> {
   // Normalize snap types — a snap_commons election sweeps "commons" officials.
-  const officeType = officeKeyForElectionType(electionType);
+  // Country chamber keys can differ from their seated office type. Bulgaria's
+  // nationalAssembly, for example, seats assemblyDeputy holders.
+  const officeType = officeKeyForElectionType(electionType, countryId);
   const officialFilter: Record<string, unknown> = { officeType, state };
   if (chamberClass) officialFilter.chamberClass = chamberClass;
 
@@ -204,7 +207,8 @@ export async function resolveElectionWithNoTally(
       election.electionType,
       election.state,
       now,
-      getChamberClass(election)
+      getChamberClass(election),
+      election.countryId
     );
   }
   // Clear single-seat incumbent when election resolves with no tally
@@ -320,7 +324,8 @@ export async function resolveElectionWithZeroVotes(
       election.electionType,
       election.state,
       now,
-      getChamberClass(election)
+      getChamberClass(election),
+      election.countryId
     );
   }
   // Clear single-seat incumbent when election resolves with zero votes cast
@@ -430,7 +435,8 @@ export async function resolveElectionWithNoRankedCandidates(
       election.electionType,
       election.state,
       now,
-      getChamberClass(election)
+      getChamberClass(election),
+      election.countryId
     );
   }
   if (isCommonsGeneralElection(election.electionType) && election.state) {

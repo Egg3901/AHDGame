@@ -825,7 +825,14 @@ export async function resolveOneGeneralElection(
           officeType = { type: "peoplesCongress", state: election.state, seatsHeld: seats };
           break;
         default:
-          officeType = { type: election.electionType, state: election.state, seatsHeld: seats };
+          // Persist the same country-specific office key used by the official
+          // row. A chamber key such as BG nationalAssembly is not itself the
+          // holder's assemblyDeputy office type.
+          officeType = {
+            type: officeKeyForElectionType(election.electionType, election.countryId),
+            state: election.state,
+            seatsHeld: seats,
+          };
       }
 
       if (candidate.isNPP && candidate.nppId) {
@@ -1254,7 +1261,8 @@ export async function resolveOneGeneralElection(
         election.electionType,
         election.state,
         now,
-        getChamberClass(election)
+        getChamberClass(election),
+        election.countryId
       );
     }
     // Spawn next cycle for election types with dedicated respawn functions
