@@ -308,6 +308,19 @@ describe("live federation settlement intent", () => {
         payloadHash: "0".repeat(64),
       })
     ).toThrow("publication inventory");
+    expect(() =>
+      buildFederationPublicationPlan(verified.intent, {
+        ...verified.snapshot,
+        firms: [
+          verified.snapshot.firms[0],
+          { ...verified.snapshot.firms[0], corporationId: "second-firm" },
+        ],
+        privateFirmPlans: [
+          verified.snapshot.privateFirmPlans[0],
+          verified.snapshot.privateFirmPlans[0],
+        ],
+      })
+    ).toThrow("publication inventory");
     const prepared = await prepareFederationPublication(args.db, publication, new Date(2));
     expect(prepared.effectIds.length).toBeGreaterThan(4);
     expect(
