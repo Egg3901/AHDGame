@@ -12,14 +12,13 @@ import { EXCHANGE_API_KEYS, getCountryForExchange } from "@/lib/constants/exchan
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import {
   buildCandles,
-  bucketWeekly,
-  WEEK_TURNS,
+  bucketCandles,
+  chartBucketTurns,
   type CandleInput,
 } from "@/lib/stockExchange/candles";
 
 /** Ranges the chart offers, in turns (0 = all available history). */
 const VALID_TURNS = new Set([24, 168, 720, 8760, 0]);
-const HISTORY_CAP = 2000;
 
 /** Trade kinds that count as market turnover for the volume subplot. */
 const TURNOVER_KINDS: ShareTradeKind[] = [
@@ -34,9 +33,9 @@ const TURNOVER_KINDS: ShareTradeKind[] = [
 /**
  * GET /api/stock-exchange/candles?exchange=global|nyse|...&turns=24|168|720|8760|0
  * Per-turn OHLC candles from raw anchor market cap plus aggregate turnover.
- * High/low prefer observed intraday extremes (marketIndexIntraday, written on
- * every snapshot rebuild); turns without prints fall back to open/close.
- * Long ranges (1Y/ALL) arrive in 168-turn weekly buckets.
+ * Covered turns use live-listing prints for all OHLC fields. Older turns
+ * fall back to recorded closes. Coverage counts refer to underlying turns.
+ * Month/short full history use daily buckets; multi-year history uses weekly.
  */
 export async function GET(request: Request) {
   try {
@@ -72,12 +71,13 @@ export async function GET(request: Request) {
       .collection<MarketCapHistory>("marketCapHistory")
       .find({})
       .sort({ turn: -1 })
-      .limit(turns === 0 ? HISTORY_CAP : turns)
+      .limit(turns === 0 ? 0 : turns + 1)
       .toArray();
     history.reverse();
     if (history.length === 0) {
       return NextResponse.json({ exchange, turns, bucketed: false, points: [] });
     }
+    const previous = turns > 0 && history.length > turns ? history.shift() : undefined;
     const firstTurn = history[0].turn;
     const lastTurn = history[history.length - 1].turn;
 
@@ -94,11 +94,14 @@ export async function GET(request: Request) {
     // recorded prints; candles fall back to open/close meanwhile).
     const intradayRows = await db
       .collection<MarketIndexIntraday>("marketIndexIntraday")
-      .find({ exchange, turn: { $gte: firstTurn, $lte: lastTurn } })
-      .project({ turn: 1, high: 1, low: 1, prints: 1 })
+      .find({ exchange, turn: { $gte: previous?.turn ?? firstTurn, $lte: lastTurn } })
+      .project({ turn: 1, open: 1, last: 1, high: 1, low: 1, prints: 1 })
       .toArray();
     const intraday = new Map(
-      intradayRows.map((r) => [r.turn, { high: r.high, low: r.low, prints: r.prints }])
+      intradayRows.map((r) => [
+        r.turn,
+        { open: r.open, last: r.last, high: r.high, low: r.low, prints: r.prints },
+      ])
     );
 
     // Per-turn turnover from share fills. Venue views scope to that venue's
@@ -161,20 +164,31 @@ export async function GET(request: Request) {
       cap: Math.round(capFor(h)),
       volume: volumeByTurn.get(h.turn) ?? 0,
     }));
-    let candles = buildCandles(inputs, intraday);
-    // 1Y/ALL aggregate into weekly buckets so series stay small.
-    const bucketed = turns === 8760 || turns === 0;
-    if (bucketed) candles = bucketWeekly(candles);
-
-    const intradayTurns = candles.filter((c) => c.intraday).length;
+    const rawCandles = buildCandles(
+      inputs,
+      intraday,
+      previous
+        ? {
+            turn: previous.turn,
+            time: Math.floor(new Date(previous.createdAt).getTime() / 1000),
+            cap: Math.round(capFor(previous)),
+            volume: 0,
+          }
+        : undefined
+    );
+    const bucketTurns = chartBucketTurns(turns, rawCandles.length);
+    const candles = bucketCandles(rawCandles, bucketTurns);
+    const intradayTurns = rawCandles.filter((c) => c.intraday).length;
+    const firstIntradayTurn = rawCandles.find((c) => c.intraday)?.turn ?? null;
     return conditionalJson(request, {
       exchange,
       turns,
-      bucketed,
-      bucketTurns: bucketed ? WEEK_TURNS : 1,
+      bucketed: bucketTurns > 1,
+      bucketTurns,
       points: candles,
       intradayTurns,
-      totalTurns: candles.length,
+      totalTurns: rawCandles.length,
+      firstIntradayTurn,
     });
   } catch (error) {
     return handleRouteError(error);
