@@ -27,6 +27,7 @@ interface ProjectionRecord {
 interface Journal {
   _id: string;
   status?: string;
+  error?: string;
   projections?: ProjectionRecord[];
 }
 type Outcome = { ok: true; newlyApplied: boolean } | { ok: false; error: string };
@@ -39,6 +40,57 @@ function reservedGuard(value: unknown): boolean {
       [RECEIPT, REVISION, "settledKeys"].some((p) => key === p || key.startsWith(`${p}.`)) ||
       reservedGuard(child)
   );
+}
+function hasStableTarget(projection: TransitionProjection): boolean {
+  const id = reviveObjectIds(projection.filter)?._id;
+  return typeof id === "string" || typeof id === "number" || id instanceof ObjectId;
+}
+/** Preserve selector callers while freezing the exact target before claiming money. */
+export async function bindProjectionTargets(
+  db: Db,
+  key: string,
+  projections: TransitionProjection[]
+): Promise<
+  { projections: TransitionProjection[] } | { error: string; status?: "rejected" | "partial" }
+> {
+  if (!projections.some((p) => p.update && !hasStableTarget(p))) return { projections };
+  const existing = await db
+    .collection<Journal>(MONEY_MOVE_COLLECTION)
+    .findOne({ _id: key }, { projection: { projections: 1, status: 1, error: 1 } });
+  if (existing?.status === "rejected")
+    return {
+      error: existing.error ?? "Original projection binding was rejected",
+      status: "rejected",
+    };
+  if (existing && !existing.projections)
+    return {
+      error: "Existing journal has no frozen projection plan; reconciliation is required",
+      status: "partial",
+    };
+  if (existing?.projections) {
+    const original = existing.projections.map((p) => p.projection);
+    if (original.some((p) => p.update && !hasStableTarget(p)))
+      return {
+        error: "Legacy projection selector has no frozen target; reconciliation is required",
+        status: "partial",
+      };
+    return { projections: original };
+  }
+  const bound: TransitionProjection[] = [];
+  for (const projection of projections) {
+    if (!projection.update || hasStableTarget(projection)) {
+      bound.push(projection);
+      continue;
+    }
+    if (!projection.filter) return { error: "Update projection has no target selector" };
+    const filter = reviveObjectIds(projection.filter) as Document;
+    const target = await db
+      .collection(projection.collection)
+      .findOne(filter, { projection: { _id: 1 } });
+    if (!target) return { error: `projection "${projection.note}" matched no document` };
+    bound.push({ ...projection, filter: { ...filter, _id: target._id } });
+  }
+  return { projections: bound };
 }
 export function invalidProjectionTarget(projection: TransitionProjection): boolean {
   if (!projection.update) return false;

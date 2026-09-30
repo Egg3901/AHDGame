@@ -44,7 +44,11 @@ import { countBankingEvent } from "@/lib/banking/telemetry";
 import { reviveObjectIds } from "./settlementEncoding";
 import { resumeLegacyDepositInterest } from "./legacyDepositInterest";
 import { resumeAtomicDocumentSettlement } from "./atomicDocumentSettlement";
-import { applyProtectedProjection, invalidProjectionTarget } from "./projectionSettlement";
+import {
+  applyProtectedProjection,
+  bindProjectionTargets,
+  invalidProjectionTarget,
+} from "./projectionSettlement";
 export { reviveObjectIds } from "./settlementEncoding";
 
 export type SettlementStatus = "applied" | "replayed" | "rejected" | "partial";
@@ -101,6 +105,7 @@ interface JournalExtension {
   legacyInterestBatch?: unknown;
   locSettlement?: unknown;
   status?: string;
+  error?: string;
   legs?: { applied: boolean }[];
   transitionKind?: string;
   currency?: string;
@@ -194,6 +199,34 @@ export async function settleTransition(
     }
   }
 
+  const bound = await bindProjectionTargets(db, transition.key, transition.projections);
+  if ("error" in bound) {
+    if (bound.status) return { ...result, status: bound.status, error: bound.error };
+    try {
+      await journal.insertOne({
+        _id: transition.key,
+        kind: transition.kind,
+        turn: transition.turn,
+        status: "rejected",
+        error: bound.error,
+        createdAt: new Date(),
+        legs: transition.legs.map((leg) => ({ ...toMoneyLeg(leg), applied: false })),
+        projections: transition.projections.map((projection) => ({
+          collection: projection.collection,
+          note: projection.note,
+          applied: false,
+          projection,
+        })),
+      } as never);
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === 11000))
+        throw error;
+      // A competing claimant owns the outcome; load its original plan again.
+      return settleTransition(db, transition);
+    }
+    return { ...result, status: "rejected", error: bound.error };
+  }
+  transition = { ...transition, projections: bound.projections };
   if (transition.projections.some(invalidProjectionTarget)) {
     return {
       ...result,
@@ -245,6 +278,12 @@ export async function settleTransition(
     // Judged on the legs themselves, not the record's status: a record can be
     // `partial` because a PROJECTION failed after every leg landed, and that
     // is exactly the case a replay must go on to finish.
+    if (owned?.status === "rejected")
+      return {
+        ...result,
+        status: "rejected",
+        error: owned.error ?? "Original settlement was rejected",
+      };
     const ownedLegs = owned?.legs ?? [];
     const legsOutstanding = !owned || ownedLegs.some((leg) => !leg.applied);
     if (legsOutstanding) {
@@ -280,7 +319,17 @@ export async function settleTransition(
           ? (error as { code?: unknown }).code
           : undefined;
       if (code === 11000) {
-        // Someone already owns this key: it is a replay.
+        // Someone already owns this key: its original outcome is authoritative.
+        const prior = await journal.findOne(
+          { _id: transition.key },
+          { projection: { status: 1, error: 1 } }
+        );
+        if (prior?.status === "rejected")
+          return {
+            ...result,
+            status: "rejected",
+            error: prior.error ?? "Original settlement was rejected",
+          };
         return finishProjections(db, transition, { ...result, status: "replayed" });
       }
       throw error;

@@ -129,6 +129,29 @@ describe("protected update projection", () => {
     expect((await recoverProjections(f.db, f.transition.key)).status).toBe("applied");
     expect(f.target().total).toBe(100);
   });
+  it("binds a selector once and replays the original target after its filter changes", async () => {
+    const f = setup();
+    f.transition.projections[0].filter = { status: "pending" };
+    expect((await settleTransition(f.db, f.transition)).status).toBe("applied");
+    f.memory.seed("corporations", [
+      ...f.memory.collection("corporations").docs,
+      { _id: new ObjectId(), total: 0, status: "pending" },
+    ]);
+    expect((await settleTransition(f.db, f.transition)).status).toBe("replayed");
+    expect(f.memory.collection("corporations").docs.map((row) => row.total)).toEqual([100, 0]);
+    expect(f.journal().projections[0].projection.filter._id).toEqual(f.id);
+  });
+  it("durably refuses an unavailable selector before moving cash", async () => {
+    const f = setup();
+    f.transition.projections[0].filter = { status: "missing" };
+    expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+    expect(f.journal().status).toBe("rejected");
+    f.target().status = "missing";
+    expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+    expect(f.target().total).toBe(0);
+    f.transition.projections[0].filter = { _id: oid(f.id.toHexString()) };
+    expect((await settleTransition(f.db, f.transition)).status).toBe("rejected");
+  });
   it("does not manufacture a legacy outcome when original proof is missing", async () => {
     const f = setup();
     interruptAfterWrite(f, "corporations", (u) => u.$inc?.total === 100);
