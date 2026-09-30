@@ -166,12 +166,19 @@ export async function openFederationPoliticalProposal(input: {
   )
     throw new Error("Federation proposal key conflicts with another decision");
   const chamber = getCountryConfig(sourceCountryId, "1991-default").legislature.lowerChamber.key;
+  const allocationSummary = (basis: string, weights: Record<string, number>) =>
+    basis === "population"
+      ? "live population shares"
+      : Object.entries(weights)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([id, bps]) => `${id} ${(bps / 100).toFixed(2)}%`)
+          .join(", ");
   const bill: Bill = {
     _id: stored.billId,
     countryId: sourceCountryId,
     stateId: getNationalDocId(sourceCountryId) ?? `${sourceCountryId.toLowerCase()}_national`,
     title: `${source.displayName} Federation Settlement Mandate`,
-    summary: `Authorize negotiations on the recorded ${source.displayName} federation settlement terms. Each successor must also consent before any change takes effect.`,
+    summary: `Authorize negotiations on the recorded ${source.displayName} federation settlement terms. Public financial assets use ${allocationSummary(terms.assetBasis, terms.assetWeights)}. Existing debt and any cash deficit use ${allocationSummary(terms.debtBasis, terms.debtWeights)}. Original creditor contracts retain their issuer and currency. Each successor must also consent before any change takes effect.`,
     originChamber: chamber,
     currentChamber: chamber,
     sponsorId: null,

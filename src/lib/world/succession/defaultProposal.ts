@@ -77,6 +77,9 @@ export async function openDefaultFederationPoliticalProposal(input: {
   /** Explicit proposed custodians for strategic or unlocated shared assets. */
   /** Omit for an NPC opening position; players supply every choice explicitly. */
   negotiatedCustodians?: Readonly<Record<string, string>>;
+  /** Omitted allocations retain population defaults; explicit terms total 10,000 basis points. */
+  assetSharesBps?: Readonly<Record<string, number>>;
+  debtSharesBps?: Readonly<Record<string, number>>;
 }) {
   const { db, sourceCountryId, currentYear, now } = input;
   const availableFromYear = earliestFederationDecisionYear("1991-default", sourceCountryId);
@@ -116,6 +119,8 @@ export async function openDefaultFederationPoliticalProposal(input: {
         participants: territories.map(({ entityId, population }) => ({ entityId, population })),
         financialAssetsMinor: 0,
         creditorDebtMinor: 0,
+        assetSharesBps: input.assetSharesBps,
+        debtSharesBps: input.debtSharesBps,
       }),
       negotiatedCustodians,
       macroTerms: {},
