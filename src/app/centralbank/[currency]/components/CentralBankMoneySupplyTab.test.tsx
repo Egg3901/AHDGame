@@ -139,29 +139,46 @@ it.each([undefined, 2, MONEY_ACCOUNTING_VERSION])(
   }
 );
 
-it("reuses a liquidity command after a network failure and renews it after success", async () => {
-  const fetchMock = vi
-    .fn()
-    .mockRejectedValueOnce(new Error("Network interrupted"))
-    .mockResolvedValue({ ok: true, json: async () => ({ operation: { amount: 400 } }) });
-  vi.stubGlobal("fetch", fetchMock);
-  render(<CentralBankMoneySupplyTab countryId="US" data={data} canOperate onChanged={() => {}} />);
-  fireEvent.change(screen.getAllByRole("combobox")[0], {
-    target: { value: "liquidity_injection" },
-  });
-  fireEvent.change(screen.getByPlaceholderText("Amount (USD)"), { target: { value: "400" } });
-  fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
-  await screen.findByText("Network interrupted");
-  const firstBody = JSON.parse(fetchMock.mock.calls[0][1].body);
-  expect(firstBody.operationId).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
-  await screen.findByText(/LIQUIDITY INJECTION completed/);
-  expect(JSON.parse(fetchMock.mock.calls[1][1].body).operationId).toBe(firstBody.operationId);
-  fireEvent.change(screen.getByPlaceholderText("Amount (USD)"), { target: { value: "400" } });
-  fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-  expect(JSON.parse(fetchMock.mock.calls[2][1].body).operationId).not.toBe(firstBody.operationId);
-  await waitFor(() =>
-    expect((screen.getByPlaceholderText("Amount (USD)") as HTMLInputElement).value).toBe("")
-  );
-});
+it.each(["liquidity_injection", "treasury_advance", "qe", "qt"])(
+  "reuses a %s command after a network failure and renews it after success",
+  async (type) => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Network interrupted"))
+      .mockResolvedValue({ ok: true, json: async () => ({ operation: { amount: 400 } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <CentralBankMoneySupplyTab countryId="US" data={data} canOperate onChanged={() => {}} />
+    );
+    fireEvent.change(screen.getAllByRole("combobox")[0], {
+      target: { value: type },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(type === "qe" || type === "qt" ? "Bond units" : "Amount (USD)"),
+      { target: { value: "400" } }
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
+    await screen.findByText("Network interrupted");
+    const firstBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(firstBody.operationId).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
+    await screen.findByText(new RegExp(`${type.replaceAll("_", " ").toUpperCase()} completed`));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).operationId).toBe(firstBody.operationId);
+    fireEvent.change(
+      screen.getByPlaceholderText(type === "qe" || type === "qt" ? "Bond units" : "Amount (USD)"),
+      { target: { value: "400" } }
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).operationId).not.toBe(firstBody.operationId);
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByPlaceholderText(
+            type === "qe" || type === "qt" ? "Bond units" : "Amount (USD)"
+          ) as HTMLInputElement
+        ).value
+      ).toBe("")
+    );
+  }
+);
