@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PlayableResidence } from "./rules/residency";
 import { planSuccessionResidency } from "./rules/residency";
@@ -32,6 +32,16 @@ export interface FederationSettlementIntentRecord {
   createdAt: Date;
 }
 
+export interface LiveSettlementSnapshot {
+  payload: Record<string, unknown>;
+  payloadHash: string;
+  privateFirmPlans: ReturnType<typeof planPrivateFirmSuccession>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function canonical(value: unknown): unknown {
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(canonical);
@@ -45,10 +55,136 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-function hashPayload(value: unknown): string {
+export function hashSettlementPayload(value: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(canonical(value)))
     .digest("hex");
+}
+
+/** Rebuild the whole proposed settlement from one database snapshot. The
+ * application writer must compare this hash under its turn transaction before
+ * making any effective change. */
+export async function buildLiveFederationSettlementSnapshot(input: {
+  db: Db;
+  sourceCountryId: CountryId;
+  activation: LiveActivationInput;
+  currentYear: number;
+  eraUnitScale: number;
+  playableResidences: readonly PlayableResidence[];
+  residenceChoices: Readonly<Record<string, PlayableResidence>>;
+  playableHeadquarters: readonly PlayableResidence[];
+  headquartersChoices: Readonly<Record<string, PlayableResidence>>;
+  session?: ClientSession;
+}): Promise<LiveSettlementSnapshot> {
+  const { db, sourceCountryId, activation, currentYear, eraUnitScale, session } = input;
+  if (!Number.isSafeInteger(currentYear) || !Number.isFinite(eraUnitScale) || eraUnitScale <= 0)
+    throw new Error("Federation snapshot needs a valid valuation year and unit scale");
+  const plan = await planLiveSuccessionActivation(db, sourceCountryId, activation, session);
+  const residents = await loadLiveSuccessionResidents(db, sourceCountryId, session);
+  const residencePlans = planSuccessionResidency({
+    sourceCountryId,
+    territories: activation.territories,
+    residents,
+    playableResidences: input.playableResidences,
+    choices: input.residenceChoices,
+  });
+  const firms = await loadLivePrivateSuccessionFirms(
+    db,
+    sourceCountryId,
+    currentYear,
+    eraUnitScale,
+    session
+  );
+  const privateFirmPlans = planPrivateFirmSuccession({
+    settlementId: activation.settlementId,
+    sourceCountryId,
+    territories: activation.territories,
+    firms,
+    playableHeadquarters: input.playableHeadquarters,
+    choices: input.headquartersChoices,
+  });
+  const fiscalShares = planSuccessionFiscalShares({
+    finances: activation.finances,
+    privateFirms: privateFirmPlans,
+  });
+  const payload = canonical({
+    valuation: { currentYear, eraUnitScale },
+    choices: {
+      playableResidences: input.playableResidences,
+      residenceChoices: input.residenceChoices,
+      playableHeadquarters: input.playableHeadquarters,
+      headquartersChoices: input.headquartersChoices,
+    },
+    activation: { ...activation, now: undefined },
+    plan: {
+      ...plan,
+      macroCountries: plan.macroCountries.map(({ createdAt, updatedAt, ...country }) => country),
+    },
+    residents,
+    residencePlans,
+    firms,
+    privateFirmPlans,
+    fiscalShares,
+  }) as Record<string, unknown>;
+  return { payload, payloadHash: hashSettlementPayload(payload), privateFirmPlans };
+}
+
+/** A settlement application must call this with the same Mongo session used
+ * for its writes. It rejects stale or altered intents before any mutation. */
+export async function verifyLiveFederationSettlementIntent(input: {
+  db: Db;
+  intentId: string;
+  sourceCountryId: CountryId;
+  appliedOnTurn: number;
+  session?: ClientSession;
+}): Promise<FederationSettlementIntentRecord> {
+  const { db, intentId, sourceCountryId, appliedOnTurn, session } = input;
+  const intent = await db
+    .collection<FederationSettlementIntentRecord>(FEDERATION_SETTLEMENT_INTENTS_COLLECTION)
+    .findOne({ _id: intentId, status: "staged" }, { session });
+  if (
+    !intent ||
+    intent.presetId !== "1991-default" ||
+    intent.sourceEntityId !== sourceCountryId ||
+    intent.appliedOnTurn !== appliedOnTurn ||
+    !Number.isSafeInteger(appliedOnTurn) ||
+    appliedOnTurn < 1 ||
+    !(intent.createdAt instanceof Date) ||
+    !Number.isFinite(intent.createdAt.getTime()) ||
+    !isRecord(intent.payload) ||
+    hashSettlementPayload(intent.payload) !== intent.payloadHash
+  )
+    throw new Error("Federation intent is missing, altered or on another turn");
+  const { activation, valuation, choices } = intent.payload;
+  if (
+    !isRecord(activation) ||
+    !isRecord(valuation) ||
+    !isRecord(choices) ||
+    !Array.isArray(choices.playableResidences) ||
+    !Array.isArray(choices.playableHeadquarters) ||
+    !isRecord(choices.residenceChoices) ||
+    !isRecord(choices.headquartersChoices) ||
+    activation.settlementId !== intent.settlementId ||
+    !isRecord(activation.approval) ||
+    activation.approval.revision !== intent.revision ||
+    activation.approval.currentYear !== valuation.currentYear
+  )
+    throw new Error("Federation intent lacks reproducible approved terms");
+  const fresh = await buildLiveFederationSettlementSnapshot({
+    db,
+    sourceCountryId,
+    activation: { ...activation, now: intent.createdAt } as unknown as LiveActivationInput,
+    currentYear: valuation.currentYear as number,
+    eraUnitScale: valuation.eraUnitScale as number,
+    playableResidences: choices.playableResidences as PlayableResidence[],
+    residenceChoices: choices.residenceChoices as Record<string, PlayableResidence>,
+    playableHeadquarters: choices.playableHeadquarters as PlayableResidence[],
+    headquartersChoices: choices.headquartersChoices as Record<string, PlayableResidence>,
+    session,
+  });
+  if (fresh.payloadHash !== intent.payloadHash)
+    throw new Error("Federation source changed since settlement approval");
+  return intent;
 }
 
 /** Freeze an approved, live-derived settlement as a contingent intent. This
@@ -66,7 +202,7 @@ export async function stageLiveFederationSettlementIntent(input: {
   playableHeadquarters: readonly PlayableResidence[];
   headquartersChoices: Readonly<Record<string, PlayableResidence>>;
 }): Promise<FederationSettlementIntentRecord> {
-  const { db, sourceCountryId, activation, appliedOnTurn, currentYear, eraUnitScale } = input;
+  const { db, sourceCountryId, activation, appliedOnTurn, currentYear } = input;
   const presetId = activation.source.presetId;
   const revision = activation.approval.revision;
   if (
@@ -87,46 +223,12 @@ export async function stageLiveFederationSettlementIntent(input: {
     .findOne({ presetId, sourceEntityId: sourceCountryId, status: "applied" });
   if (applied) throw new Error("Federation source already has an applied settlement");
 
-  const plan = await planLiveSuccessionActivation(db, sourceCountryId, activation);
-  const residents = await loadLiveSuccessionResidents(db, sourceCountryId);
-  const residencePlans = planSuccessionResidency({
-    sourceCountryId,
-    territories: activation.territories,
-    residents,
-    playableResidences: input.playableResidences,
-    choices: input.residenceChoices,
-  });
-  const firms = await loadLivePrivateSuccessionFirms(
+  const { payload, payloadHash, privateFirmPlans } = await buildLiveFederationSettlementSnapshot({
+    ...input,
     db,
     sourceCountryId,
-    currentYear,
-    eraUnitScale
-  );
-  const privateFirmPlans = planPrivateFirmSuccession({
-    settlementId: activation.settlementId,
-    sourceCountryId,
-    territories: activation.territories,
-    firms,
-    playableHeadquarters: input.playableHeadquarters,
-    choices: input.headquartersChoices,
+    activation,
   });
-  const fiscalShares = planSuccessionFiscalShares({
-    finances: activation.finances,
-    privateFirms: privateFirmPlans,
-  });
-  const payload = canonical({
-    activation: { ...activation, now: undefined },
-    plan: {
-      ...plan,
-      macroCountries: plan.macroCountries.map(({ createdAt, updatedAt, ...country }) => country),
-    },
-    residents,
-    residencePlans,
-    firms,
-    privateFirmPlans,
-    fiscalShares,
-  }) as Record<string, unknown>;
-  const payloadHash = hashPayload(payload);
   const _id = `${presetId}:${activation.settlementId}:${revision}`;
   const intended: FederationSettlementIntentRecord = {
     _id,
@@ -154,7 +256,7 @@ export async function stageLiveFederationSettlementIntent(input: {
     stored.appliedOnTurn !== appliedOnTurn ||
     stored.status !== "staged" ||
     stored.payloadHash !== payloadHash ||
-    hashPayload(stored.payload) !== payloadHash
+    hashSettlementPayload(stored.payload) !== payloadHash
   )
     throw new Error("Federation intent key conflicts with another settlement proposal");
   await stageFederationFacilityClaims(db, _id, privateFirmPlans, activation.now);

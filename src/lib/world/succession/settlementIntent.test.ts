@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { tier3Entry } from "@/lib/world/registry/builders";
 import { planSuccessionFinances } from "./rules/financialSettlement";
-import { stageLiveFederationSettlementIntent } from "./settlementIntent";
+import {
+  buildLiveFederationSettlementSnapshot,
+  hashSettlementPayload,
+  stageLiveFederationSettlementIntent,
+  verifyLiveFederationSettlementIntent,
+} from "./settlementIntent";
 import type { SuccessionActivationInput } from "./planActivation";
 
 const residentId = new ObjectId("000000000000000000000101");
@@ -144,6 +149,8 @@ describe("live federation settlement intent", () => {
       appliedOnTurn: 97,
     });
     expect(first.payloadHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.payload.valuation).toEqual({ currentYear: 1991, eraUnitScale: 1 });
+    expect(hashSettlementPayload(first.payload)).toBe(first.payloadHash);
     expect(
       (first.payload.fiscalShares as { facilityClaimLiabilityMinor: number }[])[1]
         .facilityClaimLiabilityMinor
@@ -171,6 +178,48 @@ describe("live federation settlement intent", () => {
       )?.treasuryBalance
     ).toBe(1);
     expect(await args.db.collection("worldEntityStates").find({}).toArray()).toHaveLength(0);
+  });
+
+  it("rebuilds the same live snapshot and binds the valuation and choices to its hash", async () => {
+    const { args } = scenario();
+    const staged = await stageLiveFederationSettlementIntent(args);
+    const rebuilt = await buildLiveFederationSettlementSnapshot(args);
+    expect(rebuilt.payloadHash).toBe(staged.payloadHash);
+    const changedValuation = await buildLiveFederationSettlementSnapshot({
+      ...args,
+      eraUnitScale: 2,
+    });
+    expect(changedValuation.payloadHash).not.toBe(staged.payloadHash);
+    const changedChoice = await buildLiveFederationSettlementSnapshot({
+      ...args,
+      residenceChoices: { [residentId.toString()]: { countryId: "PL", stateId: "MAZ" } },
+    });
+    expect(changedChoice.payloadHash).not.toBe(staged.payloadHash);
+  });
+
+  it("verifies the staged source and rejects a changed treasury before application", async () => {
+    const { args } = scenario();
+    const intent = await stageLiveFederationSettlementIntent(args);
+    const verify = () =>
+      verifyLiveFederationSettlementIntent({
+        db: args.db,
+        intentId: intent._id,
+        sourceCountryId: "RU",
+        appliedOnTurn: 97,
+      });
+    await expect(verify()).resolves.toEqual(intent);
+    await expect(
+      verifyLiveFederationSettlementIntent({
+        db: args.db,
+        intentId: intent._id,
+        sourceCountryId: "RU",
+        appliedOnTurn: 98,
+      })
+    ).rejects.toThrow("another turn");
+    await args.db
+      .collection<{ _id: string; treasuryBalance: number }>("federalBudget")
+      .updateOne({ _id: "RU" }, { $set: { treasuryBalance: 2 } });
+    await expect(verify()).rejects.toThrow("live federation balance sheet");
   });
 
   it("rejects changed player choices and terms under the same application key", async () => {
