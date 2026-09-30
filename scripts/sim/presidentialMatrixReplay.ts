@@ -9,7 +9,11 @@ import { resolvePresidentElection } from "../../src/lib/turn/election/presidentR
 import { loadApportionment } from "../../src/lib/elections/apportionment";
 import { allocateElectoralVotes } from "../../src/lib/turn/electionCalculations";
 import { snapshotParliamentSeats } from "../../src/lib/turn/parliamentSeatsSnapshot";
-import { qualifyPresidentialRace, presidentialPersonTurnover } from "./presidentialQualification";
+import {
+  qualifyPresidentialRace,
+  presidentialPersonTurnover,
+  type PresidentialOfficeSnapshot,
+} from "./presidentialQualification";
 
 const arg = (name: string) =>
   process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -185,6 +189,7 @@ async function main() {
           party: identity.party,
           isNPP: identity.npp,
           status: "active",
+          enteredAt: now,
           runningMateId: index === 0 && !scenario.winnerNpp ? vp : undefined,
           policies: { economic: index === 0 ? 50 : -50, social: 0 },
         })) as ElectionCandidate[];
@@ -280,6 +285,7 @@ async function main() {
                     if (
                       scenario.ledgerFault &&
                       !faultInjected &&
+                      !Array.isArray(args[1]) &&
                       Object.keys(args[1].$set ?? {}).some((key) =>
                         key.startsWith("presidentialTenureByCountry.")
                       )
@@ -363,7 +369,7 @@ async function main() {
         assert.equal(gs?.presidentialTenureByCountry.US.consecutiveTerms, scenario.hold ? 3 : 1);
         await snapshotParliamentSeats(db, 96);
         const history = await db
-          .collection("parliamentSeatsHistory")
+          .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
           .find({ officeType: "president" })
           .sort({ turn: 1 })
           .toArray();

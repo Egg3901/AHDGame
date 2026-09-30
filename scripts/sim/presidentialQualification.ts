@@ -120,17 +120,18 @@ export function qualifyPresidentialRace(
   };
 }
 
+export interface PresidentialOfficeSnapshot {
+  countryId?: string;
+  officeType?: string;
+  party?: string;
+  turn?: number;
+  seats?: number;
+  executiveHolder?: string | null;
+}
+
 /** Retain the seeded administration and same-party person changes. Historical
  * rows without holder telemetry remain unknown, never inferred from a party. */
-export function presidentialPersonTurnover(
-  rows: ReadonlyArray<{
-    countryId?: string;
-    officeType?: string;
-    turn?: number;
-    seats?: number;
-    executiveHolder?: string | null;
-  }>
-) {
+export function presidentialPersonTurnover(rows: readonly PresidentialOfficeSnapshot[]) {
   const turns = new Map<number, (typeof rows)[number][]>();
   for (const row of rows) {
     if (row.countryId !== "US" || row.officeType !== "president" || row.turn === undefined)

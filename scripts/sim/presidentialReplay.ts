@@ -15,14 +15,12 @@ async function main() {
   const db = client.db(target);
   try {
     assert.equal((await db.listCollections().toArray()).length, 0, "Preserve prior evidence");
-    await db
-      .collection("gameState")
-      .insertOne({
-        _id: "current" as never,
-        preset: "1991-default",
-        currentYear: 1991,
-        currentTurn: 96,
-      });
+    await db.collection("gameState").insertOne({
+      _id: "current" as never,
+      preset: "1991-default",
+      currentYear: 1991,
+      currentTurn: 96,
+    });
     const now = new Date("1992-11-01T00:00:00Z");
     const president = new ObjectId(),
       vicePresident = new ObjectId(),
@@ -32,27 +30,23 @@ async function main() {
       [vicePresident, "Synthetic vice president", null],
       [prior, "Synthetic incumbent", { type: "president" }],
     ] as const) {
-      await db
-        .collection("characters")
-        .insertOne({
-          _id: id,
-          name,
-          countryId: "US",
-          party: "2",
-          currentOffice: office,
-          careerHistory: [],
-          executiveTermsServed: { US: 0 },
-        });
-    }
-    await db
-      .collection("electedOfficials")
-      .insertOne({
+      await db.collection("characters").insertOne({
+        _id: id,
+        name,
         countryId: "US",
-        officeType: "president",
-        characterId: prior,
-        party: "1",
-        isNPP: false,
+        party: "2",
+        currentOffice: office,
+        careerHistory: [],
+        executiveTermsServed: { US: 0 },
       });
+    }
+    await db.collection("electedOfficials").insertOne({
+      countryId: "US",
+      officeType: "president",
+      characterId: prior,
+      party: "1",
+      isNPP: false,
+    });
     const election = {
       _id: new ObjectId(),
       countryId: "US",

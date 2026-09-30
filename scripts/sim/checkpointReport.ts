@@ -33,7 +33,11 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
 import { readFileSync, writeFileSync } from "node:fs";
-import { qualifyPresidentialRace, presidentialPersonTurnover } from "./presidentialQualification";
+import {
+  qualifyPresidentialRace,
+  presidentialPersonTurnover,
+  type PresidentialOfficeSnapshot,
+} from "./presidentialQualification";
 import type { ElectionResultSnapshot } from "@/lib/db/types/electionResultSnapshot";
 import type { ElectionVoteTally } from "@/lib/db/types/voteTally";
 
@@ -354,7 +358,7 @@ async function main(): Promise<void> {
   const label = (countryId: string, party: string): string =>
     partyName.get(`${countryId}|${party}`) ?? party;
   const seatRows = await db
-    .collection("parliamentSeatsHistory")
+    .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
     .find({ countryId: { $in: CONTROL_COUNTRIES } })
     .sort({ turn: 1 })
     .toArray();
@@ -1341,7 +1345,7 @@ async function main(): Promise<void> {
   // anyway.
   const SEAT_SHARE_OFFICES = ["house", "senate", "commons"];
   const seatShareSeatRows = await db
-    .collection("parliamentSeatsHistory")
+    .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
     .find({ countryId: { $in: CONTROL_COUNTRIES }, officeType: { $in: SEAT_SHARE_OFFICES } })
     .sort({ turn: 1 })
     .toArray();
