@@ -6635,7 +6635,7 @@ export function generateCountryOwnedSeedData(
   // (corporateSectors.revenue is liquidCurrencyCode-denominated — matching the
   // UK/CN NatCorp convention and what commodityPriceTurn expects).
   const ruStates = states.filter((state) => state.countryId === "RU" && state.gdp > 0);
-  if (ruStates.length > 0) {
+  if (ruStates.length > 0 && preset !== "2019-default") {
     // Preset-aware: the ₳→SUR rate is era-specific (1953 = 9 SUR/USD, the
     // Western GNP-estimate basis ruRegions1953 is calibrated on; the base
     // config carries the 1979 administered rate). Reading it era-blind divided
@@ -6776,6 +6776,37 @@ export function generateCountryOwnedSeedData(
     name: string;
     headquartersState: string;
   }> = [
+    ...(preset === "2019-default"
+      ? [
+          {
+            countryId: "RU" as const,
+            oid: RU_PUBLIC_CORPORATION_ID.toHexString(),
+            ceoOid: RU_PUBLIC_PLACEHOLDER_CHARACTER_ID.toHexString(),
+            userOid: RU_PUBLIC_PLACEHOLDER_USER_ID.toHexString(),
+            sequentialId: RU_PUBLIC_CORPORATION_SEQUENTIAL_ID,
+            name: "Russian Federation",
+            headquartersState: "CEN",
+          },
+        ]
+      : []),
+    ...(preset === "2019-default"
+      ? (
+          [
+            ["PL", "Poland", "PL_MAZ"],
+            ["HU", "Hungary", "HU_BUD"],
+            ["RO", "Romania", "RO_BUC"],
+            ["BG", "Bulgaria", "BG_SOF"],
+          ] as const
+        ).map(([countryId, name, headquartersState], index) => ({
+          countryId,
+          oid: `00000000000000000000b${(index * 3 + 1).toString(16).padStart(3, "0")}`,
+          ceoOid: `00000000000000000000b${(index * 3 + 2).toString(16).padStart(3, "0")}`,
+          userOid: `00000000000000000000b${(index * 3 + 3).toString(16).padStart(3, "0")}`,
+          sequentialId: 900_028 + index,
+          name,
+          headquartersState,
+        }))
+      : []),
     {
       countryId: "DE",
       oid: DE_PUBLIC_CORPORATION_OID,

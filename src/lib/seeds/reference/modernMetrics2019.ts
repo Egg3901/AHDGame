@@ -19,9 +19,9 @@ import { modernRegions2019, type Modern2019CountryId } from "./modernRegions2019
  */
 const PROFILE = {
   RU: { growth: 2.198, unemployment: 4.513, life: 73.084, urban: 74.622, births: 10.1 },
-  PL: { growth: 4.580, unemployment: 3.267, life: 77.905, urban: 59.963, births: 9.9 },
-  HU: { growth: 5.077, unemployment: 3.411, life: 76.320, urban: 70.457, births: 9.6 },
-  RO: { growth: 3.960, unemployment: 3.912, life: 75.607, urban: 52.893, births: 10.3 },
+  PL: { growth: 4.58, unemployment: 3.267, life: 77.905, urban: 59.963, births: 9.9 },
+  HU: { growth: 5.077, unemployment: 3.411, life: 76.32, urban: 70.457, births: 9.6 },
+  RO: { growth: 3.96, unemployment: 3.912, life: 75.607, urban: 52.893, births: 10.3 },
   BG: { growth: 3.793, unemployment: 4.148, life: 75.112, urban: 73.716, births: 9.3 },
 } as const;
 
@@ -37,14 +37,15 @@ function mv(value: number): StateMetricValue {
 
 export function modernMetrics2019(countryId: Modern2019CountryId): StateMetrics[] {
   const regions = modernRegions2019(countryId);
-  const base = MODERN_BASE[countryId] ?? SUCCESSOR_STATE_METRICS_1991.filter(
-    (metric) => metric.countryId === countryId
-  );
+  const base =
+    MODERN_BASE[countryId] ??
+    SUCCESSOR_STATE_METRICS_1991.filter((metric) => metric.countryId === countryId);
   const byId = new Map(base.map((metric) => [String(metric._id), metric]));
   const profile = PROFILE[countryId];
   return regions.map((region) => {
     const prior = byId.get(String(region._id));
-    if (!prior) throw new Error(`Missing democratic metric fallback for ${countryId}/${region._id}`);
+    if (!prior)
+      throw new Error(`Missing democratic metric fallback for ${countryId}/${region._id}`);
     const income = Math.round(((region.gdp * 1_000_000) / region.population) * 0.42);
     return {
       ...prior,
