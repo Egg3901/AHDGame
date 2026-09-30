@@ -55,6 +55,7 @@ import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFla
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import type { CountryId } from "@/lib/constants/countries";
+import { fetchCorporationNationalSectorSharePercent } from "@/lib/corporations/marketShare";
 import {
   retailCapacityExpansionPaused,
   retailDemandTransitionTurnsRemaining,
@@ -228,15 +229,22 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // One facility quantum — the honest "first plant", not a $1M/day nameplate.
       starterUnits = foundingStarterUnits(sectorType);
 
-      const primeRate = await resolveCountryPrimeRate(db, state.countryId);
-      const ceoChar = corporation.ceoId
-        ? await db
-            .collection<Character>("characters")
-            .findOne({ _id: corporation.ceoId }, { projection: { "stats.businessAcumen": 1 } })
-        : null;
-      const hostMetrics = await db
-        .collection<StateMetrics>("macroMetrics")
-        .findOne({ _id: stateId }, { projection: { "economic.costOfLiving": 1 } });
+      const [primeRate, ceoChar, hostMetrics, nationalMarketSharePercent] = await Promise.all([
+        resolveCountryPrimeRate(db, state.countryId),
+        corporation.ceoId
+          ? db
+              .collection<Character>("characters")
+              .findOne({ _id: corporation.ceoId }, { projection: { "stats.businessAcumen": 1 } })
+          : Promise.resolve(null),
+        db
+          .collection<StateMetrics>("macroMetrics")
+          .findOne({ _id: stateId }, { projection: { "economic.costOfLiving": 1 } }),
+        fetchCorporationNationalSectorSharePercent(db, {
+          corporationId: corporation._id,
+          countryId: state.countryId as CountryId,
+          sectorType,
+        }),
+      ]);
 
       starterBuildAnchor = computeBuildCost({
         sectorType,
@@ -246,11 +254,10 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         strategyId: null,
         year: currentYear,
         eraUnitScale,
-        // No sector here yet, so the corp holds no share of this (state, type)
-        // bucket — the dominance multiplier is 1 by construction. Entering a
-        // market you do not yet occupy is exactly the case dominance is not
-        // meant to toll.
+        // No local sector here yet, but an incumbent can still dominate this
+        // industry nationally. Greenfield entry must not bypass that toll.
         marketSharePercent: 0,
+        nationalMarketSharePercent,
         primeRate,
         acumen: ceoChar?.stats?.businessAcumen ?? NEUTRAL_STAT,
         hostCostOfLivingIndex: hostMetrics?.economic?.costOfLiving?.value ?? null,

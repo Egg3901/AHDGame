@@ -48,6 +48,7 @@ import { calculateSplitCostAnchor } from "@/lib/corporations/marketActionCosts";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { pinStateInTopSuggestions } from "@/lib/corporations/expandSuggestionPin";
+import { fetchCorporationNationalSectorSharesByCountry } from "@/lib/corporations/marketShare";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import {
   retailCapacityExpansionPaused,
@@ -446,17 +447,23 @@ export async function GET(request: Request, { params }: RouteParams) {
       // the build price, so a single blended quote would be wrong in most
       // states. One lookup per unique country, one bulk lookup for the states.
       const uniqueCountryIds = [...new Set(states.map((s) => s.countryId))];
-      const primeRateByCountry = new Map<string, number>(
-        await Promise.all(
+      const [nationalShareByCountry, primeRateEntries, costOfLivingDocs] = await Promise.all([
+        fetchCorporationNationalSectorSharesByCountry(db, {
+          corporationId: corporation._id,
+          sectorType,
+          countryIds: uniqueCountryIds as CountryId[],
+        }),
+        Promise.all(
           uniqueCountryIds.map(
             async (c) => [c, await resolveCountryPrimeRate(db, c)] as [string, number]
           )
-        )
-      );
-      const costOfLivingDocs = await db
-        .collection<StateMetrics>("macroMetrics")
-        .find({ _id: { $in: stateIds } }, { projection: { "economic.costOfLiving": 1 } })
-        .toArray();
+        ),
+        db
+          .collection<StateMetrics>("macroMetrics")
+          .find({ _id: { $in: stateIds } }, { projection: { "economic.costOfLiving": 1 } })
+          .toArray(),
+      ]);
+      const primeRateByCountry = new Map<string, number>(primeRateEntries);
       const costOfLivingByState = new Map(
         costOfLivingDocs.map((d) => [d._id, d.economic?.costOfLiving?.value ?? null])
       );
@@ -474,9 +481,11 @@ export async function GET(request: Request, { params }: RouteParams) {
               strategyId: null,
               year: currentYear,
               eraUnitScale,
-              // Entering a market this corp does not occupy: dominance is 1 by
-              // construction, exactly as expandSector assumes.
+              // The local share is zero in a greenfield state, but national
+              // dominance still follows the incumbent into the new market.
               marketSharePercent: 0,
+              nationalMarketSharePercent:
+                nationalShareByCountry.get(state.countryId as CountryId) ?? 0,
               primeRate: primeRateByCountry.get(state.countryId) ?? 0,
               acumen,
               hostCostOfLivingIndex: costOfLivingByState.get(state._id) ?? null,

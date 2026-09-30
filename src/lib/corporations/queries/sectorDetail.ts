@@ -86,7 +86,10 @@ import {
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
-import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import {
+  buildNationalDominanceShareBySectorId,
+  unownedHeadroomUnitsOf,
+} from "@/lib/corporations/marketShare";
 import { getSectorTechEffects } from "@/lib/constants/techTree";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
@@ -388,7 +391,18 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         loadActiveFtaPairs(db),
         db
           .collection<CorporateSector>("corporateSectors")
-          .find({}, { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } })
+          .find(
+            {},
+            {
+              projection: {
+                corporationId: 1,
+                stateId: 1,
+                countryId: 1,
+                sectorType: 1,
+                revenue: 1,
+              },
+            }
+          )
           .toArray(),
         db
           .collection<CorporateSector>("corporateSectors")
@@ -441,7 +455,6 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       }),
     ]);
     const corpByIdForLookup = new Map(corpsForLookup.map((c) => [c._id.toString(), c]));
-
     const blendPresenceKeys = tariffRulesNeedSectorPresenceKeys(allTariffs)
       ? buildSectorPresenceKeys(allSectorsRaw, corpByIdForLookup)
       : new Set<string>();
@@ -706,6 +719,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     let plants: Awaited<ReturnType<typeof buildSectorPlantsSection>> | null = null;
     if (plantsEnabled && !shouldRedact && !publicFinancialFog) {
+      const nationalMarketShare =
+        buildNationalDominanceShareBySectorId({
+          sectors: allSectorsRaw,
+          stateById: new Map(allStates.map((candidate) => [candidate._id, candidate])),
+          unownedSectors: [],
+          exchangeRatesByCurrency: siblingFxByCurrency,
+        }).get(sector._id.toString()) ?? 0;
       // Same governor bounds the turn processor resolves (turn/corporation
       // index.ts), read from gameConfig, not gameState, so the "market support"
       // pill counts down against the ramp the engine is actually applying.
@@ -780,6 +800,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         governorCap: marketCtx.governorCap,
         governorRampTurns: marketCtx.governorRampTurns,
         marketSharePercent: marketShare,
+        nationalMarketSharePercent: nationalMarketShare,
         // Distinct RIVAL corps in this (state, type) cell. `siblingsSectors` is
         // already scoped to exactly that cell, so this needs no extra read,
         // but it must be distinct CORPS, not sectors, or a rival holding two
