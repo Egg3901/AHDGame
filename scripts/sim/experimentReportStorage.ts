@@ -12,16 +12,25 @@ export const EXPERIMENT_TIMELINE_FIELDS = [
   "seatsTimeline",
   "partyOrgTimeline",
   "corporationsTimeline",
+  // Version 1 reports from the integrated branch already chunked these paths.
+  // Their hydration contract must survive the version 2 storage upgrade.
   "longHorizonTelemetry.approval.points",
   "longHorizonTelemetry.macro.points",
 ] as const;
 
-type TimelineField = (typeof EXPERIMENT_TIMELINE_FIELDS)[number];
+export const EXPERIMENT_CHUNK_FIELDS = [
+  ...EXPERIMENT_TIMELINE_FIELDS,
+  "longHorizonTelemetry.approval.series",
+  "longHorizonTelemetry.macro.series",
+] as const;
+
+type TimelineField = (typeof EXPERIMENT_CHUNK_FIELDS)[number];
 
 interface ChunkStorageManifest {
-  version: 1;
+  version: 1 | 2;
   generation: string;
   chunkCount: number;
+  fields?: { path: TimelineField; pointCount: number; chunkCount: number }[];
 }
 
 export interface StoredExperimentReport extends Document {
@@ -30,11 +39,6 @@ export interface StoredExperimentReport extends Document {
   seatsTimeline?: unknown[];
   partyOrgTimeline?: unknown[];
   corporationsTimeline?: unknown[];
-  longHorizonTelemetry?: {
-    approval?: { points?: unknown[]; [key: string]: unknown };
-    macro?: { points?: unknown[]; [key: string]: unknown };
-    [key: string]: unknown;
-  };
 }
 
 export interface TimelineChunk extends Document {
@@ -52,32 +56,26 @@ function assertDocumentFits(document: Record<string, unknown>, label: string): v
   }
 }
 
-function timelinePoints(report: Record<string, unknown>, field: TimelineField): unknown {
-  if (!field.startsWith("longHorizonTelemetry.")) return report[field];
-  const telemetry = report.longHorizonTelemetry as Record<string, unknown> | undefined;
-  const section = telemetry?.[field.split(".")[1]] as Record<string, unknown> | undefined;
-  return section?.points;
+function valueAtPath(report: Record<string, unknown>, path: string): unknown {
+  let current: unknown = report;
+  for (const part of path.split(".")) {
+    if (current === null || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
 
-function reportMetadata(report: Record<string, unknown>): Record<string, unknown> {
-  const metadata = Object.fromEntries(
-    Object.entries(report).filter(
-      ([key]) => !EXPERIMENT_TIMELINE_FIELDS.includes(key as TimelineField)
-    )
-  );
-  const telemetry = metadata.longHorizonTelemetry as Record<string, unknown> | undefined;
-  if (telemetry) {
-    metadata.longHorizonTelemetry = {
-      ...telemetry,
-      approval: telemetry.approval
-        ? { ...(telemetry.approval as Record<string, unknown>), points: [] }
-        : undefined,
-      macro: telemetry.macro
-        ? { ...(telemetry.macro as Record<string, unknown>), points: [] }
-        : undefined,
-    };
+/** Copy only the object spine so planning never mutates the caller's report. */
+function setArrayAtPath(report: Record<string, unknown>, path: string, points: unknown[]): void {
+  const parts = path.split(".");
+  let current = report;
+  for (const part of parts.slice(0, -1)) {
+    const prior = current[part];
+    const next = prior && typeof prior === "object" && !Array.isArray(prior) ? { ...prior } : {};
+    current[part] = next;
+    current = next;
   }
-  return metadata;
+  current[parts[parts.length - 1]] = points;
 }
 
 /** Split unbounded timelines before the MongoDB driver attempts BSON serialization. */
@@ -89,8 +87,8 @@ export function planTimelineChunks(
 ): TimelineChunk[] {
   const chunks: TimelineChunk[] = [];
 
-  for (const field of EXPERIMENT_TIMELINE_FIELDS) {
-    const points = timelinePoints(report, field);
+  for (const field of EXPERIMENT_CHUNK_FIELDS) {
+    const points = valueAtPath(report, field);
     if (!Array.isArray(points) || points.length === 0) continue;
 
     let sequence = 0;
@@ -126,12 +124,23 @@ export async function writeExperimentReport(
 ): Promise<void> {
   const generation = randomUUID();
   const chunks = planTimelineChunks(runId, generation, report);
-  const metadata = reportMetadata(report);
+  const metadata = { ...report };
+  const fields: NonNullable<ChunkStorageManifest["fields"]> = [];
+  for (const path of EXPERIMENT_CHUNK_FIELDS) {
+    const points = valueAtPath(report, path);
+    if (!Array.isArray(points)) continue;
+    fields.push({
+      path,
+      pointCount: points.length,
+      chunkCount: chunks.filter((c) => c.field === path).length,
+    });
+    if (path.includes(".")) setArrayAtPath(metadata, path, []);
+    else delete metadata[path];
+  }
   const stored = {
-    _id: runId,
     runId,
     ...metadata,
-    timelineStorage: { version: 1 as const, generation, chunkCount: chunks.length },
+    timelineStorage: { version: 2 as const, generation, chunkCount: chunks.length, fields },
     collectedAt: new Date(),
   };
   assertDocumentFits(stored, "experiment report metadata");
@@ -144,7 +153,14 @@ export async function writeExperimentReport(
   );
   try {
     if (chunks.length > 0) await chunkCollection.insertMany(chunks);
-    await reports.replaceOne({ _id: runId }, stored, { upsert: true });
+    await reports.updateOne(
+      { _id: runId },
+      {
+        $set: stored,
+        $unset: Object.fromEntries(EXPERIMENT_TIMELINE_FIELDS.map((field) => [field, ""])),
+      },
+      { upsert: true }
+    );
   } catch (error) {
     await chunkCollection.deleteMany({ runId, generation });
     throw error;
@@ -187,24 +203,45 @@ export function hydrateExperimentReport(
     );
   }
 
-  const chunkedFields = new Set(chunks.map((chunk) => chunk.field));
-  for (const field of EXPERIMENT_TIMELINE_FIELDS) {
-    if (field.startsWith("longHorizonTelemetry.")) {
-      const section = field.split(".")[1] as "approval" | "macro";
-      if (chunkedFields.has(field) && report.longHorizonTelemetry?.[section]) {
-        report.longHorizonTelemetry[section].points = [];
-      }
-    } else {
-      report[field] = [];
+  const manifest = report.timelineStorage;
+  if (manifest.version !== 1 && manifest.version !== 2)
+    throw new Error("Unsupported report storage version");
+  if (manifest.version === 2 && !manifest.fields) throw new Error("Missing report field manifest");
+  const fields: TimelineField[] =
+    manifest.version === 2
+      ? manifest.fields!.map((entry) => entry.path)
+      : [...EXPERIMENT_TIMELINE_FIELDS];
+  if (new Set(fields).size !== fields.length) throw new Error("Duplicate report field manifest");
+  for (const chunk of chunks) {
+    if (
+      chunk.runId !== report._id ||
+      chunk.generation !== manifest.generation ||
+      !fields.includes(chunk.field)
+    ) {
+      throw new Error("Unexpected report chunk identity or field");
     }
   }
-  for (const chunk of chunks) {
-    if (chunk.field.startsWith("longHorizonTelemetry.")) {
-      const section = chunk.field.split(".")[1] as "approval" | "macro";
-      report.longHorizonTelemetry?.[section]?.points?.push(...chunk.points);
-    } else {
-      for (const point of chunk.points) (report[chunk.field] as unknown[])?.push(point);
+  for (const field of fields) {
+    if (!EXPERIMENT_CHUNK_FIELDS.includes(field)) throw new Error("Unknown report chunk path");
+    const selected = chunks
+      .filter((chunk) => chunk.field === field)
+      .sort((a, b) => a.sequence - b.sequence);
+    if (manifest.version === 1 && field.startsWith("longHorizonTelemetry.") && !selected.length) {
+      // Some older version 1 reports retained these arrays inline. A missing
+      // chunk for that path must not erase data that was already present.
+      continue;
     }
+    if (selected.some((chunk, index) => chunk.sequence !== index))
+      throw new Error(`Non-contiguous report chunks: ${field}`);
+    const points = selected.flatMap((chunk) => chunk.points);
+    const expected = manifest.fields?.find((entry) => entry.path === field);
+    if (
+      manifest.version === 2 &&
+      (selected.length !== expected?.chunkCount || points.length !== expected?.pointCount)
+    ) {
+      throw new Error(`Incomplete report field: ${field}`);
+    }
+    setArrayAtPath(report, field, points);
   }
   return report;
 }

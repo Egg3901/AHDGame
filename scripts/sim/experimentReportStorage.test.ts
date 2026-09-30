@@ -1,6 +1,11 @@
 import { calculateObjectSize } from "bson";
 import { describe, expect, it } from "vitest";
-import { hydrateExperimentReport, planTimelineChunks } from "./experimentReportStorage";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import {
+  hydrateExperimentReport,
+  planTimelineChunks,
+  writeExperimentReport,
+} from "./experimentReportStorage";
 
 describe("experiment report timeline storage (#2287)", () => {
   it("splits a timeline above the failing 17.8 MB payload size into safe BSON documents", () => {
@@ -54,53 +59,89 @@ describe("experiment report timeline storage (#2287)", () => {
     );
   });
 
-  it("chunks long-horizon telemetry points while retaining coverage metadata", () => {
-    const source = {
+  it("hydrates version 1 nested telemetry chunks and preserves older inline points", () => {
+    const nested = {
       seatsTimeline: [],
       partyOrgTimeline: [],
       corporationsTimeline: [],
       longHorizonTelemetry: {
-        availability: "observed-complete",
-        approval: { series: [{ country: "US" }], points: [{ turn: 1 }, { turn: 2 }] },
-        macro: { series: [{ country: "FR" }], points: [{ turn: 1 }] },
+        approval: { points: [{ turn: 1 }] },
+        macro: { points: [{ turn: 2 }] },
       },
     };
-    const chunks = planTimelineChunks("run", "generation", source, 100);
+    const chunks = planTimelineChunks("run", "generation", nested, 100);
     const stored = {
       _id: "run",
-      longHorizonTelemetry: {
-        availability: source.longHorizonTelemetry.availability,
-        approval: { series: source.longHorizonTelemetry.approval.series, points: [] },
-        macro: { series: source.longHorizonTelemetry.macro.series, points: [] },
-      },
+      longHorizonTelemetry: { approval: { points: [] }, macro: { points: [] } },
       timelineStorage: { version: 1 as const, generation: "generation", chunkCount: chunks.length },
     };
-
-    expect(chunks.map((chunk) => chunk.field)).toContain("longHorizonTelemetry.approval.points");
-    expect(chunks.map((chunk) => chunk.field)).toContain("longHorizonTelemetry.macro.points");
     expect(hydrateExperimentReport(stored, chunks).longHorizonTelemetry).toEqual(
-      source.longHorizonTelemetry
+      nested.longHorizonTelemetry
     );
+    const inline = {
+      _id: "run",
+      longHorizonTelemetry: { approval: { points: [{ turn: 3 }] } },
+      timelineStorage: { version: 1 as const, generation: "generation", chunkCount: 0 },
+    };
+    expect(hydrateExperimentReport(inline, []).longHorizonTelemetry?.approval?.points).toEqual([
+      { turn: 3 },
+    ]);
+  });
+  it("round-trips nested telemetry above 26 MB without oversized Mongo documents", async () => {
+    const db = createMockDb();
+    const source = {
+      seatsTimeline: [{ turn: 1 }],
+      partyOrgTimeline: [],
+      corporationsTimeline: [],
+      longHorizonTelemetry: {
+        schemaVersion: 1,
+        availability: "observed-complete",
+        approval: {
+          points: Array.from({ length: 500 }, (_, turn) => ({ turn, payload: "a".repeat(18000) })),
+          series: [{ country: "UK", missingTurns: [] }],
+        },
+        macro: {
+          points: Array.from({ length: 1000 }, (_, turn) => ({ turn, payload: "m".repeat(18000) })),
+          series: [],
+        },
+      },
+    };
+    expect(calculateObjectSize(source)).toBeGreaterThan(26_000_000);
+    const originalFirst = source.longHorizonTelemetry.approval.points[0];
+    await writeExperimentReport(db as never, "nested", source);
+    const chunks = db.collection("simExperimentReportChunks").insertMany.mock.calls[0][0];
+    const stored = {
+      _id: "nested",
+      ...db.collection("simExperimentReports").updateOne.mock.calls[0][1].$set,
+    };
+    expect(calculateObjectSize(stored)).toBeLessThan(16 * 1024 * 1024);
+    expect(
+      chunks.every(
+        (chunk: Record<string, unknown>) => calculateObjectSize(chunk) < 16 * 1024 * 1024
+      )
+    ).toBe(true);
+    expect(hydrateExperimentReport(stored, chunks)).toMatchObject(source);
+    expect(source.longHorizonTelemetry.approval.points).toHaveLength(500);
+    expect(source.longHorizonTelemetry.approval.points[0]).toBe(originalFirst);
   });
 
-  it("preserves inline telemetry in reports written before telemetry chunking", () => {
-    const source = {
-      _id: "old-run",
-      longHorizonTelemetry: { approval: { points: [{ turn: 1 }] } },
-      timelineStorage: { version: 1 as const, generation: "old", chunkCount: 1 },
+  it("refuses duplicate chunk sequence even when the total count matches", () => {
+    const chunks = planTimelineChunks(
+      "run",
+      "generation",
+      { seatsTimeline: [{ turn: 1 }, { turn: 2 }] },
+      100
+    );
+    const stored = {
+      _id: "run",
+      timelineStorage: { version: 1 as const, generation: "generation", chunkCount: 2 },
     };
-    const chunks = [
-      {
-        runId: "old-run",
-        generation: "old",
-        field: "seatsTimeline" as const,
-        sequence: 0,
-        points: [],
-      },
-    ];
-
-    expect(hydrateExperimentReport(source, chunks).longHorizonTelemetry?.approval?.points).toEqual([
-      { turn: 1 },
-    ]);
+    expect(() => hydrateExperimentReport(stored, [chunks[0], chunks[0]])).toThrow("Non-contiguous");
+    expect(() =>
+      hydrateExperimentReport(
+        stored,
+        chunks.map((chunk) => ({ ...chunk, generation: "other" }))
+      )
+    ).toThrow("identity");
   });
 });
