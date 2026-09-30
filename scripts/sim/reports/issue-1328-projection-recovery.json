@@ -1,0 +1,46 @@
+{
+  "issue": 1328,
+  "baselineSource": "6bdb1f0344885a42bc1bbdeb3d537dd7f7dbd4e5",
+  "treatmentSource": "670dac61d85a775375c47775b3e4762513a84b55",
+  "scope": "Synthetic isolated Mongo subsystem using actual settleTransition and recoverProjections; no production data or world simulation.",
+  "normalParity": {
+    "payerCash": 900,
+    "recipientCash": 100,
+    "bookedValue": 100,
+    "matched": true
+  },
+  "qualification": {
+    "cases": 10,
+    "allCasesPassed": true,
+    "normalCases": 1,
+    "interruptedDeliveryCases": 5,
+    "legacyCompatibilityCases": 2,
+    "delayedPublisherCases": 1,
+    "pendingOwnerCases": 1,
+    "ambiguousLegacyRemainsPartial": true
+  },
+  "performance": {
+    "scope": "One ordinary two-leg transition with one update projection, measured before replay calls. All Mongo commands and complete command/reply BSON included.",
+    "baseline": {
+      "commands": 10,
+      "requestBson": 3627,
+      "responseBson": 335
+    },
+    "treatment": {
+      "commands": 13,
+      "requestBson": 4920,
+      "responseBson": 1071
+    }
+  },
+  "fixtureSha256": {
+    "baseline": "7075bd732517e57729e6e7e060da39021f4e529874a9d1243087ba99da834be6",
+    "treatment": "20c83122bea297f2c8a47ff091a4c5184b122c1425094b9b43ce81a45d229da8"
+  },
+  "limitations": [
+    "Synthetic actors and documents; no retained-world or production observation.",
+    "No economy formulas, loan terms, authority or activation flags changed.",
+    "Historical unfinished projections without surviving proof remain partial for explicit reconciliation.",
+    "The measured boundary does not establish a whole-phase budget or whole-world accounting closure.",
+    "Generic money-leg durability is qualified separately."
+  ]
+}
