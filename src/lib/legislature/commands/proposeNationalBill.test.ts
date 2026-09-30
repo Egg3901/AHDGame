@@ -100,6 +100,58 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
     expect(bill.originChamber).toBe("house");
     expect(bill.currentChamber).toBe("house");
   });
+  it.each([
+    [{}, "unionCongressDeputy", "unionCongress"],
+    [{ ruSovietSuccessionSinceTurn: 4 }, "congressDeputy", "congressOfPeoplesDeputies"],
+    [{ ruSovietSuccessionSinceTurn: 4, ruFederalAssemblySinceTurn: 4 }, "dumaDeputy", "stateDuma"],
+  ] as const)(
+    "lets the active Russian deputy propose under %s",
+    async (markers, officeType, chamber) => {
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValue({
+        currentTurn: 5,
+        preset: "1991-default",
+      } as never);
+      db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RU", ...markers });
+      const { authUser } = seatDelegate({ countryId: "RU", officeType });
+      const result = await proposeNationalBill(db as unknown as Db, "RU", authUser, {
+        title: "Russian mandate",
+        summary: "Test",
+        chamber,
+        category: "custom",
+        provisions: [],
+      });
+      expect(result.status).toBe(201);
+      expect(insertedBill()).toMatchObject({ originChamber: chamber, currentChamber: chamber });
+      expect(db.collectionMocks.electedOfficials!.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ officeType: { $in: expect.arrayContaining([officeType]) } })
+      );
+      vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
+    }
+  );
+  it("refuses new bills in a dissolved Russian Congress even for admins", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5, preset: "1991-default" } as never);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RU",
+      ruCongressDissolvedSinceTurn: 4,
+    });
+    const result = await proposeNationalBill(
+      db as unknown as Db,
+      "RU",
+      { userId: new ObjectId().toString(), isAdmin: true } as AuthUser,
+      {
+        title: "Closed Congress",
+        summary: "Test",
+        chamber: "congressOfPeoplesDeputies",
+        category: "custom",
+        provisions: [],
+      }
+    );
+    expect(result.status).toBe(409);
+    expect(db.collection("bills").insertOne).not.toHaveBeenCalled();
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
+  });
 });
 
 describe("proposeNationalBill — custom (flavor) bills", () => {
