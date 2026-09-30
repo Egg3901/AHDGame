@@ -1726,6 +1726,19 @@ async function serviceInterbankAndCbMargin(
         throw new Error(
           `Facility interest settlement unfinished: ${result.error ?? result.status}`
         );
+      if (result.newlyAppliedProjections.includes(0))
+        emitBankingAuditEvent(
+          {
+            ...transition.event,
+            turn,
+            currency,
+            bankId: corp._id.toString(),
+            settlementId: key,
+            outcome: "ok",
+            amount: amounts.paid,
+          },
+          db
+        );
       // A replay's debit is already present in the balance loaded above.
       if (result.status === "applied") availableCash = Math.max(0, availableCash - amounts.paid);
       if (facility === "cbMargin") {

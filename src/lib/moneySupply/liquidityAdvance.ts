@@ -9,6 +9,7 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 import {
@@ -355,6 +356,20 @@ async function finishLiquidityAdvance(
   });
   if (completed.status === "partial" || completed.status === "rejected" || completed.error)
     throw new Error(completed.error ?? "Liquidity completion unfinished");
+  if (completed.newlyAppliedProjections.includes(1))
+    emitBankingAuditEvent(
+      {
+        kind: "loan.disbursed",
+        command: "monetary.liquidityInjection",
+        turn: command.turn,
+        currency,
+        bankId,
+        settlementId: `liquidity:${receipt._id}:complete`,
+        outcome: "ok",
+        amount: result.amount,
+      },
+      db
+    );
   return result;
 }
 
