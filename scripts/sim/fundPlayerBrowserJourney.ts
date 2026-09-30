@@ -35,14 +35,11 @@ async function main() {
     (await db.collection("characters").findOne({ _id: actor }))?.name,
     "Synthetic fund investor"
   );
-  assert.equal(
-    await db.collection("users").countDocuments(),
-    0,
-    "Only an unused synthetic fixture is accepted"
-  );
-  await db
-    .collection("users")
-    .insertOne({
+  const existingUser = await db.collection("users").findOne({ _id: actor });
+  assert.equal(await db.collection("users").countDocuments(), existingUser ? 1 : 0);
+  if (existingUser) assert.equal(existingUser.email, "fund-player@example.invalid");
+  else
+    await db.collection("users").insertOne({
       _id: actor,
       username: "Synthetic fund investor",
       email: "fund-player@example.invalid",
@@ -119,6 +116,10 @@ async function main() {
     ]);
     // Keep the same app and authenticated context while each exact module warms.
     for (const path of [
+      "/api/game/turn/status",
+      "/api/client-nav",
+      "/api/maintenance",
+      "/api/client-status",
       "/api/auth/me",
       "/api/character/me",
       "/api/world/flags",
@@ -130,6 +131,29 @@ async function main() {
       assert(response.status() < 500, `${path}: ${response.status()}`);
     }
     const page = await context.newPage();
+    const diagnostics: unknown[] = [];
+    page.on("pageerror", (error) => diagnostics.push({ pageError: error.message }));
+    page.on("requestfailed", (request) =>
+      diagnostics.push({
+        failedRequest: new URL(request.url()).pathname,
+        failure: request.failure(),
+      })
+    );
+    page.on("response", (response) => {
+      if (response.status() >= 400)
+        diagnostics.push({ response: new URL(response.url()).pathname, status: response.status() });
+    });
+    const capture = async () => {
+      writeFileSync(
+        `${out}.diagnostics.json`,
+        JSON.stringify(
+          { url: page.url(), text: await page.locator("body").innerText(), diagnostics },
+          null,
+          2
+        )
+      );
+      await page.screenshot({ path: `${out}.diagnostics.png`, fullPage: true });
+    };
     const checkpoints: unknown[] = [];
     await page.goto(`${app.base}/stockmarket/us/fund/fixture`, {
       waitUntil: "domcontentloaded",
@@ -153,7 +177,12 @@ async function main() {
         mode === "subscribe"
           ? page.getByRole("button", { name: "Subscribe", exact: true }).last()
           : page.getByRole("button", { name: "Redeem units", exact: true });
-      await action().click({ timeout: 120000 });
+      try {
+        await action().click({ timeout: 120000 });
+      } catch (error) {
+        await capture();
+        throw error;
+      }
       await page.getByText("Network error", { exact: true }).waitFor({ timeout: 120000 });
       assert(lost);
       const committed = await snapshot();
