@@ -246,7 +246,11 @@ export async function materializeLegacyFederationServiceTurn(input: {
     );
     const riskLoss = call > 0 ? Math.min(0.02, (arrears / call) * 0.02) : 0;
     const updated = await db.collection<MacroCountryState>("macroCountries").updateOne(
-      { _id: id, federationTreasuryMinor: macro.federationTreasuryMinor },
+      {
+        _id: id,
+        federationTreasuryMinor: macro.federationTreasuryMinor,
+        stability: macro.stability,
+      },
       {
         $set: {
           federationTreasuryMinor: nextCash,
@@ -259,14 +263,33 @@ export async function materializeLegacyFederationServiceTurn(input: {
     );
     if (updated.matchedCount !== 1)
       throw new Error("Legacy successor budget changed during service");
-    await db.collection<FederationFiscalAccount>(FEDERATION_FISCAL_ACCOUNTS_COLLECTION).updateOne(
-      { _id: `${applicationId}:${id}` },
-      {
-        $set: { remainingContributionMinor: remainingBySuccessor[id] },
-        $inc: { cumulativeContributionMinor: contribution, cumulativeArrearsMinor: arrears },
-      },
-      { session }
+    const account = successors.find((candidate) => candidate.entityId === id)!;
+    const cumulativeContributionMinor = safeMinor(
+      (account.cumulativeContributionMinor ?? 0) + contribution,
+      "Successor cumulative contributions"
     );
+    const cumulativeArrearsMinor = safeMinor(
+      (account.cumulativeArrearsMinor ?? 0) + arrears,
+      "Successor cumulative arrears"
+    );
+    const accountUpdated = await db
+      .collection<FederationFiscalAccount>(FEDERATION_FISCAL_ACCOUNTS_COLLECTION)
+      .updateOne(
+        {
+          _id: `${applicationId}:${id}`,
+          remainingContributionMinor: account.remainingContributionMinor,
+        },
+        {
+          $set: {
+            remainingContributionMinor: remainingBySuccessor[id],
+            cumulativeContributionMinor,
+            cumulativeArrearsMinor,
+          },
+        },
+        { session }
+      );
+    if (accountUpdated.matchedCount !== 1)
+      throw new Error("Legacy successor duty changed during service");
   }
   const localCash = (endingCashMinor / 100) * issuerRate;
   if (!Number.isFinite(localCash)) throw new Error("Legacy cash exceeds local precision");

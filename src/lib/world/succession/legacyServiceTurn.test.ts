@@ -18,7 +18,7 @@ function scenario(shortfall = false) {
       { entityId: "SK", population: 1 },
     ],
     financialAssetsMinor: 0,
-    creditorDebtMinor: 300000,
+    creditorDebtMinor: 150000,
   });
   const payload = { activation: { finances } };
   const bondId = new ObjectId();
@@ -45,9 +45,27 @@ function scenario(shortfall = false) {
     { _id: "CS", countryId: "CS", currencyCode: "CSK", treasuryBalance: 0 },
   ]);
   mem.seed("federationFiscalAccounts", [
-    { _id: `${applicationId}:CS`, applicationId, entityId: "CS", kind: "legacy-administration" },
-    { _id: `${applicationId}:CZ2`, applicationId, entityId: "CZ2", kind: "background-successor" },
-    { _id: `${applicationId}:SK`, applicationId, entityId: "SK", kind: "background-successor" },
+    {
+      _id: `${applicationId}:CS`,
+      applicationId,
+      entityId: "CS",
+      kind: "legacy-administration",
+      remainingContributionMinor: 0,
+    },
+    {
+      _id: `${applicationId}:CZ2`,
+      applicationId,
+      entityId: "CZ2",
+      kind: "background-successor",
+      remainingContributionMinor: 100000,
+    },
+    {
+      _id: `${applicationId}:SK`,
+      applicationId,
+      entityId: "SK",
+      kind: "background-successor",
+      remainingContributionMinor: 50000,
+    },
   ]);
   mem.seed(
     "macroCountries",
