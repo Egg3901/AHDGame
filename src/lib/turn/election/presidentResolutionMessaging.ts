@@ -148,7 +148,7 @@ export async function sendPresidentResolutionMessaging(
   const lostPresidentLabel = getOfficeLabel(lostPresidentOffice, election.countryId);
   const loserNotifInputs: NotificationInput[] = [];
 
-  for (const [candidateId, candidateEv] of ranked.slice(1)) {
+  for (const [candidateId, candidateEv] of ranked.filter(([id]) => id !== winnerId)) {
     const candidate = candidateMap.get(candidateId);
     if (candidate && !candidate.isNPP && candidate.characterId) {
       await db.collection<Character>("characters").updateOne(

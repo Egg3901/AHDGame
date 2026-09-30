@@ -15,6 +15,7 @@
  */
 
 export type BankingAuditEventKind =
+  | "sovereign.primary_placed"
   | "charter.issued"
   | "charter.revoked"
   | "charter.switched"
@@ -36,6 +37,7 @@ export type BankingAuditEventKind =
   | "policy.rate_changed";
 
 export const BANKING_AUDIT_EVENT_KINDS: readonly BankingAuditEventKind[] = [
+  "sovereign.primary_placed",
   "charter.issued",
   "charter.revoked",
   "charter.switched",

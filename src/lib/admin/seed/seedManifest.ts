@@ -499,6 +499,9 @@ const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  { name: "financialCrisisFiscalActions", category: "runtime" },
+  { name: "financialCrisisCreditHistory", category: "runtime" },
+  { name: "bankMoneyMoves", category: "runtime" },
   {
     name: "savingsAccounts",
     category: "runtime",
@@ -991,6 +994,11 @@ const RUNTIME: CollectionEntry[] = [
   { name: "corporationShareInvites", category: "runtime" },
   { name: "wealthListHistory", category: "runtime" },
   { name: "wealthListSnapshots", category: "runtime" },
+  {
+    name: "analyticsRecords",
+    category: "runtime",
+    notes: "Current world wealth high-water mark for PostHog.",
+  },
   {
     name: "seedDiagnostics",
     category: "runtime",

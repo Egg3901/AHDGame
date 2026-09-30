@@ -67,6 +67,33 @@ describe("snapshotApprovalHistory (SP4 conversion)", () => {
     expect(set2.approvalRating).toBeCloseTo(32.5, 5);
   });
 
+  it("includes crackdown drag in the stored approval used by elections, then removes it on repeal", async () => {
+    seedUk(APPROVAL_NEUTRAL_SCORE.UK + 10);
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      unionsBanned: true,
+      unionEnforcementPosture: "crackdown",
+    });
+    await snapshotApprovalHistory(db as unknown as Db, "UK", 100);
+    const first = db.collectionMocks["governmentApprovals"]!.updateOne.mock.calls.at(-1)![1].$set;
+    expect(first.approvalRating).toBeCloseTo(40.5, 5);
+    expect(first.activeNationalModifiers).toContainEqual({
+      id: "union_crackdown",
+      label: "Union crackdown",
+      effect: -2,
+    });
+
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      unionsBanned: false,
+      unionEnforcementPosture: "crackdown",
+    });
+    await snapshotApprovalHistory(db as unknown as Db, "UK", 101);
+    const second = db.collectionMocks["governmentApprovals"]!.updateOne.mock.calls.at(-1)![1].$set;
+    expect(second.approvalRating).toBeCloseTo(42.5, 5);
+    expect(second.activeNationalModifiers).not.toContainEqual(
+      expect.objectContaining({ id: "union_crackdown" })
+    );
+  });
+
   it("scores JP from the board too, now that routing covers non-playables", async () => {
     // This asserted the OPPOSITE before the step-6 cutover — JP was pinned to
     // the legacy scorer. Every board country now shares one approval path;

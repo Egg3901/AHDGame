@@ -174,7 +174,7 @@ export interface GameState {
    * resolution / backfill.
    */
   presidentialTenureByCountry?: Partial<
-    Record<CountryId, { party: string; consecutiveTerms: number }>
+    Record<CountryId, { party: string; consecutiveTerms: number; lastElectionId?: string }>
   >;
   isActive: boolean;
   lastTurnProcessed: Date;

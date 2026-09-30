@@ -31,6 +31,7 @@ import {
   COMMODITY_LABELS,
   COMMODITY_UNITS,
   NATCORP_COMMODITY_MULTIPLIER,
+  SECTOR_SUPPLY,
   commodityMixWeight,
   dollarsToUnits,
   embargoSupplyFactorFor,
@@ -190,8 +191,8 @@ export interface CorpCommodityFlowContext {
 
 /**
  * One sector's per-commodity physical supply and demand, mirroring the world
- * supply ledger's chain leg for leg. Shared by the Commodities tab and the
- * corporation history snapshot so the two cannot report different output.
+ * supply ledger's display approximation leg for leg. Shared by the Commodities
+ * tab and commodity leaderboards; history itself is persisted from the ledger.
  *
  * Returns empty maps for a mothballed plant — it is cold: it supplies nothing
  * and buys nothing.
@@ -229,6 +230,18 @@ export function computeSectorCommodityUnits(
     sector.transitionStartTurn,
     currentTurn
   );
+  // The world ledger treats an unmodified `standard` strategy as the legacy
+  // SECTOR_SUPPLY table. Several canonical rates have evolved there without
+  // corresponding strategy-preset changes. Custom and transitioning strategies
+  // still use their effective strategy mix exactly as before.
+  const usesStrategySupply =
+    Boolean(sector.strategyId && sector.strategyId !== "standard") ||
+    Boolean(sector.transitionFromStrategyId);
+  const ledgerSupplyRates: Partial<Record<CommodityType, number>> = usesStrategySupply
+    ? rates.supply
+    : Object.fromEntries(
+        (SECTOR_SUPPLY[sector.sectorType] ?? []).map((flow) => [flow.commodity, flow.rate])
+      );
   const plannedEconomy = isPlannedEconomy(
     sector.countryId,
     context.currentYear,
@@ -243,7 +256,7 @@ export function computeSectorCommodityUnits(
   // and without it the corp surfaces invent output it could never have made.
   const supplyRates = applyExtractionResourceCapacityToSupply(
     sector.sectorType,
-    applyPlannedEconomyOutputMix(sector.sectorType, rates.supply, plannedEconomy),
+    applyPlannedEconomyOutputMix(sector.sectorType, ledgerSupplyRates, plannedEconomy),
     context.stateResourcesByState?.get(sector.stateId ?? "")
   );
 

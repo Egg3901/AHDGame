@@ -4,6 +4,10 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Character } from "@/lib/db/types/character";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
 
+vi.mock("@/lib/savings/closeCharacterSavings", () => ({
+  closeCharacterSavings: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(true),
 }));
@@ -108,6 +112,17 @@ describe("retireCharacter", () => {
         toArray: vi.fn().mockResolvedValue([]),
       };
     });
+  });
+
+  it("preserves the character when savings closure cannot finish", async () => {
+    const { closeCharacterSavings } = await import("@/lib/savings/closeCharacterSavings");
+    vi.mocked(closeCharacterSavings).mockRejectedValueOnce(new Error("Savings closure unfinished"));
+    const { retireCharacter } = await import("./retireCharacter");
+    await expect(
+      retireCharacter(db as unknown as Db, makeCharacter(), userId, "player_deleted")
+    ).rejects.toThrow("Savings closure unfinished");
+    expect(db.collection("characters").deleteOne).not.toHaveBeenCalled();
+    expect(db.collection("retiredCharacters").insertOne).not.toHaveBeenCalled();
   });
 
   it("creates a retirement snapshot with correct data", async () => {

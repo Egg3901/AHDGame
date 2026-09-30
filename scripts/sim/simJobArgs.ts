@@ -16,6 +16,7 @@ export interface SimJobExperimentFields {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  nppFundRedemptionEnabled?: boolean;
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
@@ -105,6 +106,7 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   booleanFlag(job, "canonicalFreightBillingEnabled", "canonical-freight-billing", args);
   booleanFlag(job, "shortageResponsiveSourcingEnabled", "shortage-responsive-sourcing", args);
   booleanFlag(job, "indexFundBondLiquidityEnabled", "index-fund-bond-liquidity", args);
+  booleanFlag(job, "nppFundRedemptionEnabled", "npp-fund-redemption", args);
   booleanFlag(job, "equityLiquidityFacilityEnabled", "equity-liquidity-facility", args);
   booleanFlag(job, "nppMarketCoverageEnabled", "npp-market-coverage", args);
   booleanFlag(job, "nppFragileMarketSupplyEnabled", "npp-fragile-market-supply", args);

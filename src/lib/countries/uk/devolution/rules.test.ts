@@ -1,9 +1,36 @@
+import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { isMetricActive } from "@/lib/era/metricCatalog";
 import { UK_FIRST_MINISTERS_1992 } from "@/lib/constants/historicalSeats";
 import { describe, expect, it } from "vitest";
 import { canonicalTurnsForCycle } from "@/lib/elections/canonicalCycle";
 import { applyUKDevolutionPolicy, executiveCycleAnchor, initialUKDevolutionState } from "./rules";
 
 describe("UK executive settlement", () => {
+  it("does not let a general devolution law bypass Northern Ireland public ratification", () => {
+    const state = {
+      ...initialUKDevolutionState(1991),
+      northernIrelandPeace: { posture: "unsettled" as const, changedTurn: 1 },
+    };
+    const next = applyUKDevolutionPolicy(
+      state,
+      { billId: "general-law", optionIndex: 1, enactedTurn: 10 },
+      {},
+      72
+    );
+    expect(next.regions.SCO.active).toBe(true);
+    expect(next.regions.NIR.active).toBe(false);
+  });
+  it("opens the political decision before institutions exist", () => {
+    expect(isLegislationTypeActive("uk_devolution_local_powers", 1978)).toBe(false);
+    for (const year of [1979, 1991, 1997]) {
+      expect(isLegislationTypeActive("uk_devolution_local_powers", year)).toBe(true);
+      expect(isMetricActive("devolutionSatisfaction", "UK", year)).toBe(true);
+      const state = initialUKDevolutionState(year);
+      expect(Object.values(state.regions).every((region) => !region.active)).toBe(true);
+      expect(applyUKDevolutionPolicy(state, null, {}, 72)).toBe(state);
+    }
+  });
+
   it("does not create regional executives in a 1991 starting settlement", () => {
     expect(UK_FIRST_MINISTERS_1992).toEqual([]);
     expect(Object.values(initialUKDevolutionState(1991).regions).every((r) => !r.active)).toBe(

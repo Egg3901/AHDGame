@@ -26,6 +26,7 @@ import {
   formatCreateDepartmentLabel,
 } from "@/lib/congress/billEnrichment";
 import { buildBillWhipPanelData } from "@/lib/congress/billWhipPanelData";
+import { getBillWhipWindowStart } from "@/lib/congress/billWhipPhase";
 import type { BillWhip } from "@/lib/db/types/billWhip";
 import {
   buildScopedVoteInputs,
@@ -907,6 +908,7 @@ export async function getNationalBillDetail(
 
   // Read-only per-party whip summary for the origin chamber: every seated party
   // shows its national whip direction, defaulting to "free vote" when none.
+  const whipWindowStart = getBillWhipWindowStart(bill);
   const originWhips = await db
     .collection<BillWhip>("billWhips")
     .find({
@@ -914,6 +916,7 @@ export async function getNationalBillDetail(
       targetId: bill._id,
       issuedBy: "nationalParty",
       chamber: bill.originChamber,
+      ...(whipWindowStart ? { createdAt: { $gte: whipWindowStart } } : {}),
     })
     .toArray();
   const whipDirectionByParty = new Map<string, "for" | "against">();

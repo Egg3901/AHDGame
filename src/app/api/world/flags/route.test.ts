@@ -89,3 +89,19 @@ it("does not offer euro adoption in an unratified Community after 1999", async (
   expect(flags.euroAdoptionEligibleCountries).toEqual([]);
   expect(flags.maastrichtEligibleCountries).toContain("UK");
 });
+
+describe("world campaign pricing flag", () => {
+  it.each([true, false, undefined])(
+    "exposes the effective price scalar for flag %s",
+    async (enabled) => {
+      const db = createMockDb();
+      db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+      db.collection("gameConfig").findOne.mockResolvedValue({
+        campaignEraPriceLevelEnabled: enabled,
+      });
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+      const data = await (await GET()).json();
+      expect(data.campaignPriceLevel).toBe(enabled ? 0.35808 : 1);
+    }
+  );
+});

@@ -1,3 +1,5 @@
+import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import type { Metadata } from "next";
@@ -601,6 +603,7 @@ export default async function CharacterPage({ params }: PageProps) {
   } = data;
 
   const campaignRates = await loadCampaignCurrencyRates(await getDb());
+  const campaignPriceLevel = await loadCampaignPriceLevel(await getDb());
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const isOwnProfile = userData?.character?._id?.toString() === character._id.toString();
@@ -819,7 +822,8 @@ export default async function CharacterPage({ params }: PageProps) {
     homeState?.gdp,
     character.countryId,
     character.politicalInfluence ?? 0,
-    gamePreset
+    gamePreset,
+    resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, gamePreset)
   );
   const populationTier = getPopulationTier(statePopulation);
 
@@ -1100,7 +1104,12 @@ export default async function CharacterPage({ params }: PageProps) {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled, campaignRates),
+                    fundraiseYield: fundraiseYieldLocal(
+                      character,
+                      forexEnabled,
+                      campaignRates,
+                      campaignPriceLevel
+                    ),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}

@@ -47,7 +47,8 @@ import { WIRE_SWING_THRESHOLD } from "@/lib/constants/referendum";
 async function buildCohortBaseline(
   db: Db,
   regionId: string,
-  regionDesire: number
+  regionDesire: number,
+  peaceAgreement = false
 ): Promise<ReferendumCohort[]> {
   const demo = await db
     .collection<StateDemographics>("stateDemographics")
@@ -60,7 +61,11 @@ async function buildCohortBaseline(
   if (!profile) {
     return [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
   }
-  const cohorts = buildReferendumCohorts(profile, regionDesire, cohortAffinitiesFor(regionId));
+  const cohorts = buildReferendumCohorts(
+    profile,
+    regionDesire,
+    peaceAgreement ? {} : cohortAffinitiesFor(regionId)
+  );
   return cohorts.length > 0
     ? cohorts
     : [{ groupId: "_all", share: 1, turnout: 60, yesLean: regionDesire }];
@@ -111,7 +116,12 @@ export async function processReferendumLifecycle(
         ref.campaignOpenTurn ?? currentTurn,
         openDesire
       );
-      const cohortBaseline = await buildCohortBaseline(db, ref.regionId, openDesire);
+      const cohortBaseline = await buildCohortBaseline(
+        db,
+        ref.regionId,
+        openDesire,
+        ref.kind === "peace_agreement"
+      );
       await refs.updateOne(
         { _id: ref._id },
         { $set: { status: "campaigning", pollHistory, cohortBaseline, updatedAt: now } }
@@ -134,7 +144,8 @@ export async function processReferendumLifecycle(
         ref.cohortBaseline = await buildCohortBaseline(
           db,
           ref.regionId,
-          ref.campaignBaseYesShare ?? ref.yesShare
+          ref.campaignBaseYesShare ?? ref.yesShare,
+          ref.kind === "peace_agreement"
         );
       }
       // Canonical Yes share = cohort aggregate (PS folded in), the value the
@@ -206,10 +217,21 @@ export async function processReferendumLifecycle(
       const canonicalYesShare = referendumYesShare(ref);
       const outcome = resolveReferendumVote({
         yesShare: canonicalYesShare,
-        varianceRoll: seededVariance(id, currentTurn),
+        varianceRoll: seededVariance(
+          id,
+          ref.kind === "peace_agreement" ? (ref.campaignCloseTurn ?? currentTurn) : currentTurn
+        ),
       });
       await applyReferendumOutcome(db, ref, outcome, currentTurn);
-      transitions.push({ referendumId: id, from, to: outcome.passed ? "actuating" : "settled" });
+      transitions.push({
+        referendumId: id,
+        from,
+        to: outcome.passed
+          ? ref.kind === "peace_agreement"
+            ? "completed"
+            : "actuating"
+          : "settled",
+      });
       continue;
     }
 

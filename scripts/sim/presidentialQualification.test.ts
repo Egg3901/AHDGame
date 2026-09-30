@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { qualifyPresidentialRace } from "./presidentialQualification";
+import { qualifyPresidentialRace, presidentialPersonTurnover } from "./presidentialQualification";
 
 const snapshot = {
   candidates: [
@@ -45,6 +45,8 @@ describe("qualifyPresidentialRace", () => {
       winnerParty: "1",
       winnerIsNPP: false,
       contingent: false,
+      actorMix: "mixed",
+      electionTimeApportionment: { AA: 3, BB: 2 },
       reconciliation: [],
     });
   });
@@ -71,4 +73,66 @@ describe("qualifyPresidentialRace", () => {
       }).reconciliation
     ).toContain("unit votes differ for AA/a");
   });
+
+  it.each([
+    ["npp-only", true, true],
+    ["player-only", false, false],
+    ["mixed", false, true],
+  ] as const)("records the %s actor mix", (mix, firstNpp, secondNpp) => {
+    const result = qualifyPresidentialRace(
+      "race",
+      {
+        ...snapshot,
+        candidates: snapshot.candidates.map((candidate, index) => ({
+          ...candidate,
+          isNPP: index === 0 ? firstNpp : secondNpp,
+        })),
+      },
+      tally
+    );
+    expect(result.actorMix).toBe(mix);
+    expect(result.electionTimeApportionment).toEqual({ AA: 3, BB: 2 });
+  });
+
+  it("rejects extra stored candidates, units, and votes omitted by the election-time snapshot", () => {
+    const result = qualifyPresidentialRace("race", snapshot, {
+      ...tally,
+      totalVotes: { ...tally.totalVotes, hidden: 7 },
+      totalVotesByUnit: {
+        ...tally.totalVotesByUnit,
+        AA: { ...tally.totalVotesByUnit.AA, hidden: 7 },
+        CC: { hidden: 2 },
+      },
+    });
+    expect(result.reconciliation).toEqual(
+      expect.arrayContaining([
+        "candidate hidden missing from election-time result",
+        "stored unit CC missing from election-time result",
+        "stored vote AA/hidden missing from election-time result",
+      ])
+    );
+  });
+});
+
+it("counts same-party person turnover from the seeded office and preserves missing history", () => {
+  const row = { countryId: "US", officeType: "president", seats: 1 };
+  expect(
+    presidentialPersonTurnover([
+      { ...row, turn: 1, executiveHolder: "npp:seed" },
+      { ...row, turn: 2, executiveHolder: "npp:seed" },
+      { ...row, turn: 3, executiveHolder: "player:winner" },
+      { ...row, turn: 4 },
+      { ...row, turn: 5, executiveHolder: "npp:later" },
+    ])
+  ).toEqual({ personTurnover: 1, knownTurns: 4, unknownTurns: 1 });
+  expect(presidentialPersonTurnover([{ ...row, turn: 1 }]).personTurnover).toBeNull();
+});
+
+it("reports the margin when every electoral vote goes to one candidate", () => {
+  expect(
+    qualifyPresidentialRace("sweep", snapshot, {
+      ...tally,
+      electoralVotesByCandidate: { a: 5 },
+    }).evMargin
+  ).toBe(5);
 });

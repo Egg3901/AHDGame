@@ -7,6 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 export interface WorldFlags {
   maastrichtEligibleCountries?: string[];
   preset: string;
+  campaignPriceLevel: number;
   eurozoneEnabled: boolean;
   euroMonetaryUnion?: EuroMonetaryUnion;
   euroMemberCurrencies?: CurrencyCode[];
@@ -34,6 +35,7 @@ export interface WorldFlags {
 
 const DEFAULT_FLAGS: WorldFlags = {
   preset: "2019-default",
+  campaignPriceLevel: 1,
   eurozoneEnabled: true,
   eraSystemEnabled: false,
   currentYear: null,

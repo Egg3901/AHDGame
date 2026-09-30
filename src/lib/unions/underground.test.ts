@@ -96,6 +96,8 @@ describe("undergroundDetectionChance", () => {
     expect(at).toBeGreaterThan(0);
     expect(hotter).toBeGreaterThan(at);
     expect(undergroundDetectionChance(100)).toBeLessThanOrEqual(60);
+    expect(undergroundDetectionChance(30, 3)).toBeGreaterThan(undergroundDetectionChance(30, 0));
+    expect(undergroundDetectionChance(30, 100)).toBe(undergroundDetectionChance(30, 5));
   });
 
   it("pairs with a pure roll outcome so tests stay deterministic", () => {

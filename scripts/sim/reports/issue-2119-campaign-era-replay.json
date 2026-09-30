@@ -1,0 +1,283 @@
+{
+  "source": {
+    "runId": "2c23be7d-1d1c-4333-ba3f-87e2ee9cf7f3",
+    "sourceCommit": "d54c42626ad0e560c68c5eb2de977f43a5d2e83e",
+    "completedTurn": 13
+  },
+  "replay": {
+    "commit": "59237642a1c4543aca526f5fb21f8416353eec70",
+    "dirty": false,
+    "turnsPerEra": 24,
+    "retainedCohort": "First eight active NPPs by identifier per country",
+    "syntheticCampaigns": "Three US NPP campaigns per era: level zero, level one, and an insolvent zero-fund campaign with level-five maintenance and no fundraising upgrades",
+    "limitation": "Phase replay, not a new full world or historical macro validation. Prices vary while retained populations, currencies and actor distributions are held fixed."
+  },
+  "roundTrips": {
+    "nppFunds": {
+      "min": 22,
+      "max": 27
+    },
+    "campaigns": {
+      "min": 15,
+      "max": 18
+    }
+  },
+  "replyBsonBytes": {
+    "nppFunds": {
+      "min": 540233,
+      "max": 544360
+    },
+    "campaigns": {
+      "min": 7325,
+      "max": 10801
+    }
+  },
+  "rounding": {
+    "note": "Bounds allow at most half a local unit per rounded income or maintenance leg; NPP income plus two floored party-tax legs allow 2.5 units per actor-turn. Both the era and reference rounding contribute. Cohort local-unit sums are used only as a fixed-currency parity diagnostic, not cross-country wealth.",
+    "eraDrift": [
+      {
+        "era": "1953",
+        "campaignBalanceDrift": [261.3667301933747, 552.1372175334254, 519.4663762591954],
+        "campaignBalanceTolerance": 677.4168254832563,
+        "nppBalanceDrift": 747.282057762146,
+        "nppBalanceTolerance": 216773.384154642,
+        "generatedDrift": 816.7710318542086,
+        "maintenanceDrift": 516.1992921316996,
+        "campaignFlowTolerance": 1016.1252382248844,
+        "passed": true
+      },
+      {
+        "era": "1979",
+        "campaignBalanceDrift": [57.52636625117157, 46.0210930010071, 74.78427612656378],
+        "campaignBalanceTolerance": 167.81591562799616,
+        "nppBalanceDrift": 145.25695204734802,
+        "nppBalanceTolerance": 53701.093000958776,
+        "generatedDrift": 143.81591562810354,
+        "maintenanceDrift": 34.51581975072622,
+        "campaignFlowTolerance": 251.72387344199424,
+        "passed": true
+      },
+      {
+        "era": "1991",
+        "campaignBalanceDrift": [26.80965147446841, 8.042895442340523, 21.447721179632936],
+        "campaignBalanceTolerance": 91.02412868632707,
+        "nppBalanceDrift": 120.37622714042664,
+        "nppBalanceTolerance": 29127.721179624663,
+        "generatedDrift": 67.02412868617103,
+        "maintenanceDrift": 10.723860589787364,
+        "campaignFlowTolerance": 136.53619302949062,
+        "passed": true
+      },
+      {
+        "era": "1999",
+        "campaignBalanceDrift": [19.31317520677112, 7.001026012469083, 4.586879111593589],
+        "campaignBalanceTolerance": 72.28293801677833,
+        "nppBalanceDrift": 218.31426167488098,
+        "nppBalanceTolerance": 23130.540165369064,
+        "generatedDrift": 60.353672520956025,
+        "maintenanceDrift": 29.452592190238647,
+        "campaignFlowTolerance": 108.42440702516748,
+        "passed": true
+      },
+      {
+        "era": "2007",
+        "campaignBalanceDrift": [0, 10.972264553536661, 10.972264553478453],
+        "campaignBalanceTolerance": 60.574215178299305,
+        "nppBalanceDrift": 266.56537556648254,
+        "nppBalanceTolerance": 19383.748857055776,
+        "generatedDrift": 0,
+        "maintenanceDrift": 21.944529106956907,
+        "campaignFlowTolerance": 90.86132276744895,
+        "passed": true
+      },
+      {
+        "era": "2019",
+        "campaignBalanceDrift": [0, 0, 0],
+        "campaignBalanceTolerance": 48,
+        "nppBalanceDrift": 0,
+        "nppBalanceTolerance": 15360,
+        "generatedDrift": 0,
+        "maintenanceDrift": 0,
+        "campaignFlowTolerance": 72,
+        "passed": true
+      },
+      {
+        "era": "2023",
+        "campaignBalanceDrift": [4.174058228149079, 1.2522174684563652, 13.774392152787186],
+        "campaignBalanceTolerance": 44.870291140561406,
+        "nppBalanceDrift": 196.320880651474,
+        "nppBalanceTolerance": 14358.49316497965,
+        "generatedDrift": 2.3283064365386963e-10,
+        "maintenanceDrift": 19.200667849276215,
+        "campaignFlowTolerance": 67.30543671084212,
+        "passed": true
+      },
+      {
+        "era": "2027",
+        "campaignBalanceDrift": [3.733113494468853, 1.2132618856849149, 4.013097006507451],
+        "campaignBalanceTolerance": 42.66556747213775,
+        "nppBalanceDrift": 76.73460650444031,
+        "nppBalanceTolerance": 13652.98159108408,
+        "generatedDrift": 13.99917560419999,
+        "maintenanceDrift": 15.4924210018944,
+        "campaignFlowTolerance": 63.99835120820663,
+        "passed": true
+      }
+    ]
+  },
+  "rows": [
+    {
+      "era": "1953",
+      "enabled": true,
+      "priceLevel": 0.03673,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606319046.7820578,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 66144,
+      "maintenance": 20256,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580261.3667301934, 664552.1372175334, 204519.4663762592],
+      "campaignActionCost": 735,
+      "firstDonorBaseCost": 110
+    },
+    {
+      "era": "1979",
+      "enabled": true,
+      "priceLevel": 0.16688,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318154.243048,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 300408,
+      "maintenance": 92112,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580057.5263662512, 664046.021093001, 204074.78427612656],
+      "campaignActionCost": 3338,
+      "firstDonorBaseCost": 501
+    },
+    {
+      "era": "1991",
+      "enabled": true,
+      "priceLevel": 0.35808,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318419.8762271,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 644568,
+      "maintenance": 197664,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580026.8096514745, 664008.0428954423, 204021.44772117963],
+      "campaignActionCost": 7162,
+      "firstDonorBaseCost": 1074
+    },
+    {
+      "era": "1999",
+      "enabled": true,
+      "priceLevel": 0.49707,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318081.1857383,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 894696,
+      "maintenance": 274368,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [579980.6868247932, 663992.9989739875, 203995.4131208884],
+      "campaignActionCost": 9941,
+      "firstDonorBaseCost": 1491
+    },
+    {
+      "era": "2007",
+      "enabled": true,
+      "priceLevel": 0.6562,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318032.9346244,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 1181160,
+      "maintenance": 362208,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580000, 664010.9722645535, 204010.97226455348],
+      "campaignActionCost": 13124,
+      "firstDonorBaseCost": 1969
+    },
+    {
+      "era": "2019",
+      "enabled": true,
+      "priceLevel": 1,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318299.5,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 1800000,
+      "maintenance": 552000,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580000, 664000, 204000],
+      "campaignActionCost": 20000,
+      "firstDonorBaseCost": 3000
+    },
+    {
+      "era": "2023",
+      "enabled": true,
+      "priceLevel": 1.14996,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318103.1791193,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 2069928,
+      "maintenance": 634800,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [579995.8259417719, 663998.7477825315, 203986.2256078472],
+      "campaignActionCost": 22999,
+      "firstDonorBaseCost": 3450
+    },
+    {
+      "era": "2027",
+      "enabled": true,
+      "priceLevel": 1.28579,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318222.7653935,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 2314440,
+      "maintenance": 709776,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580003.7331134945, 663998.7867381143, 203995.9869029935],
+      "campaignActionCost": 25716,
+      "firstDonorBaseCost": 3857
+    },
+    {
+      "era": "1991",
+      "enabled": false,
+      "priceLevel": 1,
+      "turns": 24,
+      "npps": 128,
+      "nonfiniteOrNegative": 0,
+      "normalizedNppFunds": 1606318299.5,
+      "campaignFixtures": 3,
+      "processed": 72,
+      "generated": 1800000,
+      "maintenance": 552000,
+      "downgraded": 1,
+      "normalizedCampaignFunds": [580000, 664000, 204000],
+      "campaignActionCost": 20000,
+      "firstDonorBaseCost": 3000
+    }
+  ]
+}

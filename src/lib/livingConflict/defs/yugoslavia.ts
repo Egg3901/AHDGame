@@ -70,7 +70,15 @@ function trees(key: string): RoleDecisionTrees {
           "Commit logistics and force to deter widening violence.",
           { escalation: 3, intervention: 4 },
           [],
-          0.0005
+          0.0005,
+          {
+            campaignRequirement: {
+              minMilitaryReadiness: 44,
+              minLogistics: 40,
+              minDomesticSupport: 42,
+            },
+            campaignCommitment: { kind: "military", side: "a", scale: 18, warWearinessDelta: 4 },
+          }
         ),
         responseOpt(
           "west_mediate",
@@ -121,7 +129,7 @@ function trees(key: string): RoleDecisionTrees {
           "Open a humanitarian corridor",
           "Receive displaced civilians and fund emergency relief.",
           { aid: 4, restraint: 1 },
-          [cfx("tick", "metric", "economy", "gdpGrowth", -0.002, "Refugee reception")],
+          [cfx("tick", "metric", "economic", "gdpGrowth", -0.002, "Refugee reception")],
           0.0003
         ),
         responseOpt(
@@ -149,7 +157,15 @@ function trees(key: string): RoleDecisionTrees {
           "Support a monitored ceasefire with a multinational force.",
           { intervention: 3, mediation: 2 },
           [],
-          0.0003
+          0.0003,
+          {
+            campaignRequirement: {
+              minMilitaryReadiness: 44,
+              minLogistics: 40,
+              minDomesticSupport: 42,
+            },
+            campaignCommitment: { kind: "military", scale: 12, warWearinessDelta: 2 },
+          }
         ),
         responseOpt(
           "europe_relief",
@@ -253,6 +269,7 @@ const outcomes: GlobalResponseOutcome[] = [
       violence: 18,
       displacement: 12,
       infrastructureDamage: 8,
+      reconstruction: -12,
     },
     nextConflictStatus: "active",
     campaignDelta: {
@@ -328,7 +345,12 @@ function event(phase: string, headline: string, body: string): ConflictEvent {
       bloc: "europe_relief",
       bystander: "abstain",
     },
-    outcomes,
+    outcomes: outcomes.map((outcome) =>
+      (phase === "settlement" || phase === "reconstruction") &&
+      outcome.outcomeId === "negotiated_restructuring"
+        ? { ...outcome, nextConflictStatus: "settled" }
+        : outcome
+    ),
     defaultOutcomeId: "fractured_response",
   };
   return {
@@ -359,7 +381,51 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
     blocMembers: ["UK", "DE", "FR", "TR"],
     bystanders: ["IE", "SE", "FI", "BR", "NG", "IN", "CN", "JP"],
   },
-  participantFallbacks: { YU: ["CS", "HU", "RO"], RU: ["CN"], US: ["UK", "FR"] },
+  participantFallbacks: { US: ["UK", "FR"] },
+  actors: [
+    {
+      id: "slovenian_authorities",
+      name: "Slovenian authorities",
+      representsCountryId: "YU",
+      countryCandidates: ["SI", "YU"],
+      regionIds: ["YU_SLO"],
+    },
+    {
+      id: "croatian_authorities",
+      name: "Croatian authorities",
+      representsCountryId: "YU",
+      countryCandidates: ["HR", "YU"],
+      regionIds: ["YU_CRO"],
+    },
+    {
+      id: "bosnian_authorities",
+      name: "Bosnian authorities",
+      representsCountryId: "YU",
+      countryCandidates: ["BA", "YU"],
+      regionIds: ["YU_BIH"],
+    },
+    {
+      id: "serbian_authorities",
+      name: "Serbian authorities",
+      representsCountryId: "YU",
+      countryCandidates: ["RS", "YU"],
+      regionIds: ["YU_SRB", "YU_VOJ", "YU_KOS"],
+    },
+    {
+      id: "montenegrin_authorities",
+      name: "Montenegrin authorities",
+      representsCountryId: "YU",
+      countryCandidates: ["ME", "YU"],
+      regionIds: ["YU_MNE"],
+    },
+    {
+      id: "macedonian_authorities",
+      name: "Macedonian authorities",
+      representsCountryId: "YU",
+      countryCandidates: ["MK", "YU"],
+      regionIds: ["YU_MKD"],
+    },
+  ],
   roleResolver: role,
   tracks: {
     constitutionalCohesion: { initial: 34 },
@@ -385,7 +451,7 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
       key: "war_displacement",
       everyTurns: 12,
       phaseKeys: ["armed_conflict", "international_intervention"],
-      trackDeltas: { displacement: 4, infrastructureDamage: 3, legitimacy: -2 },
+      trackDeltas: { displacement: 4, infrastructureDamage: 3, reconstruction: -4, legitimacy: -2 },
     },
     {
       key: "postwar_recovery",
@@ -396,6 +462,19 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
     },
   ],
   transitions: [
+    // The same settlement standard applies before war: diplomacy must not
+    // require entering armed conflict to reach implementation and return.
+    ...["federal_crisis", "declarations"].map((fromPhase) => ({
+      key: `${fromPhase}_peaceful_settlement`,
+      fromPhase,
+      toPhase: "settlement",
+      toStatus: "settled" as const,
+      priority: 90,
+      conditions: [
+        { track: "settlementMomentum", min: 70 },
+        { track: "violence", max: 25 },
+      ],
+    })),
     {
       key: "declarations_begin",
       fromPhase: "federal_crisis",
@@ -430,6 +509,8 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
       conditions: [
         { track: "violence", min: 72 },
         { track: "displacement", min: 35 },
+        // Earned by the coalition response, not by civilian suffering alone.
+        { track: "intervention", min: 18 },
       ],
     },
     {
@@ -466,6 +547,14 @@ export const YUGOSLAVIA_DEF: LivingConflictDef = {
     {
       key: "settlement_relapse",
       fromPhase: "settlement",
+      toPhase: "armed_conflict",
+      toStatus: "active",
+      priority: 100,
+      conditions: [{ track: "violence", min: 65 }],
+    },
+    {
+      key: "reconstruction_relapse",
+      fromPhase: "reconstruction",
       toPhase: "armed_conflict",
       toStatus: "active",
       priority: 100,

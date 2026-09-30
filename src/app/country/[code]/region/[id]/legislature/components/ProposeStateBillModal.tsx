@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { regionApiSubUrl } from "@/lib/urls";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import {
@@ -256,6 +257,7 @@ export function ProposeStateBillModal({
         return;
       }
 
+      void captureProductEvent("bill_drafted");
       onSuccess();
     } catch {
       setError("Failed to propose bill");

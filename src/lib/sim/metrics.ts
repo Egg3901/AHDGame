@@ -701,15 +701,35 @@ async function collectOfficeTurnoverMetrics(db: Db): Promise<OfficeTurnoverMetri
   };
 }
 
-async function collectCrisisMetrics(db: Db): Promise<CrisisMetrics> {
-  const [crises, livingConflicts, pendingDecisions, resolvedDecisions] = await Promise.all([
+export async function collectCrisisMetrics(db: Db): Promise<CrisisMetrics> {
+  const [crises, livingConflicts] = await Promise.all([
     db
       .collection<Crisis>("crises")
-      .find({}, { projection: { status: 1, createdAt: 1, resolvedAt: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            status: 1,
+            createdAt: 1,
+            resolvedAt: 1,
+            livingConflictEventId: 1,
+            "globalResponse.conflictKey": 1,
+          },
+        }
+      )
       .toArray(),
     db.collection<LivingConflictState>("livingConflicts").find({}).toArray(),
-    db.collection("crisisInteractions").countDocuments({ resolvedAt: null }),
-    db.collection("crisisInteractions").countDocuments({ resolvedAt: { $ne: null } }),
+  ]);
+  const livingCrisisIds = crises
+    .filter((crisis) => crisis.livingConflictEventId || crisis.globalResponse?.conflictKey)
+    .map((crisis) => crisis._id);
+  const [pendingDecisions, resolvedDecisions] = await Promise.all([
+    db
+      .collection("crisisInteractions")
+      .countDocuments({ crisisId: { $in: livingCrisisIds }, resolvedAt: null }),
+    db
+      .collection("crisisInteractions")
+      .countDocuments({ crisisId: { $in: livingCrisisIds }, resolvedAt: { $ne: null } }),
   ]);
   const totalSpawned = crises.length;
   const active = crises.filter((c) => c.status === "active").length;

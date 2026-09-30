@@ -1,8 +1,35 @@
 import { describe, it, expect } from "vitest";
+import type { Db } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import {
   nextPresidentialTenure,
   getPresidentialConsecutiveTerms,
+  recordPresidentialTenure,
 } from "./presidentialTenureLedger";
+
+it("records one term per election across concurrent retries and later party changes", async () => {
+  const memory = createInMemoryDb();
+  memory.seed("gameState", [
+    { _id: "current", presidentialTenureByCountry: { US: { party: "1", consecutiveTerms: 2 } } },
+  ]);
+  const db = memory as unknown as Db;
+  await Promise.all([
+    recordPresidentialTenure(db, "US", "1", "race-a"),
+    recordPresidentialTenure(db, "US", "1", "race-a"),
+  ]);
+  expect(await memory.collection("gameState").findOne({ _id: "current" })).toMatchObject({
+    presidentialTenureByCountry: {
+      US: { party: "1", consecutiveTerms: 3, lastElectionId: "race-a" },
+    },
+  });
+  await recordPresidentialTenure(db, "US", "2", "race-b");
+  await recordPresidentialTenure(db, "US", "2", "race-b");
+  expect(await memory.collection("gameState").findOne({ _id: "current" })).toMatchObject({
+    presidentialTenureByCountry: {
+      US: { party: "2", consecutiveTerms: 1, lastElectionId: "race-b" },
+    },
+  });
+});
 
 describe("nextPresidentialTenure", () => {
   it("starts a fresh 1-term streak on first-ever record", () => {

@@ -5,6 +5,7 @@ describe("matchesCongressBillStatusFilter", () => {
   it("treats both chamber vote statuses as Voting", () => {
     expect(matchesCongressBillStatusFilter("active", "active")).toBe(true);
     expect(matchesCongressBillStatusFilter("active_other", "active")).toBe(true);
+    expect(matchesCongressBillStatusFilter("veto_override", "active")).toBe(true);
     expect(matchesCongressBillStatusFilter("enrolled", "active")).toBe(false);
   });
 
@@ -35,5 +36,24 @@ describe("getCurrentCongressBillVote", () => {
         myOtherChamberVote: null,
       })
     ).toBe("against");
+  });
+
+  it("uses only the fresh override ballot after a veto", () => {
+    expect(
+      getCurrentCongressBillVote({
+        status: "veto_override",
+        myVote: "for",
+        myOtherChamberVote: "against",
+        myOverrideVote: null,
+      })
+    ).toBeNull();
+    expect(
+      getCurrentCongressBillVote({
+        status: "veto_override",
+        myVote: "for",
+        myOtherChamberVote: "against",
+        myOverrideVote: "for",
+      })
+    ).toBe("for");
   });
 });

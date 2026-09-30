@@ -29,6 +29,14 @@ export interface BillDisplay {
   otherChamberVotesFor: number;
   otherChamberVotesAgainst: number;
   otherChamberVotesAbstain: number;
+  /** Active veto-override tally for the chamber whose list is being viewed. */
+  overrideVotesFor?: number;
+  overrideVotesAgainst?: number;
+  overrideSeats?: number;
+  overrideChamber?: "house" | "senate";
+  overrideVotingStartedAt?: string | null;
+  overrideVotingEndsAt?: string | null;
+  overrideVotingEndsOnTurn?: number | null;
   category: string;
   legislationTypeId: string | null;
   legislationTypeName: string | null;
@@ -63,10 +71,12 @@ export interface BillDisplay {
   /** The calling user's current-chamber vote */
   myVote: "for" | "against" | "abstain" | null;
   myOtherChamberVote: "for" | "against" | "abstain" | null;
+  myOverrideVote?: "for" | "against" | null;
   /** Whether the user can vote on this bill in the origin chamber */
   canVoteOrigin: boolean;
   /** Whether the user can vote on this bill in the other chamber */
   canVoteOther: boolean;
+  canVetoOverride?: boolean;
   /**
    * What the viewer's Aye and Nay would each do to their positions. Only set
    * when the viewer can vote; computed server-side by the same code that

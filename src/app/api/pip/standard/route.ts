@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { notificationTypeFilter } from "@/lib/notifications/visibility";
 // GET /api/pip/standard — Returns decay projections, income summary, and recent notifications for the Standard PiP view.
 // Auth: requireAuth
@@ -100,7 +101,8 @@ export async function GET() {
       homeState?.gdp,
       character.countryId,
       undefined,
-      preset
+      preset,
+      await loadCampaignPriceLevel(db)
     );
 
     return NextResponse.json(

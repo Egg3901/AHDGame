@@ -219,7 +219,13 @@ export function processSector(
     outputFactor: labourOutputFactor,
     strikeMarginModifier,
     staffingFactor,
-  } = resolveSectorLabourProductionEffects(labour, sector, tightness, stateDemandWageIndex);
+  } = resolveSectorLabourProductionEffects(
+    labour,
+    sector,
+    tightness,
+    stateDemandWageIndex,
+    sectorCountryId
+  );
   // Effective strategy rates, resolved once here and reused below by the
   // capacity haircut, price realization, and the blended commodity margin
   // modifiers (so non-standard strategies are priced against what the

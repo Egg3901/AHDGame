@@ -9,6 +9,7 @@ import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAd
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { isLabourWagesEnabled, isLabourFullMode } from "@/lib/labour/featureFlag";
+import { undergroundUnrestVisible } from "@/lib/unions/enforcementCosts";
 import { isProspectingEnabled } from "@/lib/extraction/featureFlag";
 import {
   sectorWageLevel,
@@ -308,6 +309,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
               debtToGdpRatio: 1,
               surplus: 1,
               gdp: 1,
+              unionsBanned: 1,
               "taxRates.domesticCorporateTax": 1,
               "taxRates.foreignCorporateTax": 1,
             },
@@ -354,7 +356,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           .collection<Union>("unions")
           .findOne(
             { countryId: sectorCountryId, sectorType: sector.sectorType },
-            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1 } }
+            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1, undergroundStrength: 1 } }
           ),
       ]);
 
@@ -365,7 +367,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const representingUnionDoc = sector.representingUnionId
       ? await db
           .collection<Union>("unions")
-          .findOne({ _id: sector.representingUnionId }, { projection: { name: 1 } })
+          .findOne(
+            { _id: sector.representingUnionId },
+            { projection: { name: 1, undergroundStrength: 1 } }
+          )
       : null;
     const macroEcon: MacroEconomicValues = {
       inflationRate: federalBudget?.economicFactors?.inflationRate ?? null,
@@ -928,6 +933,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // longer exists reads as unrepresented rather than as a phantom holder.
         representingUnionId: representingUnionDoc ? sector.representingUnionId?.toString() : null,
         representingUnionName: representingUnionDoc?.name ?? null,
+        undergroundUnrest: undergroundUnrestVisible(
+          federalBudget?.unionsBanned === true,
+          (representingUnionDoc ?? coveringIndustryUnionDoc)?.undergroundStrength
+        ),
         createdAt: sector.createdAt,
         // For-sale listing, null when not listed. priceAnchor / npvAnchor are
         // ₳-denominated so the UI formatter routes through the viewer's wallet

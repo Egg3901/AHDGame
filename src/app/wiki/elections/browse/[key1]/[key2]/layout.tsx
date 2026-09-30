@@ -13,6 +13,10 @@ const TYPE_LABELS: Record<string, string> = {
   senate: "Senate",
   stateSenate: "State Senate",
   president: "President",
+  snap_commons: "Snap Commons",
+  special_commons: "Commons By-Election",
+  snap_bundestag: "Snap Bundestag",
+  snap_shugiin: "Snap Shūgiin",
   commons: "Parliamentary",
   regionalCouncil: "Regional Council",
   primeMinister: "Prime Minister",
@@ -35,9 +39,9 @@ export async function generateMetadata({
     title = `${key1} ${typeLabel} Elections — Wiki | A House Divided`;
     description = `${typeLabel} election results from ${key1}. Historical outcomes, candidates, and margins.`;
   } else {
-    const typeLabel = TYPE_LABELS[key1] ?? key1;
-    title = `${typeLabel} Elections — ${key2} | A House Divided`;
-    description = `${typeLabel} election history for ${key2}. Cycles, winners, and results.`;
+    const typeLabel = TYPE_LABELS[key2] ?? key2;
+    title = `${key1} ${typeLabel} Elections | A House Divided`;
+    description = `${typeLabel} election history for ${key1}. Cycles, winners, and results.`;
   }
 
   const url = `${getWikiSiteUrl()}/elections/browse/${key1}/${key2}`;

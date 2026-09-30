@@ -325,6 +325,51 @@ describe("processBondTurn", () => {
     expect(update.$inc.cashAnchor).toBe(50);
   });
 
+  it("matches aggregate fund cash rounding across fractional coupons and maturity", async () => {
+    const fundId = new ObjectId();
+    const bonds = [0, 1, 2].map((i) => ({
+      _id: new ObjectId(),
+      couponRate: 5,
+      maturityTurn: i === 2 ? 10 : 100,
+      matured: false,
+      defaulted: false,
+      holders: [{ fundId, units: 1 }],
+      publicFloat: 0,
+      corporationId: new ObjectId(),
+      issuerName: "Synthetic",
+      currencyCode: "GBP" as const,
+    }));
+    mockBondFinds(bonds, []);
+    db.collection("indexFunds");
+    db.collectionMocks["indexFunds"]!.find.mockReturnValue(
+      makeCursor([{ _id: fundId, anchorCurrencyCode: "USD", name: "Synthetic Fund" }])
+    );
+    db.collection("exchangeRates");
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+      makeCursor([{ currencyCode: "GBP", rate: 3 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue(makeCursor([]));
+    await processBondTurn(10);
+    const writes = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls.flatMap(([ops]) => ops);
+    const cashCredit = writes.reduce(
+      (sum, op) => sum + (op.updateOne?.update.$inc?.cashAnchor ?? 0),
+      0
+    );
+    const entries = vi
+      .mocked(emitTxBulk)
+      .mock.calls.flatMap(([, rows]) => rows)
+      .filter((row) => row.subjectType === "fund");
+    expect(entries).toHaveLength(4);
+    expect(cashCredit).toBe(343.33);
+    expect(entries.reduce((sum, row) => sum + (row.anchorAmount ?? 0), 0)).toBeCloseTo(
+      cashCredit,
+      10
+    );
+    expect(entries.every((row) => row.meta?.roundingMethod === "cumulative_fund_credit")).toBe(
+      true
+    );
+  });
+
   it("emits a bond_coupon tx for each character holder receiving a coupon", async () => {
     // Pre-fix Phase 1: bondTurn paid character coupons via charPayments map but
     // never pushed a `bond_coupon` row to txBondEntries. Multi-billion-dollar

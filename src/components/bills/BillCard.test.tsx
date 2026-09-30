@@ -88,6 +88,30 @@ describe("BillCard override deadline (ticket #936)", () => {
     expect(screen.getByText("Override Vote")).toBeTruthy();
     expect(screen.queryByText("Voting Closed")).toBeNull();
   });
+
+  it("shows the viewed chamber's fresh override tally and two-thirds requirement", () => {
+    mockClock = { realNow: new Date("2026-07-09T16:00:00Z"), currentTurn: 990 };
+    render(
+      <BillCard
+        bill={overrideBill({
+          overrideChamber: "house",
+          overrideVotesFor: 0,
+          overrideVotesAgainst: 0,
+          overrideSeats: 435,
+          overrideVotingEndsAt: "2026-07-10T15:18:38.325Z",
+          overrideVotingEndsOnTurn: 996,
+          myOverrideVote: null,
+          canVetoOverride: true,
+        })}
+      />
+    );
+
+    expect(screen.getByText("House of Representatives")).toBeTruthy();
+    expect(screen.getByText("Two-thirds of 435 seats required")).toBeTruthy();
+    expect(screen.getAllByText("0")).toHaveLength(2);
+    expect(screen.queryByText("21")).toBeNull();
+    expect(screen.queryByText("17")).toBeNull();
+  });
 });
 
 describe("BillCard sponsor profile link", () => {

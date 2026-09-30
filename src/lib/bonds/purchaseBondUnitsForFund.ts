@@ -1,5 +1,6 @@
 import type { Db, ObjectId } from "mongodb";
 import type { BondMarketPool, Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
+import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
@@ -11,7 +12,8 @@ import { sovereignBondCapError } from "@/lib/bonds/holderCap";
 import { creditBondPool, loadBondQuote, advanceBondPoolSnapshot } from "@/lib/bonds/marketPool";
 
 export type PurchaseBondUnitsForFundResult =
-  { ok: true; units: number; costAnchor: number; bondId: ObjectId } | { ok: false; reason: string };
+  | { ok: true; units: number; costAnchor: number; markedValueAnchor: number; bondId: ObjectId }
+  | { ok: false; reason: string };
 
 function resolveBondCurrency(bond: Bond): CurrencyCode {
   return (bond.currencyCode ??
@@ -23,14 +25,15 @@ function resolveBondCurrency(bond: Bond): CurrencyCode {
 async function atomicallyDebitFundCashAnchor(
   db: Db,
   fundId: ObjectId,
-  amountAnchor: number
+  amountAnchor: number,
+  minimumRemainingCashAnchor = 0
 ): Promise<{ ok: true; newCashAnchor: number } | { ok: false }> {
   if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return { ok: false };
   const rounded = Math.round(amountAnchor * 100) / 100;
   const result = await db
     .collection<IndexFund>("indexFunds")
     .findOneAndUpdate(
-      { _id: fundId, cashAnchor: { $gte: rounded } },
+      { _id: fundId, cashAnchor: { $gte: rounded + minimumRemainingCashAnchor } },
       { $inc: { cashAnchor: -rounded }, $set: { updatedAt: new Date() } },
       { returnDocument: "after", projection: { cashAnchor: 1 } }
     );
@@ -60,6 +63,8 @@ export async function purchaseBondUnitsForFund(
     bondPools?: Map<CurrencyCode, BondMarketPool>;
     /** Stable FX snapshot for the reserve deployment pass. */
     fxRates?: Partial<Record<CurrencyCode, number>>;
+    maxCostAnchor?: number;
+    cashFloor?: { cashAnchor: number; totalBackingAnchor: number; fraction: number };
     /** Caller must flush completed purchase receipts even if a later purchase fails. */
     txSink?: Omit<IndexFundTransaction, "_id">[];
     /** Caller flushes ledger rows for completed purchases after the reserve pass. */
@@ -89,12 +94,42 @@ export async function purchaseBondUnitsForFund(
   const bondFxRate =
     fxRates[bondCurrency] && fxRates[bondCurrency]! > 0 ? fxRates[bondCurrency]! : 1;
   const quote = await loadBondQuote(db, bond, { pools: options?.bondPools });
-  const costLocal = wholeUnits * quote.askPerUnit;
-  const costAnchor =
-    Math.round(corpCapitalToAnchor(costLocal, bondCurrency, bondFxRate) * 100) / 100;
+  const costForUnits = (count: number) =>
+    Math.round(corpCapitalToAnchor(count * quote.askPerUnit, bondCurrency, bondFxRate) * 100) / 100;
+  const markedForUnits = (count: number) =>
+    corpCapitalToAnchor(count * BOND_UNIT_FACE_VALUE * bond.marketPrice, bondCurrency, bondFxRate);
+  const affordable = (count: number) => {
+    const cost = costForUnits(count);
+    if (cost <= 0 || cost > (options?.maxCostAnchor ?? Infinity) + 1e-9) return false;
+    const floor = options?.cashFloor;
+    return (
+      !floor ||
+      floor.cashAnchor - cost + 1e-9 >=
+        floor.fraction * (floor.totalBackingAnchor + markedForUnits(count) - cost)
+    );
+  };
+  let low = 0;
+  let high = wholeUnits;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (affordable(middle)) low = middle;
+    else high = middle - 1;
+  }
+  const affordableUnits = low;
+  if (affordableUnits <= 0) return { ok: false, reason: "cash_buffer_floor" };
+  const costLocal = affordableUnits * quote.askPerUnit;
+  const costAnchor = costForUnits(affordableUnits);
+  const markedValueAnchor = markedForUnits(affordableUnits);
   if (costAnchor <= 0) return { ok: false, reason: "zero_cost" };
 
-  const debit = await atomicallyDebitFundCashAnchor(db, fund._id, costAnchor);
+  const minimumCash = options?.cashFloor
+    ? Math.max(
+        0,
+        options.cashFloor.fraction *
+          (options.cashFloor.totalBackingAnchor + markedValueAnchor - costAnchor)
+      )
+    : 0;
+  const debit = await atomicallyDebitFundCashAnchor(db, fund._id, costAnchor, minimumCash);
   if (!debit.ok) return { ok: false, reason: "insufficient_fund_cash" };
 
   const now = new Date();
@@ -104,7 +139,7 @@ export async function purchaseBondUnitsForFund(
       db,
       bond._id,
       { field: "fundId", id: fund._id },
-      wholeUnits,
+      affordableUnits,
       now,
       { avgCostPerUnit: pricePerUnit }
     );
@@ -121,7 +156,7 @@ export async function purchaseBondUnitsForFund(
       kind: "bond_allocation",
       amountAnchor: costAnchor,
       navAnchor: fund.quotedNav,
-      note: `Purchased ${wholeUnits} bond units (${bond.issuerName ?? "sovereign"})`,
+      note: `Purchased ${affordableUnits} bond units (${bond.issuerName ?? "sovereign"})`,
       createdAt: now,
     };
     if (options?.txSink) options.txSink.push(transaction);
@@ -148,7 +183,7 @@ export async function purchaseBondUnitsForFund(
         counterpartyName: bond.issuerName ?? "Bond market",
         meta: {
           bondId: bond._id.toString(),
-          units: wholeUnits,
+          units: affordableUnits,
           pricePerUnit,
           source: "bond-reserve",
         },
@@ -157,7 +192,7 @@ export async function purchaseBondUnitsForFund(
       else await emitTx(db, ledgerEntry, options.thresholds, options.turnLengthMinutes);
     }
 
-    return { ok: true, units: wholeUnits, costAnchor, bondId: bond._id };
+    return { ok: true, units: affordableUnits, costAnchor, markedValueAnchor, bondId: bond._id };
   } catch (err) {
     await refundFundCashAnchor(db, fund._id, costAnchor);
     throw err;

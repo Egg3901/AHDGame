@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { Button } from "@/components/ui/Button";
+import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
+import { captureProductEvent } from "@/lib/analytics/capture";
 
 export interface OnboardingChecklistCardStep {
   id: string;
@@ -13,7 +15,7 @@ export interface OnboardingChecklistCardStep {
   done: boolean;
 }
 
-interface OnboardingChecklistProps {
+export interface OnboardingChecklistProps {
   steps: OnboardingChecklistCardStep[];
   completedCount: number;
   total: number;
@@ -35,12 +37,21 @@ export function OnboardingChecklist({
   rewardAmount,
 }: OnboardingChecklistProps) {
   const t = useTranslations("profile.onboarding");
+  const { variant, ready } = usePostHogVariant("onboarding-checklist");
   const locale = useLocale();
   const [dismissed, setDismissed] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const viewCaptured = useRef(false);
+
+  useEffect(() => {
+    if (ready && !viewCaptured.current) {
+      viewCaptured.current = true;
+      void captureProductEvent("onboarding_checklist_viewed", { variant });
+    }
+  }, [ready, variant]);
 
   if (dismissed) return null;
 

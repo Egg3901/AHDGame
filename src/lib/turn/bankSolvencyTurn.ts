@@ -1,3 +1,4 @@
+import { processFinancialCrisisGuarantees } from "@/lib/crises/financialCrisisGuarantees";
 /**
  * Bank runs and depositor protection. processBankSolvencyTurn evaluates bank
  * confidence, returns fleeing household deposits with their cash, and resolves
@@ -29,7 +30,7 @@ import { getReserveRequirement } from "@/lib/banking/reserves";
 import { discountWindowStigma } from "@/lib/banking/discountWindow";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { charterMay } from "@/lib/banking/rules/capabilities";
-import { RUN_FAILURE_COVER_FRACTION } from "@/lib/banking/rules/balanceSheet";
+import { bankEquity, RUN_FAILURE_COVER_FRACTION } from "@/lib/banking/rules/balanceSheet";
 import {
   CONTAGION_PANIC_TURNS,
   FLIGHT_RATE_BY_BAND,
@@ -237,6 +238,8 @@ export async function processBankSolvencyTurn(
     }
   }
 
+  await processFinancialCrisisGuarantees(db, turn, policy);
+
   const unresolved = await db
     .collection<Corporation>("corporations")
     .find({
@@ -442,6 +445,16 @@ async function evaluateOneBank(
     // `+ postedCapital`: posted capital is a memo of cash already inside the
     // reserve balance, so adding it counted the same money twice.
     fails = depositTakerFails({
+      // Realized credit losses can exhaust equity before a cash run. Include
+      // marked securities here: the conservative distribution-capital measure
+      // deliberately excludes them, but purchased assets still back the estate.
+      netAssets:
+        bankEquity(
+          { ...charter, cashReserves, npcDeposits },
+          {
+            playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+          }
+        ) + Math.max(0, charter.propBookMarkValue ?? 0),
       priorBand,
       cashReserves,
       requiredLiquidity:

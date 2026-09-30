@@ -1,3 +1,4 @@
+import { northernIrelandAssemblyAllows } from "@/lib/countries/uk/northernIreland/service";
 import type { Db } from "mongodb";
 import {
   getCountryConfig,
@@ -54,6 +55,15 @@ export async function proposeStateBill(
   input: ProposeStateBillInput
 ): Promise<LegislatureCommandResult> {
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const now = new Date();
   const postCountryConfig = getCountryConfig(countryId);
   const {

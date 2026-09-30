@@ -22,6 +22,10 @@
 export {};
 
 import { SOVEREIGN_DEMAND_EXPERIMENT_FIELDS } from "./sovereignDemandExperimentFlags";
+import {
+  assertExperimentReportRecovery,
+  commitExperimentReportRecovery,
+} from "./experimentReportRecovery";
 import { writeExperimentReport } from "./experimentReportStorage";
 import {
   assertCollectorSourceMatch,
@@ -116,11 +120,32 @@ async function main() {
     )?.source;
     const requestedCommit = sourceCommit ?? simSource?.requestedCommit ?? null;
     const collectorCommit = resolveCollectorCommit(process.cwd());
-    assertCollectorSourceMatch({
-      requestedCommit,
-      simExecutedCommit: simSource?.executedCommit ?? null,
-      collectorCommit,
-    });
+    const recoverySimulationCommit = arg("recover-source-commit");
+    const recoveryCollectorCommit = arg("recovery-collector-commit");
+    const provenance = await gitProvenance();
+    if (recoverySimulationCommit !== undefined || recoveryCollectorCommit !== undefined) {
+      assertExperimentReportRecovery({
+        expectedSimulationCommit: recoverySimulationCommit ?? "",
+        expectedCollectorCommit: recoveryCollectorCommit ?? "",
+        requestedCommit,
+        simulationCommit: simSource?.executedCommit ?? null,
+        collectorCommit,
+        jobStatus: job?.status,
+        jobSourceCommit: job?.sourceCommit,
+        dirty: provenance.gitDirty !== false,
+        sandboxUri: SIM_MONGODB_URI ?? "",
+        controlUri: OPS_MONGODB_URI ?? "",
+        controlDatabase: opsDbName,
+        sourceDatabase: dbName as string,
+        jobDatabase: job?.dbName,
+      });
+    } else {
+      assertCollectorSourceMatch({
+        requestedCommit,
+        simExecutedCommit: simSource?.executedCommit ?? null,
+        collectorCommit,
+      });
+    }
     let mcpVersion: string | undefined;
     try {
       const { readFileSync } = await import("fs");
@@ -145,9 +170,12 @@ async function main() {
           ?.executedPath ?? null) as string | null,
         executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
           ?.executedCommit ?? null) as string | null,
-        // #2083: the collector's own SHA, proven equal to executedCommit
-        // above. Pin-only: legacy unpinned reports keep their exact shape.
+        // Ordinary collection proves equality. Explicit recovery preserves the
+        // original runtime SHA and records the different collector separately.
         ...(requestedCommit ? { collectorPath: process.cwd(), collectorCommit } : {}),
+        ...(recoverySimulationCommit
+          ? { collectionMode: "recovery", recoveredFromSimulationCommit: recoverySimulationCommit }
+          : {}),
       },
       requestedConfig: job
         ? Object.fromEntries(
@@ -168,6 +196,7 @@ async function main() {
                 "canonicalFreightBillingEnabled",
                 "shortageResponsiveSourcingEnabled",
                 "indexFundBondLiquidityEnabled",
+                "nppFundRedemptionEnabled",
                 ...SOVEREIGN_DEMAND_EXPERIMENT_FIELDS,
                 "equityLiquidityFacilityEnabled",
                 "nppMarketCoverageEnabled",
@@ -181,7 +210,7 @@ async function main() {
         sandboxRun as { effectiveConfigInitial?: Record<string, unknown> } | null
       )?.effectiveConfigInitial,
       mcpVersion,
-      ...(await gitProvenance()),
+      ...provenance,
     };
 
     // Actor coverage (#1993): the sandbox run doc carries the manifest
@@ -202,6 +231,14 @@ async function main() {
       runId as string,
       report as unknown as Record<string, unknown>
     );
+    if (recoverySimulationCommit) {
+      await commitExperimentReportRecovery(opsDb, {
+        runId: runId as string,
+        sourceDatabase: dbName as string,
+        simulationCommit: recoverySimulationCommit,
+        collectorCommit: collectorCommit as string,
+      });
+    }
     console.log(
       `[experiments:${runId}] Report written (v${report.runConfig.appVersion}, seed=${report.runConfig.seed ?? "?"}, git=${report.runConfig.gitCommit ?? "?"}${report.runConfig.gitDirty ? "-dirty" : ""}).`
     );

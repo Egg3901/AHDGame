@@ -84,6 +84,26 @@ describe("PostHog consent boundary", () => {
     );
   });
 
+  it("queues an early product event until the stable account ID is known", async () => {
+    const { captureProductEvent } = await import("./capture");
+    const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
+    state.consent = "accepted";
+    await captureProductEvent("bill_drafted");
+    expect(state.capture).not.toHaveBeenCalled();
+    identifyPostHogUser((await getPostHogClient())!, "stable-user-id", {
+      signup_date: "2026-09-29",
+      nation: "US",
+      party: "1",
+    });
+    expect(state.identify).toHaveBeenCalledWith("stable-user-id", {
+      is_player: true,
+      signup_date: "2026-09-29",
+      nation: "US",
+      party: "1",
+    });
+    expect(state.capture).toHaveBeenCalledWith("bill_drafted");
+  });
+
   it("enables sampled, masked session recording with sensitive screens blocked", async () => {
     const { getPostHogClient } = await import("./posthogClient");
     state.consent = "accepted";
@@ -102,8 +122,10 @@ describe("PostHog consent boundary", () => {
 
   it("stops capture after rejection and resumes only after another opt in", async () => {
     const { captureProductEvent } = await import("./capture");
-    const { stopPostHogCapture } = await import("./posthogClient");
+    const { stopPostHogCapture, getPostHogClient, identifyPostHogUser } =
+      await import("./posthogClient");
     state.consent = "accepted";
+    identifyPostHogUser((await getPostHogClient())!, "stable-user-id");
     await captureProductEvent("account_created");
     expect(state.capture).toHaveBeenCalledTimes(1);
 
@@ -114,6 +136,7 @@ describe("PostHog consent boundary", () => {
     expect(state.capture).toHaveBeenCalledTimes(1);
 
     state.consent = "accepted";
+    identifyPostHogUser((await getPostHogClient())!, "stable-user-id");
     await captureProductEvent("character_created");
     expect(state.optIn).toHaveBeenCalledTimes(2);
     expect(state.capture).toHaveBeenCalledTimes(2);
@@ -121,7 +144,9 @@ describe("PostHog consent boundary", () => {
 
   it("records the first completed turn once for the newly created character", async () => {
     const { rememberNewCharacter, captureFirstTurnIfReady } = await import("./capture");
+    const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
     state.consent = "accepted";
+    identifyPostHogUser((await getPostHogClient())!, "stable-user-id");
     rememberNewCharacter("char1", 10);
     vi.stubGlobal(
       "fetch",
@@ -148,7 +173,9 @@ describe("PostHog consent boundary", () => {
 
   it("carries successful signup across a full navigation and captures it once", async () => {
     const { rememberAccountCreated, capturePendingAccountCreated } = await import("./capture");
+    const { getPostHogClient, identifyPostHogUser } = await import("./posthogClient");
     state.consent = "accepted";
+    identifyPostHogUser((await getPostHogClient())!, "stable-user-id");
     rememberAccountCreated();
     await Promise.all([capturePendingAccountCreated(), capturePendingAccountCreated()]);
     await capturePendingAccountCreated();

@@ -1,3 +1,5 @@
+import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import * as Sentry from "@sentry/nextjs";
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
@@ -18,7 +20,9 @@ export const BALANCE_CHECKPOINTS_COLLECTION = "balanceSnapshotCheckpoints";
  *
  * Balances are stored in ₳ (anchor) units — local balance / FX rate — to match
  * the ledger legs' `anchorAmount`. Missing rate ⇒ treated 1:1 (mirrors
- * financialTxLog/emit.ts's amountToAnchor fallback). See plan §2.
+ * financialTxLog/emit.ts's amountToAnchor fallback). Government treasury cash
+ * instead uses the receipt valuation contract below, with account-specific
+ * provenance and no fabricated rate for a missing active currency. See plan §2.
  *
  * Scope: every financialTxLog subject kind plus the fund cash its holders move
  * against — character personal + savings wallets, corporation liquidCapital,
@@ -54,11 +58,23 @@ export async function collectBalances(db: Db): Promise<Record<string, number>> {
   return (await collectBalanceState(db)).balances;
 }
 
-async function collectBalanceState(
-  db: Db
-): Promise<{ balances: Record<string, number>; anchorRates: Record<string, number> }> {
+async function collectBalanceState(db: Db): Promise<{
+  balances: Record<string, number>;
+  anchorRates: Record<string, number>;
+  accountValuations: NonNullable<BalanceSnapshot["accountValuations"]>;
+}> {
   const rates = await loadAnchorRates(db);
   const balances: Record<string, number> = {};
+
+  // Bond pools hold the funded buyer side of sovereign primary placements.
+  const pools = db.collection<{ _id: CurrencyCode; cashLocal?: number }>("bondMarketPools");
+  for await (const pool of pools.find({}, { projection: { cashLocal: 1 } })) {
+    add(
+      balances,
+      accountId("bond_pool", pool._id, pool._id),
+      toAnchor(pool.cashLocal ?? 0, pool._id, rates)
+    );
+  }
 
   // --- Characters: personal + savings wallets --------------------------------
   const characters = db.collection<{
@@ -132,6 +148,10 @@ async function collectBalanceState(
   }
 
   // --- Governments: federalBudget treasuryBalance ----------------------------
+  const gameState = await db
+    .collection<{ _id: string; preset?: string }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+  const accountValuations: NonNullable<BalanceSnapshot["accountValuations"]> = {};
   const budgets = db.collection<{
     countryId?: string;
     treasuryBalance?: number;
@@ -144,11 +164,17 @@ async function collectBalanceState(
   for await (const b of budgetCursor) {
     if (typeof b.treasuryBalance !== "number" || !b.countryId) continue;
     const cur = b.currencyCode ?? countryCurrency(b.countryId);
-    add(
-      balances,
-      accountId("government", b.countryId, cur),
-      toAnchor(b.treasuryBalance, cur, rates)
-    );
+    const account = accountId("government", b.countryId, cur);
+    const valuation = treasuryAnchorValuation({
+      countryId: b.countryId,
+      currencyCode: cur,
+      preset: gameState?.preset ?? DEFAULT_SEED_PRESET,
+      observedRate: rates.get(cur),
+    });
+    // Match the actual treasury receipt denominator. Keep this account-specific:
+    // a budget-only authored valuation is not an exchangeRates trading quote.
+    accountValuations[account] = valuation;
+    add(balances, account, b.treasuryBalance / valuation.anchorRate);
   }
 
   // --- NPP investment cash (anchor-backed) -------------------------------
@@ -232,7 +258,7 @@ async function collectBalanceState(
     add(balances, accountId("state_party", String(sp._id), cur), toAnchor(sp.treasury, cur, rates));
   }
 
-  return { balances, anchorRates: Object.fromEntries(rates) };
+  return { balances, anchorRates: Object.fromEntries(rates), accountValuations };
 }
 
 /**
@@ -266,13 +292,14 @@ export async function writeBalanceSnapshot(
   opts: { rebaselined?: boolean } = {}
 ): Promise<number> {
   try {
-    const { balances, anchorRates } = await collectBalanceState(db);
+    const { balances, anchorRates, accountValuations } = await collectBalanceState(db);
     const doc: BalanceSnapshot = {
       _id: new ObjectId(),
       turn,
       createdAt: new Date(),
       balances,
       anchorRates,
+      accountValuations,
       ...(opts.rebaselined ? { rebaselined: true } : {}),
     };
     // Idempotent per turn — re-running a turn replaces its snapshot.
@@ -293,13 +320,14 @@ export async function writeBalanceSnapshot(
  */
 export async function writePreForexBalanceCheckpoint(db: Db, turn: number): Promise<number> {
   try {
-    const { balances, anchorRates } = await collectBalanceState(db);
+    const { balances, anchorRates, accountValuations } = await collectBalanceState(db);
     const doc: BalanceSnapshot = {
       _id: new ObjectId(),
       turn,
       createdAt: new Date(),
       balances,
       anchorRates,
+      accountValuations,
     };
     await db
       .collection<BalanceSnapshot>(BALANCE_CHECKPOINTS_COLLECTION)

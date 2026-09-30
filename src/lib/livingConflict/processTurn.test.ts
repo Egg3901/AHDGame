@@ -54,6 +54,9 @@ function fakeDb() {
         ) {
           reads.push({ collection: name, projection: options?.projection });
           return {
+            sort() {
+              return this;
+            },
             async toArray() {
               return rows(name).filter((row) => matches(row, query));
             },
@@ -165,6 +168,27 @@ describe("living-conflict turn integration", () => {
     ).toHaveLength(crisisCount);
   });
 
+  it("persists and exposes Yugoslav local actors without assigning other countries their roles", async () => {
+    const { db, stores } = fakeDb();
+    stores.set(
+      "states",
+      ["US", "UK", "DE", "CS", "HU"].map((countryId) => ({ countryId }))
+    );
+    stores.set("macroCountries", []);
+    await processLivingConflictsTurn(db, 1, 1991, true);
+    const state = (stores.get("livingConflicts") ?? []).find(
+      (row) => row.defKey === "yugoslav_dissolution"
+    );
+    expect(state?.hasOpened).toBe(true);
+    expect(state?.representedActors).toHaveLength(6);
+    const crisis = (stores.get("crises") ?? []).find(
+      (row) => pathValue(row, "globalResponse.conflictKey") === "yugoslav_dissolution"
+    );
+    expect(crisis?.description).toContain("Bosnian authorities");
+    expect(pathValue(crisis!, "globalResponse.roleByCountry.CS")).toBeUndefined();
+    expect(pathValue(crisis!, "globalResponse.roleByCountry.HU")).toBeUndefined();
+  });
+
   it("keeps Northern Ireland open while a passed reunification vote awaits consent bills", async () => {
     const { db, stores } = fakeDb();
     stores.set("referendums", [
@@ -217,9 +241,20 @@ describe("living-conflict turn integration", () => {
     expect(pathValue(crisis!, "globalResponse.roleByCountry.RU")).toBe("backer_a");
     expect(reads.filter((read) => read.collection === "macroCountries")).toEqual([
       { collection: "macroCountries", projection: { entityId: 1, _id: 0 } },
+      {
+        collection: "macroCountries",
+        projection: {
+          entityId: 1,
+          population: 1,
+          stability: 1,
+          "contribution.byCommodity.food": 1,
+          "sectors.agriculture": 1,
+        },
+      },
     ]);
     expect(reads.filter((read) => read.collection === "states")).toEqual([
       { collection: "states", projection: { countryId: 1, _id: 0 } },
+      { collection: "states", projection: { _id: 1, countryId: 1, population: 1 } },
     ]);
   });
 

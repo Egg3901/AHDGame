@@ -34,7 +34,8 @@ export interface UndergroundTurnResult {
  *   needs no decay write: `isUnionExposed` compares against the turn, so a
  *   union goes dark on its own once the window passes. No permanent flags.
  *
- * Writes only cells that actually changed, so a quiet ban costs no writes.
+ * Stamps every processed cell, including quiet ones, so a retry cannot roll
+ * detection twice or decay heat and recent-drive pressure twice.
  */
 export async function processUndergroundTurn(
   db: Db,
@@ -54,6 +55,8 @@ export async function processUndergroundTurn(
         heat: 1,
         exposedUntilTurn: 1,
         lastUndergroundDriveTurn: 1,
+        recentUndergroundDriveCount: 1,
+        undergroundProcessedTurn: 1,
       },
     })
     .toArray();
@@ -72,18 +75,30 @@ export async function processUndergroundTurn(
   let newlyExposed = 0;
 
   for (const cell of cells) {
+    if ((cell.undergroundProcessedTurn ?? -1) >= currentTurn) continue;
     const heat = undergroundHeat(cell);
     const droveThisTurn = cell.lastUndergroundDriveTurn === currentTurn;
-    // Clamp on write: the command `$inc`s heat without clamping (contention
-    // safety), so this is what caps runaway heat back to 100.
+    // Reads still clamp legacy or otherwise out-of-range heat before the
+    // detection roll. New drives persist the 0-100 cap in the command.
     const nextHeat = droveThisTurn ? heat : decayUndergroundHeat(heat);
     const set: Record<string, unknown> = {};
+    const recentDriveCount =
+      typeof cell.recentUndergroundDriveCount === "number" &&
+      Number.isFinite(cell.recentUndergroundDriveCount)
+        ? Math.max(0, cell.recentUndergroundDriveCount)
+        : 0;
+    // The count is a two-turn weighted window: every successful drive adds one,
+    // and older activity loses half its weight after each detection roll.
+    if (recentDriveCount > 0) {
+      const remainingDrivePressure = recentDriveCount / 2;
+      set.recentUndergroundDriveCount = remainingDrivePressure >= 0.5 ? remainingDrivePressure : 0;
+    }
     if (nextHeat !== (typeof cell.heat === "number" ? cell.heat : 0)) {
       set.heat = nextHeat;
     }
     if (!isUnionExposed(cell, currentTurn) && nextHeat >= HEAT_DETECTION_THRESHOLD) {
       const chance = postureDetectionChance(
-        undergroundDetectionChance(nextHeat),
+        undergroundDetectionChance(nextHeat, recentDriveCount),
         postures.get(cell.countryId) ?? "normal"
       );
       const roll = seededRoll(
@@ -97,9 +112,16 @@ export async function processUndergroundTurn(
         newlyExposed += 1;
       }
     }
-    if (Object.keys(set).length > 0) {
-      writes.push({ filter: { _id: cell._id }, update: { $set: { ...set, updatedAt: now } } });
-    }
+    writes.push({
+      filter: {
+        _id: cell._id,
+        $or: [
+          { undergroundProcessedTurn: { $exists: false } },
+          { undergroundProcessedTurn: { $lt: currentTurn } },
+        ],
+      },
+      update: { $set: { ...set, undergroundProcessedTurn: currentTurn, updatedAt: now } },
+    });
   }
 
   if (writes.length > 0) {

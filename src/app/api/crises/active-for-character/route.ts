@@ -1,3 +1,4 @@
+import { crisisDecisionRegion, canRespondToCrisis } from "@/lib/crises/rules/authorization";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
 
     const character = user.character;
     const countryId = character.countryId;
-    const stateId = character.homeState;
+    const stateId = crisisDecisionRegion(character);
 
     const characterRoles = await resolveCharacterRoles(db, character);
 
@@ -131,7 +132,13 @@ export async function GET(request: Request) {
 
         const canInteract =
           currentNode && !interaction?.resolvedAt
-            ? canCharacterInteract(currentNode, characterRoles, countryId, character.homeState) &&
+            ? canCharacterInteract(
+                currentNode,
+                characterRoles,
+                countryId,
+                crisisDecisionRegion(character)
+              ) &&
+              canRespondToCrisis(crisis, currentNode, countryId, crisisDecisionRegion(character)) &&
               !alreadyResponded &&
               (currentNode.type !== "aid" || (await aidBillsEnabled())) &&
               (!crisis.globalResponse || !!globalResponseRoleFor(crisis, countryId))

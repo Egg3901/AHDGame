@@ -124,6 +124,17 @@ describe("commodityPriceTurn", () => {
       expect(mockBulkWrite).toHaveBeenCalledTimes(2);
     });
 
+    it("projects the defense-diversion fields consumed by the supply ledger", async () => {
+      setupMocks();
+
+      await processCommodityPriceTurn(100);
+
+      expect(mockFind.mock.calls[0]?.[1]?.projection).toMatchObject({
+        militaryDivertedFraction: 1,
+        militaryDivertedTurn: 1,
+      });
+    });
+
     it("persists a trade-flow snapshot for the turn", async () => {
       setupMocks({
         states: [

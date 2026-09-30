@@ -1,3 +1,4 @@
+import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
@@ -175,7 +176,8 @@ async function handleGET() {
       homeState?.gdp,
       character.countryId,
       undefined,
-      gameState?.preset
+      gameState?.preset,
+      await loadCampaignPriceLevel(db)
     );
 
     // --- Decay projections (what happens next turn) ---

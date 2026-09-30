@@ -10,6 +10,10 @@ import {
   unionStrength,
 } from "@/lib/unions/unionEconomy";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
+import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
 
 export type OrganizeUnionResult =
   | {
@@ -40,6 +44,9 @@ export async function organizeUnion(
   character: Character,
   union: Union
 ): Promise<OrganizeUnionResult> {
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   if (!isSameCountry(character, { countryId: union.countryId as CountryId })) {
     return {
       ok: false,

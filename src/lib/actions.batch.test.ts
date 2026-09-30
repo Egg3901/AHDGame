@@ -63,3 +63,25 @@ describe("simulateActionBatch", () => {
     expect(r.ok).toBe(false);
   });
 });
+
+it.each([0.03673, 0.35808, 1.28579])(
+  "batch quotes charge the same era price %s on every action",
+  (priceLevel) => {
+    const c = makeCharacter({
+      politicalInfluence: 0,
+      actions: 50,
+      funds: 10_000_000,
+      stats: NEUTRAL_STATS,
+    });
+    const modern = simulateActionBatch(c, testState, "campaign", 5);
+    const era = simulateActionBatch(c, testState, "campaign", 5, false, undefined, { priceLevel });
+    expect(modern.ok && era.ok).toBe(true);
+    if (modern.ok && era.ok) {
+      expect(era.totalActionPoints).toBe(modern.totalActionPoints);
+      expect(Math.abs(era.netFundsChange - modern.netFundsChange * priceLevel)).toBeLessThanOrEqual(
+        2.5
+      );
+      expect(era.finalCharacter.politicalInfluence).toBe(modern.finalCharacter.politicalInfluence);
+    }
+  }
+);

@@ -37,10 +37,12 @@ function regionName(regionId: string): string {
 }
 
 function noun(kind: ReferendumKind): string {
+  if (kind === "peace_agreement") return "peace agreement";
   return kind === "reunification" ? "reunification" : "independence";
 }
 
 function Noun(kind: ReferendumKind): string {
+  if (kind === "peace_agreement") return "Peace Agreement";
   return kind === "reunification" ? "Reunification" : "Independence";
 }
 
@@ -90,6 +92,18 @@ export function buildReferendumVoteResultEmbed(args: {
   finalYesShare: number;
 }): DiscordEmbed {
   const yes = Math.round(args.finalYesShare);
+  if (args.kind === "peace_agreement") {
+    return {
+      title: `${args.region} ${args.passed ? "Ratifies" : "Rejects"} the Peace Agreement`,
+      description: `${yes}% voted Yes. ${
+        args.passed
+          ? "The public mandate joins the Westminster and Dáil authorizations. Implementation still requires decommissioning and functioning institutions."
+          : "The agreement returns to negotiations. A new public vote requires fresh authorization from both parliaments."
+      }`,
+      color: args.passed ? DISCORD_COLORS.electionResult : DISCORD_COLORS.govCollapsed,
+      footer: FOOTER,
+    };
+  }
   if (args.passed) {
     const title =
       args.kind === "reunification"

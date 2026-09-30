@@ -1,3 +1,4 @@
+import { crisisDecisionRegion, canRespondToCrisis } from "@/lib/crises/rules/authorization";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { getDb } from "@/lib/mongodb";
@@ -88,7 +89,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             activeNode,
             characterRoles,
             character.countryId,
-            character.homeState
+            crisisDecisionRegion(character)
+          ) &&
+          canRespondToCrisis(
+            crisis,
+            activeNode,
+            character.countryId,
+            crisisDecisionRegion(character)
           ) &&
           !alreadyResponded &&
           (activeNode.type !== "aid" || aidBillsEnabled) &&

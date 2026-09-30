@@ -1,0 +1,47 @@
+{
+  "syntheticMongoRoundtrip": {
+    "sourceCommit": "e7b1d32d560f465307b1c7c43db456dfd45051aa",
+    "sourceBytes": 27054088,
+    "sourceHash": "47d08d61cc6fce15304bfd331c96c04bccb1987803101ce7d48e42abd3820eb2",
+    "roundtripExact": true,
+    "metadataBytes": 959,
+    "chunkCount": 7,
+    "maxChunkBytes": 8349819,
+    "inlineCompatible": true,
+    "version1Compatible": true,
+    "repeatReplacesGeneration": true,
+    "fixture": "Synthetic 26 MB nested telemetry and 100-point top-level timeline; no engine execution."
+  },
+  "completedWorldRecovery": {
+    "runId": "900f5fbc-3c4f-4f71-ae98-c544526ead1d",
+    "turn": 11,
+    "sourceCommit": "ac37b0ee191089e1e1a0c501a29e691b45450211",
+    "collectorCommit": "e7b1d32d560f465307b1c7c43db456dfd45051aa",
+    "sourceCollections": 224,
+    "sourceHashUnchanged": true,
+    "sourceHash": "e3e6a6028731f15e75484bbdc04134a5",
+    "storageVersion": 2,
+    "metadataBytes": 143584,
+    "chunkCount": 10,
+    "maxChunkBytes": 8262884,
+    "seatsPoints": 1703,
+    "partyOrgPoints": 300,
+    "corporationsPoints": 160,
+    "approvalPoints": 1860,
+    "macroPoints": 3720,
+    "jobErrorCleared": true,
+    "collectionMode": "recovery",
+    "engineRerun": false,
+    "sourceRuntimePreserved": true
+  },
+  "rustReader": {
+    "repository": "Egg3901/lakeside-code",
+    "pullRequest": 52,
+    "status": "focused checks pending; not deployed"
+  },
+  "limits": [
+    "Recovery proves report persistence and source preservation, not game conformance.",
+    "Original simulation retains 49 critical bootstrap conformance diagnostics.",
+    "MCP contract exposes three bounded timelines and final metrics; nested telemetry is retained for full TypeScript exports."
+  ]
+}

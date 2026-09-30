@@ -13,6 +13,7 @@ import {
 } from "@/lib/partyWhips/playerWhipSummary";
 import { ObjectId } from "mongodb";
 import { getGameState } from "@/lib/gameState";
+import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; slug: string }>;
@@ -217,7 +218,10 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const nppWhips = new Map<string, BillWhip[]>();
     const characterWhips = new Map<string, BillWhip[]>();
+    const activeBillsById = new Map(activeBills.map((bill) => [bill._id.toString(), bill]));
     for (const whip of existingWhips) {
+      const bill = activeBillsById.get(whip.targetId.toString());
+      if (bill && !isBillWhipInCurrentPhase(bill, whip)) continue;
       const key = `${whip.targetId}_${whip.chamber}`;
       const target = whip.audience === "character" ? characterWhips : nppWhips;
       if (!target.has(key)) target.set(key, []);

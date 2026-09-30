@@ -150,7 +150,8 @@ describe("#2120 fund telemetry", () => {
       { kind: "future_kind", turn: 98, amountAnchor: 7 },
     ];
     const db = fakeDb({
-      gameState: [{ currentTurn: 100, nppFundRedemptionEnabled: true }],
+      gameState: [{ currentTurn: 100, nppFundRedemptionEnabled: false }],
+      gameConfig: [{ _id: "default", nppFundRedemptionEnabled: true }],
       indexFundTransactions: txs,
       indexFundRedemptionQueue: [
         { status: "queued", units: 10, requestedAmountAnchor: 100, paidAmountAnchor: 0 },
@@ -188,6 +189,16 @@ describe("#2120 fund telemetry", () => {
     expect(t.funds.redemptionQueue.unresolvedPaidAnchor).toBe(10);
     expect(t.funds.orphanPositions).toEqual({ count: 1, units: 7 });
     expect(t.funds.flags.nppFundRedemptionEnabled).toEqual({ requested: true, available: true });
+  });
+
+  it("reads the redemption flag from gameConfig for an explicit off arm", async () => {
+    const db = fakeDb({
+      gameState: [{ currentTurn: 10, nppFundRedemptionEnabled: true }],
+      gameConfig: [{ _id: "default", nppFundRedemptionEnabled: false }],
+      indexFundTransactions: [{ kind: "subscription", turn: 10, amountAnchor: 100 }],
+    });
+    const t = await collectEconomyTelemetry(db);
+    expect(t.funds.flags.nppFundRedemptionEnabled).toEqual({ requested: false, available: true });
   });
 });
 
@@ -407,4 +418,22 @@ describe("#2119 era/cost telemetry", () => {
       expect(v).toBeGreaterThan(0);
     }
   });
+});
+
+it("quotes actual 1991 prices from gameConfig instead of a stale gameState flag", async () => {
+  const db = fakeDb({
+    gameState: [{ _id: "current", preset: "1991-default", campaignEraPriceLevelEnabled: false }],
+    gameConfig: [{ _id: "default", campaignEraPriceLevelEnabled: true }],
+  });
+  const t = await collectEconomyTelemetry(db);
+  expect(t.eraCosts.flags.campaignEraPriceLevelEnabled).toEqual({
+    requested: true,
+    available: true,
+  });
+  expect(t.eraCosts.referenceCosts.fundsAtNationalAverageGdp.campaign[0]).toBe(
+    Math.round(20000 * 0.35808)
+  );
+  expect(t.eraCosts.referenceCosts.fundsAtNationalAverageGdp.advertise).toBe(
+    Math.round(100000 * 0.35808)
+  );
 });

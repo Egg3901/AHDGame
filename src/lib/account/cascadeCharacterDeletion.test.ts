@@ -3,6 +3,10 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { stubElectionCandidates } from "@/lib/test-utils/stubElectionCandidates";
 
+vi.mock("@/lib/savings/closeCharacterSavings", () => ({
+  closeCharacterSavings: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(true),
 }));
@@ -51,6 +55,16 @@ describe("cascadeCharacterDeletion", () => {
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 42 });
+  });
+
+  it("stops deletion cleanup if savings cannot settle", async () => {
+    const { closeCharacterSavings } = await import("@/lib/savings/closeCharacterSavings");
+    vi.mocked(closeCharacterSavings).mockRejectedValueOnce(new Error("Savings closure unfinished"));
+    const { cascadeCharacterDeletion } = await import("./cascadeCharacterDeletion");
+    await expect(cascadeCharacterDeletion(db as unknown as Db, new ObjectId())).rejects.toThrow(
+      "Savings closure unfinished"
+    );
+    expect(db.collection("corporations").updateMany).not.toHaveBeenCalled();
   });
 
   it("cleans personal and CEO-corporation activity before vacating seats", async () => {

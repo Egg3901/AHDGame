@@ -69,6 +69,15 @@ export interface BalanceSnapshot {
   balances: Record<string, number>;
   /** Local-currency units per anchor unit at snapshot time. */
   anchorRates?: Record<string, number>;
+  /** Account-specific valuation provenance; does not create a tradable FX rate. */
+  accountValuations?: Record<
+    string,
+    {
+      anchorRate: number;
+      anchorRateSource: "observed" | "authored_budget_only";
+      anchorRatePreset: string;
+    }
+  >;
   /**
    * When the balances were re-baselined after an admin reseed / era reset
    * (see reconcile.ts resetEpoch handling), stock-vs-flow is skipped for the
