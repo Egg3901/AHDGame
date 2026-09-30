@@ -9,7 +9,11 @@ import type {
   GlobalResponseOutcome,
 } from "@/lib/db/types/crisis";
 import { ApiError } from "@/lib/api/errors";
-import { createAsyncIterableCursor, createMockDb } from "@/lib/test-utils/mockDb";
+import {
+  createAsyncIterableCursor,
+  createMockDb,
+  type MockCollection,
+} from "@/lib/test-utils/mockDb";
 import {
   recordGlobalResponseCommitment,
   globalResponseRoleFor,
@@ -357,7 +361,7 @@ describe("concurrent national campaign commitments", () => {
     "retains both countries when reads collide (stored campaign: %s)",
     async (hasCampaign) => {
       const db = createMockDb();
-      const collection = db.collection("livingConflicts");
+      const collection: MockCollection = db.collection("livingConflicts");
       const stored: LivingConflictState = {
         ...emptyConflictState("transnational_terrorism"),
         tracks: { threatCapability: 61 },
@@ -376,24 +380,29 @@ describe("concurrent national campaign commitments", () => {
         return snapshot;
       });
       let collisions = 0;
-      collection.updateOne.mockImplementation(async (filter, update) => {
-        // Model Mongo's atomic equality guard, including the stale first read.
-        if (
-          filter.campaign &&
-          JSON.stringify(filter.campaign) !== JSON.stringify(stored.campaign)
-        ) {
-          collisions++;
-          return { matchedCount: 0, modifiedCount: 0 };
-        }
-        for (const [path, value] of Object.entries(update.$set)) {
-          if (path.startsWith("tracks.")) {
-            stored.tracks = { ...stored.tracks, [path.slice(7)]: Number(value) };
-          } else {
-            Object.assign(stored, { [path]: value });
+      collection.updateOne.mockImplementation(
+        async (
+          filter: { campaign?: { $exists?: boolean } },
+          update: { $set: Record<string, unknown> }
+        ) => {
+          // Model Mongo's atomic equality guard, including the stale first read.
+          if (
+            filter.campaign &&
+            JSON.stringify(filter.campaign) !== JSON.stringify(stored.campaign)
+          ) {
+            collisions++;
+            return { matchedCount: 0, modifiedCount: 0 };
           }
+          for (const [path, value] of Object.entries(update.$set)) {
+            if (path.startsWith("tracks.")) {
+              stored.tracks = { ...stored.tracks, [path.slice(7)]: Number(value) };
+            } else {
+              Object.assign(stored, { [path]: value });
+            }
+          }
+          return { matchedCount: 1, modifiedCount: 1 };
         }
-        return { matchedCount: 1, modifiedCount: 1 };
-      });
+      );
       const event = {
         ...crisis(),
         livingConflictEventId: "terrorism:concurrent:1",
