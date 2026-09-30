@@ -21,7 +21,8 @@ function inferCountryIdFromBill(bill: Pick<Bill, "countryId" | "stateId">): Coun
 }
 
 export function billRequiresExecutiveAction(
-  bill: Pick<Bill, "countryId" | "stateId" | "internationalAction" | "provisions">
+  bill: Pick<Bill, "countryId" | "stateId" | "internationalAction" | "provisions">,
+  hasPresidentialExecutive?: boolean
 ): boolean {
   const countryId = inferCountryIdFromBill(bill);
   if (!countryId) return true;
@@ -29,7 +30,8 @@ export function billRequiresExecutiveAction(
   // parliamentary/one-party systems enact directly. Keying on country id
   // ("US only") silently skipped the signature stage for other presidential
   // countries — NG bills enacted instantly with no sign/veto (ticket #923).
-  if (COUNTRY_CONFIGS[countryId].governmentType !== "presidential") return false;
+  if (!(hasPresidentialExecutive ?? COUNTRY_CONFIGS[countryId].governmentType === "presidential"))
+    return false;
   // International-org actions (legacy internationalAction OR the new provision)
   // auto-resolve — they don't go through executive action.
   const hasIntOrgProvision = bill.provisions?.some((p) => p.type === "international_organization");

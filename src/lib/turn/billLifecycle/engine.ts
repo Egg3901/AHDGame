@@ -18,7 +18,7 @@ import {
   tallyOverrideByChamber,
   type ChamberSeatMap,
 } from "@/lib/congress/vetoOverrideTally";
-import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { getCountryConfig, type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import {
   billHasDeclareWar,
   billHasNatPrivProvision,
@@ -65,6 +65,11 @@ export interface BillLifecycleResult {
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** Legacy bills without a country belong to the US, never another legislature. */
+function billCountryScope(config: BillLifecycleConfig): Record<string, unknown> {
+  return { countryId: config.country === "US" ? { $in: ["US", null] } : config.country };
+}
+
 /** Record a successful transition into `status` (for dispatcher-derived counters). */
 function recordTransition(result: BillLifecycleResult, status: string): void {
   result.transitionedTo[status] = (result.transitionedTo[status] ?? 0) + 1;
@@ -80,13 +85,14 @@ async function evaluatePassRule(
   db: Db,
   bill: Bill,
   rule: PassRule,
-  totals: VoteTotals
+  totals: VoteTotals,
+  governmentType?: GovernmentType
 ): Promise<boolean> {
   // Nationalize/privatize bills, and war declarations, need a two-thirds
   // supermajority of votes cast; that bar already exceeds Senate cloture, so it
   // supersedes the filibuster.
   const { rule: baseRule } = getBillPassRule(
-    getCountryConfig((bill.countryId ?? "US") as CountryId).governmentType,
+    governmentType ?? getCountryConfig((bill.countryId ?? "US") as CountryId).governmentType,
     billHasNatPrivProvision(bill.provisions),
     billHasDeclareWar(bill.provisions)
   );
@@ -153,7 +159,11 @@ export async function runBillLifecycle(
   if (config.activateProposed && firstChamber) {
     const proposed = await db
       .collection<Bill>("bills")
-      .find({ status: "proposed", originChamber: { $in: config.originChambers } })
+      .find({
+        ...billCountryScope(config),
+        status: "proposed",
+        originChamber: { $in: config.originChambers },
+      } as Filter<Bill>)
       .toArray();
     for (const bill of proposed) {
       const chamberType = firstChamber.officeTypeFor(bill);
@@ -228,6 +238,7 @@ async function closeOverrideStage(
   result: BillLifecycleResult
 ): Promise<void> {
   const expiredFilter: Record<string, unknown> = {
+    ...billCountryScope(config),
     status: stage.status,
     $or: [
       { overrideVotingEndsOnTurn: { $lte: currentTurn } },
@@ -358,6 +369,7 @@ async function closeExecutiveStage(
   // The active sign/veto is driven by the executive-action API endpoint; the
   // engine only handles the deadline expiring — pocket-sign into law.
   const expiredFilter: Record<string, unknown> = {
+    ...billCountryScope(config),
     status: stage.status,
     $or: [
       { presidentActionDeadlineOnTurn: { $lte: currentTurn } },
@@ -417,6 +429,7 @@ async function closeChamberVoteStage(
     stage.voteField === "otherChamberVotes" ? "otherChamberVotingEndsAt" : "votingEndsAt";
 
   const expiredFilter: Record<string, unknown> = {
+    ...billCountryScope(config),
     status: stage.status,
     $or: [
       { [onTurnField]: { $lte: currentTurn } },
@@ -440,7 +453,13 @@ async function closeChamberVoteStage(
       currentTurn
     );
     const fields = tallyFields(stage.voteField, res);
-    const passed = await evaluatePassRule(db, bill, stage.passRule, res.totals);
+    const passed = await evaluatePassRule(
+      db,
+      bill,
+      stage.passRule,
+      res.totals,
+      config.governmentType
+    );
 
     if (!passed) {
       // Bill-dependent reject routing (JP Sangiin: sangiin-origin fails; else the
@@ -548,7 +567,8 @@ async function closeChamberVoteStage(
       if (
         nextStage.windowHours === 0 ||
         config.lordsRevisionFlavor != null ||
-        (stage.execActionCheckOnPass && !billRequiresExecutiveAction(bill))
+        (stage.execActionCheckOnPass &&
+          !billRequiresExecutiveAction(bill, config.hasPresidentialExecutive))
       ) {
         await enterSigned(
           db,
@@ -747,6 +767,7 @@ async function closeConcurrentVoteStage(
   // The CLOSE filter ANDs the deadline pairs — a bill must not close while a chamber is
   // still voting. (The NPP FETCH filter ORs them: poll while EITHER is open.)
   const expiredFilter: Record<string, unknown> = {
+    ...billCountryScope(config),
     status: stage.status,
     $and: [
       {
@@ -787,7 +808,8 @@ async function closeConcurrentVoteStage(
     // — it bundles Senate cloture, which a concurrent bill never faces (the filibuster
     // route refuses these outright).
     const { rule } = getBillPassRule(
-      getCountryConfig((bill.countryId ?? "US") as CountryId, preset).governmentType,
+      config.governmentType ??
+        getCountryConfig((bill.countryId ?? "US") as CountryId, preset).governmentType,
       billHasNatPrivProvision(bill.provisions),
       billHasDeclareWar(bill.provisions)
     );
@@ -830,7 +852,11 @@ async function closeConcurrentVoteStage(
     const execStage = config.stages.find(
       (s): s is ExecutiveActionStage => s.kind === "executiveAction"
     );
-    if (stage.execActionCheckOnPass && execStage && billRequiresExecutiveAction(bill)) {
+    if (
+      stage.execActionCheckOnPass &&
+      execStage &&
+      billRequiresExecutiveAction(bill, config.hasPresidentialExecutive)
+    ) {
       await enterExecutive(db, bill, execStage, "votes", fields, now, currentTurn, result);
       continue;
     }

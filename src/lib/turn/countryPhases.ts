@@ -181,8 +181,7 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
     fn: processCNBillLifecycle,
     emptyResult: { enacted: 0, failed: 0 },
   },
-  // RU: the one-party lifecycle with the D8/D9 crossover branch (bicameral,
-  // contested upper chamber — a bill must clear both Supreme Soviet chambers).
+  // RU resolves the active Union, Congress or Assembly, retaining older-era rules.
   RU: {
     phaseName: "ruBillLifecycle",
     fn: processRUBillLifecycle,

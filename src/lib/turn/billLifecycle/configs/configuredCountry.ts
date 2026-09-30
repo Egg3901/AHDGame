@@ -3,7 +3,9 @@ import {
   getExecutiveOfficeKey,
   isPresidentialGovernmentType,
   type CountryId,
+  type CountryConfig,
 } from "@/lib/constants/countries";
+import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
 import {
   getOfficeTypeForChamber,
   getUpperChamberOfficeType,
@@ -25,14 +27,39 @@ const EXECUTIVE_ACTION_HOURS = 10;
  */
 export function buildConfiguredCountryBillLifecycle(
   countryId: CountryId,
-  preset?: string
+  preset?: string,
+  runtimeCountry?: CountryConfig
 ): BillLifecycleConfig {
-  const country = getCountryConfig(countryId, preset);
+  const country = runtimeCountry ?? getCountryConfig(countryId, preset);
+  if (country.id !== countryId) throw new Error("Bill lifecycle country snapshot disagrees");
+  const offices = resolveCountryOfficeLayout(country);
   const lowerChamber = country.legislature.lowerChamber.key;
-  const upperOfficeType = getUpperChamberOfficeType(countryId, preset);
+  const upperOfficeType = runtimeCountry
+    ? offices.upperOfficeType
+    : getUpperChamberOfficeType(countryId, preset);
   const upperChamber = upperOfficeType ? country.legislature.upperChamber?.key : undefined;
   const hasElectedUpperChamber = Boolean(upperChamber && country.upperElectionSystem);
-  const hasPresidentialAction = isPresidentialGovernmentType(country.governmentType);
+  const hasPresidentialAction =
+    isPresidentialGovernmentType(country.governmentType) ||
+    (runtimeCountry !== undefined &&
+      offices.headOfStateOfficeType === "president" &&
+      country.headOfStateSelection !== "legislatureAppointment");
+  const officeTypeFor = (bill: {
+    currentChamber: string;
+    originChamber?: string;
+    preset?: string;
+  }) =>
+    runtimeCountry
+      ? [lowerChamber, offices.lowerOfficeType].includes(
+          bill.currentChamber || bill.originChamber || ""
+        )
+        ? offices.lowerOfficeType
+        : [upperChamber, offices.upperOfficeType].includes(
+              bill.currentChamber || bill.originChamber || ""
+            )
+          ? (offices.upperOfficeType ?? "")
+          : ""
+      : getOfficeTypeForChamber(countryId, bill.currentChamber, bill.preset ?? preset);
 
   const finalVoteStatus = hasPresidentialAction ? "enrolled" : "signed";
   const stages: BillStage[] = [
@@ -40,11 +67,11 @@ export function buildConfiguredCountryBillLifecycle(
       kind: "chamberVote",
       status: "active",
       voteField: "votes",
-      officeTypeFor: (bill) =>
-        getOfficeTypeForChamber(countryId, bill.currentChamber, bill.preset ?? preset),
+      officeTypeFor,
       passRule: "simpleMajority",
       onReject: "fail",
       onPassStatus: hasElectedUpperChamber ? "active_other" : finalVoteStatus,
+      execActionCheckOnPass: hasPresidentialAction,
       votingDurationHours: VOTING_HOURS,
     },
   ];
@@ -54,14 +81,15 @@ export function buildConfiguredCountryBillLifecycle(
       kind: "chamberVote",
       status: "active_other",
       voteField: "otherChamberVotes",
-      officeTypeFor: (bill) =>
-        getOfficeTypeForChamber(countryId, bill.currentChamber, bill.preset ?? preset),
+      officeTypeFor,
       passRule: "simpleMajority",
       onReject: "fail",
       onPassStatus: finalVoteStatus,
       votingDurationHours: VOTING_HOURS,
       chamberOnEnter: (bill) =>
-        bill.currentChamber === lowerChamber ? upperChamber : lowerChamber,
+        [lowerChamber, offices.lowerOfficeType].includes(bill.currentChamber)
+          ? upperChamber
+          : lowerChamber,
       execActionCheckOnPass: hasPresidentialAction,
     });
   }
@@ -71,16 +99,37 @@ export function buildConfiguredCountryBillLifecycle(
       kind: "executiveAction",
       status: "enrolled",
       execKind: "presidentVeto",
-      officeType: getExecutiveOfficeKey(countryId, preset),
+      officeType: runtimeCountry
+        ? (offices.headOfStateOfficeType ?? getExecutiveOfficeKey(countryId, preset))
+        : getExecutiveOfficeKey(countryId, preset),
       windowHours: EXECUTIVE_ACTION_HOURS,
       onTimeout: "sign",
     });
   }
 
-  stages.push(CONCURRENT_VOTE_STAGE);
+  stages.push(
+    runtimeCountry
+      ? {
+          ...CONCURRENT_VOTE_STAGE,
+          chambersFor: () => offices.jointSittingOfficeTypes,
+          voteFieldFor: (_bill, officeType) =>
+            officeType === offices.lowerOfficeType ? "votes" : "otherChamberVotes",
+        }
+      : CONCURRENT_VOTE_STAGE
+  );
+  if (runtimeCountry && hasPresidentialAction)
+    stages.push({
+      kind: "override",
+      status: "veto_override",
+      threshold: "twoThirdsSeats",
+      chambers: offices.jointSittingOfficeTypes,
+      votingDurationHours: VOTING_HOURS,
+    });
 
   return {
     country: countryId,
+    governmentType: country.governmentType,
+    hasPresidentialExecutive: hasPresidentialAction,
     level: "national",
     originChambers: [
       lowerChamber,
