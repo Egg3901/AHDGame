@@ -663,6 +663,8 @@ export interface CountryGameState {
   roParliament1992SinceTurn?: number;
   /** RU 1991: ratified succession changed the playable RU slot from USSR to Russia. */
   ruSovietSuccessionSinceTurn?: number;
+  /** Retained district capacity of the negotiated provisional Russian Congress. */
+  ruProvisionalCongressSeats?: number;
   /** RU 1991: enacted authority to establish the post-Soviet presidential office. */
   ruPresidencyMandateSinceTurn?: number;
   /** RU 1991: the first presidential election has a certified result. */

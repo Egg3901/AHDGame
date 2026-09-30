@@ -1,5 +1,6 @@
 import { MongoClient, ObjectId, type CommandStartedEvent } from "mongodb";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { sovietUnionRegions1991 } from "@/lib/countries/ru/data/sovietUnionRegions1991";
 import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { openDefaultFederationPoliticalProposal } from "@/lib/world/succession/defaultProposal";
 import { recordFederationRatifications } from "@/lib/world/succession/recordRatifications";
@@ -294,5 +295,178 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     expect(
       await db.collection("federationSettlementApplications").findOne({ sourceEntityId: "CS" })
     ).toMatchObject({ appliedOnTurn: 182 });
+  });
+  it("rolls back the complete Soviet handoff, retries with retained mandates and never duplicates them", async () => {
+    const db = client.db(databaseName);
+    // Remove the independent Czech proposal so this fixture exercises one full Soviet activation.
+    await db.collection("federationPoliticalProposals").deleteMany({});
+    await db.collection("federationRatifications").deleteMany({});
+    await db
+      .collection<Fixture>("countryGameStates")
+      .insertOne({ _id: "RU", enabledForPlayers: true, status: "active" });
+    await db
+      .collection<Fixture>("countryState")
+      .insertOne({ _id: "RU", countryId: "RU", governmentType: "onePartyState", rulingPartyId: 1 });
+    await db
+      .collection<Fixture>("states")
+      .insertMany(sovietUnionRegions1991.map((row) => ({ ...row })));
+    await db.collection<Fixture>("federalBudget").insertOne({
+      _id: "RU",
+      countryId: "RU",
+      currencyCode: "RUB",
+      treasuryBalance: 100,
+      debt: { principal: 200 },
+    });
+    await db
+      .collection<Fixture>("exchangeRates")
+      .insertOne({ _id: "RUB", currencyCode: "RUB", rate: 1 });
+    const sovietBondId = new ObjectId();
+    await db.collection("bonds").insertOne({
+      _id: sovietBondId,
+      issuerType: "sovereign",
+      countryId: "RU",
+      currencyCode: "RUB",
+      totalIssued: 200,
+      couponRate: 4.8,
+      maturityTurn: 300,
+      holders: [{ units: 0.2 }],
+      publicFloat: 0,
+      matured: false,
+      defaulted: false,
+    });
+    const retained = sovietUnionRegions1991.find((row) => !row._id.startsWith("SU_"))!;
+    const playerId = new ObjectId();
+    const slateId = new ObjectId();
+    await db.collection("characters").insertOne({
+      _id: playerId,
+      countryId: "RU",
+      homeState: retained._id,
+      cash: 75,
+      currentOffice: { type: "unionCongressDeputy" },
+    });
+    await db.collection("npps").insertOne({
+      _id: slateId,
+      countryId: "RU",
+      funds: 125,
+      homeState: retained._id,
+      currentOffice: { type: "unionCongressDeputy" },
+    });
+    await db.collection("electedOfficials").insertMany([
+      {
+        _id: new ObjectId(),
+        countryId: "RU",
+        officeType: "unionCongressDeputy",
+        state: retained._id,
+        characterId: playerId,
+        party: "2",
+        seatsHeld: 1,
+      },
+      {
+        _id: new ObjectId(),
+        countryId: "RU",
+        officeType: "unionCongressDeputy",
+        state: retained._id,
+        nppId: slateId,
+        party: "1",
+        seatsHeld: 3,
+      },
+    ]);
+    const proposal = await openDefaultFederationPoliticalProposal({
+      db,
+      sourceCountryId: "RU",
+      currentYear: 1992,
+      now: new Date(0),
+    });
+    await db
+      .collection("bills")
+      .updateOne({ _id: proposal.billId }, { $set: { status: "signed", enactedAt: new Date(1) } });
+    const decisions = await recordFederationRatifications({
+      db,
+      sourceCountryId: "RU",
+      settlementId: proposal.settlementId,
+      revision: proposal.revision,
+      currentTurn: 181,
+    });
+    expect(decisions).toHaveLength(15);
+    expect(decisions.every((row) => row.choice === "approve")).toBe(true);
+    await db.createCollection("federationSettlementApplications", {
+      validator: { blocked: { $eq: true } },
+    });
+    await expect(
+      processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
+    ).rejects.toThrow(/validation/i);
+    expect(await db.collection("states").countDocuments({ countryId: "RU" })).toBe(
+      sovietUnionRegions1991.length
+    );
+    expect(
+      await db
+        .collection("electedOfficials")
+        .countDocuments({ countryId: "RU", officeType: "unionCongressDeputy" })
+    ).toBe(2);
+    expect(await db.collection("characters").findOne({ _id: playerId })).toMatchObject({
+      cash: 75,
+      currentOffice: { type: "unionCongressDeputy" },
+    });
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruSovietSuccessionSinceTurn");
+    for (const name of [
+      "federationArchivedPoliticalRows",
+      "governmentFormations",
+      "federationFiscalAccounts",
+      "worldEntityStates",
+      "macroCountries",
+    ]) {
+      expect(await db.collection(name).countDocuments({})).toBe(0);
+    }
+    await db.command({ collMod: "federationSettlementApplications", validator: {} });
+    commands = 0;
+    expect(
+      await processRatifiedFederationSettlements(db, "1991-default", 182, 1992, new Date(3))
+    ).toBe(1);
+    const activationCommands = commands;
+    const capacity = sovietUnionRegions1991
+      .filter((row) => !row._id.startsWith("SU_"))
+      .reduce((sum, row) => sum + row.houseDistricts, 0);
+    expect(await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })).toMatchObject({
+      ruSovietSuccessionSinceTurn: 182,
+      ruProvisionalCongressSeats: capacity,
+    });
+    expect(
+      await db.collection<Fixture>("governmentFormations").findOne({ _id: "RU" })
+    ).toMatchObject({
+      status: "pending",
+      totalSeats: capacity,
+      majorityThreshold: Math.floor(capacity / 2) + 1,
+      seatsByParty: { "1": 3, "2": 1 },
+    });
+    expect(await db.collection("characters").findOne({ _id: playerId })).toMatchObject({
+      cash: 75,
+      currentOffice: { type: "congressDeputy" },
+    });
+    expect(await db.collection("npps").findOne({ _id: slateId })).toMatchObject({
+      funds: 125,
+      currentOffice: { type: "congressDeputy", seatsHeld: 3 },
+    });
+    expect(await db.collection("macroCountries").countDocuments({})).toBe(14);
+    expect(await db.collection("bonds").findOne({ _id: sovietBondId })).toMatchObject({
+      countryId: "RU",
+      currencyCode: "RUB",
+      totalIssued: 200,
+      matured: false,
+      defaulted: false,
+    });
+    expect(
+      await processRatifiedFederationSettlements(db, "1991-default", 183, 1992, new Date(4))
+    ).toBe(0);
+    expect(
+      await db
+        .collection("electedOfficials")
+        .countDocuments({ countryId: "RU", officeType: "congressDeputy" })
+    ).toBe(2);
+    expect(await db.collection("federationArchivedPoliticalRows").countDocuments({})).toBe(2);
+    console.info(
+      `Soviet replica-set qualification: activation=${activationCommands} commands; retainedCapacity=${capacity}`
+    );
   });
 });

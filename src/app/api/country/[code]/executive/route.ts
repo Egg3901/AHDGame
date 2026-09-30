@@ -40,7 +40,7 @@ import {
 } from "@/lib/turn/parliamentaryGovernment";
 import { getGameTime } from "@/lib/time/gameTime";
 import { computeParliamentaryGovernmentTally } from "@/lib/congress/governmentVoteBreakdown";
-import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
+import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
 import { SNAP_ELECTION_LIMIT, SNAP_ELECTION_COOLDOWN_TURNS } from "@/lib/turn/snapElection";
 import { getConfidenceConsequenceLevel } from "@/lib/turn/rulingPartyPriorities";
 
@@ -230,6 +230,8 @@ async function handleParliamentary(countryId: CountryId) {
       ? db
           .collection<{
             _id: string;
+            ruSovietSuccessionSinceTurn?: number;
+            ruProvisionalCongressSeats?: number;
             ruPresidencySinceTurn?: number;
             ruCongressDissolvedSinceTurn?: number;
             ruFederalAssemblySinceTurn?: number;
@@ -242,7 +244,7 @@ async function handleParliamentary(countryId: CountryId) {
   // chamber key for CN (key "npc" vs office type "npcDelegate"); using the raw
   // key would match zero CN delegates, collapsing seat weights to an unweighted
   // count and breaking viewer-is-delegate detection. Mirrors the executive hub.
-  const lowerChamberKey = getLowerChamberOfficeType(countryId);
+  const lowerChamberKey = resolveCountryOfficeLayout(config).lowerOfficeType;
 
   // Inline-resolve any expired parliamentary votes before reading state, so
   // clients polling this endpoint see the post-resolution PM/vote state rather

@@ -33,6 +33,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
         ? db
             .collection<{
               _id: string;
+              ruSovietSuccessionSinceTurn?: number;
+              ruProvisionalCongressSeats?: number;
               ruPresidencySinceTurn?: number;
               ruCongressDissolvedSinceTurn?: number;
               ruFederalAssemblySinceTurn?: number;
