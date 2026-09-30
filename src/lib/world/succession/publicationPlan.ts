@@ -33,6 +33,10 @@ export function buildFederationPublicationPlan(
     snapshot;
   const entries = [activationPlan.sourceEntity, ...activationPlan.successorEntities];
   const entityIds = entries.map((entry) => entry.entityId);
+  const sourceFirmIds = snapshot.firms.map((firm) => firm.corporationId);
+  const plannedFirmIds = privateFirmPlans.map((firm) => firm.corporationId);
+  const sourceResidentIds = snapshot.residents.map((resident) => resident.characterId);
+  const plannedResidentIds = residencePlans.map((resident) => resident.characterId);
   if (
     intent.status !== "staged" ||
     intent.presetId !== "1991-default" ||
@@ -57,14 +61,11 @@ export function buildFederationPublicationPlan(
         (activationPlan.sourceEntity.status === "dissolved" ? 0 : 1) ||
     fiscalShares.filter((share) => share.kind === "legacy-administration").length !==
       (activationPlan.sourceEntity.status === "dissolved" ? 1 : 0) ||
-    privateFirmPlans.length !== snapshot.firms.length ||
-    privateFirmPlans.some(
-      (firm) => !snapshot.firms.some((source) => source.corporationId === firm.corporationId)
-    ) ||
-    residencePlans.some(
-      (resident) =>
-        !snapshot.residents.some((source) => source.characterId === resident.characterId)
-    )
+    new Set(sourceFirmIds).size !== sourceFirmIds.length ||
+    new Set(sourceResidentIds).size !== sourceResidentIds.length ||
+    new Set(plannedResidentIds).size !== plannedResidentIds.length ||
+    sourceFirmIds.sort().join(",") !== plannedFirmIds.sort().join(",") ||
+    plannedResidentIds.some((id) => !sourceResidentIds.includes(id))
   )
     throw new Error("Federation publication inventory disagrees with approved entities");
   const receipt: FederationSettlementApplicationRecord = {

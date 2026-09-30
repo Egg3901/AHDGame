@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import { hashSettlementPayload } from "./settlementIntent";
 import type { FederationPublicationPlan } from "./publicationPlan";
 import {
@@ -195,15 +195,16 @@ export async function prepareFederationPublication(
 /** The final writer calls this before any effective step or receipt. */
 export async function verifyPreparedFederationPublication(
   db: Db,
-  applicationId: string
+  applicationId: string,
+  session?: ClientSession
 ): Promise<FederationPreparedEffect[]> {
   const preparation = await db
     .collection<FederationPublicationPreparation>(FEDERATION_PUBLICATION_PREPARATIONS_COLLECTION)
-    .findOne({ _id: applicationId, status: "prepared" });
+    .findOne({ _id: applicationId, status: "prepared" }, { session });
   if (!preparation) throw new Error("Federation publication has no prepared inventory");
   const effects = await db
     .collection<FederationPreparedEffect>(FEDERATION_PREPARED_EFFECTS_COLLECTION)
-    .find({ applicationId })
+    .find({ applicationId }, { session })
     .toArray();
   effects.sort((a, b) => a._id.localeCompare(b._id));
   if (
@@ -222,7 +223,7 @@ export async function verifyPreparedFederationPublication(
   const entityEffects = effects.filter((effect) => effect.kind === "entity-state");
   const states = await db
     .collection<RuntimeWorldEntityState>(WORLD_ENTITY_STATES_COLLECTION)
-    .find({ applicationId })
+    .find({ applicationId }, { session })
     .toArray();
   const stateById = new Map(states.map((state) => [state._id, state]));
   if (
