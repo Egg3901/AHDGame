@@ -17,8 +17,9 @@ import { buildFederationPublicationPlan } from "./publicationPlan";
 import {
   prepareFederationPublication,
   verifyPreparedFederationPublication,
+  type FederationPreparedEffect,
 } from "./preparePublication";
-import { loadRuntimeWorldEntities } from "./runtimeEntities";
+import { loadRuntimeWorldEntities, type RuntimeWorldEntityState } from "./runtimeEntities";
 
 const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
@@ -409,7 +410,7 @@ describe("live federation settlement intent", () => {
     const plan = buildFederationPublicationPlan(intent, snapshot);
     const preparation = await prepareFederationPublication(args.db, plan, new Date(2));
     await args.db
-      .collection("federationPreparedEffects")
+      .collection<FederationPreparedEffect>("federationPreparedEffects")
       .deleteOne({ _id: preparation.effectIds[0] });
     await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
       "incomplete or altered"
@@ -418,14 +419,16 @@ describe("live federation settlement intent", () => {
     expect(await verifyPreparedFederationPublication(args.db, staged._id)).toHaveLength(
       preparation.effectIds.length
     );
-    await args.db.collection("worldEntityStates").deleteOne({ _id: "1991-default:UKR" });
+    await args.db
+      .collection<RuntimeWorldEntityState>("worldEntityStates")
+      .deleteOne({ _id: "1991-default:UKR" });
     await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
       "sovereign states are incomplete"
     );
     await prepareFederationPublication(args.db, plan, new Date(4));
     await args.db
-      .collection("federationPreparedEffects")
-      .updateOne({ _id: preparation.effectIds[0] }, { $set: { "value.corrupted": true } });
+      .collection<FederationPreparedEffect>("federationPreparedEffects")
+      .updateOne({ _id: preparation.effectIds[0] }, { $set: { value: { corrupted: true } } });
     await expect(verifyPreparedFederationPublication(args.db, staged._id)).rejects.toThrow(
       "incomplete or altered"
     );
