@@ -226,7 +226,10 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
                 corporationId: { $in: corpIds },
               },
             },
-            { $sort: { turn: -1 } },
+            // Sort on the group key first so the {corporationId, turn} index serves
+            // match, sort and $first as a DISTINCT_SCAN (one entry per corporation)
+            // instead of walking the whole history by turn (#2693).
+            { $sort: { corporationId: 1, turn: -1 } },
             {
               $group: {
                 _id: "$corporationId",
@@ -467,7 +470,10 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           .collection<{ corporationId: ObjectId; income?: number }>("corporationHistory")
           .aggregate<{ _id: ObjectId; income: number }>([
             { $match: { corporationId: { $in: bailoutCorpIds } } },
-            { $sort: { turn: -1 } },
+            // Sort on the group key first so the {corporationId, turn} index serves
+            // match, sort and $first as a DISTINCT_SCAN (one entry per corporation)
+            // instead of walking the whole history by turn (#2693).
+            { $sort: { corporationId: 1, turn: -1 } },
             { $group: { _id: "$corporationId", income: { $first: "$income" } } },
           ])
           .toArray();

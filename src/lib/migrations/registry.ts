@@ -95,6 +95,7 @@ import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-i
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
+import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-30-financial-tx-log-counterparty-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -308,6 +309,8 @@ export const MIGRATIONS: Migration[] = [
   // #2688: also in the startup allowlist; listed here so `npm run migrate`
   // reports it and `--only ... --force` can rerun it.
   longHorizonTelemetryIndexes,
+  // #2693: deletion stamping scanned the whole ledger on the counterparty side.
+  financialTxLogCounterpartyIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
