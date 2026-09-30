@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
-import { applyMoneyMove, resumeMoneyMove, type MoneyMove } from "../moneyMove";
+import { applyMoneyMove, closeMoneyMove, resumeMoneyMove, type MoneyMove } from "../moneyMove";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -225,6 +225,20 @@ describe("durable leg outcomes", () => {
     await expect(applyMoneyMove(f.db, f.move)).rejects.toThrow("requires journal reconciliation");
     expect(f.journals.docs[0].legs).toEqual(f.move.legs.map((leg) => ({ ...leg, applied: false })));
     expect(f.balances()).toEqual([1000, 100]);
+  });
+
+  it("preserves an operator-reconciled terminal disposition", async () => {
+    const f = fixture();
+    await f.journals.insertOne({
+      _id: f.move.key,
+      status: "partial",
+      kind: "transfer",
+      legs: f.move.legs.map((leg) => ({ ...leg, applied: false })),
+    });
+    expect(await closeMoneyMove(f.db, f.move.key, "reconciled externally")).toBe(true);
+    expect((await resumeMoneyMove(f.db, f.move.key)).status).toBe("applied");
+    expect(f.balances()).toEqual([1000, 100]);
+    expect(f.journals.docs[0].status).toBe("applied");
   });
 
   it("leaves ambiguous legacy delivery for reconciliation", async () => {

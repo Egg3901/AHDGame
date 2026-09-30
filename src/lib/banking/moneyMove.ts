@@ -507,6 +507,13 @@ async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise
       applied: [],
       error: "Atomic document settlement requires journal recovery",
     };
+  // An operator may have reconciled an older record whose individual leg
+  // acknowledgements are incomplete. Its terminal disposition is authoritative.
+  if (record.status === "applied")
+    return {
+      status: "applied",
+      applied: record.legs.flatMap((leg, i) => (leg.applied ? [i] : [])),
+    };
   let failure: string | undefined;
   for (const i of legOrder(record.legs)) {
     const leg = record.legs[i];
