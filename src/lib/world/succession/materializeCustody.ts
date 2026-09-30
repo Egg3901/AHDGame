@@ -9,6 +9,10 @@ import {
   FEDERATION_ARCHIVED_REGION_ROWS_COLLECTION,
   type FederationArchivedRegionRow,
 } from "./materializeTerritory";
+import {
+  FEDERATION_ARCHIVED_PUBLIC_CORPORATIONS_COLLECTION,
+  type FederationArchivedPublicCorporation,
+} from "./materializePublicCorporations";
 
 export const FEDERATION_CUSTODY_RECORDS_COLLECTION = "federationCustodyRecords";
 
@@ -93,19 +97,35 @@ export async function materializeFederationCustody(input: {
       const corporationId = objectIdFromAsset(assignment.assetId, "enterprise-shell:");
       const corporations = db.collection<Corporation>("corporations");
       const corporation = await corporations.findOne({ _id: corporationId }, { session });
+      const archived = await db
+        .collection<FederationArchivedPublicCorporation>(
+          FEDERATION_ARCHIVED_PUBLIC_CORPORATIONS_COLLECTION
+        )
+        .findOne(
+          { _id: `${applicationId}:${corporationId.toString()}`, applicationId },
+          { session }
+        );
+      if (archived && corporation)
+        throw new Error("Federation public shell exists in both detailed and archived custody");
+      const shell = corporation ?? archived?.value;
       if (
-        !corporation ||
-        !isStateOwned(corporation) ||
-        (corporation.countryOwnerId ?? corporation.countryId) !== sourceCountryId ||
+        !shell ||
+        !isStateOwned(shell) ||
+        (shell.countryOwnerId ?? shell.countryId) !== sourceCountryId ||
         (await db
           .collection<CorporateSector>("corporateSectors")
-          .countDocuments({ corporationId }, { session })) !== 0
+          .countDocuments({ corporationId }, { session })) !== 0 ||
+        (archived &&
+          (assignment.disposition !== "aggregate-background" ||
+            !archived.custodians.includes(assignment.custodianEntityId)))
       )
         throw new Error("Federation custody enterprise shell changed");
       if (assignment.disposition === "aggregate-background") {
-        sourceDocument = corporation;
-        const removed = await corporations.deleteOne({ _id: corporationId }, { session });
-        if (removed.deletedCount !== 1) throw new Error("Federation custody enterprise changed");
+        sourceDocument = shell;
+        if (corporation) {
+          const removed = await corporations.deleteOne({ _id: corporationId }, { session });
+          if (removed.deletedCount !== 1) throw new Error("Federation custody enterprise changed");
+        }
       }
     } else if (assignment.assetId.startsWith("enterprise:")) {
       if (assignment.kind !== "public-enterprise")

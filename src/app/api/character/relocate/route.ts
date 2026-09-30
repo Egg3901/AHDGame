@@ -256,6 +256,7 @@ async function handleGET() {
       cooldownUntil,
       cooldownDays: RELOCATION_COOLDOWN_DAYS,
       homeState: auth.character.homeState,
+      federationPendingResidenceId: auth.character.federationPendingResidenceId ?? null,
       hasOffice: !!auth.character.currentOffice,
       // True when an in-country move would vacate the seat (governor/house/…).
       // Country-scoped offices (VP/President/cabinet) only resign on country change.

@@ -62,6 +62,10 @@ export interface MacroCountryState {
   population: number;
   /** 0–1 fiscal extractive capacity relative to output. */
   fiscalCapacity: number;
+  /** Shared-accounting minor-unit treasury after a ratified federation split. */
+  federationTreasuryMinor?: number;
+  /** Agreed contribution principal toward the original issuer's creditor contracts. */
+  federationDebtResponsibilityMinor?: number;
   /** 0–1 political/economic stability. */
   stability: number;
   /** 0–1 share of aggregate S/D exposed to the shared world market. */

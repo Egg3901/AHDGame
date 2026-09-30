@@ -30,6 +30,7 @@ describe("seed manifest classification coverage", () => {
       "federationPublicCorporationRebases",
       "federationPrivateFirmHolds",
       "federationResidentHolds",
+      "federationFiscalAccounts",
     ]) {
       expect(getCollectionCategory(name)).toBe("runtime");
     }

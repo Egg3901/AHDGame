@@ -1,4 +1,4 @@
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { tier3Entry } from "@/lib/world/registry/builders";
@@ -16,10 +16,12 @@ import type { FederationRatificationRecord } from "./ratificationStore";
 import { buildFederationPublicationPlan } from "./publicationPlan";
 import {
   prepareFederationPublication,
+  verifyPreparedFederationPlan,
   verifyPreparedFederationPublication,
   type FederationPreparedEffect,
 } from "./preparePublication";
 import { loadRuntimeWorldEntities, type RuntimeWorldEntityState } from "./runtimeEntities";
+import { applyPreparedFederationSettlement } from "./applySettlement";
 
 const residentId = new ObjectId("000000000000000000000101");
 const firmId = new ObjectId("000000000000000000000102");
@@ -206,6 +208,62 @@ function scenario() {
 }
 
 describe("live federation settlement intent", () => {
+  it("applies a prepared partition once with territory, macro, fiscal and protected choices", async () => {
+    const { args } = scenario();
+    const staged = await stageLiveFederationSettlementIntent(args);
+    const { intent, snapshot } = await verifyLiveFederationSettlementIntent({
+      db: args.db,
+      intentId: staged._id,
+      sourceCountryId: "RU",
+      appliedOnTurn: 97,
+    });
+    const plan = buildFederationPublicationPlan(intent, snapshot);
+    await prepareFederationPublication(args.db, plan, new Date(2));
+    await expect(
+      applyPreparedFederationSettlement({
+        db: args.db,
+        session: { inTransaction: () => false } as ClientSession,
+        intentId: staged._id,
+        sourceCountryId: "RU",
+        appliedOnTurn: 97,
+        now: new Date(3),
+      })
+    ).rejects.toThrow("active transaction");
+    const application = await applyPreparedFederationSettlement({
+      db: args.db,
+      session: { inTransaction: () => true } as ClientSession,
+      intentId: staged._id,
+      sourceCountryId: "RU",
+      appliedOnTurn: 97,
+      now: new Date(3),
+    });
+    expect(application._id).toBe(staged._id);
+    expect(await args.db.collection("states").findOne({ _id: "UKRAINE" as never })).toBeNull();
+    expect(
+      await args.db.collection("macroCountries").findOne({ _id: "UKR" as never })
+    ).toMatchObject({
+      federationTreasuryMinor: expect.any(Number),
+    });
+    expect(await args.db.collection("federationFiscalAccounts").countDocuments({})).toBe(2);
+    expect(await args.db.collection("federationResidentHolds").countDocuments({})).toBe(1);
+    expect(await args.db.collection("federationPrivateFirmHolds").countDocuments({})).toBe(1);
+    expect(await args.db.collection("federationRelocations").countDocuments({})).toBe(2);
+    expect(await args.db.collection("bonds").findOne({ _id: bondId })).toMatchObject({
+      issuerType: "sovereign",
+      countryId: "RU",
+    });
+    expect(
+      await applyPreparedFederationSettlement({
+        db: args.db,
+        session: { inTransaction: () => true } as ClientSession,
+        intentId: staged._id,
+        sourceCountryId: "RU",
+        appliedOnTurn: 97,
+        now: new Date(4),
+      })
+    ).toEqual(application);
+  });
+
   it("stages one immutable approved snapshot while leaving every source record untouched", async () => {
     const { args } = scenario();
     const first = await stageLiveFederationSettlementIntent(args);
@@ -323,6 +381,26 @@ describe("live federation settlement intent", () => {
     ).toThrow("publication inventory");
     const prepared = await prepareFederationPublication(args.db, publication, new Date(2));
     expect(prepared.effectIds.length).toBeGreaterThan(4);
+    expect(
+      await verifyPreparedFederationPlan(args.db, publication, {} as ClientSession)
+    ).toHaveLength(prepared.effectIds.length);
+    await expect(
+      verifyPreparedFederationPlan(
+        args.db,
+        {
+          ...publication,
+          fiscalShares: publication.fiscalShares.map((share, index) =>
+            index === 0
+              ? {
+                  ...share,
+                  financialAssetEntitlementMinor: share.financialAssetEntitlementMinor + 1,
+                }
+              : share
+          ),
+        },
+        {} as ClientSession
+      )
+    ).rejects.toThrow("disagree with the live approved plan");
     expect(
       (await verifyPreparedFederationPublication(args.db, intent._id)).find(
         (effect) => effect.kind === "source-firm"

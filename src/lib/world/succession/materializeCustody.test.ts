@@ -25,6 +25,44 @@ const transfers = [
 ];
 
 describe("federation custody materialization", () => {
+  it("records a public shell already archived by the corporation materializer", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("federationArchivedPublicCorporations", [
+      {
+        _id: `${applicationId}:${shellId.toString()}`,
+        applicationId,
+        corporationId: shellId.toString(),
+        custodians: ["UKR"],
+        value: {
+          _id: shellId,
+          countryId: "RU",
+          countryOwnerId: "RU",
+          ownershipState: "stateOwned",
+          headquartersState: "UKRAINE",
+        },
+      },
+    ]);
+    const db = mem as unknown as Db;
+    expect(
+      await materializeFederationCustody({
+        db,
+        session: {} as ClientSession,
+        applicationId,
+        sourceCountryId: "RU",
+        assignments: [
+          {
+            assetId: `enterprise-shell:${shellId.toString()}`,
+            kind: "public-enterprise",
+            custodianEntityId: "UKR",
+            disposition: "aggregate-background",
+          },
+        ],
+        transfers,
+      })
+    ).toBe(1);
+    expect(await db.collection("federationCustodyRecords").countDocuments({})).toBe(1);
+  });
+
   it("retires a local unit and public shell while recognizing archived facilities", async () => {
     const mem = createInMemoryDb();
     mem.seed("militaryUnits", [

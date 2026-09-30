@@ -164,6 +164,8 @@ export interface CorporationDetail {
   typeLabel: string;
   headquartersState: string;
   headquartersStateName: string;
+  /** Ratified federation settlement awaiting the owner's playable HQ choice. */
+  federationPendingHeadquartersId?: string;
   liquidCapital: number;
   /** Currency code for liquidCapital (defaults to "USD" for pre-forex corps) */
   liquidCurrencyCode: string;
