@@ -142,7 +142,7 @@ export async function garnishLocFromIncome(
       }
       const flows: LocEffect["flows"] = Object.entries(income).map(([currency, amount]) => ({
         currency,
-        kind: "source_income",
+        kind: "debit",
         amount,
         note: `Accepted ${source} income before wallet payout`,
       }));
@@ -153,6 +153,26 @@ export async function garnishLocFromIncome(
           ["burn", principalPaid[c] ?? 0, "LOC principal retired"],
         ] as const)
           if (amount > 0) flows.push({ currency: c, kind, amount, note });
+      for (const [currency, amount] of Object.entries(income)) {
+        const diverted = amount - (remaining[currency] ?? 0);
+        if (diverted > 0)
+          flows.push({
+            currency,
+            kind: "burn",
+            amount: diverted,
+            note: "Accepted source-income conversion into LOC payment",
+          });
+      }
+      for (const c of FOREX_ACTIVE_CURRENCIES) {
+        const paid = (interest[c] ?? 0) + (principalPaid[c] ?? 0);
+        if (paid > 0)
+          flows.push({
+            currency: c,
+            kind: "mint",
+            amount: paid,
+            note: "Original allocated LOC-currency payment from diverted income",
+          });
+      }
       const settled = await settleLocPlan(db, key, turn, {
         characterId: char._id,
         expectedLoc: loc,

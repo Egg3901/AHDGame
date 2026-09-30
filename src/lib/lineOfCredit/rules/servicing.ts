@@ -202,6 +202,7 @@ export function quoteLocService(input: LocServiceInput) {
     personalUsed,
     savingsUsed,
     interestAccruals,
+    walletPayments,
     payments,
     interestPortions,
     principalPortions,

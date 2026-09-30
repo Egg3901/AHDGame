@@ -4,7 +4,7 @@ title: Recover interrupted line-of-credit payments
 summary: Preserve the original borrowing and repayment command across interrupted delivery.
 tags: [banking, bugfix]
 badges: [patch]
-areas: [economy]
+areas: [fullstack]
 ---
 
 - Borrowing and repayment keep a command receipt, preventing an uncertain delivery from charging or borrowing again on retry.

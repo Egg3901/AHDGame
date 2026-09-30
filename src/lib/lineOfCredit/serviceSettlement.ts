@@ -129,6 +129,26 @@ export async function prepareServiceEffect(
     ] as const)
       if (amount > 0) flows.push({ currency: c, kind, amount, note });
   }
+  for (const [target, sources] of Object.entries(quote.crossConverted)) {
+    for (const [currency, amount] of Object.entries(sources ?? {}))
+      if (amount && amount > 0)
+        flows.push({
+          currency,
+          kind: "burn",
+          amount,
+          note: `Original quoted LOC conversion into ${target}`,
+        });
+    const received =
+      (quote.payments[target as CurrencyCode] ?? 0) -
+      (quote.walletPayments[target as CurrencyCode] ?? 0);
+    if (received > 0)
+      flows.push({
+        currency: target,
+        kind: "mint",
+        amount: received,
+        note: "Original quoted cross-currency LOC payment",
+      });
+  }
   return {
     locAfter: quote.locAfter,
     walletInc,

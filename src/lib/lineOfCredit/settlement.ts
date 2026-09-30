@@ -14,6 +14,7 @@ import { buildTxDocs, loadAnchorRateMap, loadTxThresholds } from "@/lib/financia
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { checkBalancedTransfer, type ValueLeg } from "@/lib/banking/rules/invariants";
 import { prepareServiceEffect } from "./serviceSettlement";
 
 export interface LocEffect {
@@ -59,6 +60,20 @@ export async function loadLocSettlement(db: Db, key: string) {
 }
 
 async function recordsFor(db: Db, key: string, plan: LocPlan) {
+  for (const currency of new Set(plan.effect.flows.map((flow) => flow.currency))) {
+    const flows = plan.effect.flows.filter((flow) => flow.currency === currency);
+    if (
+      flows.some(
+        (flow) =>
+          !["debit", "credit", "mint", "burn"].includes(flow.kind) ||
+          !Number.isFinite(flow.amount) ||
+          flow.amount < 0
+      ) ||
+      checkBalancedTransfer(flows as ValueLeg[], key).length
+    )
+      throw new Error(`Unbalanced original LOC cash flows in ${currency}`);
+  }
+
   const entries = plan.effect.transactions.map((entry) => ({
     ...entry,
     createdAt: plan.createdAt,

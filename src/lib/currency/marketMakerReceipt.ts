@@ -114,6 +114,18 @@ export async function settleMarketMakerReceipt(
           note: "Original residual FX source wallet",
         },
         {
+          currency: p.fromCurrency,
+          kind: "burn",
+          amount: quote.spend - quote.fee,
+          note: "Source currency converted at original FX quote",
+        },
+        {
+          currency: p.toCurrency,
+          kind: "mint",
+          amount: quote.received,
+          note: "Destination currency delivered at original FX quote",
+        },
+        {
           currency: p.toCurrency,
           kind: "credit",
           amount: quote.received,
@@ -121,11 +133,23 @@ export async function settleMarketMakerReceipt(
         },
         {
           currency: p.fromCurrency,
+          kind: "credit",
+          amount: revenue,
+          note: "Source central-bank spread revenue",
+        },
+        {
+          currency: p.fromCurrency,
+          kind: "credit",
+          amount: reserve,
+          note: "Destination central-bank foreign reserve",
+        },
+        {
+          currency: p.fromCurrency,
           kind: "burn",
           amount: quote.fee - revenue - reserve,
           note: "Original spread sink",
         },
-      ],
+      ].filter((flow) => flow.amount > 0),
       result,
     },
   });
