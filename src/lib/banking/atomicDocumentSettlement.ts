@@ -23,6 +23,7 @@ interface AtomicPlan {
   update: AtomicUpdate;
   receipt: string;
   receiptGuard: unknown;
+  nonCashMode?: "central_bank_bond_exchange";
 }
 interface AtomicRecord extends Document {
   _id: string;
@@ -57,7 +58,11 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export async function settleAtomicDocumentTransition(
   db: Db,
   transition: BankingTransition,
-  target: { identity: Record<string, unknown>; guard?: Record<string, unknown> }
+  target: {
+    identity: Record<string, unknown>;
+    guard?: Record<string, unknown>;
+    nonCashMode?: "central_bank_bond_exchange";
+  }
 ): Promise<SettlementResult> {
   const identity = reviveObjectIds(target.identity);
   const projection = transition.projections[0];
@@ -90,7 +95,30 @@ export async function settleAtomicDocumentTransition(
   if (Object.keys(identity).length !== 1 || identity._id === undefined)
     return bad("Atomic settlement identity must be a stable document id");
   const realLegs = transition.legs.filter((leg) => leg.kind === "debit" || leg.kind === "credit");
-  if (!realLegs.length) return bad("Atomic settlement needs a document cash leg");
+  const assetOnly =
+    transition.legs.length === 0 && target.nonCashMode === "central_bank_bond_exchange";
+  if (!realLegs.length && !assetOnly)
+    return bad("Atomic settlement needs a document cash leg or an explicit bond exchange");
+  if (assetOnly) {
+    const allowed = new Set([
+      "publicFloat",
+      "centralBankHoldings",
+      "marketPrice",
+      "qeSupportRatio",
+      "updatedAt",
+    ]);
+    if (
+      projection.collection !== "bonds" ||
+      projection.update.$unset ||
+      Object.values(projection.update).some(
+        (value) =>
+          !value ||
+          typeof value !== "object" ||
+          Object.keys(value).some((path) => !allowed.has(path))
+      )
+    )
+      return bad("Noncash bond exchanges may update only the permitted asset fields");
+  }
   if (transition.legs.some((leg) => !Number.isFinite(leg.amount) || leg.amount <= 0))
     return bad("Atomic legs need finite positive amounts");
   if (
@@ -130,27 +158,50 @@ export async function settleAtomicDocumentTransition(
     update: reviveObjectIds(projection.update) as AtomicUpdate,
     receipt: `${transition.key}:atomic`,
     receiptGuard: original?.[SETTLED_KEYS_FIELD] ?? { $exists: false },
+    ...(assetOnly ? { nonCashMode: target.nonCashMode } : {}),
   };
-  const claimed = await claimMoneyMove(db, {
-    key: transition.key,
-    kind: transition.kind,
-    turn: transition.turn,
-    legs: transition.legs.map((leg) => ({ ...leg, filter: reviveObjectIds(leg.filter) })),
-    record: {
-      transitionKind: transition.kind,
-      currency: transition.currency,
-      atomicDocument: plan,
-      projections: transition.projections.map((item) => ({
-        collection: item.collection,
-        note: item.note,
-        claimedAt: null,
-        appliedAt: null,
-        applied: false,
-        projection: item,
-      })),
-    },
-  });
-  if (claimed.status === "rejected") return bad(claimed.error);
+  const extension = {
+    transitionKind: transition.kind,
+    currency: transition.currency,
+    atomicDocument: plan,
+    projections: transition.projections.map((item) => ({
+      collection: item.collection,
+      note: item.note,
+      claimedAt: null,
+      appliedAt: null,
+      applied: false,
+      projection: item,
+    })),
+  };
+  if (assetOnly) {
+    // The money primitive intentionally makes an empty cash move a no-op.
+    // Asset exchanges still claim their complete original plan before mutation.
+    try {
+      await db
+        .collection<AtomicRecord>(MONEY_MOVE_COLLECTION)
+        .insertOne({
+          ...extension,
+          _id: transition.key,
+          kind: transition.kind,
+          turn: transition.turn,
+          legs: [],
+          status: "partial",
+          createdAt: new Date(),
+        });
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === 11000))
+        throw error;
+    }
+  } else {
+    const claimed = await claimMoneyMove(db, {
+      key: transition.key,
+      kind: transition.kind,
+      turn: transition.turn,
+      legs: transition.legs.map((leg) => ({ ...leg, filter: reviveObjectIds(leg.filter) })),
+      record: extension,
+    });
+    if (claimed.status === "rejected") return bad(claimed.error);
+  }
   // The target receipt arbitrates concurrent first delivery and every recovery;
   // the journal's immutable quote, never the caller's recomputation, is applied.
   return resumeAtomicDocumentSettlement(db, transition.key);
@@ -231,6 +282,20 @@ export async function resumeAtomicDocumentSettlement(
           return { ...result, error };
         }
         balanceGuards[path] = value === undefined ? { $exists: false } : value;
+      }
+      if (plan.nonCashMode === "central_bank_bond_exchange") {
+        const paths = ["publicFloat", "centralBankHoldings"];
+        const before = paths.map((path) => Number(at(document, path) ?? 0));
+        const after = paths.map((path) => balanceAfter(document, plan.update, path));
+        if (
+          [...before, ...after].some((value) => !Number.isSafeInteger(value) || value < 0) ||
+          before[0] + before[1] !== after[0] + after[1]
+        ) {
+          const error = "Atomic bond exchange must conserve nonnegative whole units";
+          await journal.updateOne({ _id: key }, { $set: { status: "rejected", error } });
+          return { ...result, error };
+        }
+        for (const path of paths) balanceGuards[path] = at(document, path) ?? { $exists: false };
       }
       const changed = await collection.updateOne(
         {
