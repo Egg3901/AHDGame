@@ -1,11 +1,14 @@
 import type { State } from "@/lib/db/types";
+import { allocatePopulationTotal } from "@/lib/seeds/rules/populationAllocation";
+import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals1991";
 
 /**
- * Nigeria's 6 geopolitical zones, 1991 Census data.
+ * Nigeria's 6 geopolitical zones, 1991 population model.
  *
- * Population: 1991 National Population Census (88,992,220 total).
- *   Aggregated from state-level census figures to zone level.
- *   Source: citypopulation.de / Nigerian National Population Commission.
+ * Population: 1991 National Population Census (88,992,220 national total).
+ *   Zone shares are existing model estimates, not verified census aggregates.
+ *   Counts are normalized to the NPC total reproduced in NBS Annual Abstract
+ *   2011 Table 12; see populationTotals1991.ts.
  * GDP: 1991 nominal regional estimates (NGN millions). Nigeria's 1991 GDP was
  *   roughly ₦260–300 billion; figures are proportional approximations based
  *   on oil production (South-South, South-West) and agricultural dominance
@@ -14,7 +17,7 @@ import type { State } from "@/lib/db/types";
  *   (360 House, 109 Senate). Zone-level abstraction is a game construct;
  *   zones were created later (Abacha era) but used here for playable regions.
  */
-export const ngRegions1991: State[] = [
+const ngRegionPopulationWeights1991: State[] = [
   // ── North-West ───────────────────────────────────────────────────────────────
   {
     _id: "NORTH_WEST",
@@ -99,3 +102,9 @@ export const ngRegions1991: State[] = [
     votingSystem: "fptp",
   },
 ];
+
+/** Regional counts are estimates normalized to the dated national anchor, not census observations. */
+export const ngRegions1991 = allocatePopulationTotal(
+  ngRegionPopulationWeights1991,
+  POPULATION_TOTALS_1991.NG.population
+);
