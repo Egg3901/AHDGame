@@ -42,7 +42,11 @@ assertion passes while retaining EUR denomination checks. New receipt assertions
 verify both country-specific executed paths.
 
 The later development merge was clean and adds the already verified migration
-compatibility delivery. Full integrated CI remains required before this source
+compatibility delivery. Initial integrated CI found a duplicate declaration of
+Poland's opening currency parity: the development extraction and Track 1's shared
+data import both used the same name and value. The duplicate local declaration
+was removed, preserving the shared 9,500 parity. All 13 focused currency and Polish
+fiscal data tests pass. Full integrated CI remains required before this source
 is used for a new sandbox bootstrap. Bootstrap conformance and the 1991 through
 2027 horizon are not yet qualified. The Track 1 federation application and other
 open #2488 criteria are not completed by resolving Git conflicts.
