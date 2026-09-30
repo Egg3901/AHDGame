@@ -173,6 +173,8 @@ export interface SpawnNppCorporationInput {
   limitToUnownedPool?: boolean;
 }
 
+class UnownedSeedCapacityExhaustedError extends Error {}
+
 /**
  * Gather the per-affiliation inputs {@link chooseNppCorpCeo} needs for one
  * country: how many NPP-corps each participating affiliation (active non-defunct
@@ -318,7 +320,9 @@ export async function spawnNppCorporation(
       )
     : 0;
   if (input.limitToUnownedPool && !(boundedPoolRevenue > 0)) {
-    throw new Error(`No unowned ${type} capacity remains in ${headquartersState}`);
+    throw new UnownedSeedCapacityExhaustedError(
+      `No unowned ${type} capacity remains in ${headquartersState}`
+    );
   }
 
   // Get currency for the country
@@ -681,6 +685,9 @@ export async function batchSpawnNppCorporations(
         });
         results.push(result);
       } catch (err) {
+        if (options?.limitToUnownedPool && err instanceof UnownedSeedCapacityExhaustedError) {
+          break;
+        }
         console.error(`[spawnNpp] Failed to spawn ${type} corp for ${countryId}:`, err);
         // Continue with other sectors/slots
       }

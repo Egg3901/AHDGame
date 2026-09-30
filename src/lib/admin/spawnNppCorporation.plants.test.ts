@@ -232,7 +232,8 @@ describe("spawnNppCorporation — plants", () => {
   });
 
   it("conserves a small sim pool across repeated seeded spawns", async () => {
-    const { spawnNppCorporation } = await import("./spawnNppCorporation");
+    const { batchSpawnNppCorporations, spawnNppCorporation } =
+      await import("./spawnNppCorporation");
     const poolRevenue = 1_500_000;
     const initialUnits = computeUnownedHeadroomUnits("manufacturing", poolRevenue, 1);
     const pool = {
@@ -250,15 +251,13 @@ describe("spawnNppCorporation — plants", () => {
         pool.headroomUnits = update.$set.headroomUnits;
       }
     );
-    for (const name of ["One", "Two"]) {
-      await spawnNppCorporation(db as unknown as Db, {
-        name,
-        type: "manufacturing",
-        countryId: "US",
-        headquartersState: "CA",
-        limitToUnownedPool: true,
-      });
-    }
+    const spawned = await batchSpawnNppCorporations(db as unknown as Db, "US", {
+      sectorTypes: ["manufacturing"],
+      perSectorCount: 3,
+      headquartersState: "CA",
+      limitToUnownedPool: true,
+    });
+    expect(spawned).toHaveLength(2);
     await expect(
       spawnNppCorporation(db as unknown as Db, {
         name: "Three",
