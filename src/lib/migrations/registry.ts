@@ -12,6 +12,7 @@
 // Incident response scripts (heal-*, inspect-*, audit-*, fix-*) live in
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
+import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
@@ -302,6 +303,7 @@ export const MIGRATIONS: Migration[] = [
   // Heal existing true NPP-owned corporations; the founding path now stamps
   // these nodes for future spawns.
   backfillNppTechBaselines,
+  locRecoveryOwnerIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
