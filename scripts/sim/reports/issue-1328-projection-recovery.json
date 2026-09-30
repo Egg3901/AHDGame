@@ -42,5 +42,12 @@
     "Historical unfinished projections without surviving proof remain partial for explicit reconciliation.",
     "The measured boundary does not establish a whole-phase budget or whole-world accounting closure.",
     "Generic money-leg durability is qualified separately."
-  ]
+  ],
+  "focusedChecks": {
+    "sourceCommit": "ab26d093a0d0bfbde40fe29545cb02d33ad7091a",
+    "files": 3,
+    "tests": 38,
+    "passed": true,
+    "scope": "Projection publication, existing settlement journal and interbank cases. Runtime game source unchanged from native670dac; later report and browser fixture changes only."
+  }
 }

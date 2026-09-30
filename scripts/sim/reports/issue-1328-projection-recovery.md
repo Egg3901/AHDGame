@@ -30,4 +30,4 @@ New update projections require a stable target identity and cannot modify their 
 
 These measurements include all commands in the ordinary two-leg, one-projection settlement, before retry calls. They exclude fixture setup and transport headers. The added work reads the target generation and original journal, then releases the acknowledged target evidence. This boundary measurement does not establish a whole-phase budget or whole-world accounting closure.
 
-Focused regressions and all applicable final-head CI remain required before merge. Generic money-leg durability has separate source and qualification.
+Focused qualification passed 38 tests across the projection, settlement journal and interbank files at `ab26d093a0d0bfbde40fe29545cb02d33ad7091a`. Changes after the native pin consist of reports and the merged prerequisite browser fixture; runtime source is unchanged. All applicable final-head CI remains required. Generic money-leg durability has separate source and qualification.
