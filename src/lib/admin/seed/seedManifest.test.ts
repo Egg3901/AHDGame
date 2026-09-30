@@ -25,6 +25,7 @@ describe("seed manifest classification coverage", () => {
       "federationPublicationPreparations",
       "federationPreparedEffects",
       "federationArchivedRegionRows",
+      "federationCustodyRecords",
     ]) {
       expect(getCollectionCategory(name)).toBe("runtime");
     }
