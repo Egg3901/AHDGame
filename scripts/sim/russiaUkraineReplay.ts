@@ -35,7 +35,7 @@ const strategies = [
   "counterfactual",
 ] as const;
 type Strategy = (typeof strategies)[number];
-const countries = ["UKR", "RU", "US", "PL", "DE", "UK", "IE"];
+const countries = ["UKR", "RU", "US", "PL", "DE", "UK", "IE", "FR"];
 const offices = [
   "chairmanOfPresidium",
   "president",
@@ -44,6 +44,7 @@ const offices = [
   "chancellor",
   "primeMinister",
   "taoiseach",
+  "president",
 ];
 const leaders = countries.map((countryId, i) => ({
   _id: new ObjectId((i + 200).toString(16).padStart(24, "0")),
@@ -70,7 +71,7 @@ function choice(strategy: Strategy, country: string, role: string, offset: numbe
   if (role === "neighbor")
     return strategy === "deterrence" ? "transit_aid" : peace ? "mediate" : "receive_refugees";
   if (role === "bloc")
-    return strategy === "deterrence" && country === "DE"
+    return strategy === "deterrence" && (country === "DE" || country === "UK")
       ? "eu_guarantees"
       : peace
         ? "eu_guarantees"
@@ -275,15 +276,31 @@ async function main() {
             const role = crisis.globalResponse.roleByCountry[actor.countryId];
             if (!role) continue;
             const options = interaction.decisionTree[0].optionsByRole?.[role] ?? [];
-            const optionId = choice(strategy, actor.countryId, role, offset);
-            const option = options.find((o) => o.optionId === optionId);
-            assert(option);
+            let optionId = choice(strategy, actor.countryId, role, offset);
             const availability = await optionAvailabilityForGlobalResponder(
               db,
               crisis,
               actor.countryId,
               options
             );
+            if (optionId === "us_aid" && !availability?.[optionId].eligible) {
+              // This retained army cannot support the requested logistics.
+              // Exercise refusal, then let the government fund a different policy.
+              await assert.rejects(
+                submitCrisisDecision(
+                  db,
+                  interaction._id,
+                  optionId,
+                  actor._id,
+                  actor.countryId,
+                  roles.get(actor.countryId)
+                ),
+                /capacity is insufficient/
+              );
+              optionId = "us_sanctions";
+            }
+            const option = options.find((o) => o.optionId === optionId);
+            assert(option);
             assert(
               availability?.[optionId].eligible,
               `${actor.countryId} ${optionId}: ${JSON.stringify(availability?.[optionId])}`
