@@ -1201,11 +1201,18 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const { processRoParliamentTransition } =
             await import("@/lib/turn/roParliamentTransition");
           await processRoParliamentTransition(db, context.gameState, newTurn, gameNow);
-          const { processFederationRatifications } =
+          const { processFederationRatifications, processRatifiedFederationSettlements } =
             await import("@/lib/turn/federationRatifications");
           const { processFederationNpcMandates } = await import("@/lib/turn/federationNpcMandates");
           await processFederationNpcMandates(db, context.gameState.preset, currentYear, gameNow);
           await processFederationRatifications(db, context.gameState.preset, newTurn);
+          await processRatifiedFederationSettlements(
+            db,
+            context.gameState.preset,
+            newTurn,
+            currentYear,
+            gameNow
+          );
           const { processYuDissolution } = await import("@/lib/turn/yuDissolution");
           await processYuDissolution(db, context.gameState, newTurn, gameNow);
           const { processRuPresidencyTransition } =
