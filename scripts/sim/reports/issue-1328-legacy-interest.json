@@ -1,0 +1,101 @@
+{
+  "baselineSource": "4f4a853e827f22b65b9224bb034cb2011464483c",
+  "treatmentSource": "0ebff93537559a0f7736a26c3749938990b08206",
+  "runnerSha256": "fc1d729268174032bb9fc4e7c86cc28641139906270044a7ec73eec09dcfe3e5",
+  "cohort": {
+    "syntheticBanks": 10,
+    "savers": 20,
+    "turn": 300
+  },
+  "baseline": {
+    "commands": 422,
+    "readBsonBytes": 18577
+  },
+  "treatment": {
+    "commands": 485,
+    "readBsonBytes": 67798
+  },
+  "normalBalancesEqual": true,
+  "aggregateInterest": 400,
+  "nativeReceiptCount": 20,
+  "ledgerReceiptCount": 20,
+  "normalBalances": {
+    "banks": [
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      },
+      {
+        "cash": 99955.99833333334,
+        "income": -44.001666666666665,
+        "interest": 40,
+        "corporate": 17
+      }
+    ],
+    "savings": [
+      48020, 48020, 48020, 48020, 48020, 48020, 48020, 48020, 48020, 48020, 48020, 48020, 48020,
+      48020, 48020, 48020, 48020, 48020, 48020, 48020
+    ],
+    "insurance": 40.01666666666666,
+    "receipts": 20,
+    "ledger": 20
+  },
+  "recoveryCases": 4,
+  "recoveryPoints": [
+    "after bank debit",
+    "after first saver in recipient bulk",
+    "after transaction receipt bulk",
+    "after ledger receipt bulk"
+  ],
+  "repeatedRecoveryStable": true
+}
