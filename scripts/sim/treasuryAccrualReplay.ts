@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { BSON, MongoClient, type Document } from "mongodb";
 import { processTreasuryTurn } from "../../src/lib/turn/treasuryTurn";
 import { reconcileLedger } from "../../src/lib/ledger/reconcile";
@@ -100,6 +100,17 @@ async function main() {
     const budgets = () =>
       db.collection<FederalBudget>("federalBudget").find({}).sort({ _id: 1 }).toArray();
     const savedBudgets = saved.find(([name]) => name === "federalBudget")![1];
+    const valuationFixture = arg("valuation-fixture");
+    assert(
+      !valuationFixture || baseline,
+      "Only the control may import treatment valuation denominators"
+    );
+    const pinnedValuation = valuationFixture
+      ? (JSON.parse(readFileSync(valuationFixture, "utf8")) as {
+          sourceCommit: string;
+          authoredBudgetValuations: { currencyCode: string; rate: number }[];
+        })
+      : undefined;
     const authoredBudgetValuations: Document[] = [];
     for (const b of savedBudgets) {
       const countryId = String(b.countryId) as CountryId;
@@ -111,7 +122,10 @@ async function main() {
         !FOREX_ACTIVE_COUNTRIES.includes(countryId) &&
         COUNTRY_CURRENCY_MAP[countryId] === currencyCode
       ) {
-        const rate = eraRateForCurrency(currencyCode, String(state.preset));
+        const rate =
+          eraRateForCurrency(currencyCode, String(state.preset)) ??
+          pinnedValuation?.authoredBudgetValuations.find((v) => v.currencyCode === currencyCode)
+            ?.rate;
         assert(rate && Number.isFinite(rate) && rate > 0);
         rates.set(currencyCode, rate);
         authoredBudgetValuations.push({
@@ -268,6 +282,7 @@ async function main() {
       pricedCountries: [...pricedCountries].sort(),
       excludedUnpricedBudgets,
       authoredBudgetValuations,
+      valuationFixtureSourceCommit: pinnedValuation?.sourceCommit ?? null,
       invalidFxRejections,
       results,
       telemetry: { syntheticCouponStatistic: 1234, addedLedgerEntries },
