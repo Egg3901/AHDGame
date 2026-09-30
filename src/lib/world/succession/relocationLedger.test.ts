@@ -12,7 +12,7 @@ const input = {
       characterId: "person-1",
       successorEntityId: "SK",
       status: "pending-choice" as const,
-      formerCountryId: "CZ" as const,
+      formerCountryId: "CS" as const,
       formerHomeState: "SLOVAKIA",
     },
   ],
@@ -32,7 +32,7 @@ const input = {
       ],
     },
   ],
-  firmOrigins: { "firm-1": { countryId: "CZ" as const, stateId: "SLOVAKIA", entityId: "SK" } },
+  firmOrigins: { "firm-1": { countryId: "CS" as const, stateId: "SLOVAKIA", entityId: "SK" } },
   now: new Date(0),
 };
 
@@ -49,8 +49,8 @@ describe("federation protected relocation ledger", () => {
         presetId: "1991-default",
         settlementId: "split",
         revision: 1,
-        sourceEntityId: "CZ",
-        entityIds: ["CZ", "SK"],
+        sourceEntityId: "CS",
+        entityIds: ["CS", "SK"],
         status: "applied",
         appliedOnTurn: 96,
       },
@@ -70,14 +70,14 @@ describe("federation protected relocation ledger", () => {
         presetId: "1991-default",
         settlementId: "split",
         revision: 1,
-        sourceEntityId: "CZ",
-        entityIds: ["CZ", "SK"],
+        sourceEntityId: "CS",
+        entityIds: ["CS", "SK"],
         status: "applied",
         appliedOnTurn: 96,
       },
     ]);
     mem.seed("worldEntityStates", [
-      { _id: "1991-default:CZ", applicationId, entityId: "CZ", appliedOnTurn: 96 },
+      { _id: "1991-default:CZ", applicationId, entityId: "CS", appliedOnTurn: 96 },
       { _id: "1991-default:SK", applicationId, entityId: "SK", appliedOnTurn: 96 },
     ]);
     await stageFederationFacilityClaims(db, applicationId, input.firms, new Date(0));
@@ -94,7 +94,7 @@ describe("federation protected relocation ledger", () => {
         db,
         ...input,
         firmOrigins: {
-          "firm-1": { countryId: "CZ", stateId: "PRAGUE", entityId: "CZ2" },
+          "firm-1": { countryId: "CS", stateId: "PRAGUE", entityId: "CZ2" },
         },
       })
     ).rejects.toThrow("conflicts with an earlier record");

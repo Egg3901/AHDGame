@@ -324,6 +324,34 @@ describe("live federation settlement intent", () => {
     ).rejects.toThrow("matching recorded consent");
   });
 
+  it("rejects a newly added nested district before publishing the frozen territory", async () => {
+    const { args } = scenario();
+    const staged = await stageLiveFederationSettlementIntent(args);
+    await args.db
+      .collection<{
+        _id: string;
+        countryId: string;
+        parentRegionId: string;
+        population: number;
+        gdp: number;
+      }>("states")
+      .insertOne({
+        _id: "KYIV",
+        countryId: "RU",
+        parentRegionId: "UKRAINE",
+        population: 2,
+        gdp: 20,
+      });
+    await expect(
+      verifyLiveFederationSettlementIntent({
+        db: args.db,
+        intentId: staged._id,
+        sourceCountryId: "RU",
+        appliedOnTurn: 97,
+      })
+    ).rejects.toThrow("source changed");
+  });
+
   it("rejects changed player choices and terms under the same application key", async () => {
     const { args } = scenario();
     await stageLiveFederationSettlementIntent(args);

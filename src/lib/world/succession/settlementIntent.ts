@@ -10,6 +10,10 @@ import { loadPersistedFederationApproval } from "./ratificationStore";
 import { stageFederationFacilityClaims } from "./facilityClaimLedger";
 import { loadLiveSuccessionResidents } from "./loadLiveResidents";
 import { loadLivePrivateSuccessionFirms } from "./loadLivePrivateFirms";
+import {
+  planLiveFederationStateTransfers,
+  type FederationStateTransferPlan,
+} from "./territoryTransferPlan";
 import { planLiveSuccessionActivation, type SuccessionActivationInput } from "./planActivation";
 import {
   FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
@@ -41,6 +45,7 @@ export interface LiveSettlementSnapshot {
   residencePlans: ReturnType<typeof planSuccessionResidency>;
   privateFirmPlans: ReturnType<typeof planPrivateFirmSuccession>;
   fiscalShares: ReturnType<typeof planSuccessionFiscalShares>;
+  stateTransfers: FederationStateTransferPlan[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -131,6 +136,12 @@ export async function buildLiveFederationSettlementSnapshot(input: {
   if (!Number.isSafeInteger(currentYear) || !Number.isFinite(eraUnitScale) || eraUnitScale <= 0)
     throw new Error("Federation snapshot needs a valid valuation year and unit scale");
   const plan = await planLiveSuccessionActivation(db, sourceCountryId, activation, session);
+  const stateTransfers = await planLiveFederationStateTransfers({
+    db,
+    sourceCountryId,
+    territories: activation.territories,
+    session,
+  });
   const residents = await loadLiveSuccessionResidents(db, sourceCountryId, session);
   const residencePlans = planSuccessionResidency({
     sourceCountryId,
@@ -176,6 +187,7 @@ export async function buildLiveFederationSettlementSnapshot(input: {
     firms,
     privateFirmPlans,
     fiscalShares,
+    stateTransfers,
   }) as Record<string, unknown>;
   return {
     payload,
@@ -184,6 +196,7 @@ export async function buildLiveFederationSettlementSnapshot(input: {
     residencePlans,
     privateFirmPlans,
     fiscalShares,
+    stateTransfers,
   };
 }
 
