@@ -6,7 +6,7 @@ Refs #1328 and #2159. This qualifies the existing reserve-pool transfer adoption
 
 - Baseline: `e2858e5c5007a19a1d9c5b7f5dde000b2a1c6efe`.
 - Treatment: `c6ba13c5fa859976a0fc51bf2217abaee7c1d616`.
-- The baseline and each treatment checkout were clean during execution. Baseline evidence is reused from its original run. Treatment includes the baseline development commit, the LOC journal prerequisite through `5f89f1bc10`, the coordinated reserve quote guard, and atomic durability repair `91cb14360d`. Later LOC reports and concrete Mongo type declarations through `89d4a2e6ef` do not change emitted runtime behavior. The companion JSON records fixture hashes.
+- The baseline and each treatment checkout were clean during execution. Baseline evidence is reused from its original run. Treatment includes the baseline development commit, the LOC journal prerequisite through `5f89f1bc10`, the coordinated reserve quote guard, and atomic durability repair `91cb14360d`. Later LOC reports and concrete Mongo type declarations through `89d4a2e6ef` do not change emitted runtime behavior. The companion JSON records fixture hashes. Subsequent merge `b70394562d` integrates the treasury implementation and additive recovery dispatch without changing the reserve or LOC command implementation. The phase measurements below remain scoped to the executed source, before that additional treasury pending lookup.
 
 ## Outcomes
 

@@ -261,5 +261,9 @@
     "completedOrRefusedCases": 9,
     "legacyAmbiguousCasesRetainedForReconciliation": 1,
     "fixtureSha256": "b5aea7366b0068a8d0ab5d85de35e5c6cfb8f386dcad3674548dd7ed0cb2f885"
+  },
+  "postRunIntegration": {
+    "commit": "b70394562dd9cd563840eaeef5f2b10734b0e50f",
+    "scope": "Merged treasury transfer implementation and additive recovery dispatch. Reserve and LOC command implementation unchanged. Published performance remains scoped to executed c6ba source, before the additional treasury pending lookup."
   }
 }
