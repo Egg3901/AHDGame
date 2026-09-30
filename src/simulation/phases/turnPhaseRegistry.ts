@@ -1196,6 +1196,8 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           await processRoParliamentTransition(db, context.gameState, newTurn, gameNow);
           const { processFederationRatifications } =
             await import("@/lib/turn/federationRatifications");
+          const { processFederationNpcMandates } = await import("@/lib/turn/federationNpcMandates");
+          await processFederationNpcMandates(db, context.gameState.preset, currentYear, gameNow);
           await processFederationRatifications(db, context.gameState.preset, newTurn);
           const { processYuDissolution } = await import("@/lib/turn/yuDissolution");
           await processYuDissolution(db, context.gameState, newTurn, gameNow);

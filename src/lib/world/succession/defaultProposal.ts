@@ -5,6 +5,8 @@ import { loadLiveSuccessionInventory } from "./loadLiveInventory";
 import { openFederationPoliticalProposal } from "./politicalProposal";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import { planSuccessionTerritories } from "./rules/territory";
+import type { SuccessionCustodyAsset } from "./rules/custody";
+import type { SuccessorTerritory } from "./rules/territory";
 
 /** The complete 1991 federal regions, including Serbia's two provinces.
  * Proposals are drawn from live region populations and GDP, so pre-vote
@@ -34,6 +36,29 @@ export function defaultFederationParticipants(sourceCountryId: DefaultFederation
   return [...new Set(Object.values(DEFAULT_TERRITORY[sourceCountryId]))].sort();
 }
 
+/** Put every shared or strategic asset into the published negotiating terms.
+ * The largest successor is the NPC opening position; each participant still
+ * has a separate consent decision and can reject these terms. */
+export function defaultNpcCustodians(
+  territories: readonly SuccessorTerritory[],
+  assets: readonly SuccessionCustodyAsset[]
+): Record<string, string> {
+  const ranked = [...territories].sort(
+    (a, b) => b.population - a.population || a.entityId.localeCompare(b.entityId)
+  );
+  if (!ranked.length || !Number.isSafeInteger(ranked[0].population) || ranked[0].population <= 0)
+    throw new Error("NPC custody terms need populated successor territory");
+  const assignments: Record<string, string> = {};
+  for (const asset of assets) {
+    if (asset.kind === "strategic-force" || asset.homeRegionId === null) {
+      if (Object.hasOwn(assignments, asset.assetId))
+        throw new Error("NPC custody terms repeat a shared asset");
+      assignments[asset.assetId] = ranked[0].entityId;
+    }
+  }
+  return assignments;
+}
+
 /** Open the documented population-default settlement as an ordinary bill.
  * The zero financial amounts here are placeholders: a proposal binds the
  * allocation rule, while stage/verify value the live balance sheet later. */
@@ -43,7 +68,8 @@ export async function openDefaultFederationPoliticalProposal(input: {
   currentYear: number;
   now: Date;
   /** Explicit proposed custodians for strategic or unlocated shared assets. */
-  negotiatedCustodians: Readonly<Record<string, string>>;
+  /** Omit for an NPC opening position; players supply every choice explicitly. */
+  negotiatedCustodians?: Readonly<Record<string, string>>;
 }) {
   const { db, sourceCountryId, currentYear, now } = input;
   const availableFromYear = earliestFederationDecisionYear("1991-default", sourceCountryId);
@@ -53,6 +79,8 @@ export async function openDefaultFederationPoliticalProposal(input: {
   const participants = defaultFederationParticipants(sourceCountryId);
   const inventory = await loadLiveSuccessionInventory(db, sourceCountryId);
   const territories = planSuccessionTerritories(inventory.sourceRegions, participants, assignments);
+  const negotiatedCustodians =
+    input.negotiatedCustodians ?? defaultNpcCustodians(territories, inventory.custodyAssets);
   const settlementId = `${sourceCountryId.toLowerCase()}-1991-default`;
   return openFederationPoliticalProposal({
     db,
@@ -79,7 +107,7 @@ export async function openDefaultFederationPoliticalProposal(input: {
         financialAssetsMinor: 0,
         creditorDebtMinor: 0,
       }),
-      negotiatedCustodians: input.negotiatedCustodians,
+      negotiatedCustodians,
       macroTerms: {},
       now,
     },
