@@ -25,6 +25,7 @@ describe("runRequiredStartupMigrations", () => {
       "2026-09-03-repair-orphan-index-fund-state",
       "2026-09-10-provider-identity-indexes",
       "2026-09-11-central-bank-pricing-phase-in",
+      "2026-09-30-long-horizon-telemetry-indexes",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
     expect(runMigrationsMock).toHaveBeenCalledWith(db, {
