@@ -207,6 +207,9 @@ export async function processNppMonetaryOperations(
     if (decision.type !== "hold") {
       await executeMonetaryOperation(db, {
         countryId,
+        ...(decision.type === "liquidity_injection"
+          ? { operationId: `npp-liquidity-${bank._id}-${turn}` }
+          : {}),
         type: decision.type,
         ...((decision.type === "qe" || decision.type === "qt") && bond
           ? { units: decision.units, bondId: bond._id.toString() }
