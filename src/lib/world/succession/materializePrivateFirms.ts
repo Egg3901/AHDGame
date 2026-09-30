@@ -25,6 +25,14 @@ export interface FederationPrivateFirmHold {
   successorEntityId: string;
   wasSuspended: boolean;
   selectedDestination?: { countryId: CountryId; stateId: string };
+  lockedConversion?: {
+    fromCurrency: string | null;
+    toCurrency: string;
+    fromRate: number;
+    toRate: number;
+  };
+  status?: "pending-choice" | "completed";
+  completedAt?: Date;
 }
 
 /** Preserve player-owned firms whose headquarters enter a background country.
@@ -125,6 +133,7 @@ export async function materializeFederationPrivateFirms(input: {
           successorEntityId: transfer.successorEntityId,
           wasSuspended,
           ...(plan.destination ? { selectedDestination: plan.destination } : {}),
+          status: "pending-choice",
         },
         { session }
       );
