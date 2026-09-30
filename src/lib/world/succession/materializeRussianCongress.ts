@@ -337,7 +337,7 @@ async function preserveEstablishedRussianConstitution(input: {
   const retired = officials.filter(
     (row) =>
       UNION_OFFICES.includes(row.officeType) ||
-      (["congressDeputy", "stateDumaDeputy", "federationCouncilMember"].includes(row.officeType) &&
+      (["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(row.officeType) &&
         row.state != null &&
         !retained.has(row.state))
   );
@@ -398,7 +398,7 @@ async function preserveEstablishedRussianConstitution(input: {
           {
             _id: { $in: ids },
             "currentOffice.type": {
-              $in: ["congressDeputy", "stateDumaDeputy", "federationCouncilMember"],
+              $in: ["congressDeputy", "dumaDeputy", "federationCouncilMember"],
             },
           },
         ],
@@ -498,7 +498,7 @@ async function preserveEstablishedRussianConstitution(input: {
   invalidateCachedCountryState(db, "RU");
   return {
     retainedDeputies: surviving.filter((row) =>
-      ["congressDeputy", "stateDumaDeputy"].includes(row.officeType)
+      ["congressDeputy", "dumaDeputy"].includes(row.officeType)
     ).length,
     retiredOffices: retired.length,
     totalSeats: null,
