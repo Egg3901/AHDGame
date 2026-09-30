@@ -14,3 +14,5 @@ areas: [backend, engine]
 - National and regional population inputs now agree, with explicit source dates and geographic scope.
 - Regional counts remain documented estimates under the existing aggregate geography.
 - Population-based cost anchors and fresh demographic stocks consume corrected inputs. Existing census coverage gaps remain visible.
+
+China's derived1991 campaign GDP baseline also follows the corrected population, keeping an average region at a neutral income scalar.

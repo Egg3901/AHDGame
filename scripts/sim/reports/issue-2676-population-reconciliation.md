@@ -62,7 +62,7 @@ this change qualifies population reconciliation only.
 ## Verification
 
 - Six country reconciliation cases failed before repair and passed afterward.
-  -75 focused allocation, population, budget, cost-anchor and diagnostic tests passed.
+  -87 focused allocation, population, budget, cost-anchor, diagnostic and campaign tests passed.
 - The native proof calls all six real region seeders in a generated disposable
   test database, writes45 regions and verifies deterministic repeat seeding.
 - The actual complete conformance evaluator reports six passing population-sum
@@ -85,3 +85,14 @@ unchanged. Later presets with explicitly authored overrides retain those values;
 later budgets that intentionally inherit1991 also inherit its corrected anchor,
 with their existing source-era provenance. The final release bootstrap and
 worldsim gates under#2159 remain open.
+
+## Campaign income calibration
+
+The complete CI derivation test exposed one stale dependent baseline: CN1991
+GDP per capita was1,931 under the old regional population total. With unchanged
+regional GDP and corrected population, its weighted mean is1,865. The derived
+campaign baseline and its absolute pin now use1,865, preserving the neutral
+scalar for an average region. Other country/era cells are unchanged; the existing
+all-cell derivation and neutral-scalar regressions verify those dependencies.
+This is a denominator reconciliation, with no GDP, exchange-rate or scalar-rule
+tuning. Full-world balance and release replay remain open on#2159.
