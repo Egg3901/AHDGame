@@ -58,7 +58,9 @@ describe("finalizePoleVictory", () => {
     const result = await finalizePoleVictory(db as unknown as Db, noTarget, "B", 124);
 
     expect(result).toBe("resolved");
-    expect(resolveConflict).toHaveBeenCalledWith(expect.anything(), noTarget, "B", 124);
+    expect(resolveConflict).toHaveBeenCalledWith(expect.anything(), noTarget, "B", 124, {
+      endingType: "victory",
+    });
     expect(standDownCountry).not.toHaveBeenCalled();
   });
 
