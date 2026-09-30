@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { resumeSettlement, settleTransition } from "../settlementJournal";
+import { oid } from "../rules/boundary";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { CORPORATION_FOUNDING_COST } from "@/lib/constants/corporations";
+import { MONEY_MOVE_COLLECTION } from "../moneyMove";
+import { emitBankingAuditEvent } from "../auditEvents";
 import { CHARTER_CAPITAL_FOUNDING_MULTIPLE } from "../charter";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { getGdpAnchorRate } from "@/lib/currency/gdpAnchorRate";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("../auditEvents", () => ({ emitBankingAuditEvent: vi.fn() }));
 
 function makeCorp(overrides: Partial<Corporation> = {}): Corporation {
   return {
@@ -289,95 +295,226 @@ describe("banking charter", () => {
   });
 
   describe("issueCharter", () => {
-    it("debits exactly the capital requirement (money conservation)", async () => {
-      const corp = makeCorp({ liquidCapital: 50_000_000 });
-      const startingBalance = corp.liquidCapital;
-
-      db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-
-      const { issueCharter, getCharterCapitalRequirement } = await importCharter();
-      const requirement = await getCharterCapitalRequirement(db as unknown as Db, "USD");
-
-      db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-        ...corp,
-        liquidCapital: startingBalance - requirement,
-        bankCharter: {
-          type: "retail",
-          status: "active",
-          currency: "USD",
-          charteredTurn: 42,
-          postedCapital: requirement,
-          depositOffset: 0,
-          lendingOffset: 0,
-          blacklist: {},
-        } satisfies BankCharter,
-      });
-
-      const result = await issueCharter(db as unknown as Db, corp._id, "retail", "USD");
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-
-      expect(result.postedCapital).toBe(requirement);
-
-      const [, update] = db.collectionMocks.corporations!.findOneAndUpdate.mock.calls[0];
-      expect(update.$inc.liquidCapital).toBe(-requirement);
-      expect(update.$set.bankCharter.postedCapital).toBe(requirement);
-      expect(update.$set.bankCharter.status).toBe("active");
-      // Initial offsets are clamped into the era corridor (modern: deposit
-      // [-4, 0.5] keeps 0, lending floor +0.25 lifts 0).
-      expect(update.$set.bankCharter.depositOffset).toBe(0);
-      expect(update.$set.bankCharter.lendingOffset).toBe(0.25);
-
-      // Conservation: corp balance after debit + postedCapital === starting balance
-      const balanceAfter = startingBalance + update.$inc.liquidCapital;
-      expect(balanceAfter + result.postedCapital).toBe(startingBalance);
+    const revoked = (): BankCharter => ({
+      type: "retail",
+      status: "revoked",
+      currency: "USD",
+      charteredTurn: 10,
+      postedCapital: 10_000_000,
+      cashReserves: 0,
+      totalLoans: 999,
+      depositOffset: 0,
+      lendingOffset: 0,
     });
-
-    it("archives the old sub-doc on recharter of a non-active charter", async () => {
-      db.collection("bankCharterHistory");
+    function charterWorld(corp: Corporation) {
+      const memory = createInMemoryDb();
+      memory.seed("corporations", [{ ...corp }]);
+      memory.seed("gameConfig", [
+        { _id: "default", privateBankingEnabled: true, playerAdvancedBankChartersEnabled: true },
+      ]);
+      memory.seed("gameState", [{ _id: "current", preset: "2019-default", currentTurn: 42 }]);
+      memory.seed("corporateSectors", [
+        { _id: new ObjectId(), corporationId: corp._id, sectorType: "financial" },
+      ]);
+      return memory;
+    }
+    it("carries surviving named and NPC exposure without funding pending or written-off claims", async () => {
+      const corp = makeCorp({ bankCharter: revoked() });
+      const memory = charterWorld(corp);
+      const rows = [
+        { borrowerType: "corporation", status: "current", outstanding: 400 },
+        { borrowerType: "character", status: "arrears", outstanding: 600 },
+        { borrowerType: "npcBulk", status: "current", outstanding: 200 },
+        { borrowerType: "corporation", status: "pending", outstanding: 900 },
+        { borrowerType: "corporation", status: "defaulted", outstanding: 800 },
+        { borrowerType: "npcBulk", status: "repaid", outstanding: 700 },
+        { borrowerType: "corporation", status: "rejected", outstanding: 500 },
+      ].map((loan) => ({ _id: new ObjectId(), bankCorporationId: corp._id, ...loan }));
+      memory.seed("bankLoans", rows);
+      const database = memory as unknown as Db;
+      const { issueCharter } = await importCharter();
+      const result = await issueCharter(database, corp._id, "retail", "USD");
+      expect(result).toMatchObject({ ok: true, charter: { totalLoans: 1200 } });
+      expect(memory.collection("bankLoans").docs).toEqual(rows);
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        liquidCapital: 50_000_000 - (result.ok ? result.postedCapital : 0),
+        bankCharter: { totalLoans: 1200 },
+      });
+    });
+    it("rejects a stale reissue quote when a competing issuance and loan land after the book read", async () => {
+      const corp = makeCorp({ bankCharter: revoked() });
+      const borrower = makeCorp({ liquidCapital: 0 });
+      const memory = charterWorld(corp);
+      memory.collection("corporations").docs.push({ ...borrower });
+      memory.seed("bankLoans", [
+        {
+          _id: new ObjectId(),
+          bankCorporationId: corp._id,
+          borrowerType: "corporation",
+          status: "current",
+          outstanding: 400,
+        },
+      ]);
+      const database = memory as unknown as Db;
+      const { issueCharter, getCharterCapitalRequirement } = await importCharter();
+      const requirement = await getCharterCapitalRequirement(database, "USD");
+      const collection = memory.collection("bankLoans");
+      const originalFind = collection.find.bind(collection);
+      vi.spyOn(collection, "find").mockImplementationOnce((filter) => {
+        const cursor = originalFind(filter);
+        return {
+          ...cursor,
+          toArray: async () => {
+            const quoted = await cursor.toArray();
+            expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(true);
+            const competing = await settleTransition(database, {
+              key: "concurrent-loan",
+              kind: "loan_origination",
+              turn: 42,
+              currency: "USD",
+              legs: [
+                {
+                  kind: "debit",
+                  amount: 100,
+                  collection: "corporations",
+                  filter: { _id: oid(corp._id.toHexString()), "bankCharter.status": "active" },
+                  path: "bankCharter.cashReserves",
+                  note: "loan vault debit",
+                },
+                {
+                  kind: "credit",
+                  amount: 100,
+                  collection: "corporations",
+                  filter: { _id: oid(borrower._id.toHexString()) },
+                  path: "liquidCapital",
+                  note: "borrower proceeds",
+                },
+              ],
+              projections: [
+                {
+                  collection: "bankLoans",
+                  insert: {
+                    _id: oid(new ObjectId().toHexString()),
+                    bankCorporationId: oid(corp._id.toHexString()),
+                    borrowerType: "corporation",
+                    status: "current",
+                    outstanding: 100,
+                  },
+                  note: "funded loan",
+                },
+                {
+                  collection: "corporations",
+                  filter: { _id: oid(corp._id.toHexString()) },
+                  update: { $inc: { "bankCharter.totalLoans": 100 } },
+                  note: "loan exposure",
+                },
+              ],
+              event: { kind: "loan.originated", command: "bank.loan.originate" },
+            });
+            expect(competing.status).toBe("applied");
+            return quoted;
+          },
+        };
+      });
+      expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(false);
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+        liquidCapital: 50_000_000 - requirement,
+        bankCharter: { status: "active", totalLoans: 500, cashReserves: requirement - 100 },
+      });
+      expect(
+        await database.collection("corporations").findOne({ _id: borrower._id })
+      ).toMatchObject({ liquidCapital: 100 });
+      expect(memory.collection("bankLoans").docs).toHaveLength(2);
+    });
+    it("journals both capital legs and publishes one fully funded charter, including retry", async () => {
+      const corp = makeCorp({ liquidCapital: 50_000_000 });
+      const memory = charterWorld(corp);
+      const database = memory as unknown as Db;
+      const { issueCharter, getCharterCapitalRequirement } = await importCharter();
+      const requirement = await getCharterCapitalRequirement(database, "USD");
+      const result = await issueCharter(database, corp._id, "retail", "USD");
+      expect(result).toMatchObject({ ok: true });
+      const after = await database.collection("corporations").findOne({ _id: corp._id });
+      expect(after).toMatchObject({
+        liquidCapital: 50_000_000 - requirement,
+        bankCharter: {
+          cashReserves: requirement,
+          postedCapital: requirement,
+          status: "active",
+          depositOffset: 0,
+          lendingOffset: 0.25,
+        },
+      });
+      const receipt = await database
+        .collection(MONEY_MOVE_COLLECTION)
+        .findOne({ kind: "bank_charter_capital" });
+      expect(emitBankingAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "charter.issued", settlementId: receipt?._id }),
+        database
+      );
+      expect(Object.keys(result).sort()).toEqual(["charter", "ok", "postedCapital"]);
+      expect(receipt).toMatchObject({
+        status: "applied",
+        legs: [
+          { kind: "debit", amount: requirement, applied: true },
+          { kind: "credit", amount: requirement, applied: true },
+        ],
+      });
+      expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(false);
+      expect(await database.collection("corporations").findOne({ _id: corp._id })).toEqual(after);
+    });
+    it.each([false, true])(
+      "recovers actual issuance around its atomic capital write (after=%s)",
+      async (afterWrite) => {
+        const corp = makeCorp({ liquidCapital: 50_000_000 });
+        const memory = charterWorld(corp);
+        const database = memory as unknown as Db;
+        const fault = withInjectedCrash(memory, {
+          collection: "corporations",
+          op: "updateOne",
+          onCall: 1,
+          afterWrite,
+        });
+        const { issueCharter, getCharterCapitalRequirement } = await importCharter();
+        const required = await getCharterCapitalRequirement(database, "USD");
+        await expect(issueCharter(fault.db, corp._id, "retail", "USD")).rejects.toThrow();
+        const receipt = await database
+          .collection<{ _id: string }>(MONEY_MOVE_COLLECTION)
+          .findOne({ kind: "bank_charter_capital" });
+        expect(receipt).not.toBeNull();
+        await resumeSettlement(database, receipt!._id);
+        await resumeSettlement(database, receipt!._id);
+        expect(await database.collection("corporations").findOne({ _id: corp._id })).toMatchObject({
+          liquidCapital: 50_000_000 - required,
+          bankCharter: { status: "active", cashReserves: required },
+        });
+      }
+    );
+    it("archives the resolved prior charter and preserves its cash boundary on reissue", async () => {
       const oldCharter: BankCharter = {
         type: "retail",
         status: "revoked",
         currency: "USD",
         charteredTurn: 10,
         postedCapital: 10_000_000,
-        cashReserves: 10_000_000,
+        cashReserves: 0,
         depositOffset: 0,
         lendingOffset: 0,
         revokedTurn: 20,
         revokedReason: "prior revoke",
       };
       const corp = makeCorp({ liquidCapital: 50_000_000, bankCharter: oldCharter });
-      db.collectionMocks.corporations!.findOne.mockResolvedValue(corp);
-
-      const { issueCharter, getCharterCapitalRequirement } = await importCharter();
-      const requirement = await getCharterCapitalRequirement(db as unknown as Db, "USD");
-
-      db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-        ...corp,
-        liquidCapital: corp.liquidCapital - requirement,
-        bankCharter: {
-          type: "retail",
-          status: "active",
-          currency: "USD",
-          charteredTurn: 42,
-          postedCapital: requirement,
-          depositOffset: 0,
-          lendingOffset: 0.25,
-          blacklist: {},
-        } satisfies BankCharter,
+      const database = charterWorld(corp) as unknown as Db;
+      const { issueCharter } = await importCharter();
+      expect((await issueCharter(database, corp._id, "retail", "USD")).ok).toBe(true);
+      const archived = await database
+        .collection("bankCharterHistory")
+        .findOne({ corporationId: corp._id });
+      expect(archived).toMatchObject({
+        reason: "recharter",
+        archivedTurn: 42,
+        charter: { status: "revoked", revokedReason: "prior revoke" },
       });
-
-      const result = await issueCharter(db as unknown as Db, corp._id, "retail", "USD");
-      expect(result.ok).toBe(true);
-
-      expect(db.collectionMocks.bankCharterHistory!.insertOne).toHaveBeenCalledTimes(1);
-      const archived = db.collectionMocks.bankCharterHistory!.insertOne.mock.calls[0][0];
-      expect(archived.reason).toBe("recharter");
-      expect(archived.archivedTurn).toBe(42);
-      expect(archived.charter.status).toBe("revoked");
-      expect(archived.charter.revokedReason).toBe("prior revoke");
-      expect(archived.corporationId).toEqual(corp._id);
     });
   });
 

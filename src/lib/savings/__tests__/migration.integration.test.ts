@@ -182,4 +182,107 @@ describe("runSavingsMigration", () => {
     expect(batches).toEqual([]);
     expect(accounts(db)).toHaveLength(0);
   });
+
+  it("replays a completed migration when no backing remains in the household pool", async () => {
+    const db = world("authoritative");
+    Object.assign(db.collection("centralBanks").docs[0], { externalBroadMoney: 700 });
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const first = await runSavingsMigration(db as unknown as Db, 90);
+    expect(first.batches[0]?.reconciled).toBe(true);
+    expect(pool(db)).toBe(0);
+    const second = await runSavingsMigration(db as unknown as Db, 91);
+    expect(second.plan.ok).toBe(true);
+    expect(second.plan.currencies[0]).toMatchObject({
+      bankHeld: 700,
+      backingRequired: 0,
+      poolShortfall: 0,
+      banks: [expect.objectContaining({ liability: 700, backingTransfer: 0, cashAfter: 1200 })],
+    });
+    expect(second.batches[0]).toMatchObject({ applied: 0, replayed: 3, reconciled: true });
+    expect(bank(db).bankCharter.playerDeposits).toBe(700);
+    expect(bank(db).bankCharter.cashReserves).toBe(1200);
+    expect(pool(db)).toBe(0);
+  });
+
+  it("recovers the original debited backing before planning remaining transfers", async () => {
+    const db = world("authoritative");
+    Object.assign(db.collection("centralBanks").docs[0], { externalBroadMoney: 700 });
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const interrupted = vi
+      .spyOn(db.collection("corporations"), "updateOne")
+      .mockRejectedValueOnce(new Error("synthetic bank-credit interruption"));
+    await expect(runSavingsMigration(db as unknown as Db, 90)).rejects.toThrow(
+      "synthetic bank-credit interruption"
+    );
+    expect(pool(db)).toBe(0);
+    expect(bank(db).bankCharter.cashReserves).toBe(500);
+    interrupted.mockRestore();
+    const resumed = await runSavingsMigration(db as unknown as Db, 91);
+    expect(resumed.plan.ok).toBe(true);
+    expect(resumed.batches[0]).toMatchObject({ failed: 0, reconciled: true });
+    expect(accounts(db)).toHaveLength(3);
+    expect(pool(db)).toBe(0);
+    expect(bank(db).bankCharter).toMatchObject({ cashReserves: 1200, playerDeposits: 700 });
+  });
+
+  it.each(["shadow", "read cohort", "unselected currency"])(
+    "does not recover a pending transfer behind the %s gate",
+    async (gate) => {
+      const db = world("authoritative");
+      Object.assign(db.collection("centralBanks").docs[0], { externalBroadMoney: 700 });
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+      const interrupted = vi
+        .spyOn(db.collection("corporations"), "updateOne")
+        .mockRejectedValueOnce(new Error("synthetic bank-credit interruption"));
+      await expect(runSavingsMigration(db as unknown as Db, 90)).rejects.toThrow(
+        "synthetic bank-credit interruption"
+      );
+      interrupted.mockRestore();
+      if (gate === "shadow") {
+        Object.assign(db.collection("gameConfig").docs[0], { savingsAccountsMode: "shadow" });
+      } else if (gate === "read cohort") {
+        Object.assign(db.collection("gameConfig").docs[0], {
+          savingsAccountsReadCurrencies: ["USD"],
+        });
+      }
+      await runSavingsMigration(
+        db as unknown as Db,
+        91,
+        gate === "unselected currency" ? ["GBP"] : undefined
+      );
+      expect(pool(db)).toBe(0);
+      expect(bank(db).bankCharter.cashReserves).toBe(500);
+      expect(accounts(db)).toHaveLength(0);
+    }
+  );
+
+  it("does not mistake a shadow account for already transferred backing", async () => {
+    const db = world("authoritative");
+    Object.assign(db.collection("centralBanks").docs[0], { externalBroadMoney: 700 });
+    db.seed("savingsAccounts", [
+      {
+        _id: new ObjectId(),
+        ownerType: "character",
+        ownerId: P1,
+        currency: "USD",
+        balance: 700,
+        holder: BANK.toString(),
+        status: "open",
+        version: 0,
+        accruedInterest: 1.5,
+        interestEarned: 0,
+        openedTurn: 90,
+      },
+    ]);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const result = await runSavingsMigration(db as unknown as Db, 90);
+    expect(result.plan.currencies[0]).toMatchObject({ accountsExisting: 1, backingRequired: 700 });
+    expect(result.batches[0]?.reconciled).toBe(true);
+    expect(pool(db)).toBe(0);
+    expect(bank(db).bankCharter).toMatchObject({ cashReserves: 1200, playerDeposits: 700 });
+  });
 });
