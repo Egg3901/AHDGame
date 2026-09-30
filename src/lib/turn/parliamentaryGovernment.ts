@@ -71,6 +71,7 @@ import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governin
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { hasRequiredPrimeMinisterSeat } from "@/lib/uk/pmSeatEligibility";
 import { isSingleplayer } from "@/lib/singleplayer";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 
 export { resolveGoverningPartyIdsFromDocuments };
 
@@ -103,7 +104,7 @@ export async function tallySeatsByParty(
   preset?: string
 ): Promise<Record<string, number>> {
   const activePreset = preset ?? (await getGameStatePreset(db));
-  const lowerOfficeType = getLowerChamberOfficeType(countryId, activePreset);
+  const { lowerOfficeType } = await loadRuntimeCountryOffices(db, countryId, activePreset);
 
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
