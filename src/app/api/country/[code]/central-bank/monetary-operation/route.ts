@@ -19,6 +19,10 @@ import {
   existingLiquidityAdvance,
   LiquidityAdvanceRejected,
 } from "@/lib/moneySupply/liquidityAdvance";
+import {
+  existingMonetaryOperation,
+  MonetaryOperationRejected,
+} from "@/lib/moneySupply/monetaryOperationJournal";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
 import { isMoneySupplyEnabledFromConfig } from "@/lib/moneySupply/featureFlag";
 
@@ -83,7 +87,12 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
             amount: Math.max(0, Math.floor(parsed.data.amount ?? 0)),
             reason: parsed.data.reason,
           })
-        : false;
+        : await existingMonetaryOperation(db, {
+            ...parsed.data,
+            countryId,
+            turn,
+            actorName: auth.user.character?.name ?? auth.user.username,
+          });
     if (
       !auth.user.isAdmin &&
       !replay &&
@@ -108,9 +117,8 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       );
     const operation = await executeMonetaryOperation(db, {
       countryId,
-      ...(parsed.data.type === "liquidity_injection"
-        ? { operationId: parsed.data.operationId, bypassCooldown: auth.user.isAdmin }
-        : {}),
+      operationId: parsed.data.operationId,
+      bypassCooldown: auth.user.isAdmin,
       type: parsed.data.type,
       turn,
       actorName: auth.user.character?.name ?? auth.user.username,
@@ -122,7 +130,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     await snapshotMoneySupply(db, turn);
     return NextResponse.json({ success: true, operation });
   } catch (error) {
-    if (error instanceof LiquidityAdvanceRejected)
+    if (error instanceof LiquidityAdvanceRejected || error instanceof MonetaryOperationRejected)
       return NextResponse.json({ error: error.message }, { status: 409 });
     return handleRouteError(error);
   }

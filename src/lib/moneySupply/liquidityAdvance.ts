@@ -78,6 +78,12 @@ export async function executeLiquidityAdvance(
     input.amount <= 0
   )
     throw new LiquidityAdvanceRejected("Valid operation ID and positive whole amount required");
+  if (
+    await db
+      .collection<{ _id: string }>("monetaryOperationCommands")
+      .findOne({ _id: input.operationId }, { projection: { _id: 1 } })
+  )
+    throw new LiquidityAdvanceRejected("Operation ID already belongs to another monetary command");
   const receipts = db.collection<Receipt>(COLLECTION);
   let receipt = await receipts.findOne({ _id: input.operationId });
   if (!receipt) {
