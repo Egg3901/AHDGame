@@ -1,0 +1,246 @@
+{
+  "source": "4ebec5b1566cd4de6a04ff6200bd7967fa403d05",
+  "cleanSource": true,
+  "cases": [
+    {
+      "label": "normal",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "replay": true
+    },
+    {
+      "label": "signed",
+      "state": {
+        "treasury": -2000,
+        "reserves": -4000,
+        "combined": -6000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "replay": true
+    },
+    {
+      "label": "federalbudget_before",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "federalbudget_after",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "centralbanks_before",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "centralbanks_after",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "financialtxlog_before",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "financialtxlog_after",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "ledgerentries_before",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "ledgerentries_after",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "actionauditlog_before",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "actionauditlog_after",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      },
+      "concurrentRecovery": true
+    },
+    {
+      "label": "federalBudget_receipt_evicted",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      }
+    },
+    {
+      "label": "centralBanks_receipt_evicted",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      }
+    },
+    {
+      "label": "same_id_concurrent",
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      }
+    },
+    {
+      "label": "different_id_one_per_turn",
+      "results": ["rejected", "fulfilled"],
+      "state": {
+        "treasury": 9000,
+        "reserves": 6000,
+        "combined": 15000,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      }
+    },
+    {
+      "label": "two_actual_treasury_turns",
+      "control": {
+        "treasury": 14166,
+        "reserves": 5000,
+        "combined": 19166,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 0,
+        "pending": null
+      },
+      "treatment": {
+        "treasury": 13166,
+        "reserves": 6000,
+        "combined": 19166,
+        "spending": 900000,
+        "surplus": 100000,
+        "history": 1,
+        "pending": null
+      }
+    }
+  ],
+  "costs": {
+    "normal": {
+      "commands": 37,
+      "replyBytes": 20409
+    },
+    "signed": {
+      "commands": 37,
+      "replyBytes": 20409
+    },
+    "idleRecoveryTwice": {
+      "commands": 3,
+      "replyBytes": 325
+    }
+  }
+}
