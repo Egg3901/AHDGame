@@ -58,7 +58,7 @@ export async function buildRatifiedFederationActivation(input: {
   const availableFromYear = earliestFederationDecisionYear("1991-default", sourceCountryId);
   if (availableFromYear === null || currentYear < availableFromYear)
     throw new Error("Federation activation is not yet available");
-  const { sourceRegions, custodyAssets } = await loadLiveSuccessionInventory(
+  const { sourceRegions } = await loadLiveSuccessionInventory(
     db,
     sourceCountryId,
     session
