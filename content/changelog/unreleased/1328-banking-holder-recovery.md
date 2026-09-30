@@ -6,7 +6,7 @@ summary: >-
   and restore the selector for another attempt.
 tags: [banking, bugfix]
 badges: [patch]
-areas: [web]
+areas: [frontend]
 ---
 
 ## What changed
