@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { nuclearProgramBaselines, seedColdWarFoundations } from "./seedColdWarFoundations";
+import type { LivingConflictState } from "@/lib/livingConflict/types";
 
 describe("seedColdWarFoundations", () => {
   let db: MockDb;
@@ -60,5 +61,58 @@ describe("seedColdWarFoundations", () => {
     expect(result.programsInserted).toBe(3);
     expect(db.collectionMocks.nuclearPrograms!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.gameState!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("persists authored 2027 opening states only for missing rows and preserves them on retry", async () => {
+    const stored = new Map<string, LivingConflictState>();
+    db.collectionMocks.nuclearPrograms!.find.mockReturnValue({
+      toArray: async () => nuclearProgramBaselines(2027),
+    } as never);
+    db.collectionMocks.coldWarTension!.findOne.mockResolvedValue({ _id: "current" });
+    db.collectionMocks.states = db.collection("states");
+    db.collectionMocks.states!.find.mockReturnValue({
+      toArray: async () => [
+        { countryId: "IE", population: 5_000_000 },
+        { countryId: "UKR", population: 30_000_000 },
+      ],
+    } as never);
+    db.collectionMocks.macroCountries = db.collection("macroCountries");
+    db.collectionMocks.macroCountries!.find.mockReturnValue({
+      toArray: async () => [
+        { entityId: "YE", population: 30_000_000 },
+        { entityId: "SY", population: 20_000_000 },
+        { entityId: "LY", population: 7_000_000 },
+        { entityId: "TN", population: 12_000_000 },
+        { entityId: "EG", population: 100_000_000 },
+        { entityId: "TR", population: 80_000_000 },
+      ],
+    } as never);
+    db.collectionMocks.livingConflicts!.find.mockImplementation(() => ({
+      toArray: async () => [...stored.values()],
+    }));
+    db.collectionMocks.livingConflicts!.bulkWrite.mockImplementation(async (operations) => {
+      for (const operation of operations) {
+        const key = operation.updateOne.filter.defKey;
+        if (!stored.has(key) && operation.updateOne.update.$setOnInsert)
+          stored.set(key, operation.updateOne.update.$setOnInsert);
+      }
+    });
+
+    await seedColdWarFoundations(db as unknown as Db, 2027, 1248, { presetId: "2027-default" });
+    expect(stored.get("northern_ireland")).toMatchObject({ phaseLevel: 6, status: "settled" });
+    expect(stored.get("global_financial_crisis")).toMatchObject({
+      phaseLevel: 7,
+      status: "closed",
+    });
+    expect(stored.get("yugoslav_dissolution")).toMatchObject({
+      status: "closed",
+      openingDisposition: "not_applicable",
+    });
+    expect(stored.get("arab_uprisings")?.arabRegional?.origins.YE?.population).toBe(30_000_000);
+    const prior = structuredClone(stored.get("northern_ireland"));
+    const writes = db.collectionMocks.livingConflicts!.bulkWrite.mock.calls.length;
+    await seedColdWarFoundations(db as unknown as Db, 2027, 1248, { presetId: "2027-default" });
+    expect(db.collectionMocks.livingConflicts!.bulkWrite.mock.calls.length).toBe(writes);
+    expect(stored.get("northern_ireland")).toEqual(prior);
   });
 });
