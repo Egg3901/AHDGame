@@ -178,3 +178,63 @@ describe("atomic document settlement", () => {
     expect(await state(db)).toMatchObject({ liquidCapital: 100, bankCharter: { cashReserves: 5 } });
   });
 });
+
+describe("atomic settlement transaction receipts", () => {
+  it.each([false, true])(
+    "recovers the original receipt after interruption (after=%s)",
+    async (afterWrite) => {
+      const memory = world();
+      const db = memory as unknown as Db;
+      const original = transition("receipt:one");
+      const txId = new ObjectId();
+      original.projections.push({
+        collection: "financialTxLog",
+        insert: {
+          _id: oid(txId.toHexString()),
+          amount: -40,
+          turn: 5,
+        },
+        note: "immutable transaction",
+      });
+      const crash = withInjectedCrash(memory, {
+        collection: "financialTxLog",
+        op: "updateOne",
+        onCall: 1,
+        afterWrite,
+      });
+      await expect(settleAtomicDocumentTransition(crash.db, original, target)).rejects.toThrow(
+        InjectedCrash
+      );
+      expect(await state(db)).toMatchObject({
+        liquidCapital: 60,
+        bankCharter: { cashReserves: 40 },
+      });
+      await resumeSettlement(db, original.key);
+      await resumeSettlement(db, original.key);
+      expect(memory.collection("financialTxLog").docs).toHaveLength(1);
+      expect(await db.collection("financialTxLog").findOne({ _id: txId })).toMatchObject({
+        amount: -40,
+        turn: 5,
+      });
+      expect(await state(db)).toMatchObject({
+        liquidCapital: 60,
+        bankCharter: { cashReserves: 40 },
+      });
+    }
+  );
+  it("refuses a conflicting receipt without replaying the cash", async () => {
+    const memory = world();
+    const db = memory as unknown as Db;
+    const original = transition("receipt:conflict");
+    const txId = new ObjectId();
+    original.projections.push({
+      collection: "financialTxLog",
+      insert: { _id: oid(txId.toHexString()), amount: -40 },
+      note: "transaction",
+    });
+    memory.seed("financialTxLog", [{ _id: txId, amount: -99 }]);
+    await expect(settleAtomicDocumentTransition(db, original, target)).rejects.toThrow("conflicts");
+    await expect(resumeSettlement(db, original.key)).rejects.toThrow("conflicts");
+    expect(await state(db)).toMatchObject({ liquidCapital: 60, bankCharter: { cashReserves: 40 } });
+  });
+});
