@@ -1,4 +1,4 @@
-import { ObjectId, type ClientSession, type Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db, type AnyBulkWriteOperation } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Character } from "@/lib/db/types/character";
 import type { SuccessionResident, SuccessionResidencePlan } from "./rules/residency";
@@ -44,7 +44,7 @@ export async function materializeFederationResidentHolds(input: {
         .length
   )
     throw new Error("Federation resident hold needs a complete approved source inventory");
-  let held = 0;
+  const affected: Array<{ resident: SuccessionResident; plan: SuccessionResidencePlan }> = [];
   for (const resident of residents) {
     const transfer = transferByState.get(resident.homeState);
     const plan = planByCharacter.get(resident.characterId);
@@ -61,55 +61,80 @@ export async function materializeFederationResidentHolds(input: {
     )
       throw new Error("Federation resident choice disagrees with live territory");
     if (!plan) continue;
+    affected.push({ resident, plan });
+  }
+  if (affected.length === 0) return 0;
+  const characters = db.collection<Character>("characters");
+  const ids = affected.map(({ resident }) => new ObjectId(resident.characterId));
+  const live = await characters
+    .find(
+      { _id: { $in: ids } },
+      {
+        session,
+        projection: {
+          countryId: 1,
+          homeState: 1,
+          currentOffice: 1,
+          federationPendingResidenceId: 1,
+        },
+      }
+    )
+    .toArray();
+  const byId = new Map(live.map((character) => [character._id.toHexString(), character]));
+  const holds: FederationResidentHold[] = [];
+  const updates: AnyBulkWriteOperation<Character>[] = [];
+  for (const { resident, plan } of affected) {
     const id = new ObjectId(resident.characterId);
-    const characters = db.collection<Character>("characters");
-    const character = await characters.findOne({ _id: id }, { session });
+    const character = byId.get(id.toHexString());
     if (
       !character ||
       character.countryId !== sourceCountryId ||
       character.homeState !== resident.homeState ||
-      character.federationPendingResidenceId
+      Object.hasOwn(character, "federationPendingResidenceId")
     )
       throw new Error("Federation resident changed before protected relocation");
-    await db.collection<FederationResidentHold>(FEDERATION_RESIDENT_HOLDS_COLLECTION).insertOne(
-      {
-        _id: `${applicationId}:${resident.characterId}`,
-        applicationId,
-        characterId: resident.characterId,
-        formerCountryId: sourceCountryId,
-        formerHomeState: resident.homeState,
-        successorEntityId: transfer.successorEntityId,
-        formerOffice: character.currentOffice ?? null,
-        ...(plan.status === "selected" ? { selectedDestination: plan.destination } : {}),
-      },
-      { session }
-    );
-    const updated = await characters.updateOne(
-      {
-        _id: id,
-        countryId: sourceCountryId,
-        homeState: resident.homeState,
-        federationPendingResidenceId: { $exists: false },
-      },
-      { $set: { federationPendingResidenceId: applicationId, currentOffice: null } },
-      { session }
-    );
-    if (updated.matchedCount !== 1)
-      throw new Error("Federation resident changed while entering protected relocation");
-    await db.collection("electedOfficials").updateMany(
-      { characterId: id },
-      {
-        $set: {
-          characterId: null,
-          characterName: null,
-          party: null,
-          electedAt: null,
-          updatedAt: now,
+    holds.push({
+      _id: `${applicationId}:${resident.characterId}`,
+      applicationId,
+      characterId: resident.characterId,
+      formerCountryId: sourceCountryId,
+      formerHomeState: resident.homeState,
+      successorEntityId: plan.successorEntityId,
+      formerOffice: character.currentOffice ?? null,
+      ...(plan.status === "selected" ? { selectedDestination: plan.destination } : {}),
+    });
+    updates.push({
+      updateOne: {
+        filter: {
+          _id: id,
+          countryId: sourceCountryId,
+          homeState: resident.homeState,
+          federationPendingResidenceId: { $exists: false },
         },
+        update: { $set: { federationPendingResidenceId: applicationId, currentOffice: null } },
       },
-      { session }
-    );
-    held++;
+    });
   }
-  return held;
+  // Validate the entire inventory before any write. All four operations share
+  // the settlement transaction, so a concurrent change rolls back every hold.
+  await db
+    .collection<FederationResidentHold>(FEDERATION_RESIDENT_HOLDS_COLLECTION)
+    .insertMany(holds, { session });
+  const updated = await characters.bulkWrite(updates, { session });
+  if (updated.matchedCount !== affected.length)
+    throw new Error("Federation resident changed while entering protected relocation");
+  await db.collection("electedOfficials").updateMany(
+    { characterId: { $in: ids } },
+    {
+      $set: {
+        characterId: null,
+        characterName: null,
+        party: null,
+        electedAt: null,
+        updatedAt: now,
+      },
+    },
+    { session }
+  );
+  return affected.length;
 }
