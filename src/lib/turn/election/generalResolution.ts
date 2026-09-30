@@ -1342,18 +1342,31 @@ export async function resolveOneGeneralElection(
     // RU actions are DESTRUCTIVE (formation reset), so an explicit cycle guard
     // inside handleRuConvocationReset makes the trigger idempotent: only the
     // first resolver of a new cycle resets the government (spec §2.4).
-    if (election.countryId === "RU" && election.electionType === "supremeSovietDeputy") {
+    const regularRuType = election.electionType.startsWith("snap_")
+      ? election.electionType.slice(5)
+      : election.electionType;
+    if (
+      election.countryId === "RU" &&
+      [
+        "supremeSovietDeputy",
+        "unionCongressDeputy",
+        "congressDeputy",
+        "congressOfPeoplesDeputies",
+        "dumaDeputy",
+        "stateDuma",
+      ].includes(regularRuType)
+    ) {
       try {
         const remaining = await db.collection<Election>("elections").countDocuments({
           countryId: "RU",
-          electionType: "supremeSovietDeputy",
+          electionType: election.electionType,
           cycle: election.cycle,
-          status: { $ne: "resolved" satisfies ElectionStatus },
+          status: { $in: ["upcoming", "active", "completed"] satisfies ElectionStatus[] },
           _id: { $ne: election._id },
         });
         if (remaining === 0) {
           const { handleRuConvocationReset } = await import("@/lib/turn/ruConvocation");
-          await handleRuConvocationReset(db, election.cycle ?? 1, now);
+          await handleRuConvocationReset(db, election.cycle ?? 1, now, election.electionType);
         }
       } catch (err) {
         logger.error("Turn", `RU convocation trigger failed (cycle ${election.cycle})`, err);
