@@ -77,7 +77,8 @@ async function observe(db: Db, setup: Awaited<ReturnType<typeof setupCase>>) {
     householdPool: n(cb?.externalBroadMoney),
     centralBankReserves: n(cb?.reserveBalance),
     insuranceCash: n(funds?.balance),
-    treasuryCash: n(budget?.treasuryBalance),
+    // A negative treasury position is a fiscal obligation, not spendable cash.
+    treasuryCash: Math.max(0, n(budget?.treasuryBalance)),
   };
   let mint = 0,
     burn = 0;
@@ -97,6 +98,7 @@ async function observe(db: Db, setup: Awaited<ReturnType<typeof setupCase>>) {
   const account = accounts.find((row) => String(row.ownerId) === SAVER.toHexString());
   return {
     buckets,
+    treasuryFiscalPosition: n(budget?.treasuryBalance),
     cash: Object.values(buckets).reduce((a, b) => a + b, 0),
     mint,
     burn,
@@ -204,7 +206,7 @@ async function runCase(
   const headroom = namedLoanHeadroom(loaded.snapshot.charter, loaded.snapshot.reserveRatio, {
     playerDepositsAreLiabilities: true,
   });
-  const principal = Math.floor(Math.min(setup.native(90_000_000), headroom) * 100) / 100;
+  const principal = Math.floor(Math.min(setup.native(85_000_000), headroom) * 100) / 100;
   assert(principal > 0);
   const loan = await originateLoan(db, BANK, { type: "corporation", id: BORROWER }, principal, 12);
   assert(loan.ok, `Origination refused: ${JSON.stringify(loan)}`);
