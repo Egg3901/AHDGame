@@ -210,6 +210,22 @@ async function main() {
               await db
                 .collection<Crisis>("crises")
                 .updateOne({ _id: crisis._id }, { $set: { status: "resolved" } });
+              // Match the generic crisis lifecycle's close after the final
+              // fallback. A sequential NI node may still have a successor.
+              await db
+                .collection<CrisisInteraction>("crisisInteractions")
+                .updateMany(
+                  { crisisId: crisis._id, resolvedAt: null },
+                  {
+                    $set: {
+                      currentNodeId: null,
+                      decisionDeadline: null,
+                      resolvedAt: new Date(),
+                      resolutionOutcome: "completed",
+                      updatedAt: new Date(),
+                    },
+                  }
+                );
             }
           await measure("sevenFamilyDriver", () =>
             processLivingConflictsTurn(db, turn, 2027 + offset / 48, true)
@@ -328,6 +344,7 @@ async function main() {
         }
       }
       if (combined) {
+        assert.equal(peakConcurrent, 7, "All seven families must overlap");
         assert(
           MODERN_KEYS.every((key) => (windows[key] ?? 0) > 0),
           `Missing family windows: ${JSON.stringify(windows)}`
@@ -335,6 +352,14 @@ async function main() {
         assert(peakDisease > 0 && peakDisplaced > 0 && minimumMacroRatio < 1 && minDemand < 1);
         assert.equal(samples.at(-1)!.demand.DE, 1);
       }
+      const closed = await db.collection<Crisis>("crises").find({ status: "resolved" }).toArray();
+      assert.equal(
+        await db
+          .collection<CrisisInteraction>("crisisInteractions")
+          .countDocuments({ crisisId: { $in: closed.map((row) => row._id) }, resolvedAt: null }),
+        0,
+        "Closed crisis left an open interaction"
+      );
       const interactions = await db
         .collection<CrisisInteraction>("crisisInteractions")
         .find({})
