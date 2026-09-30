@@ -327,13 +327,21 @@ describe("live federation settlement intent", () => {
   it("rejects a newly added nested district before publishing the frozen territory", async () => {
     const { args } = scenario();
     const staged = await stageLiveFederationSettlementIntent(args);
-    await args.db.collection("states").insertOne({
-      _id: "KYIV",
-      countryId: "RU",
-      parentRegionId: "UKRAINE",
-      population: 2,
-      gdp: 20,
-    });
+    await args.db
+      .collection<{
+        _id: string;
+        countryId: string;
+        parentRegionId: string;
+        population: number;
+        gdp: number;
+      }>("states")
+      .insertOne({
+        _id: "KYIV",
+        countryId: "RU",
+        parentRegionId: "UKRAINE",
+        population: 2,
+        gdp: 20,
+      });
     await expect(
       verifyLiveFederationSettlementIntent({
         db: args.db,
