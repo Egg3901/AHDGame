@@ -97,6 +97,7 @@ import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-back
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
 import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-30-financial-tx-log-counterparty-index";
 import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
+import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -314,6 +315,8 @@ export const MIGRATIONS: Migration[] = [
   financialTxLogCounterpartyIndex,
   // Also in the startup allowlist, like longHorizonTelemetryIndexes.
   appleProviderIdentityIndex,
+  // #2699: seed indexes a running world never received; skips text/TTL/duplicate-blocked.
+  reconcileSeedIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
