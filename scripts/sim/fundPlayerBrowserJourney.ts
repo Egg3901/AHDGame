@@ -69,7 +69,8 @@ async function main() {
       transactions: await db.collection("indexFundTransactions").countDocuments({ fundId }),
     };
   };
-  const app = bankingJourneyApp(uri, target, out, sourceCommit);
+  const app = bankingJourneyApp(uri, target, out, sourceCommit, arg("session"));
+  let succeeded = false;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     let ready = false;
@@ -142,6 +143,13 @@ async function main() {
       app.assertAlive();
       console.log("Fund page warmup reached its transport deadline; retaining the compiling app");
     }
+    // Unsupported GETs compile the two real command handlers without placing orders.
+    for (const mode of ["subscribe", "redeem"]) {
+      const warm = await context.request.get(`${app.base}/api/investment-funds/fixture/${mode}`, {
+        timeout: 120000,
+      });
+      assert.equal(warm.status(), 405);
+    }
     const page = await context.newPage();
     const diagnostics: unknown[] = [];
     page.on("pageerror", (error) => diagnostics.push({ pageError: error.message }));
@@ -176,11 +184,21 @@ async function main() {
       let lost = false;
       await context.route(`**/api/investment-funds/*/${mode}`, async (route) => {
         requests.push(route.request().postDataJSON());
-        const response = await route.fetch({ timeout: 120000 });
-        if (!lost && response.ok()) {
-          lost = true;
-          await route.abort("failed");
-        } else await route.fulfill({ response });
+        try {
+          const response = await route.fetch({ timeout: 120000 });
+          if (!lost && response.ok()) {
+            lost = true;
+            await route.abort("failed");
+          } else await route.fulfill({ response });
+        } catch {
+          // Do not let a transport callback exception bypass owned-app cleanup.
+          diagnostics.push({
+            mode,
+            operationId: requests.at(-1)?.operationId,
+            transportFailed: true,
+          });
+          await route.abort("failed").catch(() => undefined);
+        }
       });
       const before = await snapshot();
       if (mode === "redeem")
@@ -196,7 +214,11 @@ async function main() {
         throw error;
       }
       await page.getByText("Network error", { exact: true }).waitFor({ timeout: 120000 });
-      assert(lost);
+      if (!lost) await capture();
+      assert(
+        lost,
+        "No successful server response was observed; inspect the original command before retrying"
+      );
       const committed = await snapshot();
       assert.equal(committed.units, before.units + (mode === "subscribe" ? 1 : -1));
       assert.equal(committed.wallet + committed.cashAnchor, before.wallet + before.cashAnchor);
@@ -256,10 +278,11 @@ async function main() {
         2
       )
     );
+    succeeded = true;
     console.log("Fund player browser journey passed");
   } finally {
     await browser?.close();
-    app.finish(true);
+    app.finish(succeeded);
     await client.close();
   }
 }
