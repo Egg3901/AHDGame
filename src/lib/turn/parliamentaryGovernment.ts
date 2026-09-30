@@ -1499,7 +1499,7 @@ export async function checkAppointmentEligibility(
   // changes the canFormGovernment ruling-party gate.
   const runtime = await getCountryState(db, countryId);
   const runtimeConfig = { governmentType: runtime.governmentType };
-  const lowerOfficeType = getLowerChamberOfficeType(countryId);
+  const { lowerOfficeType } = await loadRuntimeCountryOffices(db, countryId);
   const liveLowerSeats = await getLiveLowerChamberSeats(db, countryId);
   const minorityThreshold = Math.ceil(liveLowerSeats * MINORITY_SEAT_FRACTION);
 
