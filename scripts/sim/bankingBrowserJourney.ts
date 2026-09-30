@@ -46,10 +46,32 @@ async function main() {
       ).find((row) => row.stage === "baseline")?.state
     : undefined;
   if (resumeDepositEvidence) assert(resumedDepositBaseline, "Missing initial deposit baseline");
+  const recoveryEvidence = arg("resume-recovery-evidence");
+  const recoverySource = arg("resume-recovery-source");
+  const priorSteps = recoveryEvidence
+    ? (JSON.parse(readFileSync(recoveryEvidence, "utf8")) as {
+        stage: string;
+        state: Awaited<ReturnType<typeof journeySnapshot>>;
+      }[])
+    : undefined;
+  let priorRecovery: { unhandledFailure: string | null; feedbackVisible: boolean } | undefined;
+  if (recoveryEvidence) {
+    assert(recoverySource && /^[a-f0-9]{10,40}$/.test(recoverySource));
+    assert(recoveryEvidence.endsWith(".json.steps.json"));
+    priorRecovery = JSON.parse(
+      readFileSync(recoveryEvidence.replace(".steps.json", ".recovery.json"), "utf8")
+    );
+    assert(priorRecovery?.feedbackVisible && priorRecovery.unhandledFailure === null);
+    assert(
+      readFileSync(recoveryEvidence.replace(".json.steps.json", ".log"), "utf8").includes(
+        "completed savings failure recovery and stale destination finality"
+      )
+    );
+  }
   const probeHub = arg("probe-hub") === "true";
   const resumeUntouchedFixture = arg("resume-untouched-fixture") === "true";
   let fixture;
-  if (probeHub || resumedDepositBaseline) {
+  if (probeHub || resumedDepositBaseline || priorSteps) {
     assert.equal(
       (await db.collection("users").findOne({ _id: USER }))?.email,
       "banking-player@example.invalid"
@@ -59,6 +81,20 @@ async function main() {
       setup: { turn: (resumedDepositBaseline?.turn as number) ?? 0 },
       retainedHash: retained.hash,
     };
+    if (priorSteps) {
+      const afterTurn = priorSteps.at(-1);
+      assert.equal(afterTurn?.stage, "actual banking solvency and committee turn");
+      assert(afterTurn);
+      const current = await journeySnapshot(db);
+      assert.equal(current.turn, afterTurn.state.turn);
+      assert.equal(current.bank.status, "revoked");
+      assert.equal(current.savings[0].holder, "centralBank");
+      assert.equal(current.savings[0].balance, afterTurn.state.savings[0].balance + 1000);
+      assert.equal(current.saverWallet, afterTurn.state.saverWallet - 1000);
+      assert.deepEqual(current.loans, afterTurn.state.loans);
+      assert(current.journals.every((move) => move.status === "applied"));
+      fixture.setup.turn = current.turn as number;
+    }
     if (resumedDepositBaseline) {
       const existing = await journeySnapshot(db);
       assert.equal(existing.turn, resumedDepositBaseline.turn);
@@ -127,6 +163,7 @@ async function main() {
       "/api/poll-banner",
       "/api/global-alerts/active",
       "/api/flags/country/",
+      "/api/images/hero/",
     ];
     await context.route("**/*", async (route) => {
       const url = new URL(route.request().url());
@@ -205,6 +242,8 @@ async function main() {
       "/api/character/savings-holder",
       "/api/banking/loans",
       "/api/country/us/fomc/vote",
+      "/api/country/us/fomc",
+      "/api/game/turn/status",
       "/api/country/us/central-bank",
       "/api/country/ie/central-bank",
       "/api/country/ie/central-bank/rate",
@@ -236,25 +275,42 @@ async function main() {
       if (new URL(response.url()).origin === base && response.request().method() !== "GET")
         requests.push({ path: new URL(response.url()).pathname, status: response.status() });
     });
-    await page.goto(`${base}/banking`, { waitUntil: "domcontentloaded", timeout: 300_000 });
-    await page
-      .getByText("Journey Savings Bank", { exact: true })
-      .first()
-      .waitFor({ timeout: 300_000 });
-    const rejectCookies = page.getByRole("button", { name: "Reject", exact: true });
-    if (await rejectCookies.isVisible()) await rejectCookies.click();
-    await page
-      .screenshot({ path: `${out}.png`, fullPage: true, timeout: 5000 })
-      .catch(() => console.log("Optional banking screenshot unavailable"));
     const baseline = await journeySnapshot(db);
-    const actions = await runBankingActions(
-      page,
-      db,
-      base,
-      fixture.setup.turn,
-      resumedDepositBaseline
+    let actions;
+    let recovery;
+    if (priorSteps && priorRecovery) {
+      actions = {
+        snapshots: priorSteps,
+        sourceCommit: recoverySource,
+        resumedCompletedActions: true,
+      };
+      recovery = {
+        ...priorRecovery,
+        sourceCommit: recoverySource,
+        resumedCompletedRecovery: true,
+        afterReload: baseline,
+        dialogClosed: true,
+        reloadDidNotRepeatCommand: true,
+      };
+    } else {
+      await page.goto(`${base}/banking`, { waitUntil: "domcontentloaded", timeout: 300_000 });
+      await page
+        .getByText("Journey Savings Bank", { exact: true })
+        .first()
+        .waitFor({ timeout: 300_000 });
+      const rejectCookies = page.getByRole("button", { name: "Reject", exact: true });
+      if (await rejectCookies.isVisible()) await rejectCookies.click();
+      actions = await runBankingActions(page, db, base, fixture.setup.turn, resumedDepositBaseline);
+      writeFileSync(
+        out,
+        JSON.stringify({ sourceCommit, stage: "actions complete", actions }, null, 2)
+      );
+      recovery = await runRecoveryJourney(page, db, base, arg("development") === "true");
+    }
+    writeFileSync(
+      out,
+      JSON.stringify({ sourceCommit, stage: "recovery complete", actions, recovery }, null, 2)
     );
-    const recovery = await runRecoveryJourney(page, db, base, arg("development") === "true");
     const governance = await runGovernanceJourney(page, db, base, async () => {
       await context.addCookies([
         {
@@ -266,6 +322,14 @@ async function main() {
         },
       ]);
     });
+    writeFileSync(
+      out,
+      JSON.stringify(
+        { sourceCommit, stage: "governance complete", actions, recovery, governance },
+        null,
+        2
+      )
+    );
     await context.addCookies([
       {
         name: "auth-token-local",

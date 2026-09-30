@@ -35,8 +35,7 @@ export async function runBankingActions(
       (r) => new URL(r.url()).pathname === path && r.request().method() !== "GET",
       { timeout: 180_000 }
     );
-    await action();
-    const result = await response;
+    const [result] = await Promise.all([response, action()]);
     const body = await result.json();
     assert(result.ok(), `${path}: ${result.status()} ${JSON.stringify(body)}`);
     return body;

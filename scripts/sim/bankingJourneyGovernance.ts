@@ -21,8 +21,10 @@ export async function runGovernanceJourney(
       new URL(r.url()).pathname === "/api/country/us/fomc/vote" && r.request().method() === "POST",
     { timeout: 180_000 }
   );
-  await page.getByRole("button", { name: "Hold", exact: true }).click();
-  const vote = await voteResponse;
+  const [vote] = await Promise.all([
+    voteResponse,
+    page.getByRole("button", { name: "Hold", exact: true }).click(),
+  ]);
   assert(vote.ok(), `Committee ballot rejected: ${await vote.text()}`);
   const afterUs = await db.collection("centralBanks").findOne({ _id: "US" as never });
   assert(afterUs);
@@ -62,8 +64,10 @@ export async function runGovernanceJourney(
       new URL(r.url()).pathname.endsWith("/central-bank/rate") && r.request().method() === "POST",
     { timeout: 180_000 }
   );
-  await page.getByRole("button", { name: "Confirm Rate Change", exact: true }).click();
-  const rate = await rateResponse;
+  const [rate] = await Promise.all([
+    rateResponse,
+    page.getByRole("button", { name: "Confirm Rate Change", exact: true }).click(),
+  ]);
   assert(rate.ok(), `Irish rate command rejected: ${await rate.text()}`);
   const afterIe = await db.collection("centralBanks").findOne({ _id: "IE" as never });
   assert(afterIe);
