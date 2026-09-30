@@ -306,12 +306,8 @@ async function processCountryConfidenceDrift(
 export const processCNBillLifecycle = (now: Date) =>
   processOnePartyBillLifecycleForCountry("CN", now);
 
-/**
- * RU registry binding — the one-party lifecycle with the crossover branch
- * active (RU is bicameral with a contested upper chamber, D8/D9).
- */
-export const processRUBillLifecycle = (now: Date) =>
-  processOnePartyBillLifecycleForCountry("RU", now);
+/** Compatibility export; the Russian shell selects its active constitution. */
+export { processRUBillLifecycle } from "./ruBillLifecycle";
 
 /**
  * DD registry binding — the GDR Volkskammer one-party lifecycle (unicameral,
