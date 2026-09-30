@@ -19,6 +19,23 @@ function tx(overrides: Partial<DerivableTx>): DerivableTx {
 }
 
 describe("deriveLedgerEntry (Phase 1 shim)", () => {
+  it.each(["bank_cb_advance", "bank_prop_trade_buy", "bank_prop_trade_sell"] as const)(
+    "keeps marked %s vault movements separate from corporate liquid capital",
+    (type) =>
+      expect(
+        deriveLedgerEntry(
+          tx({ type, subjectType: "corporation", meta: { bankVaultMovement: true } })
+        )
+      ).toBeNull()
+  );
+  it("does not let the vault marker suppress unrelated corporate cash", () => {
+    expect(
+      deriveLedgerEntry(
+        tx({ type: "corp_revenue", subjectType: "corporation", meta: { bankVaultMovement: true } })
+      )
+    ).not.toBeNull();
+  });
+
   it("does not invent cash when historical sovereign debt is securitized", () => {
     expect(
       deriveLedgerEntry(
