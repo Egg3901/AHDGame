@@ -1,7 +1,7 @@
 {
   "issue": 1328,
   "baselineSource": "6bdb1f0344885a42bc1bbdeb3d537dd7f7dbd4e5",
-  "treatmentSource": "670dac61d85a775375c47775b3e4762513a84b55",
+  "treatmentSource": "b8acbb11b8d02163507a36c22b3ae7370cfedde3",
   "scope": "Synthetic isolated Mongo subsystem using actual settleTransition and recoverProjections; no production data or world simulation.",
   "normalParity": {
     "payerCash": 900,
@@ -10,14 +10,15 @@
     "matched": true
   },
   "qualification": {
-    "cases": 10,
+    "cases": 12,
     "allCasesPassed": true,
     "normalCases": 1,
     "interruptedDeliveryCases": 5,
     "legacyCompatibilityCases": 2,
     "delayedPublisherCases": 1,
     "pendingOwnerCases": 1,
-    "ambiguousLegacyRemainsPartial": true
+    "ambiguousLegacyRemainsPartial": true,
+    "selectorCompatibilityCases": 2
   },
   "performance": {
     "scope": "One ordinary two-leg transition with one update projection, measured before replay calls. All Mongo commands and complete command/reply BSON included.",
@@ -34,7 +35,7 @@
   },
   "fixtureSha256": {
     "baseline": "7075bd732517e57729e6e7e060da39021f4e529874a9d1243087ba99da834be6",
-    "treatment": "20c83122bea297f2c8a47ff091a4c5184b122c1425094b9b43ce81a45d229da8"
+    "treatment": "7605f1a577e32cc341ed5898a68751d3a7bdadb8e179dd04786ba34860873c39"
   },
   "limitations": [
     "Synthetic actors and documents; no retained-world or production observation.",
@@ -48,6 +49,17 @@
     "files": 3,
     "tests": 38,
     "passed": true,
-    "scope": "Projection publication, existing settlement journal and interbank cases. Runtime game source unchanged from native670dac; later report and browser fixture changes only."
+    "scope": "Prior projection, existing settlement journal and interbank checks, before the selector compatibility follow-up."
+  },
+  "selectorChecks": {
+    "sourceCommit": "b8acbb11b8d02163507a36c22b3ae7370cfedde3",
+    "tests": 2,
+    "passed": true,
+    "scopedLintPassed": true
+  },
+  "compatibility": {
+    "fiscalSourceCommit": "63844d59a5",
+    "localCherryPick": "b8acbb11b8",
+    "scope": "Crisis treasury legs and projections retain stable budget identities. Nonliteral projection selectors are bound before journal admission; an unavailable target is durably rejected before cash movement."
   }
 }
