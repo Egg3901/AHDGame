@@ -274,6 +274,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "federationArchivedPublicCorporations", category: "runtime" },
   { name: "federationPublicCorporationRebases", category: "runtime" },
   { name: "federationPrivateFirmHolds", category: "runtime" },
+  { name: "federationResidentHolds", category: "runtime" },
   { name: "federationSettlementApplications", category: "runtime" },
   { name: "worldEntityStates", category: "runtime" },
   {
