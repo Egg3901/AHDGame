@@ -160,6 +160,7 @@ describe("snapshotMoneySupply", () => {
   });
 
   it("writes a moneySupplySnapshot row for a bank-less command economy (bug: 6 Warsaw-Pact countries had zero rows)", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ preset: "1991-default" });
     // Only US has a centralBanks doc — PL (a command economy excluded from
     // FOREX_ACTIVE_COUNTRIES, like the real PL/HU/CS/RO/BG/YU) has none, but
     // it DOES have a federalBudget row, exactly the sandbox-world shape that
