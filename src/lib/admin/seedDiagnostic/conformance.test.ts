@@ -395,11 +395,11 @@ describe("runConformanceChecks", () => {
         iteration: { type: "Alpha", number: 1 },
       },
       gameConfig: { _id: "default", maintenanceMode: true },
-      centralBanks: [{ _id: "RU", countryId: "RU", primeRate: 5 }],
+      centralBanks: [{ _id: "YU", countryId: "YU", primeRate: 5 }],
     });
 
     const { checks } = await runConformanceChecks(db, { preset: "2019-default" });
-    expect(checks.find((check) => check.id === "centralBank.RU.fiscalCoverage")).toMatchObject({
+    expect(checks.find((check) => check.id === "centralBank.YU.fiscalCoverage")).toMatchObject({
       severity: "critical",
       actual: null,
     });

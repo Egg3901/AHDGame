@@ -650,7 +650,7 @@ describe("sovereign bond helpers", () => {
     // left East Germany's seeded DDM 3B of debt pointing at a corporation that
     // did not exist. DD is issuer-only (sectors: []) — it is a command economy
     // and deliberately has no producing corporations.
-    expect(entries).toHaveLength(17);
+    expect(entries).toHaveLength(22);
     const us = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.US.id);
     const uk = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.UK.id);
     const jp = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.JP.id);

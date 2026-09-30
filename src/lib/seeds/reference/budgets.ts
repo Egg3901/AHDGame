@@ -40,6 +40,7 @@ import { COUNTRY_POLICY_CONFIGS_1953 } from "./basePolicies1953";
 import { COUNTRY_POLICY_CONFIGS_1979 } from "./basePolicies1979";
 import { COUNTRY_POLICY_CONFIGS_1991 } from "./basePolicies1991";
 import { SUCCESSOR_NATIONAL_BUDGETS_1991 } from "./successorBudgets1991";
+import { MODERN_NATIONAL_BUDGETS_2019 } from "./modernBudgets2019";
 import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
@@ -247,6 +248,10 @@ export interface NationalBudgetSeedConfig {
     | "CNY"
     | "NGN"
     | "SUR"
+    | "RUB"
+    | "PLN"
+    | "RON"
+    | "BGN"
     | "FRF"
     | "ITL"
     | "ESP"
@@ -5664,13 +5669,17 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   if (preset === "2019-default") {
     return overlayNationalBudgetConfigs(
       getNationalBudgetSeedConfigsForPreset("2007-default"),
-      NATIONAL_BUDGET_SEED_CONFIGS,
+      [...NATIONAL_BUDGET_SEED_CONFIGS, ...MODERN_NATIONAL_BUDGETS_2019],
       2019
     );
   }
   if (preset === "2023-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("2019-default"),
+      // These five rows are authored for the 2019 reset only. A 2023 or
+      // 2027 world needs its own fiscal calibration before it can include them.
+      getNationalBudgetSeedConfigsForPreset("2019-default").filter(
+        (config) => !MODERN_NATIONAL_BUDGETS_2019.some((row) => row.countryId === config.countryId)
+      ),
       NATIONAL_BUDGET_SEED_CONFIGS_2023,
       2023
     );
@@ -6626,7 +6635,7 @@ export function generateCountryOwnedSeedData(
   // (corporateSectors.revenue is liquidCurrencyCode-denominated — matching the
   // UK/CN NatCorp convention and what commodityPriceTurn expects).
   const ruStates = states.filter((state) => state.countryId === "RU" && state.gdp > 0);
-  if (ruStates.length > 0) {
+  if (ruStates.length > 0 && preset !== "2019-default") {
     // Preset-aware: the ₳→SUR rate is era-specific (1953 = 9 SUR/USD, the
     // Western GNP-estimate basis ruRegions1953 is calibrated on; the base
     // config carries the 1979 administered rate). Reading it era-blind divided
@@ -6767,6 +6776,37 @@ export function generateCountryOwnedSeedData(
     name: string;
     headquartersState: string;
   }> = [
+    ...(preset === "2019-default"
+      ? [
+          {
+            countryId: "RU" as const,
+            oid: RU_PUBLIC_CORPORATION_ID.toHexString(),
+            ceoOid: RU_PUBLIC_PLACEHOLDER_CHARACTER_ID.toHexString(),
+            userOid: RU_PUBLIC_PLACEHOLDER_USER_ID.toHexString(),
+            sequentialId: RU_PUBLIC_CORPORATION_SEQUENTIAL_ID,
+            name: "Russian Federation",
+            headquartersState: "CEN",
+          },
+        ]
+      : []),
+    ...(preset === "2019-default"
+      ? (
+          [
+            ["PL", "Poland", "PL_MAZ"],
+            ["HU", "Hungary", "HU_BUD"],
+            ["RO", "Romania", "RO_BUC"],
+            ["BG", "Bulgaria", "BG_SOF"],
+          ] as const
+        ).map(([countryId, name, headquartersState], index) => ({
+          countryId,
+          oid: `00000000000000000000b${(index * 3 + 1).toString(16).padStart(3, "0")}`,
+          ceoOid: `00000000000000000000b${(index * 3 + 2).toString(16).padStart(3, "0")}`,
+          userOid: `00000000000000000000b${(index * 3 + 3).toString(16).padStart(3, "0")}`,
+          sequentialId: 900_028 + index,
+          name,
+          headquartersState,
+        }))
+      : []),
     {
       countryId: "DE",
       oid: DE_PUBLIC_CORPORATION_OID,

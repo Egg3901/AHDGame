@@ -358,6 +358,11 @@ export async function seedSeats(
   if (reset) {
     await col.deleteMany({});
     log("Dropped seats collection");
+  } else {
+    // Older seeds called Nigeria's lower house "chamber", while its office
+    // config, incumbents and elections use "house". Remove those stale keys
+    // when an existing world is reseeded, before upserting the canonical ids.
+    await col.deleteMany({ countryId: "NG", electionType: "chamber" });
   }
 
   const seats: Seat[] = [];
@@ -529,16 +534,16 @@ export async function seedSeats(
     });
   }
 
-  // NG Chamber of Deputies
+  // NG House of Representatives (the canonical NG office/election type).
   for (const region of ngRegions) {
     seats.push({
-      _id: buildSeatId("NG", "chamber", region._id),
+      _id: buildSeatId("NG", "house", region._id),
       countryId: "NG",
-      electionType: "chamber",
+      electionType: "house",
       state: region._id,
       totalSeats: region.houseDistricts,
-      displayName: buildDisplayName("NG", "chamber", region._id),
-      shortName: buildShortName("NG", "chamber", region._id),
+      displayName: buildDisplayName("NG", "house", region._id),
+      shortName: buildShortName("NG", "house", region._id),
       createdAt: now,
       updatedAt: now,
     });

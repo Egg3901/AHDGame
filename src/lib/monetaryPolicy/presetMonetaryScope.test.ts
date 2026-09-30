@@ -13,7 +13,11 @@ describe("getPresetMonetaryScope", () => {
     );
 
     const expectedForex =
-      preset === "2027-default" ? [...FOREX_ACTIVE_COUNTRIES, "BG"] : FOREX_ACTIVE_COUNTRIES;
+      preset === "2019-default"
+        ? [...FOREX_ACTIVE_COUNTRIES, "PL", "HU", "RO", "BG"]
+        : preset === "2027-default"
+          ? [...FOREX_ACTIVE_COUNTRIES, "BG"]
+          : FOREX_ACTIVE_COUNTRIES;
     expect(scope.forexCountries).toEqual(expectedForex);
     expect(scope.centralBankCountries.every((countryId) => budgeted.has(countryId))).toBe(true);
     expect(
@@ -43,21 +47,28 @@ describe("getPresetMonetaryScope", () => {
     );
   });
 
-  it.each([
-    "1991-default",
-    "1999-default",
-    "2007-default",
-    "2019-default",
-    "2023-default",
-    "2027-default",
-  ])("records explicit RU/DD exclusions in %s", (preset) => {
-    const scope = getPresetMonetaryScope(preset);
-    expect(scope.centralBankCountries).not.toEqual(expect.arrayContaining(["RU", "DD"]));
-    expect(scope.exclusions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ countryId: "RU", reason: "fiscal-model-unauthored" }),
-        expect.objectContaining({ countryId: "DD", reason: "absent-in-era" }),
-      ])
+  it.each(["1991-default", "1999-default", "2007-default", "2023-default", "2027-default"])(
+    "records explicit RU/DD exclusions in %s",
+    (preset) => {
+      const scope = getPresetMonetaryScope(preset);
+      expect(scope.centralBankCountries).not.toEqual(expect.arrayContaining(["RU", "DD"]));
+      expect(scope.exclusions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ countryId: "RU", reason: "fiscal-model-unauthored" }),
+          expect.objectContaining({ countryId: "DD", reason: "absent-in-era" }),
+        ])
+      );
+    }
+  );
+
+  it("models all five 2019 transition central banks and excludes only absent DD", () => {
+    const scope = getPresetMonetaryScope("2019-default");
+    expect(scope.centralBankCountries).toEqual(
+      expect.arrayContaining(["RU", "PL", "HU", "RO", "BG"])
     );
+    expect(scope.exclusions).toContainEqual(
+      expect.objectContaining({ countryId: "DD", reason: "absent-in-era" })
+    );
+    expect(scope.exclusions.map(({ countryId }) => countryId)).not.toContain("RU");
   });
 });

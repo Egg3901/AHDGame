@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 import type { Db } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -301,7 +302,9 @@ describe("seedExchangeRates", () => {
     await seedExchangeRates(db as unknown as Db, "2019-default");
 
     const bulkWriteCall = db.collection("exchangeRates").bulkWrite.mock.calls[0][0];
-    expect(bulkWriteCall).toHaveLength(FOREX_ACTIVE_COUNTRIES.length);
+    expect(bulkWriteCall).toHaveLength(
+      getPresetMonetaryScope("2019-default").forexCountries.length
+    );
 
     // Verify US entry
     const usOp = bulkWriteCall.find(
@@ -397,7 +400,8 @@ describe("updateCentralBanks", () => {
     expect(filters).toEqual(
       expect.arrayContaining([{ _id: "US" }, { _id: "UK" }, { _id: "JP" }, { _id: "ECB" }])
     );
-    expect(filters).not.toEqual(expect.arrayContaining([{ _id: "RU" }, { _id: "DD" }]));
+    expect(filters).toEqual(expect.arrayContaining([{ _id: "RU" }]));
+    expect(filters).not.toEqual(expect.arrayContaining([{ _id: "DD" }]));
     // Every op must request upsert so missing documents get created
     expect(ops.every((op) => op.updateOne.upsert === true)).toBe(true);
     // $set must reset tradeGrowth (not forexRevenue — $setOnInsert guards existing revenue)
@@ -406,7 +410,7 @@ describe("updateCentralBanks", () => {
       expect(update.update.$set).toMatchObject({ tradeGrowth: 0 });
     }
     expect(db.collection("centralBanks").deleteMany).toHaveBeenCalledWith({
-      _id: { $in: expect.arrayContaining(["RU", "DD"]) },
+      _id: { $in: expect.arrayContaining(["DD"]) },
     });
   });
 

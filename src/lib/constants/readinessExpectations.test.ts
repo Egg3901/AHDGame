@@ -98,7 +98,7 @@ describe("getReadinessExpectations", () => {
     const modern = getReadinessExpectations("RU", "2019-default")!;
     expect(soviet.partyRoster).toContain("CPSU");
     expect(modern.partyRoster).not.toContain("CPSU");
-    expect(modern.partyMin).toBe(0);
+    expect(modern.partyMin).toBeGreaterThan(0);
   });
 
   it("does not require a Soviet one-party leader-confidence state in 1991 Russia", () => {

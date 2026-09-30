@@ -576,6 +576,11 @@ export async function seedAllCountryData(
       const { seedBG2027 } = await import("./seed/seedBG2027");
       await seedBG2027(db, resetReference, log, preset);
     })(),
+    pack(async (log) => {
+      if (preset !== "2019-default") return;
+      const { seedModern2019 } = await import("./seed/seedModern2019");
+      await seedModern2019(db, resetReference, log, preset);
+    })(),
   ]);
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);
@@ -703,7 +708,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await seedDeBudgets(db, resetReference, log, preset);
   await seedBrBudgets(db, resetReference, log, preset);
   await seedCnBudgets(db, resetReference, log, preset);
-  await seedRuBudgets(db, resetReference, log, preset);
+  // The legacy RU seeder constructs Soviet SOEs. The 2019 democratic fiscal
+  // pack below owns the modern RU budget and sovereign issuer instead.
+  if (preset !== "2019-default") await seedRuBudgets(db, resetReference, log, preset);
   await seedFrBudgets(db, resetReference, log, preset);
   await seedItBudgets(db, resetReference, log, preset);
   await seedEsBudgets(db, resetReference, log, preset);
@@ -735,6 +742,10 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   const { seedSuccessorBudgets1991 } = await import("./seed/seedSuccessorBudgets1991");
   await guarded("seedSuccessorBudgets1991", () =>
     seedSuccessorBudgets1991(db, resetReference, preset, log)
+  );
+  const { seedModernBudgets2019 } = await import("./seed/seedModernBudgets2019");
+  await guarded("seedModernBudgets2019", () =>
+    seedModernBudgets2019(db, resetReference, preset, log)
   );
   const { seedModernTransitionBudgets2027 } =
     await import("./seed/seedModernTransitionBudgets2027");

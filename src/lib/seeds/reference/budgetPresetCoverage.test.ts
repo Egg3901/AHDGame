@@ -25,7 +25,11 @@ describe("national budget preset coverage", () => {
       );
       const removed = [...prior].filter((countryId) => !current.has(countryId));
       expect(removed, PRESETS[index]).toEqual(
-        PRESETS[index] === "1999-default" ? TRANSITION_1991_BUDGET_COUNTRIES : []
+        PRESETS[index] === "1999-default"
+          ? TRANSITION_1991_BUDGET_COUNTRIES
+          : PRESETS[index] === "2023-default"
+            ? ["RU", "PL", "HU", "RO", "BG"]
+            : []
       );
     }
   });

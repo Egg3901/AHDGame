@@ -27,6 +27,8 @@ import {
   IE_DAIL_2020,
   IE_SEANAD_1991,
   IE_SEANAD_2020,
+  IE_UACHTARAN_1991,
+  IE_UACHTARAN_2019,
   JP_GOVERNORS_1991,
   JP_GOVERNORS_2020,
   JP_REGIONAL_COUNCIL_1991,
@@ -109,7 +111,8 @@ const SOURCE_1992 =
   BR_CHAMBER_1991.length +
   BR_SENATE_1991.length +
   IE_DAIL_1991.length +
-  IE_SEANAD_1991.length;
+  IE_SEANAD_1991.length +
+  IE_UACHTARAN_1991.length;
 
 const SOURCE_1953 =
   US_EXECUTIVE_1953.length +
@@ -138,7 +141,7 @@ describe("preset seat groups", () => {
    */
   it("holds exactly the rows the source arrays contain", () => {
     const expected: Record<string, number> = {
-      "2019-default": SOURCE_2020,
+      "2019-default": SOURCE_2020 + IE_UACHTARAN_2019.length,
       "1999-default": SOURCE_2020,
       "2007-default": SOURCE_2020,
       "2023-default": SOURCE_2020,

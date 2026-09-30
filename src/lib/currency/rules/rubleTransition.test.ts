@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { isRubleAdopted, RU_2027_RUB_PER_USD, RU_2027_USD_PER_RUB } from "./rubleTransition";
 
 describe("ruble transition rules", () => {
-  it("adopts RUB for RU only in the 2027-default preset", () => {
+  it("adopts RUB for RU in democratic 2019 and 2027 presets", () => {
     expect(isRubleAdopted("RU", "2027-default")).toBe(true);
+    expect(isRubleAdopted("RU", "2019-default")).toBe(true);
     expect(isRubleAdopted("RU", "1991-default")).toBe(false);
     expect(isRubleAdopted("RU", "1979-default")).toBe(false);
     expect(isRubleAdopted("RU", "1953-default")).toBe(false);
-    expect(isRubleAdopted("RU", "2019-default")).toBe(false);
     expect(isRubleAdopted("RU", "")).toBe(false);
   });
 

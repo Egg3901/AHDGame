@@ -63,6 +63,7 @@ export type CurrencyCode =
   | "RON"
   | "YUD"
   | "BGL"
+  | "BGN"
   | "CSK"
   | "SUR"
   | "RUB"
@@ -94,6 +95,7 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
   "RON",
   "YUD",
   "BGL",
+  "BGN",
   "CSK",
   "SUR",
   "RUB",
@@ -172,6 +174,7 @@ export const CURRENCY_ANCHOR_COUNTRY: Record<CurrencyCode, CountryId> = {
   RON: "RO",
   YUD: "YU",
   BGL: "BG",
+  BGN: "BG",
   CSK: "CS",
   SUR: "RU", // Soviet ruble — anchor is the USSR/Russia entity (shared by RU + BY + BAL)
   RUB: "RU", // Modern Russian ruble — same RU anchor, active only in the 2027 preset (see getSeedCurrencyCode)
@@ -637,10 +640,24 @@ export const INITIAL_RATES_2027: Partial<Record<CountryId, number>> = {
   RU: RU_2027_RUB_PER_USD,
 };
 
+/** World Bank WDI PA.NUS.FCRF, annual 2019 local currency per USD.
+ * https://api.worldbank.org/v2/country/RUS;POL;HUN;ROU;BGR/indicator/PA.NUS.FCRF?date=2019&format=json
+ * These override Cold War placeholders only for the five post-Soviet NPP
+ * countries added to the 2019 world. Other 2019 rates remain unchanged. */
+export const INITIAL_RATES_2019_TRANSITION: Partial<Record<CountryId, number>> = {
+  ...INITIAL_RATES,
+  RU: 64.7376583333333,
+  PL: 3.839375,
+  HU: 290.66,
+  RO: 4.237925,
+  BG: 1.74704166666667,
+};
+
 export function getInitialRates(preset: string): Partial<Record<CountryId, number>> {
   if (preset === "1953-default") return INITIAL_RATES_1953;
   if (preset === "1979-default") return INITIAL_RATES_1979;
   if (preset === "1991-default") return INITIAL_RATES_1991;
+  if (preset === "2019-default") return INITIAL_RATES_2019_TRANSITION;
   if (preset === "2027-default") return INITIAL_RATES_2027;
   // 1999 and 2007 have no authored table and used to fall through to the 2019
   // one, so a 1999 world started with 2019 money: Nigeria at 1550 naira/USD
@@ -777,6 +794,7 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   RON: "lei",
   YUD: "din",
   BGL: "лв",
+  BGN: "лв",
   CSK: "Kčs",
   SUR: "руб",
   RUB: "₽",
@@ -831,8 +849,9 @@ export function getEraAwareCurrencySymbol(
 export function getSeedCurrencyCode(countryId: CountryId, preset: string): CurrencyCode {
   if (isEuroAdopted(countryId, preset)) return "EUR";
   if (isRubleAdopted(countryId, preset)) return "RUB";
-  if (preset === "2027-default" && countryId === "PL") return "PLN";
-  if (preset === "2027-default" && countryId === "RO") return "RON";
+  if ((preset === "2019-default" || preset === "2027-default") && countryId === "PL") return "PLN";
+  if ((preset === "2019-default" || preset === "2027-default") && countryId === "RO") return "RON";
+  if (preset === "2019-default" && countryId === "BG") return "BGN";
   return COUNTRY_CURRENCY_MAP[countryId];
 }
 
@@ -950,8 +969,14 @@ export function eraRateForCurrency(
   const eraRates = getInitialRates(preset ?? "");
   // Modern codes have no era-blind COUNTRY_CURRENCY_MAP entry; that map keeps
   // each predecessor's Cold War/1991 identity. PLN/RON are valid only in 2027.
-  if ((code === "PLN" || code === "RON") && preset !== "2027-default") return undefined;
-  if (code === "RUB" || code === "PLN" || code === "RON") {
+  if (
+    (code === "PLN" || code === "RON" || code === "BGN") &&
+    preset !== "2019-default" &&
+    preset !== "2027-default"
+  )
+    return undefined;
+  if (code === "BGN" && preset !== "2019-default") return undefined;
+  if (code === "RUB" || code === "PLN" || code === "RON" || code === "BGN") {
     const countryId = CURRENCY_ANCHOR_COUNTRY[code];
     const rate = eraRates[countryId] ?? INITIAL_RATES[countryId];
     return rate !== undefined && rate > 0 ? rate : undefined;

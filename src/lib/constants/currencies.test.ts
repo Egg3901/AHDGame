@@ -56,7 +56,9 @@ describe("currency anchor resolution", () => {
       const isParityFallback = anchorCurrency === "USD" && code !== "USD";
       // RUB is preset-aware: the era-blind map keeps RU on SUR (the Cold
       // War/1991 identity) while a 2027-default seed resolves RU to RUB.
-      const isPresetSeedMatch = getSeedCurrencyCode(anchor, "2027-default") === code;
+      const isPresetSeedMatch = ["2019-default", "2027-default"].some(
+        (preset) => getSeedCurrencyCode(anchor, preset) === code
+      );
       expect(anchorCurrency === code || isParityFallback || isPresetSeedMatch).toBe(true);
     }
   });

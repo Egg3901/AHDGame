@@ -3,7 +3,7 @@
  * Epsilon-level tolerances; nothing has run yet at post-reset turn 1.
  */
 
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -15,7 +15,16 @@ import {
 } from "@/lib/admin/seed/reconcileStateGdp";
 import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
 import { normalizeMaintenanceMode } from "@/lib/maintenanceStatus";
-import { generateDefaultEnactedLaws } from "@/lib/seeds/reference/budgets";
+import {
+  generateDefaultEnactedLaws,
+  getNationalBudgetSeedConfigsForPreset,
+} from "@/lib/seeds/reference/budgets";
+import {
+  COMMAND_CEILING,
+  commandEconomySoeSectors,
+  scheduledMarketizationLevel,
+} from "@/lib/constants/commandEconomy";
+import { sectorRevenueDistribution } from "./rules/sectorDistribution";
 import { DEFAULT_STRATEGIC_SECTORS } from "@/lib/seeds/reference/strategicSectors";
 import { COUNTRY_ELECTION_PHASES } from "@/lib/turn/countryPhases";
 import {
@@ -42,6 +51,7 @@ import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTi
 import {
   COUNTRY_CURRENCY_MAP,
   getInitialRates,
+  getSeedCurrencyCode,
   type CurrencyCode,
 } from "@/lib/constants/currencies";
 import {
@@ -661,7 +671,7 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
     const expectedCurrency = currencyForCountryAtYear(
       countryId,
       year,
-      COUNTRY_CURRENCY_MAP[countryId]
+      getSeedCurrencyCode(countryId, expect.preset)
     );
     const expectedRate =
       expectedCurrency === "EUR" ? expect.forexRates.DE : expect.forexRates[countryId];
@@ -770,22 +780,59 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
   return checks;
 }
 
-async function checkSectors(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
+export async function checkSectors(
+  db: Db,
+  expect: SeedExpectations
+): Promise<SeedDiagnosticCheck[]> {
   const checks: SeedDiagnosticCheck[] = [];
   const countries = expect.seededCountryIds;
+  const config = await db
+    .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+  const budgetYears = new Map<string, number>(
+    getNationalBudgetSeedConfigsForPreset(expect.preset).map((budget) => [
+      budget.countryId,
+      budget.fiscalYear,
+    ])
+  );
 
   for (const countryId of countries) {
+    // The command-band seed moves production into country-owned SOEs. Its
+    // residual unowned pool may be empty or only extraction, and is not the
+    // country's productive-sector distribution. Match the same authored era
+    // and command flag used by the SOE seeder, then require actual SOE rows.
+    const budgetYear = budgetYears.get(countryId);
+    const commandSoeSeed =
+      config?.commandEconomyEnabled === true &&
+      budgetYear !== undefined &&
+      commandEconomySoeSectors(countryId).length > 0 &&
+      scheduledMarketizationLevel(countryId, budgetYear) < COMMAND_CEILING;
     const unownedCount = await db.collection("unownedSectors").countDocuments({ countryId });
     checks.push(
-      unownedCount > 0
-        ? ok(`sectors.${countryId}.unowned`, countryId, "unownedSectors.count", ">0", unownedCount)
-        : critical(
+      commandSoeSeed
+        ? ok(
             `sectors.${countryId}.unowned`,
             countryId,
             "unownedSectors.count",
-            ">0",
-            unownedCount
+            "optional with country-owned SOE production",
+            unownedCount,
+            "command-band production is validated in the country-owned SOE pool"
           )
+        : unownedCount > 0
+          ? ok(
+              `sectors.${countryId}.unowned`,
+              countryId,
+              "unownedSectors.count",
+              ">0",
+              unownedCount
+            )
+          : critical(
+              `sectors.${countryId}.unowned`,
+              countryId,
+              "unownedSectors.count",
+              ">0",
+              unownedCount
+            )
     );
 
     const strategicCount = await db
@@ -818,26 +865,44 @@ async function checkSectors(db: Db, expect: SeedExpectations): Promise<SeedDiagn
       .find({ countryId })
       .project({ sectorType: 1, revenue: 1 })
       .toArray();
-    const revenueByType = new Map<string, number>();
-    let total = 0;
-    for (const row of rows) {
-      const t = row.sectorType ?? "";
-      const rev = Number(row.revenue) || 0;
-      revenueByType.set(t, (revenueByType.get(t) ?? 0) + rev);
-      total += rev;
+    let productiveRows = rows;
+    if (commandSoeSeed) {
+      const owners = await db
+        .collection<{ _id: ObjectId }>("corporations")
+        .find({ countryOwnerId: countryId }, { projection: { _id: 1 } })
+        .toArray();
+      const owned = owners.length
+        ? await db
+            .collection<{ sectorType?: string; revenue?: number }>("corporateSectors")
+            .find(
+              { countryId, corporationId: { $in: owners.map((owner) => owner._id) } },
+              { projection: { sectorType: 1, revenue: 1 } }
+            )
+            .toArray()
+        : [];
+      const producingOwned = owned.filter((row) => Number(row.revenue) > 0);
+      checks.push(
+        producingOwned.length > 0
+          ? ok(
+              `sectors.${countryId}.commandSoe`,
+              countryId,
+              "producing country-owned corporateSectors.count",
+              ">0",
+              producingOwned.length
+            )
+          : critical(
+              `sectors.${countryId}.commandSoe`,
+              countryId,
+              "producing country-owned corporateSectors.count",
+              ">0",
+              producingOwned.length
+            )
+      );
+      productiveRows = [...rows, ...owned];
     }
-    if (total > 0) {
-      let maxShare = 0;
-      let maxType = "";
-      let shareSum = 0;
-      for (const [t, rev] of revenueByType) {
-        const share = rev / total;
-        shareSum += share;
-        if (share > maxShare) {
-          maxShare = share;
-          maxType = t;
-        }
-      }
+    const distribution = sectorRevenueDistribution(productiveRows);
+    if (distribution) {
+      const { shareSum, maxShare, maxType } = distribution;
       const sumOk = Math.abs(shareSum - 1) <= 0.02;
       const maxOk = maxShare <= CONFORMANCE_SECTOR_MAX_SHARE;
       if (sumOk && maxOk) {

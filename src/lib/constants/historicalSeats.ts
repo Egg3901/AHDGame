@@ -3170,6 +3170,11 @@ export const IE_SEANAD_2020: HistoricalSeat[] = [
   { state: "DON", officeType: "seanad", party: "ie_ind", seatsHeld: 1 },
 ];
 
+/** 2019 opening incumbent: Michael D. Higgins, second term from 11 Nov 2018. */
+export const IE_UACHTARAN_2019: HistoricalSeat[] = [
+  { state: "IE", officeType: "uachtaran", party: "ie_ind" },
+];
+
 // ─── IE Seanad: 19th Seanad (post-June 1989 election) ────────────────────────
 // 60 seats total. Composition post-1989 GE under Taoiseach Haughey (FF/PD
 // coalition): national totals FF 30, FG 16, Lab 5, PD 6, WP 1, Ind 2.
@@ -3222,6 +3227,11 @@ export const IE_SEANAD_1991: HistoricalSeat[] = [
   { state: "DON", officeType: "seanad", party: "ie_fg", seatsHeld: 2 },
   { state: "DON", officeType: "seanad", party: "ie_labour", seatsHeld: 1 },
   { state: "DON", officeType: "seanad", party: "ie_independent", seatsHeld: 2 },
+];
+
+/** 1991 opening incumbent: Mary Robinson, inaugurated 3 Dec 1990. */
+export const IE_UACHTARAN_1991: HistoricalSeat[] = [
+  { state: "IE", officeType: "uachtaran", party: "ie_ind" },
 ];
 
 /**
@@ -4147,6 +4157,14 @@ const SEAT_GROUPS_2020: SeatGroups = {
   IE: [...IE_DAIL_2020, ...IE_SEANAD_2020],
 };
 
+// The older 1999/2007 presets also fall back to SEAT_GROUPS_2020. Keep the
+// source-backed 2019 incumbent out of those earlier opening-state rosters.
+// Michael D. Higgins began his second presidential term on 11 Nov 2018.
+// https://president.ie/en/the-president/michaeldhiggins/
+const SEAT_GROUPS_2019: SeatGroups = mergeGroups(SEAT_GROUPS_2020, {
+  IE: IE_UACHTARAN_2019,
+});
+
 /**
  * The 2027 preset, re-expressed in the country-owned grouping.
  *
@@ -4200,7 +4218,9 @@ const SEAT_GROUPS_1992: SeatGroups = {
     ...CN_GOVERNORS_1991,
   ],
   BR: [...BR_CHAMBER_1991, ...BR_SENATE_1991],
-  IE: [...IE_DAIL_1991, ...IE_SEANAD_1991],
+  // Mary Robinson was inaugurated on 3 Dec 1990 and held office at opening.
+  // https://www.president.ie/en/the-president/mary-robinson
+  IE: [...IE_DAIL_1991, ...IE_SEANAD_1991, ...IE_UACHTARAN_1991],
 };
 
 const SEAT_GROUPS_1953: SeatGroups = mergeGroups(
@@ -4233,6 +4253,7 @@ const SEAT_GROUPS_1979: SeatGroups = mergeGroups(
  */
 /** Presets with their own seat groups; everything else takes the 2020 set. */
 const EXPLICIT_SEAT_PRESETS = new Set([
+  "2019-default",
   "1991-default",
   "1953-default",
   "1979-default",
@@ -4242,6 +4263,8 @@ const EXPLICIT_SEAT_PRESETS = new Set([
 
 export function seatGroupsFor(presetId: string): SeatGroups {
   switch (presetId) {
+    case "2019-default":
+      return SEAT_GROUPS_2019;
     case "1991-default":
       return SEAT_GROUPS_1992;
     case "1953-default":

@@ -18,12 +18,16 @@ import {
  * https://bnr.ro/files/d/Pubs_ro/Lunare/2008bl/2008bl03.pdf
  */
 describe("PLN and RON in the 2027 world", () => {
-  it("routes modern codes only in 2027 and retains 1991 identities", () => {
+  it("routes modern codes in 2019 and 2027 while retaining 1991 identities", () => {
     expect(getSeedCurrencyCode("PL", "2027-default")).toBe("PLN");
     expect(getSeedCurrencyCode("RO", "2027-default")).toBe("RON");
     expect(getCountryConfig("PL", "2027-default").currencyCode).toBe("PLN");
     expect(getCountryConfig("RO", "2027-default").currencyCode).toBe("RON");
-    for (const preset of ["1953-default", "1979-default", "1991-default", "2019-default"]) {
+    for (const preset of ["2019-default", "2027-default"]) {
+      expect(getSeedCurrencyCode("PL", preset)).toBe("PLN");
+      expect(getSeedCurrencyCode("RO", preset)).toBe("RON");
+    }
+    for (const preset of ["1953-default", "1979-default", "1991-default"]) {
       expect(getSeedCurrencyCode("PL", preset)).toBe("PLZ");
       expect(getSeedCurrencyCode("RO", preset)).toBe("ROL");
     }

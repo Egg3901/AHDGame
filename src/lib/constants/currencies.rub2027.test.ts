@@ -29,9 +29,10 @@ describe("RUB 2027 era isolation", () => {
     expect(COUNTRY_CURRENCY_MAP.RU).toBe("SUR");
   });
 
-  it("seeds RUB only for RU in 2027-default, via the effective preset", () => {
+  it("seeds RUB for RU in modern presets, via the effective preset", () => {
     expect(getSeedCurrencyCode("RU", "2027-default")).toBe("RUB");
-    for (const preset of ["1953-default", "1979-default", "1991-default", "2019-default", ""]) {
+    expect(getSeedCurrencyCode("RU", "2019-default")).toBe("RUB");
+    for (const preset of ["1953-default", "1979-default", "1991-default", ""]) {
       expect(getSeedCurrencyCode("RU", preset)).toBe("SUR");
     }
   });

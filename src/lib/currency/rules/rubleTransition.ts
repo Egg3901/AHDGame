@@ -12,7 +12,7 @@
  * 201,152,000M). Inverting gives 1 / 0.01081 = 92.506 RUB per USD, rounded
  * to one decimal for the seed table. See `src/lib/countries/ru/eras/2027.ts`.
  *
- * PRESET GATING. Only the 2027-default preset starts on the modern ruble
+ * PRESET GATING. The 2019 and 2027 presets start on the modern ruble
  * (RUB). Every helper takes the preset id explicitly and passes non-RUB
  * presets through untouched, so Cold War, 1991, and every other world keep
  * the Soviet ruble (SUR) byte-identically to before. SUR and RUB never
@@ -25,7 +25,7 @@ export const RU_2027_USD_PER_RUB = 0.01081;
 export const RU_2027_RUB_PER_USD = 92.5;
 
 /** Presets whose fresh bootstrap starts Russia on the modern ruble. */
-const RUB_PRESETS: ReadonlySet<string> = new Set(["2027-default"]);
+const RUB_PRESETS: ReadonlySet<string> = new Set(["2019-default", "2027-default"]);
 
 /** True when a fresh world of `preset` starts `countryId` on the ruble. */
 export function isRubleAdopted(countryId: string, preset: string): boolean {

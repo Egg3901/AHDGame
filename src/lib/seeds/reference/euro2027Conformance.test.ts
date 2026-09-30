@@ -159,13 +159,14 @@ describe("2027 euro seed conformance", () => {
     });
 
     it("passes non-2027 presets through the seed currency map untouched", () => {
-      for (const preset of ["1991-default", "2019-default", "2023-default", "1953-default"]) {
+      for (const preset of ["1991-default", "2023-default", "1953-default"]) {
         for (const member of MEMBERS) {
           expect(getSeedCurrencyCode(member, preset), `${member}@${preset}`).toBe(
             COUNTRY_CURRENCY_MAP[member]
           );
         }
       }
+      expect(getSeedCurrencyCode("BG", "2019-default")).toBe("BGN");
     });
 
     it("builds EUR 1991 budget rows for DE only (its home code)", () => {
