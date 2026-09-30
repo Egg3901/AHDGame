@@ -133,7 +133,6 @@ async function main() {
       "/api/players/online",
       "/api/poll-banner",
       "/api/global-alerts/active",
-      "/api/client-nav",
       "/api/flags/country/",
     ];
     await context.route("**/*", async (route) => {
@@ -168,6 +167,9 @@ async function main() {
         sameSite: "Lax",
       },
     ]);
+    // The real session bundle is a readiness read, so cold compilation cannot trigger the UI's short network timeout.
+    const authenticated = await context.request.get(`${base}/api/client-nav`, { timeout: 300_000 });
+    assert(authenticated.ok(), "Synthetic session bundle failed");
     page = await context.newPage();
     const errors: string[] = [],
       requests: { path: string; status: number }[] = [];
