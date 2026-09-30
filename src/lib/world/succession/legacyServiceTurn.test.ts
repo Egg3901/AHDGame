@@ -4,6 +4,7 @@ import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import { hashSettlementPayload } from "./settlementIntent";
 import { materializeLegacyFederationServiceTurn } from "./legacyServiceTurn";
+import type { Bond } from "@/lib/db/types/bond";
 
 const applicationId = "1991-default:cs-1992:1";
 const session = { inTransaction: () => true } as ClientSession;
@@ -101,6 +102,22 @@ function scenario(shortfall = false) {
 }
 
 describe("legacy federation service transaction", () => {
+  it("funds the bond turn's frozen holder snapshot when later placements change live float", async () => {
+    const { db, bondId } = scenario();
+    const snapshot = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
+    await db
+      .collection<Bond>("bonds")
+      .updateOne({ _id: bondId }, { $set: { publicFloat: 2, totalIssued: 4000 } });
+    const receipt = await materializeLegacyFederationServiceTurn({
+      db,
+      session,
+      applicationId,
+      turn: 91,
+      now: new Date(1000),
+      bondSnapshot: snapshot,
+    });
+    expect(receipt.creditorDueMinor).toBe(150);
+  });
   it("funds unchanged creditor payments from both successors once", async () => {
     const { db, bondId } = scenario();
     const args = { db, session, applicationId, turn: 91, now: new Date(1000) };

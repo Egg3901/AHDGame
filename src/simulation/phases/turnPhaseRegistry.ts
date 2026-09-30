@@ -517,13 +517,6 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
-        if (context.gameState.preset === "1991-default") {
-          const { processLegacyFederationServiceTurn } =
-            await import("@/lib/world/succession/legacyServiceTurn");
-          await runtime.runPhase("federationLegacyDebtService", () =>
-            processLegacyFederationServiceTurn(context.db, newTurn, gameNow)
-          );
-        }
         const [bondTurnResult, commodityResult] = await Promise.all([
           runtime.runPhase("bondTurn", () => processBondTurn(newTurn)),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),

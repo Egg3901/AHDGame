@@ -1,5 +1,6 @@
 import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { CURRENCY_ANCHOR_COUNTRY, type CurrencyCode } from "@/lib/constants/currencies";
 import type { Bond } from "@/lib/db/types/bond";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { CountryGameState } from "@/lib/db/types";
@@ -72,6 +73,8 @@ export async function materializeLegacyFederationServiceTurn(input: {
   applicationId: string;
   turn: number;
   now: Date;
+  /** The immutable holder inventory used by the bond turn for this payout. */
+  bondSnapshot?: readonly Bond[];
 }): Promise<FederationLegacyServiceTurn> {
   const { db, session, applicationId, turn, now } = input;
   if (
@@ -110,10 +113,15 @@ export async function materializeLegacyFederationServiceTurn(input: {
     .collection<FederalBudget>("federalBudget")
     .find({ $or: [{ _id: sourceCountryId }, { countryId: sourceCountryId }] }, { session })
     .toArray();
-  const bonds = await db
-    .collection<Bond>("bonds")
-    .find({ issuerType: "sovereign", countryId: sourceCountryId, matured: false }, { session })
-    .toArray();
+  const bonds = input.bondSnapshot
+    ? input.bondSnapshot.filter(
+        (bond) =>
+          bond.issuerType === "sovereign" && bond.countryId === sourceCountryId && !bond.matured
+      )
+    : await db
+        .collection<Bond>("bonds")
+        .find({ issuerType: "sovereign", countryId: sourceCountryId, matured: false }, { session })
+        .toArray();
   if (
     !country ||
     country.dissolvedTurn == null ||
@@ -141,9 +149,11 @@ export async function materializeLegacyFederationServiceTurn(input: {
       )
     ),
   ];
+  if (currencyCodes.some((code) => !Object.hasOwn(CURRENCY_ANCHOR_COUNTRY, code)))
+    throw new Error("Legacy service has an unsupported issuer currency");
   const exchangeRows = await db
     .collection<ExchangeRate>("exchangeRates")
-    .find({ currencyCode: { $in: currencyCodes } }, { session })
+    .find({ currencyCode: { $in: currencyCodes as CurrencyCode[] } }, { session })
     .toArray();
   const rates: Record<string, number> = {};
   for (const row of exchangeRows) {
@@ -323,7 +333,8 @@ export async function materializeLegacyFederationServiceTurn(input: {
 export async function processLegacyFederationServiceTurn(
   db: Db,
   turn: number,
-  now: Date
+  now: Date,
+  bondSnapshot?: readonly Bond[]
 ): Promise<number> {
   const applications = await db
     .collection<FederationFiscalAccount>(FEDERATION_FISCAL_ACCOUNTS_COLLECTION)
@@ -337,6 +348,7 @@ export async function processLegacyFederationServiceTurn(
         applicationId: application.applicationId,
         turn,
         now,
+        bondSnapshot,
       })
     );
   }

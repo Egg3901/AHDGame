@@ -12,6 +12,7 @@ export interface LegacyMacroBudgetSlice {
 export function planLegacyMacroBudget(country: MacroCountryState): LegacyMacroBudgetSlice {
   const cash = country.federationTreasuryMinor;
   if (
+    typeof cash !== "number" ||
     !Number.isSafeInteger(cash) ||
     !Number.isFinite(country.fiscalCapacity) ||
     country.fiscalCapacity < 0 ||
