@@ -250,4 +250,35 @@ describe("treasury accrual stock-flow ownership", () => {
     expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(0);
     expect(db.collection("ledgerEntries").docs.map((e) => e.turn)).toEqual([11]);
   });
+  it("preserves the complete unpriced flag-off budget cohort", async () => {
+    const db = world();
+    await db
+      .collection("gameConfig")
+      .updateOne({ _id: "default" }, { $set: { ledgerShadow: false } });
+    await db
+      .collection("gameState")
+      .updateOne({ _id: "current" }, { $set: { preset: "1979-default" } });
+    await db.collection("exchangeRates").deleteMany({});
+    const template = db.collection("federalBudget").docs[0];
+    for (const [countryId, currencyCode] of [
+      ["BG", "BGL"],
+      ["CS", "CSK"],
+      ["HU", "HUF"],
+      ["PL", "PLZ"],
+      ["RO", "ROL"],
+      ["YU", "YUD"],
+    ])
+      db.seed("federalBudget", [{ ...template, _id: countryId, countryId, currencyCode }]);
+    expect((await processTreasuryTurn(10)).countriesProcessed).toBe(7);
+    expect((await processTreasuryTurn(10)).countriesProcessed).toBe(0);
+    for (const budget of db.collection("federalBudget").docs) {
+      expect(budget.treasuryBalance).toBe(-500);
+      expect(budget.treasuryAccrual).toMatchObject({
+        anchorRate: null,
+        anchorRateSource: "unpriced",
+        ledgerShadow: false,
+      });
+    }
+    expect(db.collection("ledgerEntries").docs).toHaveLength(0);
+  });
 });

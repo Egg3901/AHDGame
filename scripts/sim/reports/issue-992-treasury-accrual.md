@@ -1,62 +1,60 @@
-# Issue 992: treasury accrual ownership
+# Treasury accrual qualification for #992 and #968
 
-Date: 2026-09-30. This fixes a reproduced attribution and retry defect in the largest retained divergent account class. **Issue #992 remains open:** these are fiscal subsystem turns, not an authoritative whole-economy qualification.
+## Result and correction
 
-## Correction to the earlier report
+All 23 retained budgets reconcile on each of 12 isolated treasury turns. Every country's native closing cash matches the unchanged baseline exactly on every turn. Baseline has 23 divergent government accounts per turn; treatment has zero, balanced entries and no unattributed fiscal flow. The correctly valued first-turn baseline discrepancy is 54,881,722,832.7475 anchor units.
 
-**The earlier 23-budget anchor comparison is superseded.** The retained input lacks FX records for BGL, CSK, HUF, PLZ, ROL and YUD; the former 1:1 fallback could not establish their anchor values. No rates have been invented. This report qualifies only the 17 budgets with observed valid rates. Each of the six missing-rate currencies also has a separate actual rejection case proving every treasury and ledger receipt remains unchanged. The phase prevalidates its entire active cohort before accruing cash.
+**The original 23-budget monetary figures remain withdrawn.** They used a missing-rate 1:1 fallback. The intermediate 17-budget qualification used observed rates correctly. This fresh qualification extends it to all 23 budgets using 17 observed rates and six explicitly authored budget-only valuations. It does not rehabilitate the old figures.
 
-## Provenance
+## Accounting and compatibility
 
-- Treatment runtime: `067b35969eb25860251d7232f8c8c1e84c937c19`, clean at start and finish. [Runner](../treasuryAccrualReplay.ts), [measured data](issue-992-treasury-accrual.json).
-- Baseline runtime: `89b20b09716801d3d952d9a3698ffe08b2d23b0a`. Execution commit `8e0545560b64c4acd730a5519e2c23fd7593aeca` adds the identical runner only; its `src` diff is empty.
-- Retained input: completed run `559d9701-e07f-48c8-ade1-294bc926820a`, generated at `b4eb48872d6b17d64cd91a85202619f181797713`, saved turn 13. That older execution supplies input and does not validate the new source.
-- Six copied collection selections retain fiscal budgets, banks, currency rates, country registry, organization membership and game state. Content hash: `5dfdc74d7da666c70ad252c0e7badaa3998fea93ea8ef6e7f6685d483b235f18`. Both runs verify every copied selection remains unchanged in the source.
-- The source has 23 budgets. The measured cohort includes 17 priced countries: AT, BR, CN, DE, ES, FI, FR, GR, IE, IT, JP, NG, RU, SE, TR, UK and US. Twelve actual treasury phases advance turns 14 through 25 while other economic phases remain fixed. BG, CS, HU, PL, RO and YU are excluded from monetary qualification and individually reintroduced for the missing-FX rejection cases. Shadow accounting is explicitly enabled in the isolated copy. No production settings, outbound configuration or live state is changed.
+The actual native cash owner now stores a deterministic receipt with each accrual. Named components cover revenue, primary spending, debt service, enforcement and native rounding. Publication recovers a committed receipt after interruption; concurrent/repeated calls cannot apply the same accrual twice. Tax-base and holder-service statistics carry an explicit non-cash marker so they do not invent extra treasury movements.
 
-## Account inventory and causal reproduction
+Native fiscal accrual does not require an FX trade. With `ledgerShadow=false`, missing valuation leaves an explicit `anchorRate:null`, `anchorRateSource:"unpriced"` receipt. Native cash and retry behavior continue; no unpriced ledger entry is published. Turning shadow accounting on does not invent or backfill that old receipt's valuation.
 
-The retained diagnostic reports 23 divergent government accounts, 361 corporations and 35 funds. Its full monetary totals include missing-rate accounts and are not qualified anchor magnitudes. The raw historical inventory remains in the JSON with this explicit caveat; the priced fiscal comparison below is the current acceptance evidence for this account class.
+With `ledgerShadow=true`, the entire active cohort is valued before any accrual. Missing active-currency FX and corrupt explicit FX reject without advancing any treasury. Valid observed rates win. Only an explicitly non-forex-active budget country with its own assigned currency can use an authored era valuation. Receipts retain the rate, observed/authored source and preset. This does not activate forex or provide a settlement-rate fallback.
 
-`processTreasuryTurn` is the existing cash owner: it slices annual primary revenue/spending, charges live debt service and enforcement, and rounds the signed treasury balance. It previously emitted no ledger witness. A focused stateful test reproduced a 500 cash increase with zero explaining ledger entries.
+## Authored 1991 prerequisite
 
-Separately, corporation tax-base totals and bond-holder service totals emitted government rows without moving treasury cash. Those specific rows now carry an explicit non-cash marker, and the derivation layer excludes them from treasury cash stock-flow. Unmarked actual cash receipts and payments still derive normally. The original statistical audit rows remain available; this is not a blanket government-account skip or a tolerance change.
+Current seeding intentionally provides no tradable FX rows for the six budget-only countries below. Their 1991 valuation entries were narrowly extracted from existing Track 1 commit `609cf2bd7d`, read from integration commit `21570faf333cc5df5cc42137d0b6c72bcba4116e`. Only the six entries and the named Polish opening-rate constant were copied. Track 1 was not edited or merged wholesale; coordination is recorded in [PR #2397](https://github.com/Egg3901/AHDGame/pull/2397#issuecomment-5903826928).
 
-## Baseline versus treatment
+| Country        | Currency | Authored local units per opening anchor |
+| -------------- | -------- | --------------------------------------: |
+| Bulgaria       | BGL      |                                   28.25 |
+| Czechoslovakia | CSK      |                                  27.647 |
+| Hungary        | HUF      |                        74.7353833333333 |
+| Poland         | PLZ      |                                   9,500 |
+| Romania        | ROL      |                                    34.7 |
+| Yugoslavia     | YUD      |                                 13.5675 |
 
-| Measure                                         |            Baseline |   Treatment |
-| ----------------------------------------------- | ------------------: | ----------: |
-| Divergent government accounts, each of 12 turns |                  17 |           0 |
-| First-turn absolute unexplained delta, anchor   | 54,664,322,675.6320 |           0 |
-| Trial balance, each turn                        |               Green |       Green |
-| Unattributed bucket, each turn                  |               Empty |       Empty |
-| Native treasury cash, every country/turn        |           Reference | Exact match |
+Existing World Bank, CNB, IMF, BNB and Federal Reserve citations and observation-date caveats are retained beside the constants. These preserve the original authored local-per-USD opening convention, where the 1991 starting USD anchor is 1. They are valuation references, not current tradable quotes. Missing authored values in other eras remain explicit; flag-off native accrual remains compatible and shadow qualification refuses unpriced accounting.
 
-Every country's closing native cash matches the unchanged baseline exactly at every one of the 12 turns. The repair does not alter fiscal revenue, spending, borrowing, debt stock, rates or signed-overdraft mechanics. No reimbursement or unexplained balancing credit is introduced.
+## Exact provenance and execution
 
-Treatment records named revenue, primary spending, debt-service, enforcement and rounding components. Macro fiscal revenue/spending retain their existing modeled source/sink semantics; the witness does not pretend they are transfers from individual player accounts. An explicit rounding component records only the existing whole-unit cash rule.
+- Treatment executable: `497780cf046c483f1d9a82eec8b84bcc374ae61b`.
+- Baseline executable: `a70a1e53f7a6daa04659df7a4398b5cb46d692ce`, runtime `89b20b09716801d3d952d9a3698ffe08b2d23b0a` plus the identical runner only.
+- The baseline runner imports only the treatment's six authored valuation denominators from its pinned output. Baseline runtime source and native fiscal math are unchanged.
+- Retained completed run: `559d9701-e07f-48c8-ade1-294bc926820a`; generator `b4eb48872d6b17d64cd91a85202619f181797713`; saved turn 13.
+- Full copied-selection digest before and after both executions: `5dfdc74d7da666c70ad252c0e7badaa3998fea93ea8ef6e7f6685d483b235f18`.
+- Real treasury phases: turns 14 through 25. Other economic phases are held fixed.
 
-The cash update and its component receipt share one guarded document write. Repeated or concurrent phase calls cannot apply that turn again. A deterministic ledger upsert publishes the stored receipt; a later invocation recovers it before replacing it with the next turn's receipt. Tests cover interruptions after the cash write and before/after publication, plus recovery on the next turn.
+The copy retains game state, all federal budgets, central banks, exchange rates, country runtime state and organization memberships. Both executions preserve those source selections. Real-Mongo rejection fixtures remove active USD FX or insert corrupt explicit BGL FX; both reject with every budget and the ledger untouched. A separate synthetic 1,234 USD bond-service statistic exercises the real bond emitter: it changes no cash and adds no treasury ledger entry after the repair.
 
-The replay also calls the real bond ledger emitter with an explicitly synthetic 1,234 USD service statistic. Baseline produces a phantom treasury cash leg; treatment produces no additional ledger entry and leaves treasury cash unchanged. The fixture does not claim an actual holder payment occurred.
+No borrowing, debt-stock, interest, revenue or spending formula was changed. No compensation credit or tolerance change is introduced.
 
-## Validation and Mongo work
+## Tests and measured cost
 
-Fifteen final focused treasury tests pass, covering the cash witness, duplicate concurrent calls, crash recovery, signed balances, non-cash markers, invalid FX and whole-cohort prevalidation. The previous 20-test focused run also passed the existing 120-turn budget coherence check. Its later cold-import rerun exceeded a 60-second local timeout under host load; final remote CI is required for that case and the full source gate. No repository timeout or reconciliation tolerance was increased.
+24 treasury integration tests and three valuation-map tests pass. Coverage includes concurrent calls, repeated calls, failure before/after receipt publication, next-turn recovery, signed overdrafts, debt service, enforcement, native rounding, marked versus genuine cash rows, invalid active rates, all six authored valuations, invalid explicit budget-only rates, and shadow-flag transitions. The earlier 120-turn fiscal-coherence fixture passed after explicitly seeding its historical SUR rate. Final repository CI remains a separate gate.
 
-| Treasury phase invocation   | Mongo commands | Returned BSON bytes |
-| --------------------------- | -------------: | ------------------: |
-| Baseline, each turn         |             38 |             105,215 |
-| Treatment, first turn       |             57 |             106,206 |
-| Treatment, subsequent turns |             74 |  114,162 to 114,178 |
+| Real treasury invocation | Baseline commands | Treatment commands | Baseline returned BSON | Treatment returned BSON |
+| ------------------------ | ----------------: | -----------------: | ---------------------: | ----------------------: |
+| First turn               |                44 |                 69 |          123,236 bytes |           124,227 bytes |
+| Later turns              |                44 |                 92 |          123,236 bytes |     up to 136,285 bytes |
 
-The first invocation adds two batched context reads and 17 receipt publications. Subsequent turns also recover/upsert the previous 17 deterministic receipts before advancing. The added persisted component context costs at most 8,963 returned BSON bytes over baseline.
+The default 500-command budget is unchanged. The first invocation adds two batched context reads and 23 receipt publications. Later invocations also recover/upsert the preceding 23 receipts. Measurement excludes copying, balance snapshots, reconciliation and retry probes. It measures this fiscal phase, not the full turn.
 
-Measurements include the real treasury function and all its Mongo commands, with returned cursor-document BSON bytes. Snapshot reads, retry probes and synthetic telemetry emission are outside the measured phase call. The existing default phase budget is 500 commands; no budget is raised.
+## Remaining acceptance
 
-## Remaining acceptance and rollout
+#992 and #968 remain open. This is a complete fiscal-phase qualification, not the authoritative whole-economy 12-turn gate. Other account classes and cash writers remain separate acceptance work. Old unpriced global-inventory magnitudes are excluded from this report.
 
-- This witnesses future accruals and recovers future retries. It does not rewrite historical snapshots or invent historical cash corrections.
-- Other economic phases are held fixed. Other government writers, corporations, funds and pool-account lifecycles still require whole-turn reconciliation evidence. Trial balance and attribution here are fiscal-scope checks, not a full money-supply model qualification.
-- #992 still needs its complete account inventory and 12 consecutive authoritative-banking whole-economy turns. #968 and #2159 remain open wherever their own criteria are unmet.
-- Require valid observed FX for every active fiscal currency before promotion; missing-rate input halts accrual without partially advancing any treasury. Qualify through development and staging, observe per-kind stock-flow, treasury receipts and retry failures each turn, and preserve stored receipts on rollback. A rollback to a version without per-turn claims must not replay an already accrued turn.
+Machine-readable results: [issue-992-treasury-accrual.json](issue-992-treasury-accrual.json).
