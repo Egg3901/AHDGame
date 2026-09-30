@@ -301,14 +301,16 @@ async function evaluateOneBank(
 
   // Mark prop book before confidence so leverage / equity use fresh prices.
   if (propRunning) {
+    const beforeMarkCharter = charter;
     const marked = await markBook(db, charter);
     const liq = await forceLiquidateToLeverageCap(db, corp._id, cashReserves, charter, marked);
+    if (liq.stale) return null;
     cashReserves = liq.cashReserves;
     charter = liq.charter;
     forcedLiquidation = liq.forced;
     if (!liq.forced) {
-      await db.collection<Corporation>("corporations").updateOne(
-        { _id: corp._id, "bankCharter.status": "active" },
+      const markedUpdate = await db.collection<Corporation>("corporations").updateOne(
+        { _id: corp._id, bankCharter: beforeMarkCharter, "bankCharter.status": "active" },
         {
           $set: {
             "bankCharter.propBook": marked.positions,
@@ -317,6 +319,7 @@ async function evaluateOneBank(
           },
         }
       );
+      if (markedUpdate.matchedCount !== 1) return null;
       charter = {
         ...charter,
         propBook: marked.positions,

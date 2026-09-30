@@ -364,6 +364,7 @@ export async function openPosition(
   const updated = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corporationId,
+      bankCharter: charter,
       "bankCharter.status": "active",
       "bankCharter.cashReserves": { $gte: cost },
       // Re-gate the supervisory standing IN the write, not just on the read
@@ -484,6 +485,7 @@ export async function closePosition(
   const updated = await db.collection<Corporation>("corporations").updateOne(
     {
       _id: corporationId,
+      bankCharter: charter,
       "bankCharter.status": "active",
     },
     {
@@ -533,7 +535,7 @@ export async function forceLiquidateToLeverageCap(
   cashReserves: number,
   charter: BankCharter,
   marked: MarkBookResult
-): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean }> {
+): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean; stale?: boolean }> {
   const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue);
   const cap = PROP_LEVERAGE_MULTIPLE * Math.max(0, equity);
   if (!(marked.propBookMarkValue > cap + 1e-9) || marked.propBookMarkValue <= 0) {
@@ -575,8 +577,8 @@ export async function forceLiquidateToLeverageCap(
     propBookMarkValue: nextMark,
   };
 
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: corporationId, "bankCharter.status": "active" },
+  const updated = await db.collection<Corporation>("corporations").updateOne(
+    { _id: corporationId, bankCharter: charter, "bankCharter.status": "active" },
     {
       $set: {
         "bankCharter.cashReserves": nextLiquid,
@@ -586,6 +588,10 @@ export async function forceLiquidateToLeverageCap(
       },
     }
   );
+
+  if (updated.matchedCount !== 1) {
+    return { cashReserves, charter, forced: false, stale: true };
+  }
 
   return { cashReserves: nextLiquid, charter: nextCharter, forced: true };
 }

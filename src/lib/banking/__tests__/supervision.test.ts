@@ -111,6 +111,26 @@ describe("processBankSupervision — revoke refunds capital (ticket 1093)", () =
     };
   }
 
+  it("settles one supervisory unwind when two assessments share the same book", async () => {
+    const { memory } = revokeWorld({
+      cashReserves: 100_000,
+      propBookMarkValue: 10_000_000,
+      propBook: [{ asset: "equity", ref: "synthetic", units: 1, costBasis: 9_000_000 }],
+      totalLoans: 0,
+      totalDeposits: 0,
+      undercapitalizedSinceTurn: BREACHED_SINCE,
+    });
+    const { processBankSupervision } = await importSupervision();
+    await Promise.all([
+      processBankSupervision(memory as unknown as Db, TURN),
+      processBankSupervision(memory as unknown as Db, TURN),
+    ]);
+    const corp = corpState(memory);
+    expect(corp.liquidCapital).toBe(10_100_000);
+    expect(corp.bankCharter.cashReserves).toBe(0);
+    expect(corp.bankCharter.status).toBe("revoked");
+  });
+
   it("unwinds the prop book into cash and pays the whole balance to the shareholder", async () => {
     // Investment bank, no depositors: value sits in the prop book plus cash.
     // cashReserves (100k) against a 10M book is a 1% capital ratio, well under

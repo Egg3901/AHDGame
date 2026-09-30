@@ -216,6 +216,7 @@ async function revokeForUndercapitalization(
   // at book equity, reaches the shareholder. Depositors are not punished for
   // the owner ignoring a deadline; they are simply paid first.
   const unwoundPropBook = await unwindPropBookToCashReserves(db, corp, turn);
+  if (unwoundPropBook === null) return false;
   const revoked = await revokeCharter(db, corp._id, "undercapitalized");
   if (!revoked.ok) return false;
 
@@ -267,7 +268,7 @@ async function unwindPropBookToCashReserves(
   db: Db,
   corp: Pick<Corporation, "_id" | "name" | "bankCharter">,
   turn: number
-): Promise<number> {
+): Promise<number | null> {
   const charter = corp.bankCharter;
   if (!charter || charter.status !== "active") return 0;
   const mark = Math.max(0, charter.propBookMarkValue ?? 0);
@@ -275,7 +276,7 @@ async function unwindPropBookToCashReserves(
   if (mark <= 0 && !hasPositions) return 0;
 
   const result = await db.collection<Corporation>("corporations").updateOne(
-    { _id: corp._id, "bankCharter.status": "active" },
+    { _id: corp._id, bankCharter: charter, "bankCharter.status": "active" },
     {
       ...(mark > 0 ? { $inc: { "bankCharter.cashReserves": mark } } : {}),
       $set: {
@@ -285,7 +286,7 @@ async function unwindPropBookToCashReserves(
       },
     }
   );
-  if (result.modifiedCount === 0) return 0;
+  if (result.matchedCount !== 1) return null;
   if (mark <= 0) return 0;
 
   await emitTx(db, {
