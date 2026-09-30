@@ -76,7 +76,12 @@ export async function stageFederationFacilityClaims(
       stored.corporationId !== claim.corporationId ||
       stored.sectorId !== claim.sectorId ||
       stored.debtorEntityId !== claim.debtorEntityId ||
-      stored.creditorCountryId !== claim.creditorCountryId ||
+      (stored.creditorCountryId !== claim.creditorCountryId &&
+        !(
+          claim.creditorCountryId === null &&
+          stored.creditorCountryId &&
+          (stored.status === "payable" || stored.status === "paid")
+        )) ||
       stored.amountAnchor !== claim.amountAnchor
     )
       throw new Error("Facility claim key conflicts with an existing liability");

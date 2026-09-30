@@ -106,6 +106,9 @@ describe("contingent facility claim ledger", () => {
     );
     expect(payable).toMatchObject({ status: "payable", creditorCountryId: "RU" });
     expect(
+      (await stageFederationFacilityClaims(db, applicationId, [plan], new Date(1)))[0]
+    ).toEqual(payable);
+    expect(
       await activateFederationFacilityClaim(
         db,
         applicationId,
