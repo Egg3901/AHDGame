@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { publishFederationRelocations, type FederationRelocationRecord } from "./relocationLedger";
@@ -155,5 +155,61 @@ describe("federation protected relocation ledger", () => {
         },
       })
     ).rejects.toThrow("conflicts with an earlier record");
+  });
+  it("activates retained-headquarters facility claims in one transaction and preserves paid claims on replay", async () => {
+    const mem = createInMemoryDb();
+    const db = mem as unknown as Db;
+    mem.seed("federationSettlementApplications", [
+      {
+        _id: applicationId,
+        presetId: "1991-default",
+        settlementId: "split",
+        revision: 1,
+        sourceEntityId: "RU",
+        entityIds: ["RU", "UKR"],
+        status: "applied",
+        appliedOnTurn: 96,
+      },
+    ]);
+    mem.seed("worldEntityStates", [
+      { _id: "1991-default:RU", applicationId, entityId: "RU", appliedOnTurn: 96 },
+      { _id: "1991-default:UKR", applicationId, entityId: "UKR", appliedOnTurn: 96 },
+    ]);
+    const firms = Array.from({ length: 100 }, (_, index) => ({
+      corporationId: `firm-${index}`,
+      status: "continuing" as const,
+      claims: [
+        {
+          claimId: `plant-${index}`,
+          corporationId: `firm-${index}`,
+          sectorId: `sector-${index}`,
+          debtorEntityId: "UKR",
+          creditorCountryId: "RU" as const,
+          amountAnchor: 1200,
+        },
+      ],
+    }));
+    const firmOrigins = Object.fromEntries(
+      firms.map((firm) => [
+        firm.corporationId,
+        { countryId: "RU" as const, stateId: "RU_WEST", entityId: "RU" },
+      ])
+    );
+    await stageFederationFacilityClaims(db, applicationId, firms, new Date(0));
+    const args = { db, applicationId, residents: [], firms, firmOrigins, now: new Date(0) };
+    await expect(publishFederationRelocations(args)).rejects.toThrow("transaction");
+    const claims = mem.collection("federationFacilityClaims");
+    expect(claims.docs.every((row) => row.status === "contingent")).toBe(true);
+    const write = vi.spyOn(claims, "bulkWrite");
+    const transactional = { ...args, session: { inTransaction: () => true } as ClientSession };
+    expect(await publishFederationRelocations(transactional)).toEqual([]);
+    expect(write).toHaveBeenCalledOnce();
+    expect(claims.docs.every((row) => row.status === "payable")).toBe(true);
+    claims.docs[0].status = "paid";
+    write.mockClear();
+    expect(await publishFederationRelocations(transactional)).toEqual([]);
+    expect(write).not.toHaveBeenCalled();
+    expect(claims.docs[0].status).toBe("paid");
+    expect(mem.collection("federationRelocations").docs).toEqual([]);
   });
 });
