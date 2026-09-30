@@ -1,12 +1,13 @@
 /** Journal-owned same-document transfers publish cash and their read model atomically. */
 import { type Db, type Document, type Filter, type UpdateFilter } from "mongodb";
+import { isDeepStrictEqual } from "node:util";
 import {
   claimMoneyMove,
   MONEY_MOVE_COLLECTION,
   SETTLED_KEYS_FIELD,
   SETTLED_KEYS_CAP,
 } from "./moneyMove";
-import type { BankingTransition } from "./rules/boundary";
+import type { BankingTransition, TransitionProjection } from "./rules/boundary";
 import type { SettlementResult } from "./settlementJournal";
 import { reviveObjectIds } from "./settlementEncoding";
 
@@ -29,7 +30,7 @@ interface AtomicRecord extends Document {
   turn?: number;
   atomicDocument: AtomicPlan;
   legs: { kind: string; amount: number; path: string; applied: boolean }[];
-  projections: { projection: unknown; applied: boolean; appliedAt?: Date }[];
+  projections: { projection: TransitionProjection; applied: boolean; appliedAt?: Date }[];
 }
 const at = (value: unknown, path: string): unknown =>
   path
@@ -69,12 +70,21 @@ export async function settleAtomicDocumentTransition(
     error,
   });
   if (
-    transition.projections.length !== 1 ||
+    !transition.projections.length ||
     !projection?.update ||
     !projection.filter ||
     projection.insert
   )
-    return bad("Atomic settlement needs one document update projection");
+    return bad("Atomic settlement needs a leading document update projection");
+  if (
+    transition.projections
+      .slice(1)
+      .some(
+        (item) =>
+          item.collection !== "financialTxLog" || !item.insert?._id || item.update || item.filter
+      )
+  )
+    return bad("Atomic follow-up projections must be financial transaction inserts with fixed ids");
   if (!same(reviveObjectIds(projection.filter), identity))
     return bad("Atomic projection must address the same identity");
   if (Object.keys(identity).length !== 1 || identity._id === undefined)
@@ -130,16 +140,14 @@ export async function settleAtomicDocumentTransition(
       transitionKind: transition.kind,
       currency: transition.currency,
       atomicDocument: plan,
-      projections: [
-        {
-          collection: projection.collection,
-          note: projection.note,
-          claimedAt: null,
-          appliedAt: null,
-          applied: false,
-          projection,
-        },
-      ],
+      projections: transition.projections.map((item) => ({
+        collection: item.collection,
+        note: item.note,
+        claimedAt: null,
+        appliedAt: null,
+        applied: false,
+        projection: item,
+      })),
     },
   });
   if (claimed.status === "rejected") return bad(claimed.error);
@@ -248,6 +256,18 @@ export async function resumeAtomicDocumentSettlement(
         }
       }
     }
+  }
+  // Cash is already receipted. Recover the original visible transaction rows
+  // before completing the journal, including applied-but-unacknowledged writes.
+  for (const { projection } of record.projections.slice(1)) {
+    if (projection.collection !== "financialTxLog" || !projection.insert?._id)
+      throw new Error("Invalid atomic transaction receipt projection");
+    const document = reviveObjectIds(projection.insert) as Document;
+    const receipts = db.collection(projection.collection);
+    await receipts.updateOne({ _id: document._id }, { $setOnInsert: document }, { upsert: true });
+    const persisted = await receipts.findOne({ _id: document._id });
+    if (!isDeepStrictEqual(persisted, document))
+      throw new Error("Atomic transaction receipt conflicts with original settlement");
   }
   const now = new Date();
   const completed: Record<string, unknown> = {
