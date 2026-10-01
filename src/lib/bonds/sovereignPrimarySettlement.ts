@@ -24,7 +24,7 @@ export interface PrimaryAccountingContext {
   turnLengthMinutes: number;
   rates: Map<string, number>;
   /** World preset, for the authored era rate of a currency with no exchangeRates row. */
-  preset: string;
+  preset?: string;
 }
 
 /**
