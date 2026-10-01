@@ -174,6 +174,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   stock_order_escrow: "order_escrow",
   stock_order_refund: "order_escrow",
   corp_escrow_funding: "escrow_transfer",
+  corp_escrow_withdrawal: "escrow_transfer",
   corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",
   pension_benefit: "pension_transfer",
