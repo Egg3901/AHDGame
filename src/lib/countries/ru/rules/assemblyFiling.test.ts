@@ -86,6 +86,20 @@ describe("Ratified first-Duma player filing", () => {
       expect(decide(input)).toEqual({ allowed: false, reason: "unbound-mandate" });
     }
   );
+  it("protects constituency winners while permitting list campaigning without a second mandate", () => {
+    const input = scenario();
+    input.character.holdsConstituencyMandate = true;
+    expect(decide(input)).toMatchObject({ allowed: true, nationalList: true });
+    Object.assign(input.election, {
+      tier: "constituency",
+      state: "CEN",
+      seatId: "RU-duma-CEN-1",
+      totalSeats: 1,
+    });
+    expect(decide(input)).toEqual({ allowed: false, reason: "constituency-mandate" });
+    input.character.holdsConstituencyMandate = false;
+    expect(decide(input)).toMatchObject({ allowed: true });
+  });
   it("closes filing exactly at its raw-turn deadline", () => {
     const input = scenario();
     input.turn = 139;

@@ -170,6 +170,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       : null;
     if (dumaFiling && !dumaFiling.allowed) {
       const errors = {
+        "constituency-mandate":
+          "You already hold a certified Duma constituency mandate and cannot contest another constituency.",
         "unbound-mandate":
           "This Duma election no longer matches its ratified constitutional mandate.",
         "invalid-ballot": "This Duma ballot has an invalid district or filing schedule.",

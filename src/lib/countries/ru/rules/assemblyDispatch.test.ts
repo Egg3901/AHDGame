@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   readyRussianDumaCohorts as ready,
+  readyRussianDumaRepeats as repeats,
   type RussianDumaDispatchBallot as Ballot,
 } from "./assemblyDispatch";
 const cohortId = "000000000000000000000001";
@@ -44,4 +45,63 @@ describe("Duma cohort dispatch", () => {
     expect(ready(rows, 141)).toEqual([]);
     expect(ready(fixture(), 0)).toEqual([]);
   });
+});
+
+describe("Duma repeat dispatch", () => {
+  const rootCohortId = "000000000000000000000002";
+  function repeatFixture() {
+    const rows = fixture()
+      .slice(0, 2)
+      .map((row) => ({ ...row, binding: { ...row.binding!, rootCohortId, generation: 1 } }));
+    const opening = {
+      rootCohortId,
+      cohortId,
+      generation: 1,
+      mandateSinceTurn: 129,
+      electionIds: rows.map((row) => row.id),
+      seatIds: rows.map((row) => row.seatId!),
+    };
+    return { rows, opening };
+  }
+  it("dispatches exactly a journal-bound failed subset at its closing turn", () => {
+    const { rows, opening } = repeatFixture();
+    expect(repeats(rows, [opening], 140)).toEqual([]);
+    expect(repeats(rows.reverse(), [opening], 141)).toEqual([opening]);
+    expect(ready(rows, 141)).toEqual([]);
+    expect(
+      ready(
+        fixture().map((row) => ({
+          ...row,
+          binding: { ...row.binding!, rootCohortId, generation: 1 },
+        })),
+        141
+      )
+    ).toEqual([]);
+  });
+  it("defers missing, extra and duplicated replacements", () => {
+    const { rows, opening } = repeatFixture();
+    expect(repeats(rows.slice(1), [opening], 141)).toEqual([]);
+    expect(repeats([...rows, rows[0]], [opening], 141)).toEqual([]);
+    expect(repeats(rows, [opening, opening], 141)).toEqual([]);
+    expect(
+      repeats(
+        rows,
+        [{ ...opening, electionIds: [...opening.electionIds, opening.electionIds[0]] }],
+        141
+      )
+    ).toEqual([]);
+  });
+  it.each(["generation", "root", "seat", "capacity", "status", "identity"])(
+    "defers inconsistent %s",
+    (field) => {
+      const { rows, opening } = repeatFixture();
+      if (field === "generation") rows[0].binding!.generation = 2;
+      if (field === "root") rows[0].binding!.rootCohortId = cohortId;
+      if (field === "seat") rows[0].seatId = "unknown";
+      if (field === "capacity") rows[0].totalSeats = 1;
+      if (field === "status") rows[0].status = "active";
+      if (field === "identity") rows[0].id = "unknown";
+      expect(repeats(rows, [opening], 141)).toEqual([]);
+    }
+  );
 });
