@@ -68,7 +68,7 @@ export function presetMismatchedPartyNames(
   seeds: PartySeed[],
   preset: string,
   fallbackCountries: ReadonlySet<string>
-): Array<{ countryId: string; name: string }> {
+): Array<{ countryId: PartySeed["countryId"]; name: string }> {
   const byCountry = new Map<string, PartySeed[]>();
   for (const seed of seeds) {
     const rows = byCountry.get(seed.countryId) ?? [];
