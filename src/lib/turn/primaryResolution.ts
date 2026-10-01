@@ -1933,6 +1933,9 @@ export async function accumulateGeneralElectionVotes(
   const downBallotElections = generalElections.filter((e) => e.electionType !== "president");
   const orderedElections = [...presidentialElections, ...downBallotElections];
 
+  // Every race's tally update goes out in one bulk write after the loop
+  // (#2695). Unordered: one failing race does not block the others.
+  const tallyWrites: AnyBulkWriteOperation<ElectionVoteTally>[] = [];
   for (const election of orderedElections) {
     try {
       const existing = tallyByElection.get(election._id.toString());
@@ -1957,6 +1960,7 @@ export async function accumulateGeneralElectionVotes(
         }
         // A tally created just above is not in `existing`; let the turn read it.
         await accumulateVoteTurn(election._id, turn, now, {
+          tallyWrites,
           approvalMap,
           preload,
           election,
@@ -1966,6 +1970,15 @@ export async function accumulateGeneralElectionVotes(
       }
     } catch (err) {
       logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);
+    }
+  }
+  if (tallyWrites.length > 0) {
+    try {
+      await db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .bulkWrite(tallyWrites, { ordered: false });
+    } catch (err) {
+      logger.error("Turn", `Error writing ${tallyWrites.length} election vote tallies`, err);
     }
   }
 }

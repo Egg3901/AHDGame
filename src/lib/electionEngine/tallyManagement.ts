@@ -15,7 +15,7 @@ import type {
   StateDemographics,
   VoteTurnSnapshot,
 } from "@/lib/db/types";
-import { ObjectId } from "mongodb";
+import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import { getStateApprovalForElection } from "@/lib/utils/getStateApprovalForElection";
 import type {
   StatePartyOrg,
@@ -124,6 +124,11 @@ export async function accumulateVoteTurn(
   turnNumber: number,
   now: Date,
   options?: {
+    /**
+     * When present, the tally update is appended here instead of written, so
+     * the caller can flush every race's update in one bulk write (#2695).
+     */
+    tallyWrites?: AnyBulkWriteOperation<ElectionVoteTally>[];
     approvalMap?: Map<string, number>;
     preload?: AccumulateVoteTurnPreload;
     /** The election document, when the caller already holds it; saves a read per election. */
@@ -825,19 +830,23 @@ export async function accumulateVoteTurn(
     }
   }
 
-  await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
-    { electionId },
-    {
-      $set: {
-        totalVotes: newTotals,
-        candidateNames: cleanedNames,
-        candidateParties: cleanedParties,
-        ...(seatsEstimate ? { seatsEstimate } : {}),
-        updatedAt: now,
-      },
-      $push: { turnSnapshots: snapshot } as never,
-    }
-  );
+  const tallyUpdate = {
+    $set: {
+      totalVotes: newTotals,
+      candidateNames: cleanedNames,
+      candidateParties: cleanedParties,
+      ...(seatsEstimate ? { seatsEstimate } : {}),
+      updatedAt: now,
+    },
+    $push: { turnSnapshots: snapshot } as never,
+  };
+  if (options?.tallyWrites) {
+    options.tallyWrites.push({ updateOne: { filter: { electionId }, update: tallyUpdate } });
+    return;
+  }
+  await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .updateOne({ electionId }, tallyUpdate);
 }
 
 // ─── Initialize a blank tally for an election ────────────────────────────────
