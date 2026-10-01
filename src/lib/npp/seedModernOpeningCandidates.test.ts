@@ -147,15 +147,13 @@ it("rejects ineligible or closed empty contests before creating any actors", asy
   await db
     .collection("statePartyOrg")
     .insertOne({ stateId: "DE_BY", partyId: "1", hasPresence: false });
-  await db
-    .collection("elections")
-    .insertOne({
-      countryId: "DE",
-      state: "DE_BY",
-      electionType: "ministerPresident",
-      status: "active",
-      primaryEndTurn: 10,
-    });
+  await db.collection("elections").insertOne({
+    countryId: "DE",
+    state: "DE_BY",
+    electionType: "ministerPresident",
+    status: "active",
+    primaryEndTurn: 10,
+  });
   await expect(seedModernOpeningCandidates(db, "1991-default", new Date())).rejects.toThrow(
     "no eligible default-party field"
   );
