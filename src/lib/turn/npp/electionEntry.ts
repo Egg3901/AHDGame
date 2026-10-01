@@ -114,6 +114,8 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
 
   const openPrimaries = ctx.openPrimaries.filter((p) => {
     if (isElectionTypeEntryBlocked(p.electionType)) return false;
+    // Bound Duma cohorts are filled atomically by the dedicated slate shell.
+    if (p.countryId === "RU" && p.electionType === "dumaDeputy" && p.russianDumaRound) return false;
     if (p.electionType === "president") {
       return (
         (p.countryId === "RU" && p.russianPresidentialRound?.round === 1) ||

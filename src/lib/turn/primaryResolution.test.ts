@@ -79,16 +79,29 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(["regional", "Russian presidency"])(
+  it.each(["regional", "Russian presidency", "Duma list"])(
     "records uncontested %s primary results without US delegates",
     async (kind) => {
       const electionId = new ObjectId();
       const election = {
         _id: electionId,
-        electionType: kind === "regional" ? "senate" : "president",
+        electionType:
+          kind === "regional" ? "senate" : kind === "Duma list" ? "dumaDeputy" : "president",
         status: "active",
         countryId: kind === "regional" ? "US" : "RU",
         state: kind === "regional" ? "CA" : "RU",
+        ...(kind === "Duma list"
+          ? {
+              seatId: "RU-duma-national-list",
+              totalSeats: 225,
+              russianDumaRound: {
+                cohortId: new ObjectId(),
+                mandateSinceTurn: 72,
+                tier: "list",
+                registeredVoters: 1000,
+              },
+            }
+          : {}),
         primaryEndTime: new Date(NOW.getTime() - 1000),
         endTime: new Date(NOW.getTime() + 100000),
       };
@@ -102,13 +115,24 @@ describe("resolvePrimariesIfNeeded", () => {
         isNPP: false,
         status: "active",
       };
+      const secondOwner = new ObjectId();
       const candidate2 = {
         _id: new ObjectId(),
         electionId,
-        party: "GOP",
+        party: kind === "Duma list" ? "DEM" : "GOP",
         characterName: "Bob",
-        characterId: new ObjectId(),
-        isNPP: false,
+        characterId: secondOwner,
+        isNPP: kind === "Duma list",
+        ...(kind === "Duma list"
+          ? {
+              nppId: secondOwner,
+              russianDumaNomination: {
+                registrationOrder: 10,
+                nominationOrder: Number.MAX_SAFE_INTEGER,
+                capacity: 225,
+              },
+            }
+          : {}),
         status: "active",
       };
 
@@ -161,7 +185,10 @@ describe("resolvePrimariesIfNeeded", () => {
       expect(initPresidentVoteTally).not.toHaveBeenCalled();
       const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
       expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
-      expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
+      if (kind === "Duma list") {
+        expect(primaryResults?.byParty?.DEM).toHaveLength(2);
+        expect(primaryResults?.byParty?.DEM?.every((row) => row.won)).toBe(true);
+      } else expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
     }
   );
 
