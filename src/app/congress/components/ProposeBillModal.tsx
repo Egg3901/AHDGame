@@ -56,11 +56,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
-import type { JurisdictionMode } from "@/lib/db/types/legislation";
-import {
-  commonJurisdictionChoices,
-  JURISDICTION_MODE_LABELS,
-} from "@/lib/legislature/jurisdiction";
+import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
 
 interface LegislationPolicyOption {
   id: string;
@@ -104,10 +100,6 @@ interface LegislationTypeOption {
   estimatesGdp?: number;
   /** New-generation catalog laws: political-metric targets (registry family ids). */
   politicalMetricTargets?: { metricId: string; weight: number }[];
-  administration?: {
-    defaultJurisdictionMode: JurisdictionMode;
-    allowedJurisdictionModes: JurisdictionMode[];
-  };
   /** Tax-slider laws (ruling #16): slider bounds + live rate + revenue delta. */
   taxSliderEstimate?: {
     minRate: number;
@@ -143,7 +135,7 @@ function SupplementaryLoadError({ message, onRetry }: { message: string; onRetry
   );
 }
 
-export function ProposeBillModal({
+function LegacyProposeBillModal({
   chamber,
   adminOverride,
   myChamber,
@@ -173,7 +165,6 @@ export function ProposeBillModal({
   const effectiveChamber = myChamber ?? chamber;
   const [billChamber, setBillChamber] = useState<"house" | "senate" | "joint">(effectiveChamber);
   const [legislationTypes, setLegislationTypes] = useState<LegislationTypeOption[]>([]);
-  const [jurisdictionMode, setJurisdictionMode] = useState<JurisdictionMode | "">("");
   // All national legislation types for this country (category-agnostic), fetched
   // once to decide which categories to offer — hides categories the country has
   // no laws for (e.g. agriculture/technology in the US).
@@ -213,27 +204,6 @@ export function ProposeBillModal({
   const [categoriesError, setCategoriesError] = useState(false);
   const [budgetError, setBudgetError] = useState(false);
 
-  const jurisdictionChoices = useMemo(
-    () =>
-      commonJurisdictionChoices(
-        provisions
-          .filter((provision) => provision.legislationTypeId)
-          .map(
-            (provision) =>
-              legislationTypes.find((type) => type._id === provision.legislationTypeId)
-                ?.administration
-          )
-      ),
-    [legislationTypes, provisions]
-  );
-  const jurisdictionChoiceKey = jurisdictionChoices.modes.join("|");
-  useEffect(() => {
-    setJurisdictionMode((current) =>
-      current && jurisdictionChoices.modes.includes(current)
-        ? current
-        : (jurisdictionChoices.defaultMode ?? "")
-    );
-  }, [jurisdictionChoiceKey, jurisdictionChoices.defaultMode, jurisdictionChoices.modes]);
   const [policiesError, setPoliciesError] = useState(false);
 
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
@@ -675,7 +645,6 @@ export function ProposeBillModal({
         chamber: billChamber,
         category: cat,
         provisions: provisionPayload,
-        ...(jurisdictionMode ? { jurisdictionMode } : {}),
       };
       const {
         response: res,
@@ -1397,28 +1366,6 @@ export function ProposeBillModal({
             )}
           </div>
 
-          {jurisdictionChoices.modes.length > 0 && (
-            <div className="rounded-lg border border-card-border bg-background/50 p-3">
-              <label className="mb-1 block text-xs font-medium text-muted">
-                Responsibility model
-              </label>
-              <select
-                className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground"
-                value={jurisdictionMode}
-                onChange={(event) => setJurisdictionMode(event.target.value as JurisdictionMode)}
-              >
-                {jurisdictionChoices.modes.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {JURISDICTION_MODE_LABELS[mode]}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[11px] text-muted">
-                This selects which level administers every policy provision in this bill.
-              </p>
-            </div>
-          )}
-
           <div className="rounded-lg border border-card-border bg-card/50 px-3 py-2 text-xs text-muted">
             {adminOverride ? (
               <span>Cost waived (admin).</span>
@@ -1504,4 +1451,32 @@ export function ProposeBillModal({
       </div>
     </div>
   );
+}
+
+export function ProposeBillModal(props: Parameters<typeof LegacyProposeBillModal>[0]) {
+  const flags = useWorldFlags();
+  const useV2 =
+    flags.loaded &&
+    !flags.failed &&
+    flags.resetSystemVersions.legislation === "v2" &&
+    flags.resetV2Countries.includes(props.countryId);
+  if (useV2) {
+    const initial = props.myChamber ?? props.chamber;
+    return (
+      <GuidedLegislationModal
+        countryId={props.countryId}
+        endpoint="/api/congress/bills"
+        chambers={[
+          { value: "house", label: "House" },
+          { value: "senate", label: "Senate" },
+          { value: "joint", label: "Joint" },
+        ]}
+        initialChamber={initial}
+        adminOverride={props.adminOverride}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    );
+  }
+  return <LegacyProposeBillModal {...props} />;
 }

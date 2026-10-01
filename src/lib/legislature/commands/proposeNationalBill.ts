@@ -7,6 +7,7 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import {
   checkDuplicateProvisions,
+  checkDuplicateResetLawFamilies,
   checkDuplicateTariffProvisions,
   checkCurrentPolicyLevel,
   NATIONAL_TERMINAL_STATUSES,
@@ -26,7 +27,6 @@ import type {
   ElectedOfficial,
   PoliticalParty,
 } from "@/lib/db/types";
-import type { JurisdictionMode } from "@/lib/db/types/legislation";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
 import {
@@ -57,7 +57,6 @@ export interface ProposeNationalBillInput {
   category: string;
   fullText?: string;
   provisions: unknown[];
-  jurisdictionMode?: JurisdictionMode;
   confirmElectionRisk?: boolean;
 }
 
@@ -110,7 +109,6 @@ export async function proposeNationalBill(
     category,
     fullText,
     provisions: clientProvisions,
-    jurisdictionMode: requestedJurisdictionMode,
     confirmElectionRisk,
   } = input;
 
@@ -346,7 +344,6 @@ export async function proposeNationalBill(
     gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
   const validation = await validateBillProvisions(db, rawProvisions, category, countryId, {
     enabled: administrationEnabled,
-    requestedJurisdictionMode,
   });
   if (!validation.ok) {
     return { status: validation.status, body: { error: validation.error } };
@@ -362,6 +359,7 @@ export async function proposeNationalBill(
     centralBankProvisions: validatedCentralBankProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
+    resetLawProvisions: validatedResetLawProvisions,
   } = validation;
 
   for (const provision of validatedTariffProvisions) {
@@ -461,6 +459,16 @@ export async function proposeNationalBill(
     return { status: 409, body: { error: duplicateCheck.error } };
   }
 
+  const resetLawDuplicateCheck = await checkDuplicateResetLawFamilies(
+    db,
+    "bills",
+    activeBillFilter,
+    validatedResetLawProvisions
+  );
+  if (resetLawDuplicateCheck) {
+    return { status: 409, body: { error: resetLawDuplicateCheck.error } };
+  }
+
   const tariffDuplicateCheck = await checkDuplicateTariffProvisions(
     db,
     "bills",
@@ -514,7 +522,8 @@ export async function proposeNationalBill(
         validatedCentralBankProvisions.length +
         validatedElectoralLawProvisions.length +
         validatedEuroAdoptionProvisions.length +
-        validatedEuropeanTreatyProvisions.length,
+        validatedEuropeanTreatyProvisions.length +
+        validatedResetLawProvisions.length,
     })
   );
   const actionCost = BILL_PROPOSE_ACTION_COST;
@@ -577,6 +586,7 @@ export async function proposeNationalBill(
     ...validatedCentralBankProvisions,
     ...validatedEuroAdoptionProvisions,
     ...validatedEuropeanTreatyProvisions,
+    ...validatedResetLawProvisions,
   ];
   const stateId = getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`;
 
@@ -598,7 +608,6 @@ export async function proposeNationalBill(
     votesAbstain: 0,
     votes: {},
     category,
-    ...(administrationEnabled ? { jurisdictionMode: validation.jurisdictionMode } : {}),
     provisions: combinedProvisions,
     ...(firstPolicy && {
       legislationTypeId: firstPolicy.legislationTypeId,

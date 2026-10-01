@@ -82,7 +82,11 @@ export function DepartmentProgramPanel({
           </div>
           <div>
             <dt className="text-muted">Authority this turn</dt>
-            <dd>{money(program.authorityThisTurn ?? 0, currencySymbol)}</dd>
+            <dd>
+              {program.authorityThisTurn === undefined
+                ? "Not settled"
+                : money(program.authorityThisTurn, currencySymbol)}
+            </dd>
           </div>
           {program.availableBalance !== undefined && (
             <div>
@@ -95,8 +99,16 @@ export function DepartmentProgramPanel({
             <dd>{money(program.encumbered ?? 0, currencySymbol)}</dd>
           </div>
           <div>
-            <dt className="text-muted">Outlaid this turn</dt>
-            <dd>{money(program.outlaid ?? 0, currencySymbol)}</dd>
+            <dt className="text-muted">
+              {program.lastSettledTurn === undefined
+                ? "Outlaid this turn"
+                : `Outlaid in turn ${program.lastSettledTurn}`}
+            </dt>
+            <dd>
+              {program.outlaid === undefined
+                ? "Not measured"
+                : money(program.outlaid, currencySymbol)}
+            </dd>
           </div>
           <div>
             <dt className="text-muted">Arrears</dt>

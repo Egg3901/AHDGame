@@ -85,6 +85,20 @@ describe("generalized country department settlement plan", () => {
     expect(plan.settlements).toEqual([]);
   });
 
+  it("derives left-to-regions delivery from the enacted option", () => {
+    const stateLedEducation = law("us_federal_education_funding", 5);
+    stateLedEducation.countryId = "US";
+    const plan = buildCountryDepartmentSettlementPlan({
+      countryId: "US",
+      turn: 1,
+      year: 2027,
+      accounts: {},
+      activeLawCosts: [{ law: stateLedEducation, amount: 1_000 }],
+      legislationTypes,
+    });
+    expect(plan.settlements).toEqual([]);
+  });
+
   it("pays down retained encumbrance after a program leaves the active-law set", () => {
     const opening = createEmptyDepartmentAccount(department("uk_transport_department"));
     const account: DepartmentAccount = {

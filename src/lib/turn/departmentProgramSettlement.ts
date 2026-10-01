@@ -22,6 +22,8 @@ import type { DepartmentCountryId } from "@/lib/governmentFinance/departmentCata
 import { includedAuthorityPerTurn } from "@/lib/governmentFinance/rules/appropriation";
 import { settleCapacity } from "@/lib/governmentFinance/rules/capacity";
 import { settleProgramAccount } from "@/lib/governmentFinance/rules/implementation";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry, type ResetVersionState } from "@/lib/resetVersions/rules";
 
 const MAX_COMMIT_ATTEMPTS = 3;
 const US_PUBLIC_HEALTH_TYPE = "us_public_health";
@@ -76,13 +78,17 @@ export async function processDepartmentProgramSettlement(
   gameState: Pick<
     GameState,
     "departmentProgramSliceEnabled" | "departmentFinanceEnabled" | "manuallyEnabledSeats"
-  >
+  > &
+    ResetVersionState
 ): Promise<DepartmentProgramTurnResult> {
   if (isDepartmentFinanceEnabledFromState(gameState)) {
     return processGeneralizedDepartmentSettlement(db, turn, gameState);
   }
   if (!isDepartmentProgramSliceEnabledFromState(gameState)) return emptyResult(false);
 
+  if (resetSystemVersionsForCountry(gameState, RESET_V2_READY, "US").cabinet === "v2") {
+    return emptyResult(false);
+  }
   let budget = await loadUsBudget(db);
   if (!budget) return emptyResult(true);
   let account = budget.departmentAccounts?.[US_HEALTH_DEPARTMENT_ID];
@@ -223,9 +229,14 @@ async function loadGeneralizedBudget(
 async function processGeneralizedDepartmentSettlement(
   db: Db,
   turn: number,
-  gameState: Pick<GameState, "departmentFinanceEnabled" | "manuallyEnabledSeats">
+  gameState: Pick<GameState, "departmentFinanceEnabled" | "manuallyEnabledSeats"> &
+    ResetVersionState
 ): Promise<DepartmentProgramTurnResult> {
-  const budgets = await loadGeneralizedBudgets(db);
+  const budgets = (await loadGeneralizedBudgets(db)).filter(
+    (budget) =>
+      resetSystemVersionsForCountry(gameState, RESET_V2_READY, String(budget.countryId)).cabinet !==
+      "v2"
+  );
   if (budgets.length === 0) return emptyResult(true);
   const costResults = await Promise.all(
     budgets.map(async (budget) => ({

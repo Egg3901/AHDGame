@@ -48,6 +48,8 @@ import {
   resolveAnnualRegionalGrantPool,
 } from "@/lib/governmentFinance/grantTransfers";
 import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
+import { buildResetRegionalProgramClaims } from "@/lib/resetLegislation/rules/regionalClaims";
 
 // The current turn engine still processes fiscal-year rollover as one shared phase.
 // Pulling the anchor from country-systems makes the rule source explicit now, while
@@ -140,6 +142,28 @@ export async function processFiscalYear(
     db.collection<State>("states").find({}).toArray(),
     db.collection<StateMetrics>("macroMetrics").find({}).toArray(),
   ]);
+  const usResetRegionalPrograms = await db
+    .collection<ResetLawProgramDocument>("resetLawPrograms")
+    .find(
+      { country: "US", scope: "regional" },
+      {
+        projection: {
+          _id: 1,
+          regionId: 1,
+          familyId: 1,
+          choice: 1,
+          annualAgencyAllocation: 1,
+        },
+      }
+    )
+    .toArray();
+  const usResetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
+  for (const program of usResetRegionalPrograms) {
+    if (!program.regionId) continue;
+    const programs = usResetProgramsByRegion.get(program.regionId) ?? [];
+    programs.push(program);
+    usResetProgramsByRegion.set(program.regionId, programs);
+  }
   const stateGdpGrowthMap = new Map(
     allStateMetrics
       .filter((m) => typeof m.economic?.gdpGrowth?.value === "number")
@@ -442,7 +466,8 @@ export async function processFiscalYear(
         state.gdp,
         currentTurn,
         regionalFinanceEnabled && countryId === COUNTRY_CONFIGS.US.id,
-        regionalLegislationTypeMap
+        regionalLegislationTypeMap,
+        countryId === COUNTRY_CONFIGS.US.id ? (usResetProgramsByRegion.get(stateId) ?? []) : []
       );
     }
 
@@ -509,7 +534,8 @@ async function processStateFiscalYear(
   stateGdpMillions?: number,
   currentTurn = 0,
   regionalFinanceEnabled = false,
-  legislationTypeMap: ReadonlyMap<string, LegislationType> = new Map()
+  legislationTypeMap: ReadonlyMap<string, LegislationType> = new Map(),
+  resetPrograms: readonly ResetLawProgramDocument[] = []
 ): Promise<void> {
   const stateBudget = await db
     .collection<StateBudget>("stateBudgets")
@@ -579,34 +605,53 @@ async function processStateFiscalYear(
     revenue,
     stateGdp: newStateGdp,
   });
-  const authorizedSpending = spendingDetail.spending;
+  const resetProgramAnnualCost = resetPrograms.reduce(
+    (sum, program) => sum + program.annualAgencyAllocation,
+    0
+  );
+  const authorizedSpending: StateBudget["spending"] = {
+    ...spendingDetail.spending,
+    byCategory: {
+      ...spendingDetail.spending.byCategory,
+      resetLegislation:
+        (spendingDetail.spending.byCategory.resetLegislation ?? 0) + resetProgramAnnualCost,
+    },
+    total: spendingDetail.spending.total + resetProgramAnnualCost,
+  };
   let spending = authorizedSpending;
   let regionalProgramSettlements = stateBudget.regionalProgramSettlements;
 
-  if (regionalFinanceEnabled) {
+  const regionalSettlementEnabled = regionalFinanceEnabled || resetPrograms.length > 0;
+  if (regionalSettlementEnabled) {
     const previousIds = new Set(Object.keys(stateBudget.regionalProgramSettlements ?? {}));
-    const claims = spendingDetail.lawCosts.flatMap(({ law, annualCost }) => {
-      const type = legislationTypeMap.get(law.legislationTypeId);
-      const option =
-        typeof law.policyOptionIndex === "number"
-          ? type?.policyOptions?.[law.policyOptionIndex]
-          : undefined;
-      const implementation = option?.implementation;
-      const programId =
-        implementation?.programId ??
-        `${law.legislationTypeId}:${option?.id ?? law.policyOptionIndex ?? "current"}`;
-      return [
-        {
-          programId,
-          legislationTypeId: law.legislationTypeId,
-          policyOptionId: option?.id ?? String(law.policyOptionIndex ?? "current"),
-          authorizedCost: Math.max(0, annualCost),
-          obligationPriority: implementation?.obligationPriority ?? 5,
-          fundingSemantics: implementation?.fundingSemantics ?? "appropriation_included",
-          continuing: previousIds.has(programId),
-        } as const,
-      ];
-    });
+    const claims = [
+      ...spendingDetail.lawCosts.flatMap(({ law, annualCost }) => {
+        const type = legislationTypeMap.get(law.legislationTypeId);
+        const option =
+          typeof law.policyOptionIndex === "number"
+            ? type?.policyOptions?.[law.policyOptionIndex]
+            : undefined;
+        const implementation = option?.implementation;
+        const programId =
+          implementation?.programId ??
+          `${law.legislationTypeId}:${option?.id ?? law.policyOptionIndex ?? "current"}`;
+        return [
+          {
+            programId,
+            legislationTypeId: law.legislationTypeId,
+            policyOptionId: option?.id ?? String(law.policyOptionIndex ?? "current"),
+            authorizedCost: Math.max(0, annualCost),
+            obligationPriority: implementation?.obligationPriority ?? 5,
+            fundingSemantics: implementation?.fundingSemantics ?? "appropriation_included",
+            continuing: previousIds.has(programId),
+          } as const,
+        ];
+      }),
+      ...buildResetRegionalProgramClaims({
+        programs: resetPrograms,
+        previousProgramIds: previousIds,
+      }),
+    ];
     const negativeCostCredit = spendingDetail.lawCosts.reduce(
       (sum, row) => sum + Math.max(0, -row.annualCost),
       0
@@ -627,6 +672,12 @@ async function processStateFiscalYear(
           : (settlementByLawId.get(row.law.legislationTypeId)?.fundedAmount ?? 0);
       actualByCategory[row.category] = (actualByCategory[row.category] ?? 0) + funded;
     }
+    actualByCategory.resetLegislation = resetPrograms.reduce(
+      (sum, program) =>
+        sum +
+        (settlement.programs.find((item) => item.programId === program._id)?.fundedAmount ?? 0),
+      0
+    );
     spending = normalizeStateSpending({
       byCategory: actualByCategory,
       resourceProspecting: settlement.reservedNonProgramSpending,
@@ -658,7 +709,7 @@ async function processStateFiscalYear(
         taxRates: normalizedTaxRates,
         revenue,
         spending,
-        ...(regionalFinanceEnabled ? { authorizedSpending, regionalProgramSettlements } : {}),
+        ...(regionalSettlementEnabled ? { authorizedSpending, regionalProgramSettlements } : {}),
         surplus,
         balance: newBalance,
         updatedAt: new Date(),

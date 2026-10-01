@@ -18,8 +18,10 @@ import {
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import {
   RESET_SYSTEMS,
-  RESET_SYSTEM_VERSION_FIELDS,
+  resetSeedComplete,
+  resetSystemSelectionsFrom,
   resetSystemVersionsFrom,
+  resetVersionSelectionEligibility,
   type ResetSystem,
   type ResetSystemVersion,
 } from "@/lib/resetVersions/rules";
@@ -118,7 +120,9 @@ interface FeatureGatesState {
   nppForeignPolicyStage: NppForeignPolicyStage;
   nppEntryViabilityMode: NppEntryViabilityMode;
   resetSystemVersions: Record<ResetSystem, ResetSystemVersion>;
+  resetSystemSelections: Record<ResetSystem, ResetSystemVersion>;
   resetV2Ready: Readonly<Record<ResetSystem, boolean>>;
+  resetV2Seeded: Record<ResetSystem, boolean>;
 }
 
 async function readState(): Promise<FeatureGatesState> {
@@ -152,7 +156,11 @@ async function readState(): Promise<FeatureGatesState> {
     nppForeignPolicyStage,
     nppEntryViabilityMode,
     resetSystemVersions: resetSystemVersionsFrom(doc, RESET_V2_READY),
+    resetSystemSelections: resetSystemSelectionsFrom(doc),
     resetV2Ready: RESET_V2_READY,
+    resetV2Seeded: Object.fromEntries(
+      RESET_SYSTEMS.map((system) => [system, resetSeedComplete(doc, system)])
+    ) as Record<ResetSystem, boolean>,
   };
 }
 
@@ -192,6 +200,50 @@ export async function POST(request: Request) {
     }
 
     const db = await getDb();
+    const resetChange = parsed.data.kind === "reset-system-version" ? parsed.data : null;
+    let resetFilter: Record<string, unknown> = { _id: "current" };
+    if (resetChange) {
+      const gameState = await db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            metricsSystemVersion: 1,
+            legislationSystemVersion: 1,
+            cabinetSystemVersion: 1,
+            resetSystemSelections: 1,
+            resetWorldId: 1,
+          },
+        }
+      );
+      if (!gameState) {
+        return NextResponse.json({ error: "No game world is initialized." }, { status: 409 });
+      }
+      const eligibility = resetVersionSelectionEligibility(
+        gameState,
+        resetChange.system,
+        resetChange.value,
+        RESET_V2_READY
+      );
+      if (!eligibility.allowed) {
+        const error =
+          eligibility.reason === "metrics_required"
+            ? "Select Metrics v2 for the next reset before Legislation or Cabinet v2."
+            : eligibility.reason === "dependent_v2"
+              ? "Return Legislation and Cabinet to v1 before selecting Metrics v1."
+              : `${resetChange.system} v2 is not available until its complete runtime path ships.`;
+        return NextResponse.json({ error }, { status: 409 });
+      }
+      resetFilter = {
+        _id: "current",
+        resetWorldId: gameState.resetWorldId ?? { $exists: false },
+        ...Object.fromEntries(
+          RESET_SYSTEMS.map((system) => [
+            `resetSystemSelections.${system}`,
+            gameState.resetSystemSelections?.[system] ?? { $exists: false },
+          ])
+        ),
+      };
+    }
     const nowIso = new Date().toISOString();
     const set: Record<string, unknown> = { updatedAt: new Date() };
     const unset: Record<string, ""> = {};
@@ -235,16 +287,23 @@ export async function POST(request: Request) {
       set.nppEntryViabilityModeBy = auth.admin.username;
       set.nppEntryViabilityModeAt = nowIso;
     } else {
-      const key = RESET_SYSTEM_VERSION_FIELDS[parsed.data.system];
-      set[key] = parsed.data.value;
-      set[`${key}By`] = auth.admin.username;
-      set[`${key}At`] = nowIso;
+      set[`resetSystemSelections.${parsed.data.system}`] = parsed.data.value;
+      set[`resetSystemSelectionsAudit.${parsed.data.system}`] = {
+        by: auth.admin.username,
+        at: nowIso,
+      };
     }
 
     const update: Record<string, unknown> = { $set: set };
     if (Object.keys(unset).length > 0) update.$unset = unset;
 
-    await db.collection<GameState>("gameState").updateOne({ _id: "current" }, update);
+    const result = await db.collection<GameState>("gameState").updateOne(resetFilter, update);
+    if (resetChange && result.matchedCount === 0) {
+      return NextResponse.json(
+        { error: "The system versions changed during this request. Reload and try again." },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json({ success: true, ...(await readState()) });
   } catch (error) {

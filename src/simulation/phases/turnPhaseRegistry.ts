@@ -102,6 +102,10 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
+import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
+import { reconcileResetLawEnactments } from "@/lib/resetLegislation/reconcileEnactments";
 import { processDefenceWindfallRecoveryTurn } from "@/lib/turn/defenceWindfallRecoveryTurn";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
@@ -525,10 +529,25 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
+        const captureV2SovereignCash =
+          resetSystemVersionsFrom(context.gameState, RESET_V2_READY).cabinet === "v2";
         const [bondTurnResult, commodityResult] = await Promise.all([
-          runtime.runPhase("bondTurn", () => processBondTurn(newTurn)),
+          runtime.runPhase("bondTurn", () => processBondTurn(newTurn, captureV2SovereignCash)),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
+        if (captureV2SovereignCash) {
+          if (!bondTurnResult) throw new Error("V2 treasury requires completed bond settlement");
+          (phaseResults as Record<string, unknown>).resetTreasuryCash = await runtime.runPhase(
+            "resetTreasuryCash",
+            () =>
+              settleResetTreasuryCashTurn({
+                db: context.db,
+                gameState: context.gameState,
+                turn: newTurn,
+                bondFlows: bondTurnResult,
+              })
+          );
+        }
 
         // Collect a staged procurement-windfall assessment after bond coupons
         // and maturities land, while preserving the supplier's operating reserve.
@@ -962,6 +981,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const result = countryBillResults[index] ?? null;
           phaseResultsRecord[entry.phaseName] = result ?? entry.emptyResult;
         });
+
+        const resetLawReconciliation = await runtime.runPhase(
+          "resetLawEnactmentReconciliation",
+          () => reconcileResetLawEnactments(db, newTurn)
+        );
+        if (resetLawReconciliation) {
+          phaseResultsRecord.resetLawEnactmentReconciliation = resetLawReconciliation;
+        }
 
         // Country social-axis drift, runs sequentially AFTER bill enactment so
         // it reads the statePolicies rows the bill phases just wrote this turn.

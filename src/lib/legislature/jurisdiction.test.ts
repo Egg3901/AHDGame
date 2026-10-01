@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { LegislationType } from "@/lib/db/types/legislation";
-import { commonJurisdictionChoices, resolveBillJurisdiction } from "./jurisdiction";
+import { resolvePolicyOptionJurisdiction, validateBillAdministration } from "./jurisdiction";
 
 function type(
   id: string,
-  allowed: NonNullable<LegislationType["administration"]>["allowedJurisdictionModes"],
-  defaultJurisdictionMode: NonNullable<LegislationType["administration"]>["defaultJurisdictionMode"]
+  defaultJurisdictionMode: NonNullable<
+    LegislationType["administration"]
+  >["defaultJurisdictionMode"] = "national_direct"
 ): Pick<LegislationType, "_id" | "name" | "administration"> {
   return {
     _id: id,
@@ -14,74 +15,73 @@ function type(
       primaryPortfolioId: "health",
       lawKind: "service_program",
       implementationMode: "direct",
-      allowedJurisdictionModes: allowed,
+      allowedJurisdictionModes: [defaultJurisdictionMode],
       defaultJurisdictionMode,
       policyFamilyId: id,
     },
   };
 }
 
-describe("resolveBillJurisdiction", () => {
-  it("preserves legacy national behavior while disabled", () => {
+describe("validateBillAdministration", () => {
+  it("allows legacy bills while administration is disabled", () => {
     expect(
-      resolveBillJurisdiction({
+      validateBillAdministration({
         enabled: false,
-        requested: "regional_discretion",
-        legislationTypes: [],
+        legislationTypes: [{ _id: "legacy", name: "Legacy" }],
       })
-    ).toEqual({ ok: true, mode: "national_direct" });
+    ).toEqual({ ok: true });
   });
 
-  it("accepts a mode shared by every policy provision", () => {
-    const result = resolveBillJurisdiction({
-      enabled: true,
-      requested: "regional_discretion",
-      legislationTypes: [
-        type("a", ["national_direct", "regional_discretion"], "national_direct"),
-        type("b", ["concurrent", "regional_discretion"], "concurrent"),
-      ],
-    });
-    expect(result).toEqual({ ok: true, mode: "regional_discretion" });
+  it("accepts provisions with different authored delivery models", () => {
+    expect(
+      validateBillAdministration({
+        enabled: true,
+        legislationTypes: [type("direct"), type("grant", "grant_supported_regional")],
+      })
+    ).toEqual({ ok: true });
   });
 
-  it("rejects a mode unavailable to any provision", () => {
-    const result = resolveBillJurisdiction({
+  it("rejects an unmigrated administered law", () => {
+    const result = validateBillAdministration({
       enabled: true,
-      requested: "regional_discretion",
-      legislationTypes: [type("a", ["national_direct"], "national_direct")],
+      legislationTypes: [{ _id: "missing", name: "Missing" }],
     });
-    expect(result.ok).toBe(false);
-  });
-
-  it("requires a choice when defaults differ and national direct is not shared", () => {
-    const result = resolveBillJurisdiction({
-      enabled: true,
-      legislationTypes: [
-        type("a", ["grant_supported_regional"], "grant_supported_regional"),
-        type("b", ["regional_discretion"], "regional_discretion"),
-      ],
+    expect(result).toEqual({
+      ok: false,
+      error: 'Legislation type "Missing" has not been migrated to the administration model.',
     });
-    expect(result.ok).toBe(false);
   });
 });
 
-describe("commonJurisdictionChoices", () => {
-  it("intersects multi-provision choices and prefers a shared authored default", () => {
+describe("resolvePolicyOptionJurisdiction", () => {
+  it("uses an explicit option consequence before every fallback", () => {
     expect(
-      commonJurisdictionChoices([
+      resolvePolicyOptionJurisdiction(
+        type("education"),
         {
-          allowedJurisdictionModes: ["national_direct", "concurrent"],
-          defaultJurisdictionMode: "concurrent",
+          id: "left_to_states",
+          name: "Left to the States",
+          stance: "center",
+          effectDirection: 0,
+          economic: 0,
+          social: 0,
+          jurisdictionMode: "regional_discretion",
         },
-        {
-          allowedJurisdictionModes: ["concurrent", "regional_discretion"],
-          defaultJurisdictionMode: "concurrent",
-        },
-      ])
-    ).toEqual({ modes: ["concurrent"], defaultMode: "concurrent" });
+        "concurrent"
+      )
+    ).toBe("regional_discretion");
   });
 
-  it("hides choices when any selected type lacks administration metadata", () => {
-    expect(commonJurisdictionChoices([undefined])).toEqual({ modes: [] });
+  it("preserves a legacy bill selection when the option has no authored override", () => {
+    expect(resolvePolicyOptionJurisdiction(type("legacy"), undefined, "national_floor")).toBe(
+      "national_floor"
+    );
+  });
+
+  it("defaults new national options to their law's federal delivery model", () => {
+    expect(resolvePolicyOptionJurisdiction(type("federal"), undefined)).toBe("national_direct");
+    expect(
+      resolvePolicyOptionJurisdiction(type("grant", "grant_supported_regional"), undefined)
+    ).toBe("grant_supported_regional");
   });
 });

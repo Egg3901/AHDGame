@@ -12,6 +12,8 @@ import {
 } from "@/lib/currency/euro/rules";
 import { resolveGameYear } from "@/lib/era/era";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { RESET_V2_COUNTRIES, resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
 
 export async function GET() {
   const db = await getDb();
@@ -30,6 +32,11 @@ export async function GET() {
         startingYear: 1,
         incomeBandIndexByCountry: 1,
         liveElectionResultsEnabled: 1,
+        metricsSystemVersion: 1,
+        legislationSystemVersion: 1,
+        cabinetSystemVersion: 1,
+        resetWorldId: 1,
+        resetVersionSeeds: 1,
       },
     }
   );
@@ -66,6 +73,8 @@ export async function GET() {
       startingYear: eraOn ? (gs?.startingYear ?? null) : null,
       incomeBandIndexByCountry: eraOn ? (gs?.incomeBandIndexByCountry ?? null) : null,
       liveElectionResultsEnabled: gs?.liveElectionResultsEnabled === true,
+      resetV2Countries: RESET_V2_COUNTRIES,
+      resetSystemVersions: resetSystemVersionsFrom(gs, RESET_V2_READY),
     },
     { headers: { "Cache-Control": "no-store" } }
   );

@@ -11,7 +11,7 @@ import type {
   CentralBankIndependenceProvision,
   EuroAdoptionProvision,
   ElectoralLawProvision,
-  JurisdictionMode,
+  ResetLawProvision,
 } from "@/lib/db/types/legislation";
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
 import type { Db } from "mongodb";
@@ -44,8 +44,14 @@ import {
 import { getEraContext } from "@/lib/era/context";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
-import { resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
+import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
 import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
+import type { GameState } from "@/lib/db/types/gameState";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
+import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
 
 // snapshotBillPolicyProvisions now lives in the shared provision-enrichment core
 // so the regional bill paths can call it too. Re-exported for existing importers.
@@ -84,9 +90,9 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
-      jurisdictionMode: JurisdictionMode;
       euroAdoptionProvisions: EuroAdoptionProvision[];
       europeanTreatyProvisions: EuropeanTreatyProvision[];
+      resetLawProvisions: ResetLawProvision[];
     }
   | { ok: false; status: number; error: string };
 
@@ -101,10 +107,7 @@ export async function validateBillProvisions(
    * remember to add their own check.
    */
   sourceCountry?: CountryId,
-  administration?: {
-    enabled: boolean;
-    requestedJurisdictionMode?: JurisdictionMode;
-  }
+  administration?: { enabled: boolean }
 ): Promise<ValidatedProvisions> {
   const allowedDomains =
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
@@ -126,6 +129,9 @@ export async function validateBillProvisions(
   const validatedLegislationTypes: LegislationType[] = [];
   const validatedEuroAdoptionProvisions: EuroAdoptionProvision[] = [];
   const validatedEuropeanTreatyProvisions: EuropeanTreatyProvision[] = [];
+  const validatedResetLawProvisions: ResetLawProvision[] = [];
+  const resetFamilyIds = new Set<string>();
+  let reviewedNationalCatalog: Awaited<ReturnType<typeof loadReviewedLawCatalog>> | null = null;
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
 
   for (const rawP of rawProvisions) {
@@ -135,6 +141,90 @@ export async function validateBillProvisions(
     // accepting one here would let any backbencher take the country to war by
     // hand-rolling a provision. Refused outright rather than validated.
     const rawType = "type" in (rawP as object) ? (rawP as { type: unknown }).type : undefined;
+    if (rawType === "reset_law") {
+      const selection = rawP as {
+        familyId?: unknown;
+        scope?: unknown;
+        regionId?: unknown;
+        choice?: unknown;
+      };
+      if (
+        !sourceCountry ||
+        !["US", "UK", "JP"].includes(sourceCountry) ||
+        selection.scope !== "national" ||
+        selection.regionId !== undefined ||
+        typeof selection.familyId !== "string" ||
+        typeof selection.choice !== "string"
+      ) {
+        return {
+          ok: false,
+          status: 400,
+          error: "This proposal route accepts only national v2 law selections.",
+        };
+      }
+      if (resetFamilyIds.has(selection.familyId)) {
+        return { ok: false, status: 400, error: "A v2 bill cannot repeat a law family." };
+      }
+      if (!reviewedNationalCatalog) {
+        const gameState = await db.collection<GameState>("gameState").findOne(
+          { _id: "current" },
+          {
+            projection: {
+              resetWorldId: 1,
+              startingYear: 1,
+              legislationSystemVersion: 1,
+              resetVersionSeeds: 1,
+            },
+          }
+        );
+        if (
+          !gameState?.resetWorldId ||
+          resetSystemVersionsForCountry(gameState, RESET_V2_READY, sourceCountry).legislation !==
+            "v2"
+        ) {
+          return { ok: false, status: 409, error: "Legislation v2 is not enabled." };
+        }
+        reviewedNationalCatalog = await loadReviewedLawCatalog({
+          db,
+          worldId: gameState.resetWorldId,
+          country: sourceCountry as ResetCountry,
+          scope: "national",
+          year: eraYear ?? gameState.startingYear ?? 1991,
+        });
+      }
+      const family = reviewedNationalCatalog.find(
+        (candidate) => candidate.familyId === selection.familyId
+      );
+      const entry = family?.options.find(
+        (candidate) => candidate.option.choice === selection.choice
+      );
+      if (!family || !entry) {
+        return { ok: false, status: 400, error: "This v2 law option is unavailable." };
+      }
+      if (entry.option.choice === entry.currentChoice) {
+        return { ok: false, status: 400, error: "The selected option is already current law." };
+      }
+      resetFamilyIds.add(family.familyId);
+      validatedResetLawProvisions.push({
+        type: "reset_law",
+        familyId: family.familyId,
+        scope: "national",
+        choice: entry.option.choice as LawChoice,
+        reviewedOption: entry.option,
+        titleSnapshot: entry.title,
+        descriptionSnapshot: entry.description,
+        currentLawSnapshot: family.currentLaw,
+        currentLawDescriptionSnapshot: family.currentLawDescription,
+        currentChoiceSnapshot: entry.currentChoice,
+        currentAnnualAllocationSnapshot: entry.currentAnnualAllocation,
+        annualAllocationDeltaSnapshot: entry.annualAllocationDelta,
+        overseeingSeatIdSnapshot: family.overseeingSeatId,
+        overseeingAgencyIdSnapshot: family.overseeingAgencyId,
+        primaryMetricEffectsSnapshot: entry.primaryMetricEffects,
+        balanceBasis: entry.balanceBasis,
+      });
+      continue;
+    }
     if (rawType === "european_treaty") {
       const provision = rawP as Partial<EuropeanTreatyProvision>;
       if (
@@ -551,16 +641,15 @@ export async function validateBillProvisions(
     });
   }
 
-  const jurisdiction = resolveBillJurisdiction({
+  const administrationValidation = validateBillAdministration({
     enabled: administration?.enabled === true,
-    requested: administration?.requestedJurisdictionMode,
     legislationTypes: validatedLegislationTypes,
   });
-  if (!jurisdiction.ok || !jurisdiction.mode) {
+  if (!administrationValidation.ok) {
     return {
       ok: false,
       status: 400,
-      error: jurisdiction.error ?? "Invalid jurisdiction mode.",
+      error: administrationValidation.error ?? "Invalid administration metadata.",
     };
   }
 
@@ -584,8 +673,8 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
-    jurisdictionMode: jurisdiction.mode,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
+    resetLawProvisions: validatedResetLawProvisions,
   };
 }

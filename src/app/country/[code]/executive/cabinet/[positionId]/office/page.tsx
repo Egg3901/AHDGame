@@ -64,6 +64,7 @@ import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currenci
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { DepartmentProgramPanel } from "./components/DepartmentProgramPanel";
 import { DepartmentFinancePanel } from "./components/DepartmentFinancePanel";
+import { ResetCabinetActionPanel } from "./components/ResetCabinetActionPanel";
 
 export default function CabinetOfficePage() {
   const resolveCountryName = useCountryDisplayName();
@@ -416,17 +417,28 @@ export default function CabinetOfficePage() {
                     />
                   )}
 
-                  <MinisterialOrderPanel
-                    orders={data.orders}
-                    activeOrders={data.activeOrders}
-                    actionsRemaining={data.member?.ministerialActions ?? 0}
-                    canAct={canAct}
-                    countryCode={countryCode}
-                    positionId={positionId}
-                    singleRegionFocus={mechanics.singleRegionFocus ?? null}
-                    regionData={data.regionData}
-                    onUpdate={refetch}
-                  />
+                  {data.cabinetVersion === "v2" && data.resetCabinetActions ? (
+                    <ResetCabinetActionPanel
+                      model={data.resetCabinetActions}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      currencySymbol={currencySymbol}
+                      onUpdate={refetch}
+                    />
+                  ) : (
+                    <MinisterialOrderPanel
+                      orders={data.orders}
+                      activeOrders={data.activeOrders}
+                      actionsRemaining={data.member?.ministerialActions ?? 0}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      singleRegionFocus={mechanics.singleRegionFocus ?? null}
+                      regionData={data.regionData}
+                      onUpdate={refetch}
+                    />
+                  )}
 
                   {!mechanics.singleRegionFocus && mechanics.regionalMetrics.length > 0 && (
                     <RegionalBreakdownTable

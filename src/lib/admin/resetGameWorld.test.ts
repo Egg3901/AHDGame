@@ -7,6 +7,9 @@ import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({
   seedAllCountryData: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/resetVersions/availability", () => ({
+  RESET_V2_READY: { metrics: true, legislation: true, cabinet: true },
+}));
 vi.mock("@/lib/npp/seedHistorical", () => ({
   seedHistoricalOfficials: vi.fn().mockResolvedValue({ nppsCreated: 0, officialsCreated: 0 }),
 }));
@@ -83,6 +86,37 @@ describe("resetGameWorld", () => {
       }
     }
   );
+
+  it("uses the historical education seat only for a Cabinet v2 reset", async () => {
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+      versionSelectionSnapshot: {
+        resetSystemSelections: { metrics: "v2", cabinet: "v2" },
+      },
+    });
+    const update = db.collectionMocks.gameState.updateOne.mock.calls.find(
+      (call) => (call[0] as { _id?: string })?._id === "current"
+    );
+    expect(update?.[1]?.$set?.manuallyEnabledSeats).toEqual(["secretary_of_education"]);
+  });
+
+  it("does not carry a previous world's legislated Cabinet seats into v1", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      manuallyEnabledSeats: ["secretary_of_education"],
+    });
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+    });
+    const update = db.collectionMocks.gameState.updateOne.mock.calls.find(
+      (call) => (call[0] as { _id?: string })?._id === "current"
+    );
+    expect(update?.[1]?.$set?.manuallyEnabledSeats).toEqual([]);
+  });
 
   it("clears corporation world collections before resetting counters", async () => {
     await resetGameWorld(db as never, {
@@ -332,6 +366,7 @@ describe("resetGameWorld", () => {
     );
     expect(currentUpdate).toBeDefined();
     const unset = (currentUpdate![1] as { $unset?: Record<string, string> }).$unset;
+    expect(unset?.resetVersionSeeds).toBe("");
 
     // Each of these left a real, confirmed regression on a live 1953 world:
     //  - lastCensusYear 2010 → no census fires until game-year 2020
@@ -356,6 +391,7 @@ describe("resetGameWorld", () => {
 
     // The $set and $unset must never share a key — MongoDB rejects that update.
     const set = (currentUpdate![1] as { $set?: Record<string, unknown> }).$set ?? {};
+    expect(set.resetWorldId).toEqual(expect.any(String));
     expect(Object.keys(set).filter((k) => k in (unset ?? {}))).toEqual([]);
   });
 

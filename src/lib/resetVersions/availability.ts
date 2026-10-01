@@ -1,13 +1,13 @@
 /**
- * The reset-era rollout is not active until each full runtime path is merged.
- * A ready switch needs its data migration, UI, turn path, and rollback test.
- * The admin API rejects v2 while its system is marked unavailable.
+ * Compile-time release availability. These switches make the independently
+ * staged v2 selectors available to admins; a system still cannot activate in a
+ * world without its matching, verified opening-seed receipt.
  */
 
 import type { ResetSystem } from "./rules";
 
 export const RESET_V2_READY: Readonly<Record<ResetSystem, boolean>> = {
-  metrics: false,
-  legislation: false,
-  cabinet: false,
+  metrics: true,
+  legislation: true,
+  cabinet: true,
 };

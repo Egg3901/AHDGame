@@ -3,6 +3,7 @@ import type { DepartmentAccount, EnactedLaw, FederalBudget } from "@/lib/db/type
 import type { StateBudget } from "@/lib/db/types/budget";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { LegislationType } from "@/lib/db/types/legislation";
+import { resolvePolicyOptionJurisdiction } from "@/lib/legislature/jurisdiction";
 import { withLawAdministration } from "./lawAdministrationCatalog";
 import { clampRatio } from "./rules/implementation";
 import {
@@ -85,7 +86,7 @@ export function resolveDepartmentDeliveryExpectations(
     const countryId = law.countryId ?? "US";
     const lawIds = deliveryLawIds(law.legislationTypeId);
     for (const lawId of lawIds) addToCountryMap(expectedByCountry, countryId, lawId);
-    const jurisdictionMode = law.jurisdictionMode ?? type.administration.defaultJurisdictionMode;
+    const jurisdictionMode = resolvePolicyOptionJurisdiction(type, option, law.jurisdictionMode);
     if (jurisdictionMode === "regional_discretion") {
       for (const lawId of lawIds) addToCountryMap(excludedByCountry, countryId, lawId);
     }

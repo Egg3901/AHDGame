@@ -371,6 +371,7 @@ interface GatesState {
   nppForeignPolicyStage: NppForeignPolicyStage;
   nppEntryViabilityMode: NppEntryViabilityMode;
   resetSystemVersions: Record<ResetSystem, ResetSystemVersion>;
+  resetSystemSelections: Record<ResetSystem, ResetSystemVersion>;
   resetV2Ready: Record<ResetSystem, boolean>;
 }
 
@@ -459,6 +460,7 @@ export function FeatureGatesPanel() {
         data.nppForeignPolicyStage &&
         data.nppEntryViabilityMode &&
         data.resetSystemVersions &&
+        data.resetSystemSelections &&
         data.resetV2Ready
       ) {
         setState({
@@ -468,6 +470,7 @@ export function FeatureGatesPanel() {
           nppForeignPolicyStage: data.nppForeignPolicyStage,
           nppEntryViabilityMode: data.nppEntryViabilityMode,
           resetSystemVersions: data.resetSystemVersions,
+          resetSystemSelections: data.resetSystemSelections,
           resetV2Ready: data.resetV2Ready,
         });
       }
@@ -571,7 +574,8 @@ export function FeatureGatesPanel() {
 
       <div className="mb-5 space-y-3" aria-label="Reset-era system versions">
         {VERSION_GATES.map((gate) => {
-          const version = state.resetSystemVersions[gate.system];
+          const liveVersion = state.resetSystemVersions[gate.system];
+          const selection = state.resetSystemSelections?.[gate.system] ?? liveVersion;
           const v2Ready = state.resetV2Ready[gate.system];
           return (
             <div
@@ -581,7 +585,7 @@ export function FeatureGatesPanel() {
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold">{gate.label}</span>
                 <span className="text-[10px] uppercase tracking-wider text-muted">
-                  {version === "v1" ? "v1 live" : "v2 reset"}
+                  {liveVersion} live
                 </span>
               </div>
               <p className="mb-3 text-xs text-muted">{gate.desc}</p>
@@ -603,7 +607,7 @@ export function FeatureGatesPanel() {
                       )
                     }
                     className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-                      version === choice
+                      selection === choice
                         ? "bg-primary text-white"
                         : "text-muted hover:bg-background hover:text-foreground"
                     }`}
@@ -612,6 +616,10 @@ export function FeatureGatesPanel() {
                   </button>
                 ))}
               </div>
+              <p className="mt-2 text-[11px] text-muted">
+                Next 1991 reset: {selection}. Changing this selection does not switch the running
+                world.
+              </p>
               {!v2Ready ? (
                 <p className="mt-2 text-[11px] text-muted">
                   v2 is staged and cannot be enabled until this system is fully wired and verified.

@@ -262,6 +262,66 @@ const REFERENCE: CollectionEntry[] = [
 
 const RUNTIME: CollectionEntry[] = [
   {
+    name: "resetMetricSnapshots",
+    category: "runtime",
+    notes:
+      "World-bound 1991 v2 primary-metric boards for US, UK, and JP. Wiped on every reset; populated and read back only when the metrics v2 opening is selected. Never replaces v1 working stores in place.",
+  },
+  {
+    name: "resetLawOpeningBoards",
+    category: "runtime",
+    notes:
+      "World-bound 1991 source-law crosswalk for US, UK, and JP, including regional boards. Wiped on every reset and reseeded only for a verified legislation-v2 opening. It records current law, not reviewed enactment options.",
+  },
+  {
+    name: "resetRegionalOpeningBoards",
+    category: "runtime",
+    notes:
+      "World-bound 1991 regional source-pool allocation for 71 US, UK, and JP regions. The proportional allocation is a provisional opening claim against each regional budget, not a Cabinet account or enactment price.",
+  },
+  {
+    name: "resetDepartmentOpeningBoards",
+    category: "runtime",
+    notes:
+      "World-bound reconciled 1991 Cabinet operating claims for US, UK, and JP. Wiped on reset; these are opening claims, not spendable cash or a live department treasury.",
+  },
+  {
+    name: "resetDepartmentAccounts",
+    category: "runtime",
+    notes:
+      "World-bound v2 Cabinet accounts derived once from reconciled 1991 claims after reserving regional grants. Ordinary departments receive no opening cash; Defense and intelligence retain their specialized settlement shell. Wiped on every reset.",
+  },
+  {
+    name: "resetDepartmentContinuity",
+    category: "runtime",
+    notes:
+      "World-bound v2 existing-service continuity and unattributed grant reserve. It is not spendable Cabinet cash and is wiped on every reset.",
+  },
+  {
+    name: "resetNationalTreasuries",
+    category: "runtime",
+    notes:
+      "World-bound v2 national cash, arrears, bond debt, and emergency-advance opening. Kept apart from the legacy signed budget balance and wiped on reset.",
+  },
+  {
+    name: "resetLawPrograms",
+    category: "runtime",
+    notes:
+      "World-bound enacted v2 national and regional law programs. Replaced by family, linked to the enacting bill, and wiped on every reset.",
+  },
+  {
+    name: "resetLawEnactmentReceipts",
+    category: "runtime",
+    notes:
+      "Exactly-once receipts for v2 law fiscal transitions. The turn reconciliation phase uses them to retry a failed enactment hook safely. Wiped on reset.",
+  },
+  {
+    name: "resetCabinetActionStates",
+    category: "runtime",
+    notes:
+      "World-bound cooldown and active-effect state for v2 ministerial actions. Wiped on reset.",
+  },
+  {
     name: "ukPartyLeadership",
     category: "runtime",
     notes:

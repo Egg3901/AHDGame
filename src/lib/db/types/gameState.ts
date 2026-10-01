@@ -2,6 +2,7 @@ import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
+import type { ResetSystem, ResetSystemSeedReceipt } from "../../resetVersions/rules";
 
 export type NppEntryViabilityMode = "off" | "observe" | "enforce";
 
@@ -479,6 +480,13 @@ export interface GameState {
   legislationDemographicEffectsV2EnabledBy?: string;
   legislationDemographicEffectsV2EnabledAt?: string;
   /** Reset-era metrics engine. Absent and invalid values run the live v1 path. */
+  /** Changes on every world reset; an opening-seed receipt is valid only for this world. */
+  resetWorldId?: string;
+  /** Per-system, per-world proof that v2 data was populated and verified. */
+  resetVersionSeeds?: Partial<Record<ResetSystem, ResetSystemSeedReceipt>>;
+  /** Admin selection for the next reset; changing it does not convert the live world. */
+  resetSystemSelections?: Partial<Record<ResetSystem, "v1" | "v2">>;
+  resetSystemSelectionsAudit?: Partial<Record<ResetSystem, { by: string; at: string }>>;
   metricsSystemVersion?: "v1" | "v2";
   metricsSystemVersionBy?: string;
   metricsSystemVersionAt?: string;

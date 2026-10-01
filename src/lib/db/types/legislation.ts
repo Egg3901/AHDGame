@@ -7,6 +7,8 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { NationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
 import type { BillVoteSnapshot } from "./voteSnapshot";
 import type { WarEntryPoliticalPressure, WarEntryStake } from "@/lib/military/warEntryPolicy";
+import type { ReviewedLawOption } from "@/lib/resetLegislation/rules/reviewedOption";
+import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
 
 /**
  * Pre-whip vote snapshot, keyed by bare characterId (never npp_*).
@@ -369,6 +371,34 @@ export interface CreateDepartmentProvision {
   positionId: string;
 }
 
+/**
+ * Server-authored v2 law snapshot. Proposal clients submit only the family and
+ * choice; prices, authority, text, and modeled outcomes are resolved against
+ * the current world's reviewed catalog and frozen on the bill.
+ */
+export interface ResetLawProvision {
+  type: "reset_law";
+  familyId: string;
+  scope: "national" | "regional";
+  regionId?: string;
+  choice: LawChoice;
+  reviewedOption: ReviewedLawOption;
+  titleSnapshot: string;
+  descriptionSnapshot: string;
+  currentLawSnapshot: string;
+  currentLawDescriptionSnapshot: string;
+  currentChoiceSnapshot: LawChoice;
+  currentAnnualAllocationSnapshot: number;
+  annualAllocationDeltaSnapshot: number;
+  overseeingSeatIdSnapshot: string | null;
+  overseeingAgencyIdSnapshot: string;
+  primaryMetricEffectsSnapshot: readonly {
+    metricId: string;
+    favorableNormalizedPoints: number;
+  }[];
+  balanceBasis: "game-calibrated-provisional";
+}
+
 export type BillProvision =
   | PolicyProvision
   | TariffProvision
@@ -386,6 +416,7 @@ export type BillProvision =
   | ElectoralLawProvision
   | CentralBankIndependenceProvision
   | CreateDepartmentProvision
+  | ResetLawProvision
   | DeclareWarProvision
   | JoinConflictProvision;
 
@@ -413,7 +444,8 @@ export function isPolicyProvision(p: BillProvision): p is PolicyProvision {
     p.type !== "union_law" &&
     p.type !== "electoral_law" &&
     p.type !== "central_bank_independence" &&
-    p.type !== "create_department"
+    p.type !== "create_department" &&
+    p.type !== "reset_law"
   );
 }
 
@@ -462,7 +494,7 @@ export interface Bill {
    */
   budgetFiscalYear?: number;
   legislationTypeId?: string;
-  /** Responsibility model selected independently from the policy option. */
+  /** @deprecated Legacy proposal-selected responsibility model. New bills derive this from policy options. */
   jurisdictionMode?: JurisdictionMode;
   effectDirection?: number;
   provisions?: BillProvision[];
@@ -688,7 +720,9 @@ export interface LegislationAdministration {
   supportingPortfolioIds?: string[];
   lawKind: LawKind;
   implementationMode: LawImplementationMode;
+  /** Jurisdiction modes authored across this law's options. Not a player-selectable list. */
   allowedJurisdictionModes: JurisdictionMode[];
+  /** Federal or regional default used when an option does not author an override. */
   defaultJurisdictionMode: JurisdictionMode;
   appropriationClass?: AppropriationClass;
   fundingSemantics?: FundingSemantics;
@@ -727,6 +761,8 @@ export interface PolicyOptionImplementation {
 
 export interface LegislationPolicyOption {
   id: string;
+  /** Authored delivery consequence, such as an explicit devolution or grant option. */
+  jurisdictionMode?: JurisdictionMode;
   name: string;
   explanation?: string; // Real-world explanation of what this policy does
   stance: "left" | "center" | "right";

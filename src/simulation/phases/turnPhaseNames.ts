@@ -50,6 +50,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "playerEndorsementPartySweep",
   "billLifecycle",
   "stateBillTimers",
+  "resetLawEnactmentReconciliation",
   "cabinetNominations",
   "scotusTurn",
   "ukJrSurpriseTurn",

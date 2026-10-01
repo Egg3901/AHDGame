@@ -148,7 +148,10 @@ export async function castStateBillVote(
         billId: bill._id,
         characterId: character._id,
         provisions: (bill.provisions ?? []).filter(
-          (provision) => provision.type !== "subsidy" && provision.type !== "end_subsidy"
+          (provision) =>
+            provision.type !== "subsidy" &&
+            provision.type !== "end_subsidy" &&
+            provision.type !== "reset_law"
         ),
         vote,
         currentPolicies: character.policies,

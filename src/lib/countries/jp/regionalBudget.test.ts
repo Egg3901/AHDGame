@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { calculateJPRegionalBudget } from "./regionalBudget";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { calculateJPRegionalBudget, processJPRegionalBudgets } from "./regionalBudget";
 
 describe("calculateJPRegionalBudget", () => {
   const baseInput = {
@@ -74,5 +75,93 @@ describe("calculateJPRegionalBudget", () => {
     });
     expect(result.residentTaxRevenue).toBe(0.2 * 3500000 * 5200000);
     expect(result.fixedAssetTaxRevenue).toBe(0.05 * 8000000 * 5200000);
+  });
+});
+
+describe("processJPRegionalBudgets", () => {
+  let db: MockDb;
+  const cursor = (rows: unknown[]) => ({
+    toArray: vi.fn().mockResolvedValue(rows),
+    sort: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    skip: vi.fn().mockReturnThis(),
+    project: vi.fn().mockReturnThis(),
+  });
+
+  beforeEach(() => {
+    db = createMockDb();
+    for (const name of [
+      "states",
+      "statePolicies",
+      "resetLawPrograms",
+      "legislationTypes",
+      "regionalBudgets",
+      "macroMetrics",
+      "cabinetSettings",
+    ]) {
+      db.collection(name);
+    }
+  });
+
+  it("settles v2 regional allocations against the live prefectural budget", async () => {
+    db.collectionMocks.states!.find.mockImplementation(() =>
+      cursor([{ _id: "HOK", countryId: "JP", population: 5_000_000 }])
+    );
+    let policyRead = 0;
+    db.collectionMocks.statePolicies!.find.mockImplementation(() => {
+      policyRead += 1;
+      return cursor(
+        policyRead === 1
+          ? [
+              {
+                stateId: "HOK",
+                legislationTypeId: "jp_resident_tax",
+                policyOptionId: "resident",
+                policyOptionIndex: 0,
+                enactedTurn: 1,
+                enactedAt: new Date(0),
+              },
+              {
+                stateId: "HOK",
+                legislationTypeId: "jp_fixed_asset_tax",
+                policyOptionId: "property",
+                policyOptionIndex: 0,
+                enactedTurn: 1,
+                enactedAt: new Date(0),
+              },
+            ]
+          : []
+      );
+    });
+    db.collectionMocks.resetLawPrograms!.find.mockImplementation(() =>
+      cursor([
+        {
+          _id: "world:JP:HOK:L10",
+          regionId: "HOK",
+          familyId: "L10",
+          choice: "center_left",
+          annualAgencyAllocation: 5_000_000_000_000,
+        },
+      ])
+    );
+    db.collectionMocks.legislationTypes!.find.mockImplementation(() =>
+      cursor([
+        { _id: "jp_resident_tax", policyOptions: [{ id: "resident", rate: 10 }] },
+        { _id: "jp_fixed_asset_tax", policyOptions: [{ id: "property", rate: 1.4 }] },
+      ])
+    );
+    db.collectionMocks.regionalBudgets!.find.mockImplementation(() => cursor([]));
+    db.collectionMocks.macroMetrics!.find.mockImplementation(() => cursor([]));
+    db.collectionMocks.cabinetSettings!.findOne.mockResolvedValue(null);
+
+    await processJPRegionalBudgets(db as never, 10);
+
+    const setData =
+      db.collectionMocks.regionalBudgets!.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(setData.enactedBillCosts).toBe(5_000_000_000_000);
+    expect(setData.fundedBillCosts).toBeLessThan(5_000_000_000_000);
+    expect(setData.unfundedBillCosts).toBeGreaterThan(0);
+    expect(setData.programSettlements["world:JP:HOK:L10"].implementationFactor).toBeGreaterThan(0);
+    expect(setData.programSettlements["world:JP:HOK:L10"].implementationFactor).toBeLessThan(1);
   });
 });

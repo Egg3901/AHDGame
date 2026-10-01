@@ -114,7 +114,7 @@ The fixture database was removed after inspection. `localhost:3000` was then res
 - Prettier: passed for the evidence report and touched source files.
 - `git diff --check`: passed.
 
-Production build verification did not complete in the worktree environment. Turbopack rejected the temporary dependency junction because it resolved outside the worktree root. The webpack fallback then failed to fetch external fonts and exhausted an 8 GB heap; an approved 12 GB retry still timed out while fetching the fonts. These are build-environment blockers rather than a passing build result, so the production build remains unverified.
+This was the vertical slice's historical verification result: its restricted worktree could not complete a production build because of dependency-junction and external-font environment failures. The completed v2 implementation later passed `npm run verify:build` in the current worktree. Google Fonts are therefore not an implementation blocker, and v2 adds no new font dependency.
 
 ## Acceptance criteria status
 

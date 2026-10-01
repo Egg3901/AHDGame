@@ -941,7 +941,7 @@ export interface EnactedLaw {
   scope: "national" | "state";
   countryId?: string;
   stateId?: string;
-  /** Selected responsibility model. Absent legacy records derive from their scope. */
+  /** Delivery model derived from the enacted policy option. Absent legacy records use catalog defaults. */
   jurisdictionMode?: JurisdictionMode;
   /** @deprecated Legacy percentage-of-budget cost (0-100). Use annualCostUsd for new laws. */
   budgetCost: number;

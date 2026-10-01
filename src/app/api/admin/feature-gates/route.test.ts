@@ -134,18 +134,24 @@ describe("admin feature gates foreign policy mode", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
-      resetV2Ready: { metrics: false, legislation: false, cabinet: false },
+      resetV2Ready: { metrics: true, legislation: true, cabinet: true },
     });
   });
 
-  it("rejects v2 before the selected system has a complete runtime path", async () => {
+  it("allows an admin to select the completed metrics v2 path for the next reset", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
     const { POST } = await import("./route");
 
-    for (const system of ["metrics", "legislation", "cabinet"]) {
-      const response = await POST(request({ kind: "reset-system-version", system, value: "v2" }));
-      expect(response.status).toBe(409);
-    }
-    expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
+    const response = await POST(
+      request({ kind: "reset-system-version", system: "metrics", value: "v2" })
+    );
+
+    expect(response.status).toBe(200);
+    const [, update] = db.collection("gameState").updateOne.mock.calls[0];
+    expect(update.$set).toMatchObject({
+      "resetSystemSelections.metrics": "v2",
+      "resetSystemSelectionsAudit.metrics": { by: "tester" },
+    });
   });
 
   it("allows an admin to select v1 with an audit stamp", async () => {
@@ -159,10 +165,10 @@ describe("admin feature gates foreign policy mode", () => {
     expect(response.status).toBe(200);
     const [, update] = db.collection("gameState").updateOne.mock.calls[0];
     expect(update.$set).toMatchObject({
-      legislationSystemVersion: "v1",
-      legislationSystemVersionBy: "tester",
+      "resetSystemSelections.legislation": "v1",
+      "resetSystemSelectionsAudit.legislation": { by: "tester" },
     });
-    expect(update.$set.legislationSystemVersionAt).toBeTruthy();
+    expect(update.$set["resetSystemSelectionsAudit.legislation"].at).toBeTruthy();
     expect(update.$set).not.toHaveProperty("metricsSystemVersion");
     expect(update.$set).not.toHaveProperty("cabinetSystemVersion");
   });

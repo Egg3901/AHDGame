@@ -28,6 +28,10 @@ export interface LimitationError {
   error: string;
 }
 
+export interface ResetLawProvisionInput {
+  familyId: string;
+}
+
 /** Terminal statuses for national bills — bill is no longer in-flight */
 export const NATIONAL_TERMINAL_STATUSES: Bill["status"][] = [
   "failed",
@@ -120,6 +124,31 @@ export async function checkDuplicateProvisions(
   }
 
   return null;
+}
+
+/** Prevent two in-flight v2 bills from racing to replace the same law family. */
+export async function checkDuplicateResetLawFamilies(
+  db: Db,
+  collectionName: "bills" | "stateBills",
+  activeBillFilter: Record<string, unknown>,
+  proposedProvisions: readonly ResetLawProvisionInput[]
+): Promise<LimitationError | null> {
+  const familyIds = [...new Set(proposedProvisions.map((provision) => provision.familyId))];
+  if (familyIds.length === 0) return null;
+  const conflict = await db.collection(collectionName).findOne(
+    {
+      ...activeBillFilter,
+      provisions: {
+        $elemMatch: { type: "reset_law", familyId: { $in: familyIds } },
+      },
+    },
+    { projection: { provisions: 1 } }
+  );
+  if (!conflict) return null;
+  return {
+    error:
+      "Another active bill already proposes a change to this v2 law family. Wait for it to resolve before proposing another change.",
+  };
 }
 
 export interface TariffProvisionInput {

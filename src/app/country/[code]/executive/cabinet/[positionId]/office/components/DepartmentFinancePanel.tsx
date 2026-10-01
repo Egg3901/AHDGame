@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { DepartmentFinanceReadModel } from "@/lib/governmentFinance/readModel";
 import { DepartmentProgramPanel } from "./DepartmentProgramPanel";
@@ -36,23 +36,38 @@ export function DepartmentFinancePanel({
     [department.programs]
   );
   const defaultShare = allocatablePrograms.length > 0 ? 100 / allocatablePrograms.length : 0;
-  const [allocations, setAllocations] = useState<Record<string, number>>({});
+  const demandMode = department.allocationMode === "demand";
+  const baselineAllocations = Object.fromEntries(
+    allocatablePrograms.map((program) => [
+      program.programId!,
+      program.allocationPercent ?? (demandMode ? 100 : defaultShare),
+    ])
+  );
+  const allocationSourceKey = JSON.stringify([
+    department.departmentId,
+    department.lastAllocationChangedTurn,
+    demandMode,
+    ...allocatablePrograms.map((program) => [program.programId, program.allocationPercent]),
+  ]);
+  const [allocationDraft, setAllocationDraft] = useState<{
+    sourceKey: string;
+    allocations: Record<string, number>;
+  }>(() => ({ sourceKey: allocationSourceKey, allocations: baselineAllocations }));
+  const allocations =
+    allocationDraft.sourceKey === allocationSourceKey
+      ? allocationDraft.allocations
+      : baselineAllocations;
   const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    setAllocations(
-      Object.fromEntries(
-        allocatablePrograms.map((program) => [
-          program.programId!,
-          program.allocationPercent ?? defaultShare,
-        ])
-      )
-    );
-  }, [allocatablePrograms, defaultShare]);
   const allocationTotal = Object.values(allocations).reduce((sum, value) => sum + value, 0);
   const allocationsValid =
     Object.values(allocations).every(
-      (value) => Number.isFinite(value) && value >= 0 && value <= 100
-    ) && Math.abs(allocationTotal - 100) <= 0.1;
+      (value) =>
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= (demandMode ? 200 : 100) &&
+        (!demandMode || Number.isSafeInteger(value))
+    ) &&
+    (demandMode || Math.abs(allocationTotal - 100) <= 0.1);
   const allocationLocked =
     currentTurn !== undefined && department.lastAllocationChangedTurn === currentTurn;
 
@@ -60,7 +75,9 @@ export function DepartmentFinancePanel({
     if (!countryCode || !positionId) return;
     if (!allocationsValid) {
       showToast(
-        `Program allocations must total 100%. Current total: ${allocationTotal.toFixed(1)}%.`,
+        demandMode
+          ? "Enter a whole-number request from 0% to 200% for every law family."
+          : `Program allocations must total 100%. Current total: ${allocationTotal.toFixed(1)}%.`,
         "error"
       );
       return;
@@ -129,6 +146,36 @@ export function DepartmentFinancePanel({
             </div>
           </dl>
         )}
+        {department.unpaidAuthority !== undefined && (
+          <div className="mt-4 border-t border-card-border pt-4 text-sm">
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt
+                  className="text-muted"
+                  title="Authority actually credited by the national treasury in the last settled turn, including any overdue payments."
+                >
+                  Last treasury payment
+                </dt>
+                <dd>{money(department.lastAuthorityPaid ?? 0, currencySymbol)}</dd>
+              </div>
+              <div>
+                <dt
+                  className="text-muted"
+                  title="Enacted authority the national treasury has not paid. This is owed to the department but cannot be spent yet."
+                >
+                  Unpaid treasury authority
+                </dt>
+                <dd className={department.unpaidAuthority > 0 ? "text-error" : undefined}>
+                  {money(department.unpaidAuthority, currencySymbol)}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs text-muted">
+              Unpaid authority is not available cash. Program requests do not guarantee a treasury
+              payment; supplier arrears are shown separately above.
+            </p>
+          </div>
+        )}
       </section>
 
       {allocatablePrograms.length > 0 && (
@@ -137,12 +184,13 @@ export function DepartmentFinancePanel({
             <div>
               <h3 className="font-semibold">Program allocation</h3>
               <p className="mt-1 text-sm text-muted">
-                Set the department&apos;s emphasis when same-tier program claims exceed available
-                funds. Existing commitments and arrears are paid first.
+                {demandMode
+                  ? "Set each service's requested funding from 0% to 200% of its existing claim. Requests do not create money; available authority and capacity limit delivery."
+                  : "Set the department's emphasis when same-tier program claims exceed available funds. Existing commitments and arrears are paid first."}
               </p>
             </div>
             <span className={allocationsValid ? "text-sm text-muted" : "text-sm text-error"}>
-              {allocationTotal.toFixed(1)}%
+              {demandMode ? "Independent requests" : `${allocationTotal.toFixed(1)}%`}
             </span>
           </div>
           <div className="mt-4 space-y-3">
@@ -157,15 +205,18 @@ export function DepartmentFinancePanel({
                     className="w-24 rounded-md border border-card-border bg-background px-2 py-1 text-right"
                     type="number"
                     min={0}
-                    max={100}
-                    step={0.1}
+                    max={demandMode ? 200 : 100}
+                    step={demandMode ? 1 : 0.1}
                     value={allocations[program.programId!] ?? 0}
                     disabled={!canAct || allocationLocked || saving}
                     onChange={(event) =>
-                      setAllocations((current) => ({
-                        ...current,
-                        [program.programId!]: Number(event.target.value),
-                      }))
+                      setAllocationDraft({
+                        sourceKey: allocationSourceKey,
+                        allocations: {
+                          ...allocations,
+                          [program.programId!]: Number(event.target.value),
+                        },
+                      })
                     }
                   />
                   <span className="text-muted">%</span>

@@ -6,7 +6,6 @@ import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { schemas } from "../validate";
 import { BILL_CATEGORIES, MAX_PROVISIONS } from "@shared/constants/legislation";
 import { VETO_MESSAGE_MIN_LENGTH, VETO_MESSAGE_MAX_LENGTH } from "@/lib/constants/governorOffice";
-import { JURISDICTION_MODES } from "@/lib/legislature/jurisdiction";
 
 export const speakerActionSchema = z
   .object({
@@ -179,6 +178,25 @@ export const endEmbargoProvisionSchema = z.object({
   direction: z.enum(["export", "import", "both"]),
 });
 
+export const resetLawSelectionSchema = z
+  .object({
+    type: z.literal("reset_law"),
+    familyId: z.string().regex(/^L\d{2}$/),
+    scope: z.enum(["national", "regional"]),
+    regionId: z.string().min(1).max(24).optional(),
+    choice: z.enum([
+      "far_left",
+      "center_left",
+      "center",
+      "center_right",
+      "far_right",
+      "leave_to_states",
+    ]),
+  })
+  .refine((selection) => (selection.scope === "regional") === Boolean(selection.regionId), {
+    message: "Regional law selections require a regionId",
+  });
+
 /**
  * Strict policy-provision schema for SUB-NATIONAL (state/regional) bills.
  * Unlike the permissive national `policyProvisionSchema`, this requires a
@@ -205,6 +223,7 @@ export const stateBillPolicyProvisionSchema = z.object({
 export const stateBillProvisionSchema = z.union([
   subsidyProvisionSchema,
   endSubsidyProvisionSchema,
+  resetLawSelectionSchema,
   stateBillPolicyProvisionSchema,
 ]);
 
@@ -280,7 +299,6 @@ export const proposeBillSchema = z
     // its configured legislature after parsing.
     chamber: z.string().min(1, "Chamber required"),
     category: z.enum(BILL_CATEGORIES),
-    jurisdictionMode: z.enum(JURISDICTION_MODES).optional(),
     fullText: moderatedBillText(z.string()).optional(),
     provisions: z
       .array(
@@ -298,6 +316,7 @@ export const proposeBillSchema = z
           centralBankIndependenceProvisionSchema,
           euroAdoptionProvisionSchema,
           europeanTreatyProvisionSchema,
+          resetLawSelectionSchema,
           policyProvisionSchema,
         ])
       )

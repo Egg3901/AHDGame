@@ -170,6 +170,10 @@ export const CABINET_ROUTE_SCOPES: Record<string, CabinetLeverScope | "operation
   // allowed list in this file's header.
   allocation: "operational",
   "department-allocation": "operational",
+  // Temporary ministerial action using the holder's own charge and the
+  // department's already-appropriated flexible funds. It creates no permanent
+  // policy, procurement, personnel, or asset commitment.
+  "reset-action": "operational",
 
   // The department's declared policy direction, which is what confirmation is
   // a vote on.

@@ -135,6 +135,35 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     expect(Object.keys(db.collectionMocks)).toHaveLength(0);
   });
 
+  it("rejects a v2 bootstrap whose fresh world identity was not seeded", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      resetSystemSelections: { metrics: "v2" },
+    });
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({ db: db as unknown as Db, preset: "1991-default" })
+    ).rejects.toThrow("Fresh reset state is missing the metrics v2 world identity");
+    expect(vi.mocked(enableMaintenanceMode)).toHaveBeenCalled();
+    expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalled();
+    expect(vi.mocked(resetGameWorld)).toHaveBeenCalledOnce();
+  });
+
+  it("passes the pre-seal version snapshot into teardown", async () => {
+    const selection = {
+      _id: "current",
+      resetSystemSelections: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+    };
+    db.collection("gameState").findOne.mockResolvedValue(selection);
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    await run();
+    expect(vi.mocked(resetGameWorld).mock.calls[0]?.[1]).toMatchObject({
+      versionSelectionSnapshot: selection,
+    });
+  });
+
   it("opens the audit row BEFORE teardown runs", async () => {
     // If this inverts, the design reproduces the exact bug it fixes: a reset
     // that dies in teardown leaves no trace at all.

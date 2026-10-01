@@ -16,6 +16,7 @@ export interface DepartmentProgramReadModel {
   availableBalance?: number;
   encumbered?: number;
   outlaid?: number;
+  lastSettledTurn?: number;
   arrears?: number;
   allocationPercent?: number;
   ratios?: {
@@ -43,6 +44,7 @@ export interface DepartmentProgramReadModel {
 
 export interface DepartmentFinanceReadModel {
   enabled: boolean;
+  allocationMode?: "shares" | "demand";
   departmentId: string;
   departmentName: string;
   kind: DepartmentDefinition["kind"];
@@ -54,6 +56,9 @@ export interface DepartmentFinanceReadModel {
   encumbered?: number;
   arrears?: number;
   lastAllocationChangedTurn?: number;
+  /** Treasury authority still owed; not a supplier liability or spendable cash. */
+  unpaidAuthority?: number;
+  lastAuthorityPaid?: number;
   programs: DepartmentProgramReadModel[];
 }
 

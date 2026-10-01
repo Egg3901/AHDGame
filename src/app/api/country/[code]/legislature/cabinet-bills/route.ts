@@ -45,9 +45,10 @@ import {
 } from "@/lib/legislature/billAutoFailWarning";
 import { z } from "zod";
 import { moderatedBillTitle, moderatedBillText } from "@/lib/api/schemas/congress";
-import { JURISDICTION_MODES, resolveBillJurisdiction } from "@/lib/legislature/jurisdiction";
+import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
 import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 import { getGameState } from "@/lib/gameState";
+import { validateBillProvisions } from "@/lib/congress/billProposal";
 
 const CABINET_VOTE_DURATION_MS = 24 * 3_600_000; // 24 hours
 type BillListProvisionDisplay = NonNullable<BillDisplay["provisions"]>[number];
@@ -63,7 +64,6 @@ const proposeCabinetBillSchema = z.object({
   effectDirection: z.number().optional().default(0),
   provisions: z.array(z.unknown()).optional(),
   confirmElectionRisk: z.boolean().optional(),
-  jurisdictionMode: z.enum(JURISDICTION_MODES).optional(),
 });
 
 /**
@@ -382,7 +382,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       stateId,
       effectDirection,
       confirmElectionRisk,
-      jurisdictionMode,
     } = parsed.data;
 
     const db = await getDb();
@@ -491,6 +490,140 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         badRequest("At least 2 player-held cabinet positions (including PM) are required").toJson(),
         { status: 400 }
       );
+    }
+
+    const rawResetLawProvisions = (parsed.data.provisions ?? []).filter(
+      (provision): provision is { type: "reset_law" } =>
+        typeof provision === "object" &&
+        provision !== null &&
+        "type" in provision &&
+        provision.type === "reset_law"
+    );
+    if (rawResetLawProvisions.length > 0) {
+      if (rawResetLawProvisions.length !== parsed.data.provisions?.length) {
+        return NextResponse.json(
+          badRequest("A v2 cabinet bill cannot mix legacy and v2 law provisions.").toJson(),
+          { status: 400 }
+        );
+      }
+      const validated = await validateBillProvisions(
+        db,
+        parsed.data.provisions ?? [],
+        category,
+        countryId
+      );
+      if (!validated.ok) {
+        return NextResponse.json({ error: validated.error }, { status: validated.status });
+      }
+      if (validated.resetLawProvisions.length === 0) {
+        return NextResponse.json(badRequest("No v2 law provision was selected.").toJson(), {
+          status: 400,
+        });
+      }
+      if (!isPM && !auth.user.isAdmin) {
+        const heldSeats = new Set(
+          cabinetRows
+            .map((row) => (row as { positionId?: string }).positionId)
+            .filter((positionId): positionId is string => Boolean(positionId))
+        );
+        const outsidePortfolio = validated.resetLawProvisions.find(
+          (provision) =>
+            !provision.overseeingSeatIdSnapshot ||
+            !heldSeats.has(provision.overseeingSeatIdSnapshot)
+        );
+        if (outsidePortfolio) {
+          return NextResponse.json(
+            forbidden(
+              `${outsidePortfolio.titleSnapshot} is assigned to a different Cabinet portfolio.`
+            ).toJson(),
+            { status: 403 }
+          );
+        }
+      }
+      const now = new Date();
+      const proposalWarning = await getBillProposalAutoFailWarning(db, countryId, "cabinet", now);
+      if (proposalWarning && !confirmElectionRisk) {
+        return NextResponse.json(
+          {
+            error: getBillProposalAutoFailWarningError(proposalWarning),
+            autoFailWarning: proposalWarning,
+            requiresElectionRiskConfirmation: true,
+          },
+          { status: 409 }
+        );
+      }
+      const npiCost = getProvisionCostTotal(validated.resetLawProvisions.length);
+      const actionCost = BILL_PROPOSE_ACTION_COST;
+      if (!auth.user.isAdmin) {
+        const spendResult = await db.collection<Character>("characters").updateOne(
+          {
+            _id: character._id,
+            actions: { $gte: actionCost },
+            ...(npiCost > 0 ? { nationalInfluence: { $gte: npiCost } } : {}),
+          },
+          {
+            $inc: {
+              actions: -actionCost,
+              ...(npiCost > 0 ? { nationalInfluence: -npiCost } : {}),
+            },
+            $set: { updatedAt: now },
+          }
+        );
+        if (spendResult.modifiedCount === 0) {
+          return NextResponse.json(
+            { error: "Your actions or national influence changed. Please try again." },
+            { status: 409 }
+          );
+        }
+      }
+      const votingEndsAt = new Date(now.getTime() + CABINET_VOTE_DURATION_MS);
+      const resetBill: Omit<Bill, "_id"> = {
+        title,
+        summary,
+        fullText,
+        category,
+        provisions: validated.resetLawProvisions,
+        originChamber: "cabinet",
+        currentChamber: config.legislature.lowerChamber.key,
+        countryId,
+        status: "cabinet_review",
+        sponsorId: character._id,
+        sponsorName: character.name,
+        sponsorParty: character.party?.toString(),
+        votesFor: 0,
+        votesAgainst: 0,
+        votesAbstain: 0,
+        votes: {},
+        votingStartedAt: now,
+        votingEndsAt,
+        ...(npiCost > 0 ? { proposalNpiCost: npiCost } : {}),
+        ...(!auth.user.isAdmin ? { proposalActionCost: actionCost } : {}),
+        proposedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      try {
+        const result = await db.collection<Bill>("bills").insertOne(resetBill as Bill);
+        return NextResponse.json({
+          success: true,
+          billId: result.insertedId.toString(),
+          votingEndsAt: votingEndsAt.toISOString(),
+        });
+      } catch (error) {
+        if (!auth.user.isAdmin) {
+          await db.collection<Character>("characters").updateOne(
+            { _id: character._id },
+            {
+              $inc: {
+                actions: actionCost,
+                ...(npiCost > 0 ? { nationalInfluence: npiCost } : {}),
+              },
+              $set: { updatedAt: new Date() },
+            }
+          );
+        }
+        throw error;
+      }
     }
 
     // ── State-ownership cabinet bills: multi-provision, shared-validated. ──
@@ -630,14 +763,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const gameState = await getGameState(db);
     const administrationEnabled =
       gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
-    const jurisdiction = resolveBillJurisdiction({
+    const administrationValidation = validateBillAdministration({
       enabled: administrationEnabled,
-      requested: jurisdictionMode,
       legislationTypes: [selectedLegislationType],
     });
-    if (!jurisdiction.ok || !jurisdiction.mode) {
+    if (!administrationValidation.ok) {
       return NextResponse.json(
-        badRequest(jurisdiction.error ?? "Invalid jurisdiction mode.").toJson(),
+        badRequest(administrationValidation.error ?? "Invalid administration metadata.").toJson(),
         { status: 400 }
       );
     }
@@ -761,7 +893,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       stateId: stateId ?? undefined,
       status: "cabinet_review",
       effectDirection,
-      ...(administrationEnabled ? { jurisdictionMode: jurisdiction.mode } : {}),
       sponsorId: character._id,
       sponsorName: character.name,
       sponsorParty: character.party?.toString(),

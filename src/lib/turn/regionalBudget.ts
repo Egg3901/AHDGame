@@ -44,6 +44,8 @@ import {
 } from "@/lib/governmentFinance/regionalProgramClaims";
 import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
 import { resolveAnnualRegionalGrantPool } from "@/lib/governmentFinance/grantTransfers";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
+import { buildResetRegionalProgramClaims } from "@/lib/resetLegislation/rules/regionalClaims";
 
 // ── Pure calculation types ───────────────────────────────────────────────────
 
@@ -290,6 +292,32 @@ export async function processRegionalBudgets(
     .collection<StatePolicy>("statePolicies")
     .find({ stateId: { $in: ukRegions.map((r) => r._id as string) } })
     .toArray();
+  const resetPrograms = await db
+    .collection<ResetLawProgramDocument>("resetLawPrograms")
+    .find(
+      {
+        country: "UK",
+        scope: "regional",
+        regionId: { $in: ukRegions.map((region) => String(region._id)) },
+      },
+      {
+        projection: {
+          _id: 1,
+          regionId: 1,
+          familyId: 1,
+          choice: 1,
+          annualAgencyAllocation: 1,
+        },
+      }
+    )
+    .toArray();
+  const resetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
+  for (const program of resetPrograms) {
+    if (!program.regionId) continue;
+    const programs = resetProgramsByRegion.get(program.regionId) ?? [];
+    programs.push(program);
+    resetProgramsByRegion.set(program.regionId, programs);
+  }
 
   // 3. Fetch relevant legislation types for legacy option lookups. Only the
   //    COST half still consults these (v2 laws price through the catalog), so
@@ -369,6 +397,7 @@ export async function processRegionalBudgets(
 
   for (const region of ukRegions) {
     const regionPolicies = policiesByRegion.get(region._id) ?? [];
+    const regionResetPrograms = resetProgramsByRegion.get(String(region._id)) ?? [];
     const existingBudget = budgetMap.get(region._id);
 
     // a. Use existing value bases or defaults. These are no longer a currency
@@ -409,24 +438,35 @@ export async function processRegionalBudgets(
         (annualCostByLegislationTypeId.get(policy.legislationTypeId) ?? 0) + cost
       );
     }
+    enactedBillCosts += regionResetPrograms.reduce(
+      (sum, program) => sum + program.annualAgencyAllocation,
+      0
+    );
     // Subsidy costs must be folded into the regional phase itself because the
     // dedicated subsidy-budget phase runs in parallel and cannot safely patch
     // `regionalBudgets` after this document is written.
     const subsidyCosts = stateCostByStateId.get(region._id) ?? 0;
     enactedBillCosts += subsidyCosts;
 
-    const regionalSettlement = regionalFinanceEnabled
-      ? settleRegionalBudget({
-          availableBudget: budgetResult.totalBudget,
-          reservedNonProgramSpending: subsidyCosts,
-          claims: buildRegionalProgramClaims({
-            policies: spendingPolicies,
-            legislationTypes: materializedLegTypes,
-            annualCostByLegislationTypeId,
-            previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
-          }),
-        })
-      : null;
+    const regionalSettlement =
+      regionalFinanceEnabled || regionResetPrograms.length > 0
+        ? settleRegionalBudget({
+            availableBudget: budgetResult.totalBudget,
+            reservedNonProgramSpending: subsidyCosts,
+            claims: [
+              ...buildRegionalProgramClaims({
+                policies: spendingPolicies,
+                legislationTypes: materializedLegTypes,
+                annualCostByLegislationTypeId,
+                previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+              }),
+              ...buildResetRegionalProgramClaims({
+                programs: regionResetPrograms,
+                previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+              }),
+            ],
+          })
+        : null;
     const fundedBillCosts = regionalSettlement?.totalFunded ?? enactedBillCosts;
     const unfundedBillCosts = Math.max(0, enactedBillCosts - fundedBillCosts);
 
@@ -517,7 +557,7 @@ export async function processRegionalBudgets(
       westminsterGrant: budgetResult.westminsterGrant,
       totalBudget: budgetResult.totalBudget,
       enactedBillCosts,
-      ...(regionalFinanceEnabled
+      ...(regionalFinanceEnabled || regionResetPrograms.length > 0
         ? {
             fundedBillCosts,
             unfundedBillCosts,

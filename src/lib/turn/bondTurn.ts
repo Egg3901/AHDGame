@@ -63,6 +63,8 @@ import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
+import { sovereignIssuanceFlowsByCountry } from "@/lib/resetFinance/rules/sovereignProceeds";
+import { sovereignBondOutstanding } from "@/lib/bonds/sovereignPrincipal";
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -75,6 +77,14 @@ export interface BondTurnResult {
   bondsAutoRestructured: number;
   /** Bonds cured this turn by auto-refinance (replacement bond, no sale) of lingering defaults. */
   bondsAutoRefinanced: number;
+  /** Actual at-par issuance plus later placements, for the v2 cash shell. */
+  sovereignCashProceedsByCountry?: Record<string, number>;
+  /** New debt face, which can differ from actual placement consideration. */
+  sovereignDebtFaceIssuedByCountry?: Record<string, number>;
+  /** Actual sovereign coupon and maturity obligations already paid by this bond phase. */
+  sovereignCouponPaidByCountry?: Record<string, number>;
+  sovereignMaturityCashPaidByCountry?: Record<string, number>;
+  sovereignDebtFaceRetiredByCountry?: Record<string, number>;
 }
 
 /**
@@ -84,7 +94,10 @@ export interface BondTurnResult {
  * 3. Check for defaults (corporation liquidCapital < 0 after coupon payments)
  * 4. Settle matured bonds (return face value to holders)
  */
-export async function processBondTurn(turn: number): Promise<BondTurnResult> {
+export async function processBondTurn(
+  turn: number,
+  captureSovereignCashProceeds = false
+): Promise<BondTurnResult> {
   const db = await getDb();
   const steps = substepMarker();
   const now = new Date();
@@ -104,6 +117,28 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   await issueScheduledSovereignBondSeries(db, turn, now);
   steps.mark("sovereignIssuance");
+  // Snapshot new at-par issuance before the placement sweep can add cash to
+  // those same bonds. Reconcile tranches convert existing debt, not proceeds.
+  const atParIssues: { countryId: string; face: number }[] = [];
+  if (captureSovereignCashProceeds) {
+    const issued = await db
+      .collection<Bond>("bonds")
+      .find(
+        {
+          issuerType: "sovereign",
+          issuedAtTurn: turn,
+          reconcile: { $ne: true },
+        },
+        { projection: { countryId: 1, totalIssued: 1 } }
+      )
+      .toArray();
+    for (const bond of issued) {
+      if (!bond.countryId || !Number.isSafeInteger(bond.totalIssued) || bond.totalIssued < 0) {
+        throw new Error("Sovereign cash capture found an invalid at-par issue");
+      }
+      atParIssues.push({ countryId: bond.countryId, face: bond.totalIssued });
+    }
+  }
   // Size each currency's bond market pool, let savings flow toward its target,
   // and refresh its appetite for each sovereign issuer before anyone trades.
   await processBondMarketPoolTurn(db, turn, now);
@@ -123,6 +158,9 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
 
   if (activeBonds.length === 0) {
+    const flows = captureSovereignCashProceeds
+      ? sovereignIssuanceFlowsByCountry({ atParIssues, placements: [] })
+      : null;
     return {
       bondsProcessed: 0,
       couponsPaid: 0,
@@ -132,6 +170,19 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
       bondHistorySnapshots: 0,
       bondsAutoRestructured: 0,
       bondsAutoRefinanced: 0,
+      ...(flows
+        ? {
+            sovereignCashProceedsByCountry: Object.fromEntries(
+              Object.entries(flows).map(([countryId, flow]) => [countryId, flow.cash])
+            ),
+            sovereignDebtFaceIssuedByCountry: Object.fromEntries(
+              Object.entries(flows).map(([countryId, flow]) => [countryId, flow.face])
+            ),
+            sovereignCouponPaidByCountry: {},
+            sovereignMaturityCashPaidByCountry: {},
+            sovereignDebtFaceRetiredByCountry: {},
+          }
+        : {}),
     };
   }
 
@@ -273,6 +324,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // see PartialTxEntry in ./bondTurnLedger for the charId/isImperial shape).
   const txBondEntries: PartialTxEntry[] = [];
   const govCouponByCountry = new Map<string, { total: number; currency: CurrencyCode }>();
+  const sovereignMaturityCashPaidByCountry = new Map<string, number>();
+  const sovereignDebtFaceRetiredByCountry = new Map<string, number>();
   // #992 tranche 4: fund-holder coupon/maturity rows are fund-subject legs, so
   // the shadow ledger books them against fund:<id> (the stock-checked cash
   // account) instead of a phantom corporation:<fundId>. One projected read:
@@ -1161,6 +1214,21 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
       // bondCcy — do NOT FX-convert here. Compare to the corporate-bond branch
       // above which uses `repaymentLocal` (already issuer-local-converted).
       const sovereignRepaymentLocal = sovereignTotalUnits * BOND_UNIT_FACE_VALUE;
+      sovereignMaturityCashPaidByCountry.set(
+        bond.countryId,
+        (sovereignMaturityCashPaidByCountry.get(bond.countryId) ?? 0) + sovereignRepaymentLocal
+      );
+      sovereignDebtFaceRetiredByCountry.set(
+        bond.countryId,
+        (sovereignDebtFaceRetiredByCountry.get(bond.countryId) ?? 0) +
+          sovereignBondOutstanding({
+            issuerType: "sovereign",
+            matured: false,
+            defaulted: false,
+            totalIssued: bond.totalIssued,
+            restructureHaircutPercent: bond.restructureHaircutPercent ?? null,
+          })
+      );
       txBondEntries.push({
         type: "gov_bond_maturity_payment",
         turn,
@@ -1347,6 +1415,16 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   const { bondsAutoRestructured, bondsAutoRefinanced } = corporationActionsPaused
     ? { bondsAutoRestructured: 0, bondsAutoRefinanced: 0 }
     : await autoResolveLingeringDefaults({ db, turn, now });
+  const sovereignFlows = captureSovereignCashProceeds
+    ? sovereignIssuanceFlowsByCountry({
+        atParIssues,
+        placements: [...placement.sovereignFaceByCountry].map(([countryId, row]) => ({
+          countryId,
+          face: row.face,
+          cashPaid: row.cashPaid,
+        })),
+      })
+    : null;
 
   steps.mark("snapshotsLedgerNotify");
   return {
@@ -1358,5 +1436,22 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     bondHistorySnapshots,
     bondsAutoRestructured,
     bondsAutoRefinanced,
+    ...(sovereignFlows
+      ? {
+          sovereignCashProceedsByCountry: Object.fromEntries(
+            Object.entries(sovereignFlows).map(([countryId, flow]) => [countryId, flow.cash])
+          ),
+          sovereignDebtFaceIssuedByCountry: Object.fromEntries(
+            Object.entries(sovereignFlows).map(([countryId, flow]) => [countryId, flow.face])
+          ),
+          sovereignCouponPaidByCountry: Object.fromEntries(
+            [...govCouponByCountry].map(([countryId, row]) => [countryId, row.total])
+          ),
+          sovereignMaturityCashPaidByCountry: Object.fromEntries(
+            sovereignMaturityCashPaidByCountry
+          ),
+          sovereignDebtFaceRetiredByCountry: Object.fromEntries(sovereignDebtFaceRetiredByCountry),
+        }
+      : {}),
   };
 }

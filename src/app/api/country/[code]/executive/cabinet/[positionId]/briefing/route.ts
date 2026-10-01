@@ -135,6 +135,13 @@ import {
   type DepartmentCountryId,
 } from "@/lib/governmentFinance/departmentCatalog";
 import type { LegislationType } from "@/lib/db/types/legislation";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
+import { buildResetDepartmentFinanceReadModel } from "@/lib/resetCabinet/readModel";
+import { resetActionsForSeat } from "@/lib/resetCabinet/catalog";
+import { actionOperatingCost, rechargeActionCharges } from "@/lib/resetCabinet/rules/actions";
+import type { ResetCabinetActionState } from "@/lib/resetCabinet/rules/actionState";
 
 interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
@@ -734,11 +741,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
       };
     }
 
+    const cabinetV2 =
+      resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).cabinet === "v2";
     const generalizedDepartmentFinanceEnabled = gameState?.departmentFinanceEnabled === true;
     const legacyPublicHealthSliceEnabled =
-      gameState?.departmentProgramSliceEnabled === true && !generalizedDepartmentFinanceEnabled;
+      gameState?.departmentProgramSliceEnabled === true &&
+      !generalizedDepartmentFinanceEnabled &&
+      !cabinetV2;
     const departmentProgram =
-      countryId === COUNTRY_CONFIGS.US.id && positionId === "secretary_of_health"
+      !cabinetV2 && countryId === COUNTRY_CONFIGS.US.id && positionId === "secretary_of_health"
         ? buildPublicHealthProgramReadModel({
             enabled: legacyPublicHealthSliceEnabled,
             departmentName: resolveDepartment(mechanics, liveYear),
@@ -751,16 +762,34 @@ export async function GET(_request: Request, { params }: RouteParams) {
           })
         : undefined;
     const departmentDefinitions =
-      generalizedDepartmentFinanceEnabled && ["US", "UK", "JP"].includes(countryId)
+      (generalizedDepartmentFinanceEnabled || cabinetV2) && ["US", "UK", "JP"].includes(countryId)
         ? getDepartmentDefinitions(
             countryId as DepartmentCountryId,
             liveYear,
             new Set(gameState?.manuallyEnabledSeats ?? [])
           ).filter((definition) => definition.controllingPositionIds.includes(positionId))
         : [];
+    const resetAccounts = cabinetV2
+      ? await db
+          .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
+          .find({
+            worldId: gameState?.resetWorldId,
+            countryId: countryId as "US" | "UK" | "JP",
+            controllingSeatId: positionId,
+          })
+          .toArray()
+      : [];
+    const resetActionState = cabinetV2
+      ? await db
+          .collection<ResetCabinetActionState>("resetCabinetActionStates")
+          .findOne({ _id: countryId as "US" | "UK" | "JP", worldId: gameState?.resetWorldId })
+      : null;
+    const resetAccountById = new Map(
+      resetAccounts.map((account) => [account.departmentId, account])
+    );
     const departmentProgramTypeIds = [
       ...new Set(
-        departmentDefinitions.flatMap((definition) =>
+        (cabinetV2 ? [] : departmentDefinitions).flatMap((definition) =>
           Object.values(budget?.departmentAccounts?.[definition.id]?.programs ?? {}).map(
             (program) => program.legislationTypeId
           )
@@ -777,15 +806,22 @@ export async function GET(_request: Request, { params }: RouteParams) {
               { projection: { _id: 1, name: 1, policyOptions: 1 } }
             )
             .toArray();
-    const departmentFinances = departmentDefinitions.map((definition) =>
-      buildDepartmentFinanceReadModel({
-        enabled: true,
-        definition,
-        departmentName: resolveDepartmentDefinitionName(definition, liveYear),
-        account: budget?.departmentAccounts?.[definition.id],
-        legislationTypes: departmentLegislationTypes,
-      })
-    );
+    const departmentFinances = departmentDefinitions.map((definition) => {
+      const departmentName = resolveDepartmentDefinitionName(definition, liveYear);
+      return cabinetV2
+        ? buildResetDepartmentFinanceReadModel({
+            definition,
+            departmentName,
+            account: resetAccountById.get(definition.id),
+          })
+        : buildDepartmentFinanceReadModel({
+            enabled: true,
+            definition,
+            departmentName,
+            account: budget?.departmentAccounts?.[definition.id],
+            legislationTypes: departmentLegislationTypes,
+          });
+    });
 
     return NextResponse.json({
       // Gates the Treasury-tab "Fund Geological Survey" action (per-surface flag
@@ -805,7 +841,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         advocacy: mechanics.advocacy ?? null,
         emergency: mechanics.emergency ?? null,
       },
-      orders: getMinisterialOrders(countryId, positionId),
+      cabinetVersion: cabinetV2 ? "v2" : "v1",
+      orders: cabinetV2 ? [] : getMinisterialOrders(countryId, positionId),
       member: buildMemberView({ includeActions: true }),
       currentSettings: setting
         ? {
@@ -819,13 +856,40 @@ export async function GET(_request: Request, { params }: RouteParams) {
             lastChangedTurn: setting.lastChangedTurn,
           }
         : null,
-      activeOrders: activeOrders.map((o) => ({
+      activeOrders: (cabinetV2 ? [] : activeOrders).map((o) => ({
         orderId: o.orderId,
         orderName: o.orderName,
         issuedTurn: o.issuedTurn,
         expiresTurn: o.expiresTurn,
         effects: o.effects,
       })),
+      resetCabinetActions:
+        cabinetV2 && resetActionState
+          ? (() => {
+              const actorId = member?.characterId?.toString();
+              const actor = rechargeActionCharges(
+                actorId ? (resetActionState.actorStates[actorId]?.charges ?? 4) : 0,
+                actorId
+                  ? (resetActionState.actorStates[actorId]?.lastRechargeTurn ??
+                      resetActionState.sourceTurn)
+                  : resetActionState.sourceTurn,
+                currentTurn
+              );
+              return {
+                charges: actor.charges,
+                nextRechargeTurn: actor.nextRechargeTurn,
+                actions: resetActionsForSeat(countryId as "US" | "UK" | "JP", positionId).map(
+                  (action) => ({
+                    ...action,
+                    operatingCost: actionOperatingCost(action, budget?.gdp ?? 0),
+                  })
+                ),
+                active: resetActionState.active.filter(
+                  (entry) => entry.seatId === positionId && entry.expiresTurn > currentTurn
+                ),
+              };
+            })()
+          : null,
       currentTurn,
       targetCountries: enabledCountryIds
         .filter((enabledCountryId) => enabledCountryId !== countryId)

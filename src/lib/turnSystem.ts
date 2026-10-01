@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { ObjectId } from "mongodb";
@@ -87,6 +88,7 @@ export async function initializeGameState(): Promise<GameState> {
 
   const initialState: GameState = {
     _id: "current",
+    resetWorldId: randomUUID(),
     currentTurn: 1,
     currentYear: STARTING_YEAR,
     // Always pair `startingYear` with the matching `preset`. Writing only

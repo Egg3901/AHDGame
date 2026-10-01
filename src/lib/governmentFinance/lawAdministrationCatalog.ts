@@ -14,24 +14,33 @@ import type {
   PolicyOptionImplementation,
 } from "@/lib/db/types/legislation";
 import type { PortfolioId } from "./departmentCatalog";
+import { JURISDICTION_MODES } from "@/lib/legislature/jurisdiction";
 
 const INITIAL_COUNTRY_SCOPES = new Set(["us", "uk", "jp"]);
 const REGIONAL_MARKERS = ["_state_", "_regional_", "resident_tax", "fixed_asset_tax"];
-const REGIONALLY_ELIGIBLE_DOMAINS = new Set([
-  "agriculture",
-  "economic",
-  "economy",
-  "education",
-  "environment",
-  "governance",
-  "healthcare",
-  "infrastructure",
-  "law_justice",
-  "mediaInformation",
-  "publicSafety",
-  "social",
-  "technology",
+const OPTION_JURISDICTION_MODES = new Map<string, JurisdictionMode>([
+  ["us_federal_education_funding:federal_education_funding_opt_4", "grant_supported_regional"],
+  ["us_federal_education_funding:federal_education_funding_opt_5", "regional_discretion"],
+  ["us_federal_education_funding:federal_education_funding_opt_6", "regional_discretion"],
+  ["us_school_standards:school_standards_opt_2", "concurrent"],
+  ["us_school_standards:school_standards_opt_3", "regional_discretion"],
+  ["us_federal_healthcare_funding:federal_healthcare_funding_opt_5", "grant_supported_regional"],
+  ["us_transportation:transportation_opt_4", "regional_discretion"],
+  ["us_conservation:conservation_opt_5", "regional_discretion"],
+  ["resource_extraction_authority:concurrent_licensing", "concurrent"],
+  ["resource_extraction_authority:state_licensing", "regional_discretion"],
 ]);
+
+export function withAuthoredOptionJurisdiction(
+  legislationTypeId: string,
+  option: LegislationPolicyOption
+): LegislationPolicyOption {
+  const jurisdictionMode =
+    option.jurisdictionMode ?? OPTION_JURISDICTION_MODES.get(`${legislationTypeId}:${option.id}`);
+  return jurisdictionMode && option.jurisdictionMode !== jurisdictionMode
+    ? { ...option, jurisdictionMode }
+    : option;
+}
 
 function isRegionalType(type: LegislationType): boolean {
   if (type.allowedScope === "state" || type.taxRateChange?.scope === "state") return true;
@@ -102,17 +111,16 @@ function resolveJurisdictionModes(type: LegislationType): {
   if (isRegionalType(type)) {
     return { allowed: ["regional_discretion"], defaultMode: "regional_discretion" };
   }
-  if (type.isGrant) {
-    return {
-      allowed: ["grant_supported_regional", "national_floor"],
-      defaultMode: "grant_supported_regional",
-    };
-  }
-  const allowed: JurisdictionMode[] = ["national_direct"];
-  if (REGIONALLY_ELIGIBLE_DOMAINS.has(type.policyDomain)) {
-    allowed.push("national_floor", "concurrent", "grant_supported_regional", "regional_discretion");
-  }
-  return { allowed, defaultMode: "national_direct" };
+  const defaultMode: JurisdictionMode = type.isGrant
+    ? "grant_supported_regional"
+    : "national_direct";
+  const authored = type.policyOptions?.flatMap((option) =>
+    option.jurisdictionMode ? [option.jurisdictionMode] : []
+  );
+  const allowed = JURISDICTION_MODES.filter(
+    (mode) => mode === defaultMode || authored?.includes(mode)
+  );
+  return { allowed, defaultMode };
 }
 
 function resolveLawKind(type: LegislationType): LawKind {
@@ -253,12 +261,23 @@ export function withLawAdministration(types: LegislationType[]): LegislationType
     // policy pipeline. Materialize them too so enabling administration does not
     // make long-lived US laws suddenly unproposable.
     if (type.countryScope && !INITIAL_COUNTRY_SCOPES.has(type.countryScope)) return type;
-    const administration = buildLawAdministration(type);
+    const policyOptions = type.policyOptions?.map((option) =>
+      withAuthoredOptionJurisdiction(type._id, option)
+    );
+    const prepared = policyOptions ? { ...type, policyOptions } : type;
+    const jurisdiction = resolveJurisdictionModes(prepared);
+    const administration = prepared.administration
+      ? {
+          ...prepared.administration,
+          allowedJurisdictionModes: jurisdiction.allowed,
+          defaultJurisdictionMode: jurisdiction.defaultMode,
+        }
+      : buildLawAdministration(prepared);
     return {
-      ...type,
-      allowedScope: type.allowedScope ?? (isRegionalType(type) ? "state" : "national"),
+      ...prepared,
+      allowedScope: prepared.allowedScope ?? (isRegionalType(prepared) ? "state" : "national"),
       administration,
-      policyOptions: withProgramImplementation(type, administration),
+      policyOptions: withProgramImplementation(prepared, administration),
     };
   });
 }

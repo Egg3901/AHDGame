@@ -39,4 +39,22 @@ describe("DepartmentProgramPanel", () => {
     expect(screen.getByText(/Binding constraint:/).textContent).toContain("ramp");
     expect(screen.getByText(/Public Health Preparedness/).textContent).toContain("30%");
   });
+
+  it("does not present an unsettled v2 opening claim as zero spending", () => {
+    render(
+      <DepartmentProgramPanel
+        currencySymbol="$"
+        program={{
+          enabled: true,
+          departmentName: "Health and Human Services",
+          programName: "Treatment waits",
+          explanation: "Existing service claim",
+          status: "operating",
+          annualDemand: 100,
+        }}
+      />
+    );
+    expect(screen.getByText("Not settled")).toBeTruthy();
+    expect(screen.getByText("Not measured")).toBeTruthy();
+  });
 });

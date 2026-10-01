@@ -268,6 +268,7 @@ function makeDb(options: {
   states?: Record<string, unknown>[];
   stateMetrics?: Record<string, unknown>[];
   stateBudgets?: Record<string, unknown>[];
+  resetPrograms?: Record<string, unknown>[];
 }) {
   const {
     federalBudget = makeFederalBudget(),
@@ -275,6 +276,7 @@ function makeDb(options: {
     states = [],
     stateMetrics = [],
     stateBudgets = [],
+    resetPrograms = [],
   } = options;
   const resolvedFederalBudgets = federalBudgets ?? (federalBudget === null ? [] : [federalBudget]);
 
@@ -331,6 +333,10 @@ function makeDb(options: {
                 }
               ),
             updateOne: stateBudgetUpdateOne,
+          };
+        case "resetLawPrograms":
+          return {
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(resetPrograms) }),
           };
         case "federalBudgetSnapshots":
           return {
@@ -860,6 +866,44 @@ describe("processFiscalYear", () => {
     const setOps = (call[1] as { $set: Record<string, unknown> }).$set;
     expect(setOps.surplus).toBe(10_000_000_000);
     expect(setOps.balance).toBe(60_000_000_000); // 50B + 10B
+  });
+
+  it("settles US v2 state-law allocations through the state budget", async () => {
+    const stateBudget = makeStateBudget("US-CA");
+    stateBudget.balance = 0;
+    vi.mocked(calculateStateRevenue).mockResolvedValue({
+      total: 100_000_000,
+      byCategory: {},
+    } as never);
+    vi.mocked(calculateStateSpendingDetail).mockResolvedValue({
+      spending: { total: 0, byCategory: {} },
+      lawCosts: [],
+    });
+    const db = makeDb({
+      states: [{ _id: "US-CA", countryId: "US" }],
+      stateBudgets: [stateBudget],
+      resetPrograms: [
+        {
+          _id: "world:US:US-CA:L10",
+          regionId: "US-CA",
+          familyId: "L10",
+          choice: "center_left",
+          annualAgencyAllocation: 250_000_000,
+        },
+      ],
+    });
+
+    await processFiscalYear(db as unknown as Db, 2026, 600);
+
+    const call = db._stateBudgetUpdateOne.mock.calls[1];
+    const setOps = (call[1] as { $set: Record<string, unknown> }).$set as {
+      authorizedSpending: { total: number };
+      spending: { total: number };
+      regionalProgramSettlements: Record<string, { implementationFactor: number }>;
+    };
+    expect(setOps.authorizedSpending.total).toBe(250_000_000);
+    expect(setOps.spending.total).toBe(100_000_000);
+    expect(setOps.regionalProgramSettlements["world:US:US-CA:L10"].implementationFactor).toBe(0.4);
   });
 
   it("processes non-US federal budgets with country-scoped helpers", async () => {

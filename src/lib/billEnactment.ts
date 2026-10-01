@@ -95,6 +95,7 @@ import {
   isBankingSeparationLegislationType,
   separationPolicyFromOptionId,
 } from "@/lib/banking/separationBill";
+import { applyResetLawBillEnactment } from "@/lib/resetLegislation/enactBill";
 
 type EnactableBill = Pick<
   Bill | StateBill,
@@ -483,6 +484,11 @@ export async function onBillEnacted(
   });
 
   await applyInternationalWithdrawalMeasure(db, bill as Bill, currentTurn);
+
+  // V2 law provisions carry a server-authored, frozen fiscal and outcome
+  // snapshot. Persist their program and department-authority transition before
+  // legacy policy processing; the transactional receipt makes retries safe.
+  await applyResetLawBillEnactment(db, bill, currentTurn);
 
   // Electoral law: franchise + registration access. Applied before the policy
   // provisions below because both are national gameState writes the demographic

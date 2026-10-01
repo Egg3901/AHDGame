@@ -450,7 +450,9 @@ export async function listNationalLegislatureBills(
                                     ? "Entry into the Conflict"
                                     : provision.type === "create_department"
                                       ? formatCreateDepartmentLabel(provision).legislationTypeName
-                                      : describeSubsidyProvision(provision);
+                                      : provision.type === "reset_law"
+                                        ? provision.titleSnapshot
+                                        : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,
             legislationTypeName,

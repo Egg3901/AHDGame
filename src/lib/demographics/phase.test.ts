@@ -62,6 +62,102 @@ describe("runDemographicFlows", () => {
     expect(db.collectionMocks.states!.bulkWrite).toHaveBeenCalled();
     expect(db.collectionMocks.regionDemographics!.bulkWrite).toHaveBeenCalled();
     expect(db.collectionMocks.macroMetrics!.bulkWrite).toHaveBeenCalled();
+    const writes = db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: { update: { $set: Record<string, unknown> } };
+    }>;
+    expect(writes[0]!.updateOne.update.$set.resetCohortReading).toBeUndefined();
+  });
+
+  it("writes raw realized cohort outcomes only for a seed-verified v2 world", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      resetWorldId: "test-reset-world",
+      metricsSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "test-reset-world",
+          revision: 1,
+          sourceTurn: 1,
+          completedAt: "2026-09-30T00:00:00.000Z",
+          verificationHash: "verified",
+        },
+      },
+    });
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "US:CA",
+          worldId: "test-reset-world",
+          countryId: "US",
+          regionId: "CA",
+          asOfTurn: 1,
+          observations: { "19": { value: 250 } },
+        },
+      ]),
+    });
+    const { runDemographicFlows } = await import("./phase");
+    await runDemographicFlows(db as unknown as Db, 2, {
+      metrics: true,
+      legislation: false,
+      cabinet: false,
+    });
+    const writes = db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: {
+        update: {
+          $set: {
+            resetCohortReading?: {
+              asOfTurn: number;
+              populationGrowthAnnualized: number;
+              realizedTfr: number;
+              dependencyBurden15To64: number;
+              periodLifeExpectancy: number;
+            };
+          };
+        };
+      };
+    }>;
+    expect(writes[0]!.updateOne.update.$set.resetCohortReading).toMatchObject({
+      asOfTurn: 2,
+      realizedTfr: expect.any(Number),
+      dependencyBurden15To64: expect.any(Number),
+      populationGrowthAnnualized: expect.any(Number),
+      periodLifeExpectancy: expect.any(Number),
+    });
+    expect(db.collectionMocks.resetMetricSnapshots!.find).toHaveBeenCalledWith(
+      expect.objectContaining({ worldId: "test-reset-world", scope: "regional" }),
+      expect.objectContaining({
+        projection: expect.objectContaining({ "observations.19.value": 1 }),
+      })
+    );
+  });
+
+  it("refuses stale or missing v2 health ownership rather than reverting to political inputs", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      resetWorldId: "test-reset-world",
+      metricsSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "test-reset-world",
+          revision: 1,
+          sourceTurn: 1,
+          completedAt: "2026-09-30T00:00:00.000Z",
+          verificationHash: "verified",
+        },
+      },
+    });
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    const { runDemographicFlows } = await import("./phase");
+    await expect(
+      runDemographicFlows(db as unknown as Db, 2, {
+        metrics: true,
+        legislation: false,
+        cabinet: false,
+      })
+    ).rejects.toThrow("V2 cohorts lack current health inputs");
+    expect(db.collectionMocks.regionDemographics!.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("writes a population SSOT equal to the Σ of the advanced vector", async () => {

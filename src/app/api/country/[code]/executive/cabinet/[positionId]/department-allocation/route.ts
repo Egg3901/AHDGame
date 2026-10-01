@@ -14,10 +14,13 @@ import {
 } from "@/lib/governmentFinance/departmentCatalog";
 import { validateDepartmentProgramAllocations } from "@/lib/governmentFinance/departmentAllocation";
 import { getDb } from "@/lib/mongodb";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { setResetDepartmentAllocations } from "@/lib/resetCabinet/setDepartmentAllocations";
 
 const schema = z.object({
   departmentId: z.string().min(1),
-  programAllocationPercents: z.record(z.string(), z.number().min(0).max(100)),
+  programAllocationPercents: z.record(z.string(), z.number().min(0).max(200)),
 });
 
 interface RouteParams {
@@ -41,6 +44,34 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const gameState = await getGameState(db);
+    const cabinetV2 =
+      resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).cabinet === "v2";
+    if (cabinetV2) {
+      const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
+      const isHolder =
+        member?.characterId &&
+        auth.user.character &&
+        member.characterId.toString() === auth.user.character._id.toString();
+      if (!isHolder && !auth.user.isAdmin) {
+        return NextResponse.json(
+          { error: "Only the cabinet holder or admin can set department allocations" },
+          { status: 403 }
+        );
+      }
+      const result = await setResetDepartmentAllocations({
+        db,
+        worldId: String(gameState?.resetWorldId ?? ""),
+        countryId: countryId as "US" | "UK" | "JP",
+        departmentId: parsed.data.departmentId,
+        positionId,
+        turn: gameState?.currentTurn ?? 0,
+        actorId: auth.user.character?._id.toString() ?? auth.user.userId,
+        allocations: parsed.data.programAllocationPercents,
+      });
+      return NextResponse.json(result.ok ? { success: true } : { error: result.error }, {
+        status: result.ok ? 200 : result.status,
+      });
+    }
     if (gameState?.departmentFinanceEnabled !== true) {
       return NextResponse.json({ error: "Department finance is not enabled" }, { status: 404 });
     }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { JurisdictionMode } from "@/lib/db/types/legislation";
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 import { resolvePortfolioDepartment, type DepartmentCountryId } from "./departmentCatalog";
 import {
@@ -67,9 +68,9 @@ describe("law administration catalog", () => {
     }
   });
 
-  it("offers jurisdiction independently of policy stance on eligible national subjects", () => {
+  it("keeps ordinary federal laws federally administered", () => {
     const publicHealth = legislationTypes.find((type) => type._id === "us_public_health")!;
-    expect(publicHealth.administration?.allowedJurisdictionModes).toContain("regional_discretion");
+    expect(publicHealth.administration?.allowedJurisdictionModes).toEqual(["national_direct"]);
     expect(publicHealth.policyOptions?.map((option) => option.stance)).toEqual([
       "left",
       "left",
@@ -79,6 +80,70 @@ describe("law administration catalog", () => {
       "right",
       "right",
     ]);
+  });
+
+  it("authors grants and devolution on policy options instead of a proposal selector", () => {
+    const education = legislationTypes.find((type) => type._id === "us_federal_education_funding")!;
+    expect(education.administration).toMatchObject({
+      defaultJurisdictionMode: "national_direct",
+      allowedJurisdictionModes: [
+        "national_direct",
+        "grant_supported_regional",
+        "regional_discretion",
+      ],
+    });
+    expect(education.policyOptions?.[4]?.jurisdictionMode).toBe("grant_supported_regional");
+    expect(education.policyOptions?.[5]?.jurisdictionMode).toBe("regional_discretion");
+    expect(education.policyOptions?.[6]?.jurisdictionMode).toBe("regional_discretion");
+
+    const science = legislationTypes.find((type) => type._id === "us_federal_science_funding")!;
+    expect(science.administration?.allowedJurisdictionModes).toEqual(["national_direct"]);
+    expect(science.policyOptions?.every((option) => option.jurisdictionMode === undefined)).toBe(
+      true
+    );
+  });
+
+  it("refreshes authored option jurisdiction on previously materialized catalog rows", () => {
+    const education = initialCatalog.find((type) => type._id === "us_federal_education_funding")!;
+    const stale = {
+      ...education,
+      administration: {
+        ...education.administration!,
+        portfolioId: "education" as const,
+        responsibleDepartmentId: "us_department_of_education",
+        responsiblePositionId: "secretary_of_education",
+        lawKind: "service_program" as const,
+        implementationMode: "direct" as const,
+        allowedJurisdictionModes: [
+          "national_direct",
+          "national_floor",
+          "concurrent",
+          "grant_supported_regional",
+          "regional_discretion",
+        ] satisfies JurisdictionMode[],
+        defaultJurisdictionMode: "national_direct" as const,
+        jurisdictionMode: "national_direct" as const,
+        appropriationClass: "operating" as const,
+        priorityClass: "discretionary" as const,
+        capacityWeight: 1.5,
+        baselineDeliveryFloor: 0.42,
+      },
+    };
+
+    const [refreshed] = withLawAdministration([stale]);
+
+    expect(refreshed.policyOptions?.[4]?.jurisdictionMode).toBe("grant_supported_regional");
+    expect(refreshed.policyOptions?.[5]?.jurisdictionMode).toBe("regional_discretion");
+    expect(refreshed.administration).toMatchObject({
+      responsibleDepartmentId: "us_department_of_education",
+      capacityWeight: 1.5,
+      allowedJurisdictionModes: [
+        "national_direct",
+        "grant_supported_regional",
+        "regional_discretion",
+      ],
+      defaultJurisdictionMode: "national_direct",
+    });
   });
 
   it("creates delivery metadata for cost-bearing laws but not tax-rate regimes", () => {

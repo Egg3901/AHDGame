@@ -217,7 +217,7 @@ export interface PlacementResult {
   bondsTouched: number;
   unitsPlaced: number;
   corporateProceedsByCorp: Map<string, { local: number; currency: CurrencyCode }>;
-  sovereignFaceByCountry: Map<CountryId, { face: number; annualCoupon: number }>;
+  sovereignFaceByCountry: Map<CountryId, { face: number; cashPaid: number; annualCoupon: number }>;
 }
 
 /**
@@ -314,6 +314,16 @@ export async function placeUnsoldBondUnits(
       budgetByCurrency.set(currency, budget - paid);
       result.bondsTouched++;
       result.unitsPlaced += units;
+      const row = result.sovereignFaceByCountry.get(bond.countryId) ?? {
+        face: 0,
+        cashPaid: 0,
+        annualCoupon: 0,
+      };
+      const face = units * BOND_UNIT_FACE_VALUE;
+      row.face += face;
+      row.cashPaid += paid;
+      row.annualCoupon += ((bond.couponRate ?? 0) / 100) * face;
+      result.sovereignFaceByCountry.set(bond.countryId, row);
       continue;
     }
 
@@ -344,17 +354,10 @@ export async function placeUnsoldBondUnits(
     result.bondsTouched++;
     result.unitsPlaced += units;
 
-    if (bond.issuerType === "sovereign" && bond.countryId) {
-      const row = result.sovereignFaceByCountry.get(bond.countryId) ?? { face: 0, annualCoupon: 0 };
-      row.face += face;
-      row.annualCoupon += ((bond.couponRate ?? 0) / 100) * face;
-      result.sovereignFaceByCountry.set(bond.countryId, row);
-    } else {
-      const key = bond.corporationId.toString();
-      const row = result.corporateProceedsByCorp.get(key) ?? { local: 0, currency };
-      row.local += paid;
-      result.corporateProceedsByCorp.set(key, row);
-    }
+    const key = bond.corporationId.toString();
+    const row = result.corporateProceedsByCorp.get(key) ?? { local: 0, currency };
+    row.local += paid;
+    result.corporateProceedsByCorp.set(key, row);
   }
   return result;
 }

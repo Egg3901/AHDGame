@@ -29,6 +29,8 @@ import {
 import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
 import { resolveAnnualRegionalGrantPool } from "@/lib/governmentFinance/grantTransfers";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
+import { buildResetRegionalProgramClaims } from "@/lib/resetLegislation/rules/regionalClaims";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -136,6 +138,28 @@ export async function processJPRegionalBudgets(
     .collection<StatePolicy>("statePolicies")
     .find({ stateId: { $in: regionIds } })
     .toArray();
+  const resetPrograms = await db
+    .collection<ResetLawProgramDocument>("resetLawPrograms")
+    .find(
+      { country: "JP", scope: "regional", regionId: { $in: regionIds } },
+      {
+        projection: {
+          _id: 1,
+          regionId: 1,
+          familyId: 1,
+          choice: 1,
+          annualAgencyAllocation: 1,
+        },
+      }
+    )
+    .toArray();
+  const resetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
+  for (const program of resetPrograms) {
+    if (!program.regionId) continue;
+    const programs = resetProgramsByRegion.get(program.regionId) ?? [];
+    programs.push(program);
+    resetProgramsByRegion.set(program.regionId, programs);
+  }
 
   // Fetch JP national policies (for Local Allocation Tax amount)
   const nationalPolicies = await db
@@ -221,6 +245,7 @@ export async function processJPRegionalBudgets(
 
   for (const region of jpRegions) {
     const regionPolicies = policiesByRegion.get(region._id) ?? [];
+    const regionResetPrograms = resetProgramsByRegion.get(String(region._id)) ?? [];
     const existingBudget = budgetMap.get(region._id);
 
     // Find resident tax rate and fixed asset tax rate
@@ -272,23 +297,34 @@ export async function processJPRegionalBudgets(
         (annualCostByLegislationTypeId.get(policy.legislationTypeId) ?? 0) + cost
       );
     }
+    enactedBillCosts += regionResetPrograms.reduce(
+      (sum, program) => sum + program.annualAgencyAllocation,
+      0
+    );
     // JP prefectural budgets share the same parallel-phase constraint as UK
     // regions, so subsidy spend has to be composed into the persisted budget here.
     const subsidyCosts = stateCostByStateId.get(region._id) ?? 0;
     enactedBillCosts += subsidyCosts;
 
-    const regionalSettlement = regionalFinanceEnabled
-      ? settleRegionalBudget({
-          availableBudget: budgetResult.totalBudget,
-          reservedNonProgramSpending: subsidyCosts,
-          claims: buildRegionalProgramClaims({
-            policies: spendingPolicies,
-            legislationTypes: materializedLegTypes,
-            annualCostByLegislationTypeId,
-            previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
-          }),
-        })
-      : null;
+    const regionalSettlement =
+      regionalFinanceEnabled || regionResetPrograms.length > 0
+        ? settleRegionalBudget({
+            availableBudget: budgetResult.totalBudget,
+            reservedNonProgramSpending: subsidyCosts,
+            claims: [
+              ...buildRegionalProgramClaims({
+                policies: spendingPolicies,
+                legislationTypes: materializedLegTypes,
+                annualCostByLegislationTypeId,
+                previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+              }),
+              ...buildResetRegionalProgramClaims({
+                programs: regionResetPrograms,
+                previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+              }),
+            ],
+          })
+        : null;
     const fundedBillCosts = regionalSettlement?.totalFunded ?? enactedBillCosts;
     const unfundedBillCosts = Math.max(0, enactedBillCosts - fundedBillCosts);
 
@@ -352,7 +388,7 @@ export async function processJPRegionalBudgets(
       nationalGrant: budgetResult.nationalGrant,
       totalBudget: budgetResult.totalBudget,
       enactedBillCosts,
-      ...(regionalFinanceEnabled
+      ...(regionalFinanceEnabled || regionResetPrograms.length > 0
         ? {
             fundedBillCosts,
             unfundedBillCosts,

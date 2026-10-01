@@ -87,6 +87,15 @@ describe("POST department allocation", () => {
     );
   });
 
+  it("preserves fractional percentage shares in v1 worlds", async () => {
+    const { POST } =
+      await import("@/app/api/country/[code]/executive/cabinet/[positionId]/department-allocation/route");
+    const response = await POST(request({ public_health: 12.5, rural_health: 87.5 }), {
+      params: Promise.resolve({ code: "us", positionId: "secretary_of_health" }),
+    });
+    expect(response.status).toBe(200);
+  });
+
   it("rejects partial allocations without writing", async () => {
     const { POST } =
       await import("@/app/api/country/[code]/executive/cabinet/[positionId]/department-allocation/route");

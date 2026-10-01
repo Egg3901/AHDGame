@@ -81,6 +81,8 @@ import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 import { regionalBudgetPhaseDue, resolveRegionalBudgetCadence } from "./regionalBudgetCadence";
 import type { LegislationType } from "@/lib/db/types/legislation";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
   key: "stateEffectsAndNationalAggregation",
@@ -660,6 +662,36 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     );
     if (memberCountReconcileResult && memberCountReconcileResult.partiesUpdated > 0) {
       phaseResults.partyMemberCountReconcile = memberCountReconcileResult;
+    }
+
+    // V2 boards are independent of the legacy display store and may advance
+    // only from complete, owner-produced observations. While the reset release
+    // gate is closed this is a zero-query skip and v1 remains authoritative.
+    if (
+      (["US", "UK", "JP"] as const).some(
+        (country) =>
+          resetSystemVersionsForCountry(gameState, RESET_V2_READY, country).metrics === "v2"
+      )
+    ) {
+      const [{ collectResetMetricOwnerReadings }, { refreshResetMetricSnapshotsTurn }] =
+        await Promise.all([
+          import("@/lib/resetMetrics/collectOwnerReadings"),
+          import("@/lib/resetMetrics/refreshTurn"),
+        ]);
+      await runtime.runPhase("resetMetricRefresh", () =>
+        refreshResetMetricSnapshotsTurn({
+          db,
+          gameState,
+          turn: newTurn,
+          ownerReadings: (boards) => collectResetMetricOwnerReadings(db, boards, newTurn),
+        })
+      );
+    } else {
+      await runtime.markPhaseSkipped(
+        "resetMetricRefresh",
+        "featureDisabled",
+        "Skipped because the reset metrics v2 gate is inactive."
+      );
     }
 
     // Durable long-horizon provenance (#2099/#2100), resolved once per turn and

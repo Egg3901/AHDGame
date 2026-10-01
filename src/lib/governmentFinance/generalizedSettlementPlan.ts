@@ -15,6 +15,7 @@ import {
   type PortfolioId,
 } from "./departmentCatalog";
 import { createEmptyDepartmentAccount, createEmptyUsHealthDepartmentAccount } from "./departments";
+import { resolvePolicyOptionJurisdiction } from "@/lib/legislature/jurisdiction";
 
 export interface ActiveLawCostInput {
   law: EnactedLaw;
@@ -92,7 +93,7 @@ export function buildCountryDepartmentSettlementPlan(
       }
       continue;
     }
-    const jurisdictionMode = law.jurisdictionMode ?? type.administration.defaultJurisdictionMode;
+    const jurisdictionMode = resolvePolicyOptionJurisdiction(type, option, law.jurisdictionMode);
     if (jurisdictionMode === "regional_discretion") continue;
     const department = resolvePortfolioDepartment(
       input.countryId,
