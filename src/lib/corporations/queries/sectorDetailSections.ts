@@ -107,6 +107,7 @@ import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
+import type { RetoolHint } from "@/lib/corporations/retoolHint";
 import {
   CAPACITY_BUILD_TURNS,
   capacityRescaleRatio,
@@ -1184,6 +1185,12 @@ export interface SectorPlantsSection {
    * Absent when owned capacity is unknown.
    */
   unclaimedSharePct?: number;
+  /**
+   * Set when the demand throttle holds this plant down because the valuable
+   * part of its output is oversupplied and another strategy for the same
+   * sector would sell into a shortage here (ticket 1370 follow-up). Advisory.
+   */
+  retoolHint: RetoolHint | null;
   currentTurn: number;
   /**
    * Everything the build dialog needs to price an order CLIENT-SIDE. Build cost
@@ -1388,6 +1395,8 @@ export function buildSectorPlantsSection(args: {
   demandGapUnits?: number;
   /** Owned capacity in this (state, sectorType) cell, every producer, units/day. */
   ownedCellCapacityUnits?: number;
+  /** Strategy suggestion when the plant's valuable output is oversupplied (computeRetoolHint). */
+  retoolHint?: RetoolHint | null;
   workers: number;
   /** ₳/day, all on the same basis as `sector.revenue` normalized to ₳. */
   money: {
@@ -1462,6 +1471,7 @@ export function buildSectorPlantsSection(args: {
     headroomUnits,
     demandGapUnits = 0,
     ownedCellCapacityUnits,
+    retoolHint = null,
     workers,
     money,
     regulatoryBurdenPp,
@@ -1838,6 +1848,7 @@ export function buildSectorPlantsSection(args: {
     demandGapUnits: roomHeldByOwnIdle ? 0 : nonNeg(demandGapUnits),
     roomHeldByOwnIdle,
     ...(unclaimedSharePct != null ? { unclaimedSharePct } : {}),
+    retoolHint,
     currentTurn,
     buildQuote: {
       unitPriceAnchor: oneUnit.unitPriceAnchor,

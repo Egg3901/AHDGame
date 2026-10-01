@@ -18,3 +18,4 @@ areas: [engine, frontend]
 - Room to build reads 0 while your own plant in that market is running below capacity because of sales. Your idle capacity reaches buyers before new capacity would. The build dialog says so.
 - Unclaimed share shows the part of the market nobody has built into. It read 0% everywhere.
 - Room to build for energy, oil, iron, natural gas, advertising and healthcare no longer counts demand the market does not clear.
+- When a plant runs below capacity because its main product is oversupplied, the plant page names the strategy for the same sector whose output this market is short of, with how much of each it would sell. The strategy picker marks that strategy.
