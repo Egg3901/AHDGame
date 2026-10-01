@@ -1,4 +1,5 @@
 ---
+date: 2026-10-01
 title: Independent Russian constitutional decisions
 badges: [patch]
 areas: [fullstack]
