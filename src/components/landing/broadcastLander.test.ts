@@ -64,11 +64,6 @@ describe("1991 broadcast lander content", () => {
     ];
     for (const text of copy) expect(text, text).not.toMatch(DASHES);
   });
-
-  it("links only eras that have a world report out to one", () => {
-    expect(ERA_CONFIGS["1953"].worldReportUrl).toMatch(/^https:\/\//);
-    expect(ERA_CONFIGS["1991"].worldReportUrl).toBeUndefined();
-  });
 });
 
 describe("the dissolved Soviet Union", () => {
@@ -93,9 +88,9 @@ describe("the dissolved Soviet Union", () => {
     const russiaUkraine = topojson.mesh(
       topology,
       topology.objects.countries,
-      (a: { id: unknown }, b: { id: unknown }) =>
+      (a, b) =>
         a !== b && [String(a.id), String(b.id)].sort().join() === ["643", "804"].sort().join()
-    ) as GeoJSON.MultiLineString;
+    );
     const key = (p: number[]) => `${p[0].toFixed(4)},${p[1].toFixed(4)}`;
     const seamPoints = new Set(seams.coordinates.flat().map(key));
     const outlinePoints = new Set(outline.coordinates.flat().map(key));

@@ -102,12 +102,6 @@ export type EraConfig = {
   broadcast?: BroadcastLanderConfig;
   /** Globe rotation at first paint, `[-lon, -lat, 0]`. Defaults to the Mediterranean. */
   initialRotation?: [number, number, number];
-  /**
-   * Where the hero's "explore the world" pill points. An era with its own
-   * public microsite links out to it; without one the pill opens the in-game
-   * world map rather than another era's site.
-   */
-  worldReportUrl?: string;
 };
 
 /**
@@ -338,7 +332,6 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
     accessMap: accessFor("1953-default", NATIONS_1953),
     nations: nationsFor("1953-default", NATIONS_1953),
-    worldReportUrl: "https://ops.ahousedividedgame.com/p/1953",
   },
 
   "1979": {

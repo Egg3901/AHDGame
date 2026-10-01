@@ -16,7 +16,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { cdnStatic, CDN_WORLD_GEO_URL } from "@/lib/images/cdnUrls";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -123,9 +123,6 @@ const ANDROID_BETA_APK_URL = "https://ops.lakesidegames.net/downloads/a-house-di
 /** Opening view for an era that does not choose its own: the Mediterranean. */
 const DEFAULT_GLOBE_ROTATION: [number, number, number] = [-12, -38, 0];
 
-const PROMO_PILL_CLASSES =
-  "pointer-events-auto mt-5 flex w-full max-w-lg items-center gap-2.5 rounded-full border border-card-border bg-card/70 py-1.5 pl-1.5 pr-3.5 text-body-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:border-primary/50 hover:bg-card";
-
 function links(isSignedIn: boolean) {
   return {
     primary: isSignedIn ? "/dashboard" : "/register",
@@ -190,25 +187,6 @@ function LandingNavLink({
   return (
     <Link href={href} className={className}>
       {label}
-    </Link>
-  );
-}
-
-/**
- * The hero's world-report pill. An era with its own microsite opens it in a new
- * tab; without one the pill stays on site and opens the world map.
- */
-function PromoPill({ href, children }: { href?: string; children: ReactNode }) {
-  if (href) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className={PROMO_PILL_CLASSES}>
-        {children}
-      </a>
-    );
-  }
-  return (
-    <Link href="/world" className={PROMO_PILL_CLASSES}>
-      {children}
     </Link>
   );
 }
@@ -416,9 +394,6 @@ export function SandboxHome({
   const wireframeColor = eraConfig.wireframeColor ?? undefined;
   // The 1991 satellite-feed hero. Exclusive with the CRT look: no era sets both.
   const broadcast = eraConfig.broadcast;
-  // An era with its own public microsite links out to it; any other era opens
-  // the world map instead of advertising somebody else's year.
-  const worldReportUrl = eraConfig.worldReportUrl;
   // Sphere / conflict / crisis theatres for this era, mirroring the world
   // entity manifest. Stable module-level array, so the globe memoises on it.
   const battlegroundFeatureIds = battlegroundFeatureIdsForEra(eraConfig.id);
@@ -583,19 +558,6 @@ export function SandboxHome({
                 {t("landing.explore")}
               </Link>
             </div>
-            {/* Full-width pill under the actions: a link out to the era's world
-                report, not a fourth call to action. */}
-            <PromoPill href={worldReportUrl}>
-              <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-white">
-                {t("landing.newBadge")}
-              </span>
-              <span className="text-muted">
-                {t("landing.promoPill", { version: world.version, year: String(world.seedYear) })}
-              </span>
-              <span aria-hidden="true" className="ml-auto text-primary">
-                →
-              </span>
-            </PromoPill>
           </div>
         </div>
 

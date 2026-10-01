@@ -16,7 +16,7 @@ areas: [frontend]
 - Mir and three communications satellites orbit the globe. Every few seconds one of them beams down to a place from the year's news and labels it with the date.
 - A crawl along the foot of the first screen runs fourteen headlines from 1991, from the first night of Desert Storm to the Soviet flag coming down over the Kremlin.
 - Japan gets a player-count chip on the landing globe.
-- In an era without a public world report, the promo pill opens the world map.
+- The version pill under the hero buttons is gone. Its link pointed at a world report that is no longer published.
 - Admins can preview any seed's landing page from the homepage preview before a reset puts it live.
 - The login page quotes and two historical crisis descriptions no longer use dashes.
 - With reduced motion on, the crawl stops and can be scrolled, and the satellites hold still.
