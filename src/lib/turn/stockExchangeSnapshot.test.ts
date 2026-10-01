@@ -633,6 +633,54 @@ describe("stockExchangeSnapshot", () => {
       }
     });
 
+    it("uses recorded splits instead of interpreting issuance as a split", async () => {
+      const id = new ObjectId();
+      const defaults = mockCollection.getMockImplementation()!;
+      const corp = createCorporation({
+        _id: id,
+        name: "Split Co",
+        sharePrice: 50,
+        totalShares: 200,
+        publicFloat: 100,
+        ceoId: undefined,
+        ceoVacant: true,
+      });
+      mockCollection.mockImplementation((name: string) => {
+        if (name === "corporations") return createMockChain([corp]);
+        if (name === "corporationHistory")
+          return createMockChain([
+            {
+              _id: id,
+              h1: {
+                turn: 99,
+                sharePrice: 100,
+                totalShares: 100,
+                createdAt: new Date(99 * 3600_000),
+              },
+              h24: { turn: 76, sharePrice: 100, totalShares: 100 },
+              h48: { turn: 52, sharePrice: 100, totalShares: 100 },
+            },
+          ]);
+        if (name === "shareTradeHistory")
+          return createMockChain([
+            {
+              corporationId: id,
+              turn: 100,
+              createdAt: new Date(100 * 3600_000),
+              structureChange: { oldTotalShares: 100, newTotalShares: 200 },
+            },
+          ]);
+        return defaults(name);
+      });
+      vi.mocked(getPublicShareQuote).mockImplementation((row: any) => row.sharePrice ?? 100);
+      await generateStockExchangeSnapshots(100, mockDb);
+      const listing = mockUpdateOne.mock.calls.find((call) => call[0]?._id === "global")![1].$set
+        .listings[0];
+      expect(listing.priceChange1h).toBe(0);
+      expect(listing.priceChange24h).toBe(0);
+      expect(listing.priceChange48h).toBe(0);
+    });
+
     it("persists finite price changes and tradability for a mixed snapshot", async () => {
       const pubId = new ObjectId();
       const soeId = new ObjectId();
@@ -724,6 +772,8 @@ describe("stockExchangeSnapshot", () => {
       }
       expect(byName.get("Pub Co")?.isTradable).toBe(true);
       expect(byName.get("Pub Co")?.priceChange1h).toBe(11.11);
+      // Doubling issued shares without a recorded split is not a 300% gain.
+      expect(byName.get("Pub Co")?.priceChange48h).toBe(100);
       expect(byName.get("Zero SoE")?.isTradable).toBe(false);
       expect(byName.get("Zero SoE")?.priceChange1h).toBe(0);
       expect(byName.get("Zero SoE")?.priceChange24h).toBe(0);
