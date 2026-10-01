@@ -230,6 +230,7 @@ export const SUB_TABS_BY_TAB: Record<MainTabId, readonly SubTabConfig[]> = {
     { id: "debug", label: "Debug" },
     { id: "migrations", label: "Migrations" },
     { id: "mail-reports", label: "Mail Reports" },
+    { id: "player-reports", label: "Player Reports" },
     { id: "poll-banner", label: "Poll Banner" },
   ],
   system: [
@@ -310,7 +311,7 @@ export const SUB_GROUPS_BY_TAB: Partial<Record<MainTabId, readonly SubNavGroup[]
     { label: "API", ids: ["api-keys", "api-abuse"] },
   ],
   support: [
-    { label: "Queues", ids: ["suggestions", "mail-reports", "feedback"] },
+    { label: "Queues", ids: ["suggestions", "mail-reports", "player-reports", "feedback"] },
     { label: "Ops", ids: ["poll-banner", "logs", "debug", "migrations"] },
   ],
   system: [

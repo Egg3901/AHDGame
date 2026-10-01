@@ -56,6 +56,29 @@ describe("resetGameWorld", () => {
     db = createMockDb();
   });
 
+  it("preserves account join dates while retiring profiles for a new iteration", async () => {
+    db.collection("characters");
+    db.collectionMocks.characters.find.mockReturnValue({ toArray: async () => [] });
+    await resetGameWorld(db as never, {
+      deleteProfiles: false,
+      seedHistorical: false,
+      preset: "1991-default",
+    });
+
+    const users = db.collectionMocks.users;
+    expect(users.deleteMany).not.toHaveBeenCalled();
+    expect(users.replaceOne).not.toHaveBeenCalled();
+    for (const [, update] of users.updateMany.mock.calls) {
+      expect(update.$set ?? {}).not.toHaveProperty("createdAt");
+      expect(update.$unset ?? {}).not.toHaveProperty("createdAt");
+    }
+    // The surviving history boundary must also stay fixed across resets.
+    for (const [, update] of db.collectionMocks.gameState.updateOne.mock.calls) {
+      expect(update.$set ?? {}).not.toHaveProperty("createdAt");
+      expect(update.$unset ?? {}).not.toHaveProperty("createdAt");
+    }
+  });
+
   it.each(["none", "default"] as const)(
     "overwrites the previous starting-party mode with %s",
     async (startingParties) => {

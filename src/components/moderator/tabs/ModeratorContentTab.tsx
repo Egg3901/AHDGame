@@ -38,6 +38,14 @@ const MailReportsTab = dynamic(
   { ssr: false }
 );
 
+const PlayerReportsTab = dynamic(
+  () =>
+    import("@/components/admin/content/PlayerReportsTab").then((m) => ({
+      default: m.PlayerReportsTab,
+    })),
+  { ssr: false }
+);
+
 const CONTENT_SUB_TABS: { id: ModContentSubTab; label: string }[] = [
   { id: "news", label: "News Posts" },
   { id: "banner-ads", label: "Banner Ads" },
@@ -45,6 +53,7 @@ const CONTENT_SUB_TABS: { id: ModContentSubTab; label: string }[] = [
   { id: "wiki-review", label: "Wiki Review" },
   { id: "supporter-requests", label: "Supporter Requests" },
   { id: "mail-reports", label: "Mail Reports" },
+  { id: "player-reports", label: "Player Reports" },
 ];
 
 interface ModeratorContentTabProps {
@@ -59,8 +68,8 @@ export function ModeratorContentTab({ activeSub, onSubChange }: ModeratorContent
         <h2 className="text-base font-semibold">Content Moderation</h2>
         <p className="mt-1 text-sm text-muted">
           Review player-authored news posts and banner ads, manage wiki pages, review wiki
-          submissions, and investigate reported player mail. System wire posts and wiki seed/access
-          controls remain admin-only.
+          submissions, and investigate reported player mail and profiles. System wire posts and wiki
+          seed/access controls remain admin-only.
         </p>
       </div>
 
@@ -74,6 +83,7 @@ export function ModeratorContentTab({ activeSub, onSubChange }: ModeratorContent
       {activeSub === "mail-reports" && (
         <MailReportsTab backHref="/moderator?tab=content&sub=mail-reports" />
       )}
+      {activeSub === "player-reports" && <PlayerReportsTab />}
     </div>
   );
 }
