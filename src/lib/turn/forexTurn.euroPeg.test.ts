@@ -202,14 +202,16 @@ describe("euro follower live peg", () => {
     expect(it).not.toHaveProperty("currencyCode");
   });
 
-  it("adds zero DB round trips: no gameState read, one pre-fetch per collection", async () => {
+  it("loads monetary policy once and batches country rate reads", async () => {
     mockEuroBanksAndRates();
     await processForexTurn(db as unknown as Db, 50, "2027-default");
 
-    expect(db.collectionMocks.gameState).toBeUndefined();
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledTimes(1);
+    // The unhydrated 2027 compatibility path reloads its one common quote.
+    expect(db.collectionMocks.exchangeRates.findOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks.centralBanks.find).toHaveBeenCalledTimes(1);
-    // Pre-existing reads only: the turn-open pre-fetch plus the limit-order
-    // phase's rate reload. The peg adds neither.
+    // Country rows stay batched: the turn-open pre-fetch plus the limit-order
+    // phase's rate reload, independently of the number of followers.
     expect(db.collectionMocks.exchangeRates.find).toHaveBeenCalledTimes(2);
     // One writeback per processed country, nothing else.
     expect(db.collectionMocks.exchangeRates.updateOne).toHaveBeenCalledTimes(3);
