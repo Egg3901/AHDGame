@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ObjectId } from "mongodb";
 
 const state = vi.hoisted(() => ({ captureServerGameEvent: vi.fn().mockResolvedValue(undefined) }));
 
@@ -41,6 +42,41 @@ describe("server game analytics", () => {
           player_candidate_count: 3,
           turnout_pct: "unknown",
           seats_available: 2,
+        }),
+      })
+    );
+  });
+
+  it.each([
+    ["president", "CA", "national"],
+    ["house", "US", "national"],
+    ["house", "CA", "regional"],
+  ] as const)("formats %s primary scope %s as %s", async (electionType, region, scope) => {
+    const { capturePrimaryOutcome } = await import("./electionAnalytics");
+    await capturePrimaryOutcome(
+      {} as never,
+      {
+        _id: new ObjectId("0123456789abcdef01234567"),
+        electionType,
+        state: region,
+        countryId: "US",
+      },
+      [{ isNPP: true }, { isNPP: false }, {}],
+      { a: [{ won: true }, { won: false }], b: [{ won: true }] },
+      12
+    );
+    expect(state.captureServerGameEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turn: 12,
+        nationId: "US",
+        insertId: "election-resolved:0123456789abcdef01234567:primary",
+        properties: expect.objectContaining({
+          phase: "primary",
+          scope,
+          candidate_count: 3,
+          player_candidate_count: 2,
+          seats_available: 2,
+          turnout_pct: "unknown",
         }),
       })
     );

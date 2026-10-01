@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import type { GameIteration } from "@/lib/db/types/gameState";
+import type { Election, ElectionCandidate, PrimaryResultEntry } from "@/lib/db/types";
 import { captureServerGameEvent } from "./serverPosthog";
 
 const ELECTION_TYPES = new Set([
@@ -91,6 +92,34 @@ export async function captureElectionResolved(input: {
       turnout_pct: input.turnoutPct === "unknown" ? "unknown" : percentage(input.turnoutPct),
       seats_available: Math.max(0, Math.trunc(input.seatsAvailable)),
     },
+  });
+}
+
+/** Format a committed primary result without expanding the election resolver. */
+export async function capturePrimaryOutcome(
+  db: Db,
+  election: Pick<Election, "_id" | "electionType" | "state" | "countryId">,
+  candidates: readonly Pick<ElectionCandidate, "isNPP">[],
+  resultsByParty: Record<string, readonly Pick<PrimaryResultEntry, "won">[]>,
+  turn: number
+): Promise<void> {
+  await captureElectionResolved({
+    db,
+    electionId: election._id.toString(),
+    electionType: election.electionType,
+    phase: "primary",
+    scope:
+      election.electionType === "president" || election.state === election.countryId
+        ? "national"
+        : "regional",
+    candidateCount: candidates.length,
+    playerCandidateCount: candidates.filter((candidate) => !candidate.isNPP).length,
+    turnoutPct: "unknown",
+    seatsAvailable: Object.values(resultsByParty)
+      .flat()
+      .filter((candidate) => candidate.won).length,
+    nationId: election.countryId ?? "US",
+    turn,
   });
 }
 

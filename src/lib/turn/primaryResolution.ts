@@ -116,7 +116,7 @@ import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOp
 import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLifecycle";
 import { getStandingPlatformsForCountry } from "@/lib/uk/conference/conferenceCommands";
 import { hydrateVoteTurnMemo } from "@/lib/turn/voteAccumulationPreload";
-import { captureElectionResolved } from "@/lib/analytics/electionAnalytics";
+import { capturePrimaryOutcome } from "@/lib/analytics/electionAnalytics";
 
 /**
  * Optional restriction of a turn sweep to specific elections. Absent (the
@@ -774,25 +774,7 @@ export async function resolvePrimariesIfNeeded(
       );
     }
 
-    const primarySeatsAvailable = Object.values(primaryResultsByParty)
-      .flat()
-      .filter((candidate) => candidate.won).length;
-    await captureElectionResolved({
-      db,
-      electionId: electionId.toString(),
-      electionType: election.electionType,
-      phase: "primary",
-      scope:
-        election.electionType === "president" || election.state === election.countryId
-          ? "national"
-          : "regional",
-      candidateCount: candidates.length,
-      playerCandidateCount: candidates.filter((candidate) => !candidate.isNPP).length,
-      turnoutPct: "unknown",
-      seatsAvailable: primarySeatsAvailable,
-      nationId: election.countryId ?? "US",
-      turn: currentTurn,
-    });
+    await capturePrimaryOutcome(db, election, candidates, primaryResultsByParty, currentTurn);
   }
 
   if (totalEliminated > 0)
