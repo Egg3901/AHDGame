@@ -15,6 +15,7 @@
  * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId } from "mongodb";
 import type { ClientSession, Db, UpdateFilter } from "mongodb";
 import type {
@@ -1427,7 +1428,10 @@ export async function runIndexFundCron(
   const timingOn = process.env.SIM_CORP_TIMING === "1";
   const passTimings: Array<[string, number]> = [];
   let _tPrev = timingOn ? Date.now() : 0;
+  // Always feeds the persisted phase sub-steps (#2689).
+  const steps = substepMarker();
   const mark = (label: string): void => {
+    steps.mark(label);
     if (!timingOn) return;
     const nowMs = Date.now();
     passTimings.push([label, nowMs - _tPrev]);

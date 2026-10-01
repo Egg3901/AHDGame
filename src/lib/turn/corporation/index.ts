@@ -822,6 +822,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // same fund cash/positions, so serializing within a fund preserves exact
   // ordering + per-corporation tx-log granularity, while the ~32 independent
   // funds overlap. Per-corp dividend attribution is unchanged.
+  mark("rdInnovations");
   if (fundDividendAccruals.length > 0) {
     const { isIndexFundsEnabled } = await import("@/lib/indexFunds/featureFlag");
     if (await isIndexFundsEnabled()) {
@@ -920,7 +921,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     }
   }
 
-  mark("rd+fundDividends");
+  mark("fundDividends");
   // Phase 3c: Credit dividends to corporate shareholders, see
   // creditCorpDividends (FX spread skim, 50% dividend-received deduction tax,
   // corp_dividend ledger rows, same-turn corporationHistory tax record).
@@ -1327,12 +1328,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // Await the resolver so vote effects are part of the completed corporation turn.
     await processVoteAutoResolve(db, turn, forexEnabled);
     void processVoteReminders(db, turn);
+    mark("voteAutoResolve");
     // Resolve nationalizations whose notice window has elapsed (spec §14): cure-cancel
     // or complete the taking. Awaited so its effects land within this corp turn.
     await processPendingNationalizations(db, turn);
     // Resolve privatization auctions whose bid window has closed (spec §13.3):
     // sell to the top bidder or re-absorb the unsold carve-out.
     await processNationalizationAuctions(db, turn);
+    mark("nationalizations");
 
     // Financial-distress clock for the executive-nationalization grace window.
     // Runs last, after pending takings may have removed seized corps and all
@@ -1343,6 +1346,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     } catch (err) {
       logger.error("corporationTurn", "financial-distress tracking failed", err);
     }
+    mark("financialDistress");
 
     // Subsidiary corporations (feature-gated, dynamic import to avoid circular
     // deps): clear the formalization marker + dividend-floor fields on any corp
@@ -1375,6 +1379,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // divestiture order. Runs after subsidiary cleanup so the controlled-group
     // measurement reads settled ownership. Best-effort: a hiccup must not fail
     // the turn.
+    mark("subsidiaryCleanup");
     try {
       const { resolveDueMergerReviews, fineOverdueDivestitures } =
         await import("@/lib/corporations/mergerReview/lifecycle");
@@ -1403,6 +1408,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // negative liquidCapital forever. Wind down the terminally-insolvent ones
     // (see nppInsolvencyDissolution.ts). Runs after distress tracking so it
     // reads the same post-turn cash. Best-effort.
+    mark("mergerReview");
     try {
       const { processNppInsolventCorpDissolution } =
         await import("@/lib/turn/corporation/nppInsolvencyDissolution");
@@ -1416,7 +1422,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       logger.error("corporationTurn", "NPP insolvency dissolution failed", err);
     }
   }
-  mark("votes+nationalizations+distress");
+  mark("nppInsolvencyDissolution");
 
   // One bulk write for the whole turn's aggregate corp-audit entries, never
   // per-corp (perf guard, see comment above `corpAuditEntries`).

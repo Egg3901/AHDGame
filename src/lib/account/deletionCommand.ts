@@ -342,6 +342,7 @@ export async function reserveDeletion(
     password: s.password ?? null,
     ...(s.googleId === undefined ? { googleId: { $exists: false } } : { googleId: s.googleId }),
     ...(s.discordId === undefined ? { discordId: { $exists: false } } : { discordId: s.discordId }),
+    ...(s.appleId === undefined ? { appleId: { $exists: false } } : { appleId: s.appleId }),
     role: s.role,
     ...(s.isAdmin === undefined ? { isAdmin: { $exists: false } } : { isAdmin: s.isAdmin }),
     isBanned: { $ne: true },

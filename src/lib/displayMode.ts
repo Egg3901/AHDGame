@@ -20,6 +20,15 @@ export function isClientShellUserAgent(userAgent: string): boolean {
   return userAgent.includes("AHDClient-Mobile/") || userAgent.includes("AHDClient-Desktop/");
 }
 
+/**
+ * The AHDClient phone app (App Store and Play builds). Store rules forbid
+ * linking out to buy digital perks, so the root layout marks the document and
+ * `.store-purchase-cta` elements are hidden by CSS. Desktop keeps them.
+ */
+export function isStoreAppUserAgent(userAgent: string): boolean {
+  return userAgent.includes("AHDClient-Mobile/");
+}
+
 /** Any in-app webview: no ads, no consent prompts, no cookie banner. */
 export function isInAppWebViewUserAgent(userAgent: string): boolean {
   return isNativeAppUserAgent(userAgent) || isClientShellUserAgent(userAgent);

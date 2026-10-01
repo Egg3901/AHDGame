@@ -21,8 +21,8 @@ export function ElectionInfoBox({ election, totalVotes }: ElectionInfoBoxProps) 
           <dd className="text-foreground font-medium">{formatDate(election.endTime)}</dd>
         </div>
         <div className="flex justify-between items-baseline">
-          <dt className="font-semibold text-muted">Cycle</dt>
-          <dd className="text-foreground font-medium">{election.cycle}</dd>
+          <dt className="font-semibold text-muted">Year</dt>
+          <dd className="text-foreground font-medium">{election.year}</dd>
         </div>
         <div className="flex justify-between items-baseline">
           <dt className="font-semibold text-muted">Type</dt>

@@ -200,7 +200,7 @@ export function HelpDropdown({
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setIsOpen(false)}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+              className="store-purchase-cta flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
             >
               <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M14.82 2.41C11.55 2.41 8.9 5.07 8.9 8.34c0 3.26 2.65 5.9 5.92 5.9 3.26 0 5.9-2.64 5.9-5.9 0-3.27-2.64-5.93-5.9-5.93zM3.18 21.6h3.28V2.41H3.18V21.6z" />
@@ -213,7 +213,7 @@ export function HelpDropdown({
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setIsOpen(false)}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
+              className="store-purchase-cta flex items-center gap-2 px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-background/60"
             >
               <svg
                 className="h-4 w-4 text-muted"

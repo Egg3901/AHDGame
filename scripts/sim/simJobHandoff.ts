@@ -23,6 +23,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Explicit priority never changes the creation timestamp or claim window.
+export const SIM_JOB_CLAIM_SORT = { queuePriority: -1, createdAt: 1 } as const;
+
 export const STALE_LEASE_RECOVERY_ERROR = "stale worker lease recovered";
 export const LEGACY_ORPHAN_RECOVERY_ERROR = "orphaned legacy claim recovered";
 
@@ -68,7 +71,7 @@ export interface ClaimUpdate {
 }
 
 export interface HandoffStore {
-  /** Atomic find-one-and-claim of the oldest admissible queued job. */
+  /** Atomic claim of the highest-priority admissible job, oldest first on ties. */
   claimOne(filter: ClaimFilter, update: ClaimUpdate): Promise<HandoffJob | null>;
   /** Requeue leased `running` rows whose heartbeat predates the cutoff. */
   requeueStaleLeases(staleBefore: Date, error: string, now: Date): Promise<number>;

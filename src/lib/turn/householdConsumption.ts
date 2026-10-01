@@ -1,4 +1,5 @@
 import {
+  calibrationMultiplier,
   eraScaledBasePrices,
   demographicWealthMultiplier,
   type CommodityType,
@@ -224,6 +225,13 @@ export interface HouseholdConsumptionInput {
    * the map (never priced) is left unclamped.
    */
   priorGlobalSupply?: Map<CommodityType, number>;
+  /**
+   * The era demand calibration the caller applies after every demand leg
+   * (`commodityDemandCalibration`). The supply clamp bounds CALIBRATED demand,
+   * so it divides the cap by this; see `computeRawSupplyDemand`'s parameter of
+   * the same name for why the two corrections must not stack. Absent means 1.
+   */
+  demandCalibration?: (commodity: CommodityType) => number;
 }
 
 export interface HouseholdConsumptionResult {
@@ -276,6 +284,7 @@ export function computeHouseholdConsumption(
     eraUnitScale = 1,
     plantsUnitScale = 1,
     priorGlobalSupply,
+    demandCalibration,
   } = input;
   const basePrices = eraScaledBasePrices(eraUnitScale);
   const unitScale = plantsUnitScale > 0 ? plantsUnitScale : 1;
@@ -355,10 +364,13 @@ export function computeHouseholdConsumption(
     for (const [commodity, total] of global) {
       const supply = priorGlobalSupply.get(commodity);
       if (!(typeof supply === "number" && supply > 0)) continue;
-      const cap = supply * PLANTS_HOUSEHOLD_SUPPLY_CAP;
+      // Bounds calibrated demand: divide by the calibration the caller applies
+      // later, and record the truncation in those same calibrated units.
+      const calibration = calibrationMultiplier(demandCalibration, commodity);
+      const cap = (supply * PLANTS_HOUSEHOLD_SUPPLY_CAP) / calibration;
       if (total <= cap) continue;
       const factor = cap / total;
-      truncated.set(commodity, total - cap);
+      truncated.set(commodity, (total - cap) * calibration);
       global.set(commodity, cap);
       for (const contrib of byState.values()) {
         const v = contrib.get(commodity);

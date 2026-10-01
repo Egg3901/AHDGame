@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PATREON_BORDER_OPTIONS, PATREON_HIGHLIGHT_COLORS } from "@/lib/db/types";
 import type {
   PatreonBorderOption,
@@ -67,7 +67,7 @@ function FrostedOverlay({
   description,
   buttonLabel = "Subscribe on Patreon",
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   buttonLabel?: string;
 }) {
@@ -80,7 +80,7 @@ function FrostedOverlay({
           href={PATREON_SUBSCRIBE_URL}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 inline-flex items-center justify-center rounded-lg border border-primary/35 bg-primary/12 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/18"
+          className="store-purchase-cta mt-3 inline-flex items-center justify-center rounded-lg border border-primary/35 bg-primary/12 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/18"
         >
           {buttonLabel}
         </Link>
@@ -235,7 +235,12 @@ export function PatreonBenefitsSection() {
         }
       : accessLevel === "guest"
         ? {
-            title: "Subscribe to unlock this",
+            title: (
+              <>
+                <span className="store-purchase-cta">Subscribe to unlock this</span>
+                <span className="store-app-only">Supporter feature</span>
+              </>
+            ),
             description: "Supporter unlocks ad settings, tint color, and static borders.",
           }
         : null;
@@ -243,7 +248,7 @@ export function PatreonBenefitsSection() {
   return (
     <div className="space-y-6">
       {(accessLevel === "guest" || accessLevel === "signed-out") && (
-        <div className={`${SURFACE_CLASS} p-5 md:p-6`}>
+        <div className={`store-purchase-cta ${SURFACE_CLASS} p-5 md:p-6`}>
           <div className="mb-4">
             <h5 className="text-lg font-semibold text-foreground">Membership Tiers</h5>
             <p className="mt-1 text-sm text-muted">
@@ -306,7 +311,7 @@ export function PatreonBenefitsSection() {
             href={manageUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/16"
+            className="store-purchase-cta inline-flex items-center justify-center rounded-xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/16"
           >
             {manageLabel}
           </Link>

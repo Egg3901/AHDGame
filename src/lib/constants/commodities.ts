@@ -1287,6 +1287,19 @@ export const COMMODITY_AGGREGATE_INPUT_CAP = 30;
 export const PLANTS_LEDGER_DEMAND_SUPPLY_CAP = 1.5;
 
 /**
+ * A caller's era demand calibration for one commodity, guarded so a missing,
+ * zero or non-finite value reads as 1 (no calibration). The supply caps divide
+ * by this, so it must never be 0.
+ */
+export function calibrationMultiplier(
+  demandCalibration: ((commodity: CommodityType) => number) | undefined,
+  commodity: CommodityType
+): number {
+  const m = demandCalibration?.(commodity);
+  return typeof m === "number" && Number.isFinite(m) && m > 0 ? m : 1;
+}
+
+/**
  * Aggregate ceiling on the blended output surplus modifier (percentage points).
  * Prevents diversified extraction from earning +40 net commodity margin simply
  * by selling into every scarce market at once. Focused strategies remain
@@ -2103,7 +2116,19 @@ export function computeRawSupplyDemand(
    * ledger and the book on literally the same table. Defaults to the modern
    * table, which is weight-identical, so every existing caller is unchanged.
    */
-  ledgerBasePrices: Record<CommodityType, number> = COMMODITY_BASE_PRICES
+  ledgerBasePrices: Record<CommodityType, number> = COMMODITY_BASE_PRICES,
+  /**
+   * Era demand calibration the caller applies to the finished demand ledger
+   * (`commodityDemandCalibration`), per commodity. The 1.5x cap below must
+   * bound the CALIBRATED demand, so it is divided by this multiplier here.
+   *
+   * Without it the two corrections stack: the cap pins raw demand at 1.5x
+   * supply and the calibration then multiplies that pinned figure, so a
+   * commodity calibrated below 2/3 (1953 energy and oil 0.55, iron 0.45) reads
+   * a permanent glut of 1/(1.5 x m) no matter how short it really is, and its
+   * producers can never sell out. Absent means 1 for every commodity.
+   */
+  demandCalibration?: (commodity: CommodityType) => number
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2554,13 +2579,18 @@ export function computeRawSupplyDemand(
   // commodity below the pressure it already had before this change.
   if (demandUnscaled) {
     for (const [commodity, bal] of global) {
-      const cap = bal.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP;
+      // The cap bounds demand AFTER the caller's era calibration, so a capped
+      // commodity reads exactly 1.5x supply once calibrated, like every
+      // uncalibrated one. Truncation is recorded in the same calibrated units
+      // as the demand it is read beside.
+      const calibration = calibrationMultiplier(demandCalibration, commodity);
+      const cap = (bal.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP) / calibration;
       if (bal.demand <= cap) continue;
       const unscaled = getCommodityStabilizer(commodity) + (demandUnscaled.get(commodity) ?? 0);
       const target = Math.max(unscaled, cap);
       if (target >= bal.demand) continue;
       const factor = target / bal.demand;
-      demandTruncated.set(commodity, bal.demand - target);
+      demandTruncated.set(commodity, (bal.demand - target) * calibration);
       bal.demand = target;
       for (const stateMap of byState.values()) {
         const s = stateMap.get(commodity);

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { bulkOps, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { frRegions1991 } from "@/lib/countries/fr/data/frRegions1991";
+import { esRegions1991 } from "@/lib/countries/es/data/esRegions1991";
 import { seedCohortVectors } from "./seedCohortVectors";
 
 function withStatesAndMetrics(db: MockDb, states: unknown[], metrics: unknown[]) {
@@ -22,6 +24,22 @@ describe("seedCohortVectors", () => {
     vi.clearAllMocks();
     db = createMockDb();
   });
+
+  it.each([
+    ["FR", frRegions1991],
+    ["ES", esRegions1991],
+  ] as const)(
+    "seeds all eight %s1991 regions without missing age profiles",
+    async (_country, regions) => {
+      withStatesAndMetrics(db, regions, []);
+      const stats = await seedCohortVectors(db as unknown as Db, "1991-default", () => {});
+      expect(stats.covered).toBe(8);
+      expect(stats.skipped).toEqual([]);
+      expect(stats.totalTargetPop).toBe(regions.reduce((sum, row) => sum + row.population, 0));
+      expect(Math.abs(stats.totalPeople - stats.totalTargetPop)).toBeLessThanOrEqual(8 * 101);
+      expect(bulkOps(db.collectionMocks.regionDemographics!.bulkWrite)).toHaveLength(8);
+    }
+  );
 
   it("builds a 101-bin age/sex vector and stamps derived population metrics", async () => {
     withStatesAndMetrics(

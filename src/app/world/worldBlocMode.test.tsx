@@ -8,7 +8,8 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import MapSVGContent, { BACKGROUND_LAYER_KEY } from "./components/MapSVGContent";
-import { render } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
+import { vi } from "vitest";
 import { buildTierLookup, isTierInteractive, TIER_COLORS } from "@/components/landing/countryTiers";
 import { getWorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 import { WORLD_COUNTRY_ISO_TO_ID } from "@/lib/worldCountryRegistry";
@@ -207,5 +208,39 @@ describe("bloc mode draws an alliance at its real size", () => {
     expect(pathRefsMap.current.has(BACKGROUND_LAYER_KEY)).toBe(true);
     expect(pathRefsMap.current.has(backgroundNonMember!)).toBe(false);
     expect(canada(paths)).toBeTruthy();
+  });
+});
+
+describe("world background macro inspection paths", () => {
+  it("draws seeded background separately and supports hover, click and keyboard inspection", () => {
+    const onCountryClick = vi.fn();
+    const onHover = vi.fn();
+    const { svg, pathRefsMap } = renderMap({
+      inspectableFeatureIds: new Set(["124"]),
+      worldEntities: SNAPSHOT,
+      onCountryClick,
+      onHover,
+    });
+    const canada = pathRefsMap.current.get("124");
+    expect(canada).toBeTruthy();
+    expect(canada?.getAttribute("role")).toBe("button");
+    expect(canada?.getAttribute("aria-label")).toBe("Inspect Canada background macro");
+    fireEvent.mouseEnter(canada!);
+    expect(onHover).toHaveBeenCalledWith("124");
+    fireEvent.click(canada!);
+    fireEvent.keyDown(canada!, { key: "Enter" });
+    expect(onCountryClick).toHaveBeenCalledTimes(2);
+    expect(onCountryClick).toHaveBeenCalledWith("124");
+    const merged = pathRefsMap.current.get(BACKGROUND_LAYER_KEY);
+    expect(merged).toBeTruthy();
+    expect(svg.querySelectorAll('[role="button"]')).toHaveLength(1);
+  });
+
+  it("keeps unseeded background inert and existing full-country clicks usable", () => {
+    const onCountryClick = vi.fn();
+    const { pathRefsMap } = renderMap({ onCountryClick });
+    expect(pathRefsMap.current.has("124")).toBe(false);
+    fireEvent.click(pathRefsMap.current.get("840")!);
+    expect(onCountryClick).toHaveBeenCalledWith("840");
   });
 });

@@ -50,3 +50,30 @@ sharing a patch number. "1.4.38" was not a release, it was six unrelated pull
 requests that merged on the same afternoon. On 2026-09-06 those entries were
 folded into the ten releases that actually happened, ending at 1.6.0, and only
 `changelog:release` mints a version now.
+
+## Release review
+
+Before cutting, compare the previous release tag with the production source,
+not the author dates of commits. A branch written weeks ago can have reached
+production today. Match every production change to a release note or a named
+developer maintenance item; missing notes must be recovered from the source.
+Keep notes for work that has not reached production in `unreleased/`.
+
+Give balance changes their own prominent section. State the old and new values,
+the affected countries or rulesets, and whether the change affects existing
+worlds, newly created worlds or a gradual ramp. The developer fold preserves
+the full note body as well as its summary, so detailed rules survive when the
+source note is removed. Rewrite the public draft before publishing it.
+
+Describe the change and its expected impact in neutral, concrete terms. Use
+mechanics, values and scope instead of claims that a system is fairer, safer,
+better or more faithful. Explain relevant previous behaviour without judging
+it or celebrating its replacement. Distinguish expected effects from measured
+results.
+
+Keep existing version URLs. A small packaging fix can remain a real patch
+release, but describe the actual fix instead of a bare version bump. Correct
+older player posts where the original developer record already described a
+material change. Developer source references and `content/changelog/coverage.json`
+retain the production inventory; pending qualification belongs in developer
+notes and is excluded from player-facing shipped claims.

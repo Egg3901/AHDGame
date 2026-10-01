@@ -93,6 +93,13 @@ banner as `control` within the existing server feature gate. The
 `turn-complete-celebration` assigns and tags the existing turn completion event;
 its UI treatment remains with the existing turn UI. Related client events carry
 `variant`. Both flags default to `control` when assignment is unavailable.
+
+`profile-redesign` assigns the own-profile page (`/profile`): `control` is the
+current layout and `test` is the dossier layout. `profile_design_viewed` fires
+once per page view with the rendered `design` and the `variant` (`unassigned`
+when PostHog did not answer before the fallback). The last real assignment is
+cached in local storage so a returning `test` player does not see `control`
+first. Withdrawing consent clears that cache and returns the page to `control`.
 `ask-upsell-placement` and Ask LLM calls belong to
 the separate Ask application at `ask.lakesidegames.net`; this repository has
 only its inbound notification webhook.

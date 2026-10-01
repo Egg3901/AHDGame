@@ -3,6 +3,9 @@ import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-re
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-central-bank-pricing-phase-in";
+import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
+import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
+import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -20,6 +23,17 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   repairOrphanIndexFundState,
   providerIdentityIndexes,
   centralBankPricingPhaseIn,
+  // #2688: without these, every per-turn telemetry upsert scans its collection,
+  // a cost that grows each turn until the index exists.
+  longHorizonTelemetryIndexes,
+  // Sign in with Apple writes `appleId`; its unique index must exist before
+  // the first Apple login can race a duplicate account into existence.
+  appleProviderIdentityIndex,
+  // #2049 (player ticket 1368): the UK appoint path allows a departmental minister to take
+  // a central title, but the legacy one-seat-per-character unique index
+  // rejects that insert until this swap runs, so the DPM appointment failed
+  // with a spurious conflict error on worlds that never ran it.
+  ukDualMinistryRoleSlot,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

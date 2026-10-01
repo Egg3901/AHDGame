@@ -67,8 +67,21 @@ export interface ConflictSide {
  */
 export interface TreatyEntry {
   countryId: CountryId;
-  /** The alliance that bound it, e.g. "NATO" / "WARSAW_PACT". */
+  /** The alliance that bound it, e.g. "NATO" / "WARSAW_PACT", or a custom org id. */
   organizationId: string;
+  /**
+   * The alliance's display name when the entry was written. A custom organization's
+   * name lives in the database, not in the built-in constants, so a reader holding
+   * only the id could show nothing better than the id. Absent on entries written
+   * before this field; readers fall back to the built-in name, then the id.
+   */
+  organizationName?: string;
+  /**
+   * Why the alliance was binding: a standing charter, or a posture its members voted
+   * (Article 5). Absent on entries written before this field, all of which were
+   * charter entries or bloc conflict-entry resolutions.
+   */
+  basis?: "charter" | "posture";
   /** The member this country was pulled in to defend. */
   defending: CountryId;
   joinedTurn: number;

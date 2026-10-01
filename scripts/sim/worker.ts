@@ -34,6 +34,7 @@ import { MongoClient, type Db, type Collection, type Filter } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import {
   claimNextJob,
+  SIM_JOB_CLAIM_SORT,
   createHandoffController,
   findLiveEngineRunIdsFromCmdlines,
   listProcessCmdlines,
@@ -43,11 +44,12 @@ import {
   type HandoffStore,
 } from "./simJobHandoff";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
-import { assertSafeToken } from "./simJobArgs";
+import { assertSafeToken, buildRunWorldArgs } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
 import { buildStatusMirrorUpdate, type SandboxProgress } from "./simStatusMirror";
 import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
+import { activatePreparedSandbox, type PreparedSandbox } from "./preparedSandbox";
 import { planCollectorSpawns } from "./collectorSource";
 import {
   pickSovereignDemandExperimentFlags,
@@ -116,6 +118,8 @@ if (OPS_MONGODB_URI === SIM_MONGODB_URI && !ALLOW_SHARED_MONGO) {
 }
 
 interface SimJob {
+  preparedSandbox?: PreparedSandbox;
+  queuePriority?: number;
   _id: string;
   status: "queued" | "running" | "completed" | "failed";
   preset: string;
@@ -212,7 +216,7 @@ function mongoHandoffStore(jobsCol: Collection<SimJob>): HandoffStore {
           $set: update.set,
           $unset: { error: "" },
         },
-        { sort: { createdAt: 1 }, returnDocument: "after" }
+        { sort: SIM_JOB_CLAIM_SORT, returnDocument: "after" }
       );
       return (job ?? null) as unknown as HandoffJob | null;
     },
@@ -366,6 +370,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
   // spawn work. Read-only git checks only - the worker never fetches,
   // checks out, resets, or otherwise mutates the shared worktree.
   const verifiedSource = verifySimSource(job, defaultSimSourceDeps());
+  if (job.preparedSandbox && (!verifiedSource || job.cloneFromLive)) {
+    throw new Error("Prepared sandbox requires a source pin and forbids production cloning");
+  }
   if (verifiedSource) {
     await jobsCol.updateOne(
       { _id: job._id },
@@ -403,6 +410,24 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     // OPS_MONGODB_URI (it never should, but it especially shouldn't be handed
     // the production credential it has no use for).
     const runWorldEnv = { ...baseChildEnv(), SIM_MONGODB_URI: SIM_MONGODB_URI as string };
+    // Validate all arguments before the prepared copy is activated.
+    buildRunWorldArgs(job);
+    if (job.preparedSandbox) {
+      const client = await new MongoClient(SIM_MONGODB_URI as string).connect();
+      try {
+        const validation = await activatePreparedSandbox(
+          client.db(job.dbName),
+          job.preset,
+          job.preparedSandbox
+        );
+        await jobsCol.updateOne(
+          { _id: job._id },
+          { $set: { preparedSandboxValidation: validation, updatedAt: new Date() } }
+        );
+      } finally {
+        await client.close();
+      }
+    }
     if (job.cloneFromLive) {
       // Copy the live world's STATE into the sandbox db (history/log
       // collections excluded — see cloneWorld.ts). The clone step is the one

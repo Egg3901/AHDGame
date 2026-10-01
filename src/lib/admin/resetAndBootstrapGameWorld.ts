@@ -35,6 +35,11 @@
  * companion classification of which collections each phase touches.
  */
 
+import {
+  clearStartingPolitics,
+  resolveStartingPartiesMode,
+  type StartingPartiesMode,
+} from "./startingParties";
 import type { Db } from "mongodb";
 import { resetGameWorld, type ResetGameWorldResult } from "@/lib/admin/resetGameWorld";
 import { bootstrapGameWorld, type BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
@@ -45,12 +50,16 @@ import {
   closeResetRunLog,
   createResetRunRecord,
   openResetRunLog,
+  type ResetRunStatus,
 } from "@/lib/admin/resetRunRecord";
+import type { SeedDiagnosticCheck } from "@/lib/admin/seedDiagnostic/types";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
 
 export interface ResetAndBootstrapOptions {
+  /** 1991 only: leave political offices vacant for player-created parties. */
+  startingParties?: StartingPartiesMode;
   db: Db;
   /** "historical" populates real-world officials/NPPs; "vacant" leaves seats empty. */
   mode?: BootstrapMode;
@@ -107,7 +116,16 @@ export interface ResetAndBootstrapOptions {
   log?: (msg: string) => void;
 }
 
+export interface ResetSeedReadiness {
+  status: "healthy" | "blocked" | "not-checked";
+  criticalChecks: SeedDiagnosticCheck[];
+  baselineCaptured: boolean;
+  error?: string;
+}
+
 export interface ResetAndBootstrapResult {
+  status: ResetRunStatus;
+  readiness: ResetSeedReadiness;
   reset: ResetGameWorldResult;
   /** Bootstrap summary counts (undefined if seedOnly: true). */
   bootstrap: Awaited<ReturnType<typeof bootstrapGameWorld>> | undefined;
@@ -138,9 +156,10 @@ export async function resetAndBootstrapGameWorld(
   // cycle-0 races and `detectPreIterationComplete` (which needs at least one
   // RESOLVED founding race) could never end the phase, pinning the calendar to
   // the era start forever.
-  const foundingEligible = !seedOnly && mode === "historical";
+  const startingParties = resolveStartingPartiesMode(preset, options.startingParties);
+  const foundingEligible = startingParties !== "none" && !seedOnly && mode === "historical";
   const atPresetAnchor = isPresetAnchorDate(preset, options.startDate);
-  if (options.preIteration === true && !atPresetAnchor) {
+  if (startingParties !== "none" && options.preIteration === true && !atPresetAnchor) {
     throw new Error("The founding phase can only start at week 1 of an authored era anchor");
   }
   const preIteration =
@@ -154,6 +173,12 @@ export async function resetAndBootstrapGameWorld(
     log(msg);
   };
 
+  collect(`Starting parties: ${startingParties}`);
+  if (startingParties === "none") {
+    collect(
+      "Founding phase disabled: no starting parties; normal player elections advance the calendar."
+    );
+  }
   if (preIteration) {
     collect(
       `Pre-iteration founding phase ON for ${preset}${
@@ -205,6 +230,11 @@ export async function resetAndBootstrapGameWorld(
   const run = createResetRunRecord(collect);
   let phaseReached = "seal";
   let aborted = false;
+  const readiness: ResetSeedReadiness = {
+    status: "not-checked",
+    criticalChecks: [],
+    baselineCaptured: false,
+  };
   let finalized: Awaited<ReturnType<typeof finalizeResetGameWorld>> | null = null;
   const recordRunLog = options.recordRunLog !== false;
   if (recordRunLog) await openResetRunLog(db, run, { preset, mode, adminUsername });
@@ -231,6 +261,7 @@ export async function resetAndBootstrapGameWorld(
       iteration,
       startDate: options.startDate,
       preIteration,
+      startingParties,
       log: collect,
     });
     collect(reset.message);
@@ -245,6 +276,7 @@ export async function resetAndBootstrapGameWorld(
       resetReference,
       seedOnly,
       preIteration,
+      startingParties,
       log: collect,
       run,
     });
@@ -264,6 +296,7 @@ export async function resetAndBootstrapGameWorld(
     finalized = await run.step("finalize", "finalizeResetGameWorld", () =>
       finalizeResetGameWorld(db, {
         preset,
+        startingParties,
         teardown: reset.details,
         deleteProfiles,
         log: collect,
@@ -279,7 +312,7 @@ export async function resetAndBootstrapGameWorld(
     // 3) Reset-only path: seed historical officials *after* reference is re-seeded.
     //    On the bootstrap path, bootstrapGameWorld already seeded them internally.
     let postSeedOfficials: ResetAndBootstrapResult["postSeedOfficials"];
-    if (seedOnly) {
+    if (seedOnly && preset !== "2019-no-parties") {
       phaseReached = "officials";
       // CONTAINED: the reference data is already re-seeded by this point, so a
       // failure here degrades the run rather than discarding it.
@@ -293,6 +326,8 @@ export async function resetAndBootstrapGameWorld(
         );
       }
     }
+
+    if (startingParties === "none") await clearStartingPolitics(db, preset);
 
     // 4) Seal the freshly-reset world behind maintenance mode, then run the
     //    seed conformance diagnostic while sealed. Diagnostic failure must NEVER
@@ -314,12 +349,32 @@ export async function resetAndBootstrapGameWorld(
           preset,
         });
         collect(formatDiagnosticSummary(report));
+        readiness.criticalChecks = (report.checks ?? []).filter(
+          (check) => check.severity === "critical"
+        );
+        for (const check of readiness.criticalChecks) {
+          run.recordFailure(
+            "audit",
+            check.id,
+            `${check.scope}: ${check.metric}; expected ${check.expected}, actual ${check.actual}${check.note ? `; ${check.note}` : ""}`
+          );
+        }
+        if (report.summary.critical > 0 && readiness.criticalChecks.length === 0) {
+          run.recordFailure(
+            "audit",
+            "seedConformance",
+            `${report.summary.critical} critical seed checks`
+          );
+        }
+        if (run.status(false) !== "succeeded") readiness.status = "blocked";
         // A `partial` run means at least one seeder was contained, so the world is
         // knowingly incomplete. Capturing a baseline from it would make every
         // future drift check compare against a broken reference — the same reason a
         // critical finding skips capture.
         if (report.summary.critical === 0 && run.status(false) === "succeeded") {
           await captureSeedBaseline(db);
+          readiness.status = "healthy";
+          readiness.baselineCaptured = true;
           collect("Seed diagnostic baseline captured");
         } else if (run.status(false) !== "succeeded") {
           collect(
@@ -332,6 +387,9 @@ export async function resetAndBootstrapGameWorld(
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        readiness.status = "blocked";
+        readiness.error = message;
+        run.recordFailure("audit", "seedDiagnostic", err);
         collect(`Seed diagnostic failed: ${message}`);
         try {
           const { diagnosticErrorReport } = await import("@/lib/admin/seedDiagnostic");
@@ -349,7 +407,8 @@ export async function resetAndBootstrapGameWorld(
     }
 
     phaseReached = "complete";
-    return { reset, bootstrap, postSeedOfficials, logs };
+    if (run.status(false) !== "succeeded") readiness.status = "blocked";
+    return { reset, bootstrap, postSeedOfficials, logs, status: run.status(false), readiness };
   } catch (error) {
     aborted = true;
     collect(

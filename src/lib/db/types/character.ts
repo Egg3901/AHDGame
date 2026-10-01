@@ -292,6 +292,7 @@ export interface Character {
   lastPollLarge?: StoredPoll;
   highlightedAchievementIds?: ObjectId[];
   campaignSongUrl?: string;
+  /** @deprecated Campaign songs no longer autoplay; legacy documents may still carry it. */
   campaignSongAutoplay?: boolean;
   groupFavorability?: Record<string, number>;
   /**

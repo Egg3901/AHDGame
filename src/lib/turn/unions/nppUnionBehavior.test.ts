@@ -285,7 +285,9 @@ describe("processNppUnionBehavior", () => {
         agreementDurationTurns: 48,
         noStrikeTurns: 24,
       }),
-      10
+      10,
+      // Per-phase read cache shared by every campaign the phase opens (#2690).
+      expect.any(Map)
     );
     expect(
       vi.mocked(openBargainingCampaignFromLiveConditions).mock.calls[0][3].wageLevel

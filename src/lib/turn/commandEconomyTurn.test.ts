@@ -21,6 +21,12 @@ type BudgetDoc = {
     blackMarketPressureEffective?: number;
     repressionDirective?: { level?: number };
     marketizationLevel?: number;
+    economicReform?: {
+      target: "command" | "dual_track" | "market";
+      targetLevel: number;
+      enactedTurn: number;
+      reachedAtTurn?: number | null;
+    };
   };
 };
 
@@ -735,5 +741,92 @@ describe("era gravity restores the schedule when nobody intervenes", () => {
     const { db, budgetSets } = makeGovDb([ru], [corp], [sector], formations, []);
     await processCommandEconomyTurn(db, 1, YEAR_1979);
     expect(budgetSets[0]["economicFactors.marketizationLevel"]).toBeGreaterThan(30);
+  });
+});
+
+describe("a reformed economy stays reformed", () => {
+  it("a persisted MARKET level is not snapped back to the era schedule", async () => {
+    // DD's schedule says command (10) until 1990. A DD that legislated its way
+    // to the market band must be read at its persisted level, not the schedule:
+    // dropping it from the registry re-read it as command and dragged the dial
+    // back down the next turn.
+    const dd = makeBudget("DD", { marketizationLevel: 85 });
+    const { db, updateOnes } = makeDb({ commandEconomyEnabled: true }, [dd]);
+
+    await processCommandEconomyTurn(db, TURN, 1979);
+
+    expect(updateOnes.find((u) => u.filter._id.equals(dd._id))).toBeUndefined();
+  });
+});
+
+describe("a legislated economic system moves the dial", () => {
+  const YEAR_1979 = 1979; // RU schedule seed 10
+
+  /** Inert fixture (see the era-gravity suite): only the law moves the dial. */
+  function runInert(
+    persistedLevel: number,
+    economicReform: NonNullable<BudgetDoc["economicFactors"]["economicReform"]>
+  ) {
+    const ru = makeBudget("RU", {
+      wageGrowth: 0,
+      gdpGrowth: 0,
+      monetaryOverhang: 0,
+      shortageIndex: 0,
+      blackMarketPremium: 0,
+      secondEconomyShare: 0,
+      marketizationLevel: persistedLevel,
+      economicReform,
+    });
+    const formations: GovForm[] = [
+      {
+        _id: "RU",
+        commandStance: { creditAggressiveness: 0.5, budgetSoftness: 0.5, reformism: 0 },
+      },
+    ];
+    return makeGovDb([ru], [], [], formations, []);
+  }
+
+  const market = { target: "market" as const, targetLevel: 100, enactedTurn: 1 };
+  const dualTrack = { target: "dual_track" as const, targetLevel: 45, enactedTurn: 1 };
+  const command = { target: "command" as const, targetLevel: 10, enactedTurn: 1 };
+
+  it("a market law ramps a command economy off the floor at the ramp rate", async () => {
+    const { db, budgetSets } = runInert(0, { ...market, reachedAtTurn: null });
+    await processCommandEconomyTurn(db, 5, YEAR_1979);
+    expect(budgetSets[0]["economicFactors.marketizationLevel"]).toBeCloseTo(1.25, 5);
+    expect(budgetSets[0]).not.toHaveProperty("economicFactors.economicReform.reachedAtTurn");
+  });
+
+  it("the ramp keeps going above the planned band, where the plan loop no longer runs", async () => {
+    const { db, budgetSets } = runInert(72, { ...market, reachedAtTurn: null });
+    await processCommandEconomyTurn(db, 5, YEAR_1979);
+    expect(budgetSets).toHaveLength(1);
+    expect(budgetSets[0]["economicFactors.marketizationLevel"]).toBeCloseTo(73.25, 5);
+  });
+
+  it("marks the law reached when the dial arrives", async () => {
+    const { db, budgetSets } = runInert(99.5, { ...market, reachedAtTurn: null });
+    await processCommandEconomyTurn(db, 7, YEAR_1979);
+    expect(budgetSets[0]["economicFactors.marketizationLevel"]).toBe(100);
+    expect(budgetSets[0]["economicFactors.economicReform.reachedAtTurn"]).toBe(7);
+  });
+
+  it("a reached law, not the era schedule, is the dial's resting point", async () => {
+    // Without the law, gravity pulls a 45 back toward RU's era level of 10.
+    const { db, budgetSets } = runInert(45, { ...dualTrack, reachedAtTurn: 3 });
+    await processCommandEconomyTurn(db, 5, YEAR_1979);
+    expect(budgetSets[0]["economicFactors.marketizationLevel"]).toBeCloseTo(45, 10);
+  });
+
+  it("a counter-reform takes a market economy back toward the plan", async () => {
+    const { db, budgetSets } = runInert(100, { ...command, reachedAtTurn: null });
+    await processCommandEconomyTurn(db, 5, YEAR_1979);
+    expect(budgetSets[0]["economicFactors.marketizationLevel"]).toBeCloseTo(98.75, 5);
+  });
+
+  it("a reached law above the planned band writes nothing", async () => {
+    const { db, budgetSets } = runInert(100, { ...market, reachedAtTurn: 3 });
+    await processCommandEconomyTurn(db, 5, YEAR_1979);
+    expect(budgetSets).toHaveLength(0);
   });
 });

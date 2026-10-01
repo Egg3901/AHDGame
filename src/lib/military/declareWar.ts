@@ -1,13 +1,6 @@
-import { ObjectId, type Db } from "mongodb";
+import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { getCharactersCollection } from "@/lib/db/collections/characters";
-import { createNotifications, type NotificationInput } from "@/lib/notifications";
-import { recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
-import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
-import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
-import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { createConflict } from "@/lib/military/createConflict";
@@ -15,8 +8,9 @@ import { joinSide } from "@/lib/military/joinSide";
 import { findWarBetween } from "@/lib/military/findWarBetween";
 import { sideOf } from "@/lib/military/occupation";
 import { loadMilitaryBlocs } from "@/lib/military/blocLookup";
-import { resolveTreatyDefenders, type TreatyDefender } from "@/lib/military/treatyDefence";
-import type { TreatyEntry } from "@/lib/db/types/conflict";
+import { resolveTreatyDefenders, toTreatyEntries } from "@/lib/military/treatyDefence";
+import { announceTreatyEntries } from "@/lib/military/treatyEntryNotice";
+import { enactImmediateWarEntry } from "@/lib/military/warEntryPolicy";
 import type { WarGoal } from "@/lib/military/warGoals";
 
 export interface DeclareWarInput {
@@ -32,122 +26,6 @@ export interface DeclareWarResult {
   conflict: ConflictDoc;
   /** True when the declarer enrolled in an existing war rather than starting one. */
   joined: boolean;
-}
-
-/**
- * Tell the countries a treaty just took to war, and log it on the alliance.
- *
- * Notifications are addressed to USERS, not countries — `NotificationInput` carries a
- * `userId` and there is no country-addressed notice anywhere in this codebase. So a
- * country's notice goes to the two seats that can act on it: the head of government and
- * the defence minister, the same pair the declare-war route authorises to take a country
- * to war in the first place.
- *
- * A war must never fail over a notification. `createNotifications` swallows its own
- * errors, but the seat lookups either side of it do not, and this runs AFTER the
- * conflict has been written — so an unguarded throw here would abandon the rest of the
- * enactment (the engine catches and logs it) over a side effect, reporting a failed
- * enactment for a war that was in fact created correctly. Hence the blanket catch.
- */
-async function announceTreatyEntries(
-  db: Db,
-  entries: TreatyEntry[],
-  conflictName: string,
-  currentTurn: number
-): Promise<void> {
-  if (entries.length === 0) return;
-  try {
-    await announceTreatyEntriesUnguarded(db, entries, conflictName, currentTurn);
-  } catch (err) {
-    console.error("[declareWar] treaty entry announcement failed:", err);
-  }
-}
-
-async function announceTreatyEntriesUnguarded(
-  db: Db,
-  entries: TreatyEntry[],
-  conflictName: string,
-  currentTurn: number
-): Promise<void> {
-  const inputs: NotificationInput[] = [];
-  for (const e of entries) {
-    const org =
-      INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
-        ?.name ?? e.organizationId;
-    const defended = COUNTRY_CONFIGS[e.defending]?.name ?? e.defending;
-
-    const seatCharacterIds: ObjectId[] = [];
-    const hog = await getHeadOfGovernmentCharacterId(db, e.countryId);
-    if (hog) seatCharacterIds.push(hog);
-    const defenceSeat = DEFENSE_POSITION_BY_COUNTRY[e.countryId];
-    if (defenceSeat) {
-      const row = await getCabinetMembersCollection(db).findOne({
-        countryId: e.countryId,
-        positionId: defenceSeat,
-      });
-      if (row?.characterId) seatCharacterIds.push(row.characterId);
-    }
-    if (seatCharacterIds.length === 0) continue;
-
-    const chars = await (
-      await getCharactersCollection(db)
-    )
-      .find({ _id: { $in: seatCharacterIds } })
-      .project<{ _id: ObjectId; userId?: ObjectId }>({ _id: 1, userId: 1 })
-      .toArray();
-
-    for (const c of chars) {
-      if (!c.userId) continue;
-      inputs.push({
-        userId: c.userId,
-        type: "treaty_defence_invoked" as const,
-        title: "Treaty obligations invoked",
-        message: `${defended} has been attacked. Under the ${org}, your forces have entered the ${conflictName}.`,
-        metadata: {
-          countryId: e.countryId,
-          organizationId: e.organizationId,
-          defending: e.defending,
-        },
-      });
-    }
-  }
-
-  // Deduped by user: one player can hold both seats, and two identical notices about one
-  // war reads as a bug.
-  const seen = new Set<string>();
-  await createNotifications(
-    inputs.filter((i) => {
-      const key = String(i.userId);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-  );
-
-  for (const e of entries) {
-    const defended = COUNTRY_CONFIGS[e.defending]?.name ?? e.defending;
-    await recordOrgHistoryEvent(
-      db,
-      e.countryId,
-      currentTurn,
-      `${e.organizationId} collective defence invoked: entered the ${conflictName} to defend ${defended}.`,
-      { organizationId: e.organizationId, defending: e.defending }
-    );
-  }
-}
-
-/** Stamp the resolver's output with who it came for and when. */
-function toTreatyEntries(
-  defenders: TreatyDefender[],
-  defending: CountryId,
-  joinedTurn: number
-): TreatyEntry[] {
-  return defenders.map((d) => ({
-    countryId: d.countryId,
-    organizationId: d.organizationId,
-    defending,
-    joinedTurn,
-  }));
 }
 
 /**
@@ -194,22 +72,37 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
     // would enrol allies AGAINST the country they came to protect. The declarer's own
     // enrolment keeps its long-standing `?? "A"` fallback below, unchanged.
     if (defenderSide) {
+      const opposing = (defenderSide === "A" ? live.sideB : live.sideA).countries;
       const defenders = await resolveTreatyDefenders(db, {
         defender,
-        declarer,
+        attackers: [declarer, ...opposing.filter((c) => c !== declarer)],
         conflict: live,
         currentTurn,
       });
+      // The same entry primitive the per-turn reconciliation and the bloc
+      // collective-defence resolution use: roster, `joinTurns`, a reserve commitment
+      // to the front, and the treaty entry. One path, so an ally pulled in here pays
+      // exactly what an ally pulled in on any later turn pays.
       for (const d of defenders) {
-        await joinSide(db, live, d.countryId, defenderSide, currentTurn);
+        await enactImmediateWarEntry({
+          db,
+          conflict: live,
+          countryId: d.countryId,
+          side: defenderSide,
+          organizationId: d.organizationId,
+          currentTurn,
+          stake: "collective_defense",
+          defendingCountryId: defender,
+          organizationName: d.organizationName,
+          basis: d.basis,
+        });
       }
-      if (defenders.length > 0) {
-        const entries = toTreatyEntries(defenders, defender, currentTurn);
-        await getConflictsCollection(db).updateOne({ _id: live._id }, {
-          $push: { treatyEntries: { $each: entries } },
-        } as never);
-        await announceTreatyEntries(db, entries, live.name, currentTurn);
-      }
+      await announceTreatyEntries(
+        db,
+        toTreatyEntries(defenders, defender, currentTurn),
+        live.name,
+        currentTurn
+      );
     }
 
     const target = defenderSide === "A" ? "B" : "A";
@@ -224,7 +117,11 @@ export async function declareWar(db: Db, input: DeclareWarInput): Promise<Declar
   // `initialControl`, `deployOpeningForces` (so allies arrive with troops instead of an
   // empty theatre) and `baseStrength = 320 + sideB.countries.length * 60`. Enrolling
   // afterwards with `joinSide` leaves all three computed for a coalition of one.
-  const defenders = await resolveTreatyDefenders(db, { defender, declarer, currentTurn });
+  const defenders = await resolveTreatyDefenders(db, {
+    defender,
+    attackers: [declarer],
+    currentTurn,
+  });
   const treatyEntries = toTreatyEntries(defenders, defender, currentTurn);
 
   const conflict = await createConflict(db, {

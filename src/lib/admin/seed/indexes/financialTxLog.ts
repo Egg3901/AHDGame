@@ -9,6 +9,12 @@ import { ensureIndex } from "./helpers";
  * `expiresAt = createdAt + TX_TTL_TURNS × turnLengthMinutes × 60_000`
  * (default 168 turns ≈ 7 days). The index itself just honors that stamp.
  */
+/** Shared with the live-world migration so the definitions cannot drift (#2693). */
+export const FINANCIAL_TX_LOG_COUNTERPARTY_INDEX = {
+  keys: { counterpartyId: 1, _id: -1 },
+  options: { name: "financialTxLog_counterpartyId_id", sparse: true, background: true },
+} as const;
+
 export async function seedFinancialTxLogIndexes(db: Db, log: (msg: string) => void) {
   log("Financial transaction log indexes:");
 
@@ -39,6 +45,16 @@ export async function seedFinancialTxLogIndexes(db: Db, log: (msg: string) => vo
     "financialTxLog",
     { subjectId: 1, _id: -1 },
     { name: "financialTxLog_subjectId_id", sparse: true, background: true },
+    log
+  );
+  // Counterparty mirror of the subject index. `stampEntityDeleted` filters on
+  // counterpartyId when a corporation or character is deleted; without this
+  // it scans the whole log (4.2M rows, 9 s per deletion in an aged sandbox).
+  await ensureIndex(
+    db,
+    "financialTxLog",
+    FINANCIAL_TX_LOG_COUNTERPARTY_INDEX.keys,
+    FINANCIAL_TX_LOG_COUNTERPARTY_INDEX.options,
     log
   );
   await ensureIndex(

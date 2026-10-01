@@ -480,3 +480,22 @@ describe("European integration votes", () => {
     ).toBeLessThan(0);
   });
 });
+
+describe("computeIdeologyForce: economic system reform", () => {
+  const reform = (target: "market" | "dual_track" | "command") =>
+    makeBill({ provisions: [{ type: "economic_system_reform", target }] });
+
+  it("a command-left legislator opposes liberalization and backs the plan", () => {
+    const npp = makeNPP({ policies: { economic: -3, social: 0, domainPositions: {} } });
+    expect(computeIdeologyForce(npp, reform("market"))).toBeCloseTo(-60, 5);
+    expect(computeIdeologyForce(npp, reform("command"))).toBeCloseTo(60, 5);
+  });
+
+  it("a market-right legislator backs liberalization, more for the full market", () => {
+    const npp = makeNPP({ policies: { economic: 4, social: 0, domainPositions: {} } });
+    expect(computeIdeologyForce(npp, reform("market"))).toBeGreaterThan(
+      computeIdeologyForce(npp, reform("dual_track"))
+    );
+    expect(computeIdeologyForce(npp, reform("dual_track"))).toBeGreaterThan(0);
+  });
+});

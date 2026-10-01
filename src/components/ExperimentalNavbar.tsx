@@ -67,6 +67,7 @@ import {
 } from "@/components/navbar/experimentalNavPrimitives";
 import { ExperimentalUserMenu } from "@/components/navbar/ExperimentalUserMenu";
 import { ExperimentalMobileMenu } from "@/components/navbar/ExperimentalMobileMenu";
+import { Wordmark, WORDMARK } from "@/components/Wordmark";
 import type {
   AdminCharacter,
   CharacterProfile,
@@ -80,6 +81,8 @@ import type {
 export interface ExperimentalNavbarProps {
   navigationVariant?: "a" | "b";
   clientShell?: boolean;
+  /** Type the site name in on load, in mono (1991 worlds). */
+  typedWordmark?: boolean;
   user?: NavLinkRef;
   showProfile?: boolean;
   currentParty?: { id: string; name: string; countryId: string };
@@ -108,6 +111,7 @@ export interface ExperimentalNavbarProps {
 export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   navigationVariant = "a",
   clientShell = false,
+  typedWordmark = false,
   user,
   showProfile = false,
   currentParty,
@@ -615,7 +619,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         target="_blank"
         rel="noopener noreferrer"
         onClick={closeAll}
-        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
+        className="store-purchase-cta flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
         {t("help.patreon")}
       </a>
@@ -624,7 +628,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
         target="_blank"
         rel="noopener noreferrer"
         onClick={closeAll}
-        className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
+        className="store-purchase-cta flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-fg-2 transition-colors hover:bg-white/5"
       >
         {t("help.supporterWall")}
       </a>
@@ -747,9 +751,12 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   className="h-full w-full object-contain"
                 />
               </span>
-              <span className="whitespace-nowrap font-serif text-base font-bold tracking-tight text-foreground">
-                A House Divided
-              </span>
+              <Wordmark
+                typed={typedWordmark}
+                className={`whitespace-nowrap text-base font-bold tracking-tight text-foreground ${
+                  typedWordmark ? "font-mono" : "font-serif"
+                }`}
+              />
             </Link>
 
             {user?.singleplayer && !clientShell && <SingleplayerEndTurnButton />}
@@ -1035,9 +1042,12 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   className="h-full w-full object-contain"
                 />
               </span>
-              <span className="whitespace-nowrap font-serif text-[15px] font-bold tracking-tight text-foreground">
-                A House Divided
-              </span>
+              <Wordmark
+                typed={typedWordmark}
+                className={`whitespace-nowrap text-[15px] font-bold tracking-tight text-foreground ${
+                  typedWordmark ? "font-mono" : "font-serif"
+                }`}
+              />
             </Link>
             <div className="ml-auto flex items-center gap-1.5">
               {showProfile && user && (
@@ -1179,8 +1189,12 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             >
               {!mobileProfileOpen && (
                 <div className="flex h-14 shrink-0 items-center justify-between border-b border-card-border px-4">
-                  <span className="font-serif text-base font-semibold text-foreground">
-                    A House Divided
+                  <span
+                    className={`text-base font-semibold text-foreground ${
+                      typedWordmark ? "font-mono" : "font-serif"
+                    }`}
+                  >
+                    {WORDMARK}
                   </span>
                   <button
                     type="button"

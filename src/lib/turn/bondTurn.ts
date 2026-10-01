@@ -2,6 +2,7 @@
  * Bond turns settle coupons and principal while preserving holder denominations.
  * processBondTurn shares one monetary quote snapshot across payout conversions.
  */
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { euroSettlementRates } from "@/lib/currency/euro/rules";
 import { purchaseSpreadRate } from "@/lib/currency/rules/purchaseConversion";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
@@ -85,6 +86,7 @@ export interface BondTurnResult {
  */
 export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   const db = await getDb();
+  const steps = substepMarker();
   const now = new Date();
   const forexEnabled = await isForexEnabled();
   // #1198: gates default DETECTION only, in Phase 3. Coupon and maturity
@@ -101,16 +103,22 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     );
 
   await issueScheduledSovereignBondSeries(db, turn, now);
+  steps.mark("sovereignIssuance");
   // Size each currency's bond market pool, let savings flow toward its target,
   // and refresh its appetite for each sovereign issuer before anyone trades.
   await processBondMarketPoolTurn(db, turn, now);
+  steps.mark("marketPools");
   await processSovereignImfFacilityPayments(db, turn);
+  steps.mark("imfPayments");
   await processSovereignRecoveryTurn(db, turn);
+  steps.mark("sovereignRecovery");
   // Auto-repudiate countries whose executive decision window has expired
   // (crisisAutoActionAt <= now AND sovereignCrisisState === "crisisPending").
   // Must run before legislativeTurn so countries resolved here are not double-processed.
   await processCrisisAutoActions(db, Date.now(), turn);
+  steps.mark("crisisAutoActions");
   await processSovereignLegislativeTurn(db, Date.now(), turn);
+  steps.mark("sovereignLegislative");
 
   const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
 
@@ -182,6 +190,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // cash allows, and fund the issuers for them. Runs after this turn's
   // active-bond snapshot, so newly placed units start earning next turn.
   const placement = await placeUnsoldBondUnits(db, turn, now);
+  steps.mark("loadAndPlacement");
   if (placement.unitsPlaced > 0) {
     await settlePlacementProceeds(db, placement, fxByCurrency, now);
   }
@@ -720,6 +729,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // Mutates `defaultedCorps` with cascade-defaulted holder corps; see
   // rollbackDefaultedIssuerMaturityFlows in ./bondTurnHelpers for the full
   // optimistic-write reversal + cascade semantics.
+  steps.mark("couponsAndMaturities");
   await rollbackDefaultedIssuerMaturityFlows({
     db,
     bondMaturityFlows,
@@ -1287,6 +1297,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   // Corporate holder coupon income + maturity face-value returns were already
   // applied in Phase 2 (the unified per-corp delta) so they could enter the
+  steps.mark("defaultsAndRollback");
   // Phase 3 default check. Newly-defaulted issuers' maturity flows are rolled
   // back in Phase 3.5 — by here the corp ledger is fully settled.
 
@@ -1337,6 +1348,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     ? { bondsAutoRestructured: 0, bondsAutoRefinanced: 0 }
     : await autoResolveLingeringDefaults({ db, turn, now });
 
+  steps.mark("snapshotsLedgerNotify");
   return {
     bondsProcessed: activeBonds.length,
     couponsPaid,

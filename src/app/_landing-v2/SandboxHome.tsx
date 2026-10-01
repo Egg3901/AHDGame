@@ -29,9 +29,17 @@ import {
   battlegroundFeatureIdsForEra,
   economicPowerFeatureIdsForEra,
 } from "@/components/landing/countryTierRosters";
+import { successorProxiesForYear } from "@/components/landing/countryTiers";
 import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorld";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
+import {
+  BroadcastBackdrop,
+  BroadcastHeadline,
+  BroadcastKicker,
+  BroadcastTicker,
+  BroadcastTierKey,
+} from "./BroadcastHero";
 import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import type { GovernmentType } from "@/lib/constants/countries";
 import type { EraNation, EraTileKey } from "@/components/landing/eraThemes";
@@ -112,6 +120,9 @@ const GHOST_BUTTON_CLASSES =
 
 /** Public sideload mirror for the Android beta build;  */
 const ANDROID_BETA_APK_URL = "https://ops.lakesidegames.net/downloads/a-house-divided-0.3.1.apk";
+
+/** Opening view for an era that does not choose its own: the Mediterranean. */
+const DEFAULT_GLOBE_ROTATION: [number, number, number] = [-12, -38, 0];
 
 function links(isSignedIn: boolean) {
   return {
@@ -315,6 +326,8 @@ export function SandboxHome({
   governmentTypes = {},
   discordStats = null,
   world,
+  backgroundMacroFeatureIds,
+  currentYear,
 }: {
   isSignedIn: boolean;
   era?: string | number;
@@ -330,6 +343,14 @@ export function SandboxHome({
    * pill advertised v1.0.0 for six releases after 1.0.0 shipped.
    */
   world: MarketedWorld;
+  /**
+   * Background Nations the era's preset simulates as macro aggregates. Read
+   * from the world entity manifest on the server, so the manifest stays out of
+   * this bundle. The globe draws them apart from unsimulated grey.
+   */
+  backgroundMacroFeatureIds?: readonly string[];
+  /** The world's in-game year now. The broadcast headline rolls up to it. */
+  currentYear?: number;
 }) {
   const t = useTranslations("auth");
   const eraConfig = getEraConfig(era);
@@ -382,10 +403,14 @@ export function SandboxHome({
   const learn = useMemo(() => learnLinks(t), [t]);
 
   const wireframeColor = eraConfig.wireframeColor ?? undefined;
+  // The 1991 satellite-feed hero. Exclusive with the CRT look: no era sets both.
+  const broadcast = eraConfig.broadcast;
   // Sphere / conflict / crisis theatres for this era, mirroring the world
   // entity manifest. Stable module-level array, so the globe memoises on it.
   const battlegroundFeatureIds = battlegroundFeatureIdsForEra(eraConfig.id);
   const economicPowerFeatureIds = economicPowerFeatureIdsForEra(eraConfig.id);
+  // Czechoslovakia and Yugoslavia drawn over their successors where the era names them.
+  const successorProxies = useMemo(() => successorProxiesForYear(eraConfig.year), [eraConfig.year]);
 
   return (
     <div className="relative bg-background text-foreground">
@@ -450,6 +475,7 @@ export function SandboxHome({
             />
           </>
         )}
+        {broadcast && <BroadcastBackdrop />}
         <div
           className="absolute left-[60%] top-[48%] h-[130vmax] w-[130vmax] -translate-x-1/2 -translate-y-1/2"
           style={
@@ -463,7 +489,7 @@ export function SandboxHome({
             gameDate={eraConfig.gameDate}
             countryAccess={eraConfig.accessMap}
             geoUrl={CDN_WORLD_GEO_URL}
-            initialRotation={[-12, -38, 0]}
+            initialRotation={eraConfig.initialRotation ?? DEFAULT_GLOBE_ROTATION}
             initialZoom={1.05}
             wireframeColor={wireframeColor}
             playerCounts={playerCounts}
@@ -471,6 +497,11 @@ export function SandboxHome({
             economicPowerFeatureIds={economicPowerFeatureIds}
             onShowcaseActiveChange={setShowcaseActive}
             showcasePaused={countdown !== null}
+            broadcast={broadcast}
+            hideTierLegend={Boolean(broadcast)}
+            markersFromSm={Boolean(broadcast)}
+            backgroundMacroFeatureIds={backgroundMacroFeatureIds}
+            successorProxies={successorProxies}
           />
         </div>
 
@@ -486,7 +517,10 @@ export function SandboxHome({
       {/* pointer-events-none lets drag/zoom fall through to the fixed globe. */}
       <div
         id="top"
-        className="pointer-events-none relative z-10 flex h-[100svh] min-h-[560px] flex-col justify-center"
+        className={`pointer-events-none relative z-10 flex h-[100svh] min-h-[560px] flex-col justify-center ${
+          // Centre the copy in the space above the ticker, not behind it.
+          broadcast ? "pb-[calc(12vh+3.75rem)]" : ""
+        }`}
       >
         {/* Hero copy — fades out of the way during the idle crisis showcase,
             back in the instant the user drags/scrolls/clicks. */}
@@ -497,12 +531,28 @@ export function SandboxHome({
         >
           <div className="max-w-xl">
             <CrtCountdown remaining={countdown} />
-            <h1 className="font-display text-display font-bold leading-tight tracking-tight text-foreground">
-              {eraConfig.heroHeadline}
-            </h1>
-            <p className="mt-5 max-w-lg text-body-lg leading-relaxed text-muted">
-              {eraConfig.heroDek}
-            </p>
+            {broadcast ? (
+              <>
+                <BroadcastKicker kicker={broadcast.kicker} dateline={broadcast.dateline} />
+                <BroadcastHeadline
+                  text={eraConfig.heroHeadline}
+                  year={eraConfig.year}
+                  currentYear={currentYear}
+                />
+                <p className="mt-5 max-w-lg text-base leading-relaxed text-white/70 sm:text-[1.0625rem]">
+                  {eraConfig.heroDek}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="font-display text-display font-bold leading-tight tracking-tight text-foreground">
+                  {eraConfig.heroHeadline}
+                </h1>
+                <p className="mt-5 max-w-lg text-body-lg leading-relaxed text-muted">
+                  {eraConfig.heroDek}
+                </p>
+              </>
+            )}
             {/* Three actions, one shape each: create an account, come back to
                 one, or look around first. The app download lives in the drawer
                 below — it is not a way into the game. */}
@@ -527,24 +577,6 @@ export function SandboxHome({
                 {t("landing.explore")}
               </Link>
             </div>
-            {/* Full-width pill under the actions: a link out to the 1953 world
-                report, not a fourth call to action. */}
-            <a
-              href="https://ops.ahousedividedgame.com/p/1953"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="pointer-events-auto mt-5 flex w-full max-w-lg items-center gap-2.5 rounded-full border border-card-border bg-card/70 py-1.5 pl-1.5 pr-3.5 text-body-xs font-medium text-foreground backdrop-blur-sm transition-colors hover:border-primary/50 hover:bg-card"
-            >
-              <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-white">
-                {t("landing.newBadge")}
-              </span>
-              <span className="text-muted">
-                {t("landing.promoPill", { version: world.version, year: String(world.seedYear) })}
-              </span>
-              <span aria-hidden="true" className="ml-auto text-primary">
-                →
-              </span>
-            </a>
           </div>
         </div>
 
@@ -559,6 +591,21 @@ export function SandboxHome({
           </span>
           <span className="block h-5 w-[1px] animate-pulse bg-muted/60" />
         </div>
+
+        {/* The crawl sits just above the drawer's 12vh overlap, so it is the
+            last thing in the first viewport. It stays up through the idle
+            showcase, the way a crawl outlasts the segment over it. */}
+        {broadcast && (
+          <div className="absolute inset-x-0 bottom-[calc(12vh+1rem)]">
+            <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
+              <BroadcastTierKey
+                hidden={showcaseActive}
+                backgroundIsSimulated={Boolean(backgroundMacroFeatureIds?.length)}
+              />
+              <BroadcastTicker label={broadcast.tickerLabel} items={broadcast.ticker} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Drawer — opaque, rises over the fixed globe as you scroll ──────── */}

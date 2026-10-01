@@ -1,0 +1,403 @@
+/*
+ * Dossier profile design (PostHog experiment `profile-redesign`).
+ *
+ * Deliberately unlayered: the global `h1` serif rule is unlayered too, and
+ * unlayered CSS beats every Tailwind utility. Everything here is scoped to
+ * [data-profile-design="dossier"] so control renders exactly as before.
+ *
+ * One neutral palette for every theme family (dark and light), so a country
+ * theme can no longer tint the page brown or purple. Colour is reserved for
+ * the party accent and for gains and losses.
+ */
+
+html[data-profile-design-pending] [data-profile-design-root] {
+  visibility: hidden;
+}
+
+[data-profile-design="dossier"] {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #111113;
+  --card-default: #111113;
+  --card-elevated: #19191c;
+  --card-muted: #0c0c0e;
+  --card-border: #232327;
+  --muted: #a1a1aa;
+  --dossier-faint: #8b8b94;
+  --dossier-line: #232327;
+  --dossier-line-strong: #34343a;
+  --dossier-grid: rgb(255 255 255 / 0.035);
+  --dossier-meter-fill: #e4e4e7;
+  --dossier-hover: rgb(255 255 255 / 0.05);
+  --dossier-grain-opacity: 0.07;
+}
+
+[data-theme="light"] [data-profile-design="dossier"],
+[data-theme="pastel"] [data-profile-design="dossier"],
+[data-theme="broadsheet"] [data-profile-design="dossier"] {
+  --background: #f4f4f5;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --card-default: #ffffff;
+  --card-elevated: #f4f4f5;
+  --card-muted: #fafafa;
+  --card-border: #e4e4e7;
+  --muted: #52525b;
+  --dossier-faint: #71717a;
+  --dossier-line: #e4e4e7;
+  --dossier-line-strong: #d4d4d8;
+  --dossier-grid: rgb(0 0 0 / 0.045);
+  --dossier-meter-fill: #27272a;
+  --dossier-hover: rgb(0 0 0 / 0.04);
+  --dossier-grain-opacity: 0.05;
+}
+
+/* ---- Shared surfaces for the components the dossier only restyles ---- */
+
+[data-profile-design="dossier"] .shadow-card {
+  box-shadow: none;
+}
+
+[data-profile-design="dossier"] .ahd-section-header {
+  border-bottom-color: var(--dossier-line);
+}
+
+[data-profile-design="dossier"] .ahd-section-header h2,
+.dossier-label,
+.dossier-panel-head h2 {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dossier-faint);
+}
+
+/* ---- Header ---- */
+
+.dossier-hero {
+  isolation: isolate;
+}
+
+.dossier-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--dossier-party);
+  z-index: 2;
+}
+
+/* The no-upload state: party glow, a faint survey grid, and grain. */
+.dossier-hero-field {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 60% 90% at 100% 0%,
+      color-mix(in srgb, var(--dossier-party) 22%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(to right, var(--dossier-grid) 1px, transparent 1px) 0 0 / 48px 48px,
+    linear-gradient(to bottom, var(--dossier-grid) 1px, transparent 1px) 0 0 / 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 100% at 85% 0%, black, transparent 75%);
+}
+
+.dossier-hero-field::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: var(--dossier-grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.dossier-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dossier-faint);
+}
+
+.dossier-button,
+.dossier-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--dossier-line-strong);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+  transition: background-color 120ms ease;
+}
+
+.dossier-button:hover,
+.dossier-actions button:hover {
+  background: var(--dossier-hover);
+  color: var(--foreground);
+}
+
+.dossier-avatar button {
+  width: 6rem;
+  height: 6rem;
+  border-radius: 10px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--dossier-party) 35%, var(--card-elevated)),
+    var(--card-elevated) 70%
+  );
+  box-shadow: 0 0 0 1px var(--dossier-line-strong);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--foreground);
+}
+
+@media (min-width: 640px) {
+  .dossier-avatar button {
+    width: 8rem;
+    height: 8rem;
+    font-size: 3.5rem;
+  }
+}
+
+.dossier-office {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  opacity: 0.85;
+}
+
+@media (min-width: 640px) {
+  .dossier-office {
+    font-size: 1.125rem;
+  }
+}
+
+.dossier-office-extra {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+h1.dossier-name {
+  margin-top: 0.25rem;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: clamp(2.25rem, 4vw + 1rem, 4.25rem);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.dossier-identity {
+  margin-top: 0.875rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.dossier-identity a:hover {
+  color: var(--foreground);
+}
+
+.dossier-party {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.dossier-party-swatch {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 2px;
+  background: var(--dossier-party);
+}
+
+.dossier-sep {
+  color: var(--dossier-line-strong);
+}
+
+.dossier-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 1.375rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--dossier-line-strong);
+  border-radius: 4px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dossier-bio {
+  margin-top: 1.75rem;
+  max-width: 68ch;
+  padding-left: 1rem;
+  border-left: 2px solid var(--dossier-line-strong);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+.dossier-bio blockquote {
+  opacity: 0.85;
+}
+
+.dossier-bio-empty {
+  color: var(--dossier-faint);
+}
+
+/* ---- Scoreboard ---- */
+
+.dossier-panel {
+  overflow: hidden;
+  border: 1px solid var(--dossier-line);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.dossier-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--dossier-line);
+}
+
+.dossier-cta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.dossier-cta:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/*
+ * Cells draw their right and bottom hairlines outside their box; the panel
+ * clips the outer edge. Cells stay transparent so no sibling paints over a
+ * line, and a short last row leaves card, not a grey block.
+ */
+.dossier-figures-hero,
+.dossier-figures {
+  display: grid;
+}
+
+.dossier-figures-hero {
+  grid-template-columns: 1fr;
+}
+
+.dossier-figures {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .dossier-figures-hero {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dossier-figures {
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+}
+
+.dossier-figure {
+  min-width: 0;
+  padding: 1.125rem 1.25rem 1.25rem;
+  box-shadow:
+    1px 0 0 var(--dossier-line),
+    0 1px 0 var(--dossier-line);
+}
+
+.dossier-figure-hero {
+  padding: 1.5rem;
+}
+
+.dossier-label {
+  cursor: help;
+  text-decoration: underline dotted var(--dossier-line-strong);
+  text-underline-offset: 4px;
+}
+
+.dossier-value {
+  margin-top: 0.625rem;
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.dossier-figure-hero .dossier-value {
+  font-size: clamp(3rem, 4vw + 1.5rem, 4.25rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.dossier-unit {
+  margin-left: 0.2em;
+  font-size: 0.45em;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.dossier-meter {
+  position: relative;
+  height: 2px;
+  margin-top: 0.875rem;
+  background: var(--dossier-line);
+}
+
+.dossier-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--dossier-meter-fill);
+}
+
+.dossier-note {
+  margin-top: 0.5rem;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.dossier-note-neutral {
+  color: var(--dossier-faint);
+}
+
+.dossier-note-gain {
+  color: var(--success);
+}
+
+.dossier-note-loss {
+  color: var(--error);
+}

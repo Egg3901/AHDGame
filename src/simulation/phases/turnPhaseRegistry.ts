@@ -51,6 +51,7 @@ import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadershi
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
 import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
+import { reconcileMutualDefence } from "@/lib/military/treatyDefence";
 import { applyDecayToAllStates, processPartyGOTV } from "@/lib/turn/demographicTurnoutTurn";
 import {
   processPartyOrgTurn,
@@ -122,7 +123,6 @@ import { processByElectionWatcher } from "@/lib/turn/byElections";
 import { processCommonsByElectionWatcher } from "@/lib/turn/commonsByElections";
 import { detectPreIterationComplete } from "@/lib/turn/preIterationLifecycle";
 import { processActivityLogging } from "@/lib/turn/activityLogging";
-import { runFinancialSuspectScan } from "@/lib/financialTxLog/suspectScan";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot } from "@/lib/ledger/balanceSnapshot";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
@@ -603,10 +603,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
-        const suspectScanResult = await runtime.runPhase("financialSuspectScan", () =>
-          runFinancialSuspectScan(context.db, newTurn)
-        );
-        phaseResults.financialSuspectScan = suspectScanResult === null ? null : true;
+        // financialSuspectScan runs after the turn commits (#2694, postTurnScans.ts).
 
         if (bondTurnResult) {
           phaseResults.bondTurn = {
@@ -1310,6 +1307,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         phaseResults.settlement = await runtime.runPhase("settlement", () =>
           processSettlementTurn(db, newTurn)
         );
+
+        // Sequential and AFTER alignment/settlement: alliance membership and posture
+        // (both written by the batch above and by alignment defections) decide who is
+        // bound. Brings every declared war into line with the alliances as they stand
+        // now: a posture raised to Article 5 mid-war, or a country that joined a
+        // defender's alliance mid-war. Idempotent; see `reconcileMutualDefence`.
+        await runtime.runPhase("mutualDefence", () => reconcileMutualDefence(db, newTurn));
 
         await runtime.runPhase("autoReelectionEntry", () =>
           runAutoReelectionEntry(db, gameNow, newTurn)
