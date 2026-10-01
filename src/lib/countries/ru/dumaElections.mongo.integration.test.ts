@@ -1,6 +1,7 @@
 import { MongoClient, ObjectId } from "mongodb";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Election } from "@/lib/db/types";
+import { admitRussianDumaNpcNominees } from "./dumaNpcAdmission";
 import { openRussianDumaElection } from "./dumaElectionOpening";
 import { certifyRussianDumaElection, RUSSIAN_DUMA_RESULTS_COLLECTION } from "./dumaElectionResult";
 import { RU_1991_ECONOMIC_REGION_POPULATION } from "./data/ruPopulation1991";
@@ -210,6 +211,153 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       certificationCommands,
       replayCommands,
       ballots: 226,
+    });
+  });
+  it("admits bounded NPC slates atomically while preserving players, profiles and Congress", async () => {
+    const db = client.db(databaseName);
+    await db.collection<Fixture>("countryGameStates").insertOne({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruFederalAssemblyMandateSinceTurn: 129,
+    });
+    await db.collection<Fixture>("states").insertMany(
+      Object.entries(RU_1991_ECONOMIC_REGION_POPULATION).map(([id, population]) => ({
+        _id: id,
+        countryId: "RU",
+        population,
+        votingEligiblePopulation: population * 0.7,
+      }))
+    );
+    const opened = await openRussianDumaElection({
+      db,
+      game: { preset: "1991-default" },
+      turn: 129,
+      now: new Date(1000),
+    });
+    if (!opened) throw new Error("Missing fixture cohort");
+    await db.collection("politicalParties").insertMany(
+      [1, 2, 3, 4].map((sequentialId) => ({
+        countryId: "RU",
+        sequentialId,
+        regimeStatus: sequentialId === 4 ? "banned" : "registered",
+      }))
+    );
+    const first = new ObjectId(),
+      third = new ObjectId();
+    await db.collection("npps").insertMany([
+      {
+        _id: first,
+        countryId: "RU",
+        name: "First profile",
+        party: "1",
+        homeState: "CEN",
+        currentOffice: { type: "congressDeputy" },
+        retiredAt: null,
+        cashOnHand: 77,
+      },
+      {
+        _id: third,
+        countryId: "RU",
+        name: "Third profile",
+        party: "3",
+        homeState: "NWR",
+        currentOffice: null,
+        retiredAt: null,
+        cashOnHand: 91,
+      },
+      {
+        countryId: "RU",
+        name: "Executive profile",
+        party: "2",
+        homeState: "CEN",
+        currentOffice: { type: "president" },
+        retiredAt: null,
+      },
+      {
+        countryId: "RU",
+        name: "Retired",
+        party: "2",
+        homeState: "CEN",
+        currentOffice: null,
+        retiredAt: new Date(0),
+      },
+      {
+        countryId: "RU",
+        name: "Technocrat",
+        party: "2",
+        homeState: "CEN",
+        currentOffice: null,
+        isTechnocrat: true,
+      },
+      { countryId: "PL", name: "Foreign", party: "2", homeState: "CEN", currentOffice: null },
+      { countryId: "RU", name: "Banned", party: "4", homeState: "CEN", currentOffice: null },
+    ]);
+    const beforeProfiles = await db.collection("npps").find({}).sort({ _id: 1 }).toArray();
+    const district = await db
+      .collection<Election>("elections")
+      .findOne({ seatId: "RU-duma-CEN-1" });
+    if (!district) throw new Error("Missing fixture district");
+    const playerId = new ObjectId();
+    const player = {
+      _id: new ObjectId(),
+      characterId: playerId,
+      electionId: district._id,
+      countryId: "RU",
+      characterName: "Player",
+      party: "1",
+      isNPP: false,
+      status: "active",
+      enteredAt: new Date(1000),
+      russianDumaNomination: { registrationOrder: 10, nominationOrder: 10, capacity: 1 },
+    };
+    await db.collection("electionCandidates").insertOne(player);
+    await db
+      .collection("electedOfficials")
+      .insertOne({ countryId: "RU", officeType: "congressDeputy", nppId: first });
+    await db.command({
+      collMod: "countryGameStates",
+      validator: { ruDumaNpcAdmissionCohortId: { $exists: false } },
+    });
+    const input = { db, cohortId: opened.cohortId, turn: 129, now: new Date(1000) };
+    await expect(admitRussianDumaNpcNominees(input)).rejects.toMatchObject({ code: 121 });
+    expect(await db.collection("electionCandidates").countDocuments()).toBe(1);
+    expect(await db.collection("electionCandidates").findOne({ _id: player._id })).toEqual(player);
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruDumaNpcAdmissionCohortId");
+    await db.command({ collMod: "countryGameStates", validator: {} });
+    commands = 0;
+    const admitted = await admitRussianDumaNpcNominees(input);
+    const admissionCommands = commands;
+    expect(admitted).toEqual({ created: 451, unrepresentedParties: ["2"] });
+    expect(admissionCommands).toBeLessThanOrEqual(18);
+    expect(await db.collection("electionCandidates").countDocuments()).toBe(452);
+    const npcCandidates = await db.collection("electionCandidates").find({ isNPP: true }).toArray();
+    expect(
+      npcCandidates.every(
+        (row) => row.characterId.equals(row.nppId) && row._id.equals(row.boundedNpcNomineeId)
+      )
+    ).toBe(true);
+    expect(npcCandidates.filter((row) => row.russianDumaNomination.capacity === 225)).toHaveLength(
+      2
+    );
+    expect(npcCandidates.every((row) => !Object.hasOwn(row, "cashOnHand"))).toBe(true);
+    expect(await db.collection("npps").find({}).sort({ _id: 1 }).toArray()).toEqual(beforeProfiles);
+    expect(await db.collection("electionCandidates").findOne({ _id: player._id })).toEqual(player);
+    expect(await db.collection("electedOfficials").countDocuments()).toBe(1);
+    commands = 0;
+    expect(await admitRussianDumaNpcNominees({ ...input, turn: 130 })).toEqual({
+      created: 0,
+      unrepresentedParties: ["2"],
+    });
+    const replayCommands = commands;
+    expect(replayCommands).toBeLessThanOrEqual(2);
+    expect(await db.collection("electionCandidates").countDocuments()).toBe(452);
+    console.info("Duma NPC admission qualification", {
+      admissionCommands,
+      replayCommands,
+      nominees: 451,
+      preservedPlayers: 1,
     });
   });
 });

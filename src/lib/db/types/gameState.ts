@@ -677,6 +677,10 @@ export interface CountryGameState {
   ruFederalAssemblyMandateSinceTurn?: number;
   /** Bound first-Duma election cohort; opening it does not retire Congress. */
   ruFirstDumaElectionCohortId?: ObjectId;
+  /** Atomic first-Duma bounded NPC slate admission receipt. */
+  ruDumaNpcAdmissionCohortId?: ObjectId;
+  /** Registered parties without an eligible profile for fallback NPC nominees. */
+  ruDumaUnrepresentedParties?: string[];
   /** RU 1991: the first Federal Assembly election has a certified result. */
   ruFederalAssemblyElectionCertifiedSinceTurn?: number;
   /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */

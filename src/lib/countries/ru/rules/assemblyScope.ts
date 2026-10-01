@@ -24,3 +24,14 @@ export function isRussianDumaNationalList(election: {
     binding.mandateSinceTurn > 0
   );
 }
+
+/** National list nominees remain registered together; seats are assigned only at certification. */
+export function russianDumaPrimaryAdvanceLimit(
+  election: Parameters<typeof isRussianDumaNationalList>[0],
+  registeredCandidates: number
+): number | null {
+  if (!isRussianDumaNationalList(election)) return null;
+  if (!Number.isSafeInteger(registeredCandidates) || registeredCandidates < 0)
+    throw new Error("Duma list registration needs a safe candidate count");
+  return registeredCandidates;
+}

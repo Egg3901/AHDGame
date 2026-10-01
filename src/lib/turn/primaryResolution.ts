@@ -1,9 +1,11 @@
-import { bindRussianPresidentialElectorate } from "@/lib/countries/ru/presidentialElectoratePreload";
 /**
- * Primaries count party ballots over time and advance the leading candidates.
- * recordPrimarySnapshots includes versioned turnout and standing character ads;
- * resolvePrimariesIfNeeded preserves counted ballots when selecting nominees.
+ * Primaries count party ballots and select candidates for the general election.
+ * resolvePrimariesIfNeeded retains all registered Russian national list nominees;
+ * constituency contests keep their normal party nomination limit.
  */
+import { russianDumaPrimaryAdvanceLimit } from "@/lib/countries/ru/rules/assemblyScope";
+import { bindRussianPresidentialElectorate } from "@/lib/countries/ru/presidentialElectoratePreload";
+
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
@@ -242,10 +244,27 @@ export async function resolvePrimariesIfNeeded(
     if (candidates.length === 0) continue;
     const partyCounts = new Map<string, number>();
     for (const c of candidates) partyCounts.set(c.party, (partyCounts.get(c.party) ?? 0) + 1);
-    const maxAdvancing = getPrimaryWinnersForElection(
-      (election.countryId ?? "US") as CountryId,
-      election.electionType
-    );
+    const maxAdvancing =
+      russianDumaPrimaryAdvanceLimit(
+        {
+          countryId: election.countryId ?? "US",
+          electionType: election.electionType,
+          state: election.state,
+          seatId: election.seatId,
+          totalSeats: election.totalSeats,
+          russianDumaRound: election.russianDumaRound
+            ? {
+                ...election.russianDumaRound,
+                cohortId: election.russianDumaRound.cohortId.toHexString(),
+              }
+            : undefined,
+        },
+        candidates.length
+      ) ??
+      getPrimaryWinnersForElection(
+        (election.countryId ?? "US") as CountryId,
+        election.electionType
+      );
     const tally = tallyByElection.get(eid);
     // Already stamped — never re-init (would wipe general-phase vote accumulation).
     if (tally?.primaryResults) continue;
