@@ -677,6 +677,8 @@ export interface CountryGameState {
   ruFederalAssemblyMandateSinceTurn?: number;
   /** Bound first-Duma election cohort; opening it does not retire Congress. */
   ruFirstDumaElectionCohortId?: ObjectId;
+  /** Bound first-Council subject cohort; opening it does not retire Congress. */
+  ruFirstCouncilElectionCohortId?: ObjectId;
   /** Atomic first-Duma bounded NPC slate admission receipt. */
   ruDumaNpcAdmissionCohortId?: ObjectId;
   /** Registered parties without an eligible profile for fallback NPC nominees. */

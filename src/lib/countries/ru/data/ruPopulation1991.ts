@@ -10,8 +10,8 @@
  * Assignment of subjects to economic regions follows the 1991 regional
  * classification. The game's Volga macroregion combines Volga-Vyatka and
  * Volga; Northwest includes Kaliningrad. Rosstat's 1991 Chechen-Ingush row
- * (1,302 thousand) is counted once in North Caucasus; its separately printed
- * Chechen subtotal (970 thousand) is not added again. Autonomous okrugs
+ * (1,302 thousand) is counted once in North Caucasus. The source shares the
+ * pre-1994 values across both rows; later Chechen values are not added again. Autonomous okrugs
  * nested in oblast totals are likewise not added again.
  *
  * These are Russian Federation regions only. Kazakhstan, Transcaucasia,
