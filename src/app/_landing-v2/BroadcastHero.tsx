@@ -64,8 +64,6 @@ export function BroadcastHeadline({
   );
 }
 
-const DIGITS = "0123456789".split("");
-
 /** How long the page shows the seed year before rolling to the world's year. */
 const ODOMETER_HOLD_MS = 900;
 
@@ -94,6 +92,8 @@ export function YearOdometer({ from, to }: { from: number; to: number }) {
           .split("")
           .map((digit, place, all) => (
             <span key={place} className="ahd-bc-odometer-digit">
+              {/* The 0 to 9 strip is drawn by CSS, so the headline's text stays
+                  the year alone for search engines and copy and paste. */}
               <span
                 className="ahd-bc-odometer-strip"
                 style={{
@@ -101,11 +101,7 @@ export function YearOdometer({ from, to }: { from: number; to: number }) {
                   // Lower places start first, the way an odometer carries.
                   transitionDelay: `${(all.length - 1 - place) * 70}ms`,
                 }}
-              >
-                {DIGITS.map((n) => (
-                  <span key={n}>{n}</span>
-                ))}
-              </span>
+              />
             </span>
           ))}
       </span>

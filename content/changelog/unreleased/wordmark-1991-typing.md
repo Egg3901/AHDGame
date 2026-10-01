@@ -16,3 +16,5 @@ areas: [frontend]
 - The loading navbar and the full navbar share one typing run, so the name does not restart when the full navbar arrives.
 - With reduced motion on, the name appears at once. Screen readers always get the whole name.
 - Other eras keep the existing wordmark.
+- The 1991 headline's year reads as one year to search engines and copy and paste; the rolling digits are drawn by CSS.
+- On phones the satellite beams no longer print their datelines behind the headline.

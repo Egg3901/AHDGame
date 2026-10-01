@@ -1257,13 +1257,16 @@ html[data-high-contrast="true"] :focus-visible {
 }
 
 .ahd-bc-odometer-strip {
-  display: flex;
-  flex-direction: column;
+  display: block;
   transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.ahd-bc-odometer-strip > span {
-  height: 1.04em;
+/* The digits live in CSS rather than the DOM, so the headline reads as one
+   year to search engines, screen readers and anyone copying it. */
+.ahd-bc-odometer-strip::before {
+  content: "0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";
+  display: block;
+  white-space: pre;
   line-height: 1.04em;
 }
 
