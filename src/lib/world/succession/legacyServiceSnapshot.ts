@@ -88,7 +88,7 @@ export async function loadLegacyServiceSnapshots(
     ])
     .toArray();
   return [
-    ...latest,
+    ...latest.map((row) => ({ ...row, servicingKind: undefined, issuerOwnShareMinor: undefined })),
     ...continuing.map((row) => ({
       ...row,
       servicingKind: "continuing-state" as const,
@@ -97,7 +97,7 @@ export async function loadLegacyServiceSnapshots(
     })),
   ]
     .map((row) => ({
-      ...("servicingKind" in row
+      ...(row.servicingKind
         ? { servicingKind: row.servicingKind, issuerOwnShareMinor: row.issuerOwnShareMinor }
         : {}),
       sourceCountryId: sources.get(row._id)!,
