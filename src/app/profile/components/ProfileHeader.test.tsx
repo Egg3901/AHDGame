@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render as rtlRender, screen } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Character, PoliticalParty } from "@/lib/db/types";
 import { ProfileHeader } from "./ProfileHeader";
@@ -97,6 +97,42 @@ const baseProps = {
   stateLabel: "Northern Districts",
   countrySlug: "dd",
 };
+
+describe("ProfileHeader membership date", () => {
+  it("shows a precise account date without a history footnote", () => {
+    render(<ProfileHeader {...baseProps} />);
+    expect(screen.getByText("Member since July 22, 2026")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "About this join date" })).toBeNull();
+  });
+
+  it("explains earlier lost history when the asterisk is tapped", () => {
+    render(<ProfileHeader {...baseProps} memberSinceIsApproximate />);
+    expect(screen.getByText("Member since July 22, 2026 or earlier")).toBeTruthy();
+    const footnote = screen.getByRole("button", { name: "About this join date" });
+    expect(footnote.textContent).toBe("*");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.click(footnote);
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip.textContent).toContain(
+      "Account creation data from earlier iterations was lost."
+    );
+    expect(footnote.getAttribute("aria-describedby")).toBe(tooltip.id);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("opens the history footnote with the keyboard and dismisses it on blur", () => {
+    render(<ProfileHeader {...baseProps} memberSinceIsApproximate />);
+    const footnote = screen.getByRole("button", { name: "About this join date" });
+    const matches = vi.spyOn(footnote, "matches").mockReturnValue(true);
+    fireEvent.focus(footnote);
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    fireEvent.blur(footnote);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    matches.mockRestore();
+  });
+});
 
 describe("ProfileHeader region badge", () => {
   it("shows the resolved region name, not the opaque state id", () => {

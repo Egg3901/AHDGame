@@ -105,6 +105,7 @@ import {
 } from "@/lib/utils/fundGeneration";
 import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
 import { countryElectionsUrl, countryUrl, politiciansUrl, regionUrl } from "@/lib/urls";
+import { resolveMemberSince } from "@/lib/character/memberSince";
 
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 
@@ -461,6 +462,11 @@ async function getCharacterById(characterId: string) {
       isModerator: user?.isAdmin || false || user?.role === "moderator" || user?.role === "admin",
       isBanned: user?.isBanned || false,
       lastActivity: user?.lastActivity || null,
+      membership: resolveMemberSince({
+        accountCreatedAt: user?.createdAt,
+        profileCreatedAt: character.createdAt,
+        historyStartedAt: gameState?.singleplayerConfig ? null : gameState?.createdAt,
+      }),
       discordId: user?.discordId ?? null,
       discordUsername: user?.discordUsername ?? null,
       discordAvatar: user?.discordAvatar ?? null,
@@ -821,7 +827,7 @@ export default async function CharacterPage({ params }: PageProps) {
   );
   const populationTier = getPopulationTier(statePopulation);
 
-  const memberSince = new Date(character.createdAt).toLocaleDateString("en-US", {
+  const memberSince = data.membership.date.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -1003,6 +1009,7 @@ export default async function CharacterPage({ params }: PageProps) {
           party={party}
           user={{ username, isAdmin, isModerator }}
           memberSince={memberSince}
+          memberSinceIsApproximate={data.membership.isApproximate}
           officeLabels={profileOfficeLabels}
           stateLabel={stateName}
           countrySlug={countrySlug}
