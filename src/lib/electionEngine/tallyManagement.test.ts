@@ -475,6 +475,7 @@ describe("accumulateVoteTurn — vote accumulation", () => {
       expect(update.$set.candidateParties[withdrawn]).toBe("2");
       expect(update.$push.turnSnapshots.cumulativeVotes[withdrawn]).toBe(60);
       expect(update.$push.turnSnapshots.sharesPct[withdrawn]).toBe(60);
+      expect(update.$set.russianDumaBallot).toEqual({ againstAllVotes: 0 });
       expect(db.collectionMocks.campaigns.find).not.toHaveBeenCalledWith(
         { electionId },
         { projection: { candidateId: 1, campaignStrength: 1 } }
@@ -1319,6 +1320,66 @@ describe("accumulateVoteTurn — approvalMap option", () => {
 // ─── tallyCleaner: removeWithdrawnCandidateFromTally ─────────────────────────
 
 describe("removeWithdrawnCandidateFromTally", () => {
+  it("preserves native Duma cast votes and labels while clearing a withdrawn seat projection", async () => {
+    const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
+    const electionId = new ObjectId();
+    db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
+      makeTally(electionId, {
+        state: "CEN",
+        totalVotes: { cand1: 30, cand2: 50 },
+        candidateNames: { cand1: "Alice", cand2: "Bob" },
+        candidateParties: { cand1: "1", cand2: "2" },
+        seatsEstimate: { cand1: 1 },
+        russianDumaBallot: { againstAllVotes: 5 },
+      })
+    );
+    db.collection("elections");
+    await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
+    expect(db.collectionMocks.elections.findOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledWith(
+      { electionId },
+      { $unset: { "seatsEstimate.cand1": "" }, $set: { updatedAt: expect.any(Date) } }
+    );
+  });
+  it("leaves counted native Duma votes intact without an unnecessary write", async () => {
+    const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
+    const electionId = new ObjectId();
+    db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
+      makeTally(electionId, {
+        totalVotes: { cand1: 30 },
+        russianDumaBallot: { againstAllVotes: 5 },
+      })
+    );
+    await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
+    expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
+  });
+  it.each(["native", "foreign", "unbound"])(
+    "checks a prior unmarked Russian-region tally for %s binding",
+    async (kind) => {
+      const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
+      const electionId = new ObjectId();
+      db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
+        makeTally(electionId, { state: "CEN", totalVotes: { cand1: 30 } })
+      );
+      db.collection("elections").findOne.mockResolvedValue({
+        countryId: kind === "foreign" ? "CZ" : "RU",
+        electionType: "dumaDeputy",
+        ...(kind === "unbound" ? {} : { russianDumaRound: { cohortId: new ObjectId() } }),
+      });
+      await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
+      expect(db.collectionMocks.elections.findOne).toHaveBeenCalledWith(
+        { _id: electionId },
+        { projection: { countryId: 1, electionType: 1, russianDumaRound: 1 } }
+      );
+      if (kind === "native")
+        expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
+      else
+        expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledWith(
+          { electionId },
+          expect.objectContaining({ $unset: expect.objectContaining({ "totalVotes.cand1": "" }) })
+        );
+    }
+  );
   it("returns early without updating when tally does not exist", async () => {
     const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
 
