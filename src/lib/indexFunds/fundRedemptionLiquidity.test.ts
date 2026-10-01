@@ -182,6 +182,23 @@ describe("sellFundHoldingShares", () => {
     expect(txDoc).toMatchObject({ kind: "public_float_sell", shares: 50 });
   });
 
+  it("does not write a phantom sale when a forced liquidation has zero whole shares", async () => {
+    const { sellFundHoldingsForRedemptionCash } = await import("./fundRedemptionLiquidity");
+    const { recordShareTrade } = await import("@/lib/corporations/shareTradeHistory");
+    const { settleFloatSellDebit } = await import("@/lib/corporations/shareEscrowSettlement");
+    const mockDb = buildMockDb();
+    const fund = { ...baseFund, holdings: [{ ...baseFund.holdings[0], shares: 0 }] };
+    const result = await sellFundHoldingsForRedemptionCash(
+      mockDb as unknown as import("mongodb").Db,
+      fund,
+      100,
+      { corporationIds: [corpId] }
+    );
+    expect(result).toMatchObject({ sharesSold: 0, salesExecuted: 0, cashRaisedAnchor: 0 });
+    expect(recordShareTrade).not.toHaveBeenCalled();
+    expect(settleFloatSellDebit).not.toHaveBeenCalled();
+  });
+
   it("sells exactly held when maxShares > held", async () => {
     const mockDb = buildMockDb();
 

@@ -98,12 +98,12 @@ describe("movingAverage", () => {
 describe("range bucketing", () => {
   it("keeps 1252 turns readable and buckets price and turnover together", () => {
     const points = buildCandles(pts(Array(1252).fill(35)), new Map());
-    expect(chartBucketTurns(0, points.length)).toBe(24);
-    const buckets = bucketCandles(points, 24);
-    expect(buckets).toHaveLength(53);
+    expect(chartBucketTurns(0, points.length)).toBe(12);
+    const buckets = bucketCandles(points, 12);
+    expect(buckets).toHaveLength(105);
     expect(buckets.reduce((sum, c) => sum + c.volume, 0)).toBe(12520);
-    expect(chartBucketTurns(720, 720)).toBe(24);
+    expect(chartBucketTurns(720, 720)).toBe(4);
     expect(chartBucketTurns(168, 168)).toBe(1);
-    expect(chartBucketTurns(0, 8760)).toBe(168);
+    expect(chartBucketTurns(0, 8760)).toBe(48);
   });
 });

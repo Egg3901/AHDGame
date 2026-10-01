@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { marketTurnLabel } from "@/lib/stockExchange/rules/calendar";
+import type { GameDateAnchor } from "@/lib/utils/gameDate";
+import { LocalTime } from "@/components/time/LocalTime";
 import { Skeleton } from "@/components/ui";
 import {
   ALL_EXCHANGES,
@@ -27,10 +30,11 @@ import type {
 /* ------------------------------------------------------------------ */
 
 const RANGES = [
-  { key: "24H", label: "24H", turns: 24 },
-  { key: "7D", label: "7D", turns: 168 },
-  { key: "1M", label: "1M", turns: 720 },
-  { key: "1Y", label: "1Y", turns: 8760 },
+  { key: "1M", label: "1M", turns: 4 },
+  { key: "6M", label: "6M", turns: 24 },
+  { key: "1Y", label: "1Y", turns: 48 },
+  { key: "5Y", label: "5Y", turns: 240 },
+  { key: "10Y", label: "10Y", turns: 480 },
   { key: "ALL", label: "ALL", turns: 0 },
 ] as const;
 
@@ -38,6 +42,9 @@ type RangeKey = (typeof RANGES)[number]["key"];
 
 interface CandleDto {
   turn: number;
+  endTurn?: number;
+  invalidVolumeTrades?: number;
+  notes?: string[];
   time: number;
   open: number;
   high: number;
@@ -58,6 +65,11 @@ interface CandlesResponse {
   intradayTurns: number;
   totalTurns: number;
   firstIntradayTurn: number | null;
+  calendar?: GameDateAnchor | null;
+  asOf?: string | null;
+  invalidVolumeTrades?: number;
+  missingTurns?: number;
+  invalidPriceTurns?: number;
 }
 
 type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: CorporationType };
@@ -80,11 +92,19 @@ function ma(values: number[], window: number): (number | null)[] {
 export function MarketOverview({
   exchangeFilter,
   exchangeMeta,
+  refreshKey,
+  currentTurn,
 }: {
   exchangeFilter: ExchangeFilter;
   exchangeMeta?: Record<string, ExchangeMetaEntry>;
+  refreshKey?: object | null;
+  currentTurn?: number;
 }) {
   const { formatAmount } = useCurrency();
+  const formatAmountRef = useRef(formatAmount);
+  useEffect(() => {
+    formatAmountRef.current = formatAmount;
+  }, [formatAmount]);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -95,7 +115,7 @@ export function MarketOverview({
   const ma50Ref = useRef<ISeriesApi<"Line"> | null>(null);
   const compareRef = useRef<ISeriesApi<"Line"> | null>(null);
 
-  const [range, setRange] = useState<RangeKey>("7D");
+  const [range, setRange] = useState<RangeKey>("1Y");
   const [showMa20, setShowMa20] = useState(false);
   const [showMa50, setShowMa50] = useState(false);
   const [compare, setCompare] = useState<CompareKey | null>(null);
@@ -110,16 +130,19 @@ export function MarketOverview({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [chartReady, setChartReady] = useState(false);
+  const [meta, setMeta] = useState<CandlesResponse | null>(null);
+  const calendarRef = useRef<GameDateAnchor | null>(null);
+  const fittedRange = useRef<string | null>(null);
 
   const exchangeApi =
     exchangeFilter === "global" ? "global" : (getExchangeApiKey(exchangeFilter) ?? "global");
   const exchangeLabel = exchangeFilter === "global" ? "Global" : getExchangeLabel(exchangeFilter);
 
-  const turns = RANGES.find((r) => r.key === range)?.turns ?? 168;
+  const turns = RANGES.find((r) => r.key === range)?.turns ?? 48;
   const candlesRef = useRef<CandleDto[]>([]);
 
   const fmt = (n: number | undefined): string =>
-    n === undefined ? "—" : formatAmount(Math.round(n));
+    n === undefined || !Number.isFinite(n) ? "Unavailable" : formatAmountRef.current(Math.round(n));
 
   /* ---------------- chart lifecycle (mount once) ---------------- */
   useEffect(() => {
@@ -150,7 +173,7 @@ export function MarketOverview({
       const border = cssVar("--card-border", "#2a2a3d");
       const turnLabel = (time: number): string => {
         const candle = candlesRef.current.find((row) => row.time === time);
-        return candle ? `T${candle.turn}` : "";
+        return candle ? marketTurnLabel(candle.endTurn ?? candle.turn, calendarRef.current) : "";
       };
 
       chart = createChart(container, {
@@ -192,7 +215,12 @@ export function MarketOverview({
 
       const volumeSeries = chart.addSeries(
         HistogramSeries,
-        { priceScaleId: "", priceFormat: { type: "volume" } },
+        {
+          priceScaleId: "",
+          priceFormat: { type: "volume" },
+          lastValueVisible: false,
+          priceLineVisible: false,
+        },
         0
       );
       volumeRef.current = volumeSeries;
@@ -220,12 +248,12 @@ export function MarketOverview({
           ? " · recorded closes"
           : ` · ${row.intradayTurns ?? 1}/${row.totalTurns ?? 1} turns with prints`;
         tip.innerHTML =
-          `<div class="font-mono font-bold text-foreground">T${idx >= 0 ? rows[idx].turn : ""}</div>` +
+          `<div class="font-mono font-bold text-foreground">${row ? marketTurnLabel(row.turn, calendarRef.current, true) : ""}${row?.endTurn && row.endTurn !== row.turn ? `<br/>through ${marketTurnLabel(row.endTurn, calendarRef.current, true)}` : ""}</div>` +
           `<div class="font-mono tabular-nums">O ${fmt(data.open)} H ${fmt(data.high)}<br/>` +
           `L ${fmt(data.low)} C ${fmt(data.close)}</div>` +
           `<div class="font-mono tabular-nums ${chg >= 0 ? "text-success" : "text-error"}">` +
           `${chg >= 0 ? "+" : ""}${fmt(chg)} (${chg >= 0 ? "+" : ""}${chgPct.toFixed(2)}%)</div>` +
-          `<div class="font-mono tabular-nums text-muted">Vol ${fmt(vol)}${flatNote}</div>`;
+          `<div class="font-mono tabular-nums text-muted">Vol ${fmt(vol)}${flatNote}${row?.invalidVolumeTrades ? " · incomplete turnover" : ""}</div>`;
         const box = container.getBoundingClientRect();
         tip.style.display = "block";
         tip.style.left = `${Math.min(Math.max(param.point.x + 12, 8), Math.max(box.width - 170, 8))}px`;
@@ -255,40 +283,54 @@ export function MarketOverview({
       ma50Ref.current = null;
       compareRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---------------- data: candles + volume per range ---------------- */
   useEffect(() => {
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-state reset on range/exchange change
-    setLoading(true);
-    setFailed(false);
-    fetch(`/api/stock-exchange/candles?exchange=${exchangeApi}&turns=${turns}`, {
-      cache: "no-store",
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("candles failed"))))
-      .then((json: CandlesResponse) => {
-        if (cancelled) return;
+    const controller = new AbortController();
+    let inFlight = false;
+    const load = async () => {
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      try {
+        const response = await fetch(
+          `/api/stock-exchange/candles?exchange=${exchangeApi}&turns=${turns}`,
+          { cache: "no-store", signal: controller.signal }
+        );
+        if (!response.ok) throw new Error("Market data unavailable");
+        const json: CandlesResponse = await response.json();
+        if (controller.signal.aborted) return;
+        calendarRef.current = json.calendar ?? null;
+        setMeta(json);
         setCandles(json.points ?? []);
-        setBucketTurns(json.bucketTurns ?? (json.bucketed ? 168 : 1));
+        setBucketTurns(json.bucketTurns ?? 1);
         setTotalTurns(json.totalTurns ?? json.points.length);
         setFirstIntradayTurn(
           json.firstIntradayTurn ?? json.points.find((c) => c.intraday)?.turn ?? null
         );
         setIntradayTurns(json.intradayTurns ?? 0);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFailed(true);
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
+        setFailed(false);
+      } catch {
+        if (!controller.signal.aborted) setFailed(true);
+      } finally {
+        inFlight = false;
+        if (!controller.signal.aborted) setLoading(false);
+      }
     };
-  }, [exchangeApi, turns]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- request status follows range changes
+    setLoading(true);
+    void load();
+    const refresh = () => {
+      if (document.visibilityState !== "hidden") void load();
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [exchangeApi, turns, refreshKey, currentTurn]);
 
   /* ---------------- push candles + volume into the chart ---------------- */
   useEffect(() => {
@@ -311,12 +353,16 @@ export function MarketOverview({
     volumeSeries.setData(
       candles.map((c): HistogramData<UTCTimestamp> => ({
         time: c.time as UTCTimestamp,
-        value: c.volume,
+        value: Number.isFinite(c.volume) ? c.volume : 0,
         color: c.close >= c.open ? `${up}80` : `${down}80`,
       }))
     );
-    chart.timeScale().fitContent();
-  }, [candles, chartReady]);
+    const key = `${exchangeApi}:${turns}`;
+    if (fittedRange.current !== key && candles.length > 0) {
+      chart.timeScale().fitContent();
+      fittedRange.current = key;
+    }
+  }, [candles, chartReady, exchangeApi, turns]);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,21 +379,21 @@ export function MarketOverview({
 
   // Mark the first live-print bucket on the price series as well as in the legend.
   useEffect(() => {
-    const start = candles.find((c) => c.intraday);
+    const events = candles.filter((c) => (c.notes?.length ?? 0) > 0);
     markerRef.current?.setMarkers(
-      start && firstIntradayTurn != null && intradayTurns < totalTurns
-        ? [
-            {
-              time: start.time as UTCTimestamp,
-              position: "aboveBar",
-              shape: "arrowDown",
-              color: cssVar("--muted", "#8f8f9d"),
-              text: `Live prints from T${firstIntradayTurn}`,
-            },
-          ]
-        : []
+      events.map((c) => ({
+        time: c.time as UTCTimestamp,
+        position: "aboveBar" as const,
+        shape: "circle" as const,
+        color: cssVar("--muted", "#8f8f9d"),
+        text: c.notes?.some((n) => n.startsWith("Large"))
+          ? "Valuation change"
+          : c.notes?.some((n) => n.startsWith("Live-print") || n.startsWith("Listing coverage"))
+            ? "Coverage change"
+            : "",
+      }))
     );
-  }, [candles, chartReady, firstIntradayTurn, intradayTurns, totalTurns]);
+  }, [candles, chartReady]);
 
   /* ---------------- moving-average overlays ---------------- */
   useEffect(() => {
@@ -417,15 +463,6 @@ export function MarketOverview({
       return;
     }
     const base = candles[0].time;
-    const normalize = (series: { time: number; value: number }[]): LineData<UTCTimestamp>[] => {
-      if (series.length === 0) return [];
-      const first = series[0].value;
-      if (!first) return [];
-      return series.map((p) => ({
-        time: p.time as UTCTimestamp,
-        value: ((p.value - first) / first) * 100,
-      }));
-    };
     const applyLine = (data: LineData<UTCTimestamp>[]) => {
       if (!chart) return;
       if (data.length === 0) {
@@ -451,61 +488,36 @@ export function MarketOverview({
         compareRef.current.setData(data);
       }
     };
-    if (compare.kind === "venue") {
-      fetch(`/api/stock-exchange/candles?exchange=${compare.api}&turns=${turns}`, {
-        cache: "no-store",
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("compare failed"))))
-        .then((json: CandlesResponse) => {
-          if (cancelled) return;
-          const pts = (json.points ?? [])
-            .filter((p) => p.time >= base)
-            .map((p) => ({ time: p.time, value: p.close }));
-          applyLine(normalize(pts));
-        })
-        .catch(() => {
-          if (!cancelled) setCompareError(true);
-        });
-    } else {
-      fetch(
-        `/api/stock-exchange/market-cap-history?exchange=${exchangeApi}&limit=${turns === 0 ? 2000 : turns}`,
-        {
-          cache: "no-store",
-        }
-      )
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("sector failed"))))
-        .then(
-          (json: {
-            points?: { turn: number; createdAt: string; bySector?: Record<string, number> }[];
-          }) => {
-            if (cancelled) return;
-            const pts = (json.points ?? [])
-              .map((p) => ({
-                turn: p.turn,
-                time: Math.floor(new Date(p.createdAt).getTime() / 1000),
-                value: p.bySector?.[compare.sector] ?? 0,
+    const query =
+      compare.kind === "venue"
+        ? `exchange=${compare.api}`
+        : `exchange=global&sector=${compare.sector}`;
+    fetch(`/api/stock-exchange/candles?${query}&turns=${turns}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Comparison unavailable"))))
+      .then((json: CandlesResponse) => {
+        if (cancelled) return;
+        setCompareError(false);
+        const points = (json.points ?? []).filter((p) => p.time >= base);
+        const opening = points[0]?.open;
+        applyLine(
+          opening > 0
+            ? points.map((p) => ({
+                time: p.time as UTCTimestamp,
+                value: (p.close / opening - 1) * 100,
               }))
-              .filter((p) => Number.isFinite(p.time) && p.value > 0);
-            // Comparisons use exactly the main candle boundaries.
-            const bucketedPts = bucketed
-              ? candles.flatMap((c, i) => {
-                  const nextTurn = candles[i + 1]?.turn ?? Infinity;
-                  const week = pts.filter((p) => p.turn >= c.turn && p.turn < nextTurn);
-                  const last = week[week.length - 1];
-                  return last ? [{ time: c.time, value: last.value }] : [];
-                })
-              : pts.filter((p) => p.time >= base);
-            applyLine(normalize(bucketedPts));
-          }
-        )
-        .catch(() => {
-          if (!cancelled) setCompareError(true);
-        });
-    }
+            : []
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCompareError(true);
+          compareRef.current?.setData([]);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [candles, chartReady, compare, exchangeApi, turns, bucketed]);
+  }, [candles, chartReady, compare, exchangeApi, turns]);
 
   const last = candles[candles.length - 1];
   const first = candles[0];
@@ -524,8 +536,9 @@ export function MarketOverview({
     [exchangeApi, exchangeMeta]
   );
   const sectorOptions = useMemo(
-    () => Object.keys(CORPORATION_TYPE_LABELS) as CorporationType[],
-    []
+    () =>
+      exchangeApi === "global" ? (Object.keys(CORPORATION_TYPE_LABELS) as CorporationType[]) : [],
+    [exchangeApi]
   );
 
   return (
@@ -534,7 +547,7 @@ export function MarketOverview({
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
-              {exchangeLabel} Market · Candles
+              {exchangeLabel} · Listed market cap
             </h3>
             {!loading && last && (
               <div className="text-sm tabular-nums">
@@ -542,7 +555,7 @@ export function MarketOverview({
                   {formatAmount(last.close)}
                 </span>{" "}
                 <span
-                  title={`${range} change from first open to last close`}
+                  title={`${range} raw capitalization change from first open to last close; includes changes in listings and valuation coverage`}
                   className={`font-mono font-bold ${rangeChg >= 0 ? "text-success" : "text-error"}`}
                 >
                   {rangeChg >= 0 ? "+" : ""}
@@ -558,12 +571,12 @@ export function MarketOverview({
                 key={r.key}
                 onClick={() => {
                   setRange(r.key);
-                  setLogScale(r.key === "ALL" || r.key === "1Y");
+                  setLogScale(r.key === "ALL" || r.key === "10Y");
                 }}
                 title={
                   r.turns === 0
                     ? "Full recorded history"
-                    : `Last ${r.turns} turns (${r.turns === 24 ? "a day" : r.turns === 168 ? "a week" : r.turns === 720 ? "a month" : "a year"})`
+                    : `Last ${r.turns} turns in the game calendar (48 turns per year)`
                 }
                 className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap ${
                   range === r.key
@@ -671,9 +684,8 @@ export function MarketOverview({
           </span>
           {bucketed && (
             <span>
-              {bucketTurns === 24
-                ? "Daily buckets (24 turns)"
-                : `Weekly buckets (${bucketTurns} turns)`}
+              {bucketTurns / 4 < 12 ? `${bucketTurns / 4}-month` : `${bucketTurns / 48}-year`}{" "}
+              buckets ({bucketTurns} turns)
             </span>
           )}
           {!loading && candles.length > 0 && (
@@ -684,10 +696,56 @@ export function MarketOverview({
           )}
           {!loading && firstIntradayTurn != null && intradayTurns < totalTurns && (
             <span>
-              Live-print coverage begins T{firstIntradayTurn}; earlier candles use recorded closes
+              Live-print coverage begins{" "}
+              {marketTurnLabel(firstIntradayTurn, meta?.calendar ?? null, true)}; earlier candles
+              use recorded closes
             </span>
           )}
         </div>
+        {last && (
+          <p className="mb-2 text-xs text-muted">
+            Through {marketTurnLabel(last.endTurn ?? last.turn, meta?.calendar ?? null, true)}
+            {meta?.asOf && (
+              <>
+                {" "}
+                · Observed{" "}
+                <LocalTime value={meta.asOf} options={{ hour: "2-digit", minute: "2-digit" }} /> ·
+                refreshes every minute
+              </>
+            )}
+          </p>
+        )}
+        {(meta?.invalidVolumeTrades ?? 0) > 0 && (
+          <p className="mb-2 text-xs text-warning">
+            Turnover incomplete: {meta?.invalidVolumeTrades} invalid trade records excluded.
+          </p>
+        )}
+        {(meta?.missingTurns ?? 0) + (meta?.invalidPriceTurns ?? 0) > 0 && (
+          <p className="mb-2 text-xs text-warning">
+            History coverage: {meta?.missingTurns ?? 0} missing turns;{" "}
+            {meta?.invalidPriceTurns ?? 0} invalid valuations excluded.
+          </p>
+        )}
+        {candles.some((c) => c.notes?.length) && (
+          <details className="mb-2 text-xs text-muted">
+            <summary className="cursor-pointer">
+              Valuation and coverage events ({candles.filter((c) => c.notes?.length).length})
+            </summary>
+            <ul className="mt-2 space-y-1 max-h-40 overflow-auto">
+              {candles
+                .filter((c) => c.notes?.length)
+                .map((c) => (
+                  <li key={c.turn}>
+                    {marketTurnLabel(c.turn, meta?.calendar ?? null, true)}
+                    {c.endTurn !== c.turn && c.endTurn
+                      ? ` through ${marketTurnLabel(c.endTurn, meta?.calendar ?? null, true)}`
+                      : ""}
+                    : {c.notes?.join("; ")}
+                  </li>
+                ))}
+            </ul>
+          </details>
+        )}
         <div className="relative h-60 sm:h-80">
           <div ref={containerRef} className="h-full w-full" />
           <div
@@ -700,21 +758,19 @@ export function MarketOverview({
           )}
           {!loading && (failed || candles.length === 0) && (
             <p className="absolute inset-0 flex items-center justify-center bg-card text-sm text-muted">
-              No market history available yet for this range.
+              {failed
+                ? "Market data could not be refreshed. Try again shortly."
+                : "No market history available yet for this range."}
             </p>
           )}
         </div>
       </div>
       <div className="px-4 py-2 text-[11px] text-muted border-t border-card-border mt-3">
-        Listed market capitalization in anchor units,{" "}
-        {bucketed
-          ? bucketTurns === 24
-            ? "grouped daily"
-            : "grouped weekly"
-          : "one candle per turn"}
-        . Covered turns use live-listing prints for all O/H/L/C values; older turns use recorded
-        closes. Volume shares the candle buckets. {range} change compares first open with last
-        close. Hover or drag for O/H/L/C and turnover.
+        Game-calendar ranges: 4 turns per month, 48 per year. Raw listed capitalization in anchor
+        units, {bucketed ? `${bucketTurns}-turn buckets` : "one candle per turn"}. Covered turns use
+        observed live prints; older turns use recorded closes. Capitalization changes include
+        listings, removals and coverage changes, so they are not investment returns. Volume includes
+        recorded executable fills. Hover for O/H/L/C, turnover and bucket dates.
       </div>
     </div>
   );

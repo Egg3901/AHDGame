@@ -35,6 +35,7 @@ describe("stockExchangeSnapshot", () => {
   let mockDb: Db;
   let mockCollection: ReturnType<typeof vi.fn>;
   let mockUpdateOne: ReturnType<typeof vi.fn>;
+  let intradayBulkWrite: ReturnType<typeof vi.fn>;
 
   const createMockChain = (result: any[]) => ({
     find: vi.fn().mockReturnThis(),
@@ -52,6 +53,7 @@ describe("stockExchangeSnapshot", () => {
   beforeEach(() => {
     resetCorpFxRateCacheForTests();
     mockUpdateOne = vi.fn();
+    intradayBulkWrite = vi.fn().mockResolvedValue({ ok: 1 });
     // Default collection mock: returns an empty chain (find/sort/project/aggregate/toArray).
     // Individual tests override with `.mockReturnValueOnce(createMockChain([...]))` for the
     // collections they care about; any collection not covered falls through to this default
@@ -67,7 +69,7 @@ describe("stockExchangeSnapshot", () => {
       findOne: vi.fn().mockResolvedValue(null),
       updateOne: mockUpdateOne,
       updateMany: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
-      bulkWrite: vi.fn().mockResolvedValue({ ok: 1 }),
+      bulkWrite: intradayBulkWrite,
     }));
 
     mockDb = {
@@ -538,15 +540,18 @@ describe("stockExchangeSnapshot", () => {
 
       await generateStockExchangeSnapshots(100, mockDb);
 
-      // Snapshot upserts plus one intraday level per venue (shared mock).
-      expect(mockUpdateOne).toHaveBeenCalledTimes(2 * (ALL_EXCHANGES.length + 1));
-      expect(mockUpdateOne).toHaveBeenCalledWith(
-        { _id: "nyse:100" },
-        expect.objectContaining({
-          $max: expect.objectContaining({ high: expect.any(Number) }),
-          $min: expect.objectContaining({ low: expect.any(Number) }),
-        }),
-        { upsert: true }
+      // One batched intraday write now covers all venues and global sectors.
+      expect(mockUpdateOne).toHaveBeenCalledTimes(ALL_EXCHANGES.length + 1);
+      expect(intradayBulkWrite).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            updateOne: expect.objectContaining({ filter: { _id: "nyse:100" } }),
+          }),
+          expect.objectContaining({
+            updateOne: expect.objectContaining({ filter: { _id: "sector:financial:100" } }),
+          }),
+        ]),
+        { ordered: false }
       );
       expect(mockUpdateOne).toHaveBeenCalledWith(
         { _id: "nyse" },

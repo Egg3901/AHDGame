@@ -1066,13 +1066,21 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       await recordIntradayLevels(
         database,
         currentTurn,
-        snapshots.map((snapshot) => ({
-          exchange: snapshot._id,
-          marketCap: snapshot.listings.reduce(
-            (sum, l) => sum + (l.marketCapAnchor ?? l.marketCap),
-            0
-          ),
-        })),
+        [
+          ...snapshots.map((snapshot) => ({
+            exchange: snapshot._id,
+            marketCap: snapshot.listings.reduce(
+              (sum, l) => sum + (l.marketCapAnchor ?? l.marketCap),
+              0
+            ),
+          })),
+          ...Object.keys(CORPORATION_TYPE_LABELS).map((type) => ({
+            exchange: `sector:${type}`,
+            marketCap: allListings
+              .filter((l) => l.type === type)
+              .reduce((sum, l) => sum + (l.marketCapAnchor ?? l.marketCap), 0),
+          })),
+        ],
         now
       );
     }

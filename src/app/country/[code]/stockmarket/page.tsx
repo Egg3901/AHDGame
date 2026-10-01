@@ -13,7 +13,6 @@ import type {
   MarketCapPoint,
   ExchangeFilter,
   StockTab,
-  StockListing,
 } from "./types";
 import { StockTicker } from "./components/StockTicker";
 import { ExchangeSelector, type ExchangeCompareRow } from "./components/ExchangeSelector";
@@ -857,6 +856,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
                 </div>
               </div>
               <span
+                title="Price return of today's listings, using reconstructed starting capitalization weights. Local quote returns, split adjusted; not the raw capitalization change on the chart."
                 className={`text-lg font-bold tabular-nums ${
                   weightedPriceChange >= 0 ? "text-success" : "text-error"
                 }`}
@@ -884,7 +884,12 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         activeTab === "stats" ||
         activeTab === "bonds" ||
         activeTab === "commodities" ? (
-          <MarketOverview exchangeFilter={exchangeFilter} exchangeMeta={exchangeMeta} />
+          <MarketOverview
+            exchangeFilter={exchangeFilter}
+            exchangeMeta={exchangeMeta}
+            refreshKey={data}
+            currentTurn={currentTurn}
+          />
         ) : (
           <TabContextStrip
             activeTab={activeTab}

@@ -1,10 +1,10 @@
 ---
-date: 2026-09-30
-title: Fix stock chart ranges and capitalization
+date: 2026-10-01
+title: Repair stock market charts and returns
 summary: >-
-  Stock candles now use consistent live market values, and chart changes follow
-  the selected range. Daily buckets and logarithmic scaling make full history
-  readable, with aligned turnover and visible intraday coverage.
+  Stock charts now use game-calendar ranges and dates, refresh automatically,
+  retain long-history detail, and distinguish live quotes from recorded closes.
+  Market returns use starting weights, and incomplete turnover is flagged.
 tags: [stock-market, charts]
 badges: [patch]
 areas: [fullstack]
@@ -12,8 +12,10 @@ areas: [fullstack]
 
 ## What changed
 
-- Candles with intraday prints use those prints for open, high, low and close.
-- Range changes compare the first open with the last close, including the preceding turn when available.
-- Month and shorter full-history views use daily buckets; longer history uses weekly buckets. Full history includes all recorded turns.
-- Full-history and yearly views default to a logarithmic scale, with a linear scale toggle.
-- Volume uses the same candle buckets and chart pane. Intraday coverage counts underlying turns and marks where live prints begin.
+- Chart ranges use game months and years, including founding-phase calendar offsets. Bucket tooltips show both start and end dates.
+- Long history retains monthly or quarterly detail, includes all recorded turns, and offers logarithmic scaling.
+- Live-print candles use one valuation source for all O/H/L/C values. Charts refresh every minute and when the world turn changes, preserving zoom.
+- Capitalization changes, price-basket returns, and continuity-adjusted indices are explicitly distinguished. Returns use starting capitalization weights instead of magnifying winners with ending weights.
+- Price and volume use identical buckets. Invalid trade records cannot poison turnover totals; incomplete turnover is visibly flagged, and new invalid audit writes are rejected.
+- Missing turns, listing coverage changes, constituent removals, and large stored repricings are annotated without smoothing away history.
+- Exchange and global-sector comparisons share the chart's ranges, valuation sources, and first-open basis.

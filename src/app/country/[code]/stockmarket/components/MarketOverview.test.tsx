@@ -111,7 +111,7 @@ describe("MarketOverview loading", () => {
     );
     render(<MarketOverview exchangeFilter="global" />);
     await waitFor(() => expect(screen.getByText(/-95.*-47.50%/)).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "24H" }));
+    fireEvent.click(screen.getByRole("button", { name: "6M" }));
     await waitFor(() => expect(screen.getByText(/-15.*-12.50%/)).toBeTruthy());
   });
 
@@ -143,7 +143,7 @@ describe("MarketOverview loading", () => {
     expect(setVolumeData.mock.calls.at(-1)?.[0][0].value).toBe(0);
     expect(screen.getByText("1/48 turns with intraday prints")).toBeTruthy();
     expect(screen.getByText(/coverage begins T34/)).toBeTruthy();
-    expect(screen.getByText("Daily buckets (24 turns)")).toBeTruthy();
+    expect(screen.getByText("6-month buckets (24 turns)")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "ALL" }));
     await waitFor(() => expect(applyPriceOptions).toHaveBeenCalledWith({ mode: 1 }));
   });
@@ -155,18 +155,20 @@ describe("MarketOverview loading", () => {
         Promise.resolve({
           ok: true,
           json: async () =>
-            url.includes("market-cap-history")
+            url.includes("sector=financial")
               ? {
                   points: [
                     {
                       turn: 10,
-                      createdAt: new Date(1000 * 1000).toISOString(),
-                      bySector: { financial: 100 },
+                      time: 1000,
+                      open: 100,
+                      close: 100,
                     },
                     {
                       turn: 11,
-                      createdAt: new Date(2000 * 1000).toISOString(),
-                      bySector: { financial: 110 },
+                      time: 2000,
+                      open: 100,
+                      close: 110,
                     },
                   ],
                 }
@@ -199,20 +201,57 @@ describe("MarketOverview loading", () => {
     await waitFor(() =>
       expect(setCompareData).toHaveBeenCalledWith([
         { time: 1000, value: 0 },
-        { time: 2000, value: 10 },
+        { time: 2000, value: expect.closeTo(10) },
       ])
     );
     fireEvent.change(select, { target: { value: "venue:nyse" } });
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith("/api/stock-exchange/candles?exchange=nyse&turns=168", {
+      expect(fetch).toHaveBeenCalledWith("/api/stock-exchange/candles?exchange=nyse&turns=48", {
         cache: "no-store",
       })
     );
     await waitFor(() =>
       expect(setCompareData).toHaveBeenCalledWith([
         { time: 1000, value: 0 },
-        { time: 2000, value: 20 },
+        { time: 2000, value: expect.closeTo(20) },
       ])
     );
+  });
+});
+
+describe("world dates and refreshed data", () => {
+  it("labels the ending game date of a bucket and reloads without refitting zoom", async () => {
+    const fit = vi.fn();
+    createChart.mockImplementation(() => ({
+      addSeries: () => ({ setData: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }) }),
+      timeScale: () => ({ fitContent: fit }),
+      subscribeCrosshairMove: vi.fn(),
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          points: [{ ...candle, turn: 1255, endTurn: 1266, invalidVolumeTrades: 2 }],
+          totalTurns: 12,
+          invalidVolumeTrades: 2,
+          calendar: {
+            startingYear: 1953,
+            currentTurn: 1266,
+            preIterationTurns: 48,
+            lastTurnProcessed: "2026-10-01",
+          },
+        }),
+      })
+    );
+    const { rerender } = render(<MarketOverview exchangeFilter="global" currentTurn={1266} />);
+    await waitFor(() => expect(screen.getByText(/Through May 1978/)).toBeTruthy());
+    expect(screen.getByText(/Turnover incomplete/)).toBeTruthy();
+    expect(createChart.mock.calls.at(-1)?.[1].timeScale.tickMarkFormatter(1000)).toBe("May 1978");
+    rerender(<MarketOverview exchangeFilter="global" currentTurn={1267} />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(fit).toHaveBeenCalledTimes(1);
   });
 });
