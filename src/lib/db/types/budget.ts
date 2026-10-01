@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { EconomicSystemTarget } from "@/lib/db/types/legislation";
 
 export type CreditRating = "AAA" | "AA" | "A" | "BBB" | "BB" | "B" | "CCC";
 export type BudgetDocumentId = "federal" | "UK" | string;
@@ -219,6 +220,17 @@ export interface EconomicGrowthFactors {
    *  Present only for planned economies while `commandEconomyEnabled` is on; the
    *  turn engine hydrates the in-process registry from this field. */
   marketizationLevel?: number;
+  /** A legislated economic system (`economic_system_reform` provision). While
+   *  present the turn engine ramps `marketizationLevel` toward `targetLevel`,
+   *  then holds it there with weak gravity in place of the era schedule. */
+  economicReform?: {
+    target: EconomicSystemTarget;
+    targetLevel: number;
+    enactedTurn: number;
+    /** Turn the dial first reached the target; null while the ramp runs. */
+    reachedAtTurn?: number | null;
+    billId?: string;
+  };
 
   // ── Command Economy v2 (P1): active Gosbank (directed credit + soft budgets) ─
   /** Effective per-country budget-softness dial, 0 (hard: insolvent SOEs fold)

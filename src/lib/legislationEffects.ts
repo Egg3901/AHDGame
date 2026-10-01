@@ -321,7 +321,13 @@ export async function applyLegislationEffect(
           // Structural act: bring a seat into existence regardless of its era.
           // Must stay above the tariff catch-all (no tariff fields to cast).
           await applyCreateDepartmentProvision(db, p);
-        } else {
+        } else if (p.type === "tariff") {
+          // Only a real tariff reaches the tariff write. Electoral law, central
+          // bank independence, euro adoption and economic system reform are
+          // applied by `billEnactment`; an open catch-all here cast them to
+          // TariffProvision and upserted a rate-less, scope-less tariff row for
+          // every one of those bills.
+          //
           // Real enactment path — apply the data write, then fire sentiment
           // pulses only if the tariff rate actually changed. The reconcile
           // replay path (`reconcileSignedTariffBills`) calls `applyTariffProvision`
