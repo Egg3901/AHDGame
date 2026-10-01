@@ -164,7 +164,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!runningMateChar) {
       return NextResponse.json({ error: "Running mate character not found" }, { status: 404 });
     }
-    if (!runningMateChar.userId) {
+    if (!runningMateChar.userId || runningMateChar.federationPendingResidenceId !== undefined) {
       return NextResponse.json(
         { error: "That character is not eligible to be selected as running mate" },
         { status: 400 }
