@@ -2,6 +2,7 @@ import { MongoClient, ObjectId } from "mongodb";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Election } from "@/lib/db/types";
 import { admitRussianDumaNpcNominees } from "./dumaNpcAdmission";
+import { certifyRussianDumaRepeat } from "./dumaRepeatResult";
 import {
   openRussianDumaRepeat,
   RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
@@ -232,6 +233,144 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(
       await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
     ).not.toHaveProperty("ruFederalAssemblySinceTurn");
+    const repeatCandidates = replacements.map((row) => ({
+      _id: new ObjectId(),
+      electionId: row._id,
+      countryId: "RU",
+      characterId: npcId,
+      nppId: npcId,
+      isNPP: true,
+      party: "1",
+      characterName: "Repeat bounded nominee",
+      status: "active",
+      russianDumaNomination: {
+        registrationOrder: 3000,
+        nominationOrder: 0,
+        capacity: row.totalSeats!,
+      },
+    }));
+    await db.collection("electionCandidates").insertMany(repeatCandidates);
+    await db.collection("electionVoteTallies").insertMany(
+      replacements.map((row, index) => ({
+        _id: new ObjectId(),
+        electionId: row._id,
+        finalized: false,
+        totalVotes: {
+          [repeatCandidates[index]._id.toHexString()]:
+            row.totalSeats === 225 ? row.russianDumaRound!.registeredVoters : 0,
+        },
+        candidateParties: { [repeatCandidates[index]._id.toHexString()]: "1" },
+        russianDumaBallot: { againstAllVotes: 0 },
+      }))
+    );
+    await db
+      .collection("elections")
+      .updateMany(
+        { "russianDumaRound.cohortId": result!.record.cohortId },
+        { $set: { status: "completed" } }
+      );
+    await db.command({
+      collMod: RUSSIAN_DUMA_RESULTS_COLLECTION,
+      validator: { generation: { $ne: 1 } },
+    });
+    const certification = {
+      db,
+      rootCohortId: opened!.cohortId,
+      generation: 1,
+      turn: 154,
+      now: new Date(4000),
+    };
+    await expect(certifyRussianDumaRepeat(certification)).rejects.toMatchObject({ code: 121 });
+    expect(
+      await db.collection("elections").countDocuments({
+        "russianDumaRound.cohortId": result!.record.cohortId,
+        status: "completed",
+      })
+    ).toBe(2);
+    expect(
+      await db
+        .collection("electionVoteTallies")
+        .countDocuments({ electionId: { $in: result!.record.electionIds }, finalized: false })
+    ).toBe(2);
+    expect(
+      await db
+        .collection("electionCandidates")
+        .countDocuments({ electionId: { $in: result!.record.electionIds }, status: "active" })
+    ).toBe(2);
+    expect(await db.collection(RUSSIAN_DUMA_RESULTS_COLLECTION).countDocuments()).toBe(1);
+    await db.command({ collMod: RUSSIAN_DUMA_RESULTS_COLLECTION, validator: {} });
+    commands = 0;
+    const firstRepeat = await certifyRussianDumaRepeat(certification);
+    const certificationCommands = commands;
+    expect(certificationCommands).toBeLessThanOrEqual(18);
+    expect(firstRepeat.result.constituencyResults.filter((row) => row.winner)).toHaveLength(224);
+    expect(firstRepeat.result.listDecision.outcome).toBe("elected");
+    expect(firstRepeat.ballots).toHaveLength(226);
+    expect(firstRepeat.nominees).toHaveLength(226);
+    expect(Object.keys(firstRepeat.votesByElection)).toHaveLength(226);
+    expect(firstRepeat.result.constituencyResults.filter((row) => row.winner)).toEqual(
+      previous.result.constituencyResults.filter((row) => row.winner)
+    );
+    commands = 0;
+    expect(await certifyRussianDumaRepeat({ ...certification, turn: 155 })).toEqual(firstRepeat);
+    expect(commands).toBeLessThanOrEqual(3);
+    const next = await openRussianDumaRepeat({
+      ...input,
+      previousResultId: firstRepeat._id,
+      turn: 155,
+      now: new Date(5000),
+    });
+    expect(next?.record.generation).toBe(2);
+    expect(next?.record.electionIds).toHaveLength(1);
+    const last = await db
+      .collection<Election>("elections")
+      .findOne({ _id: next!.record.electionIds[0] });
+    const lastCandidate = {
+      ...repeatCandidates.find((row) =>
+        row.electionId.equals(replacements.find((row) => row.totalSeats === 1)!._id)
+      )!,
+      _id: new ObjectId(),
+      electionId: last!._id,
+      status: "active",
+    };
+    await db.collection("electionCandidates").insertOne(lastCandidate);
+    await db.collection("electionVoteTallies").insertOne({
+      _id: new ObjectId(),
+      electionId: last!._id,
+      finalized: false,
+      totalVotes: { [lastCandidate._id.toHexString()]: last!.russianDumaRound!.registeredVoters },
+      candidateParties: { [lastCandidate._id.toHexString()]: "1" },
+      russianDumaBallot: { againstAllVotes: 0 },
+    });
+    await db
+      .collection("elections")
+      .updateOne({ _id: last!._id }, { $set: { status: "completed" } });
+    const finalRepeat = await certifyRussianDumaRepeat({
+      ...certification,
+      generation: 2,
+      turn: 167,
+      now: new Date(6000),
+    });
+    expect(finalRepeat.result.constituencyResults.filter((row) => row.winner)).toHaveLength(225);
+    expect(
+      Object.values(finalRepeat.result.listAssignment!.seatsByNominee).reduce(
+        (sum, seats) => sum + seats,
+        0
+      )
+    ).toBe(225);
+    expect(finalRepeat.result.listDecision.outcome).toBe("elected");
+    expect(
+      await openRussianDumaRepeat({ ...input, previousResultId: finalRepeat._id, turn: 168 })
+    ).toBeNull();
+    expect(await db.collection(RUSSIAN_DUMA_RESULTS_COLLECTION).countDocuments()).toBe(3);
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    expect(
+      (
+        await db
+          .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
+          .findOne({ _id: previous._id })
+      )?.ballots
+    ).toEqual(snapshot);
     await db
       .collection<Fixture>("countryGameStates")
       .updateOne({ _id: "RU" }, { $set: { ruFederalAssemblyMandateSinceTurn: 130 } });
