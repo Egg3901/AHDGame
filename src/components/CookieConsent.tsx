@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui";
 import { shouldRenderGooglePrivacyMessaging } from "@/lib/googlePrivacyMessaging";
 
-const STORAGE_KEY = "ahd-cookie-consent";
+import { COOKIE_CONSENT_KEY } from "@/lib/analytics/storageKeys";
+
+const STORAGE_KEY = COOKIE_CONSENT_KEY;
 export const CONSENT_EVENT = "ahd:cookie-consent-changed";
 export const CONSENT_RESET_EVENT = "ahd:cookie-consent-reset";
 

@@ -105,6 +105,69 @@ function InlineHeatBar({ pct }: { pct: number }) {
   );
 }
 
+/** Per-source action breakdown, shared by the control and dossier layouts. */
+export function ActionsTooltipBody({
+  baseActionsPerTurn,
+  officeActionBonus,
+  chairActionBonus,
+  bonusActionsFromParty,
+  actionsPerTurn,
+  totalActionsPerTurn,
+  actionBreakdown,
+  actionCap,
+  hoardThreshold,
+}: {
+  baseActionsPerTurn?: number;
+  officeActionBonus?: number;
+  chairActionBonus?: number;
+  bonusActionsFromParty?: number;
+  actionsPerTurn: number;
+  totalActionsPerTurn: number;
+  actionBreakdown?: { label: string; amount: number }[];
+  actionCap: number;
+  hoardThreshold: number;
+}) {
+  const t = useTranslations("profile.standing");
+  return (
+    <div className="text-muted space-y-1">
+      <p>
+        {baseActionsPerTurn != null && officeActionBonus != null ? (
+          <>
+            {t("actionsBase", { count: baseActionsPerTurn })}
+            {officeActionBonus > 0 && <> + {t("actionsOffice", { count: officeActionBonus })}</>}
+            {(chairActionBonus ?? 0) > 0 && (
+              <> + {t("actionsChair", { count: chairActionBonus ?? 0 })}</>
+            )}
+            {(bonusActionsFromParty ?? 0) > 0 && (
+              <> + {t("actionsParty", { count: bonusActionsFromParty ?? 0 })}</>
+            )}{" "}
+            = <strong>{actionsPerTurn}</strong> {t("actionsPerTurnUnit")}
+          </>
+        ) : (
+          <>{t("actionsSimple", { count: totalActionsPerTurn })}</>
+        )}
+      </p>
+      {actionBreakdown && actionBreakdown.length > 0 && (
+        <div className="border-t border-card-border/30 pt-1 space-y-0.5">
+          {actionBreakdown.map((item) => (
+            <div key={item.label} className="flex justify-between gap-3 tabular-nums">
+              <span>{item.label}</span>
+              <span>+{item.amount}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p>{t("turnExplainer", { cap: actionCap })}</p>
+      <p>
+        {t("hoardWarning", {
+          threshold: hoardThreshold,
+          penalty: ACTION_HOARDING_PENALTY,
+        })}
+      </p>
+    </div>
+  );
+}
+
 export function PoliticalStanding({
   character,
   homeState,
@@ -163,44 +226,17 @@ export function PoliticalStanding({
                 </span>
               }
             >
-              <div className="text-muted space-y-1">
-                <p>
-                  {baseActionsPerTurn != null && officeActionBonus != null ? (
-                    <>
-                      {t("actionsBase", { count: baseActionsPerTurn })}
-                      {officeActionBonus > 0 && (
-                        <> + {t("actionsOffice", { count: officeActionBonus })}</>
-                      )}
-                      {(chairActionBonus ?? 0) > 0 && (
-                        <> + {t("actionsChair", { count: chairActionBonus ?? 0 })}</>
-                      )}
-                      {(bonusActionsFromParty ?? 0) > 0 && (
-                        <> + {t("actionsParty", { count: bonusActionsFromParty ?? 0 })}</>
-                      )}{" "}
-                      = <strong>{actionsPerTurn}</strong> {t("actionsPerTurnUnit")}
-                    </>
-                  ) : (
-                    <>{t("actionsSimple", { count: totalActionsPerTurn })}</>
-                  )}
-                </p>
-                {actionBreakdown && actionBreakdown.length > 0 && (
-                  <div className="border-t border-card-border/30 pt-1 space-y-0.5">
-                    {actionBreakdown.map((item) => (
-                      <div key={item.label} className="flex justify-between gap-3 tabular-nums">
-                        <span>{item.label}</span>
-                        <span>+{item.amount}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p>{t("turnExplainer", { cap: actionCap })}</p>
-                <p>
-                  {t("hoardWarning", {
-                    threshold: hoardThreshold,
-                    penalty: ACTION_HOARDING_PENALTY,
-                  })}
-                </p>
-              </div>
+              <ActionsTooltipBody
+                baseActionsPerTurn={baseActionsPerTurn}
+                officeActionBonus={officeActionBonus}
+                chairActionBonus={chairActionBonus}
+                bonusActionsFromParty={bonusActionsFromParty}
+                actionsPerTurn={actionsPerTurn}
+                totalActionsPerTurn={totalActionsPerTurn}
+                actionBreakdown={actionBreakdown}
+                actionCap={actionCap}
+                hoardThreshold={hoardThreshold}
+              />
             </InfoTooltip>
             <div className="text-[10px] text-muted/70 font-medium mt-0.5">
               {t("perTurn", { count: actionsPerTurn })}
