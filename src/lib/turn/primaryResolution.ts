@@ -3,6 +3,7 @@
  * recordPrimarySnapshots includes versioned turnout and standing character ads;
  * resolvePrimariesIfNeeded preserves counted ballots when selecting nominees.
  */
+import { preloadIncumbentSeatShares } from "@/lib/electionEngine/incumbentSeatShare";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import {
@@ -1913,6 +1914,13 @@ export async function accumulateGeneralElectionVotes(
   if (preload) {
     preload.fundsByPartyByElection = await loadFundsByPartyForElections(
       generalElections.filter((e) => e.electionType !== "president").map((e) => e._id),
+      db
+    );
+    // One handle for the phase so per-Db caches (country state) hit, and
+    // incumbent seat shares for every race in two reads (#2695).
+    preload.db = db;
+    preload.incumbentSeatShareByElection = await preloadIncumbentSeatShares(
+      generalElections.filter((e) => e.electionType !== "president"),
       db
     );
   }
