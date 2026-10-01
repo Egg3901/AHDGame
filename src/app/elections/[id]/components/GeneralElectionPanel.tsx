@@ -1,5 +1,6 @@
 "use client";
 
+import { RussianPresidentialResultPanel } from "./RussianPresidentialResultPanel";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
 
@@ -373,6 +374,9 @@ export function GeneralElectionPanel({
     name: c.characterName,
     color: colorMap.get(c.id)!,
   }));
+
+  if (countryId === "RU" && electionType === "president")
+    return <RussianPresidentialResultPanel candidates={sorted} tally={tally} />;
 
   // Presidential election - enhanced table view
   if (isPresident) {

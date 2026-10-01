@@ -669,6 +669,10 @@ export interface CountryGameState {
   ruPresidencyMandateSinceTurn?: number;
   /** RU 1991: the first presidential election has a certified result. */
   ruPresidencyElectionCertifiedSinceTurn?: number;
+  /** Bound result journal of the latest certified Russian presidential ballot. */
+  ruPresidencyCertifiedElectionId?: ObjectId;
+  /** First direct Russian ballot opened under the bound constitutional mandate. */
+  ruPresidencyFirstElectionId?: ObjectId;
   /** RU 1991: enacted authority to replace Congress with the Federal Assembly. */
   ruFederalAssemblyMandateSinceTurn?: number;
   /** RU 1991: the first Federal Assembly election has a certified result. */

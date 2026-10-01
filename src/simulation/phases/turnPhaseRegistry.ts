@@ -1228,6 +1228,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const { processRussianConstitutionalMandates } =
             await import("@/lib/countries/ru/constitutionalProposals");
           await processRussianConstitutionalMandates(db, context.gameState, newTurn, gameNow);
+          const { openRussianPresidentialElection } =
+            await import("@/lib/countries/ru/presidentialElectionOpening");
+          await openRussianPresidentialElection({
+            db,
+            game: context.gameState,
+            turn: newTurn,
+            now: gameNow,
+          });
           const { processRuPresidencyTransition } =
             await import("@/lib/countries/ru/ruPresidencyTransition");
           await processRuPresidencyTransition(db, context.gameState, newTurn, gameNow);

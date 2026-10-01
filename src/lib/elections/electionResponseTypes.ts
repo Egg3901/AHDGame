@@ -42,6 +42,7 @@ export interface SnapshotEntry {
 }
 
 export interface GeneralVotesData {
+  russianPresidentialResult?: ElectionVoteTally["russianPresidentialResult"];
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;

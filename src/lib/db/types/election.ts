@@ -77,6 +77,13 @@ export interface Election {
    * which resolve to v1.
    */
   rulesetVersion?: number;
+  /** A Russian direct ballot freezes its mandate, electorate and round. */
+  russianPresidentialRound?: {
+    round: 1 | 2;
+    mandateSinceTurn: number;
+    registeredVoters: number;
+    predecessorElectionId?: ObjectId;
+  };
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**
@@ -140,6 +147,8 @@ export interface ElectionCandidate {
   withdrawnAt?: Date;
   /** For president: running mate character ID. Cannot be current President. */
   runningMateId?: ObjectId;
+  /** Bound Russian tickets can pair a player or NPC nominee with an NPC vice-president. */
+  russianRunningMateNppId?: ObjectId;
   /** 2-char US state abbreviation (e.g. "CA", "TX") — for presidential travel system */
   travelState?: string | null;
   /** When the travel was last set */
