@@ -117,14 +117,12 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     await db
       .collection<Fixture>("countryGameStates")
       .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruPresidencyMandateSinceTurn: 72 });
-    await db
-      .collection<Fixture>("states")
-      .insertOne({
-        _id: "RU_CEN",
-        countryId: "RU",
-        population: 150,
-        votingEligiblePopulation: 100,
-      });
+    await db.collection<Fixture>("states").insertOne({
+      _id: "RU_CEN",
+      countryId: "RU",
+      population: 150,
+      votingEligiblePopulation: 100,
+    });
     await db.createCollection("elections", { validator: { countryId: { $ne: "RU" } } });
     const input = { db, game: { preset: "1991-default" }, turn: 72, now: new Date(1000) };
     await expect(openRussianPresidentialElection(input)).rejects.toThrow();
@@ -154,40 +152,34 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     await db
       .collection<Fixture>("countryGameStates")
       .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruPresidencyMandateSinceTurn: 72 });
-    await db
-      .collection("elections")
-      .insertOne({
-        _id: electionId,
-        countryId: "RU",
-        electionType: "president",
-        cycle: 1,
-        electionYear: 1992,
-        status: "completed",
-        endTurn: 84,
-        russianPresidentialRound: { round: 1, mandateSinceTurn: 72, registeredVoters: 100 },
-      });
-    await db
-      .collection("electionCandidates")
-      .insertMany(
-        ids.map((_id, i) => ({
-          _id,
-          electionId,
-          countryId: "RU",
-          characterId: new ObjectId(),
-          characterName: `Candidate ${i}`,
-          party: String(i),
-          status: "active",
-        }))
-      );
-    await db
-      .collection("electionVoteTallies")
-      .insertOne({
-        _id: electionId,
+    await db.collection("elections").insertOne({
+      _id: electionId,
+      countryId: "RU",
+      electionType: "president",
+      cycle: 1,
+      electionYear: 1992,
+      status: "completed",
+      endTurn: 84,
+      russianPresidentialRound: { round: 1, mandateSinceTurn: 72, registeredVoters: 100 },
+    });
+    await db.collection("electionCandidates").insertMany(
+      ids.map((_id, i) => ({
+        _id,
         electionId,
-        finalized: false,
-        totalVotes: Object.fromEntries(ids.map((id, i) => [id.toHexString(), [25, 20, 15][i]])),
-        candidateParties: Object.fromEntries(ids.map((id, i) => [id.toHexString(), String(i)])),
-      });
+        countryId: "RU",
+        characterId: new ObjectId(),
+        characterName: `Candidate ${i}`,
+        party: String(i),
+        status: "active",
+      }))
+    );
+    await db.collection("electionVoteTallies").insertOne({
+      _id: electionId,
+      electionId,
+      finalized: false,
+      totalVotes: Object.fromEntries(ids.map((id, i) => [id.toHexString(), [25, 20, 15][i]])),
+      candidateParties: Object.fromEntries(ids.map((id, i) => [id.toHexString(), String(i)])),
+    });
     await db.createCollection("russianPresidentialElectionResults");
     await db.command({ collMod: "elections", validator: { _id: electionId } });
     const input = { db, electionId, turn: 84, now: new Date(1000) };
@@ -223,28 +215,24 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       president = new ObjectId(),
       vice = new ObjectId(),
       chair = new ObjectId();
-    await db
-      .collection<Fixture>("countryGameStates")
-      .insertOne({
-        _id: "RU",
-        ruSovietSuccessionSinceTurn: 48,
-        ruPresidencyMandateSinceTurn: 72,
-        ruPresidencyElectionCertifiedSinceTurn: 84,
-        ruPresidencyCertifiedElectionId: electionId,
-      });
-    await db
-      .collection("russianPresidentialElectionResults")
-      .insertOne({
-        _id: electionId.toHexString(),
-        electionId,
-        countryId: "RU",
-        preset: "1991-default",
-        mandateSinceTurn: 72,
-        resolvedOnTurn: 84,
-        decision: { outcome: "won", winnerCandidateId: new ObjectId().toHexString() },
-        winner: { characterId: president, name: "President", party: "1" },
-        vicePresident: { nppId: vice, name: "Vice", party: "1" },
-      });
+    await db.collection<Fixture>("countryGameStates").insertOne({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruPresidencyMandateSinceTurn: 72,
+      ruPresidencyElectionCertifiedSinceTurn: 84,
+      ruPresidencyCertifiedElectionId: electionId,
+    });
+    await db.collection("russianPresidentialElectionResults").insertOne({
+      _id: electionId.toHexString(),
+      electionId,
+      countryId: "RU",
+      preset: "1991-default",
+      mandateSinceTurn: 72,
+      resolvedOnTurn: 84,
+      decision: { outcome: "won", winnerCandidateId: new ObjectId().toHexString() },
+      winner: { characterId: president, name: "President", party: "1" },
+      vicePresident: { nppId: vice, name: "Vice", party: "1" },
+    });
     await db
       .collection("characters")
       .insertOne({ _id: president, countryId: "RU", currentOffice: null, money: 500 });
@@ -252,23 +240,19 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       { _id: vice, countryId: "RU", currentOffice: null },
       { _id: chair, countryId: "RU", currentOffice: { type: "chairmanOfSupremeSoviet" } },
     ]);
-    await db
-      .collection("electedOfficials")
-      .insertOne({
-        _id: new ObjectId(),
-        countryId: "RU",
-        officeType: "chairmanOfSupremeSoviet",
-        nppId: chair,
-      });
-    await db
-      .collection<Fixture>("governmentFormations")
-      .insertOne({
-        _id: "RU",
-        status: "formed",
-        pmName: "Continuing PM",
-        pmNppId: new ObjectId(),
-        hosNppId: chair,
-      });
+    await db.collection("electedOfficials").insertOne({
+      _id: new ObjectId(),
+      countryId: "RU",
+      officeType: "chairmanOfSupremeSoviet",
+      nppId: chair,
+    });
+    await db.collection<Fixture>("governmentFormations").insertOne({
+      _id: "RU",
+      status: "formed",
+      pmName: "Continuing PM",
+      pmNppId: new ObjectId(),
+      hosNppId: chair,
+    });
     await db.createCollection("russianPresidentialOfficeArchives");
     await db.createCollection("electionCandidates");
     await db.createCollection("pmAppointmentVotes");
@@ -387,7 +371,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       countryBefore
     );
     expect(
-      await db.collection("russianConstitutionalProposals").findOne({ _id: proposal._id })
+      await db.collection<Fixture>("russianConstitutionalProposals").findOne({ _id: proposal._id })
     ).toMatchObject({ status: "open" });
     await db.command({ collMod: "russianConstitutionalProposals", validator: {} });
     commands = 0;

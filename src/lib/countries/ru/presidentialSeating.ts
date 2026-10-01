@@ -12,6 +12,7 @@ import type {
   ElectionCandidate,
 } from "@/lib/db/types";
 import { PM_VACANCY_DEADLINE_TURNS } from "@/lib/constants/turnTime";
+import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import {
   RUSSIAN_PRESIDENTIAL_RESULTS_COLLECTION,
@@ -23,7 +24,8 @@ interface Archive {
   preset: "1991-default";
   electionId: ObjectId;
   turn: number;
-  official: ElectedOfficial;
+  official?: ElectedOfficial;
+  cabinetMember?: UnifiedCabinetMember;
 }
 export async function materializeRussianPresidentialSeating(input: {
   db: Db;
@@ -113,6 +115,31 @@ export async function materializeRussianPresidentialSeating(input: {
     ...(charIds.length ? [{ characterId: { $in: charIds } }] : []),
     ...(nppIds.length ? [{ nppId: { $in: nppIds } }] : []),
   ];
+  const cabinet = db.collection<UnifiedCabinetMember>("cabinetMembers");
+  const winningMinisters = await cabinet
+    .find({ countryId: "RU", $or: identities }, { session })
+    .toArray();
+  if (winningMinisters.length) {
+    await db.collection<Archive>(RUSSIAN_PRESIDENTIAL_ARCHIVES_COLLECTION).bulkWrite(
+      winningMinisters.map((cabinetMember) => ({
+        updateOne: {
+          filter: { _id: `${result._id}:cabinet:${cabinetMember._id.toHexString()}` },
+          update: {
+            $setOnInsert: {
+              _id: `${result._id}:cabinet:${cabinetMember._id.toHexString()}`,
+              preset: "1991-default" as const,
+              electionId: result.electionId,
+              turn,
+              cabinetMember,
+            },
+          },
+          upsert: true,
+        },
+      })),
+      { session }
+    );
+    await cabinet.deleteMany({ _id: { $in: winningMinisters.map((row) => row._id) } }, { session });
+  }
   const officials = db.collection<ElectedOfficial>("electedOfficials");
   const retiredTypes = ["chairmanOfSupremeSoviet", "president", "vicePresident"];
   const old = await officials
