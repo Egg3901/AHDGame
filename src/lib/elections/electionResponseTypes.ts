@@ -108,6 +108,7 @@ export interface ElectionResponse {
   electionType: string;
   state: string;
   countryId: string;
+  russianDumaRound?: { cohortId: string; mandateSinceTurn: number; tier: "constituency" | "list" };
   senateClass: number | null;
   chamberClass: number | null;
   cycle: number;

@@ -11,3 +11,5 @@ The first Duma ballot model contains 225 constituency elections and a separate 2
 Opening and certification preserve Congress and its officeholders. Failed constituencies remain vacancies, invalid owners cannot receive mandates, and a failed transaction cannot partially certify the cohort. Player filing validates the ratified cohort, raw-turn deadline, Russian residence and national party registration. National lists accept residents of any Russian region, while independents contest their home constituencies. Pre-count withdrawals are excluded from the frozen roster; later withdrawals retain counted votes and cannot receive a seat.
 
 NPC admission, vote accrual, repeat ballots and certified office handover are still being connected on this feature branch.
+
+The election list now offers national list filing to party members across Russian home regions. Constituency filing remains local, and independent players cannot file for a national party list. The filing API still checks the ratified mandate and party registration.

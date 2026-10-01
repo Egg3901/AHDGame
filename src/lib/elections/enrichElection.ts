@@ -1374,6 +1374,15 @@ export async function _enrichElection(
     electionType: election.electionType,
     state: election.state,
     countryId,
+    ...(election.russianDumaRound
+      ? {
+          russianDumaRound: {
+            cohortId: election.russianDumaRound.cohortId.toHexString(),
+            mandateSinceTurn: election.russianDumaRound.mandateSinceTurn,
+            tier: election.russianDumaRound.tier,
+          },
+        }
+      : {}),
     senateClass: election.senateClass ?? null,
     chamberClass: election.chamberClass ?? null,
     cycle: election.cycle,

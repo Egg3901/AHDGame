@@ -24,6 +24,7 @@ export function toElectionDisplay(e: ElectionResponse): ElectionDisplay {
     electionType: e.electionType,
     state: e.state,
     countryId: e.countryId,
+    russianDumaRound: e.russianDumaRound,
     senateClass: e.senateClass ?? undefined,
     chamberClass: e.chamberClass ?? undefined,
     cycle: e.cycle,
