@@ -53,7 +53,7 @@ export function russianAssemblyVacancyScenario(
       row.registrationOrder++;
       row.nominationOrder++;
     }
-    list.candidates.push(candidate);
+    list.candidates = [...list.candidates, candidate];
     duma.nominees.push({
       candidateId: new ObjectId(candidate.id),
       ownerId: playerId,

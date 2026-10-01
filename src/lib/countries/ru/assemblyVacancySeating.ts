@@ -179,6 +179,7 @@ export async function materializeRussianAssemblyVacancySeating(input: {
     if (
       !nominee ||
       !ballot ||
+      !office.party ||
       !ever.has(office._id.toHexString()) ||
       office.isNPP !== nominee.isNpc ||
       String(nominee.isNpc ? office.nppId : office.characterId) !== nominee.ownerId.toHexString()
