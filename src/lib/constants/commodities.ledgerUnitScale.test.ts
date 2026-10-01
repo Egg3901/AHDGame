@@ -165,6 +165,59 @@ describe("computeRawSupplyDemand - ledgerUnitScale (ticket #1027 phase 2)", () =
     expect(s2 / s1).toBeCloseTo(3, 4);
   });
 
+  it("bounds CALIBRATED demand when the caller passes its era calibration (ticket 1370)", () => {
+    // 1953 energy is calibrated to 0.55. The cap used to bound raw demand and
+    // the calibration then multiplied the pinned figure, so energy read
+    // 1 / (1.5 x 0.55) = 1.21 supply over demand: a glut at every supply level.
+    // The cap must bound the calibrated demand instead.
+    const m = 0.55;
+    const sectors = [
+      plant({ stateId: "S1", revenue: 10_000_000, producedUnits: 1_000, capacityUnits: 1_000 }),
+      plant({ stateId: "S2", revenue: 30_000_000, producedUnits: 3_000, capacityUnits: 3_000 }),
+      plant({
+        sectorType: "energy",
+        stateId: "S3",
+        revenue: 0,
+        producedUnits: 2_000_000,
+        capacityUnits: 2_000_000,
+      }),
+    ];
+    const runCalibrated = (calibration?: (c: CommodityType) => number) =>
+      computeRawSupplyDemand(
+        sectors,
+        { nationalAverage: 0, byState: new Map() },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        false,
+        true,
+        SCALE,
+        undefined,
+        1,
+        COMMODITY_BASE_PRICES,
+        calibration
+      );
+    const uncalibrated = runCalibrated();
+    const calibrated = runCalibrated((c) => (c === "energy" ? m : 1));
+    const raw =
+      uncalibrated.global.get("energy")!.demand + (uncalibrated.demandTruncated.get("energy") ?? 0);
+    const energy = calibrated.global.get("energy")!;
+    // Before the caller applies its calibration the ledger holds cap / m, so
+    // the calibrated figure lands exactly on the cap.
+    expect(energy.demand * m).toBeCloseTo(energy.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP, 6);
+    // Truncation is recorded in the calibrated units it is read beside.
+    expect(calibrated.demandTruncated.get("energy")).toBeCloseTo((raw - energy.demand) * m, 4);
+    // Every other commodity, and an absent calibration, are unchanged.
+    expect(uncalibrated.global.get("energy")!.demand).toBeCloseTo(
+      energy.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP,
+      6
+    );
+    expect(calibrated.global.get("steel")).toEqual(uncalibrated.global.get("steel"));
+  });
+
   it("never cuts a commodity below its unscaled-basis demand (legacy shortages keep their pressure)", () => {
     // Agriculture demands fertilizers; give it a huge nameplate so even the
     // UNSCALED fertilizer demand exceeds 1.5x the (near-zero) supply. The cap

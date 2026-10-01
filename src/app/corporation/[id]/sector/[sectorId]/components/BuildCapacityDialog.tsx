@@ -421,6 +421,14 @@ export default function BuildCapacityDialog({
                   {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
                   taken from a rival.
                 </>
+              ) : plants.roomHeldByOwnIdle ? (
+                // The plant is held below capacity by its own sales, so the
+                // market gap is not room for new capacity yet (ticket 1370).
+                <>
+                  Your {sites} here already run below capacity because sales set the pace. Output
+                  climbs about 15% a turn while buyers keep taking it, so new capacity would sit
+                  idle until that catches up. Fill what you have before building more.
+                </>
               ) : noShareLeft ? (
                 // Two very different reasons the room is zero, and saying
                 // "oversupplied" for both is what made a fully-claimed market
