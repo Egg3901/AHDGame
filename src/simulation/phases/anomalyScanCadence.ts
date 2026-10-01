@@ -1,5 +1,3 @@
-import { SINGLEPLAYER_SKIP_PHASES } from "./singleplayerPhases";
-
 /**
  * How often the anti-abuse scans run in a shared world.
  *
@@ -22,8 +20,12 @@ export const ANOMALY_SCAN_EVERY_TURNS = 3;
 /** Shortest rolling window among the scans; cadence must never exceed it. */
 const SHORTEST_SCAN_WINDOW_TURNS = 6;
 
-/** The same set singleplayer skips outright: detection, never gameplay. */
-export const ANTI_ABUSE_SCAN_PHASES: ReadonlySet<string> = SINGLEPLAYER_SKIP_PHASES;
+/** Only abuse detection follows this cadence. Shared-world health runs every turn. */
+export const ANTI_ABUSE_SCAN_PHASES: ReadonlySet<string> = new Set([
+  "financialSuspectScan",
+  "auditAnomalyScan",
+  "suspiciousDetection",
+]);
 
 export function resolveAnomalyScanCadence(
   env: Record<string, string | undefined> = process.env
