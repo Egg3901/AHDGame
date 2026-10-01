@@ -63,6 +63,36 @@ export function selectPartyRosterForPreset(seeds: PartySeed[], preset: string): 
   );
 }
 
+/** Cleanup preserves the selected roster, including an explicitly allowed fallback. */
+export function presetMismatchedPartyNames(
+  seeds: PartySeed[],
+  preset: string,
+  fallbackCountries: ReadonlySet<string>
+): Array<{ countryId: string; name: string }> {
+  const byCountry = new Map<string, PartySeed[]>();
+  for (const seed of seeds) {
+    const rows = byCountry.get(seed.countryId) ?? [];
+    rows.push(seed);
+    byCountry.set(seed.countryId, rows);
+  }
+  const activeKeys = new Set(
+    [...byCountry].flatMap(([countryId, rows]) =>
+      (fallbackCountries.has(countryId)
+        ? selectPartyRosterForPreset(rows, preset)
+        : rows.filter((seed) => isPartyValidForPreset(seed, preset))
+      ).map((seed) => `${seed.countryId}:${seed.name}`)
+    )
+  );
+  return seeds
+    .filter(
+      (seed) =>
+        seed.validForPresets &&
+        !seed.validForPresets.includes(preset) &&
+        !activeKeys.has(`${seed.countryId}:${seed.name}`)
+    )
+    .map((seed) => ({ countryId: seed.countryId, name: seed.name }));
+}
+
 /**
  * Deletes default parties whose seed declares `validForPresets` that excludes
  * the active preset. Country seeders call this before upserting so a reseed

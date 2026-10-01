@@ -19,7 +19,8 @@ vi.mock("@/lib/constants/historicalSeats", () => ({
   getPresetById: vi.fn().mockReturnValue({ deleteDefaultParties: true }),
 }));
 
-vi.mock("@/lib/seeds/ensureDefaultParties", () => ({
+vi.mock("@/lib/seeds/ensureDefaultParties", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/seeds/ensureDefaultParties")>()),
   ensureDefaultParties: vi.fn().mockResolvedValue(undefined),
 }));
 
