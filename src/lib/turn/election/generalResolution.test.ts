@@ -152,6 +152,23 @@ beforeEach(async () => {
 // ── resolveOneGeneralElection ─────────────────────────────────────────────────
 
 describe("resolveOneGeneralElection", () => {
+  it("does not claim or seat a bound Duma ballot through the single-race resolver", async () => {
+    const election = makeElection({
+      countryId: "RU",
+      electionType: "dumaDeputy",
+      status: "completed",
+      russianDumaRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        tier: "constituency",
+        registeredVoters: 100,
+      },
+    });
+    expect(
+      await resolveBulgarianElection(db as unknown as Db, election, undefined, 141, NOW)
+    ).toEqual({ resolved: false, newsOutcomes: [] });
+    expect(db.collectionMocks.elections!.updateOne).not.toHaveBeenCalled();
+  });
   it("seats the 1991 Bulgarian regional list by D'Hondt", async () => {
     const election = makeElection({
       countryId: "BG",

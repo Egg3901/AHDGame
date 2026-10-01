@@ -1,5 +1,12 @@
+/**
+ * Completed elections resolve through their country's counting rules.
+ * resolveGeneralElections certifies bound Duma cohorts together and defers
+ * partial cohorts, preserving Congress until a separate chamber handover.
+ */
 import { getDb } from "@/lib/mongodb";
-import type { ObjectId } from "mongodb";
+import { ObjectId } from "mongodb";
+import { readyRussianDumaCohorts } from "@/lib/countries/ru/rules/assemblyDispatch";
+import { certifyRussianDumaElection } from "@/lib/countries/ru/dumaElectionResult";
 import type { Election, ElectionVoteTally, GameState, State } from "@/lib/db/types";
 import { generateElectionNews } from "@/lib/news";
 import { HOUSE_SEATS, UK_COMMONS_SEATS } from "@/lib/constants";
@@ -98,6 +105,36 @@ export async function resolveGeneralElections(
   }
 
   let resolved = 0;
+  if (gameStateDoc?.preset === "1991-default") {
+    const cohorts = readyRussianDumaCohorts(
+      completedElections.map((row) => ({
+        id: row._id.toHexString(),
+        countryId: row.countryId,
+        electionType: row.electionType,
+        status: row.status,
+        endTurn: row.endTurn,
+        seatId: row.seatId,
+        totalSeats: row.totalSeats,
+        binding: row.russianDumaRound
+          ? { ...row.russianDumaRound, cohortId: row.russianDumaRound.cohortId.toHexString() }
+          : undefined,
+      })),
+      currentTurn
+    );
+    for (const cohortId of cohorts) {
+      try {
+        await certifyRussianDumaElection({
+          db,
+          cohortId: new ObjectId(cohortId),
+          turn: currentTurn,
+          now,
+        });
+        resolved += 226;
+      } catch (error) {
+        logger.error("Turn", `Failed to certify Duma cohort ${cohortId}`, error);
+      }
+    }
+  }
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
   const resolvedElections: Election[] = [];
   // Forensics/alt-detection audit spine (plan §3.1, T2.7): one entry per
@@ -122,6 +159,12 @@ export async function resolveGeneralElections(
   // the same order form each group.
   const orderGroups: Election[][] = [];
   for (const election of completedElections) {
+    if (
+      election.countryId === "RU" &&
+      election.electionType === "dumaDeputy" &&
+      election.russianDumaRound
+    )
+      continue;
     const order = generalElectionResolutionOrder(election);
     const lastGroup = orderGroups[orderGroups.length - 1];
     if (lastGroup && generalElectionResolutionOrder(lastGroup[0]) === order) {

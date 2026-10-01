@@ -7,6 +7,9 @@ import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
 
+vi.mock("@/lib/countries/ru/dumaElectionResult", () => ({
+  certifyRussianDumaElection: vi.fn(),
+}));
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
@@ -485,5 +488,82 @@ describe("electionResolution", () => {
       expect(cycle2!.endTurn).toBe(480); // 240 + 240
       expect(cycle2!.startTurn).toBe(432); // 480 - 48
     });
+  });
+});
+
+describe("Duma cohort resolution dispatch", () => {
+  const now = new Date("1993-12-12T00:00:00Z");
+  const cohortId = new ObjectId();
+  function cohort(): Election[] {
+    return Array.from(
+      { length: 226 },
+      (_, index) =>
+        ({
+          _id: new ObjectId(),
+          countryId: "RU",
+          electionType: "dumaDeputy",
+          status: "completed",
+          state: index ? "CEN" : "RU",
+          seatId: index ? `RU-duma-CEN-${index}` : "RU-duma-national-list",
+          totalSeats: index ? 1 : 225,
+          endTurn: 141,
+          russianDumaRound: {
+            cohortId,
+            mandateSinceTurn: 129,
+            tier: index ? "constituency" : "list",
+            registeredVoters: 100,
+          },
+        }) as Election
+    );
+  }
+  async function mount(elections: Election[]) {
+    vi.clearAllMocks();
+    const db = {
+      collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "elections")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => elections }) };
+        if (name === "electionVoteTallies")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => [] }) };
+        if (name === "gameState")
+          return { findOne: async () => ({ preset: "1991-default", currentTurn: 141 }) };
+        throw new Error(`Unexpected collection ${name}`);
+      }),
+    };
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    return db;
+  }
+  it("certifies a full cohort once without generic district or list seating", async () => {
+    const db = await mount(cohort());
+    const { certifyRussianDumaElection } = await import("@/lib/countries/ru/dumaElectionResult");
+    vi.mocked(certifyRussianDumaElection).mockResolvedValue({ cohortId } as never);
+    const { resolveGeneralElections } = await import("./electionResolution");
+    expect(await resolveGeneralElections(now)).toBe(226);
+    expect(certifyRussianDumaElection).toHaveBeenCalledExactlyOnceWith({
+      db,
+      cohortId,
+      turn: 141,
+      now,
+    });
+    const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+    expect(resolveOneGeneralElection).not.toHaveBeenCalled();
+  });
+  it("defers a partial cohort instead of resolving the completed districts separately", async () => {
+    await mount(cohort().slice(1));
+    const { resolveGeneralElections } = await import("./electionResolution");
+    expect(await resolveGeneralElections(now)).toBe(0);
+    const { certifyRussianDumaElection } = await import("@/lib/countries/ru/dumaElectionResult");
+    expect(certifyRussianDumaElection).not.toHaveBeenCalled();
+    const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+    expect(resolveOneGeneralElection).not.toHaveBeenCalled();
+  });
+  it("leaves a failed certification for retry and never falls back to district seating", async () => {
+    await mount(cohort());
+    const { certifyRussianDumaElection } = await import("@/lib/countries/ru/dumaElectionResult");
+    vi.mocked(certifyRussianDumaElection).mockRejectedValue(new Error("late transaction failure"));
+    const { resolveGeneralElections } = await import("./electionResolution");
+    expect(await resolveGeneralElections(now)).toBe(0);
+    const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+    expect(resolveOneGeneralElection).not.toHaveBeenCalled();
   });
 });
