@@ -29,6 +29,9 @@ export interface RussianCouncilResultRecord {
   countryId: "RU";
   preset: "1991-default";
   cohortId: ObjectId;
+  /** Repeat receipts preserve all held subjects under the original mandate. */
+  rootCohortId?: ObjectId;
+  generation?: number;
   mandateSinceTurn: number;
   resolvedOnTurn: number;
   createdAt: Date;

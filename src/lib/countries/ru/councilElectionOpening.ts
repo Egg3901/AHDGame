@@ -19,6 +19,11 @@ export const RUSSIAN_COUNCIL_OPENINGS_COLLECTION = "russianCouncilElectionOpenin
 export interface RussianCouncilOpeningRecord {
   _id: string;
   cohortId: ObjectId;
+  /** Absent for the original complete89-subject opening. */
+  rootCohortId?: ObjectId;
+  generation?: number;
+  previousResultId?: string;
+  seatIds?: string[];
   countryId: "RU";
   preset: "1991-default";
   mandateSinceTurn: number;

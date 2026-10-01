@@ -99,6 +99,10 @@ export interface Election {
   /** The first Council freezes one two-seat ballot per federal subject. */
   russianCouncilRound?: {
     cohortId: ObjectId;
+    /** Repeats retain the original mandate and immutable predecessor ballot. */
+    rootCohortId?: ObjectId;
+    generation?: number;
+    predecessorElectionId?: ObjectId;
     mandateSinceTurn: number;
     registeredVoters: number;
     districtNumber: number;
