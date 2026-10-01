@@ -5,10 +5,9 @@
  */
 import { russianDumaPrimaryAdvanceLimit } from "@/lib/countries/ru/rules/assemblyScope";
 import {
-  bindRussianDumaElectorate,
-  usesRussianDumaNationalElectorate,
-} from "@/lib/countries/ru/dumaElectoratePreload";
-import { bindRussianPresidentialElectorate } from "@/lib/countries/ru/presidentialElectoratePreload";
+  bindBallotElectorate,
+  nationwideBallotCountries,
+} from "@/lib/electionEngine/ballotElectoratePreload";
 
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
@@ -116,7 +115,6 @@ import {
   type NominationResolutionResult,
 } from "@/lib/turn/election/conventionResolution";
 import { logger } from "../observability/logger";
-import { isNationwideDirectExecutiveElection } from "@/lib/elections/nationwideExecutive";
 import { buildNationwideElectoratePreload } from "@/lib/electionEngine/nationwideElectorate";
 import { resolveGoverningPartyIds } from "@/lib/government/governingPartyIds";
 import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOppositionBoost";
@@ -1781,22 +1779,7 @@ export async function accumulateGeneralElectionVotes(
           .map((election) => (election.countryId ?? "US") as CountryId)
       ),
     ];
-    const nationwideCountries = [
-      ...new Set(
-        stateElections
-          .filter((election) => {
-            const countryId = (election.countryId ?? "US") as CountryId;
-            return (
-              isNationwideDirectExecutiveElection(
-                election.electionType,
-                election.state,
-                countryId
-              ) || usesRussianDumaNationalElectorate(election)
-            );
-          })
-          .map((election) => (election.countryId ?? "US") as CountryId)
-      ),
-    ];
+    const nationwideCountries = nationwideBallotCountries(stateElections);
     const regionalScope =
       nationwideCountries.length > 0
         ? {
@@ -1991,12 +1974,7 @@ export async function accumulateGeneralElectionVotes(
         // A tally created just above is not in `existing`; let the turn read it.
         await accumulateVoteTurn(election._id, turn, now, {
           approvalMap,
-          preload: preload
-            ? bindRussianDumaElectorate(
-                election,
-                bindRussianPresidentialElectorate(election, preload)
-              )
-            : preload,
+          preload: preload ? bindBallotElectorate(election, preload) : preload,
           election,
           tally: existing ?? undefined,
           candidates: activeCandidates,
