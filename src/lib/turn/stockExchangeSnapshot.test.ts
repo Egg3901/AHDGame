@@ -33,8 +33,9 @@ import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporatio
 
 describe("stockExchangeSnapshot", () => {
   let mockDb: Db;
-  let mockCollection: ReturnType<typeof vi.fn>;
+  let mockCollection: ReturnType<typeof vi.fn<(name: string) => any>>;
   let mockUpdateOne: ReturnType<typeof vi.fn>;
+  let intradayBulkWrite: ReturnType<typeof vi.fn>;
 
   const createMockChain = (result: any[]) => ({
     find: vi.fn().mockReturnThis(),
@@ -52,6 +53,7 @@ describe("stockExchangeSnapshot", () => {
   beforeEach(() => {
     resetCorpFxRateCacheForTests();
     mockUpdateOne = vi.fn();
+    intradayBulkWrite = vi.fn().mockResolvedValue({ ok: 1 });
     // Default collection mock: returns an empty chain (find/sort/project/aggregate/toArray).
     // Individual tests override with `.mockReturnValueOnce(createMockChain([...]))` for the
     // collections they care about; any collection not covered falls through to this default
@@ -67,7 +69,7 @@ describe("stockExchangeSnapshot", () => {
       findOne: vi.fn().mockResolvedValue(null),
       updateOne: mockUpdateOne,
       updateMany: vi.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 }),
-      bulkWrite: vi.fn().mockResolvedValue({ ok: 1 }),
+      bulkWrite: intradayBulkWrite,
     }));
 
     mockDb = {
@@ -538,15 +540,18 @@ describe("stockExchangeSnapshot", () => {
 
       await generateStockExchangeSnapshots(100, mockDb);
 
-      // Snapshot upserts plus one intraday level per venue (shared mock).
-      expect(mockUpdateOne).toHaveBeenCalledTimes(2 * (ALL_EXCHANGES.length + 1));
-      expect(mockUpdateOne).toHaveBeenCalledWith(
-        { _id: "nyse:100" },
-        expect.objectContaining({
-          $max: expect.objectContaining({ high: expect.any(Number) }),
-          $min: expect.objectContaining({ low: expect.any(Number) }),
-        }),
-        { upsert: true }
+      // One batched intraday write now covers all venues and global sectors.
+      expect(mockUpdateOne).toHaveBeenCalledTimes(ALL_EXCHANGES.length + 1);
+      expect(intradayBulkWrite).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            updateOne: expect.objectContaining({ filter: { _id: "nyse:100" } }),
+          }),
+          expect.objectContaining({
+            updateOne: expect.objectContaining({ filter: { _id: "sector:financial:100" } }),
+          }),
+        ]),
+        { ordered: false }
       );
       expect(mockUpdateOne).toHaveBeenCalledWith(
         { _id: "nyse" },
@@ -626,6 +631,54 @@ describe("stockExchangeSnapshot", () => {
         const listing = updateCall[1]?.$set?.listings?.[0];
         expect(listing.ceo).toBe(null);
       }
+    });
+
+    it("uses recorded splits instead of interpreting issuance as a split", async () => {
+      const id = new ObjectId();
+      const defaults = mockCollection.getMockImplementation()!;
+      const corp = createCorporation({
+        _id: id,
+        name: "Split Co",
+        sharePrice: 50,
+        totalShares: 200,
+        publicFloat: 100,
+        ceoId: undefined,
+        ceoVacant: true,
+      });
+      mockCollection.mockImplementation((name: string) => {
+        if (name === "corporations") return createMockChain([corp]);
+        if (name === "corporationHistory")
+          return createMockChain([
+            {
+              _id: id,
+              h1: {
+                turn: 99,
+                sharePrice: 100,
+                totalShares: 100,
+                createdAt: new Date(99 * 3600_000),
+              },
+              h24: { turn: 76, sharePrice: 100, totalShares: 100 },
+              h48: { turn: 52, sharePrice: 100, totalShares: 100 },
+            },
+          ]);
+        if (name === "shareTradeHistory")
+          return createMockChain([
+            {
+              corporationId: id,
+              turn: 100,
+              createdAt: new Date(100 * 3600_000),
+              structureChange: { oldTotalShares: 100, newTotalShares: 200 },
+            },
+          ]);
+        return defaults(name);
+      });
+      vi.mocked(getPublicShareQuote).mockImplementation((row: any) => row.sharePrice ?? 100);
+      await generateStockExchangeSnapshots(100, mockDb);
+      const listing = mockUpdateOne.mock.calls.find((call) => call[0]?._id === "global")![1].$set
+        .listings[0];
+      expect(listing.priceChange1h).toBe(0);
+      expect(listing.priceChange24h).toBe(0);
+      expect(listing.priceChange48h).toBe(0);
     });
 
     it("persists finite price changes and tradability for a mixed snapshot", async () => {
@@ -719,6 +772,8 @@ describe("stockExchangeSnapshot", () => {
       }
       expect(byName.get("Pub Co")?.isTradable).toBe(true);
       expect(byName.get("Pub Co")?.priceChange1h).toBe(11.11);
+      // Doubling issued shares without a recorded split is not a 300% gain.
+      expect(byName.get("Pub Co")?.priceChange48h).toBe(100);
       expect(byName.get("Zero SoE")?.isTradable).toBe(false);
       expect(byName.get("Zero SoE")?.priceChange1h).toBe(0);
       expect(byName.get("Zero SoE")?.priceChange24h).toBe(0);

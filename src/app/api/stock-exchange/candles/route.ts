@@ -4,24 +4,22 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
-import type { MarketCapHistory } from "@/lib/db/types";
+import type { GameState, MarketCapHistory, Corporation } from "@/lib/db/types";
 import type { MarketIndexIntraday } from "@/lib/db/types/marketIndexIntraday";
 import type { ShareTradeHistory, ShareTradeKind } from "@/lib/db/types/shareTradeHistory";
-import type { Corporation } from "@/lib/db/types";
 import { EXCHANGE_API_KEYS, getCountryForExchange } from "@/lib/constants/exchangeRegistry";
+import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import {
   buildCandles,
-  bucketWeekly,
-  WEEK_TURNS,
+  bucketCandles,
+  chartBucketTurns,
   type CandleInput,
 } from "@/lib/stockExchange/candles";
 
-/** Ranges the chart offers, in turns (0 = all available history). */
-const VALID_TURNS = new Set([24, 168, 720, 8760, 0]);
-const HISTORY_CAP = 2000;
-
-/** Trade kinds that count as market turnover for the volume subplot. */
+// Game-calendar ranges plus older client ranges retained for compatibility.
+const VALID_TURNS = new Set([4, 12, 24, 48, 168, 240, 480, 720, 8760, 0]);
 const TURNOVER_KINDS: ShareTradeKind[] = [
   "market_buy",
   "market_sell",
@@ -31,150 +29,237 @@ const TURNOVER_KINDS: ShareTradeKind[] = [
   "takeover_buyout",
 ];
 
-/**
- * GET /api/stock-exchange/candles?exchange=global|nyse|...&turns=24|168|720|8760|0
- * Per-turn OHLC candles from raw anchor market cap plus aggregate turnover.
- * High/low prefer observed intraday extremes (marketIndexIntraday, written on
- * every snapshot rebuild); turns without prints fall back to open/close.
- * Long ranges (1Y/ALL) arrive in 168-turn weekly buckets.
- */
+/** Raw listed capitalization in anchor units. No simulated high/low values. */
 export async function GET(request: Request) {
   try {
-    const db = await getDb();
     const { searchParams } = new URL(request.url);
     const exchange = searchParams.get("exchange")?.toLowerCase() ?? "global";
-    const turns = Number(searchParams.get("turns") ?? 168);
-
-    if (!EXCHANGE_API_KEYS.has(exchange)) {
+    const turns = Number(searchParams.get("turns") ?? 48);
+    const sector = searchParams.get("sector") as CorporationType | null;
+    if (
+      !EXCHANGE_API_KEYS.has(exchange) ||
+      !VALID_TURNS.has(turns) ||
+      (sector != null && (exchange !== "global" || !Object.hasOwn(CORPORATION_TYPE_LABELS, sector)))
+    ) {
       return NextResponse.json(
-        { error: `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}` },
+        { error: "Invalid exchange, game-calendar range or global sector." },
         { status: 400 }
       );
     }
-    if (!VALID_TURNS.has(turns)) {
-      return NextResponse.json(
-        { error: "Invalid turns. Use one of: 24, 168, 720, 8760, 0." },
-        { status: 400 }
-      );
-    }
-
     const authUser = await getAuthUser();
-    const isAdmin = authUser?.isAdmin === true;
     const venueCountry = getCountryForExchange(exchange);
-    if (!isAdmin && venueCountry) {
-      const enabledCountries = await getEnabledCountryIds();
-      if (!enabledCountries.includes(venueCountry as CountryId)) {
-        return NextResponse.json({ exchange, turns, bucketed: false, points: [] });
-      }
-    }
-
-    const history = await db
-      .collection<MarketCapHistory>("marketCapHistory")
-      .find({})
-      .sort({ turn: -1 })
-      .limit(turns === 0 ? HISTORY_CAP : turns)
-      .toArray();
-    history.reverse();
-    if (history.length === 0) {
+    if (
+      !authUser?.isAdmin &&
+      venueCountry &&
+      !(await getEnabledCountryIds()).includes(venueCountry as CountryId)
+    ) {
       return NextResponse.json({ exchange, turns, bucketed: false, points: [] });
     }
-    const firstTurn = history[0].turn;
-    const lastTurn = history[history.length - 1].turn;
-
-    const capFor = (h: MarketCapHistory): number => {
-      if (exchange === "global") return h.globalMarketCap;
-      const exData = h.exchangeCaps?.[exchange];
-      if (exData) return exData.marketCap;
-      if (exchange === "nyse") return h.nyseMarketCap ?? 0;
-      if (exchange === "ftse") return h.ftseMarketCap ?? 0;
-      return 0;
+    const db = await getDb();
+    const collection = db.collection<MarketCapHistory>("marketCapHistory");
+    const [latest, gameState] = await Promise.all([
+      collection.findOne({}, { sort: { turn: -1 }, projection: { turn: 1 } }),
+      db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            currentTurn: 1,
+            lastTurnProcessed: 1,
+            startingYear: 1,
+            preIterationTurns: 1,
+            preIteration: 1,
+          },
+        }
+      ),
+    ]);
+    if (!latest) return NextResponse.json({ exchange, turns, bucketed: false, points: [] });
+    const lastTurn = Math.max(latest.turn, gameState?.currentTurn ?? latest.turn);
+    const firstTurn = turns === 0 ? 1 : Math.max(1, lastTurn - turns + 1);
+    const [history, previous, intradayRows] = await Promise.all([
+      collection
+        .find({ turn: { $gte: firstTurn, $lte: lastTurn } })
+        .project<MarketCapHistory>({
+          turn: 1,
+          createdAt: 1,
+          globalMarketCap: 1,
+          nyseMarketCap: 1,
+          ftseMarketCap: 1,
+          exchangeCaps: 1,
+          bySector: 1,
+          listingUniverse: 1,
+          removedMarketCap: 1,
+        })
+        .sort({ turn: 1 })
+        .toArray(),
+      collection.findOne({ turn: { $lt: firstTurn } }, { sort: { turn: -1 } }),
+      db
+        .collection<MarketIndexIntraday>("marketIndexIntraday")
+        .find({
+          exchange: sector ? `sector:${sector}` : exchange,
+          turn: { $gte: Math.max(1, firstTurn - 1), $lte: lastTurn },
+        })
+        .project<MarketIndexIntraday>({
+          turn: 1,
+          open: 1,
+          last: 1,
+          high: 1,
+          low: 1,
+          prints: 1,
+          updatedAt: 1,
+        })
+        .sort({ turn: 1 })
+        .toArray(),
+    ]);
+    const capFor = (h: MarketCapHistory): number =>
+      sector
+        ? (h.bySector?.[sector] ?? 0)
+        : exchange === "global"
+          ? h.globalMarketCap
+          : (h.exchangeCaps?.[exchange]?.marketCap ??
+            (exchange === "nyse" ? h.nyseMarketCap : exchange === "ftse" ? h.ftseMarketCap : 0));
+    const intraday = new Map(intradayRows.map((r) => [r.turn, r]));
+    // Scope before grouping so other venues cannot consume the limit or poison the sum.
+    const corps =
+      venueCountry || sector
+        ? await db
+            .collection<Corporation>("corporations")
+            .find({
+              ...(venueCountry ? { countryId: venueCountry } : {}),
+              ...(sector ? { type: sector } : {}),
+            })
+            .project({ _id: 1 })
+            .toArray()
+        : null;
+    const finiteTotal = {
+      $and: [
+        { $isNumber: "$totalAnchor" },
+        { $gte: ["$totalAnchor", 0] },
+        { $lte: ["$totalAnchor", Number.MAX_VALUE] },
+      ],
     };
-
-    // Observed intraday extremes for the range (empty until the writer has
-    // recorded prints; candles fall back to open/close meanwhile).
-    const intradayRows = await db
-      .collection<MarketIndexIntraday>("marketIndexIntraday")
-      .find({ exchange, turn: { $gte: firstTurn, $lte: lastTurn } })
-      .project({ turn: 1, high: 1, low: 1, prints: 1 })
-      .toArray();
-    const intraday = new Map(
-      intradayRows.map((r) => [r.turn, { high: r.high, low: r.low, prints: r.prints }])
-    );
-
-    // Per-turn turnover from share fills. Venue views scope to that venue's
-    // corporations via a lightweight id-to-country map; global skips the join.
-    let venueCorpIds: Set<string> | null = null;
-    if (venueCountry) {
-      const corps = await db
-        .collection<Corporation>("corporations")
-        .find({})
-        .project({ countryId: 1 })
-        .toArray();
-      venueCorpIds = new Set(
-        corps.filter((c) => c.countryId === venueCountry).map((c) => c._id.toString())
-      );
-    }
-    const turnoverRows = await db
+    const turnover = await db
       .collection<ShareTradeHistory>("shareTradeHistory")
-      .aggregate<{ _id: number; volume: number }>([
+      .aggregate<{ _id: number; volume: number; invalidTrades: number }>([
         {
           $match: {
             turn: { $gte: firstTurn, $lte: lastTurn },
             kind: { $in: TURNOVER_KINDS },
+            shares: { $gt: 0 },
+            ...(corps ? { corporationId: { $in: corps.map((c) => c._id) } } : {}),
           },
         },
-        { $group: { _id: "$turn", volume: { $sum: "$totalAnchor" } } },
+        {
+          $group: {
+            _id: "$turn",
+            volume: { $sum: { $cond: [finiteTotal, "$totalAnchor", 0] } },
+            invalidTrades: { $sum: { $cond: [finiteTotal, 0, 1] } },
+          },
+        },
       ])
       .toArray();
-    // Venue scoping needs per-corp attribution, which the turn-grouped rollup
-    // discards; run the corp-scoped variant only for venue views.
-    let volumeByTurn = new Map(turnoverRows.map((r) => [r._id, Math.round(r.volume)]));
-    if (venueCorpIds) {
-      const venueRows = await db
-        .collection<ShareTradeHistory>("shareTradeHistory")
-        .aggregate<{ _id: { turn: number; corp: unknown }; volume: number }>([
-          {
-            $match: {
-              turn: { $gte: firstTurn, $lte: lastTurn },
-              kind: { $in: TURNOVER_KINDS },
-            },
+    const actions = await db
+      .collection<ShareTradeHistory>("shareTradeHistory")
+      .aggregate<{ _id: { turn: number; kind: string }; count: number }>([
+        {
+          $match: {
+            turn: { $gte: firstTurn, $lte: lastTurn },
+            kind: { $in: ["stock_split", "reverse_split"] },
+            ...(corps ? { corporationId: { $in: corps.map((c) => c._id) } } : {}),
           },
-          {
-            $group: {
-              _id: { turn: "$turn", corp: "$corporationId" },
-              volume: { $sum: "$totalAnchor" },
-            },
-          },
-        ])
-        .toArray();
-      volumeByTurn = new Map<number, number>();
-      for (const r of venueRows) {
-        const corpId = String(r._id.corp ?? "");
-        if (!venueCorpIds.has(corpId)) continue;
-        volumeByTurn.set(r._id.turn, Math.round((volumeByTurn.get(r._id.turn) ?? 0) + r.volume));
-      }
+        },
+        { $group: { _id: { turn: "$turn", kind: "$kind" }, count: { $sum: 1 } } },
+      ])
+      .toArray();
+    const actionsByTurn = new Map<number, string[]>();
+    for (const action of actions) {
+      const notes = actionsByTurn.get(action._id.turn) ?? [];
+      notes.push(
+        `${action.count} ${action._id.kind === "stock_split" ? "stock split" : "reverse split"} ${action.count === 1 ? "event" : "events"} recorded`
+      );
+      actionsByTurn.set(action._id.turn, notes);
     }
-
-    const inputs: CandleInput[] = history.map((h) => ({
-      turn: h.turn,
-      time: Math.floor(new Date(h.createdAt).getTime() / 1000),
-      cap: Math.round(capFor(h)),
-      volume: volumeByTurn.get(h.turn) ?? 0,
-    }));
-    let candles = buildCandles(inputs, intraday);
-    // 1Y/ALL aggregate into weekly buckets so series stay small.
-    const bucketed = turns === 8760 || turns === 0;
-    if (bucketed) candles = bucketWeekly(candles);
-
-    const intradayTurns = candles.filter((c) => c.intraday).length;
+    const volumes = new Map(turnover.map((r) => [r._id, r]));
+    const inputs: CandleInput[] = [];
+    let prior: MarketCapHistory | null = previous;
+    let invalidPriceTurns = 0;
+    for (const h of history) {
+      const cap = capFor(h);
+      const time = Math.floor(new Date(h.createdAt).getTime() / 1000);
+      if (!Number.isFinite(cap) || cap < 0 || !Number.isFinite(time)) {
+        invalidPriceTurns++;
+        continue;
+      }
+      const notes: string[] = [...(actionsByTurn.get(h.turn) ?? [])];
+      if (prior && prior.turn + 1 !== h.turn)
+        notes.push(`Missing turn history between T${prior.turn} and T${h.turn}`);
+      if (prior && prior.listingUniverse !== h.listingUniverse)
+        notes.push("Listing coverage changed; capitalization levels are not directly comparable");
+      const removed =
+        exchange === "global" ? h.removedMarketCap : h.exchangeCaps?.[exchange]?.removedMarketCap;
+      if (!sector && removed && removed > 0)
+        notes.push("Listed constituents removed; total capitalization includes the removal");
+      if (prior && capFor(prior) > 0 && Math.abs(cap / capFor(prior) - 1) >= 0.5)
+        notes.push("Large recorded valuation change; not a verified investment return");
+      inputs.push({
+        turn: h.turn,
+        time,
+        cap: Math.round(cap),
+        volume: volumes.get(h.turn)?.volume ?? 0,
+        invalidVolumeTrades: volumes.get(h.turn)?.invalidTrades ?? 0,
+        notes,
+      });
+      prior = h;
+    }
+    // A refreshed live print can precede the next end-of-turn history row.
+    for (const row of intradayRows) {
+      if (
+        row.turn <= (inputs.at(-1)?.turn ?? latest.turn) ||
+        row.turn < firstTurn ||
+        !Number.isFinite(row.last)
+      )
+        continue;
+      inputs.push({
+        turn: row.turn,
+        time: Math.floor(new Date(row.updatedAt).getTime() / 1000),
+        cap: row.last,
+        volume: volumes.get(row.turn)?.volume ?? 0,
+        invalidVolumeTrades: volumes.get(row.turn)?.invalidTrades ?? 0,
+      });
+    }
+    const raw = buildCandles(
+      inputs,
+      intraday,
+      previous && Number.isFinite(capFor(previous))
+        ? {
+            turn: previous.turn,
+            time: Math.floor(new Date(previous.createdAt).getTime() / 1000),
+            cap: capFor(previous),
+            volume: 0,
+          }
+        : undefined
+    );
+    const bucketTurns = chartBucketTurns(turns, lastTurn - firstTurn + 1);
+    const points = bucketCandles(raw, bucketTurns);
+    const calendar = gameState ? gameDateAnchorFromState(gameState) : null;
+    const asOf = intradayRows.at(-1)?.updatedAt ?? history.at(-1)?.createdAt ?? null;
     return conditionalJson(request, {
       exchange,
+      sector,
       turns,
-      bucketed,
-      bucketTurns: bucketed ? WEEK_TURNS : 1,
-      points: candles,
-      intradayTurns,
-      totalTurns: candles.length,
+      metric: "raw-market-cap",
+      bucketed: bucketTurns > 1,
+      bucketTurns,
+      points,
+      intradayTurns: raw.filter((c) => c.intraday).length,
+      totalTurns: raw.length,
+      firstIntradayTurn: raw.find((c) => c.intraday)?.turn ?? null,
+      calendar,
+      asOf,
+      latestTurn: points.at(-1)?.endTurn ?? null,
+      missingTurns: inputs.length ? lastTurn - inputs[0].turn + 1 - inputs.length : 0,
+      invalidPriceTurns,
+      invalidVolumeTrades: turnover.reduce((sum, r) => sum + r.invalidTrades, 0),
+      volumeCoverage: "Recorded executable fills; invalid records excluded and flagged",
     });
   } catch (error) {
     return handleRouteError(error);

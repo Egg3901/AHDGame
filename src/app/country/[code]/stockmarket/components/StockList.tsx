@@ -1,4 +1,6 @@
 "use client";
+import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
@@ -108,6 +110,7 @@ function buildRows(
     // Group return aggregates cover tradable members only: non-tradable
     // firms have no measured return and must not dilute the basket.
     const tradableMembers = members.filter(listingTradable);
+    const returns = aggregateExchangeTotals(tradableMembers);
     rows.push({
       kind: "soeGroup",
       countryId,
@@ -122,9 +125,9 @@ function buildRows(
       incomeAnchor: members.reduce((s, m) => s + (m.incomeAnchor ?? m.income), 0),
       publicFloat: members.reduce((s, m) => s + (m.publicFloat ?? 0), 0),
       totalShares: members.reduce((s, m) => s + m.totalShares, 0),
-      priceChange1h: weightedAverage(tradableMembers, (m) => finitePriceChange(m.priceChange1h)),
-      priceChange24h: weightedAverage(tradableMembers, (m) => finitePriceChange(m.priceChange24h)),
-      priceChange48h: weightedAverage(tradableMembers, (m) => finitePriceChange(m.priceChange48h)),
+      priceChange1h: returns.weightedChange1h,
+      priceChange24h: returns.weightedChange24h,
+      priceChange48h: returns.weightedChange48h,
       tradableCount: tradableMembers.length,
     });
   }
@@ -661,7 +664,7 @@ export function StockList({
                   <Tooltip content="Current price per share on this exchange" />
                 </th>
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  {timeframe} Change
+                  {MARKET_TIMEFRAMES[timeframe].label} Change
                   <Tooltip content="Percentage change in share price over the selected period" />
                 </th>
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">

@@ -240,7 +240,7 @@ export async function sellFundHoldingsForRedemptionCash(
       { ...corp, sharePrice: executionPrice },
       fxRate
     );
-    if (pricePerShareAnchor <= 0) continue;
+    if (!Number.isFinite(pricePerShareAnchor) || pricePerShareAnchor <= 0) continue;
     pricedHoldings.push({
       corporationId: holding.corporationId,
       shares: holding.shares,
@@ -277,7 +277,7 @@ export async function sellFundHoldingsForRedemptionCash(
     if (cashRaisedAnchor >= cashNeededAnchor) break;
 
     const corp = corpMap.get(sale.corporationId.toString());
-    if (!corp) continue;
+    if (!corp || !Number.isFinite(sale.sharesToSell) || sale.sharesToSell <= 0) continue;
 
     const saleResult = await executeOneHoldingSale(db, fund, corp, sale, holdings, turn, now, {
       session: options?.session,
@@ -366,6 +366,13 @@ async function executeOneHoldingSale(
   now: Date,
   options?: OneHoldingSaleOptions
 ): Promise<OneHoldingSaleResult | null> {
+  if (
+    !Number.isFinite(sale.sharesToSell) ||
+    sale.sharesToSell <= 0 ||
+    !Number.isFinite(sale.pricePerShareAnchor) ||
+    sale.pricePerShareAnchor <= 0
+  )
+    return null;
   const quote = await loadEquityQuote(db, corp, { pools: options?.pools });
   const issuerFunded = options?.settlementCounterparty === "issuer";
   if (!issuerFunded && quote.active && sale.sharesToSell > quote.bidDepthShares) return null;
