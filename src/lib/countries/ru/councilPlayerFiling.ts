@@ -301,7 +301,7 @@ export async function materializeRussianCouncilPlayerFiling(input: {
     const unset = Object.fromEntries(
       decision.withdrawIds.flatMap((id) =>
         ["primaryVotes", "totalVotes", "candidateNames", "candidateParties", "seatsEstimate"].map(
-          (field) => [`${field}.${id}`, ""]
+          (field) => [`${field}.${id}`, "" as const]
         )
       )
     );

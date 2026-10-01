@@ -209,15 +209,13 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
         .toArray();
     const before = await association();
     const campaignId = new ObjectId();
-    await db
-      .collection("campaigns")
-      .insertOne({
-        _id: campaignId,
-        electionId: subject!._id,
-        candidateId: playerIds[0],
-        party: "2",
-        funds: 34567,
-      });
+    await db.collection("campaigns").insertOne({
+      _id: campaignId,
+      electionId: subject!._id,
+      candidateId: playerIds[0],
+      party: "2",
+      funds: 34567,
+    });
     await db.command({
       collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION,
       validator: { playerFilings: { $exists: false } },
