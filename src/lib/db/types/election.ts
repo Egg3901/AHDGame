@@ -87,6 +87,10 @@ export interface Election {
   /** Bound first-Duma ballots share one mandate and frozen registration cohort. */
   russianDumaRound?: {
     cohortId: ObjectId;
+    /** Absent on the original generation; repeats retain their original mandate identity. */
+    rootCohortId?: ObjectId;
+    generation?: number;
+    predecessorElectionId?: ObjectId;
     mandateSinceTurn: number;
     tier: "constituency" | "list";
     registeredVoters: number;

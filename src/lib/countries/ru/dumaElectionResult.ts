@@ -23,6 +23,8 @@ export interface RussianDumaResultRecord {
   countryId: "RU";
   preset: "1991-default";
   cohortId: ObjectId;
+  rootCohortId?: ObjectId;
+  generation?: number;
   mandateSinceTurn: number;
   resolvedOnTurn: number;
   createdAt: Date;

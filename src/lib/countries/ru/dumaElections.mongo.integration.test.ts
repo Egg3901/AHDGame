@@ -2,6 +2,10 @@ import { MongoClient, ObjectId } from "mongodb";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Election } from "@/lib/db/types";
 import { admitRussianDumaNpcNominees } from "./dumaNpcAdmission";
+import {
+  openRussianDumaRepeat,
+  RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
+} from "./dumaRepeatOpening";
 import { openRussianDumaElection } from "./dumaElectionOpening";
 import {
   certifyRussianDumaElection,
@@ -90,6 +94,155 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       replayCommands,
       ballots: 226,
     });
+  });
+
+  it("atomically opens only failed ballots with fresh registers and replays the immutable generation", async () => {
+    const db = client.db(databaseName);
+    await db.collection<Fixture>("countryGameStates").insertOne({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruFederalAssemblyMandateSinceTurn: 129,
+    });
+    await db.collection<Fixture>("states").insertMany(
+      Object.entries(RU_1991_ECONOMIC_REGION_POPULATION).map(([id, population]) => ({
+        _id: id,
+        countryId: "RU",
+        population,
+        votingEligiblePopulation: population * 0.7,
+      }))
+    );
+    const opened = await openRussianDumaElection({
+      db,
+      game: { preset: "1991-default" },
+      turn: 129,
+      now: new Date(1000),
+    });
+    const elections = await db
+      .collection<Election>("elections")
+      .find({ countryId: "RU" })
+      .toArray();
+    const npcId = new ObjectId();
+    const officialId = new ObjectId();
+    await db.collection("npps").insertOne({ _id: npcId, countryId: "RU", party: "1" });
+    await db
+      .collection("electedOfficials")
+      .insertOne({ _id: officialId, countryId: "RU", officeType: "congressDeputy" });
+    const candidates = elections.map((row) => ({
+      _id: new ObjectId(),
+      electionId: row._id,
+      countryId: "RU",
+      characterId: npcId,
+      nppId: npcId,
+      isNPP: true,
+      party: "1",
+      characterName: "Bounded nominee",
+      status: "active",
+      russianDumaNomination: {
+        registrationOrder: 0,
+        nominationOrder: 0,
+        capacity: row.totalSeats!,
+      },
+    }));
+    await db.collection("electionCandidates").insertMany(candidates);
+    // A district and the national list fail. Every other district remains valid.
+    const failedIds = new Set([
+      elections[0]._id.toHexString(),
+      elections.find((row) => row.totalSeats === 225)!._id.toHexString(),
+    ]);
+    await db.collection("electionVoteTallies").insertMany(
+      elections.map((row, index) => ({
+        _id: new ObjectId(),
+        electionId: row._id,
+        finalized: false,
+        totalVotes: {
+          [candidates[index]._id.toHexString()]: failedIds.has(row._id.toHexString())
+            ? 0
+            : row.russianDumaRound!.registeredVoters,
+        },
+        candidateParties: { [candidates[index]._id.toHexString()]: "1" },
+        russianDumaBallot: { againstAllVotes: 0 },
+      }))
+    );
+    await db.collection("elections").updateMany({}, { $set: { status: "completed" } });
+    const previous = await certifyRussianDumaElection({
+      db,
+      cohortId: opened!.cohortId,
+      turn: 141,
+      now: new Date(2000),
+    });
+    const snapshot = structuredClone(previous.ballots);
+    await db.collection("states").updateMany({}, { $mul: { votingEligiblePopulation: 0.5 } });
+    await db.createCollection(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION, {
+      validator: { generation: { $ne: 1 } },
+    });
+    const input = {
+      db,
+      rootCohortId: opened!.cohortId,
+      previousResultId: previous._id,
+      turn: 142,
+      now: new Date(3000),
+    };
+    await expect(openRussianDumaRepeat(input)).rejects.toMatchObject({ code: 121 });
+    expect(await db.collection("elections").countDocuments()).toBe(226);
+    expect(await db.collection(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION).countDocuments()).toBe(0);
+    await db.command({ collMod: RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION, validator: {} });
+    commands = 0;
+    const result = await openRussianDumaRepeat(input);
+    const openingCommands = commands;
+    expect(result?.created).toBe(true);
+    expect(result?.record.generation).toBe(1);
+    expect(result?.record.electionIds).toHaveLength(2);
+    expect(openingCommands).toBeLessThanOrEqual(11);
+    const replacements = await db
+      .collection<Election>("elections")
+      .find({ "russianDumaRound.cohortId": result!.record.cohortId })
+      .toArray();
+    expect(replacements).toHaveLength(2);
+    expect(
+      new Set(replacements.map((row) => row.russianDumaRound!.predecessorElectionId!.toHexString()))
+    ).toEqual(failedIds);
+    for (const row of replacements) {
+      const old = previous.ballots!.find((ballot) => ballot.seatId === row.seatId)!;
+      expect(row.russianDumaRound!.registeredVoters).toBeLessThan(old.registeredVoters);
+      expect(row.russianDumaRound!.rootCohortId?.equals(opened!.cohortId)).toBe(true);
+      expect(row.startTurn).toBe(142);
+      expect(row.primaryEndTurn).toBe(152);
+      expect(row.endTurn).toBe(154);
+    }
+    commands = 0;
+    const replay = await openRussianDumaRepeat({ ...input, turn: 143 });
+    const replayCommands = commands;
+    expect(replay?.created).toBe(false);
+    expect(replay?.record).toEqual(result!.record);
+    expect(replayCommands).toBeLessThanOrEqual(6);
+    expect(await db.collection("elections").countDocuments()).toBe(228);
+    expect(
+      (
+        await db
+          .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
+          .findOne({ _id: previous._id })
+      )?.ballots
+    ).toEqual(snapshot);
+    expect(
+      await db
+        .collection("elections")
+        .countDocuments({ "russianDumaRound.cohortId": opened!.cohortId, status: "resolved" })
+    ).toBe(226);
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruFederalAssemblySinceTurn");
+    await db
+      .collection<Fixture>("countryGameStates")
+      .updateOne({ _id: "RU" }, { $set: { ruFederalAssemblyMandateSinceTurn: 130 } });
+    await expect(openRussianDumaRepeat(input)).rejects.toThrow("unseated certified predecessor");
+    await db
+      .collection<Fixture>("countryGameStates")
+      .updateOne({ _id: "RU" }, { $set: { ruFederalAssemblyMandateSinceTurn: 129 } });
+    await db
+      .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
+      .updateOne({ _id: previous._id }, { $unset: { ballots: "" } });
+    await expect(openRussianDumaRepeat(input)).rejects.toThrow("preserved predecessor ballots");
   });
 
   it("rolls back all 226 Duma certifications on a late journal failure, then retries and replays", async () => {
