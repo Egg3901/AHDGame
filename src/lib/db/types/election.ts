@@ -84,6 +84,14 @@ export interface Election {
     registeredVoters: number;
     predecessorElectionId?: ObjectId;
   };
+  /** Bound first-Duma ballots share one mandate and frozen registration cohort. */
+  russianDumaRound?: {
+    cohortId: ObjectId;
+    mandateSinceTurn: number;
+    tier: "constituency" | "list";
+    registeredVoters: number;
+    regionalDistrictCount?: number;
+  };
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**

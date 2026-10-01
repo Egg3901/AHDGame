@@ -675,6 +675,8 @@ export interface CountryGameState {
   ruPresidencyFirstElectionId?: ObjectId;
   /** RU 1991: enacted authority to replace Congress with the Federal Assembly. */
   ruFederalAssemblyMandateSinceTurn?: number;
+  /** Bound first-Duma election cohort; opening it does not retire Congress. */
+  ruFirstDumaElectionCohortId?: ObjectId;
   /** RU 1991: the first Federal Assembly election has a certified result. */
   ruFederalAssemblyElectionCertifiedSinceTurn?: number;
   /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */

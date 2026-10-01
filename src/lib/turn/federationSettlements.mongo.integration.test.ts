@@ -20,6 +20,8 @@ import {
 import { openRussianPresidentialElection } from "@/lib/countries/ru/presidentialElectionOpening";
 import { resolveRussianPresidentialElection } from "@/lib/countries/ru/resolvePresidentialElection";
 import { materializeRussianPresidentialSeating } from "@/lib/countries/ru/presidentialSeating";
+import { openRussianDumaElection } from "@/lib/countries/ru/dumaElectionOpening";
+import { RU_1991_ECONOMIC_REGION_POPULATION } from "@/lib/countries/ru/data/ruPopulation1991";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
 
@@ -142,6 +144,61 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     console.info("Russian presidential opening qualification", {
       openingCommands,
       registeredVoters: 100,
+    });
+  });
+
+  it("rolls back a partially inserted first Duma cohort, then retries and replays in bounded commands", async () => {
+    const db = client.db(databaseName);
+    await db
+      .collection<Fixture>("countryGameStates")
+      .insertOne({
+        _id: "RU",
+        ruSovietSuccessionSinceTurn: 48,
+        ruFederalAssemblyMandateSinceTurn: 129,
+      });
+    await db
+      .collection<Fixture>("states")
+      .insertMany(
+        Object.entries(RU_1991_ECONOMIC_REGION_POPULATION).map(([id, population]) => ({
+          _id: id,
+          countryId: "RU",
+          population,
+          votingEligiblePopulation: population * 0.7,
+        }))
+      );
+    await db.createCollection("elections", {
+      validator: { seatId: { $ne: "RU-duma-national-list" } },
+    });
+    const officialId = new ObjectId();
+    await db
+      .collection("electedOfficials")
+      .insertOne({ _id: officialId, countryId: "RU", officeType: "congressDeputy" });
+    const input = { db, game: { preset: "1991-default" }, turn: 129, now: new Date(1000) };
+    await expect(openRussianDumaElection(input)).rejects.toThrow();
+    expect(await db.collection("elections").countDocuments()).toBe(0);
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruFirstDumaElectionCohortId");
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    await db.command({ collMod: "elections", validator: {} });
+    commands = 0;
+    const result = await openRussianDumaElection(input);
+    const openingCommands = commands;
+    expect(result?.created).toBe(true);
+    expect(openingCommands).toBeLessThanOrEqual(9);
+    expect(await db.collection("elections").countDocuments()).toBe(226);
+    commands = 0;
+    const replay = await openRussianDumaElection({ ...input, turn: 130 });
+    const replayCommands = commands;
+    expect(replay?.created).toBe(false);
+    expect(replay?.cohortId.equals(result!.cohortId)).toBe(true);
+    expect(replayCommands).toBeLessThanOrEqual(6);
+    expect(await db.collection("elections").countDocuments()).toBe(226);
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    console.info("Russian Duma opening qualification", {
+      openingCommands,
+      replayCommands,
+      ballots: 226,
     });
   });
 
