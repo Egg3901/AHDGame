@@ -59,6 +59,33 @@ const soe = (id: string, name: string): StockListing => ({
 });
 
 describe("StockList non-tradable state", () => {
+  it("uses starting weights for grouped state-owned listings", () => {
+    render(
+      <StockList
+        timeframe="24h"
+        listings={[
+          {
+            ...tradable,
+            _id: "large",
+            isNatcorp: true,
+            countryOwnerId: "RU",
+            marketCapAnchor: 1_000_000,
+            priceChange24h: 0,
+          },
+          {
+            ...tradable,
+            _id: "small",
+            isNatcorp: true,
+            countryOwnerId: "RU",
+            marketCapAnchor: 1_000,
+            priceChange24h: 1_000_000,
+          },
+        ]}
+      />
+    );
+    expect(screen.getByText("+0.10%")).toBeTruthy();
+    expect(screen.getByText("6M Change")).toBeTruthy();
+  });
   it("renders a non-tradable badge for zero-share SOEs and never NaN%", () => {
     render(<StockList listings={[tradable, soe("s1", "SoE One"), soe("s2", "SoE Two")]} />);
 

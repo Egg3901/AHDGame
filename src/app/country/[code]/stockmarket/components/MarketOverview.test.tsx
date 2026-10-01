@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MarketOverview } from "./MarketOverview";
 
-const { createChart, setCandleData, setCompareData } = vi.hoisted(() => ({
-  createChart: vi.fn(),
-  setCandleData: vi.fn(),
-  setCompareData: vi.fn(),
-}));
+const { createChart, setCandleData, setCompareData, setVolumeData, applyPriceOptions } = vi.hoisted(
+  () => ({
+    createChart: vi.fn(),
+    setCandleData: vi.fn(),
+    setCompareData: vi.fn(),
+    setVolumeData: vi.fn(),
+    applyPriceOptions: vi.fn(),
+  })
+);
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({ formatAmount: (value: number) => `${value}` }),
@@ -18,7 +22,9 @@ vi.mock("lightweight-charts", () => ({
   HistogramSeries: "volume",
   LineSeries: "line",
   CrosshairMode: { Normal: 0 },
+  PriceScaleMode: { Normal: 0, Logarithmic: 1 },
   createChart,
+  createSeriesMarkers: vi.fn(() => ({ detach: vi.fn(), setMarkers: vi.fn() })),
 }));
 
 const candle = {
@@ -37,9 +43,13 @@ describe("MarketOverview loading", () => {
     createChart.mockReset();
     setCandleData.mockReset();
     setCompareData.mockReset();
+    setVolumeData.mockReset();
+    applyPriceOptions.mockReset();
     createChart.mockImplementation(() => ({
       addSeries: (kind: string) => ({
-        setData: kind === "candles" ? setCandleData : kind === "line" ? setCompareData : vi.fn(),
+        setData:
+          kind === "candles" ? setCandleData : kind === "line" ? setCompareData : setVolumeData,
+        priceScale: () => ({ applyOptions: applyPriceOptions }),
       }),
       priceScale: () => ({ applyOptions: vi.fn() }),
       timeScale: () => ({ fitContent: vi.fn() }),
@@ -81,6 +91,97 @@ describe("MarketOverview loading", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("fits a newly selected range only after its own data arrives", async () => {
+    const fit = vi.fn();
+    createChart.mockImplementation(() => ({
+      addSeries: () => ({ setData: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }) }),
+      timeScale: () => ({ fitContent: fit }),
+      subscribeCrosshairMove: vi.fn(),
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+    }));
+    let resolveAll!: (value: unknown) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url.includes("turns=0")
+          ? new Promise((resolve) => {
+              resolveAll = resolve;
+            })
+          : Promise.resolve({
+              ok: true,
+              json: async () => ({ exchange: "global", turns: 48, points: [candle] }),
+            })
+      )
+    );
+    render(<MarketOverview exchangeFilter="global" />);
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "ALL" }));
+    expect(fit).toHaveBeenCalledTimes(1);
+    resolveAll({
+      ok: true,
+      json: async () => ({ exchange: "global", turns: 0, points: [candle] }),
+    });
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(2));
+  });
+
+  it("reports first open to last close for the selected range", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            points: [
+              { ...candle, open: url.includes("turns=24") ? 120 : 200, close: 110 },
+              { ...candle, turn: 11, time: 2000, open: 110, close: 100 },
+              { ...candle, turn: 12, time: 3000, open: 100, close: 105 },
+            ],
+            bucketed: false,
+            intradayTurns: 3,
+          }),
+        })
+      )
+    );
+    render(<MarketOverview exchangeFilter="global" />);
+    await waitFor(() => expect(screen.getByText(/-95.*-47.50%/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "6M" }));
+    await waitFor(() => expect(screen.getByText(/-15.*-12.50%/)).toBeTruthy());
+  });
+
+  it("aligns every volume bucket, marks coverage and defaults ALL to log scale", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            points: [
+              { ...candle, intraday: false, volume: 0 },
+              { ...candle, turn: 34, time: 2000 },
+            ],
+            bucketed: true,
+            bucketTurns: 24,
+            totalTurns: 48,
+            intradayTurns: 1,
+            firstIntradayTurn: 34,
+          }),
+        })
+      )
+    );
+    render(<MarketOverview exchangeFilter="global" />);
+    await waitFor(() => expect(setCandleData).toHaveBeenCalled());
+    expect(setVolumeData.mock.calls.at(-1)?.[0].map((p: { time: number }) => p.time)).toEqual(
+      setCandleData.mock.calls.at(-1)?.[0].map((p: { time: number }) => p.time)
+    );
+    expect(setVolumeData.mock.calls.at(-1)?.[0][0].value).toBe(0);
+    expect(screen.getByText("1/48 turns with intraday prints")).toBeTruthy();
+    expect(screen.getByText(/coverage begins T34/)).toBeTruthy();
+    expect(screen.getByText("6-month buckets (24 turns)")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "ALL" }));
+    await waitFor(() => expect(applyPriceOptions).toHaveBeenCalledWith({ mode: 1 }));
+  });
+
   it("offers only accessible national exchanges and plots a sector comparison", async () => {
     vi.stubGlobal(
       "fetch",
@@ -88,18 +189,20 @@ describe("MarketOverview loading", () => {
         Promise.resolve({
           ok: true,
           json: async () =>
-            url.includes("market-cap-history")
+            url.includes("sector=financial")
               ? {
                   points: [
                     {
                       turn: 10,
-                      createdAt: new Date(1000 * 1000).toISOString(),
-                      bySector: { financial: 100 },
+                      time: 1000,
+                      open: 100,
+                      close: 100,
                     },
                     {
                       turn: 11,
-                      createdAt: new Date(2000 * 1000).toISOString(),
-                      bySector: { financial: 110 },
+                      time: 2000,
+                      open: 100,
+                      close: 110,
                     },
                   ],
                 }
@@ -132,20 +235,57 @@ describe("MarketOverview loading", () => {
     await waitFor(() =>
       expect(setCompareData).toHaveBeenCalledWith([
         { time: 1000, value: 0 },
-        { time: 2000, value: 10 },
+        { time: 2000, value: expect.closeTo(10) },
       ])
     );
     fireEvent.change(select, { target: { value: "venue:nyse" } });
     await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith("/api/stock-exchange/candles?exchange=nyse&turns=168", {
+      expect(fetch).toHaveBeenCalledWith("/api/stock-exchange/candles?exchange=nyse&turns=48", {
         cache: "no-store",
       })
     );
     await waitFor(() =>
       expect(setCompareData).toHaveBeenCalledWith([
         { time: 1000, value: 0 },
-        { time: 2000, value: 20 },
+        { time: 2000, value: expect.closeTo(20) },
       ])
     );
+  });
+});
+
+describe("world dates and refreshed data", () => {
+  it("labels the ending game date of a bucket and reloads without refitting zoom", async () => {
+    const fit = vi.fn();
+    createChart.mockImplementation(() => ({
+      addSeries: () => ({ setData: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }) }),
+      timeScale: () => ({ fitContent: fit }),
+      subscribeCrosshairMove: vi.fn(),
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          points: [{ ...candle, turn: 1255, endTurn: 1266, invalidVolumeTrades: 2 }],
+          totalTurns: 12,
+          invalidVolumeTrades: 2,
+          calendar: {
+            startingYear: 1953,
+            currentTurn: 1266,
+            preIterationTurns: 48,
+            lastTurnProcessed: "2026-10-01",
+          },
+        }),
+      })
+    );
+    const { rerender } = render(<MarketOverview exchangeFilter="global" currentTurn={1266} />);
+    await waitFor(() => expect(screen.getByText(/Through May 1978/)).toBeTruthy());
+    expect(screen.getByText(/Turnover incomplete/)).toBeTruthy();
+    expect(createChart.mock.calls.at(-1)?.[1].timeScale.tickMarkFormatter(1000)).toBe("May 1978");
+    rerender(<MarketOverview exchangeFilter="global" currentTurn={1267} />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(fit).toHaveBeenCalledTimes(1);
   });
 });
