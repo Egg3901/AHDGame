@@ -6,7 +6,7 @@ summary: >-
   each one. Energy, oil, iron and natural gas markets now show the demand
   buyers have. Room to build and Unclaimed share match what plants can sell.
 tags: [economy, corporations, markets]
-badges: [fix]
+badges: [patch]
 areas: [engine, frontend]
 ---
 
