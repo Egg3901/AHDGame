@@ -10,6 +10,7 @@ export type TabCounts = Partial<Record<MainTabId, number>>;
 export interface QueueCounts {
   suggestions?: number;
   mailReports?: number;
+  playerReports?: number;
   wikiReview?: number;
   suspicious?: number;
   feedback?: number;
@@ -46,6 +47,13 @@ export const QUEUE_DESTINATIONS: {
     dotClass: "bg-error",
   },
   {
+    key: "playerReports",
+    label: "Player reports",
+    tab: "support",
+    sub: "player-reports",
+    dotClass: "bg-error",
+  },
+  {
     key: "wikiReview",
     label: "Wiki review",
     tab: "content",
@@ -75,7 +83,8 @@ export const QUEUE_TAB_SUBS: Record<string, keyof QueueCounts> = Object.fromEntr
 
 function deriveTabs(queues: QueueCounts): TabCounts {
   const tabs: TabCounts = {};
-  const support = (queues.mailReports ?? 0) + (queues.suggestions ?? 0);
+  const support =
+    (queues.mailReports ?? 0) + (queues.playerReports ?? 0) + (queues.suggestions ?? 0);
   if (support > 0) tabs.support = support;
   if ((queues.wikiReview ?? 0) > 0) tabs.content = queues.wikiReview;
   if ((queues.suspicious ?? 0) > 0) tabs.players = queues.suspicious;
@@ -114,6 +123,13 @@ export function useAdminBadgeCounts(): AdminBadgeCounts {
         if (data && typeof data.total === "number") update({ mailReports: data.total });
       })
       .catch(quietly("mail-reports"));
+
+    fetch("/api/admin/player-reports?status=pending&limit=1", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.total === "number") update({ playerReports: data.total });
+      })
+      .catch(quietly("player-reports"));
 
     fetch("/api/admin/wiki/review-queue", { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))

@@ -111,6 +111,12 @@ export interface User {
    * or retired), or unset (defaults to the name of the user's highest-scoring life).
    */
   legacyDisplayCharacterId?: string;
+  /**
+   * Users this player has blocked: their mail is hidden and refused, and their
+   * profile bio and campaign song are hidden from this player. Capped at
+   * MAX_BLOCKED_USERS.
+   */
+  blockedUserIds?: ObjectId[];
   discordId?: string;
   discordUsername?: string;
   discordAvatar?: string;
