@@ -117,6 +117,7 @@ export function MarketOverview({
   const [showMa50, setShowMa50] = useState(false);
   const [compare, setCompare] = useState<CompareKey | null>(null);
   const [compareError, setCompareError] = useState(false);
+  const [compareCoverage, setCompareCoverage] = useState<string | null>(null);
   const [candles, setCandles] = useState<CandleDto[]>([]);
   const [bucketTurns, setBucketTurns] = useState(1);
   const bucketed = bucketTurns > 1;
@@ -502,6 +503,9 @@ export function MarketOverview({
       .then((json: CandlesResponse) => {
         if (cancelled) return;
         setCompareError(false);
+        setCompareCoverage(
+          `${json.intradayTurns ?? 0}/${json.totalTurns ?? json.points.length} turns with live prints; older comparison levels use recorded closes`
+        );
         const points = (json.points ?? []).filter((p) => p.time >= base);
         const opening = points[0]?.open;
         applyLine(
@@ -636,6 +640,7 @@ export function MarketOverview({
               onChange={(e) => {
                 const v = e.target.value;
                 setCompareError(false);
+                setCompareCoverage(null);
                 if (!v) {
                   setCompare(null);
                   return;
@@ -667,7 +672,7 @@ export function MarketOverview({
             </select>
             {compareLabel && (
               <span className="text-[11px] text-muted">
-                vs {compareLabel} ·{" "}
+                vs {compareLabel} · {compareCoverage ?? "loading coverage"} ·{" "}
                 <button onClick={() => setCompare(null)} className="text-primary hover:underline">
                   clear
                 </button>
