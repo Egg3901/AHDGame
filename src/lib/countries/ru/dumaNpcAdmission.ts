@@ -160,14 +160,19 @@ export async function materializeRussianDumaNpcAdmission(input: {
       tier: row.russianDumaRound!.tier,
     })),
     parties: partyIds,
-    profiles: profiles.map((row) => ({
-      id: row._id.toHexString(),
-      party: row.party,
-      homeState: row.homeState,
-      eligible:
-        !row.currentOffice ||
-        ["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(row.currentOffice),
-    })),
+    profiles: profiles.map((row) => {
+      const office =
+        typeof row.currentOffice === "string" ? row.currentOffice : row.currentOffice?.type;
+      return {
+        id: row._id.toHexString(),
+        party: row.party,
+        homeState: row.homeState,
+        eligible:
+          !row.currentOffice ||
+          (office != null &&
+            ["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(office)),
+      };
+    }),
     activeCandidates: active.map((row) => ({
       electionId: row.electionId.toHexString(),
       party: row.party,
