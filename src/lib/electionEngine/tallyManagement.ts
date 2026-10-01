@@ -3,6 +3,8 @@
  */
 
 import { russianDumaVoteTotals } from "@/lib/countries/ru/rules/assemblyVoteIncrement";
+import { russianCouncilVoteTotals } from "@/lib/countries/ru/rules/councilVoteTotals";
+import { resolveRussianCouncilBallot } from "@/lib/countries/ru/rules/councilResult";
 import { russianPresidentialVoteIncrement } from "@/lib/countries/ru/rules/presidentialVoteIncrement";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { applyNationalAds } from "@/lib/campaignTargeting/nationalAds";
@@ -440,10 +442,16 @@ export async function accumulateVoteTurn(
     election.countryId === "RU" &&
     election.electionType === "dumaDeputy" &&
     election.russianDumaRound != null;
-  const alreadyCast = isBoundDuma
-    ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
-      (tally.russianDumaBallot?.againstAllVotes ?? 0)
-    : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
+  const isBoundCouncil =
+    election.countryId === "RU" &&
+    election.electionType === "federationCouncilMember" &&
+    election.russianCouncilRound != null;
+  const alreadyCast = isBoundCouncil
+    ? (tally.russianCouncilBallot?.validBallots ?? 0)
+    : isBoundDuma
+      ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
+        (tally.russianDumaBallot?.againstAllVotes ?? 0)
+      : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
@@ -779,10 +787,60 @@ export async function accumulateVoteTurn(
     });
   }
 
+  let councilTotals: ReturnType<typeof russianCouncilVoteTotals> | null = null;
+  if (isBoundCouncil) {
+    const rawVotes = Object.fromEntries(
+      enriched.map((candidate) => [
+        candidate.candidateId,
+        newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+      ])
+    );
+    const nominationById = new Map(
+      candidates.map((candidate) => [
+        candidate._id.toHexString(),
+        candidate.russianCouncilNomination,
+      ])
+    );
+    councilTotals = russianCouncilVoteTotals({
+      registeredVoters: election.russianCouncilRound!.registeredVoters,
+      priorVotes: tally.totalVotes,
+      ledger: tally.russianCouncilBallot,
+      rawVotes,
+      rawAgainstAllVotes: Object.values(rawVotes).every((count) => count === 0)
+        ? Math.max(0, Math.floor(effEffectiveTurnPool))
+        : 0,
+      nominees: enriched.map((candidate) => {
+        const nomination = nominationById.get(candidate.candidateId);
+        if (!nomination) throw new Error("Council voting needs each nominee's frozen registration");
+        return {
+          id: candidate.candidateId,
+          registrationOrder: nomination.registrationOrder,
+          economicLean: candidate.charEP,
+          socialLean: candidate.charSP,
+          favorability: candidate.favorability,
+        };
+      }),
+    });
+    newTotals = councilTotals.votes;
+  }
+
   // For house/stateSenate races, compute per-candidate seat estimates
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
+    if (councilTotals) {
+      const result = resolveRussianCouncilBallot({
+        ...councilTotals.ballot,
+        invalidated: tally.russianCouncilBallot?.invalidated,
+      });
+      const winners =
+        result.outcome === "elected" && result.winnerIds.every((id) => activeCandidateIds.has(id))
+          ? new Set(result.winnerIds)
+          : new Set<string>();
+      return Object.fromEntries(
+        enriched.map((row) => [row.candidateId, winners.has(row.candidateId) ? 1 : 0])
+      );
+    }
     const electionType = election.electionType as string;
     const totalSeats = election.totalSeats as number | undefined;
     if (!totalSeats || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
@@ -854,8 +912,9 @@ export async function accumulateVoteTurn(
     return seats;
   })();
 
-  const nativeRussianTotal =
-    (election.countryId === "RU" && election.russianPresidentialRound) || isBoundDuma
+  const nativeRussianTotal = councilTotals
+    ? councilTotals.ledger.validBallots
+    : (election.countryId === "RU" && election.russianPresidentialRound) || isBoundDuma
       ? Object.values(newTotals).reduce((sum, count) => sum + count, 0) +
         (isBoundDuma ? (tally.russianDumaBallot?.againstAllVotes ?? 0) : 0)
       : null;
@@ -873,13 +932,22 @@ export async function accumulateVoteTurn(
             ])
           ),
     ...(seatsEstimate ? { seatsEstimate } : {}),
+    ...(councilTotals
+      ? {
+          russianCouncilBallot: {
+            registeredVoters: councilTotals.ledger.registeredVoters,
+            validBallots: councilTotals.ledger.validBallots,
+            againstAllVotes: councilTotals.ledger.againstAllVotes,
+          },
+        }
+      : {}),
   };
 
   // Sync nominee labels, retaining counted Duma withdrawals for certification.
   const cleanedNames = { ...tally.candidateNames };
   const cleanedParties = { ...tally.candidateParties };
   for (const key of Object.keys(tally.totalVotes)) {
-    if (!activeCandidateIds.has(key) && !isBoundDuma) {
+    if (!activeCandidateIds.has(key) && !isBoundDuma && !isBoundCouncil) {
       delete cleanedNames[key];
       delete cleanedParties[key];
     }
@@ -898,6 +966,9 @@ export async function accumulateVoteTurn(
         totalVotes: newTotals,
         candidateNames: cleanedNames,
         candidateParties: cleanedParties,
+        ...(councilTotals
+          ? { russianCouncilBallot: { ...tally.russianCouncilBallot, ...councilTotals.ledger } }
+          : {}),
         ...(isBoundDuma
           ? {
               russianDumaBallot: {
