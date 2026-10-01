@@ -5,7 +5,13 @@
  */
 import { createHash } from "node:crypto";
 import { ObjectId, type Db } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  FOREX_ACTIVE_COUNTRIES,
+  eraRateForCurrency,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
 import type { TransitionProjection } from "@/lib/banking/rules/boundary";
 import { computeExpiresAtSync } from "@/lib/financialTxLog/expiresAt";
 import { DEFAULT_TURN_LENGTH_MINUTES } from "@/lib/db/types/financialTxLog";
@@ -17,10 +23,34 @@ export interface PrimaryAccountingContext {
   ledgerShadow: boolean;
   turnLengthMinutes: number;
   rates: Map<string, number>;
+  /** World preset, for the authored era rate of a currency with no exchangeRates row. */
+  preset: string;
+}
+
+/**
+ * Rate for a sovereign primary placement. A live exchangeRates row wins. A
+ * country outside the forex system issuing in its own currency (the
+ * Warsaw-Pact currencies have no row by design) uses its authored era rate,
+ * the same rule treasury accrual applies, instead of failing the bond turn.
+ */
+export function primaryFinancingRate(
+  accounting: Pick<PrimaryAccountingContext, "rates" | "preset">,
+  countryId: string,
+  currency: string
+): number | undefined {
+  const observed = accounting.rates.get(currency);
+  if (observed !== undefined) return observed;
+  if (
+    !FOREX_ACTIVE_COUNTRIES.includes(countryId as CountryId) &&
+    COUNTRY_CURRENCY_MAP[countryId as CountryId] === currency
+  ) {
+    return eraRateForCurrency(currency as CurrencyCode, accounting.preset);
+  }
+  return undefined;
 }
 
 export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingContext> {
-  const [config, rates] = await Promise.all([
+  const [config, rates, gameState] = await Promise.all([
     db
       .collection<{ _id: string; ledgerShadow?: boolean; turnLengthMinutes?: number }>("gameConfig")
       .findOne({ _id: "default" }, { projection: { ledgerShadow: 1, turnLengthMinutes: 1 } }),
@@ -28,11 +58,15 @@ export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingCo
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
       .toArray(),
+    db
+      .collection<{ _id: string; preset?: string }>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1 } }),
   ]);
   return {
     ledgerShadow: config?.ledgerShadow === true,
     turnLengthMinutes: config?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES,
     rates: new Map(rates.map((r) => [r.currencyCode, r.rate])),
+    preset: gameState?.preset ?? "",
   };
 }
 
@@ -62,7 +96,7 @@ export async function commitSovereignPrimary(
 ): Promise<void> {
   const transition = sovereignPrimaryTransition(input);
   transition.projections.push(...projections);
-  const observedRate = accounting.rates.get(input.currency);
+  const observedRate = primaryFinancingRate(accounting, input.countryId, input.currency);
   if (
     input.poolCash + input.monetaryCash > 0 &&
     (observedRate === undefined || !Number.isFinite(observedRate) || observedRate <= 0)
