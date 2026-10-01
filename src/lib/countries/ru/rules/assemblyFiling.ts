@@ -35,6 +35,7 @@ export interface RussianDumaFilingInput {
     party: string;
     pendingRelocation: boolean;
     recognizedParty: boolean;
+    holdsConstituencyMandate?: boolean;
   };
 }
 export type RussianDumaFilingDecision =
@@ -51,7 +52,8 @@ export type RussianDumaFilingDecision =
         | "filing-closed"
         | "invalid-residence"
         | "independent-list"
-        | "unregistered-list";
+        | "unregistered-list"
+        | "constituency-mandate";
     };
 export function decideRussianDumaFiling(input: RussianDumaFilingInput): RussianDumaFilingDecision {
   const { election, character } = input;
@@ -95,6 +97,8 @@ export function decideRussianDumaFiling(input: RussianDumaFilingInput): RussianD
       return { allowed: false, reason: "independent-list" };
     if (!character.recognizedParty) return { allowed: false, reason: "unregistered-list" };
   } else {
+    if (character.holdsConstituencyMandate)
+      return { allowed: false, reason: "constituency-mandate" };
     const district = districts.get(election.seatId);
     if (
       election.tier !== "constituency" ||

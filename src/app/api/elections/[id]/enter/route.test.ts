@@ -510,6 +510,62 @@ describe("Bound first-Duma filing", () => {
       })
     );
   });
+  it.each(["eligible", "winner", "missing-journal", "wrong-ballot", "wrong-predecessor"])(
+    "checks %s repeat filing against immutable generation lineage",
+    async (reason) => {
+      const { db, election } = await setupDuma("constituency");
+      const roundId = new ObjectId();
+      Object.assign(election.russianDumaRound, {
+        cohortId: roundId,
+        rootCohortId: cohortId,
+        generation: 1,
+      });
+      db.collection("russianDumaRepeatOpenings");
+      db.collection("russianDumaElectionResults");
+      db.collectionMocks.russianDumaRepeatOpenings.findOne.mockResolvedValue(
+        reason === "missing-journal"
+          ? null
+          : {
+              rootCohortId: cohortId,
+              cohortId: roundId,
+              generation: 1,
+              mandateSinceTurn: 129,
+              previousResultId: cohortId.toHexString(),
+              electionIds: [reason === "wrong-ballot" ? new ObjectId() : electionOid],
+              seatIds: [election.seatId],
+            }
+      );
+      db.collectionMocks.russianDumaElectionResults.findOne.mockResolvedValue({
+        countryId: "RU",
+        preset: "1991-default",
+        cohortId: reason === "wrong-predecessor" ? new ObjectId() : cohortId,
+        mandateSinceTurn: 129,
+        result: {
+          constituencyResults:
+            reason === "winner"
+              ? [{ winner: { isNpc: false, ownerId: characterOid.toHexString() } }]
+              : [],
+        },
+      });
+      const response = await POST(makeReq(), {
+        params: Promise.resolve({ id: electionOid.toHexString() }),
+      });
+      expect(response.status, JSON.stringify(await response.clone().json())).toBe(
+        reason === "eligible" ? 200 : 403
+      );
+      if (reason === "eligible")
+        expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ characterId: characterOid })
+        );
+      else {
+        expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+        if (reason === "winner")
+          expect((await response.json()).error).toMatch(
+            /already hold a certified Duma constituency/
+          );
+      }
+    }
+  );
   it("rejects an unbound cohort before inserting any candidate", async () => {
     const { db, election } = await setupDuma();
     election.russianDumaRound.cohortId = new ObjectId();
