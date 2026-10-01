@@ -285,11 +285,23 @@
       "turn": "Turn {turn}"
     },
     "dossier": {
-      "file": "Dossier",
       "noOffice": "Private citizen",
       "independent": "Independent",
       "nationalRank": "#{rank} nationally",
-      "partyInfluence": "Party influence"
+      "partyInfluence": "Party influence",
+      "stateInfluence": "State influence",
+      "nationalInfluence": "National influence",
+      "hoarding": "Hoarding, −{penalty} per turn",
+      "hoardAbove": "Hoarding penalty above {threshold}",
+      "infamyCost": "Costs {value}% favorability per turn",
+      "infamySafe": "No penalty below 20%",
+      "partyBonus": "{count} of {max} bonus actions",
+      "colMeasure": "Measure",
+      "colValue": "Value",
+      "colPerTurn": "Per turn",
+      "colNotes": "Notes",
+      "favorabilityStable": "Holds steady at 60% or below",
+      "favorabilityCooling": "Above 60%, cooling each turn"
     }
   }
 }

@@ -9,7 +9,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import { ProfilePictureUpload } from "@/components/ProfilePictureUpload";
 import { PatreonBadge } from "@/components/patreon/PatreonBadge";
 import { CampaignSongPlayer } from "@/components/CampaignSongPlayer";
-import { CountryFlag } from "@/components/CountryFlag";
 import { getPartyHex } from "@/lib/utils/politics";
 import { regionUrl, partyUrl } from "@/lib/urls";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -33,10 +32,9 @@ interface DossierHeaderProps {
 }
 
 /**
- * Dossier variant of the own-profile header (experiment `profile-redesign`).
- * Office and name are the headline, party and place are typography rather than
- * chips, and the party colour is the only accent. Designed to stand on its own
- * with no banner or avatar uploaded.
+ * Record variant of the own-profile header (experiment `profile-redesign`).
+ * An identity block, not a banner: name, office, then the facts as one line
+ * of text. The party colour appears once, as the swatch beside the party.
  */
 export function DossierHeader({
   character,
@@ -55,23 +53,18 @@ export function DossierHeader({
   ownProfileHref,
 }: DossierHeaderProps) {
   const t = useTranslations("profile");
-  const accentHex =
-    patreonHighlightColor ?? getPartyHex(character.party, party?.color ?? undefined);
+  const partyHex = patreonHighlightColor ?? getPartyHex(character.party, party?.color ?? undefined);
   const countryId = (character.countryId ?? (countrySlug.toUpperCase() as CountryId)) as CountryId;
   const countryCfg = getCountryConfig(countryId);
   const isIndependent = character.party === "independent" || !party;
-  const [primaryOffice, ...otherOffices] = officeLabels;
-  const fileNumber = character.sequentialId
-    ? `${countryCfg.code.toUpperCase()}-${String(character.sequentialId).padStart(5, "0")}`
-    : countryCfg.code.toUpperCase();
 
   return (
     <section
-      className="dossier-hero relative overflow-hidden rounded-xl border border-card-border bg-card"
-      style={{ "--dossier-party": accentHex } as CSSProperties}
+      className="dossier-record overflow-hidden rounded-lg border border-card-border bg-card"
+      style={{ "--dossier-party": partyHex } as CSSProperties}
     >
-      {character.profileHeaderImageUrl ? (
-        <div className="relative h-28 sm:h-40">
+      {character.profileHeaderImageUrl && (
+        <div className="relative h-24 sm:h-36">
           <Image
             src={character.profileHeaderImageUrl}
             alt=""
@@ -81,116 +74,83 @@ export function DossierHeader({
             sizes="(max-width: 1280px) 100vw, 1280px"
             unoptimized={bypassNextImageOptimization(character.profileHeaderImageUrl)}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-card to-transparent" />
         </div>
-      ) : (
-        <div className="dossier-hero-field" aria-hidden />
       )}
 
-      <div className="relative px-5 pb-6 pt-5 sm:px-8 sm:pb-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="dossier-meta">
-            <span>{t("dossier.file")}</span>
-            <span aria-hidden>/</span>
-            <span>{fileNumber}</span>
-            <span aria-hidden>/</span>
-            <span>{t("header.memberSince", { date: memberSince })}</span>
-          </p>
-          <div className="dossier-actions flex items-center gap-2">
-            <CopyProfileLinkButton href={ownProfileHref} />
-            <Link href="/settings" className="dossier-button">
-              {t("header.editProfile")}
-            </Link>
-          </div>
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:gap-5 sm:p-6">
+        <div className="dossier-avatar shrink-0">
+          <ProfilePictureUpload
+            currentUrl={character.avatarUrl}
+            characterName={character.name}
+            size="hero"
+            borderKey={patreonProfileBorder}
+            tintColor={patreonHighlightColor}
+            patreonTier={patreonTier ?? null}
+            patreonExpiresAt={patreonExpiresAt ?? null}
+          />
         </div>
 
-        <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-7">
-          <div className="dossier-avatar shrink-0">
-            <ProfilePictureUpload
-              currentUrl={character.avatarUrl}
-              characterName={character.name}
-              size="hero"
-              borderKey={patreonProfileBorder}
-              tintColor={patreonHighlightColor}
-              patreonTier={patreonTier ?? null}
-              patreonExpiresAt={patreonExpiresAt ?? null}
-            />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <p className="dossier-office">
-              {primaryOffice ?? t("dossier.noOffice")}
-              {otherOffices.length > 0 && (
-                <span className="dossier-office-extra"> / {otherOffices.join(" / ")}</span>
-              )}
-            </p>
-            <h1 className="dossier-name">{character.name}</h1>
-
-            <p className="dossier-identity">
-              {isIndependent ? (
-                <span className="dossier-party">
-                  <span className="dossier-party-swatch" aria-hidden />
-                  {t("dossier.independent")}
-                </span>
-              ) : (
-                <Link href={partyUrl(countrySlug, party.sequentialId)} className="dossier-party">
-                  <span className="dossier-party-swatch" aria-hidden />
-                  {party.name}
-                </Link>
-              )}
-              <span className="dossier-sep" aria-hidden>
-                /
-              </span>
-              <Link href={regionUrl(countryId, character.homeState)}>{stateLabel}</Link>
-              <span className="dossier-sep" aria-hidden>
-                /
-              </span>
-              <Link href={countryCfg.overviewPath} className="inline-flex items-center gap-1.5">
-                <CountryFlag
-                  country={countryCfg.code}
-                  width={18}
-                  height={12}
-                  className="h-3 w-auto rounded-[1px] object-cover"
-                  title={countryCfg.name}
-                />
-                {countryCfg.name}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+            <div className="min-w-0">
+              <h1 className="dossier-name">{character.name}</h1>
+              <p className="dossier-office">
+                {officeLabels.length > 0 ? officeLabels.join(", ") : t("dossier.noOffice")}
+              </p>
+            </div>
+            <div className="dossier-actions flex shrink-0 items-center gap-2">
+              <CopyProfileLinkButton href={ownProfileHref} />
+              <Link href="/settings" className="dossier-button">
+                {t("header.editProfile")}
               </Link>
-            </p>
+            </div>
+          </div>
 
-            {(patreonTier || user.isAdmin || user.isModerator) && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <PatreonBadge
-                  tier={patreonTier ?? null}
-                  expiresAt={patreonExpiresAt}
-                  since={patreonSince}
-                  provider={supporterProvider ?? undefined}
-                  appearance="tag"
-                />
-                {user.isAdmin && <span className="dossier-tag">{t("header.admin")}</span>}
-                {user.isModerator && !user.isAdmin && (
-                  <span className="dossier-tag">{t("header.moderator")}</span>
-                )}
-              </div>
+          <p className="dossier-facts">
+            {isIndependent ? (
+              <span className="dossier-party">
+                <span className="dossier-party-swatch" aria-hidden />
+                {t("dossier.independent")}
+              </span>
+            ) : (
+              <Link href={partyUrl(countrySlug, party.sequentialId)} className="dossier-party">
+                <span className="dossier-party-swatch" aria-hidden />
+                {party.name}
+              </Link>
             )}
-          </div>
-        </div>
+            <span>
+              <Link href={regionUrl(countryId, character.homeState)}>{stateLabel}</Link>,{" "}
+              <Link href={countryCfg.overviewPath}>{countryCfg.name}</Link>
+            </span>
+            <span>{t("header.memberSince", { date: memberSince })}</span>
+            {patreonTier && (
+              <PatreonBadge
+                tier={patreonTier}
+                expiresAt={patreonExpiresAt}
+                since={patreonSince}
+                provider={supporterProvider ?? undefined}
+                appearance="tag"
+              />
+            )}
+            {user.isAdmin && <span>{t("header.admin")}</span>}
+            {user.isModerator && !user.isAdmin && <span>{t("header.moderator")}</span>}
+          </p>
 
-        <figure className="dossier-bio">
           {character.bio ? (
-            <blockquote className="line-clamp-4 sm:line-clamp-3">{character.bio}</blockquote>
+            <p className="dossier-bio">{character.bio}</p>
           ) : (
-            <p className="dossier-bio-empty">{t("header.noBio")}</p>
+            <p className="dossier-bio dossier-bio-empty">{t("header.noBio")}</p>
           )}
-        </figure>
 
-        {character.campaignSongUrl && (
-          <div className="mt-5 border-t border-card-border pt-4">
-            <CampaignSongPlayer
-              videoId={character.campaignSongUrl}
-              characterName={character.name}
-            />
-          </div>
-        )}
+          {character.campaignSongUrl && (
+            <div className="mt-4">
+              <CampaignSongPlayer
+                videoId={character.campaignSongUrl}
+                characterName={character.name}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

@@ -240,11 +240,23 @@
       "share": "Teilen"
     },
     "dossier": {
-      "file": "Akte",
       "noOffice": "Privatperson",
       "independent": "Parteilos",
       "nationalRank": "Platz {rank} landesweit",
-      "partyInfluence": "Parteieinfluss"
+      "partyInfluence": "Parteieinfluss",
+      "stateInfluence": "Einfluss im Bundesstaat",
+      "nationalInfluence": "Landesweiter Einfluss",
+      "hoarding": "Horten, −{penalty} pro Runde",
+      "hoardAbove": "Hortstrafe ab {threshold}",
+      "infamyCost": "Kostet {value}% Beliebtheit pro Runde",
+      "infamySafe": "Keine Strafe unter 20%",
+      "partyBonus": "{count} von {max} Bonusaktionen",
+      "colMeasure": "Kennzahl",
+      "colValue": "Wert",
+      "colPerTurn": "Pro Runde",
+      "colNotes": "Hinweise",
+      "favorabilityStable": "Bleibt bei 60% oder darunter stabil",
+      "favorabilityCooling": "Über 60%, sinkt jede Runde"
     }
   }
 }
