@@ -31,6 +31,8 @@ export interface RussianCouncilOpeningRecord {
     completedOnTurn: number;
   };
   createdAt: Date;
+  /** Serializes player admission with automatic admission to this frozen cohort. */
+  playerFilings?: number;
 }
 
 export async function materializeRussianCouncilElectionOpening(input: {
