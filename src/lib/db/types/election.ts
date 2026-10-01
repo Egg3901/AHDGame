@@ -138,6 +138,8 @@ export interface ElectionCandidate {
     nominationOrder: number;
     capacity: number;
   };
+  /** Server-created nominee identity for an NPC profile representing a bounded slate. */
+  boundedNpcNomineeId?: ObjectId;
   isNPP?: boolean;
   nppId?: ObjectId;
   enteredAt: Date;

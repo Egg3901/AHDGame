@@ -1,4 +1,5 @@
 import type { CreateIndexesOptions, IndexSpecification } from "mongodb";
+import { BOUNDED_NPC_CANDIDATE_GUARDS } from "./boundedNpcCandidates";
 
 /**
  * THE write-guard index specs. One definition, two consumers.
@@ -24,15 +25,7 @@ export type IndexSpecTuple = [string, IndexSpecification, CreateIndexesOptions];
 
 /** Election-entry and endorsement guards. */
 export const ELECTION_WRITE_GUARD_INDEXES: IndexSpecTuple[] = [
-  [
-    "electionCandidates",
-    { characterId: 1 },
-    {
-      name: "unique_active_election_candidate_per_character",
-      unique: true,
-      partialFilterExpression: { status: "active" },
-    },
-  ],
+  ...BOUNDED_NPC_CANDIDATE_GUARDS,
   [
     "statePartyCandidates",
     { stateId: 1, partyId: 1, characterId: 1 },
