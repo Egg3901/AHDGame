@@ -34,6 +34,11 @@ export function resolveRussianDumaCohort(ballots: readonly RussianDumaCohortBall
   return resolveRussianDumaBallots(ballots, false);
 }
 
+/** Revalidate an accumulated certified family whose repeat polls froze fresh registers. */
+export function resolveRussianDumaAccumulatedCohort(ballots: readonly RussianDumaCohortBallot[]) {
+  return resolveRussianDumaBallots(ballots, true);
+}
+
 /** Repeat generations may have different registers from already certified ballots. */
 function resolveRussianDumaBallots(ballots: readonly RussianDumaCohortBallot[], repeat: boolean) {
   if (
