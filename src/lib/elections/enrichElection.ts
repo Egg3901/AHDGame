@@ -3,7 +3,10 @@
  * _enrichElection retains Russian national list nominees together and uses the
  * same primary advance limit as the resolver.
  */
-import { russianDumaPrimaryAdvanceLimit } from "@/lib/countries/ru/rules/assemblyScope";
+import {
+  russianDumaPrimaryAdvanceLimit,
+  russianCouncilPrimaryAdvanceLimit,
+} from "@/lib/countries/ru/rules/assemblyScope";
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 /**
  * Low-level enrichment function that accepts pre-fetched dependencies.
@@ -639,7 +642,24 @@ export async function _enrichElection(
           : undefined,
       },
       enrichedWithYou.length
-    ) ?? getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
+    ) ??
+    russianCouncilPrimaryAdvanceLimit(
+      {
+        countryId: election.countryId ?? "US",
+        electionType: election.electionType,
+        state: election.state,
+        seatId: election.seatId,
+        totalSeats: election.totalSeats,
+        russianCouncilRound: election.russianCouncilRound
+          ? {
+              ...election.russianCouncilRound,
+              cohortId: election.russianCouncilRound.cohortId.toHexString(),
+            }
+          : undefined,
+      },
+      enrichedWithYou.length
+    ) ??
+    getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
 
   // Display candidates: post-primary dedup, keeping up to `primaryAdvanceCount`
   // per party. Safety net for the window between primaryEndTime and the next

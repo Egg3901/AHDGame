@@ -3,7 +3,10 @@
  * resolvePrimariesIfNeeded retains all registered Russian national list nominees;
  * constituency contests keep their normal party nomination limit.
  */
-import { russianDumaPrimaryAdvanceLimit } from "@/lib/countries/ru/rules/assemblyScope";
+import {
+  russianDumaPrimaryAdvanceLimit,
+  russianCouncilPrimaryAdvanceLimit,
+} from "@/lib/countries/ru/rules/assemblyScope";
 import {
   bindBallotElectorate,
   nationwideBallotCountries,
@@ -258,6 +261,22 @@ export async function resolvePrimariesIfNeeded(
             ? {
                 ...election.russianDumaRound,
                 cohortId: election.russianDumaRound.cohortId.toHexString(),
+              }
+            : undefined,
+        },
+        candidates.length
+      ) ??
+      russianCouncilPrimaryAdvanceLimit(
+        {
+          countryId: election.countryId ?? "US",
+          electionType: election.electionType,
+          state: election.state,
+          seatId: election.seatId,
+          totalSeats: election.totalSeats,
+          russianCouncilRound: election.russianCouncilRound
+            ? {
+                ...election.russianCouncilRound,
+                cohortId: election.russianCouncilRound.cohortId.toHexString(),
               }
             : undefined,
         },
