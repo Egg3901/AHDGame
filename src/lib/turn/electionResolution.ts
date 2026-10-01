@@ -5,7 +5,15 @@
  */
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
-import { readyRussianDumaCohorts } from "@/lib/countries/ru/rules/assemblyDispatch";
+import {
+  readyRussianDumaCohorts,
+  readyRussianDumaRepeats,
+} from "@/lib/countries/ru/rules/assemblyDispatch";
+import { certifyRussianDumaRepeat } from "@/lib/countries/ru/dumaRepeatResult";
+import {
+  RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
+  type RussianDumaRepeatOpeningRecord,
+} from "@/lib/countries/ru/dumaRepeatOpening";
 import { certifyRussianDumaElection } from "@/lib/countries/ru/dumaElectionResult";
 import type { Election, ElectionVoteTally, GameState, State } from "@/lib/db/types";
 import { generateElectionNews } from "@/lib/news";
@@ -116,7 +124,11 @@ export async function resolveGeneralElections(
         seatId: row.seatId,
         totalSeats: row.totalSeats,
         binding: row.russianDumaRound
-          ? { ...row.russianDumaRound, cohortId: row.russianDumaRound.cohortId.toHexString() }
+          ? {
+              ...row.russianDumaRound,
+              cohortId: row.russianDumaRound.cohortId.toHexString(),
+              rootCohortId: row.russianDumaRound.rootCohortId?.toHexString(),
+            }
           : undefined,
       })),
       currentTurn
@@ -132,6 +144,77 @@ export async function resolveGeneralElections(
         resolved += 226;
       } catch (error) {
         logger.error("Turn", `Failed to certify Duma cohort ${cohortId}`, error);
+      }
+    }
+    const repeatRows = completedElections.filter(
+      (row) =>
+        row.countryId === "RU" &&
+        row.electionType === "dumaDeputy" &&
+        row.russianDumaRound?.rootCohortId &&
+        Number.isSafeInteger(row.russianDumaRound.generation) &&
+        row.russianDumaRound.generation! > 0
+    );
+    if (repeatRows.length) {
+      const openingIds = [
+        ...new Set(
+          repeatRows.map(
+            (row) =>
+              `${row.russianDumaRound!.rootCohortId!.toHexString()}:repeat:${row.russianDumaRound!.generation}`
+          )
+        ),
+      ];
+      const openings = await db
+        .collection<RussianDumaRepeatOpeningRecord>(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION)
+        .find(
+          { _id: { $in: openingIds } },
+          {
+            projection: {
+              rootCohortId: 1,
+              cohortId: 1,
+              generation: 1,
+              mandateSinceTurn: 1,
+              electionIds: 1,
+              seatIds: 1,
+            },
+          }
+        )
+        .toArray();
+      const ready = readyRussianDumaRepeats(
+        repeatRows.map((row) => ({
+          id: row._id.toHexString(),
+          countryId: row.countryId,
+          electionType: row.electionType,
+          status: row.status,
+          endTurn: row.endTurn,
+          seatId: row.seatId,
+          totalSeats: row.totalSeats,
+          binding: {
+            ...row.russianDumaRound!,
+            cohortId: row.russianDumaRound!.cohortId.toHexString(),
+            rootCohortId: row.russianDumaRound!.rootCohortId!.toHexString(),
+          },
+        })),
+        openings.map((row) => ({
+          ...row,
+          rootCohortId: row.rootCohortId.toHexString(),
+          cohortId: row.cohortId.toHexString(),
+          electionIds: row.electionIds.map((id) => id.toHexString()),
+        })),
+        currentTurn
+      );
+      for (const opening of ready) {
+        try {
+          await certifyRussianDumaRepeat({
+            db,
+            rootCohortId: new ObjectId(opening.rootCohortId),
+            generation: opening.generation,
+            turn: currentTurn,
+            now,
+          });
+          resolved += opening.electionIds.length;
+        } catch (error) {
+          logger.error("Turn", `Failed to certify Duma repeat ${opening.cohortId}`, error);
+        }
       }
     }
   }

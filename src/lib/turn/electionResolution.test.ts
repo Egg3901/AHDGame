@@ -7,6 +7,7 @@ import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
 
+vi.mock("@/lib/countries/ru/dumaRepeatResult", () => ({ certifyRussianDumaRepeat: vi.fn() }));
 vi.mock("@/lib/countries/ru/dumaElectionResult", () => ({
   certifyRussianDumaElection: vi.fn(),
 }));
@@ -516,7 +517,7 @@ describe("Duma cohort resolution dispatch", () => {
         }) as Election
     );
   }
-  async function mount(elections: Election[]) {
+  async function mount(elections: Election[], openings: unknown[] = []) {
     vi.clearAllMocks();
     const db = {
       collection: vi.fn().mockImplementation((name: string) => {
@@ -524,6 +525,8 @@ describe("Duma cohort resolution dispatch", () => {
           return { find: vi.fn().mockReturnValue({ toArray: async () => elections }) };
         if (name === "electionVoteTallies")
           return { find: vi.fn().mockReturnValue({ toArray: async () => [] }) };
+        if (name === "russianDumaRepeatOpenings")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => openings }) };
         if (name === "gameState")
           return { findOne: async () => ({ preset: "1991-default", currentTurn: 141 }) };
         throw new Error(`Unexpected collection ${name}`);
@@ -566,4 +569,47 @@ describe("Duma cohort resolution dispatch", () => {
     const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
     expect(resolveOneGeneralElection).not.toHaveBeenCalled();
   });
+  it.each(["complete", "partial", "failed"])(
+    "dispatches a %s repeat subset without generic seating",
+    async (state) => {
+      const rootCohortId = new ObjectId();
+      const rows = cohort()
+        .slice(0, 2)
+        .map((row) => ({
+          ...row,
+          russianDumaRound: { ...row.russianDumaRound!, rootCohortId, generation: 1 },
+        }));
+      const opening = {
+        rootCohortId,
+        cohortId,
+        generation: 1,
+        mandateSinceTurn: 129,
+        electionIds: rows.map((row) => row._id),
+        seatIds: rows.map((row) => row.seatId!),
+      };
+      const db = await mount(state === "partial" ? rows.slice(1) : rows, [opening]);
+      const { certifyRussianDumaRepeat } = await import("@/lib/countries/ru/dumaRepeatResult");
+      if (state === "failed")
+        vi.mocked(certifyRussianDumaRepeat).mockRejectedValue(new Error("late journal failure"));
+      else vi.mocked(certifyRussianDumaRepeat).mockResolvedValue({ cohortId } as never);
+      const { resolveGeneralElections } = await import("./electionResolution");
+      expect(await resolveGeneralElections(now)).toBe(state === "complete" ? 2 : 0);
+      if (state === "partial") expect(certifyRussianDumaRepeat).not.toHaveBeenCalled();
+      else
+        expect(certifyRussianDumaRepeat).toHaveBeenCalledExactlyOnceWith({
+          db,
+          rootCohortId,
+          generation: 1,
+          turn: 141,
+          now,
+        });
+      expect(
+        db.collection.mock.calls.filter(([name]) => name === "russianDumaRepeatOpenings")
+      ).toHaveLength(1);
+      const { certifyRussianDumaElection } = await import("@/lib/countries/ru/dumaElectionResult");
+      expect(certifyRussianDumaElection).not.toHaveBeenCalled();
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      expect(resolveOneGeneralElection).not.toHaveBeenCalled();
+    }
+  );
 });
