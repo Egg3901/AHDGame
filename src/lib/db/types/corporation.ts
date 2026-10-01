@@ -232,6 +232,8 @@ export interface Corporation {
   /** State code where corporation is headquartered */
   headquartersState: string;
   /** Cash on hand */
+  /** Atomic audit key written with an NPP founding debit; observer publication uses this stamp. */
+  nppFoundingCashWitnessKey?: string;
   liquidCapital: number;
   /**
    * Currency denomination of liquidCapital.

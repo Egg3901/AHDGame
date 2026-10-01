@@ -77,6 +77,8 @@ export interface NppCorpDecision {
   liquidCapitalDelta: number;
   /** Local-currency cash floor that later NPP operator passes must preserve. */
   cashFloorLocal: number;
+  /** Exact total founding charge, separate from any reinvestment or borrowed cash. */
+  foundingCashLocal?: number;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
