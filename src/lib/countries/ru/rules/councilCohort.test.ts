@@ -15,14 +15,14 @@ function fixture(): RussianCouncilCohortBallot[] {
     registeredVoters: 1000,
     validBallots: 500,
     againstAllVotes: 0,
-    candidates: [0, 1].map((number) => ({
+    candidates: [0, 1, 2].map((number) => ({
       id: `${district.seatId}-${number}`,
       ownerId: `profile-${district.districtNumber}-${number}`,
       party: "independent",
       isNpc: true,
       eligible: true,
       registrationOrder: number,
-      votes: 500,
+      votes: number < 2 ? 500 : 0,
     })),
   }));
 }
@@ -43,8 +43,8 @@ describe("First Council cohort certification", () => {
     input[0].candidates[0].votes = 300;
     input[0].candidates[1].votes = 150;
     input[1].validBallots = 200;
-    input[1].candidates.forEach((row) => {
-      row.votes = 200;
+    input[1].candidates.forEach((row, index) => {
+      row.votes = index < 2 ? 200 : 0;
     });
     const result = resolve(input);
     expect(result[0]).toMatchObject({ vacancies: 1, decision: { outcome: "elected" } });

@@ -22,7 +22,7 @@ export type RussianCouncilBallotResult =
   | {
       outcome: "repeat";
       validBallots: number;
-      reason: "invalidated" | "low-valid-turnout" | "no-candidates";
+      reason: "invalidated" | "low-valid-turnout" | "no-candidates" | "insufficient-nominees";
     };
 
 export function resolveRussianCouncilBallot(
@@ -66,6 +66,10 @@ export function resolveRussianCouncilBallot(
   );
   if (!ranked.length)
     return { outcome: "repeat", validBallots: input.validBallots, reason: "no-candidates" };
+  // Article 20(7) defers the poll for additional nominations when fewer than
+  // three candidates remain. The November amendment does not remove this rule.
+  if (ranked.length < 3)
+    return { outcome: "repeat", validBallots: input.validBallots, reason: "insufficient-nominees" };
   // Decree 1846 removes the highest-candidate against-all veto, while leaving
   // the second-seat provision in article 31 unchanged. Strict excess vetoes
   // only the second mandate; equality does not.

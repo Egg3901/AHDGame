@@ -33,6 +33,7 @@ describe("Amended 1993 Council block ballots", () => {
     input.options = [
       { id: "a", votes: 150, registrationOrder: 0 },
       { id: "b", votes: 100, registrationOrder: 1 },
+      { id: "c", votes: 0, registrationOrder: 2 },
     ];
     expect(resolve(input)).toMatchObject({ outcome: "elected", winnerIds: ["a", "b"] });
   });
@@ -43,6 +44,7 @@ describe("Amended 1993 Council block ballots", () => {
     input.options = [
       { id: "a", votes: 350, registrationOrder: 0 },
       { id: "b", votes: 99, registrationOrder: 1 },
+      { id: "c", votes: 0, registrationOrder: 2 },
     ];
     expect(resolve(input)).toMatchObject({ outcome: "elected", winnerIds: ["a"], vacancies: 1 });
     input.options[1].votes = 100;
@@ -55,6 +57,7 @@ describe("Amended 1993 Council block ballots", () => {
     input.options = [
       { id: "a", votes: 150, registrationOrder: 0 },
       { id: "b", votes: 100, registrationOrder: 1 },
+      { id: "c", votes: 0, registrationOrder: 2 },
     ];
     expect(resolve(input)).toMatchObject({ outcome: "elected", winnerIds: ["a"], vacancies: 1 });
   });
@@ -63,15 +66,21 @@ describe("Amended 1993 Council block ballots", () => {
     input.options = [
       { id: "late", votes: 250, registrationOrder: 2 },
       { id: "early", votes: 250, registrationOrder: 1 },
+      { id: "third", votes: 0, registrationOrder: 3 },
     ];
     const before = structuredClone(input);
     expect(resolve(input)).toMatchObject({ winnerIds: ["early", "late"] });
     expect(input).toEqual(before);
   });
-  it("retains a single surviving nominee without inventing another seat", () => {
+  it("defers a single surviving nominee for additional nominations", () => {
     const input = fixture();
     input.options = [{ id: "only", votes: 250, registrationOrder: 0 }];
-    expect(resolve(input)).toMatchObject({ winnerIds: ["only"], vacancies: 1 });
+    expect(resolve(input)).toMatchObject({ outcome: "repeat", reason: "insufficient-nominees" });
+  });
+  it("defers two remaining nominees even when their votes reach quorum", () => {
+    const input = fixture();
+    input.options.pop();
+    expect(resolve(input)).toMatchObject({ outcome: "repeat", reason: "insufficient-nominees" });
   });
   it("repeats invalidated, empty and zero-registration ballots", () => {
     expect(resolve({ ...fixture(), invalidated: true })).toMatchObject({
@@ -123,6 +132,7 @@ describe("Amended 1993 Council block ballots", () => {
         options: [
           { id: "a", votes: validBallots, registrationOrder: 0 },
           { id: "b", votes: validBallots, registrationOrder: 1 },
+          { id: "c", votes: 0, registrationOrder: 2 },
         ],
       })
     ).toMatchObject({ outcome: "elected", winnerIds: ["a", "b"] });
