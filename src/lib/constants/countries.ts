@@ -1354,9 +1354,7 @@ export function getCountryConfigForRuntime(
     return countryState.ruDumaCurrentConvocationCohortId
       ? {
           ...assembly,
-          lowerElectionSystem: assembly.lowerElectionSystem
-            ? { ...assembly.lowerElectionSystem, termYears: 4 }
-            : undefined,
+          lowerElectionSystem: { ...assembly.lowerElectionSystem, termYears: 4 },
           officeTypes: assembly.officeTypes.map((office) =>
             office.key === "dumaDeputy" ? { ...office, termYears: 4 } : office
           ),

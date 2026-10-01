@@ -343,6 +343,9 @@ export async function materializeRussianDumaConvocationSeating(input: {
         row.isNPP !== nominee.isNpc ||
         String(nominee.isNpc ? row.nppId : row.characterId) !== nominee.ownerId.toHexString() ||
         !row.party ||
+        !row.characterName ||
+        !row.state ||
+        row.state !== ballot.regionId ||
         !row.seatSource
       )
         throw new Error("Current Duma office is outside its seated certified family");
@@ -506,7 +509,7 @@ export async function materializeRussianDumaConvocationSeating(input: {
     if (!selected.length) continue;
     const operations = selected.map((row) => ({
       updateOne: {
-        filter: { _id: new ObjectId(row.ownerId), countryId: "RU" },
+        filter: { _id: new ObjectId(row.ownerId), countryId: "RU" as const },
         update: {
           $set: {
             currentOffice: {
