@@ -15,6 +15,7 @@
  * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
+import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId } from "mongodb";
 import type { ClientSession, Db, UpdateFilter } from "mongodb";
@@ -106,7 +107,7 @@ import {
   remainingRedemptionUnits,
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
-import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { emitTx, emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
@@ -710,16 +711,23 @@ export async function rebalanceFundToTarget(
     plan.sells.length > 0
       ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db), loadTxThresholds(db)])
       : undefined;
-  // Sells first so freed cash funds the buys.
-  for (const leg of plan.sells) {
-    const refreshed = (await getFundById(db, fund._id)) ?? fund;
-    const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
-      note: "Rebalance: trim overweight",
-      fxByCurrency: sellInputs?.[0],
-      turn: sellInputs?.[1],
-      thresholds: sellInputs?.[2],
-    });
-    if (res.sharesSold > 0) sells++;
+  // Sells first so freed cash funds the buys. Ledger rows of completed sales
+  // flush in one write, even if a later sale throws.
+  const sellLedger: TxInput[] = [];
+  try {
+    for (const leg of plan.sells) {
+      const refreshed = (await getFundById(db, fund._id)) ?? fund;
+      const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
+        note: "Rebalance: trim overweight",
+        fxByCurrency: sellInputs?.[0],
+        turn: sellInputs?.[1],
+        thresholds: sellInputs?.[2],
+        ledgerSink: sellLedger,
+      });
+      if (res.sharesSold > 0) sells++;
+    }
+  } finally {
+    if (sellInputs && sellLedger.length > 0) await emitTxBulk(db, sellLedger, sellInputs[2]);
   }
 
   let buys = 0;
@@ -1485,10 +1493,14 @@ export async function runIndexFundCron(
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
   // #992 tranche 6: one thresholds read for every bond-reserve purchase row
   // this turn; threaded through each deploy so N funds share it.
-  const [bondDeployThresholds, bondDeployTurnLengthMinutes] = await Promise.all([
-    loadTxThresholds(db),
-    loadTurnLengthMinutes(db),
-  ]);
+  const [bondDeployThresholds, bondDeployTurnLengthMinutes, bondSettleInTransaction] =
+    await Promise.all([
+      loadTxThresholds(db),
+      loadTurnLengthMinutes(db),
+      // A replica set settles each fund's bond pass in one transaction; a
+      // standalone server (singleplayer, sandboxes) keeps per-purchase writes.
+      assertTransactionSupportAtBoot().catch(() => false),
+    ]);
 
   // Pass 1a: mark holdings and recompute NAV. Each task only writes its own
   // fund document, so bounded concurrency is safe and removes the serial
@@ -1626,6 +1638,7 @@ export async function runIndexFundCron(
             turn: currentTurn,
             thresholds: bondDeployThresholds,
             turnLengthMinutes: bondDeployTurnLengthMinutes,
+            settleInTransaction: bondSettleInTransaction,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {
