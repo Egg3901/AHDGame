@@ -169,6 +169,23 @@ describe("resolveOneGeneralElection", () => {
     ).toEqual({ resolved: false, newsOutcomes: [] });
     expect(db.collectionMocks.elections!.updateOne).not.toHaveBeenCalled();
   });
+  it("does not claim or seat a bound Council ballot through the single-race resolver", async () => {
+    const election = makeElection({
+      countryId: "RU",
+      electionType: "federationCouncilMember",
+      status: "completed",
+      russianCouncilRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        registeredVoters: 100,
+        districtNumber: 1,
+      },
+    });
+    expect(
+      await resolveBulgarianElection(db as unknown as Db, election, undefined, 141, NOW)
+    ).toEqual({ resolved: false, newsOutcomes: [] });
+    expect(db.collectionMocks.elections!.updateOne).not.toHaveBeenCalled();
+  });
   it("seats the 1991 Bulgarian regional list by D'Hondt", async () => {
     const election = makeElection({
       countryId: "BG",

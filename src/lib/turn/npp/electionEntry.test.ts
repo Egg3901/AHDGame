@@ -515,6 +515,25 @@ describe("processElectionEntry", () => {
     expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
 
+  it("leaves a bound Council cohort to atomic NPC slate admission", async () => {
+    const election = createTestElection({
+      countryId: "RU",
+      electionType: "federationCouncilMember",
+      state: "RU_CEN",
+      russianCouncilRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        registeredVoters: 100,
+        districtNumber: 1,
+      },
+    });
+    const npp = createTestNpp({ countryId: "RU", currentOffice: null, homeState: "RU_CEN" });
+    const ctx = buildContext(db, election, [npp], [], []);
+    db.collection("electionCandidates");
+    expect(await processElectionEntry(ctx)).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.bulkWrite).not.toHaveBeenCalled();
+  });
   it("allows NPC candidates in a playable Russian first ballot but protects the runoff roster", async () => {
     const president = createTestElection({
       countryId: "RU",

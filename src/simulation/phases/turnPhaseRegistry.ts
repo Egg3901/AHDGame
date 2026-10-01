@@ -1246,6 +1246,20 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         });
         const govFormedMap = govResult?.governmentFormed ?? {};
 
+        if (context.gameState?.preset === "1991-default") {
+          const { processRussianAssemblyCampaigns } =
+            await import("@/lib/countries/ru/assemblyCampaigns");
+          (phaseResults as Record<string, unknown>).russianAssemblyCampaigns =
+            await runtime.runPhase("russianAssemblyCampaigns", () =>
+              processRussianAssemblyCampaigns({
+                db,
+                game: context.gameState,
+                turn: newTurn,
+                now: gameNow,
+              })
+            );
+        }
+
         await runtime.runPhase("parliamentaryGovernmentPhases", () =>
           runParliamentaryGovernmentPhases(gameNow, newTurn)
         );
