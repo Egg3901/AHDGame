@@ -94,6 +94,62 @@ it.skipIf(!enabled)(
       expect(await processChallengerGeneration(new Date())).toBe(0);
       expect(await db.collection("electionCandidates").countDocuments({})).toBe(12);
       expect(await db.collection("npps").countDocuments({})).toBe(12);
+
+      // Re-enable default player parties and exercise every named modern-era
+      // reproduction, including simultaneous US presidential and Vermont races.
+      await db.collection("gameState").updateOne(
+        { _id: "current" },
+        {
+          $set: { startingPartiesMode: "default" },
+        }
+      );
+      await db.collection("politicalParties").insertMany(
+        ["IE", "NG", "DE", "US"].flatMap((countryId, index) =>
+          [1, 2].map((partyIndex) => ({
+            countryId,
+            sequentialId: 20 + index * 2 + partyIndex,
+            isDefault: true,
+            name: `Modern fixture ${countryId} ${partyIndex}`,
+            economicPosition: 0,
+            socialPosition: 0,
+          }))
+        )
+      );
+      const modernCases = [
+        ...["DUB", "KIL", "MID", "WEX", "LIM", "COR", "GAL", "DON"].map((state) => [
+          "IE",
+          "localCouncil",
+          state,
+        ]),
+        ["NG", "regionalCouncil", "NORTH_WEST"],
+        ["DE", "ministerPresident", "BY"],
+        ["DE", "ministerPresident", "HE"],
+      ];
+      const modernElections = modernCases.map(([countryId, electionType, state]) => ({
+        _id: new ObjectId(),
+        countryId,
+        electionType,
+        state,
+        status: "active",
+        cycle: 1,
+        primaryEndTurn: 24,
+        endTurn: 48,
+        startTurn: 1,
+      }));
+      await db.collection("elections").insertMany(modernElections);
+      expect(await processChallengerGeneration(new Date())).toBe(26);
+      const modernCandidates = await db.collection("electionCandidates").find({}).toArray();
+      for (const election of [
+        ...modernElections,
+        ...elections.filter((e) => e.countryId === "US"),
+      ]) {
+        expect(
+          modernCandidates.filter((candidate) => candidate.electionId.equals(election._id))
+        ).toHaveLength(2);
+      }
+      expect(new Set(modernCandidates.map((c) => String(c.characterId))).size).toBe(38);
+      expect(await processChallengerGeneration(new Date())).toBe(0);
+      expect(await db.collection("electionCandidates").countDocuments({})).toBe(38);
     } finally {
       if (!/^ahd_sim_issue2072_candidates_[a-f0-9]{12}$/.test(db.databaseName))
         throw new Error("Refusing cleanup outside the disposable sandbox fixture");
