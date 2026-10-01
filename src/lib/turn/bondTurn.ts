@@ -60,6 +60,7 @@ import {
 import { emitBondTurnLedger, snapshotBondHistory, type PartialTxEntry } from "./bondTurnLedger";
 import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
+import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "@/lib/bonds/marketPoolLedger";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
@@ -106,7 +107,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   steps.mark("sovereignIssuance");
   // Size each currency's bond market pool, let savings flow toward its target,
   // and refresh its appetite for each sovereign issuer before anyone trades.
-  await processBondMarketPoolTurn(db, turn, now);
+  const poolLedgerContext = await loadBondPoolLedgerContext(db, turn);
+  await processBondMarketPoolTurn(db, turn, now, poolLedgerContext);
   steps.mark("marketPools");
   await processSovereignImfFacilityPayments(db, turn);
   steps.mark("imfPayments");
@@ -1183,10 +1185,16 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     await db.collection("bonds").bulkWrite(bondOps);
   }
 
-  for (const [currency, credit] of poolCreditsLocal) {
-    await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now);
-    await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now);
-  }
+  await withBondPoolLedgerBatch(db, poolLedgerContext, async (batch) => {
+    for (const [currency, credit] of poolCreditsLocal) {
+      await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now, {
+        ledgerContext: batch,
+      });
+      await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now, {
+        ledgerContext: batch,
+      });
+    }
+  });
 
   if (fundPaymentsAnchor.size > 0) {
     const fundPaymentOps = [...fundPaymentsAnchor]

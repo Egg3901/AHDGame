@@ -15,6 +15,8 @@ export type FinancialTxType =
   // Bonds
   | "bond_purchase"
   | "bond_sell"
+  | "bond_pool_inflow"
+  | "bond_pool_sweep"
   | "bond_coupon"
   | "bond_maturity"
   | "bond_default"
