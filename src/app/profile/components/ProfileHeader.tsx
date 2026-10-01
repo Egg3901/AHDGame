@@ -15,12 +15,14 @@ import { PROFILE_HERO_OVERLAP_CLASSES } from "@/lib/constants/profileHeroLayout"
 import { CopyProfileLinkButton } from "./CopyProfileLinkButton";
 import { CountryFlag } from "@/components/CountryFlag";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 interface ProfileHeaderProps {
   character: Character;
   party: PoliticalParty | null;
   user: { username: string; isAdmin: boolean | undefined; isModerator: boolean | undefined };
   memberSince: string;
+  memberSinceIsApproximate?: boolean;
   officeLabels: readonly string[];
   stateLabel: string;
   campaignSongUrl?: string | null;
@@ -48,6 +50,7 @@ export function ProfileHeader({
   party,
   user,
   memberSince,
+  memberSinceIsApproximate = false,
   officeLabels,
   stateLabel,
   campaignSongUrl,
@@ -236,7 +239,18 @@ export function ProfileHeader({
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                {t("memberSince", { date: memberSince })}
+                <span>
+                  {t(memberSinceIsApproximate ? "memberSinceEarlier" : "memberSince", {
+                    date: memberSince,
+                  })}
+                  {memberSinceIsApproximate && (
+                    <Tooltip
+                      variant="footnote"
+                      label={t("memberSinceExplanation")}
+                      content={t("memberSinceHistoryLost")}
+                    />
+                  )}
+                </span>
               </p>
 
               {ownProfileHref && (

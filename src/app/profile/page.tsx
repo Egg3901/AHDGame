@@ -98,6 +98,7 @@ import { getFinancialData } from "@/lib/character/financialData";
 import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
 import { isPatreonActive } from "@/lib/db/types";
+import { resolveMemberSince } from "@/lib/character/memberSince";
 
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 
@@ -363,6 +364,11 @@ async function getCharacterData() {
     discordUsername: viewerUser?.discordUsername ?? null,
     discordAvatar: viewerUser?.discordAvatar ?? null,
     lastActivity: viewerUser?.lastActivity ?? null,
+    membership: resolveMemberSince({
+      accountCreatedAt: userDoc?.createdAt,
+      profileCreatedAt: character.createdAt,
+      historyStartedAt: gameState?.singleplayerConfig ? null : gameState?.createdAt,
+    }),
     // Gate on active status exactly as the public profile does
     // (src/app/character/[id]/page.tsx). Without this the owner keeps their
     // badge, border and highlight colour after the pledge lapses while every
@@ -686,7 +692,7 @@ export default async function ProfilePage() {
 
   const populationTier = getPopulationTier(statePopulation);
 
-  const memberSince = new Date(character.createdAt).toLocaleDateString(locale, {
+  const memberSince = data.membership.date.toLocaleDateString(locale, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -706,6 +712,7 @@ export default async function ProfilePage() {
           party={party}
           user={user}
           memberSince={memberSince}
+          memberSinceIsApproximate={data.membership.isApproximate}
           officeLabels={profileOfficeLabels}
           stateLabel={stateLabel}
           campaignSongUrl={character.campaignSongUrl}
