@@ -5,6 +5,8 @@ import Link from "next/link";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { Tooltip } from "@/components/ui";
 import { resolveListingColor } from "../stockMarketColors";
 import type { BondListing, CommodityData, MarketCapPoint, StockListing } from "../types";
@@ -122,20 +124,31 @@ function sumBySector(pt: MarketCapPoint): number {
   return Object.values(pt.bySector).reduce((a, b) => a + (b ?? 0), 0);
 }
 
+/** Raw history turn to the calendar year the player sees (mirrors MarketOverview). */
+function turnToGameYear(turn: number, startingYear: number, calendarOffset = 0): number {
+  return startingYear + Math.floor((Math.max(1, turn - calendarOffset) - 1) / 48);
+}
+
 export function MarketStats({
   listings,
   commodities,
   bondListings,
   history,
+  bondTotalOutstanding,
 }: {
   listings: StockListing[];
   commodities: CommodityData[];
   bondListings: BondListing[];
   history: MarketCapPoint[];
+  /** Board-wide bond outstanding notional in anchor units (from /api/bonds). */
+  bondTotalOutstanding?: number;
 }) {
   const { formatAmount, formatPrice } = useCurrency();
   const formatMetricValue = makeMetricFormatter(formatAmount, formatPrice);
   const [metric, setMetric] = useState<SectorMetricKey>("marketCap");
+  const turnStatus = useGameTurnStatus();
+  const startingYearRef = turnStatus?.startingYear ?? STARTING_YEAR;
+  const calendarOffset = turnStatus?.preIterationTurns ?? 0;
 
   const groupedListings = useMemo(() => {
     const m = new Map<CorporationType, StockListing[]>();
@@ -284,7 +297,6 @@ export function MarketStats({
   }, [history]);
 
   const metricLabel = METRIC_OPTIONS.find((o) => o.key === metric)?.label ?? metric;
-  const hasHistory = history.length > 0;
 
   return (
     <div className="space-y-10">
@@ -297,8 +309,6 @@ export function MarketStats({
 
         {sectorRows.length === 0 ? (
           <p className="text-sm text-muted">No listed corporations for this exchange.</p>
-        ) : !hasHistory ? (
-          <p className="text-sm text-muted">No market history available yet.</p>
         ) : (
           <>
             <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
@@ -384,9 +394,13 @@ export function MarketStats({
                         const corpColor = resolveListingColor(l);
                         return (
                           <div key={l._id} className="flex items-center gap-2 text-xs sm:text-sm">
-                            <span className="w-28 shrink-0 truncate sm:w-40" title={l.name}>
+                            <Link
+                              href={`/corporation/${l.sequentialId ?? l._id}`}
+                              className="w-28 shrink-0 truncate font-medium text-foreground hover:text-primary hover:underline sm:w-40"
+                              title={l.name}
+                            >
                               {l.name}
-                            </span>
+                            </Link>
                             <div className="min-w-0 flex-1">
                               <div className="h-6 overflow-hidden rounded bg-card-elevated">
                                 <div
@@ -408,48 +422,6 @@ export function MarketStats({
                   </div>
                 );
               })}
-            </div>
-
-            <div className="space-y-4 pt-6">
-              <h3 className="text-base font-semibold text-foreground">
-                Largest companies by sector (by market cap)
-              </h3>
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {sectorRows.map((row) => {
-                  const top = (groupedListings.get(row.type) ?? []).slice(0, 5);
-                  return (
-                    <div
-                      key={`card-${row.type}`}
-                      className="rounded-xl border border-card-border bg-card p-4 shadow-sm"
-                    >
-                      <h4 className="mb-3 text-sm font-semibold text-foreground">{row.label}</h4>
-                      <ul className="space-y-2">
-                        {top.map((l, idx) => (
-                          <li key={l._id}>
-                            <Link
-                              href={`/corporation/${l.sequentialId ?? l._id}`}
-                              className="flex items-start gap-2 rounded-lg py-1.5 pl-2 transition-colors hover:bg-card-elevated/50"
-                              style={{
-                                borderLeft: `4px solid ${resolveListingColor(l)}`,
-                              }}
-                            >
-                              <span className="text-[10px] font-mono text-muted tabular-nums">
-                                {idx + 1}.
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-medium text-foreground">{l.name}</div>
-                                <div className="text-xs tabular-nums text-muted">
-                                  {formatAmount(l.marketCap)}
-                                </div>
-                              </div>
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-card-border pt-6">
@@ -591,19 +563,22 @@ export function MarketStats({
                   labels.push(t);
                 if (labels[labels.length - 1] !== multiSeries.maxTurn)
                   labels.push(multiSeries.maxTurn);
-                return labels.map((t) => (
-                  <text
-                    key={t}
-                    x={multiSeries.xScale(t)}
-                    y={PAD.top + multiSeries.innerH + 22}
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontWeight="500"
-                    fill="var(--muted)"
-                  >
-                    T{t}
-                  </text>
-                ));
+                return labels
+                  .map((t) => ({ t, y: turnToGameYear(t, startingYearRef, calendarOffset) }))
+                  .filter((d, i, arr) => i === 0 || d.y !== arr[i - 1].y)
+                  .map(({ t, y }) => (
+                    <text
+                      key={t}
+                      x={multiSeries.xScale(t)}
+                      y={PAD.top + multiSeries.innerH + 22}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="500"
+                      fill="var(--muted)"
+                    >
+                      {y}
+                    </text>
+                  ));
               })()}
             </svg>
             <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
@@ -648,6 +623,12 @@ export function MarketStats({
               <span className="text-muted">Total public float (units)</span>
               <span className="font-semibold tabular-nums">
                 {bondSnapshot.totalFloat.toLocaleString("en-US")}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted">Total outstanding</span>
+              <span className="font-semibold tabular-nums">
+                {bondTotalOutstanding != null ? formatAmount(bondTotalOutstanding) : "—"}
               </span>
             </div>
           </div>

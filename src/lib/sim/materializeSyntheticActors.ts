@@ -28,10 +28,9 @@
  * - DD finance minister: `cabinetMembers` row whose `positionId` equals
  *   `COUNTRY_CONFIGS.DD.financeMinisterCabinetId` (the key the national-issuer
  *   gate looks up).
- * - State-party member: candidacy plus one self-vote per office against ONE
- *   real persisted `statePartyOrg` (attaching to its live voting elections,
- *   creating only missing offices), so `processCompletedElections` seats
- *   through the representative path.
+ * - State-party member: one chair candidacy and self-vote against a real
+ *   persisted `statePartyOrg`. The active-candidacy index forbids the same
+ *   member from contesting multiple offices in one state party at once.
  * - Fed nominee: one nomination queued into the US `centralBanks` nominations
  *   array through the production route checks, so the turn's chair selection
  *   finds a pool.
@@ -45,7 +44,6 @@
 
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { ALL_POSITIONS } from "@/lib/statePartyElections";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
@@ -410,7 +408,7 @@ export async function materializeSyntheticActors(
   const statePartyVotes: Array<Record<string, unknown>> = [];
   if (targetOrg) {
     const orgCountryId = (targetOrg.countryId ?? "US") as CountryId;
-    for (const position of ALL_POSITIONS) {
+    for (const position of ["chair"] as const) {
       const existing = await db.collection("statePartyElections").findOne({
         stateId: targetOrg.stateId,
         partyId: targetOrg.partyId,

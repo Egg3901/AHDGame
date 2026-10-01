@@ -17,6 +17,10 @@ import {
 } from "@/lib/unions/unionDues";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
+import {
   clampPoliticalContributionPct,
   freeCashFlowPerTurn,
   politicalContributionPerTurn,
@@ -46,6 +50,9 @@ export async function resolveOwnedUnion(
   }
   if (!union.ownerId || union.ownerId.toString() !== character._id.toString()) {
     return { ok: false, status: 403, error: "You do not lead this union." };
+  }
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
   }
   // `suspended` is checked alongside the budget flag so leader actions agree
   // with the read surfaces ([id]/route.ts, leaderboard), which both render

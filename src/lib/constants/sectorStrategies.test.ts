@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { SECTOR_STRATEGIES } from "./sectorStrategies";
+import { getEffectiveStrategyRates, SECTOR_STRATEGIES } from "./sectorStrategies";
 import { COMMODITY_TYPES } from "./commodities";
+
+describe("persisted media and entertainment sectors", () => {
+  it("resolves their existing strategies while the product rollout is withdrawn", () => {
+    expect(() =>
+      getEffectiveStrategyRates("media", "legacy_broadcast", null, null, 1065)
+    ).not.toThrow();
+    expect(() =>
+      getEffectiveStrategyRates("entertainment", "live_service", null, null, 1065)
+    ).not.toThrow();
+    expect(SECTOR_STRATEGIES.media).toBeDefined();
+    expect(SECTOR_STRATEGIES.entertainment).toBeDefined();
+  });
+});
 
 describe("telecom wireline lean recipe (demand audit step 5)", () => {
   const telecom = SECTOR_STRATEGIES.telecommunications;

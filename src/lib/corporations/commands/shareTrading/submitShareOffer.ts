@@ -1,3 +1,9 @@
+/**
+ * Share offers reserve purchase funding while awaiting acceptance.
+ * submitShareOffer includes the source monetary authority spread in corporate escrow.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -7,6 +13,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { submitOfferSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -123,6 +130,11 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
 
+    // The offer escrows cash that pays the seller on accept — a disguised
+    // transfer for a fresh account buying a confederate's listing.
+    const barrier = await newCharacterTransferBarrierResponse(character);
+    if (barrier) return barrier;
+
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
       return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
@@ -207,6 +219,8 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       const placerFxRate = await getCorpFxRate(db, placerCorp);
       const fxRates = await loadFxRatesRecord(db);
       const escrowEstimate = estimateCorpWalletSpend({
+        union: await loadEuroMonetaryUnion(db),
+        spreadStrengths: await loadForexSpreadStrengths(db),
         requiredAmount: escrowAmount,
         availableBalance: placerCorp.liquidCapital ?? 0,
         fromCurrency: placerCurrency,

@@ -55,7 +55,8 @@ export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
 export const FRAGILE_MARKET_COMMODITY_BY_SECTOR: Readonly<
   Partial<Record<CorporationType, CommodityType>>
 > = {
-  media_entertainment: "advertising",
+  media: "advertising",
+  entertainment: "advertising",
   chemical_industries: "fertilizers",
   logistics: "freight",
   extraction: "rare_earth",

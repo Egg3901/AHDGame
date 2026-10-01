@@ -1,5 +1,14 @@
+import { advanceArabRegionalTurn, reconcileArabTerrorismSpillover } from "./arabRegional";
+import { advancePandemicState, pandemicOpeningYear, PANDEMIC_KEY } from "./rules/pandemic";
 import type { Db } from "mongodb";
-import type { ConflictRole, FiredEvent, LivingConflictDef, LivingConflictState } from "./types";
+import { hasRequiredBelligerents } from "./rules/participants";
+import type {
+  ConflictActor,
+  ConflictRole,
+  FiredEvent,
+  LivingConflictDef,
+  LivingConflictState,
+} from "./types";
 import {
   applyCommitment,
   applyTrackDeltas,
@@ -36,6 +45,7 @@ export interface ConflictParticipants {
   neighbors: string[];
   blocMembers: string[];
   bystanders?: string[];
+  representedActors?: ConflictActor[];
 }
 
 /** Every nation named in the conflict, for "all"-affecting events. */
@@ -112,15 +122,48 @@ export async function driveConflictTurn(
   turn: number,
   year: number | null | undefined,
   externalPressure = 0,
-  openingTrackDeltas: Record<string, number> = {}
+  openingTrackDeltas: Record<string, number> = {},
+  observedTrackValues: Record<string, number> = {}
 ): Promise<DriveResult> {
   let state = normalizeConflictState(def, await loadConflictState(db, def.key));
   if (state.lastProcessedTurn === turn) return { state, events: [] };
   if (state.status === "closed") return { state, events: [] };
+  if (participants.representedActors)
+    state = { ...state, representedActors: participants.representedActors };
+  if (def.key === "russia_ukraine_security" && participants.belligerents[0]) {
+    state = {
+      ...state,
+      representedActors: [
+        {
+          id: "ukrainian-sovereign-authority",
+          name: "Affected sovereign authority",
+          representsCountryId: "UKR",
+          countryId: participants.belligerents[0],
+          regionIds: [],
+        },
+      ],
+    };
+  }
   const wasOpen = state.hasOpened;
 
   if (!state.hasOpened) {
-    if (!inWindow(def, year)) {
+    if (
+      def.key === PANDEMIC_KEY &&
+      typeof year === "number" &&
+      year < pandemicOpeningYear(participants)
+    )
+      return { state, events: [] };
+    // A surviving federation in the authored 2027 world is an explicit
+    // counterfactual, not a replay of the historical 1991-2010 window.
+    const survivingFederation =
+      def.key === "yugoslav_dissolution" &&
+      state.openingProvenance?.preset === "2027-default" &&
+      state.openingDisposition === "counterfactual" &&
+      year === 2027;
+    if (
+      (!inWindow(def, year) && !survivingFederation) ||
+      !hasRequiredBelligerents(def, participants)
+    ) {
       return { state, events: [] };
     }
     if (def.minimumOpeningPressure !== undefined && externalPressure < def.minimumOpeningPressure) {
@@ -154,7 +197,29 @@ export async function driveConflictTurn(
   }
 
   if (wasOpen && state.hasOpened) {
-    state = { ...state, campaign: advanceCampaignTurn(state.campaign) };
+    const campaign = normalizeCampaignState(state.campaign);
+    state = {
+      ...state,
+      campaign:
+        def.key === PANDEMIC_KEY
+          ? { ...campaign, stageTurns: campaign.stageTurns + 1 }
+          : advanceCampaignTurn(campaign),
+    };
+  }
+
+  // Authoritative observations replace their prior values each turn. They
+  // cannot accumulate solely because the driver runs again.
+  if (Object.keys(observedTrackValues).length > 0) {
+    state = applyTrackDeltas(
+      def,
+      state,
+      Object.fromEntries(
+        Object.entries(observedTrackValues).map(([key, value]) => [
+          key,
+          value - (state.tracks?.[key] ?? def.tracks?.[key]?.initial ?? 0),
+        ])
+      )
+    );
   }
 
   const trackDeltas = scheduledPressureDeltas(
@@ -165,12 +230,22 @@ export async function driveConflictTurn(
   if (Object.keys(trackDeltas).length > 0) {
     state = applyTrackDeltas(def, state, trackDeltas);
   }
-  state = evaluateConflictTransitions(
-    def,
-    state,
-    typeof year === "number" ? year : undefined
-  ).state;
+  if (def.key === PANDEMIC_KEY) {
+    state = advancePandemicState({
+      ...state,
+      pandemicOriginCountryId: state.pandemicOriginCountryId ?? participants.belligerents[0],
+    });
+  }
+  if (def.key !== "arab_uprisings" || !state.arabRegional) {
+    state = evaluateConflictTransitions(
+      def,
+      state,
+      typeof year === "number" ? year : undefined
+    ).state;
+  }
 
+  state = await advanceArabRegionalTurn(db, state, turn);
+  state = await reconcileArabTerrorismSpillover(db, state, turn);
   const fired = selectEvents(def, state, turn);
   const events: DrivenEvent[] = fired.map((f) => ({
     fired: f,

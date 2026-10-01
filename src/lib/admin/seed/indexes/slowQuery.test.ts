@@ -26,6 +26,23 @@ describe("seedSlowQueryIndexes", () => {
       name: call[3]?.name,
     }));
 
+    expect(created).toEqual(
+      expect.arrayContaining([
+        {
+          collection: "corporationHistory",
+          key: { turn: 1 },
+          name: "corporationHistory_turn",
+        },
+        {
+          collection: "portfolioHistory",
+          key: { characterId: 1 },
+          name: "portfolioHistory_characterId",
+        },
+        { collection: "bondHistory", key: { bondId: 1 }, name: "bondHistory_bondId" },
+        { collection: "shareOrders", key: { status: 1 }, name: "shareOrders_status" },
+      ])
+    );
+
     // federalBudget.findOne({ countryId }) — per-turn envelope calculators
     expect(created).toContainEqual({
       collection: "federalBudget",

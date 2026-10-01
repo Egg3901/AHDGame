@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { MembershipPanel } from "./MembershipPanel";
 import { LeadershipPanel } from "./LeadershipPanel";
 import { LegislationPanel } from "./LegislationPanel";
@@ -124,6 +124,91 @@ describe("membership application tally", () => {
 
     expect(screen.getByText(/1 \/ 3 yes/)).toBeTruthy();
     expect(screen.queryByText(/\/ 4 yes/)).toBeNull();
+  });
+});
+
+describe("membership mutual defence warning", () => {
+  const application = {
+    _id: "p1",
+    proposingCountryId: "DE",
+    proposedByCharacterName: "German Foreign Minister",
+    proposedOnTurn: 199,
+    closesOnTurn: 213,
+    votes: [],
+  };
+
+  it("lets a member table retroactive defensive entry for a live war", async () => {
+    const onChange = vi.fn();
+    render(
+      <MembershipPanel
+        org={orgWith({
+          pendingMembershipProposals: [application],
+          pendingLegislation: [
+            {
+              _id: "generic-entry",
+              type: "join_conflict",
+              status: "pending",
+              joinConflictTheaterId: "german-war",
+              joinConflictSide: "A",
+            },
+          ],
+          membershipDefenseWarnings: [
+            {
+              organizationId: "NATO",
+              applicantCountryId: "DE",
+              kind: "active_conflict",
+              conflictId: "german-war",
+              conflictName: "German War",
+              side: "A",
+              opposingNames: ["Soviet Union"],
+            },
+          ],
+        })}
+        {...props}
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByText("Mutual defence warning")).toBeTruthy();
+    expect(screen.getByText(/Admission does not invoke the pact retroactively/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Propose defensive entry" }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledOnce());
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/country/US/international-organizations/NATO/legislation",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          type: "join_conflict",
+          theaterId: "german-war",
+          side: "A",
+          defendingCountryId: "DE",
+        }),
+      })
+    );
+  });
+
+  it("warns about a declaration that is still before the aggressor's legislature", () => {
+    render(
+      <MembershipPanel
+        org={orgWith({
+          pendingMembershipProposals: [application],
+          membershipDefenseWarnings: [
+            {
+              organizationId: "NATO",
+              applicantCountryId: "DE",
+              kind: "pending_declaration",
+              declarationBillId: "bill-1",
+              opposingNames: ["Soviet Union"],
+            },
+          ],
+        })}
+        {...props}
+      />
+    );
+
+    expect(screen.getByText(/Soviet Union has a declaration of war against Germany/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Propose defensive entry" })).toBeNull();
   });
 });
 
@@ -416,5 +501,64 @@ describe("an organization where nobody holds a vote", () => {
     );
 
     expect(screen.getByText(/no members hold a vote/)).toBeTruthy();
+  });
+});
+
+describe("pact entry notice", () => {
+  const warning = {
+    organizationId: "NATO",
+    conflictId: "war_ru_dd",
+    conflictNumber: 12,
+    conflictName: "Russia-East Germany War",
+    defendingCountryId: "DD",
+  };
+
+  it("tells an applying country that joining now takes it into the war next turn", () => {
+    render(
+      <MembershipPanel
+        org={orgWith({
+          members: MEMBERS.filter((m) => m.countryId !== "US"),
+          pactEntryWarnings: [warning],
+        })}
+        {...props}
+      />
+    );
+    expect(screen.getByText("Mutual defence notice")).toBeTruthy();
+    expect(screen.getByText(/Joining now brings you into the/)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Russia-East Germany War" });
+    expect(link.getAttribute("href")).toBe("/world/conflicts/12");
+    expect(screen.getByText(/side next turn/)).toBeTruthy();
+  });
+
+  it("tells the members voting on an admission what admitting the applicant does", () => {
+    render(
+      <MembershipPanel
+        org={orgWith({
+          pendingMembershipProposals: [
+            {
+              _id: "p1",
+              proposingCountryId: "DE",
+              proposedByCharacterName: "German Foreign Minister",
+              proposedOnTurn: 199,
+              closesOnTurn: 213,
+              votes: [],
+            },
+          ],
+          pactEntryWarnings: [warning],
+        })}
+        {...props}
+      />
+    );
+    expect(screen.getByText(/now brings it into the/)).toBeTruthy();
+  });
+
+  it("stays silent when the alliance is defending nobody", () => {
+    render(
+      <MembershipPanel
+        org={orgWith({ members: MEMBERS.filter((m) => m.countryId !== "US") })}
+        {...props}
+      />
+    );
+    expect(screen.queryByText("Mutual defence notice")).toBeNull();
   });
 });

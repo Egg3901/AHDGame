@@ -307,17 +307,67 @@ describe("processBondTurn", () => {
 
     expect(result.bondsProcessed).toBe(1);
     expect(result.couponsPaid).toBe(1);
-    expect(db.collectionMocks["indexFunds"]!.updateOne).toHaveBeenCalled();
+    expect(db.collectionMocks["indexFunds"]!.bulkWrite).toHaveBeenCalled();
     const fundUpdate = vi
-      .mocked(db.collectionMocks["indexFunds"]!.updateOne)
-      .mock.calls.find((call) => {
-        const filter = call[0] as { _id: ObjectId };
-        return filter._id.toString() === fundId.toString();
-      });
+      .mocked(db.collectionMocks["indexFunds"]!.bulkWrite)
+      .mock.calls.flatMap(
+        (call) =>
+          call[0] as Array<{
+            updateOne?: { filter: { _id: ObjectId }; update: unknown };
+          }>
+      )
+      .find((op) => {
+        return op.updateOne?.filter._id.toString() === fundId.toString();
+      })?.updateOne;
     expect(fundUpdate).toBeDefined();
-    const update = fundUpdate![1] as { $inc: { cashAnchor: number } };
+    const update = fundUpdate!.update as { $inc: { cashAnchor: number } };
     // perTurnCouponPayment mocked to 10; USD fx defaults to 1.0; 5 units => 50
     expect(update.$inc.cashAnchor).toBe(50);
+  });
+
+  it("matches aggregate fund cash rounding across fractional coupons and maturity", async () => {
+    const fundId = new ObjectId();
+    const bonds = [0, 1, 2].map((i) => ({
+      _id: new ObjectId(),
+      couponRate: 5,
+      maturityTurn: i === 2 ? 10 : 100,
+      matured: false,
+      defaulted: false,
+      holders: [{ fundId, units: 1 }],
+      publicFloat: 0,
+      corporationId: new ObjectId(),
+      issuerName: "Synthetic",
+      currencyCode: "GBP" as const,
+    }));
+    mockBondFinds(bonds, []);
+    db.collection("indexFunds");
+    db.collectionMocks["indexFunds"]!.find.mockReturnValue(
+      makeCursor([{ _id: fundId, anchorCurrencyCode: "USD", name: "Synthetic Fund" }])
+    );
+    db.collection("exchangeRates");
+    db.collectionMocks["exchangeRates"]!.find.mockReturnValue(
+      makeCursor([{ currencyCode: "GBP", rate: 3 }])
+    );
+    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue(makeCursor([]));
+    await processBondTurn(10);
+    const writes = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls.flatMap(([ops]) => ops);
+    const cashCredit = writes.reduce(
+      (sum, op) => sum + (op.updateOne?.update.$inc?.cashAnchor ?? 0),
+      0
+    );
+    const entries = vi
+      .mocked(emitTxBulk)
+      .mock.calls.flatMap(([, rows]) => rows)
+      .filter((row) => row.subjectType === "fund");
+    expect(entries).toHaveLength(4);
+    expect(cashCredit).toBe(343.33);
+    expect(entries.reduce((sum, row) => sum + (row.anchorAmount ?? 0), 0)).toBeCloseTo(
+      cashCredit,
+      10
+    );
+    expect(entries.every((row) => row.meta?.roundingMethod === "cumulative_fund_credit")).toBe(
+      true
+    );
   });
 
   it("emits a bond_coupon tx for each character holder receiving a coupon", async () => {
@@ -816,6 +866,104 @@ describe("processBondTurn", () => {
     );
     expect(holderPayOp).toBeDefined();
   });
+
+  it.each([true, false])(
+    "settles member coupons only with a valid common anchor (available=%s)",
+    async (anchorAvailable) => {
+      const holderCorpId = new ObjectId();
+      const issuerCorpId = new ObjectId();
+      const bond = {
+        _id: new ObjectId(),
+        couponRate: 5,
+        currencyCode: "EUR",
+        maturityTurn: 100,
+        matured: false,
+        defaulted: false,
+        isCorporate: false,
+        holders: [{ corporationId: holderCorpId, units: 3 }],
+        publicFloat: 0,
+        corporationId: issuerCorpId,
+      };
+
+      vi.mocked(getBondCountryId).mockReturnValue("DE");
+      db.collection("gameState");
+      db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
+        _id: "current",
+        forexEnabled: true,
+        euroMonetaryUnion: {
+          authorityId: "ECB",
+          anchorCountryId: "DE",
+          anchorCurrency: "EUR",
+          anchorUnitsPerEuro: 1,
+          establishedTurn: 1,
+          revision: 1,
+          members: {
+            DE: {
+              countryId: "DE",
+              ledgerCurrency: "EUR",
+              ledgerUnitsPerAnchorUnit: 1,
+              joinedTurn: 1,
+              source: "enacted-law",
+            },
+            IE: {
+              countryId: "IE",
+              ledgerCurrency: "IEP",
+              ledgerUnitsPerAnchorUnit: 0.75,
+              joinedTurn: 1,
+              source: "enacted-law",
+            },
+          },
+        },
+      });
+      mockBondFinds([bond], [{ _id: bond._id, marketPrice: 1.01 }]);
+
+      db.collection("exchangeRates");
+      db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { currencyCode: "EUR", rate: anchorAvailable ? 2 : 0 },
+          { currencyCode: "IEP", rate: 99 },
+        ]),
+      });
+
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([
+          {
+            _id: holderCorpId,
+            countryId: "IE",
+            liquidCurrencyCode: "IEP",
+            liquidCapital: 1_000_000,
+          },
+        ])
+      );
+      db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+        makeCursor([{ countryId: "US", primeRate: 2.75 }])
+      );
+      db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
+
+      if (!anchorAvailable) {
+        await expect(processBondTurn(10)).rejects.toThrow("common monetary anchor quote");
+        expect(db.collectionMocks["corporations"]!.bulkWrite).not.toHaveBeenCalled();
+        return;
+      }
+      await processBondTurn(10);
+
+      // Thirty EUR coupon units become 22.5 legacy IEP units, with no internal spread.
+      const corpBulkWrite = db.collectionMocks["corporations"]!.bulkWrite;
+      const allOps = corpBulkWrite.mock.calls.flatMap(
+        (call: unknown[]) => call[0] as unknown[]
+      ) as Array<{
+        updateOne?: { filter?: { _id?: ObjectId }; update?: { $inc?: { liquidCapital?: number } } };
+      }>;
+      const holderPayOp = allOps.find(
+        (op) =>
+          op.updateOne?.filter?._id?.toString() === holderCorpId.toString() &&
+          op.updateOne?.update?.$inc?.liquidCapital === 22.5
+      );
+      expect(holderPayOp).toBeDefined();
+    }
+  );
 
   it("charges corporate issuer for public float coupon costs", async () => {
     // Public float units incur coupon cost for the issuing corporation
@@ -1349,91 +1497,94 @@ describe("processBondTurn", () => {
     expect(maturityEntry!.meta?.units).toBe(4);
   });
 
-  it("logs corporate holder coupon cash after the existing FX fee with gross bond-side meta", async () => {
-    const holderCorpId = new ObjectId();
-    const issuerCorpId = new ObjectId();
-    const bondId = new ObjectId();
-    const bond = {
-      _id: bondId,
-      couponRate: 5,
-      maturityTurn: 100,
-      matured: false,
-      defaulted: false,
-      isCorporate: true,
-      holders: [{ corporationId: holderCorpId, units: 3 }],
-      publicFloat: 0,
-      corporationId: issuerCorpId,
-      issuerName: "Sterling Issuer",
-      currencyCode: "GBP" as const,
-    };
+  it.each([1, 1.5])(
+    "logs corporate coupon cash using source spread strength %s",
+    async (strength) => {
+      const holderCorpId = new ObjectId();
+      const issuerCorpId = new ObjectId();
+      const bondId = new ObjectId();
+      const bond = {
+        _id: bondId,
+        couponRate: 5,
+        maturityTurn: 100,
+        matured: false,
+        defaulted: false,
+        isCorporate: true,
+        holders: [{ corporationId: holderCorpId, units: 3 }],
+        publicFloat: 0,
+        corporationId: issuerCorpId,
+        issuerName: "Sterling Issuer",
+        currencyCode: "GBP" as const,
+      };
 
-    vi.mocked(isCorporateBond).mockReturnValue(true);
+      vi.mocked(isCorporateBond).mockReturnValue(true);
 
-    mockBondFinds([bond], [{ _id: bondId, marketPrice: 1.02 }]);
-    db.collection("exchangeRates");
-    db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
-        { currencyCode: "GBP", rate: 0.8 },
-        { currencyCode: "JPY", rate: 100 },
-      ]),
-    });
-    db.collectionMocks["corporations"]!.find.mockReturnValue(
-      makeCursor([
-        {
-          _id: issuerCorpId,
-          liquidCapital: 10_000,
-          countryId: "UK",
-          liquidCurrencyCode: "GBP",
-          name: "Sterling Issuer",
-        },
-        {
-          _id: holderCorpId,
-          liquidCapital: 50_000,
-          countryId: "JP",
-          liquidCurrencyCode: "JPY",
-          name: "Tokyo Holder",
-        },
-      ])
-    );
-    db.collectionMocks["centralBanks"]!.find.mockReturnValue(
-      makeCursor([{ countryId: "UK", primeRate: 2.75 }])
-    );
-    db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([]),
-    });
+      mockBondFinds([bond], [{ _id: bondId, marketPrice: 1.02 }]);
+      db.collection("exchangeRates");
+      db.collectionMocks["exchangeRates"]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { currencyCode: "GBP", rate: 0.8, forexSpreadStrength: strength },
+          { currencyCode: "JPY", rate: 100 },
+        ]),
+      });
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([
+          {
+            _id: issuerCorpId,
+            liquidCapital: 10_000,
+            countryId: "UK",
+            liquidCurrencyCode: "GBP",
+            name: "Sterling Issuer",
+          },
+          {
+            _id: holderCorpId,
+            liquidCapital: 50_000,
+            countryId: "JP",
+            liquidCurrencyCode: "JPY",
+            name: "Tokyo Holder",
+          },
+        ])
+      );
+      db.collectionMocks["centralBanks"]!.find.mockReturnValue(
+        makeCursor([{ countryId: "UK", primeRate: 2.75 }])
+      );
+      db.collectionMocks["bondHistory"]!.aggregate.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([]),
+      });
 
-    await processBondTurn(10);
+      await processBondTurn(10);
 
-    const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
-    const couponEntry = allEntries.find(
-      (e: unknown) =>
-        (e as { type?: string }).type === "bond_coupon" &&
-        (e as { subjectType?: string }).subjectType === "corporation" &&
-        (e as { subjectId?: ObjectId }).subjectId?.toString() === holderCorpId.toString()
-    ) as
-      | {
-          amount: number;
-          currencyCode: string;
-          meta?: { bondCurrency?: string; bondAmount?: number; fxSpreadAnchor?: number };
-        }
-      | undefined;
-    expect(couponEntry).toBeDefined();
-    expect(couponEntry!.currencyCode).toBe("JPY");
-    expect(couponEntry!.amount).toBe(3712.5);
-    expect(couponEntry!.meta?.bondCurrency).toBe("GBP");
-    expect(couponEntry!.meta?.bondAmount).toBe(30);
-    expect(couponEntry!.meta?.fxSpreadAnchor).toBe(0.375);
-    expect(db.collectionMocks["corporations"]!.bulkWrite).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          updateOne: expect.objectContaining({
-            filter: { _id: holderCorpId },
-            update: expect.objectContaining({ $inc: { liquidCapital: couponEntry!.amount } }),
+      const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
+      const couponEntry = allEntries.find(
+        (e: unknown) =>
+          (e as { type?: string }).type === "bond_coupon" &&
+          (e as { subjectType?: string }).subjectType === "corporation" &&
+          (e as { subjectId?: ObjectId }).subjectId?.toString() === holderCorpId.toString()
+      ) as
+        | {
+            amount: number;
+            currencyCode: string;
+            meta?: { bondCurrency?: string; bondAmount?: number; fxSpreadAnchor?: number };
+          }
+        | undefined;
+      expect(couponEntry).toBeDefined();
+      expect(couponEntry!.currencyCode).toBe("JPY");
+      expect(couponEntry!.amount).toBeCloseTo(3750 * (1 - 0.01 * strength));
+      expect(couponEntry!.meta?.bondCurrency).toBe("GBP");
+      expect(couponEntry!.meta?.bondAmount).toBe(30);
+      expect(couponEntry!.meta?.fxSpreadAnchor).toBeCloseTo(0.375 * strength);
+      expect(db.collectionMocks["corporations"]!.bulkWrite).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            updateOne: expect.objectContaining({
+              filter: { _id: holderCorpId },
+              update: expect.objectContaining({ $inc: { liquidCapital: couponEntry!.amount } }),
+            }),
           }),
-        }),
-      ])
-    );
-  });
+        ])
+      );
+    }
+  );
 
   it("logs corporate holder maturity receipts in holder currency with bond-side meta", async () => {
     const holderCorpId = new ObjectId();

@@ -111,7 +111,7 @@ describe("getUnionName", () => {
     });
 
     it("US 1999 predates SAG-AFTRA (2012) and NNU (2009)", () => {
-      expect(getUnionName("US", "media_entertainment", "1999-default")).toBe("Screen Actors Guild");
+      expect(getUnionName("US", "entertainment", "1999-default")).toBe("Screen Actors Guild");
       expect(getUnionName("US", "healthcare", "1999-default")).toBe(
         "Service Employees International Union"
       );

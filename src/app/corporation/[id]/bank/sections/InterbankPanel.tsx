@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 import { Badge, Button, Input } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { perTurnInterestOn } from "@/lib/banking/rules/loans";
+import { CB_MARGIN_COLLATERAL_FRACTION, cbMarginRatePercent } from "@/lib/banking/rules/decide";
 import type { ConsolePayload, Party, ShowToast } from "../types";
 import { mergeState, partyHref } from "../lib/helpers";
 import { PartySearch } from "../components/PartySearch";
@@ -31,6 +33,8 @@ export function InterbankPanel({
   depositTaking,
   interbankDebt,
   cbMarginDebt,
+  propBookMarkValue,
+  primeRate,
   loans,
   canMutate,
   onChanged,
@@ -41,6 +45,10 @@ export function InterbankPanel({
   depositTaking: boolean;
   interbankDebt: number;
   cbMarginDebt: number;
+  /** Current value of the bank's own investments: the credit line's collateral. */
+  propBookMarkValue: number;
+  /** Prime rate, so the credit-line cost preview prices the full rate. */
+  primeRate: number | null;
   loans: ConsolePayload["interbankLoans"];
   canMutate: boolean;
   onChanged: () => Promise<void>;
@@ -52,10 +60,22 @@ export function InterbankPanel({
     { borrower: null, amount: "", rate: "", marginAmount: "", busy: false }
   );
 
+  // Consequence preview for the lend form: interbank loans are interest-only
+  // with no fixed maturity (rules/interbankServicing: principal returns
+  // through repayment), so the preview prices one turn of income at the
+  // entered rate and names the reserve cost up front.
+  const lendAmount = parseFloat(amount);
+  const lendRate = parseFloat(rate);
+  const validLend =
+    borrower != null &&
+    Number.isFinite(lendAmount) &&
+    lendAmount > 0 &&
+    Number.isFinite(lendRate) &&
+    lendRate >= 0;
+  const lendIncomePerTurn = validLend ? perTurnInterestOn(lendAmount, lendRate) : null;
+
   const lend = async () => {
-    const a = parseFloat(amount);
-    const r = parseFloat(rate);
-    if (!borrower || !(a > 0) || !(r >= 0)) {
+    if (!validLend) {
       showToast("Pick a borrowing bank and enter an amount and a non-negative rate", "error");
       return;
     }
@@ -65,9 +85,9 @@ export function InterbankPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          borrowerCorporationId: borrower.id,
-          amount: a,
-          ratePercent: r,
+          borrowerCorporationId: borrower!.id,
+          amount: lendAmount,
+          ratePercent: lendRate,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
@@ -75,13 +95,27 @@ export function InterbankPanel({
         showToast(json.error ?? "Could not lend interbank", "error");
         return;
       }
-      showToast("Interbank loan originated", "success");
+      showToast(
+        `Lent ${formatBankMoney(lendAmount, currency)} to ${borrower!.name}: earns about ${formatBankMoney(lendIncomePerTurn ?? 0, currency)} each turn until repaid, and ties up ${formatBankMoney(lendAmount, currency)} of cash above the reserve requirement.`,
+        "success"
+      );
       updateInterbankState({ borrower: null, amount: "", rate: "" });
       await onChanged();
     } finally {
       updateInterbankState({ busy: false });
     }
   };
+
+  // The central bank credit line is collateralised: debt may not exceed half
+  // the current value of the bank's own investments
+  // (rules/decide.CB_MARGIN_COLLATERAL_FRACTION), priced at prime plus the
+  // margin spread (rules/decide.cbMarginRatePercent).
+  const prime = primeRate ?? 0;
+  const marginCap = CB_MARGIN_COLLATERAL_FRACTION * Math.max(0, propBookMarkValue);
+  const marginHeadroom = Math.max(0, marginCap - Math.max(0, cbMarginDebt));
+  const enteredMargin = parseFloat(marginAmount);
+  const validMarginDraw =
+    Number.isFinite(enteredMargin) && enteredMargin > 0 && enteredMargin <= marginHeadroom;
 
   const margin = async (action: "draw" | "repay") => {
     const a = parseFloat(marginAmount);
@@ -98,10 +132,21 @@ export function InterbankPanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? `Could not ${action} margin`, "error");
+        showToast(json.error ?? `Could not ${action} the credit line`, "error");
         return;
       }
-      showToast(action === "draw" ? "Margin drawn" : "Margin repaid", "success");
+      if (action === "draw") {
+        const owed = Math.max(0, cbMarginDebt) + a;
+        showToast(
+          `Credit line drawn: now owes ${formatBankMoney(owed, currency)}, costing about ${formatBankMoney(perTurnInterestOn(owed, cbMarginRatePercent(prime)), currency)} next turn, with ${formatBankMoney(Math.max(0, marginHeadroom - a), currency)} of collateral room left.`,
+          "success"
+        );
+      } else {
+        showToast(
+          `Credit line repaid ${formatBankMoney(a, currency)}: owes ${formatBankMoney(Math.max(0, Math.max(0, cbMarginDebt) - a), currency)}.`,
+          "success"
+        );
+      }
       updateInterbankState({ marginAmount: "" });
       await onChanged();
     } finally {
@@ -112,7 +157,9 @@ export function InterbankPanel({
   return (
     <section className="space-y-4">
       <Eyebrow kind="ceoControl" />
-      <h3 className="text-base font-semibold text-foreground">Interbank &amp; CB margin</h3>
+      <h3 className="text-base font-semibold text-foreground">
+        Interbank &amp; central bank credit
+      </h3>
       <div className="rounded-xl border border-card-border bg-card grid grid-cols-2 divide-x divide-card-border max-w-xl">
         <StatCell
           label="Interbank debt"
@@ -121,9 +168,9 @@ export function InterbankPanel({
           tooltip={t("tooltips.interbankDebt")}
         />
         <StatCell
-          label="CB margin debt"
+          label="Central bank credit line"
           value={formatBankMoney(cbMarginDebt, currency)}
-          sub="collateralised line"
+          sub={`secured on your investments · room ${formatBankMoney(marginHeadroom, currency)}`}
           tooltip={t("tooltips.marginDebt")}
         />
       </div>
@@ -173,7 +220,16 @@ export function InterbankPanel({
               />
             </label>
           </div>
-          <Button type="button" onClick={() => void lend()} disabled={busy}>
+          {validLend && lendIncomePerTurn != null && (
+            <p className="text-[11px] text-muted">
+              Lending {formatBankMoney(lendAmount, currency)} at {lendRate.toFixed(2)}% earns about{" "}
+              {formatBankMoney(lendIncomePerTurn, currency)} each turn, has no fixed maturity
+              (interest-only until the borrower repays), and moves{" "}
+              {formatBankMoney(lendAmount, currency)} of cash out of reserves. Missed interest
+              counts arrears turns and can default the loan after 8 turns (about 8 hours).
+            </p>
+          )}
+          <Button type="button" onClick={() => void lend()} disabled={busy || !validLend}>
             {busy ? "Working..." : "Lend interbank"}
           </Button>
         </div>
@@ -181,18 +237,35 @@ export function InterbankPanel({
 
       {canMutate && (
         <div className="rounded-xl border border-card-border bg-card p-4 space-y-3 max-w-xl">
-          <p className="text-sm text-muted">Draw or repay the central bank margin line.</p>
+          <p className="text-sm text-muted">
+            Draw or repay the central bank credit line. It lends against your own investments as
+            collateral: up to half their current value ({formatBankMoney(marginCap, currency)} on
+            investments worth {formatBankMoney(Math.max(0, propBookMarkValue), currency)}), priced
+            above prime. Arrears here draw supervisory attention.
+          </p>
           <label className="block space-y-1 text-xs text-muted max-w-xs">
             Amount
             <Input
               value={marginAmount}
               onChange={(e) => updateInterbankState({ marginAmount: e.target.value })}
               inputMode="decimal"
-              aria-label="CB margin amount"
+              aria-label="Central bank credit line amount"
             />
           </label>
+          {Number.isFinite(enteredMargin) && enteredMargin > 0 && (
+            <p className="text-[11px] text-muted">
+              {validMarginDraw
+                ? `Drawing ${formatBankMoney(enteredMargin, currency)} leaves ${formatBankMoney(marginHeadroom - enteredMargin, currency)} of collateral room, and adds about ${formatBankMoney(perTurnInterestOn(Math.max(0, cbMarginDebt) + enteredMargin, cbMarginRatePercent(prime)), currency)} next turn. Interest accrues every turn (about every hour) until repaid.`
+                : `That draw exceeds the ${formatBankMoney(marginHeadroom, currency)} of collateral room left.`}
+            </p>
+          )}
           <div className="flex gap-2">
-            <Button type="button" onClick={() => void margin("draw")} disabled={busy}>
+            <Button
+              type="button"
+              onClick={() => void margin("draw")}
+              disabled={busy || !validMarginDraw}
+              title={validMarginDraw ? undefined : "Enter an amount within the collateral room"}
+            >
               Draw
             </Button>
             <Button

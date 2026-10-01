@@ -40,8 +40,45 @@ beforeEach(() => {
   db.collection("users");
   // A flush market pool: every sale in these tests is small.
   db.collection("bondMarketPools");
-  db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 1e9 });
+  db.collectionMocks.bondMarketPools.findOne.mockImplementation(
+    async (filter: Record<string, unknown>) =>
+      "settledKeys" in filter ? null : { _id: "USD", cashLocal: 1e9 }
+  );
   db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 1e9 });
+
+  db.collection("bondSaleIntents");
+  const intents: Array<Record<string, unknown>> = [];
+  const matches = (row: Record<string, unknown>, filter: Record<string, unknown>) =>
+    Object.entries(filter).every(([key, value]) => {
+      const actual = row[key];
+      if (actual instanceof ObjectId && value instanceof ObjectId) return actual.equals(value);
+      return actual === value;
+    });
+  db.collectionMocks.bondSaleIntents.insertOne.mockImplementation(
+    async (intent: Record<string, unknown>) => {
+      intents.push({ ...intent });
+      return { insertedId: intent._id };
+    }
+  );
+  db.collectionMocks.bondSaleIntents.findOne.mockImplementation(
+    async (filter: Record<string, unknown>) => intents.find((row) => matches(row, filter)) ?? null
+  );
+  db.collectionMocks.bondSaleIntents.find.mockImplementation((filter: Record<string, unknown>) => {
+    const cursor = {
+      sort: () => cursor,
+      limit: () => cursor,
+      toArray: async () => intents.filter((row) => matches(row, filter)),
+    };
+    return cursor;
+  });
+  db.collectionMocks.bondSaleIntents.updateOne.mockImplementation(
+    async (filter: Record<string, unknown>, update: { $set?: Record<string, unknown> }) => {
+      const row = intents.find((candidate) => matches(candidate, filter));
+      if (!row) return { matchedCount: 0, modifiedCount: 0 };
+      Object.assign(row, update.$set);
+      return { matchedCount: 1, modifiedCount: 1 };
+    }
+  );
 });
 
 describe("POST /api/bonds/[bondId]/sell", () => {
@@ -112,12 +149,15 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       _id: userId,
       activeCharacterId: characterId,
     });
-    db.collectionMocks.characters.findOne.mockResolvedValue({
+    const seller = {
       _id: characterId,
       userId,
       name: "Seller",
       countryId: "US",
-    });
+    };
+    db.collectionMocks.characters.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => ("userId" in filter ? seller : null)
+    );
     db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
     db.collectionMocks.characters.updateOne.mockResolvedValue({
       matchedCount: 0,
@@ -137,13 +177,20 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     expect(response.status).toBe(404);
     // Three units at the 980 bid: debited 2,940 from the pool, then put it back.
     expect(db.collectionMocks.bondMarketPools.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: "USD", cashLocal: { $gte: 2940 } },
+      expect.objectContaining({
+        _id: "USD",
+        cashLocal: { $gte: 2940 },
+        settledKeys: { $ne: expect.any(String) },
+      }),
       expect.objectContaining({ $inc: { cashLocal: -2940, "lifetime.salesOut": 2940 } }),
       expect.anything()
     );
     expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledWith(
-      { _id: "USD" },
-      expect.objectContaining({ $inc: { cashLocal: 2940, "lifetime.salesOut": -2940 } })
+      expect.objectContaining({ _id: "USD", settledKeys: expect.any(String) }),
+      expect.objectContaining({
+        $inc: { cashLocal: 2940, "lifetime.salesOut": -2940 },
+        $pull: { settledKeys: expect.any(String) },
+      })
     );
   });
 
@@ -172,12 +219,15 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       _id: userId,
       activeCharacterId: characterId,
     });
-    db.collectionMocks.characters.findOne.mockResolvedValue({
+    const seller = {
       _id: characterId,
       userId,
       name: "Seller",
       countryId: "US",
-    });
+    };
+    db.collectionMocks.characters.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => ("userId" in filter ? seller : null)
+    );
     db.collectionMocks.bonds.updateOne
       .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 })
       .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 });
@@ -197,14 +247,16 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(db.collectionMocks.bonds.updateOne).toHaveBeenNthCalledWith(
-      2,
-      { _id: bondId, "holders.characterId": characterId },
+    const restoreCall = db.collectionMocks.bonds.updateOne.mock.calls.find(
+      (call) => call[1]?.$inc?.publicFloat === -3
+    );
+    expect(restoreCall).toBeDefined();
+    expect(restoreCall?.[0]).toEqual(
       expect.objectContaining({
-        $inc: expect.objectContaining({
-          "holders.$.units": 3,
-          publicFloat: -3,
-        }),
+        _id: bondId,
+        holders: {
+          $elemMatch: expect.objectContaining({ characterId, saleIntentId: expect.any(ObjectId) }),
+        },
       })
     );
   });

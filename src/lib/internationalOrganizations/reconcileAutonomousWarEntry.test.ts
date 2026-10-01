@@ -15,6 +15,7 @@ vi.mock("@/lib/internationalOrganizations/commands/buildJoinConflictBill", () =>
 }));
 vi.mock("@/lib/internationalOrganizations/service", () => ({
   getMembers: (...args: unknown[]) => getMembers(...args),
+  loadOrganizationDef: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("@/lib/db/collections/conflicts", () => ({
   getConflict: (...args: unknown[]) => getConflict(...args),

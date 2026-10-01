@@ -1,12 +1,14 @@
-import type { Db } from "mongodb";
-import type { ExchangeRate } from "@/lib/db/types";
-import type { CurrencyCode } from "@/lib/constants/currencies";
-
 /**
  * Campaign currency shell loads a world's fixed base rates once for the caller.
  * Political income and costs share this snapshot; live forex remains reserved
  * for market transactions. Missing legacy rate rows retain the historical fallback.
  */
+
+import { resolveCampaignPriceLevel } from "./rules/priceLevel";
+import type { Db } from "mongodb";
+import type { ExchangeRate } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+
 export { campaignAnchorToLocal, campaignLocalRate, getCampaignCurrency } from "./rules/currency";
 import { getCampaignCurrency, type CampaignCurrencyRates } from "./rules/currency";
 export type { CampaignCurrencyRates } from "./rules/currency";
@@ -46,4 +48,17 @@ export async function loadCampaignFxRate(
     return { rate: 1.0, currencyCode };
   }
   return { rate: rateDoc.rate, currencyCode };
+}
+
+/** Load the world's campaign price basis once at the shell boundary. */
+export async function loadCampaignPriceLevel(db: Db): Promise<number> {
+  const [config, state] = await Promise.all([
+    db
+      .collection<{ _id: string; campaignEraPriceLevelEnabled?: boolean }>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { campaignEraPriceLevelEnabled: 1 } }),
+    db
+      .collection<{ _id: string; preset?: string }>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1 } }),
+  ]);
+  return resolveCampaignPriceLevel(config?.campaignEraPriceLevelEnabled, state?.preset);
 }

@@ -306,6 +306,7 @@ function marketQuality(
   const spreads: number[] = [];
   let twoSidedListings = 0;
   let depthAnchor = 0;
+  let bidDepthAnchor = 0;
   // The liquidity facility posts both sides itself, so it satisfies the plain two-sided
   // metric by construction. The organic counters are the ones that show participation.
   let organicTwoSidedListings = 0;
@@ -332,6 +333,10 @@ function marketQuality(
         ? listing.sharePriceAnchor! / listing.sharePrice
         : 1;
     depthAnchor += book.reduce(
+      (sum, order) => sum + order.sharesRemaining * order.pricePerShare * anchorPerLocal,
+      0
+    );
+    bidDepthAnchor += buys.reduce(
       (sum, order) => sum + order.sharesRemaining * order.pricePerShare * anchorPerLocal,
       0
     );
@@ -402,6 +407,7 @@ function marketQuality(
     facilityQuotedListings,
     spreads,
     depthAnchor,
+    bidDepthAnchor,
     organicDepthAnchor,
     executionHours,
     amihud,
@@ -1287,6 +1293,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         "two_sided_non_crossed_books"
       ),
       openOrderDepthAnchor: quality.depthAnchor,
+      openBidDepthAnchor: quality.bidDepthAnchor,
       depthToMarketCap: metric(
         ratio(quality.depthAnchor, marketCapTotal),
         input.shareOrders.filter((order) => order.status === "open").length,

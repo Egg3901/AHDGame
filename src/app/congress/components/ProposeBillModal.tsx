@@ -1,8 +1,12 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
+
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { useToast } from "@/contexts/ToastContext";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import { reserveManpowerLabel } from "@/lib/military/manpower";
 import {
   BILL_CATEGORIES,
@@ -238,6 +242,11 @@ export function ProposeBillModal({
   const isElectoralCat = ELECTORAL_LAW_BILL_CATEGORIES.has(cat as BillCategory);
   // Custom (flavor/roleplay) bills carry no provisions and have no in-game effect.
   const isCustomCat = cat === "custom";
+  const { maastrichtEligibleCountries } = useWorldFlags();
+  const [treatyAction, setTreatyAction] = useState<"" | "ratify" | "reject">("");
+  const canDecideTreaty =
+    cat === "foreign policy" && maastrichtEligibleCountries?.includes(countryId) === true;
+  const includeTreaty = canDecideTreaty && treatyAction !== "";
   const [natRows, setNatRows] = useState<NatProvisionInput[]>([{ type: "nationalize" }]);
 
   const [tariffRows, setTariffRows] = useState<TariffProvisionInput[]>([
@@ -402,7 +411,8 @@ export function ProposeBillModal({
   // so the policy provisions get what is left. Without this the form built a
   // four-provision bill out of three rows plus the franchise checkbox and the
   // body schema refused it with "At most 3 provisions" (#1250).
-  const standaloneProvisionCount = isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0;
+  const standaloneProvisionCount =
+    (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0) + (includeTreaty ? 1 : 0);
   const maxPolicyProvisions = Math.max(0, MAX_PROVISIONS - standaloneProvisionCount);
 
   const provisionCountForInfluenceCost = isCustomCat
@@ -417,7 +427,9 @@ export function ProposeBillModal({
             // it has to be counted here or the modal quotes a cost lower than
             // the route then charges, and `canAffordNpi` clears a bill the
             // server refuses for insufficient influence (#1250).
-            provisions.length + standaloneProvisionCount;
+            (includeTreaty
+              ? provisions.filter((p) => p.legislationTypeId.trim()).length
+              : provisions.length) + standaloneProvisionCount;
   const totalCost = getProvisionCostTotal(provisionCountForInfluenceCost);
   const canAffordNpi =
     adminOverride || nationalInfluence === null || nationalInfluence >= totalCost;
@@ -585,14 +597,17 @@ export function ProposeBillModal({
         });
       }
     } else {
-      const valid = provisions.every((p) => p.legislationTypeId.trim());
+      const policyProvisions = includeTreaty
+        ? provisions.filter((p) => p.legislationTypeId.trim())
+        : provisions;
+      const valid = policyProvisions.every((p) => p.legislationTypeId.trim());
       if (!valid) {
         setError("Each provision must have a legislation type selected.");
         return;
       }
       // Tax-slider provisions must move the rate at least one step (ruling #16;
       // the server re-validates against the live rate).
-      for (const p of provisions) {
+      for (const p of policyProvisions) {
         const slider = legislationTypes.find(
           (t) => t._id === p.legislationTypeId
         )?.taxSliderEstimate;
@@ -620,13 +635,13 @@ export function ProposeBillModal({
       // a player can fill the rows first and tick the box afterwards, which the
       // cap cannot retract. Say so rather than letting the body schema refuse
       // the bill with a bare count.
-      if (provisions.length + standaloneProvisionCount > MAX_PROVISIONS) {
+      if (policyProvisions.length + standaloneProvisionCount > MAX_PROVISIONS) {
         setError(
           `A bill carries at most ${MAX_PROVISIONS} provisions, and the electoral-law change is one of them. Remove a policy provision.`
         );
         return;
       }
-      provisionPayload = provisions.map((p) => ({
+      provisionPayload = policyProvisions.map((p) => ({
         legislationTypeId: p.legislationTypeId.trim(),
         policyOptionId: p.policyOptionId || undefined,
         effectDirection: p.effectDirection,
@@ -634,6 +649,12 @@ export function ProposeBillModal({
         social: p.social,
         ...(p.proposedRate !== undefined && { proposedRate: p.proposedRate }),
       }));
+      if (includeTreaty)
+        provisionPayload.push({
+          type: "european_treaty",
+          treaty: "maastricht",
+          action: treatyAction,
+        });
       // Electoral law rides alongside the policy provisions of a social bill.
       // Each axis is opt-in separately so a franchise bill does not silently
       // reset the registration regime — the server enforces the same rule.
@@ -672,6 +693,7 @@ export function ProposeBillModal({
         return;
       }
       showToast("Bill proposed — voting is now open.");
+      void captureProductEvent("bill_drafted");
       onSuccess();
       onClose();
     } finally {
@@ -799,6 +821,9 @@ export function ProposeBillModal({
           </div>
 
           <div>
+            {canDecideTreaty && (
+              <EuropeanTreatyProvisionEditor action={treatyAction} onChange={setTreatyAction} />
+            )}
             {isCustomCat ? (
               /* ── Custom (flavor) bill: no provisions, no in-game effect ── */
               <p className="rounded-lg border border-card-border bg-card/50 px-3 py-2 text-xs text-muted">

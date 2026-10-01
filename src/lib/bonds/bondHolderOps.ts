@@ -1,4 +1,4 @@
-import type { Db, ObjectId } from "mongodb";
+import type { Db, Filter, ObjectId } from "mongodb";
 import type { Bond } from "@/lib/db/types";
 
 export type BondHolderTarget =
@@ -17,7 +17,7 @@ export async function reserveBondUnitsForHolder(
   target: BondHolderTarget,
   units: number,
   now: Date,
-  options?: { avgCostPerUnit?: number }
+  options?: { avgCostPerUnit?: number; guardFilter?: Filter<Bond> }
 ): Promise<boolean> {
   const holderSet: Record<string, unknown> = { updatedAt: now };
   if (options?.avgCostPerUnit !== undefined) {
@@ -28,6 +28,7 @@ export async function reserveBondUnitsForHolder(
     {
       _id: bondId,
       publicFloat: { $gte: units },
+      ...options?.guardFilter,
       [`holders.${target.field}`]: target.id,
     },
     {
@@ -49,6 +50,7 @@ export async function reserveBondUnitsForHolder(
     {
       _id: bondId,
       publicFloat: { $gte: units },
+      ...options?.guardFilter,
       holders: {
         $not: { $elemMatch: { [target.field]: target.id } },
       },
@@ -65,6 +67,7 @@ export async function reserveBondUnitsForHolder(
     {
       _id: bondId,
       publicFloat: { $gte: units },
+      ...options?.guardFilter,
       [`holders.${target.field}`]: target.id,
     },
     {

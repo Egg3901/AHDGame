@@ -51,10 +51,13 @@ describe("getMultiSeatMinShare", () => {
     expect(getMultiSeatMinShare("localCouncil")).toBe(0.1);
   });
 
-  it("keeps the existing 20% Commons eligibility gate", () => {
+  it("uses 10% for UK Commons while keeping the US House safe default at 20%", () => {
     expect(getMultiSeatMinShare("house")).toBe(0.2);
-    expect(getMultiSeatMinShare("commons")).toBe(0.2);
-    expect(getMultiSeatMinShare("snap_commons")).toBe(0.2);
+    expect(getMultiSeatMinShare("house", 5, "US")).toBeCloseTo(1 / 6, 10);
+    expect(getMultiSeatMinShare("house", 9, "US")).toBe(0.1);
+    expect(getMultiSeatMinShare("house", 9, "NG")).toBe(0.2);
+    expect(getMultiSeatMinShare("commons")).toBe(0.1);
+    expect(getMultiSeatMinShare("snap_commons")).toBe(0.1);
     expect(getMultiSeatMinShare("governor")).toBe(0.2);
   });
 
@@ -265,10 +268,40 @@ describe("allocateSeats - commons (UK)", () => {
     ];
 
     expect(allocateSeats("commons", "TEST", 81, ranked, 999).seatsEstimate).toEqual({
-      con: 52,
-      lab: 29,
-      ld: 0,
+      con: 43,
+      lab: 24,
+      ld: 14,
     });
+  });
+
+  it("represents every party above 10% in a crowded five-party region", () => {
+    const ranked: RankedCandidate[] = [
+      { id: "lab1", votes: 116, party: "lab" },
+      { id: "lab2", votes: 79, party: "lab" },
+      { id: "lab3", votes: 76, party: "lab" },
+      { id: "workers1", votes: 139, party: "workers" },
+      { id: "workers2", votes: 74, party: "workers" },
+      { id: "con1", votes: 65, party: "con" },
+      { id: "con2", votes: 64, party: "con" },
+      { id: "con3", votes: 61, party: "con" },
+      { id: "lib1", votes: 74, party: "lib" },
+      { id: "lib2", votes: 51, party: "lib" },
+      { id: "lib3", votes: 48, party: "lib" },
+      { id: "revival", votes: 153, party: "revival" },
+    ];
+
+    const result = allocateSeats("commons", "TEST", 91, ranked, 1000);
+    const partySeats = (party: string) =>
+      ranked
+        .filter((candidate) => candidate.party === party)
+        .reduce((sum, candidate) => sum + (result.seatsEstimate[candidate.id] ?? 0), 0);
+
+    expect(partySeats("lab")).toBeGreaterThan(0);
+    expect(partySeats("workers")).toBeGreaterThan(0);
+    expect(partySeats("con")).toBeGreaterThan(0);
+    expect(partySeats("lib")).toBeGreaterThan(0);
+    expect(partySeats("revival")).toBeGreaterThan(0);
+    expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(91);
   });
 
   it("uses UK_COMMONS_SEATS[LON]=75 as authoritative seat count", () => {
@@ -316,7 +349,7 @@ describe("allocateSeats - commons (UK)", () => {
   });
 
   it("allocates LON seats proportionally to vote share", () => {
-    // Labour: 50%, Conservative: 30%, LibDem: 20% — all above 20% threshold
+    // Labour: 50%, Conservative: 30%, LibDem: 20% — all above the 10% threshold
     const ranked: RankedCandidate[] = [
       { id: "Labour", votes: 500 },
       { id: "Conservative", votes: 300 },
@@ -435,19 +468,93 @@ describe("allocateSeats - fallback pool when eligible candidates < seat count", 
 // ── Threshold boundary conditions ────────────────────────────────────────────
 
 describe("allocateSeats - threshold boundary conditions", () => {
-  it("candidate at exactly 20% is eligible for house", () => {
-    // 200/1000 = 0.2 — exactly at threshold — should be eligible.
-    // Use "UNKNOWN" state so authoritativeSeats = totalSeats = 5.
+  it("includes a 5-seat House party at one sixth and excludes one just below", () => {
+    const exact = allocateSeats(
+      "house",
+      "UNKNOWN",
+      5,
+      [
+        { id: "major", votes: 5, party: "major" },
+        { id: "minor", votes: 1, party: "minor" },
+      ],
+      6,
+      undefined,
+      undefined,
+      undefined,
+      "US"
+    );
+    const below = allocateSeats(
+      "house",
+      "UNKNOWN",
+      5,
+      [
+        { id: "major", votes: 5001, party: "major" },
+        { id: "minor", votes: 999, party: "minor" },
+      ],
+      6000,
+      undefined,
+      undefined,
+      undefined,
+      "US"
+    );
+
+    expect(exact.seatsEstimate).toEqual({ major: 4, minor: 1 });
+    expect(below.seatsEstimate).toEqual({ major: 5, minor: 0 });
+  });
+
+  it("keeps the legacy 20% gate for non-US house races", () => {
+    const result = allocateSeats(
+      "house",
+      "NG_NC",
+      5,
+      [
+        { id: "major", votes: 830, party: "major" },
+        { id: "minor", votes: 170, party: "minor" },
+      ],
+      1000,
+      undefined,
+      undefined,
+      undefined,
+      "NG"
+    );
+
+    expect(result.seatsEstimate).toEqual({ major: 5, minor: 0 });
+  });
+
+  it("includes a Commons party at exactly 10% and excludes one just below", () => {
+    const exact = allocateSeats(
+      "commons",
+      "UNKNOWN",
+      10,
+      [
+        { id: "major", votes: 900, party: "major" },
+        { id: "minor", votes: 100, party: "minor" },
+      ],
+      1000
+    );
+    const below = allocateSeats(
+      "commons",
+      "UNKNOWN",
+      10,
+      [
+        { id: "major", votes: 901, party: "major" },
+        { id: "minor", votes: 99, party: "minor" },
+      ],
+      1000
+    );
+
+    expect(exact.seatsEstimate).toEqual({ major: 9, minor: 1 });
+    expect(below.seatsEstimate).toEqual({ major: 10, minor: 0 });
+  });
+
+  it("candidate at exactly 20% remains eligible for a 4-seat house delegation", () => {
+    // 200/1000 = 0.2, exactly at the capped threshold.
     const ranked: RankedCandidate[] = [
       { id: "A", votes: 800 },
       { id: "B", votes: 200 },
     ];
-    const result = allocateSeats("house", "UNKNOWN", 5, ranked, 1000);
-    // authoritativeSeats = HOUSE_SEATS["UNKNOWN"] ?? 5 = 5
-    // 2-seat special case? No — authoritativeSeats=5 ≠ 2.
-    // Both eligible (80% and 20%); minPoolSize = min(5, 2) = 2; eligible.length(2) >= 2 → no fallback
-    // A: 800/1000 * 5 = 4.0 → 4 seats; B: 200/1000 * 5 = 1.0 → 1 seat
-    expect(result.seatsEstimate["A"]).toBe(4);
+    const result = allocateSeats("house", "UNKNOWN", 4, ranked, 1000);
+    expect(result.seatsEstimate["A"]).toBe(3);
     expect(result.seatsEstimate["B"]).toBe(1);
     expect(result.losers).not.toContain("B");
   });
@@ -551,7 +658,7 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
     const ranked: RankedCandidate[] = [
       { id: "con", votes: 460, party: "con" },
       { id: "lab", votes: 450, party: "lab" },
-      { id: "lib", votes: 50, party: "lib" }, // 5% — below the 20% commons gate
+      { id: "lib", votes: 50, party: "lib" }, // 5% — below the 10% commons gate
       { id: "snp", votes: 15, party: "snp" }, // 1.5%
       { id: "pc", votes: 15, party: "pc" }, // 1.5%
       { id: "sf", votes: 10, party: "sf" }, // 1.0%
@@ -569,13 +676,13 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
   });
 
   it("threshold is computed on the PARTY aggregate, not the individual candidate", () => {
-    // Party X splits 24% across two candidates (12% + 12%) and clears the
-    // 20% Commons gate via the aggregate; party Y's single 8% candidate does not.
+    // Party X splits 12% across two candidates (6% + 6%) and clears the
+    // 10% Commons gate via the aggregate; party Y's single 8% candidate does not.
     const ranked: RankedCandidate[] = [
-      { id: "z1", votes: 680, party: "Z" }, // 68%
+      { id: "z1", votes: 800, party: "Z" }, // 80%
       { id: "y1", votes: 80, party: "Y" }, // 8% alone — below gate
-      { id: "x1", votes: 120, party: "X" }, // 12% (X aggregate 24%)
-      { id: "x2", votes: 120, party: "X" }, // 12% (X aggregate 24%)
+      { id: "x1", votes: 60, party: "X" }, // 6% (X aggregate 12%)
+      { id: "x2", votes: 60, party: "X" }, // 6% (X aggregate 12%)
     ];
     const result = allocateSeats("commons", "UNKNOWN_REGION", 20, ranked, 1000);
     expect(result.seatsEstimate["y1"]).toBe(0);
@@ -600,9 +707,9 @@ describe("allocateSeats - party-aggregate eligibility threshold", () => {
 
   it("degenerate fallback: when NOBODY clears the threshold, fills in ranked order", () => {
     const ranked: RankedCandidate[] = [
-      { id: "A", votes: 180, party: "pA" }, // 18%
-      { id: "B", votes: 150, party: "pB" }, // 15%
-      { id: "C", votes: 120, party: "pC" }, // 12%
+      { id: "A", votes: 80, party: "pA" }, // 8%
+      { id: "B", votes: 70, party: "pB" }, // 7%
+      { id: "C", votes: 60, party: "pC" }, // 6%
     ];
     const result = allocateSeats("commons", "UNKNOWN_REGION", 3, ranked, 1000);
     const total = Object.values(result.seatsEstimate).reduce((s, v) => s + v, 0);
@@ -648,12 +755,12 @@ describe("allocateSeats - Commons proportional correction", () => {
     );
 
     expect(result.seatsEstimate).toEqual({
-      monroe: 17,
-      viktoriya: 13,
-      count: 14,
-      liam: 19,
-      asif: 0,
-      aaliyah: 17,
+      monroe: 14,
+      viktoriya: 11,
+      count: 11,
+      liam: 16,
+      asif: 14,
+      aaliyah: 14,
       mihai: 1,
     });
     expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(81);
@@ -669,7 +776,7 @@ describe("allocateSeats - Commons proportional correction", () => {
     expect(result.seatsEstimate).toEqual({ con: 30, lab: 27, snp: 18 });
   });
 
-  it("keeps the 20% Commons gate while excluding a sub-threshold minor", () => {
+  it("keeps the 10% Commons gate while excluding a sub-threshold minor", () => {
     const ranked: RankedCandidate[] = [
       { id: "con", votes: 476, party: "con" },
       { id: "lab", votes: 453, party: "lab" },

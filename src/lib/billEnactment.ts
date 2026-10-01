@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 /**
  * Bill Enactment Hook
  *
@@ -20,6 +21,8 @@
  * same-currency — no FX conversion needed inside this file.
  */
 
+import { recordEuroAdoption } from "@/lib/currency/euro/adoption";
+import { reconcileEnactedUKDevolution } from "@/lib/countries/uk/devolution/service";
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import { ObjectId as MongoObjectId } from "mongodb";
 import type {
@@ -62,6 +65,7 @@ import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { generateDiscordEventCard } from "@/lib/discord/eventCard";
+import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import {
@@ -76,7 +80,7 @@ import { getCurrentTurn } from "@/lib/currentTurn";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getSelectedPolicyOption } from "@/lib/budget/costs";
 import type { CountryId } from "@/lib/constants/countries";
-import { getCountryConfig, EU_EUROZONE_MEMBERS } from "@/lib/constants/countries";
+import { getCountryConfig } from "@/lib/constants/countries";
 import {
   inferCountryIdFromStateId,
   resolveBillCountryId,
@@ -108,6 +112,22 @@ type EnactableBill = Pick<
   // Votes from both chambers for federal bills
   votes?: Record<string, "for" | "against" | "abstain">;
   otherChamberVotes?: Record<string, "for" | "against" | "abstain">;
+  // Chamber + tally fields read by the Discord card's vote-split chart. The
+  // lifecycle engine hands us the full bill document, so these are present on
+  // real enactments even though the Pick above doesn't declare them.
+  sponsorName?: string;
+  originChamber?: Bill["originChamber"];
+  currentChamber?: Bill["currentChamber"];
+  presidentAction?: Bill["presidentAction"];
+  votesFor?: number;
+  votesAgainst?: number;
+  votesAbstain?: number;
+  otherChamberVotesFor?: number;
+  otherChamberVotesAgainst?: number;
+  otherChamberVotesAbstain?: number;
+  voteSnapshot?: Bill["voteSnapshot"];
+  otherChamberVoteSnapshot?: Bill["otherChamberVoteSnapshot"];
+  overrideDisplaySnapshot?: Bill["overrideDisplaySnapshot"];
   /**
    * #3598: attribution tag threaded onto the resulting `EnactedLaw` row.
    * Omitted for ordinary bills; set to "scotus_ruling" by the SCOTUS docket
@@ -288,30 +308,14 @@ async function applyTaxRateChange(
   }
 }
 
-/**
- * Records a country's Euro adoption vote. When all EU_EUROZONE_MEMBERS have
- * voted, flips gameState.eurozoneEnabled to true.
- *
- * Idempotent: $addToSet is a no-op if the country already voted. Safe to
- * call for non-EU countries — returns early without any DB writes.
- */
-export async function applyEuroAdoptionProvision(db: Db, countryId: CountryId): Promise<void> {
-  if (!EU_EUROZONE_MEMBERS.includes(countryId)) return;
-
-  await db
-    .collection<GameState>("gameState")
-    .updateOne({ _id: "current" }, { $addToSet: { euroAdoptedCountries: countryId } });
-
-  const gs = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { euroAdoptedCountries: 1 } });
-  const adopted = gs?.euroAdoptedCountries ?? [];
-
-  if (EU_EUROZONE_MEMBERS.every((m) => adopted.includes(m as CountryId))) {
-    await db
-      .collection<GameState>("gameState")
-      .updateOne({ _id: "current" }, { $set: { eurozoneEnabled: true } });
-  }
+/** Record a signed national authorization and reconcile its monetary settlement. */
+export async function applyEuroAdoptionProvision(
+  db: Db,
+  countryId: CountryId,
+  currentTurn: number,
+  billId: string
+): Promise<void> {
+  await recordEuroAdoption(db, countryId, currentTurn, billId);
 }
 
 /**
@@ -329,6 +333,15 @@ export async function applyCentralBankIndependenceProvision(
   countryId: CountryId,
   currentTurn: number
 ): Promise<void> {
+  // A proposal may predate accession. Its later enactment cannot reclaim
+  // monetary authority or create a competing national policy committee.
+  if ((await loadEuroMonetaryUnion(db))?.members[countryId]) {
+    await createSystemNewsPost(
+      `${getCountryConfig(countryId)?.name ?? countryId} enacted a central-bank independence law, but rate-setting remains with the common euro authority.`,
+      "legislation"
+    ).catch(() => {});
+    return;
+  }
   const governmentControlled = provision.action === "revoke";
   const banks = db.collection<CentralBank>("centralBanks");
   const bankId = getBankId(countryId);
@@ -485,7 +498,12 @@ export async function onBillEnacted(
   // Euro adoption: record this country's vote; enable eurozone when all members adopt.
   if (bill.provisions?.some((p) => p.type === "euro_adoption")) {
     const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
-    await applyEuroAdoptionProvision(db, enactingCountryId as CountryId);
+    await applyEuroAdoptionProvision(
+      db,
+      enactingCountryId as CountryId,
+      currentTurn,
+      bill._id.toString()
+    );
   }
 
   // Central bank independence: grant/revoke rate-setting authority.
@@ -712,18 +730,30 @@ export async function onBillEnacted(
   // (see referendumWebhooks); skip the generic "Bill Enacted" notice to avoid a
   // duplicate post for the same event.
   if (bill.category !== "reunification") {
+    const enactmentScopeLabel = isNationalBill ? "Federal" : "Regional";
+    const voteSplit = billChamberVoteSplits(
+      bill,
+      resolvedCountry ?? "US",
+      isNationalBill ? "national" : "regional"
+    );
+    const cardMetadata = [
+      "Bill enacted",
+      ...(policyLabel ? [policyLabel] : []),
+      ...(bill.sponsorName ? [`Sponsor: ${bill.sponsorName}`] : []),
+    ];
     const cardUrl = await generateDiscordEventCard(
       {
         eyebrow: `${countryLabel} · ${locationLabel}`,
         title: bill.title,
         summary: "Signed into law",
-        metadata: policyLabel ? ["Bill enacted", policyLabel] : ["Bill enacted"],
+        metadata: cardMetadata,
+        voteSplit,
         tone: "positive",
       },
       `bill-enacted-${bill._id.toString()}`
     );
     sendCountryGameEvent(resolvedCountry ?? "US", {
-      title: `Bill enacted: ${bill.title}`,
+      title: `${enactmentScopeLabel} bill enacted: ${bill.title}`,
       description: cardUrl
         ? `[View the enacted bill](${billUrl})`
         : `**${bill.title}** was signed into law.`,
@@ -863,6 +893,9 @@ async function processProvisionEnactment(
       { $set: statePolicy },
       { upsert: true }
     );
+  if (stateId === "uk_national" && provision.legislationTypeId === "uk_devolution_local_powers") {
+    await reconcileEnactedUKDevolution(db, new Date());
+  }
 
   // Apply tax rate changes if this is tax legislation
   if (lt?.taxRateChange && policyOption?.rate !== undefined) {

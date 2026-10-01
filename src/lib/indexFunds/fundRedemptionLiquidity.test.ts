@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { planProportionalHoldingsSale, sellFundHoldingShares } from "./fundRedemptionLiquidity";
 import type { IndexFund } from "@/lib/db/types";
+import { DEFAULT_TX_THRESHOLDS } from "@/lib/db/types/financialTxLog";
 
 // ---------------------------------------------------------------------------
 // Mocks for sellFundHoldingShares (avoids a live MongoDB dependency)
@@ -194,6 +195,26 @@ describe("sellFundHoldingShares", () => {
 
     expect(result.sharesSold).toBe(200);
     expect(result.salesExecuted).toBe(1);
+  });
+
+  it("uses preloaded rebalance inputs without reading them again", async () => {
+    const mockDb = buildMockDb();
+    const { loadFxRatesByCurrency } = await import("@/lib/currency/corporationCapital");
+    const { getCurrentTurn } = await import("@/lib/turn/currentTurn");
+    const { loadTxThresholds } = await import("@/lib/financialTxLog/emit");
+
+    const result = await sellFundHoldingShares(
+      mockDb as unknown as import("mongodb").Db,
+      baseFund,
+      corpId,
+      10,
+      { fxByCurrency: new Map(), turn: 4, thresholds: DEFAULT_TX_THRESHOLDS }
+    );
+
+    expect(result.sharesSold).toBe(10);
+    expect(loadFxRatesByCurrency).not.toHaveBeenCalled();
+    expect(getCurrentTurn).not.toHaveBeenCalled();
+    expect(loadTxThresholds).not.toHaveBeenCalled();
   });
 
   it("returns zeros when holding is not found", async () => {

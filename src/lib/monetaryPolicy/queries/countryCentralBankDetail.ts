@@ -54,7 +54,12 @@ import {
 } from "@/lib/turn/centralBankChairSelection";
 import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
-import { buildCentralBankBootstrapUpdate, getCentralBankScope } from "@/lib/centralBank/helpers";
+import {
+  buildCentralBankBootstrapUpdate,
+  getCentralBankScope,
+  getMonetaryPolicyScope,
+  getBankId,
+} from "@/lib/centralBank/helpers";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import { boardCanCarryMotions } from "@/lib/centralBank/fomc";
 import { isNationalIssuer } from "@/lib/extraction/contractIssuerAuth";
@@ -122,10 +127,18 @@ export async function buildCentralBankChairData(
     // chairCharacterId would render a player name under the "Autonomous Chair
     // (AI)" badge (M1). chairMode "npp" never resolves to a character.
     const npp = bank.chairNppId
-      ? await db.collection<NPP>("npps").findOne({ _id: bank.chairNppId })
+      ? await db
+          .collection<NPP>("npps")
+          .findOne({ _id: bank.chairNppId }, { projection: { _id: 1, name: 1, avatarUrl: 1 } })
       : null;
     return {
-      chairData: npp ? { characterId: npp._id.toHexString(), name: npp.name } : null,
+      chairData: npp
+        ? {
+            characterId: npp._id.toHexString(),
+            name: npp.name,
+            avatarUrl: npp.avatarUrl,
+          }
+        : null,
       chairMode,
       chairNppId,
     };
@@ -194,11 +207,31 @@ export async function loadCountryCentralBankDetail(params: {
     return { ok: false as const, status: 500, error: "Failed to load central bank" };
   }
 
+  const financialBankId = getBankId(countryId);
+  const financialBank =
+    financialBankId === bankId
+      ? bank
+      : await db.collection<CentralBank>("centralBanks").findOne({ _id: financialBankId });
+  if (!financialBank)
+    return { ok: false as const, status: 503, error: "National financial account unavailable" };
+
+  const policyScope = await getMonetaryPolicyScope(db, countryId);
+  const policyCurrency = policyScope.currencyCode;
+  const policyBank =
+    policyScope.bankId === bankId
+      ? bank
+      : await db.collection<CentralBank>("centralBanks").findOne({ _id: policyScope.bankId });
+  if (!policyBank)
+    return { ok: false as const, status: 503, error: "Monetary authority unavailable" };
+  const isPolicyChair =
+    viewer?.character != null &&
+    String(policyBank.chairCharacterId) === String(viewer.character._id);
+
   // Governance: who sets the rate here. The pre-1997 Bank of England is
   // government-controlled by default; legislation can override either way.
   // Keyed on the bank's HOME country: SCO/WAL reach the same BoE doc, and its
   // governance (and the government that holds the pen) is the UK's.
-  const bankHomeCountryId = (bank.countryId ?? countryId) as CountryId;
+  const bankHomeCountryId = (policyBank.countryId ?? countryId) as CountryId;
   // Independent of one another once the bank doc is loaded — one round.
   const [
     governmentControlled,
@@ -207,7 +240,7 @@ export async function loadCountryCentralBankDetail(params: {
     budgetDoc,
     gameState,
   ] = await Promise.all([
-    isBankGovernmentControlledLive(bank, bankHomeCountryId),
+    isBankGovernmentControlledLive(policyBank, bankHomeCountryId),
     buildCentralBankChairData(db, bank),
     isForexEnabled(),
     db
@@ -242,7 +275,7 @@ export async function loadCountryCentralBankDetail(params: {
       Record<CurrencyCode, number>
     >;
     // Spread strength lives on the currency's anchor exchangeRates doc.
-    const anchorId = getCountryIdForCurrency(nationalCurrency);
+    const anchorId = getCountryIdForCurrency(policyCurrency ?? nationalCurrency);
     const myRateDoc = rateDocs.find((r) => r._id === anchorId);
     if (myRateDoc) {
       forexSpreadStrength = clampForexSpreadStrength(myRateDoc.forexSpreadStrength);
@@ -280,8 +313,8 @@ export async function loadCountryCentralBankDetail(params: {
     }
   }
 
-  const rateScale = getRateScale(bank.primeRate);
-  const recentHistory = bank.rateHistory.slice(-20).reverse();
+  const rateScale = getRateScale(policyBank.primeRate);
+  const recentHistory = policyBank.rateHistory.slice(-20).reverse();
 
   const currentInflation = budgetDoc?.economicFactors?.inflationRate ?? 2.5;
   const currentTurn = gameState?.currentTurn ?? 0;
@@ -385,8 +418,8 @@ export async function loadCountryCentralBankDetail(params: {
       ? fxDocForBreakdown.rate / fxDocForBreakdown.baseRate - 1.0
       : 0.0;
 
-  const primeRateHistory = bank.interestRateHistory?.map((snapshot) => snapshot.rate) ?? [];
-  const effectiveRate = computeEffectivePrimeRate(bank.primeRate, primeRateHistory);
+  const primeRateHistory = policyBank.interestRateHistory?.map((snapshot) => snapshot.rate) ?? [];
+  const effectiveRate = computeEffectivePrimeRate(policyBank.primeRate, primeRateHistory);
   const gdp = budgetDoc?.gdp || 27_000_000_000_000;
   const surplusToGdp = (budgetDoc?.surplus ?? 0) / gdp;
   const moneyForBreakdown = await db
@@ -397,7 +430,7 @@ export async function loadCountryCentralBankDetail(params: {
     calculateInflationWithBreakdown({
       unemployment: breakdownUnemployment,
       gdpGrowth: breakdownGdpGrowth,
-      primeRate: bank.primeRate,
+      primeRate: policyBank.primeRate,
       primeRateHistory,
       surplusToGdp,
       tariffRate: breakdownTariffRate,
@@ -562,18 +595,18 @@ export async function loadCountryCentralBankDetail(params: {
     ]);
 
   const locRow = locAgg[0];
-  const totalDeposits = bank.nationalSavingsBalance ?? 0;
-  const bankReserves = bank.reserveBalance ?? 0;
+  const totalDeposits = financialBank.nationalSavingsBalance ?? 0;
+  const bankReserves = financialBank.reserveBalance ?? 0;
   const reservePortfolio = buildFullReservePortfolioSummary({
     homeCurrency,
     reserveBalance: bankReserves,
-    spreadFeeReserveBalances: bank.spreadFeeReserveBalances,
+    spreadFeeReserveBalances: financialBank.spreadFeeReserveBalances,
     rates: rateMap,
   });
   const totalLoansOutstanding = (locRow?.totalBalance ?? 0) + (locRow?.totalArrears ?? 0);
   const systemCap = (totalDeposits + bankReserves) * LOC_DEPOSIT_FRACTION;
   const availableCapacity = Math.max(0, systemCap - totalLoansOutstanding);
-  const forexRevenue = bank.forexRevenue ?? 0;
+  const forexRevenue = financialBank.forexRevenue ?? 0;
   const reservePoolTransferLimits = computeReservePoolTransferLimits({
     forexRevenue,
     lendingReserves: bankReserves,
@@ -582,12 +615,12 @@ export async function loadCountryCentralBankDetail(params: {
   });
   const reservePoolTransferCooldownRemaining = turnsUntilReservePoolTransferReady({
     currentTurn,
-    lastTransferTurn: bank.lastReservePoolTransferTurn,
+    lastTransferTurn: financialBank.lastReservePoolTransferTurn,
     isAdmin,
   });
   const reservePoolTransferNextTurn =
-    bank.lastReservePoolTransferTurn != null
-      ? bank.lastReservePoolTransferTurn + RESERVE_POOL_TRANSFER_COOLDOWN_TURNS
+    financialBank.lastReservePoolTransferTurn != null
+      ? financialBank.lastReservePoolTransferTurn + RESERVE_POOL_TRANSFER_COOLDOWN_TURNS
       : null;
   const savingsInterestExpenseLifetime = savingsInterestAgg[0]?.total ?? 0;
   const locInterestAccruedLifetime = locInterestAccrualAgg[0]?.total ?? 0;
@@ -619,8 +652,13 @@ export async function loadCountryCentralBankDetail(params: {
       .toArray(),
   ]);
 
-  const hasBoard = (bank.fomcBoard?.length ?? 0) > 0 && !governmentControlled;
-  const hasFunctionalBoard = hasBoard && boardCanCarryMotions(bank.fomcBoard ?? []);
+  const policyFx =
+    policyCurrency === "EUR" && countryId !== "DE"
+      ? await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: "DE" })
+      : fxDocForBreakdown;
+
+  const hasBoard = (policyBank.fomcBoard?.length ?? 0) > 0 && !governmentControlled;
+  const hasFunctionalBoard = hasBoard && boardCanCarryMotions(policyBank.fomcBoard ?? []);
 
   return {
     ok: true as const,
@@ -630,8 +668,8 @@ export async function loadCountryCentralBankDetail(params: {
       abbreviation: config.centralBank.abbreviation,
       chairTitle: config.centralBank.chairTitle,
       currencyCode: nationalCurrency,
-      primeRate: bank.primeRate,
-      lastRateChangeTurn: bank.lastRateChangeTurn ?? null,
+      primeRate: policyBank.primeRate,
+      lastRateChangeTurn: policyBank.lastRateChangeTurn ?? null,
       chairControlsLocked: bank.chairControlsLocked === true,
       // A working committee owns the rate: the chair's direct control is gone and
       // the card must send players to the committee room instead of a dead POST.
@@ -642,7 +680,7 @@ export async function loadCountryCentralBankDetail(params: {
       committeeSeated: hasFunctionalBoard,
       // A committee exists on the bank but cannot carry a motion; the chair is
       // setting the rate directly in the interim. Lets the page explain why.
-      committeeDead: hasBoard && !boardCanCarryMotions(bank.fomcBoard ?? []),
+      committeeDead: hasBoard && !boardCanCarryMotions(policyBank.fomcBoard ?? []),
       currentSavingsPressure: bank.currentSavingsPressure ?? 0,
       currentInflation: displayInflation,
       targetInflation: getInflationTarget(countryId, gameState?.currentYear),
@@ -664,11 +702,18 @@ export async function loadCountryCentralBankDetail(params: {
       nominations,
       lobbyingTotals,
       rateHistory: recentHistory,
-      interestRateHistory: bank.interestRateHistory ?? [],
+      interestRateHistory: policyBank.interestRateHistory ?? [],
       inflationHistory: bank.inflationHistory ?? [],
       gdpGrowthHistory: bank.gdpGrowthHistory ?? [],
       savingsFlowHistory: bank.savingsFlowHistory ?? [],
       isChair,
+      isPolicyChair,
+      policyChairControlsLocked: policyBank.chairControlsLocked === true,
+      monetaryAuthority: {
+        countryId: bankHomeCountryId,
+        bankId: policyScope.bankId,
+        name: COUNTRY_CONFIGS[bankHomeCountryId]?.centralBank.name ?? policyScope.bankId,
+      },
       isAdmin,
       isExecutive,
       governmentControlled,
@@ -706,15 +751,17 @@ export async function loadCountryCentralBankDetail(params: {
           ? {
               ...moneySupply,
               annualizedM2GrowthPct: currentMoneyGrowth(moneySupply),
-              operations: bank.monetaryOperations ?? [],
-              lastOperationTurn: bank.lastMonetaryOperationTurn ?? null,
-              lastPolicyEvaluation: bank.lastMonetaryPolicyEvaluation
+              operations: financialBank.monetaryOperations ?? [],
+              lastOperationTurn: financialBank.lastMonetaryOperationTurn ?? null,
+              lastPolicyEvaluation: financialBank.lastMonetaryPolicyEvaluation
                 ? {
-                    ...bank.lastMonetaryPolicyEvaluation,
-                    annualizedM2GrowthPct: currentMoneyGrowth(bank.lastMonetaryPolicyEvaluation),
+                    ...financialBank.lastMonetaryPolicyEvaluation,
+                    annualizedM2GrowthPct: currentMoneyGrowth(
+                      financialBank.lastMonetaryPolicyEvaluation
+                    ),
                     moneyGrowthReliable:
-                      currentMoneyGrowth(bank.lastMonetaryPolicyEvaluation) != null &&
-                      bank.lastMonetaryPolicyEvaluation.moneyGrowthReliable,
+                      currentMoneyGrowth(financialBank.lastMonetaryPolicyEvaluation) != null &&
+                      financialBank.lastMonetaryPolicyEvaluation.moneyGrowthReliable,
                   }
                 : null,
               eligibleBonds: eligibleQeBonds.map((bond) => ({
@@ -724,22 +771,22 @@ export async function loadCountryCentralBankDetail(params: {
             }
           : null,
       intervention: {
-        currencyCode: nationalCurrency,
-        baseRate: fxDocForBreakdown?.baseRate ?? null,
-        currentRate: fxDocForBreakdown?.rate ?? null,
-        policy: fxDocForBreakdown?.interventionPolicy
+        currencyCode: policyCurrency ?? nationalCurrency,
+        baseRate: policyFx?.baseRate ?? null,
+        currentRate: policyFx?.rate ?? null,
+        policy: policyFx?.interventionPolicy
           ? {
-              floor: fxDocForBreakdown.interventionPolicy.floor,
-              ceiling: fxDocForBreakdown.interventionPolicy.ceiling,
-              setByCharacterName: fxDocForBreakdown.interventionPolicy.setByCharacterName,
-              setAtTurn: fxDocForBreakdown.interventionPolicy.setAtTurn,
-              lastAdjustedAtTurn: fxDocForBreakdown.interventionPolicy.lastAdjustedAtTurn,
+              floor: policyFx.interventionPolicy.floor,
+              ceiling: policyFx.interventionPolicy.ceiling,
+              setByCharacterName: policyFx.interventionPolicy.setByCharacterName,
+              setAtTurn: policyFx.interventionPolicy.setAtTurn,
+              lastAdjustedAtTurn: policyFx.interventionPolicy.lastAdjustedAtTurn,
               recentInterventions:
-                isChair || isAdmin ? fxDocForBreakdown.interventionPolicy.recentInterventions : [],
+                isPolicyChair || isAdmin ? policyFx.interventionPolicy.recentInterventions : [],
             }
           : null,
-        forexRevenue: isChair || isAdmin ? (bank.forexRevenue ?? 0) : null,
-        reserveBalance: isChair || isAdmin ? (bank.reserveBalance ?? 0) : null,
+        forexRevenue: isPolicyChair || isAdmin ? (policyBank.forexRevenue ?? 0) : null,
+        reserveBalance: isPolicyChair || isAdmin ? (policyBank.reserveBalance ?? 0) : null,
         // Chair-controlled spread-strength lever (public so all players see the
         // current setting; cooldown info lets the chair UI gate the slider).
         forexSpread: {

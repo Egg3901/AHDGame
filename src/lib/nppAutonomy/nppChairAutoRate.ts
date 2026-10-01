@@ -1,3 +1,4 @@
+import type { EuroPolicyIndicators } from "@/lib/currency/euro/rules";
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CentralBank, RateChangeRecord } from "@/lib/db/types/centralBank";
@@ -115,7 +116,8 @@ export async function processNppChairAutoRate(
    * start year should pass `getStartingYearForPreset(DEFAULT_SEED_PRESET)`
    * explicitly rather than leaving it out.
    */
-  startingYear: number | undefined
+  startingYear: number | undefined,
+  commonIndicators?: EuroPolicyIndicators
 ): Promise<void> {
   if (bank.chairMode !== "npp") return;
   // A government-controlled bank (the pre-1997 Bank of England) has no rate of
@@ -134,23 +136,32 @@ export async function processNppChairAutoRate(
     return;
   }
 
-  const targetInflation = getInflationTarget(countryId, currentYear);
+  const targetInflation =
+    commonIndicators?.targetInflation ?? getInflationTarget(countryId, currentYear);
 
   const budgetId = getNationalBudgetId(countryId);
-  const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
-  const inflationRate = finiteOr(budget?.economicFactors?.inflationRate, targetInflation);
+  const budget = commonIndicators
+    ? null
+    : await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  const inflationRate =
+    commonIndicators?.inflationRate ??
+    finiteOr(budget?.economicFactors?.inflationRate, targetInflation);
 
   const nationalDocId = getNationalDocId(countryId);
-  const nationalMetrics = nationalDocId
-    ? // SP5: national economic rollup lives on macroMetrics.
-      await db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
-    : null;
-  const gdpGrowth = finiteOr(nationalMetrics?.economic?.gdpGrowth?.value, NPP_CHAIR_TARGET_GROWTH);
+  const nationalMetrics =
+    !commonIndicators && nationalDocId
+      ? // SP5: national economic rollup lives on macroMetrics.
+        await db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
+      : null;
+  const gdpGrowth =
+    commonIndicators?.gdpGrowth ??
+    finiteOr(nationalMetrics?.economic?.gdpGrowth?.value, NPP_CHAIR_TARGET_GROWTH);
 
   // Era-authored neutral rate when the current in-game era overrides it (e.g.
   // IT 1953 ≈ 4% vs the late-1970s 12% baked into defaultPrimeRate); otherwise
   // the country's modern default — unchanged for worlds at 1999+.
   const neutralRate =
+    commonIndicators?.neutralRate ??
     getEraMonetaryBaseline(countryId, currentYear)?.neutralPrimeRate ??
     COUNTRY_CONFIGS[countryId].centralBank.defaultPrimeRate;
   const targetRate = computeNppChairRateTarget({

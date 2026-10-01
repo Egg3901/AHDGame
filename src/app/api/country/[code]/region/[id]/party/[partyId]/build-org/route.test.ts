@@ -730,7 +730,13 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     // Ledger: exactly one spender "action" row + one "poach" row per rival.
     const ledgerCalls = db.collectionMocks["orgRegLedger"]!.insertOne.mock.calls.map((c) => c[0]);
     expect(ledgerCalls.filter((r) => r.source === "action")).toHaveLength(1);
-    expect(ledgerCalls.filter((r) => r.source === "poach")).toHaveLength(2);
+    expect(db.collectionMocks["orgRegLedger"]!.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls[0][0]).toMatchObject([
+      { source: "poach", partyId: "2" },
+      { source: "poach", partyId: "3" },
+    ]);
+    expect(db.collectionMocks["statePartyOrg"]!.bulkWrite).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks["statePartyOrg"]!.bulkWrite.mock.calls[0][0]).toHaveLength(2);
   });
 
   it("blends national PS into the comparison — a nationally-backed rival is poached less", async () => {

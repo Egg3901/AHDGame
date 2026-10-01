@@ -73,6 +73,8 @@ export interface CampaignData {
    * Lets the client localize anchor-formula previews (e.g. campaign-strength cost).
    */
   fxRate: number;
+  /** Era price basis for generated campaign money and costs; legacy clients use 1. */
+  priceLevel?: number;
 
   funds?: number;
   actions?: number;
@@ -96,6 +98,8 @@ export interface CampaignData {
   canAppointManagers: boolean;
 
   campaignStrength?: number;
+  /** Race-specific multiplier cap used for honest strength previews. */
+  campaignStrengthMaxBonus?: number;
 
   /**
    * Presidential tickets: the named running mate, resolved from the candidate's

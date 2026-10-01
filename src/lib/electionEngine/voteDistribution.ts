@@ -23,7 +23,6 @@ import {
   stateOrgBonusFraction,
   HOME_STATE_BONUS_PRIMARY,
   HOME_STATE_BONUS_GENERAL,
-  STATE_ORG_MAX_LEVEL,
   MAX_PARTY_INFLUENCE_BONUS_PRIMARY,
 } from "./constants";
 import {
@@ -162,13 +161,13 @@ export function distributeVotesByGroupLevelAllocation(
         const regResistance = options?.isGeneralElection
           ? regResistanceMultiplier(options?.regByParty?.get(ec.party))
           : 1.0;
-        // Seeded party-baseline (registrationShare): concave share^0.5 scalar
-        // so a 2.5%-baseline party lands in single digits instead of the
-        // twenties. Exactly 1.0× when the seeded field is absent (all
-        // pre-existing worlds and every US lane) — see regBaselineMultiplier.
-        const regBaseline = options?.isGeneralElection
-          ? regBaselineMultiplier(options?.regShareByParty?.get(ec.party))
-          : 1.0;
+        // Current-Reg party baseline: concave share^0.5 scalar so low-Reg
+        // parties stay small after normalization. Undefined disables the lane;
+        // a missing party in an enabled region receives the zero-share floor.
+        const regBaseline =
+          options?.isGeneralElection && options.regBaselineByParty
+            ? regBaselineMultiplier(options.regBaselineByParty.get(ec.party) ?? 0)
+            : 1.0;
         const supportMood = options?.isGeneralElection ? supportMoodMultiplier(ec.support) : 1.0;
         // Apply a moderate weight penalty to NPPs when a human player is in the
         // same general election — NPPs should still be competitive but lose their

@@ -378,3 +378,34 @@ describe("processReferendumLifecycle", () => {
     expect(set.result.passed).toBe(true);
   });
 });
+
+describe("peace agreement public ballot", () => {
+  it.each([true, false])(
+    "resolves canonical public consent (passed=%s) without changing borders or independence desire",
+    async (passed) => {
+      const db = createMockDb();
+      const ref = refDoc({
+        kind: "peace_agreement",
+        regionId: "NIR",
+        status: "polling",
+        yesShare: passed ? 1 : 99,
+        campaignBaseYesShare: passed ? 70 : 30,
+        cohortBaseline: [
+          { groupId: "age:35_54", share: 1, turnout: 65, yesLean: passed ? 70 : 30 },
+        ],
+        campaignCloseTurn: 158,
+      });
+      setup(db, [ref]);
+      vi.mocked(runReferendumActuation).mockClear();
+      const result = await processReferendumLifecycle(db as unknown as Db, 159);
+      expect(lastSet(db, "referendums")).toMatchObject({
+        status: passed ? "completed" : "settled",
+        result: { passed },
+      });
+      expect(result?.transitions[0].to).toBe(passed ? "completed" : "settled");
+      expect(runReferendumActuation).not.toHaveBeenCalled();
+      expect(db.collection("bills").insertOne).not.toHaveBeenCalled();
+      expect(db.collection("macroMetrics").updateOne).not.toHaveBeenCalled();
+    }
+  );
+});

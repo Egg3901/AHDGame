@@ -21,11 +21,12 @@ export const DE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   extraction: "IG BCE",
   healthcare: "ver.di",
   retail: "ver.di",
-  media_entertainment: "ver.di",
+  media: "ver.di",
   logistics: "ver.di",
   technology: "IG Metall",
   financial: "ver.di",
   telecommunications: "ver.di",
+  entertainment: "ver.di",
   defense: "IG Metall",
   agriculture: "IG BAU",
   real_estate: "IG BAU",
@@ -37,7 +38,8 @@ export const DE_UNION_NAMES_1999: Partial<Record<CorporationType, string>> = {
   logistics: "ÖTV",
   retail: "Gewerkschaft Handel, Banken und Versicherungen",
   financial: "Gewerkschaft Handel, Banken und Versicherungen",
-  media_entertainment: "IG Medien",
+  media: "IG Medien",
+  entertainment: "IG Medien",
   telecommunications: "Deutsche Postgewerkschaft",
 };
 
@@ -53,7 +55,8 @@ export const DE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
 
 export const DE_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
   ...DE_UNION_NAMES_1991,
-  media_entertainment: "Deutsche Angestellten-Gewerkschaft",
+  media: "IG Druck und Papier",
+  entertainment: "Deutsche Angestellten-Gewerkschaft",
 };
 
 export const DE_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
@@ -65,11 +68,12 @@ export const DE_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
   extraction: "IG Bergbau",
   healthcare: "Gewerkschaft Öffentliche Dienste, Transport und Verkehr",
   retail: "Gewerkschaft Handel, Banken und Versicherungen",
-  media_entertainment: "Deutsche Angestellten-Gewerkschaft",
+  media: "Deutsche Angestellten-Gewerkschaft",
   logistics: "Gewerkschaft der Eisenbahner Deutschlands",
   technology: "IG Metall",
   financial: "Gewerkschaft Handel, Banken und Versicherungen",
   telecommunications: "Deutsche Postgewerkschaft",
+  entertainment: "Deutsche Angestellten-Gewerkschaft",
   defense: "IG Metall",
   agriculture: "Gewerkschaft Gartenbau, Land- und Forstwirtschaft",
   real_estate: "IG Bau-Steine-Erden",

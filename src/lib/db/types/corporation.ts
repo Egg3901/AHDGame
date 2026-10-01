@@ -163,6 +163,8 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /** Monotonic generation for atomic proprietary book settlement. */
+  bankPropBookRevision?: number;
   /**
    * Crash-recovery plan for an in-flight bank-charter transfer
    * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before
@@ -313,14 +315,16 @@ export interface Corporation {
   /** Shares available in the public float (universal market maker pool) */
   publicFloat?: number;
   /**
-   * Approved primary shares not yet bought by the currency market pool. These
-   * are authorized, not outstanding: they earn no dividends and dilute only
-   * as the pool places them into publicFloat with real cash.
+   * Approved primary shares not yet bought by the currency market pool or a
+   * direct exchange buyer. For
+   * IPOs with issuedUpfront, they are in totalShares and publicFloat, available
+   * to buy. Other pending issues are authorized and not yet outstanding.
    */
   pendingShareIssuance?: {
     remainingShares: number;
     requestedShares: number;
     source: "direct" | "vote" | "ipo" | "founding_ipo";
+    issuedUpfront?: boolean;
     createdAtTurn: number;
     initialPriceLocal: number;
   };

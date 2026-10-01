@@ -6,6 +6,7 @@ import {
   nationalCapForCountry,
 } from "@/lib/turn/politicalStrength/strengthConstants";
 import {
+  UK_TIER_GRADUATION_REGION_FRACTION,
   resolvePartyPsCap,
   resolveTierTransition,
   updateEarnedRegions,
@@ -114,6 +115,10 @@ export async function processPartyTierTurn(
       regionCount,
       warningStartedTurn: party.majorDemotionWarning?.startedTurn ?? null,
       currentTurn,
+      // Three of the UK's twelve regions makes the threshold usable for
+      // parties with a strong nation-wide base without changing other countries.
+      graduationRegionFraction:
+        party.countryId === "UK" ? UK_TIER_GRADUATION_REGION_FRACTION : undefined,
       // One-party-state ruling parties are pinned Major (never demoted).
       exemptFromDemotion: party.regimeStatus === "ruling",
     });

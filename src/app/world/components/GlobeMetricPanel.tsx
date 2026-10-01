@@ -2,7 +2,9 @@
 
 import type { MetricCategoryId } from "@/lib/db/types";
 import { TIER_COLORS, TIER_LABELS, TIER_ORDER } from "@/components/landing/countryTiers";
-import { BLOC_COLORS, BLOC_LABELS, BLOC_ORDER } from "../worldBlocs";
+import { buildBlocPalette, type MapBlocStyle } from "../worldBlocs";
+
+const DEFAULT_BLOC_PALETTE = buildBlocPalette([]);
 
 /** Category display info */
 const CATEGORY_INFO: Record<MetricCategoryId, { name: string; icon: string }> = {
@@ -84,7 +86,7 @@ export type MetricFilter =
   | { type: "metric"; categoryId: MetricCategoryId; metricId: string }
   | { type: "party" }
   | { type: "corps" }
-  /** East / West / Non-Aligned. The default view — see `worldBlocs.ts`. */
+  /** Treaty Blocs, including player-founded poles. See `worldBlocs.ts`. */
   | { type: "blocs" };
 
 interface GlobeMetricPanelProps {
@@ -93,11 +95,11 @@ interface GlobeMetricPanelProps {
   availableCategories: MetricCategoryId[];
   availableMetrics: Record<string, string[]>;
   /**
-   * Whether this world has blocs at all. Offered unconditionally, the tab
-   * painted a 2019 map in TIER colours under a West/East/Non-Aligned legend —
-   * a legend describing something that is not on the screen.
+   * Whether this world has preset or player-founded Blocs. Without one, the
+   * map stays in tier colors and must not show a misleading Bloc legend.
    */
   blocsAvailable: boolean;
+  blocPalette?: Readonly<Record<string, MapBlocStyle>>;
 }
 
 export default function GlobeMetricPanel({
@@ -106,6 +108,7 @@ export default function GlobeMetricPanel({
   availableCategories,
   availableMetrics,
   blocsAvailable,
+  blocPalette = DEFAULT_BLOC_PALETTE,
 }: GlobeMetricPanelProps) {
   const selectedCategory =
     filter.type === "category"
@@ -166,10 +169,10 @@ export default function GlobeMetricPanel({
         {(filter.type === "blocs" || filter.type === "none") && (
           <div className="flex items-center gap-3 px-3 py-2 overflow-x-auto scrollbar-none">
             {(filter.type === "blocs"
-              ? BLOC_ORDER.map((bloc) => ({
-                  key: bloc,
-                  label: BLOC_LABELS[bloc],
-                  color: BLOC_COLORS[bloc],
+              ? Object.entries(blocPalette).map(([key, style]) => ({
+                  key,
+                  label: style.label,
+                  color: style.fill,
                 }))
               : TIER_ORDER.map((tier) => ({
                   key: tier,

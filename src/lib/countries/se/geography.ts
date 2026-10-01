@@ -3,6 +3,7 @@ import { seMetricPresets1953 } from "./data/seMetricPresets1953";
 import { seRegionCensusData } from "@/lib/seeds/se/seRegionCensusData";
 import { seRegionCensusData1953 } from "@/lib/seeds/se/seRegionCensusData1953";
 import { seRegions } from "./data/seRegions";
+import { seRegions1991 } from "./data/seRegions1991";
 import { seRegions1953 } from "./data/seRegions1953";
 import { seStateMetrics } from "./data/seStateMetrics";
 import {
@@ -30,7 +31,7 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. Sweden authors 3 census
- * eras, 1 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * eras, 1 metric eras, 0 anchor eras and 4 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
@@ -52,6 +53,7 @@ const metricPresetBundles = {
 const populationAnchors = {};
 
 const regionBundles = {
+  "1991-default": seRegions1991,
   "1953-default": seRegions1953,
   "1979-default": seRegions,
   "2019-default": seRegions,

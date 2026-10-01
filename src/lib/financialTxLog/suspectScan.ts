@@ -122,7 +122,9 @@ export async function runFinancialSuspectScan(db: Db, currentTurn: number): Prom
             amount: 1,
             anchorAmount: 1,
             currencyCode: 1,
-            meta: 1,
+            "meta.corporationId": 1,
+            "meta.corporationName": 1,
+            "meta.pricePerShare": 1,
           },
         }
       )
@@ -203,46 +205,38 @@ export async function runFinancialSuspectScan(db: Db, currentTurn: number): Prom
     }
 
     // ── Round trip: A debits → B, B credits → A ──────────────────────────────
-    // Build debit counterparty map: for each entity A with debits, collect B IDs
-    const debitsBySubject = new Map<string, Set<string>>();
-    const docsBySubject = new Map<string, FinancialTxLogEntry[]>();
+    // Index both legs by the same directed A|B key. The previous version built
+    // subject buckets and then filtered both buckets once per counterparty,
+    // repeatedly scanning the same high-volume subjects.
+    const roundTripsByPair = new Map<
+      string,
+      { aId: string; bId: string; debits: FinancialTxLogEntry[]; returns: FinancialTxLogEntry[] }
+    >();
     for (const [index, doc] of window.entries()) {
       await budget.checkpoint("roundTripGrouping", index);
-      if (!doc.subjectId) continue;
+      if (!doc.subjectId || !doc.counterpartyId || doc.amount === 0) continue;
       const sid = String(doc.subjectId);
-      const arr = docsBySubject.get(sid) ?? [];
-      arr.push(doc);
-      docsBySubject.set(sid, arr);
-      if (doc.amount < 0 && doc.counterpartyId) {
-        const set = debitsBySubject.get(sid) ?? new Set<string>();
-        set.add(String(doc.counterpartyId));
-        debitsBySubject.set(sid, set);
-      }
+      const counterpartyId = String(doc.counterpartyId);
+      const aId = doc.amount < 0 ? sid : counterpartyId;
+      const bId = doc.amount < 0 ? counterpartyId : sid;
+      const key = `${aId}|${bId}`;
+      const pair = roundTripsByPair.get(key) ?? { aId, bId, debits: [], returns: [] };
+      if (doc.amount < 0) pair.debits.push(doc);
+      else pair.returns.push(doc);
+      roundTripsByPair.set(key, pair);
     }
-    let roundTripSubjectIndex = 0;
-    for (const [aId, bIds] of debitsBySubject) {
-      await budget.checkpoint("roundTripSubjectScan", roundTripSubjectIndex++);
-      let roundTripCounterpartyIndex = 0;
-      for (const bId of bIds) {
-        await budget.checkpoint("roundTripCounterpartyScan", roundTripCounterpartyIndex++);
-        // check if B sent a credit back to A
-        const bDocs = docsBySubject.get(bId) ?? [];
-        const returnCredits = bDocs.filter(
-          (d) => d.amount > 0 && d.counterpartyId && String(d.counterpartyId) === aId
-        );
-        if (returnCredits.length === 0) continue;
-        const aDebits = (docsBySubject.get(aId) ?? []).filter(
-          (d) => d.amount < 0 && d.counterpartyId && String(d.counterpartyId) === bId
-        );
-        const detail = `Round-trip detected: ${aId.slice(-6)} → ${bId.slice(-6)} → ${aId.slice(-6)} within ${config.windowTurns} turns`;
-        for (const doc of [...aDebits, ...returnCredits]) {
-          addFlag(String(doc._id), {
-            type: "round_trip",
-            severity: "high",
-            detail,
-            detectedAt: now,
-          });
-        }
+    let roundTripPairIndex = 0;
+    for (const pair of roundTripsByPair.values()) {
+      await budget.checkpoint("roundTripPairScan", roundTripPairIndex++);
+      if (pair.debits.length === 0 || pair.returns.length === 0) continue;
+      const detail = `Round-trip detected: ${pair.aId.slice(-6)} → ${pair.bId.slice(-6)} → ${pair.aId.slice(-6)} within ${config.windowTurns} turns`;
+      for (const doc of [...pair.debits, ...pair.returns]) {
+        addFlag(String(doc._id), {
+          type: "round_trip",
+          severity: "high",
+          detail,
+          detectedAt: now,
+        });
       }
     }
 
@@ -328,25 +322,30 @@ export async function runFinancialSuspectScan(db: Db, currentTurn: number): Prom
       buys.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       sells.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       const matched = new Set<string>();
-      let sellIndex = 0;
+      const sellMatchDeltas = new Int32Array(sells.length + 1);
+      let sellStart = 0;
+      let sellEnd = 0;
       for (const [buyIndex, b] of buys.entries()) {
         await budget.checkpoint("samePriceWashBuyScan", buyIndex);
-        while (
-          sellIndex < sells.length &&
-          sells[sellIndex].createdAt.getTime() < b.createdAt.getTime() - washWindowMs
-        ) {
-          sellIndex++;
+        const minTime = b.createdAt.getTime() - washWindowMs;
+        const maxTime = b.createdAt.getTime() + washWindowMs;
+        while (sellStart < sells.length && sells[sellStart].createdAt.getTime() < minTime) {
+          sellStart++;
         }
-
-        for (let candidateIndex = sellIndex; candidateIndex < sells.length; candidateIndex++) {
-          const s = sells[candidateIndex];
-          const deltaMs = s.createdAt.getTime() - b.createdAt.getTime();
-          if (deltaMs > washWindowMs) break;
-          if (Math.abs(deltaMs) <= washWindowMs) {
-            matched.add(String(b._id));
-            matched.add(String(s._id));
-          }
+        if (sellEnd < sellStart) sellEnd = sellStart;
+        while (sellEnd < sells.length && sells[sellEnd].createdAt.getTime() <= maxTime) {
+          sellEnd++;
         }
+        if (sellStart < sellEnd) {
+          matched.add(String(b._id));
+          sellMatchDeltas[sellStart]++;
+          sellMatchDeltas[sellEnd]--;
+        }
+      }
+      let activeMatchRanges = 0;
+      for (let sellIndex = 0; sellIndex < sells.length; sellIndex++) {
+        activeMatchRanges += sellMatchDeltas[sellIndex];
+        if (activeMatchRanges > 0) matched.add(String(sells[sellIndex]._id));
       }
       if (matched.size > 0) {
         const [, corpId, priceKey] = key.split("|");
@@ -416,25 +415,29 @@ export async function runFinancialSuspectScan(db: Db, currentTurn: number): Prom
         }
 
         const { ObjectId: ObjectIdCtor } = await import("mongodb");
+        type CashSnapshot = Pick<PortfolioHistory, "turn" | "cashValue"> & {
+          characterId?: unknown;
+          corporationId?: unknown;
+        };
         const fetchSnapshots = async (
           collection: "portfolioHistory" | "corporationPortfolioHistory",
           idField: "characterId" | "corporationId",
           subjectIds: string[]
-        ): Promise<Map<string, PortfolioHistory[]>> => {
+        ): Promise<Map<string, CashSnapshot[]>> => {
           if (subjectIds.length === 0) return new Map();
           const docs = await db
-            .collection<PortfolioHistory>(collection)
+            .collection<CashSnapshot>(collection)
             .find({
               [idField]: { $in: subjectIds.map((id) => new ObjectIdCtor(id)) },
               turn: { $gte: minTurn },
             } as never)
+            .project<CashSnapshot>({ [idField]: 1, turn: 1, cashValue: 1 })
             .sort({ turn: 1 })
             .toArray();
-          const map = new Map<string, PortfolioHistory[]>();
+          const map = new Map<string, CashSnapshot[]>();
           for (const [index, d] of docs.entries()) {
             await budget.checkpoint("cashMismatchSnapshotMap", index);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const sid = String((d as any)[idField]);
+            const sid = String(d[idField]);
             const arr = map.get(sid) ?? [];
             arr.push(d);
             map.set(sid, arr);
@@ -449,7 +452,7 @@ export async function runFinancialSuspectScan(db: Db, currentTurn: number): Prom
 
         const evaluateSubject = async (
           subjectId: string,
-          snapshots: PortfolioHistory[] | undefined,
+          snapshots: CashSnapshot[] | undefined,
           index: number
         ) => {
           await budget.checkpoint("cashMismatchEvaluation", index);

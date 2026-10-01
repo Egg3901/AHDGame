@@ -84,9 +84,19 @@ async function handleGET(request: Request) {
       outcome: "ok",
     });
 
-    // Redirect back to wherever they were
-    const referer = request.headers.get("referer") || "/dashboard";
-    return NextResponse.redirect(referer);
+    // Redirect back to wherever they were — same-origin only; a raw referer
+    // redirect is an open redirect for anyone who can get an admin to click a
+    // cross-site link to this URL.
+    const referer = request.headers.get("referer");
+    let target = "/dashboard";
+    try {
+      if (referer && new URL(referer).host === new URL(request.url).host) {
+        target = referer;
+      }
+    } catch {
+      target = "/dashboard";
+    }
+    return NextResponse.redirect(target);
   } catch (error) {
     return handleRouteError(error);
   }

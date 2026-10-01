@@ -15,11 +15,19 @@
  * "West".
  */
 import type { Db } from "mongodb";
-import { resolveAlignmentEra, type AlignmentPoleId } from "@/lib/constants/alignmentEras";
+import {
+  isCustomAlignmentPoleId,
+  resolveAlignmentEra,
+  type AlignmentChannel,
+  type AlignmentPoleId,
+  type CustomAlignmentPoleId,
+  type CustomAlignmentPoleToken,
+} from "@/lib/constants/alignmentEras";
 import { PRESET_YEAR, DEFAULT_PRESET } from "@/lib/constants/alignmentSeeds";
 import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
 import { getOrganizationMembershipsCollection } from "@/lib/db/collections";
 import type { WorldBloc } from "@/lib/world/bloc";
+import { loadAlignmentTopology } from "@/lib/alignment/topology";
 
 /** Which side of the board a pole sits on. Unmapped poles colour nothing. */
 const BLOC_BY_POLE: Partial<Record<AlignmentPoleId, WorldBloc>> = {
@@ -30,6 +38,55 @@ const BLOC_BY_POLE: Partial<Record<AlignmentPoleId, WorldBloc>> = {
 };
 
 export type BlocMembership = Record<string, WorldBloc>;
+export type MapBlocId = WorldBloc | CustomAlignmentPoleId;
+export interface CustomMapBloc {
+  poleId: CustomAlignmentPoleId;
+  label: string;
+  accentToken: CustomAlignmentPoleToken;
+}
+export interface BlocMapData {
+  membership: Record<string, MapBlocId>;
+  customBlocs: CustomMapBloc[];
+}
+
+/** The map and military share the same live treaty roll, including custom poles. */
+export async function loadBlocMapData(db: Db, preset: string | undefined): Promise<BlocMapData> {
+  const membership: Record<string, MapBlocId> = { ...(await loadBlocMembership(db, preset)) };
+  const year = PRESET_YEAR[preset ?? ""] ?? PRESET_YEAR[DEFAULT_PRESET];
+  const topology = await loadAlignmentTopology(db, year);
+  const customChannels = topology.channels.filter(
+    (channel): channel is AlignmentChannel & { poleId: CustomAlignmentPoleId } =>
+      isCustomAlignmentPoleId(channel.poleId)
+  );
+  if (customChannels.length === 0) return { membership, customBlocs: [] };
+
+  const poleByOrg = new Map(
+    customChannels.map((channel) => [channel.organizationId, channel.poleId])
+  );
+  const memberships = await getOrganizationMembershipsCollection(db);
+  const rows = await memberships
+    .find(
+      { organizationId: { $in: [...poleByOrg.keys()] } },
+      { projection: { organizationId: 1, countryId: 1 } }
+    )
+    .toArray();
+  for (const row of rows) {
+    const pole = poleByOrg.get(row.organizationId);
+    if (pole) membership[String(row.countryId)] = pole;
+  }
+  const activePoles = new Set(Object.values(membership));
+  const customBlocs: CustomMapBloc[] = customChannels
+    .filter((channel) => activePoles.has(channel.poleId))
+    .map((channel) => {
+      const pole = topology.poleDefinitions.get(channel.poleId)!;
+      return {
+        poleId: channel.poleId,
+        label: pole.label,
+        accentToken: pole.accentToken as CustomAlignmentPoleToken,
+      };
+    });
+  return { membership, customBlocs };
+}
 
 /**
  * entityId → bloc, for every member of an accession-governing organisation.
@@ -104,14 +161,22 @@ export function blocOrgFor(preset: string | undefined, bloc: WorldBloc): string 
  * Empty for an org that does not govern accession (joining the UN costs a country
  * nothing it already holds), and empty where the era has only one such channel.
  *
- * ⚠️ Keyed on the PRESET, exactly as `blocOrgFor` above is, and for the same
- * reason: a year-derived lookup returns no eastern channel once a 1953 game's
- * clock passes 1991, and the exclusivity would go silently inert mid-game.
+ * Built-in channels are keyed on the PRESET, exactly as `blocOrgFor` above is.
+ * Callers may supply a topology that also includes player-founded Bloc channels.
+ * A year-derived built-in lookup would drop the Warsaw Pact from a 1953 world
+ * once its clock passes 1991, silently disabling exclusivity mid-game.
  */
-export function rivalBlocOrgsFor(preset: string | undefined, organizationId: string): string[] {
+export function rivalBlocOrgsFor(
+  preset: string | undefined,
+  organizationId: string,
+  liveChannels?: readonly AlignmentChannel[]
+): string[] {
   const year = PRESET_YEAR[preset ?? ""] ?? PRESET_YEAR[DEFAULT_PRESET];
-  const channels = resolveAlignmentEra(year).channels.filter(
-    (channel) => channel.alignmentAccession && channel.organizationId in INTERNATIONAL_ORGANIZATIONS
+  const channels = (liveChannels ?? resolveAlignmentEra(year).channels).filter(
+    (channel) =>
+      channel.alignmentAccession &&
+      (channel.organizationId in INTERNATIONAL_ORGANIZATIONS ||
+        isCustomAlignmentPoleId(channel.poleId))
   );
   const own = channels.find((channel) => channel.organizationId === organizationId);
   if (!own) return [];

@@ -27,6 +27,8 @@ import { loadNomineePersonalPositions } from "@/lib/scotus/nominateJustice";
 import { computeJusticeIdeology } from "@/lib/scotus/ideology";
 import { DIVERGENT_TENURE_FLOOR_TURNS } from "@/lib/scotus/tenure";
 import { initialJusticeActionFields } from "@/lib/constants/justiceActions";
+import { DISCORD_COLORS, sendCountryGameEvent } from "@/lib/discordWebhooks";
+import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 
 export interface ScotusNominationLifecycleResult {
   nominationsProcessed: number;
@@ -208,10 +210,49 @@ export async function processScotusNominationLifecycle(
     const reTally = await computeCabinetNominationTally(database, nom.countryId, nom.votes);
     const passed = didPass(reTally.votesFor, reTally.votesAgainst);
 
+    // Portrait for the Discord card — character or generated-NPP nominee.
+    const nomineeAvatarUrl =
+      nom.nomineeMode === "character" && nom.nomineeCharacterId
+        ? (
+            await database
+              .collection<Character>("characters")
+              .findOne({ _id: nom.nomineeCharacterId }, { projection: { avatarUrl: 1 } })
+          )?.avatarUrl
+        : nom.nomineeNppId
+          ? (
+              await database
+                .collection<NPP>("npps")
+                .findOne({ _id: nom.nomineeNppId }, { projection: { avatarUrl: 1 } })
+            )?.avatarUrl
+          : undefined;
+
+    const countryConfig = getCountryConfig(nom.countryId as CountryId);
+    const confirmingChamber = countryConfig?.legislature.upperChamber;
+    // Gated on the status claim below so a racing turn runner cannot post the
+    // same resolution twice (#1208-style double-execution).
+    const announceResolution = () =>
+      sendCountryGameEvent(nom.countryId, {
+        title: passed ? "Supreme Court Justice Confirmed" : "Supreme Court Nomination Rejected",
+        description: passed
+          ? `**${nom.nomineeName}** was confirmed to Seat ${nom.seatNumber} of the Supreme Court (${reTally.votesFor}–${reTally.votesAgainst}).`
+          : `**${nom.nomineeName}** was rejected by the ${confirmingChamber?.name ?? "Senate"} for Seat ${nom.seatNumber} of the Supreme Court (${reTally.votesFor}–${reTally.votesAgainst}).`,
+        color: DISCORD_COLORS.scotusRuling,
+        cardVoteSplit: [
+          {
+            label: confirmingChamber?.name ?? "Senate",
+            votesFor: reTally.votesFor,
+            votesAgainst: reTally.votesAgainst,
+            votesAbstain: reTally.votesAbstain,
+            seats: confirmingChamber?.seats,
+          },
+        ],
+        ...(nomineeAvatarUrl ? { thumbnail: { url: nomineeAvatarUrl } } : {}),
+      }).catch(() => {});
+
     if (passed) {
       await seatConfirmedJustice(database, nom, now, currentTurn);
-      await database.collection<ScotusNomination>("scotusNominations").updateOne(
-        { _id: nom._id },
+      const claim = await database.collection<ScotusNomination>("scotusNominations").updateOne(
+        { _id: nom._id, status: "active" },
         {
           $set: {
             status: "confirmed",
@@ -223,6 +264,8 @@ export async function processScotusNominationLifecycle(
           },
         }
       );
+      if (claim.modifiedCount === 0) continue;
+      announceResolution();
       confirmed++;
 
       const presidentChar = await database
@@ -260,8 +303,8 @@ export async function processScotusNominationLifecycle(
         }
       }
     } else {
-      await database.collection<ScotusNomination>("scotusNominations").updateOne(
-        { _id: nom._id },
+      const claim = await database.collection<ScotusNomination>("scotusNominations").updateOne(
+        { _id: nom._id, status: "active" },
         {
           $set: {
             status: "rejected",
@@ -273,6 +316,8 @@ export async function processScotusNominationLifecycle(
           },
         }
       );
+      if (claim.modifiedCount === 0) continue;
+      announceResolution();
       rejected++;
 
       const presidentChar = await database

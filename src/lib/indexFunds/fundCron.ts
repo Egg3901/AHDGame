@@ -15,6 +15,7 @@
  * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId } from "mongodb";
 import type { ClientSession, Db, UpdateFilter } from "mongodb";
 import type {
@@ -29,6 +30,7 @@ import type {
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import {
   getFundById,
+  listFundsByIds,
   listActiveFunds,
   listServiceableFunds,
   updateFundNav,
@@ -42,7 +44,6 @@ import {
   insertFundTransactionsBulk,
 } from "@/lib/indexFunds/fundQueries";
 import {
-  INDEX_FUND_INITIAL_NAV,
   calculateBackingRatio,
   quoteCashOnlyRedemption,
   proRataRedemptionCashShare,
@@ -58,13 +59,18 @@ import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
-import { applyFloatBuyCredit } from "@/lib/corporations/shareEscrowSettlement";
+import {
+  applyFloatBuyCredit,
+  type FloatBuyCreditReceipt,
+} from "@/lib/corporations/shareEscrowSettlement";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import {
   sellFundHoldingsForRedemptionCash,
   sellFundHoldingShares,
 } from "@/lib/indexFunds/fundRedemptionLiquidity";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
+import { recomputeNav, refreshFundNavAfterBondDeployment, restoreFundCashBuffer } from "./fundNav";
+export { recomputeNav, refreshFundNavAfterBondDeployment, restoreFundCashBuffer } from "./fundNav";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import {
   domesticCoverageEnabled,
@@ -101,6 +107,9 @@ import {
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -124,6 +133,7 @@ import {
 } from "@/lib/equities/marketPool";
 import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
 import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
+import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -163,6 +173,13 @@ export type RebalanceOutcome = {
   writtenOffValueAnchor: number;
   unsellableCount: number;
 };
+
+/**
+ * NAV preparation only touches the current fund document. Eight concurrent
+ * workers hide independent Mongo latency without racing the later bond and
+ * equity allocation passes, whose ordering is economically significant.
+ */
+export const INDEX_FUND_NAV_CONCURRENCY = 8;
 
 const NO_REBALANCE: RebalanceOutcome = {
   rebalanced: false,
@@ -317,35 +334,6 @@ export function shouldRunCrossFundRebalancing(currentTurn: number): boolean {
 
 // ── Pass 1: Recompute NAV ─────────────────────────────────────────────
 
-export function recomputeNav(
-  fund: IndexFund,
-  options?: {
-    bondPrincipalAnchor?: number;
-    openOrdersEscrowAnchor?: number;
-    /**
-     * Units queued for redemption whose supply was already burned. They belong
-     * in the DENOMINATOR: a queued holder is still a holder with a pro-rata
-     * claim, not a creditor owed a fixed sum. Subtracting a cash liability
-     * struck at the NAV locked when the redemption was requested is what
-     * drained GLB50 - assets fell, the liability did not, and the entire
-     * decline was pushed onto the holders who stayed until NAV hit zero.
-     */
-    queuedRedemptionUnits?: number;
-  }
-): number | null {
-  const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
-  const bondPrincipalAnchor = options?.bondPrincipalAnchor ?? 0;
-  const openOrdersEscrowAnchor = options?.openOrdersEscrowAnchor ?? 0;
-  const queuedRedemptionUnits = Math.max(0, options?.queuedRedemptionUnits ?? 0);
-  const totalBacking =
-    fund.cashAnchor + holdingsValueAnchor + bondPrincipalAnchor + openOrdersEscrowAnchor;
-  const totalUnits = fund.unitSupply + queuedRedemptionUnits;
-  if (totalUnits <= 0) return INDEX_FUND_INITIAL_NAV;
-
-  const nav = totalBacking / totalUnits;
-  return Number.isFinite(nav) && nav > 0 ? nav : null;
-}
-
 // ── Pass 3 helper: Absorb public float ────────────────────────────────
 
 /**
@@ -379,10 +367,44 @@ async function reverseFloatBuyCredit(
   db: Db,
   corp: EligibleCorpRow,
   amountLocal: number,
-  pools?: Map<CurrencyCode, EquityMarketPool>
+  pools?: Map<CurrencyCode, EquityMarketPool>,
+  receipt?: FloatBuyCreditReceipt
 ): Promise<void> {
   const currency = equityPoolCurrency(corp);
   const snapshot = pools?.get(currency);
+  if (receipt && receipt.issuerShares > 0) {
+    if (receipt.poolCreditLocal > 0) {
+      const poolRollback = await db
+        .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
+        .updateOne(
+          { _id: currency, cashLocal: { $gte: receipt.poolCreditLocal } },
+          {
+            $inc: {
+              cashLocal: -receipt.poolCreditLocal,
+              "lifetime.purchasesIn": -receipt.poolCreditLocal,
+            },
+            $set: { updatedAt: new Date() },
+          }
+        );
+      if (poolRollback.matchedCount !== 1)
+        throw new Error("Failed to reverse equity-pool buy credit");
+      if (snapshot)
+        snapshot.cashLocal = Math.max(0, (snapshot.cashLocal ?? 0) - receipt.poolCreditLocal);
+    }
+    const issuerRollback = await db.collection<Corporation>("corporations").updateOne(
+      { _id: corp._id },
+      {
+        $inc: {
+          "pendingShareIssuance.remainingShares": receipt.issuerShares,
+          liquidCapital: -receipt.issuerCreditLocal,
+          shareIssuanceProceeds: -receipt.issuerCreditLocal,
+        },
+        $set: { updatedAt: new Date() },
+      }
+    );
+    if (issuerRollback.matchedCount !== 1) throw new Error("Failed to reverse IPO buy credit");
+    return;
+  }
   const poolExists = pools
     ? snapshot !== undefined
     : Boolean(
@@ -488,6 +510,7 @@ export async function executeFundShareBuy(
     let debitedFund: Pick<IndexFund, "_id" | "cashAnchor" | "holdings"> | null = null;
     let shareCreditApplied = false;
     let issuerCreditApplied = false;
+    let floatBuyCreditReceipt: FloatBuyCreditReceipt | undefined;
     let holdingsUpdated = false;
     let purchasedHoldings: IndexFundHolding[] | undefined;
     const shareholderSnapshot = await db
@@ -527,9 +550,10 @@ export async function executeFundShareBuy(
       }
       shareCreditApplied = true;
 
-      await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
+      floatBuyCreditReceipt = await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
         ...sessionOpts,
         pools: batch?.pools,
+        sharesBought: shares,
       });
       issuerCreditApplied = true;
 
@@ -604,7 +628,13 @@ export async function executeFundShareBuy(
       }
       if (issuerCreditApplied) {
         await compensate(async () => {
-          await reverseFloatBuyCredit(db, corp, actualIssuerCreditLocal, batch?.pools);
+          await reverseFloatBuyCredit(
+            db,
+            corp,
+            actualIssuerCreditLocal,
+            batch?.pools,
+            floatBuyCreditReceipt
+          );
         });
       }
       if (shareCreditApplied) {
@@ -676,11 +706,18 @@ export async function rebalanceFundToTarget(
   });
 
   let sells = 0;
+  const sellInputs =
+    plan.sells.length > 0
+      ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db), loadTxThresholds(db)])
+      : undefined;
   // Sells first so freed cash funds the buys.
   for (const leg of plan.sells) {
     const refreshed = (await getFundById(db, fund._id)) ?? fund;
     const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
       note: "Rebalance: trim overweight",
+      fxByCurrency: sellInputs?.[0],
+      turn: sellInputs?.[1],
+      thresholds: sellInputs?.[2],
     });
     if (res.sharesSold > 0) sells++;
   }
@@ -1391,7 +1428,10 @@ export async function runIndexFundCron(
   const timingOn = process.env.SIM_CORP_TIMING === "1";
   const passTimings: Array<[string, number]> = [];
   let _tPrev = timingOn ? Date.now() : 0;
+  // Always feeds the persisted phase sub-steps (#2689).
+  const steps = substepMarker();
   const mark = (label: string): void => {
+    steps.mark(label);
     if (!timingOn) return;
     const nowMs = Date.now();
     passTimings.push([label, nowMs - _tPrev]);
@@ -1445,110 +1485,186 @@ export async function runIndexFundCron(
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
   // #992 tranche 6: one thresholds read for every bond-reserve purchase row
   // this turn; threaded through each deploy so N funds share it.
-  const bondDeployThresholds = await loadTxThresholds(db);
+  const [bondDeployThresholds, bondDeployTurnLengthMinutes] = await Promise.all([
+    loadTxThresholds(db),
+    loadTurnLengthMinutes(db),
+  ]);
 
-  // Pass 1: mark holdings, recompute NAV, deploy bond reserve.
+  // Pass 1a: mark holdings and recompute NAV. Each task only writes its own
+  // fund document, so bounded concurrency is safe and removes the serial
+  // network wait across dozens of funds. Keep bond deployment in Pass 1b:
+  // funds compete for shared public float there, so its ordering is part of
+  // the economic result and must remain deterministic.
   const navReadyFundIds: IndexFund["_id"][] = [];
-  for (const fund of funds) {
-    try {
-      const workingFund = await applyMarkToMarketIfNeeded(db, fund, candidateCorps, exchangeRates);
-
-      const bondPrincipalAnchor = initialBondPrincipalByFundId.get(workingFund._id.toString()) ?? 0;
-      const openOrdersEscrowAnchor = openOrdersEscrowByFundId.get(workingFund._id.toString()) ?? 0;
-      const queuedRedemptionUnits = queuedUnitsByFundId.get(workingFund._id.toString()) ?? 0;
-
-      const newNav = recomputeNav(workingFund, {
-        bondPrincipalAnchor,
-        openOrdersEscrowAnchor,
-        queuedRedemptionUnits,
-      });
-
-      if (newNav === null || !Number.isFinite(newNav) || newNav <= 0) {
-        // Genuinely no assets left. Freeze so no new subscriptions deepen the
-        // hole. With queued units in the denominator this can only fire when
-        // the fund really is empty, not merely when a large redemption is
-        // outstanding against a falling book.
-        const holdingsValue = computeHoldingsValueAnchor(workingFund);
-        const actualBacking = Math.max(
-          0,
-          workingFund.cashAnchor + holdingsValue + bondPrincipalAnchor + openOrdersEscrowAnchor
+  type NavPreparation =
+    | {
+        kind: "ready";
+        fund: IndexFund;
+        bondPrincipalAnchor: number;
+        queuedUnits: number;
+        warning?: string;
+      }
+    | { kind: "collapsed"; error: string }
+    | { kind: "error"; error: string };
+  const navPreparations = await boundedParallelMap(
+    funds,
+    INDEX_FUND_NAV_CONCURRENCY,
+    async (fund): Promise<NavPreparation> => {
+      try {
+        const workingFund = await applyMarkToMarketIfNeeded(
+          db,
+          fund,
+          candidateCorps,
+          exchangeRates
         );
-        const quotedLiability =
-          workingFund.quotedNav * (workingFund.unitSupply + queuedRedemptionUnits);
-        await updateFundNav(db, workingFund._id, {
-          quotedNav: workingFund.quotedNav,
-          backingRatio: quotedLiability > 0 ? actualBacking / quotedLiability : 0,
+
+        const bondPrincipalAnchor =
+          initialBondPrincipalByFundId.get(workingFund._id.toString()) ?? 0;
+        const openOrdersEscrowAnchor =
+          openOrdersEscrowByFundId.get(workingFund._id.toString()) ?? 0;
+        const queuedRedemptionUnits = queuedUnitsByFundId.get(workingFund._id.toString()) ?? 0;
+
+        const newNav = recomputeNav(workingFund, {
+          bondPrincipalAnchor,
+          openOrdersEscrowAnchor,
+          queuedRedemptionUnits,
         });
-        await setFundStatus(db, workingFund._id, "paused", "backing_ratio");
-        result.errors.push(
-          `Fund ${workingFund.slug} auto-paused: backing collapsed (assets=${actualBacking.toFixed(0)}, liability=${quotedLiability.toFixed(0)})`
-        );
-        result.fundsProcessed++;
-        continue;
+
+        if (newNav === null || !Number.isFinite(newNav) || newNav <= 0) {
+          // Genuinely no assets left. Freeze so no new subscriptions deepen the
+          // hole. With queued units in the denominator this can only fire when
+          // the fund really is empty, not merely when a large redemption is
+          // outstanding against a falling book.
+          const holdingsValue = computeHoldingsValueAnchor(workingFund);
+          const actualBacking = Math.max(
+            0,
+            workingFund.cashAnchor + holdingsValue + bondPrincipalAnchor + openOrdersEscrowAnchor
+          );
+          const quotedLiability =
+            workingFund.quotedNav * (workingFund.unitSupply + queuedRedemptionUnits);
+          await updateFundNav(db, workingFund._id, {
+            quotedNav: workingFund.quotedNav,
+            backingRatio: quotedLiability > 0 ? actualBacking / quotedLiability : 0,
+          });
+          await setFundStatus(db, workingFund._id, "paused", "backing_ratio");
+          return {
+            kind: "collapsed",
+            error: `Fund ${workingFund.slug} auto-paused: backing collapsed (assets=${actualBacking.toFixed(0)}, liability=${quotedLiability.toFixed(0)})`,
+          };
+        }
+
+        const holdingsValue = computeHoldingsValueAnchor(workingFund);
+        const backing = calculateBackingRatio({
+          cashAnchor: workingFund.cashAnchor,
+          holdingsValueAnchor: holdingsValue,
+          bondPrincipalAnchor,
+          openOrdersEscrowAnchor,
+          queuedRedemptionUnits,
+          quotedNav: newNav,
+          unitSupply: workingFund.unitSupply,
+        });
+
+        await updateFundNav(db, workingFund._id, {
+          quotedNav: newNav,
+          backingRatio: backing.backingRatio,
+        });
+
+        if (backing.shouldAutoPause) {
+          await setFundStatus(db, workingFund._id, "paused", backing.pauseReason);
+        } else if (workingFund.status === "paused" && workingFund.pauseReason === "backing_ratio") {
+          await setFundStatus(db, workingFund._id, "active");
+        }
+
+        // NAV persistence only changes fields already known in this pass. Keep
+        // the in-memory fund in sync instead of reading the full document back,
+        // and reuse the bond-principal snapshot loaded for every fund above.
+        const refreshedFund: IndexFund = {
+          ...workingFund,
+          quotedNav: newNav,
+          backingRatio: backing.backingRatio,
+        };
+        return {
+          kind: "ready",
+          fund: refreshedFund,
+          bondPrincipalAnchor,
+          queuedUnits: queuedRedemptionUnits,
+          ...(backing.shouldAutoPause
+            ? {
+                warning: `Fund ${workingFund.slug} auto-paused: backing ratio ${backing.backingRatio.toFixed(4)}`,
+              }
+            : {}),
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { kind: "error", error: `Fund ${fund.slug}: ${message}` };
       }
+    }
+  );
+  mark("pass1a-nav");
 
-      const holdingsValue = computeHoldingsValueAnchor(workingFund);
-      const backing = calculateBackingRatio({
-        cashAnchor: workingFund.cashAnchor,
-        holdingsValueAnchor: holdingsValue,
-        bondPrincipalAnchor,
-        openOrdersEscrowAnchor,
-        queuedRedemptionUnits,
-        quotedNav: newNav,
-        unitSupply: workingFund.unitSupply,
-      });
-
-      await updateFundNav(db, workingFund._id, {
-        quotedNav: newNav,
-        backingRatio: backing.backingRatio,
-      });
-
-      if (backing.shouldAutoPause) {
-        await setFundStatus(db, workingFund._id, "paused", backing.pauseReason);
-        result.errors.push(
-          `Fund ${workingFund.slug} auto-paused: backing ratio ${backing.backingRatio.toFixed(4)}`
-        );
-      } else if (workingFund.status === "paused" && workingFund.pauseReason === "backing_ratio") {
-        await setFundStatus(db, workingFund._id, "active");
-      }
-
-      result.navUpdates++;
-
-      // NAV persistence only changes fields already known in this pass. Keep
-      // the in-memory fund in sync instead of reading the full document back,
-      // and reuse the bond-principal snapshot loaded for every fund above.
-      // No bond mutation occurs between that snapshot and this deployment.
-      const refreshedFund: IndexFund = {
-        ...workingFund,
-        quotedNav: newNav,
-        backingRatio: backing.backingRatio,
-      };
-      const bondPrincipalAfterNav = bondPrincipalAnchor;
-      if (queuedRedemptionUnits <= 0) {
+  // Pass 1b: deploy bond reserves in the original stable fund order.
+  for (const preparation of navPreparations) {
+    if (preparation.kind === "error") {
+      result.errors.push(preparation.error);
+      continue;
+    }
+    result.fundsProcessed++;
+    if (preparation.kind === "collapsed") {
+      result.errors.push(preparation.error);
+      continue;
+    }
+    result.navUpdates++;
+    if (preparation.warning) result.errors.push(preparation.warning);
+    try {
+      if (preparation.queuedUnits <= 0) {
         const bondDeploy = await deployBondReserveFromCash(
           db,
-          refreshedFund,
-          bondPrincipalAfterNav,
+          preparation.fund,
+          preparation.bondPrincipalAnchor,
           {
             liquidityTargetEnabled: bondLiquidityEnabled,
             turn: currentTurn,
             thresholds: bondDeployThresholds,
+            turnLengthMinutes: bondDeployTurnLengthMinutes,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {
           result.bondDeployments++;
+          await refreshFundNavAfterBondDeployment(
+            db,
+            preparation.fund._id,
+            preparation.bondPrincipalAnchor + bondDeploy.markedValueAnchor,
+            openOrdersEscrowByFundId.get(preparation.fund._id.toString()) ?? 0
+          );
         }
       }
-
-      navReadyFundIds.push(workingFund._id);
-      result.fundsProcessed++;
+      navReadyFundIds.push(preparation.fund._id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      result.errors.push(`Fund ${fund.slug}: ${message}`);
+      result.errors.push(`Fund ${preparation.fund.slug}: ${message}`);
+      // Earlier purchases can settle before a later issue or receipt fails.
+      // Re-read the book and cash so the pre-deployment quote is not left live.
+      try {
+        const settledBondValue = await sumFundBondHoldingsValueAnchor(
+          db,
+          preparation.fund,
+          exchangeRates
+        );
+        await refreshFundNavAfterBondDeployment(
+          db,
+          preparation.fund._id,
+          settledBondValue,
+          openOrdersEscrowByFundId.get(preparation.fund._id.toString()) ?? 0
+        );
+      } catch (refreshError) {
+        result.errors.push(
+          `Fund ${preparation.fund.slug} post-bond NAV: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`
+        );
+      }
     }
   }
 
-  mark("pass1-nav");
+  mark("pass1b-bonds");
   // Pass 2: recompute target weights before float absorption so buys use the
   // current basket. Runs every financial day (24 turns) or on first init.
   funds = (await listActiveFunds(db)).filter(
@@ -1680,25 +1796,25 @@ export async function runIndexFundCron(
 
   mark("pass3b-crossFund");
   // Pass 3c: pay redemptions and snapshot after cross-fund market settles.
-  funds = (
-    await Promise.all(redemptionServiceFundIds.map((fundId) => getFundById(db, fundId)))
-  ).filter((fund): fund is IndexFund => fund !== null);
+  funds = await listFundsByIds(db, redemptionServiceFundIds);
   for (const fund of funds) {
     try {
       // `funds` was just re-read above and nothing writes between; the old
       // per-fund re-read here was a duplicate round trip.
       const refreshedFund = fund;
 
-      const paidRedemptions = await processQueuedRedemptions(
-        db,
-        refreshedFund,
-        forexEnabled,
-        currentTurn
-      );
+      const hasQueuedRedemptions = queuedUnitsByFundId.has(fund._id.toString());
+      const paidRedemptions = hasQueuedRedemptions
+        ? await processQueuedRedemptions(db, refreshedFund, forexEnabled, currentTurn)
+        : 0;
       result.redemptionsPaid += paidRedemptions;
 
       if (currentTurn > 0) {
-        const finalFund = await getFundById(db, fund._id);
+        // A fund with no queued units cannot have been mutated by the
+        // redemption processor, which is skipped above. Snapshot the fresh
+        // batch-loaded document directly; only redemption-bearing funds need
+        // a post-settlement reread.
+        const finalFund = hasQueuedRedemptions ? await getFundById(db, fund._id) : refreshedFund;
         if (finalFund) {
           const holdingValue = computeHoldingsValueAnchor(finalFund);
           await insertFundSnapshot(db, {
@@ -1776,9 +1892,28 @@ export async function runIndexFundCron(
   // mutation has settled. Disabling the gate cancels and refunds prior bids in
   // the same pass, providing an immediate rollback path.
   try {
-    const quoteFunds = (await listActiveFunds(db)).filter(
-      (fund) => !queuedUnitsByFundId.has(fund._id.toString())
+    const activeQuoteFunds = await listActiveFunds(db);
+    const quoteBondValueByFundId = await sumFundBondHoldingsByFundId(
+      db,
+      activeQuoteFunds,
+      exchangeRates
     );
+    const quoteFunds: IndexFund[] = [];
+    const currentQueuedUnits = await loadQueuedRedemptionUnitsByFundId(
+      db,
+      activeQuoteFunds.map((fund) => fund._id)
+    );
+    for (const fund of activeQuoteFunds) {
+      const restored = await restoreFundCashBuffer(
+        db,
+        fund,
+        quoteBondValueByFundId.get(String(fund._id)) ?? 0,
+        exchangeRates,
+        currentTurn
+      );
+      quoteBondValueByFundId.set(String(fund._id), restored.bondPrincipalAnchor);
+      if (!currentQueuedUnits.has(String(fund._id))) quoteFunds.push(restored.fund);
+    }
     const fxByCurrency = new Map<CurrencyCode, number>(
       Object.entries(exchangeRates)
         .filter(([, rate]) => typeof rate === "number" && rate > 0)
@@ -1808,6 +1943,7 @@ export async function runIndexFundCron(
       turn: currentTurn,
       enabled: equityLiquidityEnabled,
       funds: quoteFunds,
+      bondValueByFundId: quoteBondValueByFundId,
       listings: quoteListings,
       totalListings: candidateCorps.length,
     });

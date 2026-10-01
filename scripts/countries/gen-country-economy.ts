@@ -18,6 +18,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { POPULATION_TOTALS_1991 } from "../../src/lib/seeds/reference/populationTotals1991";
 
 interface Entry {
   readonly shape: string;
@@ -121,7 +122,22 @@ const stateSalesTax = maybe("NEUTRAL_STATE_SALES_TAX_BY_COUNTRY");
 
 const economicBaselineValue = maybe("ECONOMIC_BASELINES");
 const repEconValue = maybe("REP_ECON");
-const costScaleAnchorsValue = maybe("COST_SCALE_ANCHORS");
+const historicalCostScaleAnchors = maybe("COST_SCALE_ANCHORS");
+// Preserve the immutable migration snapshot while applying the verified population repair.
+const populationAnchor =
+  COUNTRY === "CN"
+    ? POPULATION_TOTALS_1991.CN
+    : COUNTRY === "NG"
+      ? POPULATION_TOTALS_1991.NG
+      : null;
+const costScaleAnchorsValue =
+  historicalCostScaleAnchors && populationAnchor
+    ? JSON.stringify(
+        { ...JSON.parse(historicalCostScaleAnchors), popLow: populationAnchor.population },
+        null,
+        2
+      )
+    : historicalCostScaleAnchors;
 const gdpDenomination1953 = maybe("GDP_DENOMINATION_1953");
 const payoutCap = maybe("PLAYER_PAYOUT_CAP_PER_TURN");
 const sovereignStructure = maybe("SOVEREIGN_CORP_LEGAL_STRUCTURE");

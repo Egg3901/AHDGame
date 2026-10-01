@@ -100,3 +100,52 @@ describe("post-resolution spawners during the pre-iteration founding phase", () 
     expect(inserted.cycle).toBe(1);
   });
 });
+
+describe("Commons post-snap year", () => {
+  it("uses the scheduled game year instead of the regular cycle year", async () => {
+    const db = createMockDb();
+    setup(db, {
+      currentTurn: 1229,
+      startingYear: 1953,
+      preset: "1953-default",
+      preIterationTurns: 48,
+    });
+    const now = new Date("2026-09-29T14:00:00Z");
+    const snap = {
+      ...resolvedFoundingRace("commons"),
+      electionType: "snap_commons",
+      cycle: 6,
+      endTurn: 1228,
+      endTime: new Date(now.getTime() - 3_600_000),
+    } as Election;
+    await spawnCommonsElection(db as never, snap, now);
+    const inserted = db.collection("elections").insertOne.mock.calls[0][0];
+    expect(inserted.endTurn).toBe(1468);
+    expect(inserted.electionYear).toBe(1982);
+    expect(inserted.shiftedScheduleEndTurn).toBe(1468);
+  });
+
+  it("keeps the shifted term clock when the post-snap Parliament resolves", async () => {
+    const db = createMockDb();
+    setup(db, {
+      currentTurn: 1469,
+      startingYear: 1953,
+      preset: "1953-default",
+      preIterationTurns: 48,
+    });
+    const now = new Date("2026-10-09T14:00:00Z");
+    const regular = {
+      ...resolvedFoundingRace("commons"),
+      electionType: "commons",
+      cycle: 7,
+      endTurn: 1468,
+      endTime: new Date(now.getTime() - 3_600_000),
+      shiftedScheduleEndTurn: 1468,
+    } as Election;
+    await spawnCommonsElection(db as never, regular, now);
+    const inserted = db.collection("elections").insertOne.mock.calls[0][0];
+    expect(inserted.cycle).toBe(8);
+    expect(inserted.endTurn).toBe(1708);
+    expect(inserted.electionYear).toBe(1987);
+  });
+});

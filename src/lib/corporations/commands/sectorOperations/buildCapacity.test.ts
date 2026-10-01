@@ -51,6 +51,7 @@ vi.mock("@/lib/currency/marketMaker", () => ({
 }));
 vi.mock("@/lib/corporations/marketShare", () => ({
   fetchSectorMarketSharePercent: vi.fn().mockResolvedValue(0),
+  fetchCorporationNationalSectorSharePercent: vi.fn().mockResolvedValue(0),
   // Crowded, so these cases price at the undiscounted dominance toll and the
   // hand-computed expectations below are unaffected by the density scaling.
   fetchSectorCompetitorCount: vi.fn().mockResolvedValue(DOMINANCE_DENSITY_CROWDED_COMPETITORS),
@@ -253,6 +254,32 @@ describe("buildCapacity — build", () => {
       $inc: { liquidCapital: number };
     };
     expect(inc.$inc.liquidCapital).toBeCloseTo(-expected.totalAnchor, 6);
+  });
+
+  it("charges the national dominance toll when local share is below threshold", async () => {
+    const { fetchSectorMarketSharePercent, fetchCorporationNationalSectorSharePercent } =
+      await import("@/lib/corporations/marketShare");
+    vi.mocked(fetchSectorMarketSharePercent).mockResolvedValueOnce(20);
+    vi.mocked(fetchCorporationNationalSectorSharePercent).mockResolvedValueOnce(60);
+    await wireMocks(sectorDoc());
+
+    const res = await buildCapacity(request({ action: "build", units: 1_000, preview: true }), {
+      params,
+    });
+    const body = (await res.json()) as Record<string, number>;
+    const expected = computeBuildCost({
+      strategyId: null,
+      eraUnitScale: 1,
+      sectorType: "manufacturing",
+      units: 1_000,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: 20,
+      nationalMarketSharePercent: 60,
+      primeRate: 0,
+    });
+
+    expect(body.costAnchor).toBe(Math.round(expected.totalAnchor));
+    expect(body.dominanceMultiplier).toBeCloseTo(expected.dominanceMultiplier, 3);
   });
 
   it("stamps the priced strategy on the order it queues", async () => {

@@ -42,7 +42,7 @@ describe("buildWorldNavItems", () => {
 
   it("includes country-scoped map link", () => {
     const us = buildWorldNavItems({ countryId: "US" }).find((i) => i.id === "map");
-    expect(us?.label).toBe("Map");
+    expect(us?.label).toBe("Country Map");
     expect(us?.href).toContain("/country/us");
   });
 });

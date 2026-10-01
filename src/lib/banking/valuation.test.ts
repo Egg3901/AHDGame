@@ -22,4 +22,11 @@ describe("bank valuation", () => {
     expect(bankNpvFromPerTurnIncome(100)).toBe(Math.round((100 * TURNS_PER_YEAR) / 0.15));
     expect(bankNpvFromPerTurnIncome(-100)).toBe(0);
   });
+
+  it("scales the capitalized value by the boost multiplier, never the income", () => {
+    const base = bankNpvFromPerTurnIncome(100);
+    expect(bankNpvFromPerTurnIncome(100, 1.5)).toBe(Math.round(base * 1.5));
+    expect(bankNpvFromPerTurnIncome(-100, 1.5)).toBe(0);
+    expect(bankNpvFromPerTurnIncome(100, 1)).toBe(base);
+  });
 });

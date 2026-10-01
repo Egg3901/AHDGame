@@ -1,5 +1,5 @@
 import type { ClientSession, Db, ObjectId } from "mongodb";
-import type { EquityMarketPool } from "@/lib/db/types";
+import type { Corporation, EquityMarketPool } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import * as Sentry from "@sentry/nextjs";
 import { getShareBuybackMode } from "./shareBuybackMode";
@@ -22,8 +22,9 @@ import {
 
 /**
  * Centralized routing for public-float cash settlement. When a currency has an
- * equity market pool, it is the counterparty: buys pay into the pool and sells
- * draw from its finite cash. The old issuer escrow/treasury path remains only
+ * equity market pool, it is the counterparty for already funded shares: buys
+ * pay into the pool and sells draw from its finite cash. Primary IPO shares
+ * still owned by the issuer pay the issuer first. The old issuer escrow/treasury path remains only
  * as a compatibility fallback for seed worlds and tests without a pool.
  *
  * `amountLocal` is always in the issuer's liquidCurrencyCode units
@@ -37,6 +38,8 @@ type EscrowCorp = {
 };
 type EscrowSettlementOptions = {
   session?: ClientSession;
+  /** Shares removed from publicFloat by this buy, for primary IPO proceeds. */
+  sharesBought?: number;
   /** Explicit corporate buyouts remain issuer-funded, not ordinary market trades. */
   counterparty?: "market" | "issuer";
   /**
@@ -46,6 +49,42 @@ type EscrowSettlementOptions = {
    */
   pools?: Map<CurrencyCode, EquityMarketPool>;
 };
+
+export type FloatBuyCreditReceipt = {
+  issuerShares: number;
+  issuerCreditLocal: number;
+  poolCreditLocal: number;
+};
+
+async function claimUnpaidIpoShares(
+  db: Db,
+  corpId: ObjectId,
+  shares: number,
+  options?: EscrowSettlementOptions
+): Promise<number> {
+  if (!Number.isSafeInteger(shares) || shares <= 0) return 0;
+  const corporations = db.collection<Corporation>("corporations");
+  const mongoOptions = options?.session ? { session: options.session } : undefined;
+  const previous = await corporations.findOneAndUpdate(
+    {
+      _id: corpId,
+      "pendingShareIssuance.source": "ipo",
+      "pendingShareIssuance.issuedUpfront": true,
+      "pendingShareIssuance.remainingShares": { $gt: 0 },
+    },
+    [
+      {
+        $set: {
+          "pendingShareIssuance.remainingShares": {
+            $max: [0, { $subtract: ["$pendingShareIssuance.remainingShares", shares] }],
+          },
+        },
+      },
+    ],
+    { returnDocument: "before", projection: { pendingShareIssuance: 1 }, ...mongoOptions }
+  );
+  return Math.min(shares, previous?.pendingShareIssuance?.remainingShares ?? 0);
+}
 
 /**
  * Credit the issuer for a float BUY.
@@ -60,7 +99,7 @@ export async function applyFloatBuyCredit(
   corp: EscrowCorp,
   amountLocal: number,
   options?: EscrowSettlementOptions
-): Promise<void> {
+): Promise<FloatBuyCreditReceipt> {
   const currency = equityPoolCurrency({
     countryId: corp.countryId,
     liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
@@ -70,22 +109,67 @@ export async function applyFloatBuyCredit(
     ? snapshot !== undefined
     : Boolean(await readEquityPool(db, currency, options));
   if (options?.counterparty !== "issuer" && poolExists) {
-    await creditEquityPool(db, currency, amountLocal, "purchasesIn", new Date(), options);
+    const issuerShares = await claimUnpaidIpoShares(
+      db,
+      corp._id,
+      options?.sharesBought ?? 0,
+      options
+    );
+    const issuerCreditLocal =
+      issuerShares > 0 && options?.sharesBought
+        ? Math.round((amountLocal * issuerShares * 100) / options.sharesBought) / 100
+        : 0;
+    const poolCreditLocal = Math.round((amountLocal - issuerCreditLocal) * 100) / 100;
+    const mongoOptions = options?.session ? { session: options.session } : undefined;
+    let issuerCredited = false;
+    try {
+      if (issuerCreditLocal > 0) {
+        const balance = await creditCorpLiquidCapital(
+          db,
+          corp._id,
+          issuerCreditLocal,
+          true,
+          options
+        );
+        if (balance === null) throw new Error("IPO issuer disappeared during float buy");
+        issuerCredited = true;
+      }
+      if (poolCreditLocal > 0) {
+        await creditEquityPool(db, currency, poolCreditLocal, "purchasesIn", new Date(), options);
+      }
+    } catch (error) {
+      if (issuerShares > 0) {
+        await db.collection<Corporation>("corporations").updateOne(
+          { _id: corp._id },
+          {
+            $inc: {
+              "pendingShareIssuance.remainingShares": issuerShares,
+              ...(issuerCredited
+                ? { liquidCapital: -issuerCreditLocal, shareIssuanceProceeds: -issuerCreditLocal }
+                : {}),
+            },
+          },
+          mongoOptions
+        );
+      }
+      throw error;
+    }
     // Keep the caller's snapshot in step with the pool it just credited, so
     // the next quote in the same pass sees the cash skew a per-buy read would.
     if (snapshot) {
-      const credited = Math.round(amountLocal * 100) / 100;
+      const credited = poolCreditLocal;
       if (Number.isFinite(credited) && credited > 0) {
         snapshot.cashLocal = (snapshot.cashLocal ?? 0) + credited;
       }
     }
-    return;
+    return { issuerShares, issuerCreditLocal, poolCreditLocal };
   }
   if (getShareBuybackMode(corp) === "escrow") {
     await creditCorpShareEscrow(db, corp._id, amountLocal, options);
   } else {
     await creditCorpLiquidCapital(db, corp._id, amountLocal, true, options);
   }
+  return { issuerShares: 0, issuerCreditLocal: 0, poolCreditLocal: 0 };
 }
 
 /** Re-exported so callers can type the hoisted split without a second import. */

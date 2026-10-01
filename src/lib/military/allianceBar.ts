@@ -14,28 +14,37 @@
 import type { Db } from "mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
-import { loadBlocMembership, allianceNameFor } from "@/lib/world/blocMembership";
-import { blocOf, sharesBloc, type BlocLookup } from "./bloc";
+import { allianceNameFor } from "@/lib/world/blocMembership";
+import { loadMilitaryBlocRollForPreset } from "./blocLookup";
+import { isCustomAlignmentPoleId } from "@/lib/constants/alignmentEras";
+import { blocOf, sharesBloc, type Bloc, type BlocLookup } from "./bloc";
 
 export interface AllianceRoll {
   /** entityId → bloc, from the live roll for the running era. */
   blocs: BlocLookup;
   /** The seed preset the roll was read for, which names the alliance. */
   preset: string;
+  namesByBloc?: Record<string, string>;
+}
+
+function nameForBloc(roll: AllianceRoll, bloc: Bloc): string | null {
+  return (
+    roll.namesByBloc?.[bloc] ??
+    (isCustomAlignmentPoleId(bloc) ? null : allianceNameFor(roll.preset, bloc))
+  );
 }
 
 /**
  * The era's bloc roll plus the preset that names its alliances.
  *
- * A single read: `loadMilitaryBlocs` already fetches game state for the preset and then
- * discards it, which is precisely the field a refusal needs in order to say "the Warsaw
- * Pact" rather than "east".
+ * Read the same treaty roll as combat, preserving the preset and custom Bloc
+ * names so a refusal can name the actual alliance.
  */
 export async function loadAllianceRoll(db: Db): Promise<AllianceRoll> {
   const col = await getGameStateCollection(db);
   const gs = await col.findOne({ _id: "current" }, { projection: { preset: 1 } });
   const preset = gs?.preset ?? DEFAULT_SEED_PRESET;
-  return { blocs: await loadBlocMembership(db, preset), preset };
+  return { ...(await loadMilitaryBlocRollForPreset(db, preset)), preset };
 }
 
 /**
@@ -54,7 +63,7 @@ export function alliesOf(
   const mates = Object.keys(roll.blocs).filter(
     (c) => c !== source && sharesBloc(roll.blocs, source, c)
   );
-  return { alliance: allianceNameFor(roll.preset, bloc), mates };
+  return { alliance: nameForBloc(roll, bloc), mates };
 }
 
 /**
@@ -72,5 +81,6 @@ export async function allianceBarBetween(
 ): Promise<string | null> {
   const roll = await loadAllianceRoll(db);
   if (!sharesBloc(roll.blocs, source, target)) return null;
-  return allianceNameFor(roll.preset, blocOf(roll.blocs, source)) ?? "same alliance bloc";
+  const bloc = blocOf(roll.blocs, source);
+  return nameForBloc(roll, bloc) ?? "same alliance bloc";
 }

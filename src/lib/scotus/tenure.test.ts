@@ -2,10 +2,38 @@ import { describe, expect, it } from "vitest";
 import {
   DIVERGENT_TENURE_FLOOR_TURNS,
   DIVERGENT_TENURE_HAZARD_PER_TURN,
+  DIVERGENT_TENURE_MEDIAN_TURNS,
   divergentDeathChance,
   formatDivergentDeathChance,
   rollDivergentDeparture,
 } from "./tenure";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+
+describe("Divergent Justice tenure calibration", () => {
+  it("keeps the annual departure probability in a sane range", () => {
+    const annualDepartureProbability =
+      1 - Math.pow(1 - DIVERGENT_TENURE_HAZARD_PER_TURN, TURNS_PER_YEAR);
+
+    expect(annualDepartureProbability).toBeGreaterThan(0.04);
+    expect(annualDepartureProbability).toBeLessThan(0.05);
+  });
+
+  it("leaves about 80% seated after five active years", () => {
+    const fiveYearSurvival = Math.pow(1 - DIVERGENT_TENURE_HAZARD_PER_TURN, 5 * TURNS_PER_YEAR);
+
+    expect(fiveYearSurvival).toBeGreaterThan(0.79);
+    expect(fiveYearSurvival).toBeLessThan(0.8);
+  });
+
+  it("has 50% survival at the target median tenure", () => {
+    const medianSurvival = Math.pow(
+      1 - DIVERGENT_TENURE_HAZARD_PER_TURN,
+      DIVERGENT_TENURE_MEDIAN_TURNS
+    );
+
+    expect(medianSurvival).toBeCloseTo(0.5, 10);
+  });
+});
 
 describe("rollDivergentDeparture", () => {
   it("never departs before the floor, regardless of the random draw", () => {
@@ -23,10 +51,10 @@ describe("rollDivergentDeparture", () => {
     const floorTurn = seatedAtTurn + DIVERGENT_TENURE_FLOOR_TURNS;
     // A draw just under the hazard departs; a draw just over does not.
     expect(
-      rollDivergentDeparture(seatedAtTurn, floorTurn, DIVERGENT_TENURE_HAZARD_PER_TURN - 0.001)
+      rollDivergentDeparture(seatedAtTurn, floorTurn, DIVERGENT_TENURE_HAZARD_PER_TURN * 0.5)
     ).toBe(true);
     expect(
-      rollDivergentDeparture(seatedAtTurn, floorTurn, DIVERGENT_TENURE_HAZARD_PER_TURN + 0.001)
+      rollDivergentDeparture(seatedAtTurn, floorTurn, DIVERGENT_TENURE_HAZARD_PER_TURN * 1.5)
     ).toBe(false);
   });
 
@@ -34,7 +62,7 @@ describe("rollDivergentDeparture", () => {
     const seatedAtTurn = 0;
     const farFuture = seatedAtTurn + DIVERGENT_TENURE_FLOOR_TURNS + 100_000;
     expect(
-      rollDivergentDeparture(seatedAtTurn, farFuture, DIVERGENT_TENURE_HAZARD_PER_TURN - 0.001)
+      rollDivergentDeparture(seatedAtTurn, farFuture, DIVERGENT_TENURE_HAZARD_PER_TURN * 0.5)
     ).toBe(true);
   });
 
@@ -83,15 +111,15 @@ describe("formatDivergentDeathChance", () => {
         chancePerTurn: DIVERGENT_TENURE_HAZARD_PER_TURN,
         turnsUntilActive: 0,
       })
-    ).toBe("1.5% death chance per turn");
+    ).toBe("0.1% death chance per turn");
   });
 
   it("says when the hazard starts during the floor", () => {
     expect(formatDivergentDeathChance({ chancePerTurn: 0, turnsUntilActive: 1 }, "compact")).toBe(
-      "0% death chance (1 turn until 1.5%)"
+      "0% death chance (1 turn until 0.1%)"
     );
     expect(formatDivergentDeathChance({ chancePerTurn: 0, turnsUntilActive: 42 }, "full")).toBe(
-      "No death chance yet. 1.5% per turn starts in 42 turns."
+      "No death chance yet. 0.1% per turn starts in 42 turns."
     );
   });
 });

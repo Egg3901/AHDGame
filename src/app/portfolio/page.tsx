@@ -8,5 +8,10 @@ import PortfolioClient from "./PortfolioClient";
 // /api/character/portfolio itself — per-user, cookie-scoped, `cache: no-store`.
 // A cached shell is then harmless because it contains no PII.
 export default function PortfolioPage() {
-  return <PortfolioClient />;
+  // Holdings are excluded from PostHog session replay.
+  return (
+    <div data-replay-block>
+      <PortfolioClient />
+    </div>
+  );
 }

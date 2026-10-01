@@ -4,6 +4,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { scrubPushRequest } from "@/lib/nativePush/telemetry";
+import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 
 // RAILWAY_ENVIRONMENT_NAME is injected on all Railway deployments.
 // Disabling locally prevents MongoParseError / MONGODB_URI-missing noise flooding the dashboard.
@@ -12,16 +13,17 @@ const isProduction = railwayEnv === "production";
 const sentryEnabled = !!railwayEnv;
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN,
+  dsn: process.env.SENTRY_DSN,
 
   enabled: sentryEnabled,
 
   // Deploy identifier (full git SHA) injected via next.config.ts. Ties every
   // event to a specific build and matches uploaded source-map artifacts.
   release: process.env.SENTRY_RELEASE,
+  environment: process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV,
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: isProduction ? 0.02 : 1,
+  tracesSampleRate: isProduction ? 0.1 : 1,
 
   // SSE at /api/events holds connections open for minutes — excluding avoids skewing Performance stats
   ignoreTransactions: [
@@ -33,18 +35,9 @@ Sentry.init({
     "POST /api/analytics/pageview",
   ],
 
-  // Structured logs shipped to GlitchTip's Logs view in every environment.
-  // Self-hosted GlitchTip has no per-event billing, so production logs are
-  // safe to keep on and are essential for reconstructing "it just didn't work".
-  enableLogs: true,
-
-  integrations: [
-    // Mirror server-side console.warn/console.error into GlitchTip Logs. This
-    // captures the large body of existing console-only error handling without
-    // rewriting every call site, turning silent console output into a queryable
-    // forensic trail correlated with traces.
-    Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
-  ],
+  // SaaS logs are usage-billed. Keep errors and sampled traces as the initial
+  // signal, then enable logs only after a volume and cost review.
+  enableLogs: false,
 
   // Disable sending user PII (Personally Identifiable Information) to error tracking
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
@@ -68,6 +61,6 @@ Sentry.init({
       return null;
     }
 
-    return event;
+    return scrubSentryEvent(event);
   },
 });

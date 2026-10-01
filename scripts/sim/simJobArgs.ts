@@ -16,12 +16,14 @@ export interface SimJobExperimentFields {
   canonicalFreightBillingEnabled?: boolean;
   shortageResponsiveSourcingEnabled?: boolean;
   indexFundBondLiquidityEnabled?: boolean;
+  nppFundRedemptionEnabled?: boolean;
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
   /** Frontier-entry experiment gate (#991). Explicit false is a pinned control
    * arm, not an omission: it must reach runWorld. */
   frontierEntryExperimentEnabled?: boolean;
+  campaignEraPriceLevelEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   mode?: string;
@@ -104,9 +106,11 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   booleanFlag(job, "canonicalFreightBillingEnabled", "canonical-freight-billing", args);
   booleanFlag(job, "shortageResponsiveSourcingEnabled", "shortage-responsive-sourcing", args);
   booleanFlag(job, "indexFundBondLiquidityEnabled", "index-fund-bond-liquidity", args);
+  booleanFlag(job, "nppFundRedemptionEnabled", "npp-fund-redemption", args);
   booleanFlag(job, "equityLiquidityFacilityEnabled", "equity-liquidity-facility", args);
   booleanFlag(job, "nppMarketCoverageEnabled", "npp-market-coverage", args);
   booleanFlag(job, "nppFragileMarketSupplyEnabled", "npp-fragile-market-supply", args);
+  booleanFlag(job, "campaignEraPriceLevelEnabled", "campaign-era-price-level", args);
   // Frontier-entry experiment gate (#991): spelling owned by
   // frontierEntryExperimentCliArgs, so the worker cannot drift from runWorld's
   // parser. Explicit false survives (control arm); absent emits nothing.

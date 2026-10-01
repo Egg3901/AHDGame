@@ -46,6 +46,24 @@ afterEach(() => {
 });
 
 describe("RestrictionsView", () => {
+  it("identifies crisis sanctions and their expiry", async () => {
+    mockEmbargoes([
+      {
+        id: "crisis-1",
+        sourceCountry: "DE",
+        targetCountry: "UK",
+        commodity: "ordnance",
+        direction: "both",
+        mode: "block",
+        origin: "crisis",
+        expiresTurn: 148,
+      },
+    ]);
+    render(<RestrictionsView ledger={ledger} />);
+    expect(await screen.findByText(/Crisis decision/)).toBeTruthy();
+    expect(screen.getByText(/expires turn 148/)).toBeTruthy();
+  });
+
   it("groups active embargoes by the imposing nation with a readable summary", async () => {
     mockEmbargoes([
       {

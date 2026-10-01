@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Austria default political parties.
@@ -13,6 +14,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * Positions -5..+5. Each entry is gated via `validForPresets`.
  */
 export const atParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.AT ?? []),
   // ─── 1979 Kreisky era (continuous into 1991) ───────────────────────────
   {
     seedOrder: 1,
@@ -46,7 +48,7 @@ export const atParties: PartySeed[] = [
     socialPosition: 2, // Catholic-conservative Lager
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1979-default", "1991-default"],
+    validForPresets: ["1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 750_000,
     nationalTaxRate: 0,
@@ -69,7 +71,7 @@ export const atParties: PartySeed[] = [
     isDefault: true,
     // Continuous into 1991, pre-Haider (leader from Sept 1986) liberal wing
     // still fresh off 1986's split; positions kept at the 1979 baseline.
-    validForPresets: ["1979-default", "1991-default"],
+    validForPresets: ["1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 350_000,
     nationalTaxRate: 0,
@@ -92,7 +94,7 @@ export const atParties: PartySeed[] = [
     socialPosition: -3, // socially liberal, anti-nuclear founding cause
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1991-default"],
+    validForPresets: ["1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 200_000,
     nationalTaxRate: 0,

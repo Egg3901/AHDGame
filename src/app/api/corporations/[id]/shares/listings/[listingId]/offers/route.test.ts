@@ -4,6 +4,9 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { MARKET_MAKER_SPREAD } from "@/lib/constants/currencies";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/api/newCharacterTransferBarrier", () => ({
+  newCharacterTransferBarrierResponse: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/requireCorporationActions", () => ({
   requireCorporationActionsEnabled: vi.fn().mockResolvedValue(null),

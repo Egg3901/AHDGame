@@ -32,6 +32,7 @@ describe("provider credential write guards", () => {
       password: "digest",
       googleId: { $exists: false },
       discordId: "d1",
+      appleId: { $exists: false },
       isBanned: { $ne: true },
       authRevokedAt: cutoff,
       authMigrationFence: { $exists: false },
@@ -81,5 +82,39 @@ describe("provider credential write guards", () => {
     expect(
       decideProviderUnlink({ password: "", googleId: "g1", discordId: "d1" }, "google")
     ).toEqual({ ok: true, linkedId: "g1" });
+  });
+});
+
+describe("Sign in with Apple as a third provider", () => {
+  it("reads and pins the Apple link like the others", () => {
+    expect(linkedProviderId({ appleId: "001.abc.002" }, "apple")).toBe("001.abc.002");
+    expect(linkedProviderId({ appleId: "" }, "apple")).toBe(null);
+    expect(
+      providerWriteSnapshotFilter({ password: "", googleId: undefined, appleId: "a1" })
+    ).toMatchObject({ appleId: "a1", googleId: { $exists: false } });
+  });
+
+  it("never replaces a different Apple link", () => {
+    expect(decideProviderLink({ appleId: "a1" }, "apple", "a1")).toEqual({
+      ok: true,
+      mode: "idempotent",
+    });
+    expect(decideProviderLink({ appleId: "a1" }, "apple", "a2")).toEqual({
+      ok: false,
+      reason: "conflict",
+    });
+  });
+
+  it("counts an Apple link as a remaining login method, and protects an Apple-only account", () => {
+    expect(decideProviderUnlink({ password: "", googleId: "g1", appleId: "a1" }, "google")).toEqual(
+      { ok: true, linkedId: "g1" }
+    );
+    expect(decideProviderUnlink({ password: "", discordId: "d1", appleId: "a1" }, "apple")).toEqual(
+      { ok: true, linkedId: "a1" }
+    );
+    expect(decideProviderUnlink({ password: "", appleId: "a1" }, "apple")).toEqual({
+      ok: false,
+      reason: "last_method",
+    });
   });
 });

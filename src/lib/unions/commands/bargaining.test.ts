@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/unions/unionProsecutionBar", () => ({
+  isUnionProsecutionBarred: vi.fn().mockResolvedValue(false),
+  UNION_PROSECUTION_MESSAGE: "You are barred from union actions by prosecution.",
+}));
 import { ObjectId, type Db } from "mongodb";
 import type { BargainingCampaign, Character, Union } from "@/lib/db/types";
 import { STRIKE_EXPECTATION_GAP_THRESHOLD } from "@/lib/labour/strikes";

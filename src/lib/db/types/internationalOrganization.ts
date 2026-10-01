@@ -172,6 +172,12 @@ export interface OrganizationLegislation {
   joinConflictTheaterId?: string;
   /** `join_conflict`: which side of that conflict the bloc backs. */
   joinConflictSide?: "A" | "B";
+  /**
+   * `join_conflict`: applicant or member whose existing defensive war makes
+   * this a collective-defence call even when a widened theatre's map anchor is
+   * held by the other side.
+   */
+  joinConflictDefendingCountryId?: CountryId;
   proposingCountryId: CountryId;
   proposedByCharacterId: ObjectId;
   proposedByCharacterName: string;

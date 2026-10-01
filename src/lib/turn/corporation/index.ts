@@ -1,3 +1,8 @@
+/**
+ * Corporation turns settle operating results and distribute shareholder income.
+ * processCorporationTurn shares monetary quotes across automatic dividend conversions.
+ */
+import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { Character } from "@/lib/db/types";
@@ -28,6 +33,7 @@ import {
   type LabourContext,
 } from "@/lib/labour/laborCost";
 import { buildUnionEffectsById } from "@/lib/unions/unionLookups";
+import { loadUndergroundStrengthByCountrySector } from "@/lib/unions/undergroundEffects";
 import { loadCollectiveAgreementEffects } from "@/lib/unions/collectiveAgreementEffects";
 import { loadIndustrialActionOutputFactors } from "@/lib/unions/industrialActionEffects";
 import {
@@ -43,7 +49,10 @@ import { processImfBailoutPayments } from "@/lib/turn/imfBailoutTurn";
 import { buildPersonalBalanceBulkOp, getHomeCurrency } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
-import { executeMarketMakerTrade, distributeConversionSpread } from "@/lib/currency/marketMaker";
+import {
+  executeMarketMakerTrade,
+  distributeConversionSpreadsBatch,
+} from "@/lib/currency/marketMaker";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -81,14 +90,6 @@ import { createCorporationTurnTimer, type CorporationTurnResult } from "./corpor
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
-import { resolveCorporationProductsEnabled } from "@/lib/products/featureFlag";
-import {
-  resolveProductClearingEffects,
-  type ProductClearingEffect,
-} from "@/lib/products/productMarketEffects";
-import { loadPostLaunchProductDocs, processCorporationProductTurn } from "./productLifecycleTurn";
-import { processAdvertisingTurn } from "@/lib/advertising/settlementTurn";
-import type { CoverageSectorInput } from "@/lib/advertising/rules/coverage";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -146,7 +147,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           supplyAgreementsEnabled: 1,
           prospectingEnabled: 1,
           commandEconomyEnabled: 1,
-          corporationProductsEnabled: 1,
           privateBankingEnabled: 1,
           interstateMoneyWiringEnabled: 1,
           freightSettlementMode: 1,
@@ -214,14 +214,20 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // sector inside processSectors from sectorType + currentYear). Inert (no
   // economic change) when the mode is off, the default.
   const fullEnabled = labourAtLeast(labourMode, "full");
-  const [unionsById, collectiveAgreementEffects, industrialActionOutputFactorBySectorId] =
-    fullEnabled
-      ? await Promise.all([
-          buildUnionEffectsById(db, turn ?? gameState?.currentTurn ?? 0),
-          loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
-          loadIndustrialActionOutputFactors(db),
-        ])
-      : [undefined, undefined, undefined];
+  const bannedUnionCountryIds = buildUnionsBannedByCountry(lookups.federalBudgets);
+  const [
+    unionsById,
+    collectiveAgreementEffects,
+    industrialActionOutputFactorBySectorId,
+    undergroundStrengthByCountrySector,
+  ] = fullEnabled
+    ? await Promise.all([
+        buildUnionEffectsById(db, turn ?? gameState?.currentTurn ?? 0),
+        loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
+        loadIndustrialActionOutputFactors(db),
+        loadUndergroundStrengthByCountrySector(db, bannedUnionCountryIds),
+      ])
+    : [undefined, undefined, undefined, undefined];
   const labour: LabourContext = {
     wagesEnabled: labourAtLeast(labourMode, "wages"),
     minWageRatioByCountry: buildMinWageRatioByCountry(lookups.federalBudgets),
@@ -233,7 +239,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // Union ban (player suggestion #93): read at the "unions" tier (the same
     // tier the unionization/strike machinery runs at), unlike the bias map
     // above whose reads are gated at "full".
-    unionsBannedByCountry: buildUnionsBannedByCountry(lookups.federalBudgets),
+    unionsBannedByCountry: bannedUnionCountryIds,
+    undergroundStrengthByCountrySector,
     // Union dues v1: gated read, only fetched when fullEnabled, so a union
     // document's mere existence never has an effect at a lower tier. Resolved
     // per-sector via `CorporateSector.representingUnionId`, not by
@@ -293,16 +300,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on, accrual can run shadow (A1/A2) with the slice still off.
   const brandLoyaltySliceEnabled =
     brandLoyaltyEnabled && marketGovernorConfig?.brandLoyaltySliceEnabled === true;
-  // Corporation products (issue #2125 slice): post-launch demand and
-  // price-defense effects for the clearing pre-pass below. One projected bulk
-  // read, only when the flag is on; flag-off performs zero product reads and
-  // passes an empty map, which leaves every clearing input byte-identical.
-  // Last turn's persisted product state, consistent with clearing's lagged
-  // inputs (the lifecycle advances later in this same turn).
-  const corporationProductsEnabled = resolveCorporationProductsEnabled(marketGovernorConfig);
-  const productEffectsByCorp: Map<string, ProductClearingEffect> = corporationProductsEnabled
-    ? resolveProductClearingEffects(await loadPostLaunchProductDocs(db), true)
-    : new Map();
   const market = buildMarketContext(marketSystemMode, {
     cap: marketGovernorConfig?.marketGovernorCap,
     rampTurns: marketGovernorConfig?.marketGovernorRampTurns,
@@ -350,7 +347,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltyEnabled,
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
-    productEffectsByCorp,
   });
   contractedByCorpCommodity = clearingContractedByCorpCommodity;
   mark("marketContext");
@@ -517,8 +513,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labourDemandWageIndexByState,
     strikeEvents,
     capacityBindingEvents,
-    settledMarketingSpendAnchorByBuyerId,
-    advertisingDeliveredAnchorBySellerId,
   } = processSectors(
     lookups,
     turn,
@@ -542,7 +536,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
     techLedger: nppTechLedger,
-  } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled);
+  } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
+    corporations: lookups.corporations,
+    issuerBondsByCorpId: lookups.bondsByCorpId,
+    heldBondsByCorpId: lookups.bondsHeldByCorpId,
+  });
   mark("nppCorpDecisions");
 
   // Merge NPP corp updates into the main corpOps
@@ -642,53 +640,6 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
 
-  // Coverage-backed advertising (issue #2235 slice): attribute each buyer's
-  // ALREADY-SETTLED marketing spend across its active agreements plus spot,
-  // then feed the effective delivered advertising into the product lifecycle
-  // below. Allocation view only — no cash, revenue, or market writes. Flag-off
-  // performs zero advertising reads or writes; the flag rides the preamble
-  // projection above.
-  let effectiveAdvertisingAnchorByCorpId: Map<string, number> | undefined;
-  if (corporationProductsEnabled) {
-    const advertisingSectorsByCorp = new Map<string, CoverageSectorInput[]>();
-    for (const [corpId, sectors] of lookups.sectorsByCorp) {
-      advertisingSectorsByCorp.set(
-        corpId,
-        sectors.map((sector) => ({
-          stateId: sector.stateId,
-          revenue: sector.revenue,
-          countryId: sector.countryId,
-          mothballed: sector.mothballed,
-          embargoSuspended: sector.embargoSuspended,
-          activeCapacityPercent: sector.activeCapacityPercent,
-        }))
-      );
-    }
-    const advertisingResult = await processAdvertisingTurn(db, {
-      enabled: true,
-      turn: turn ?? gameState?.currentTurn,
-      corpsById: lookups.corpById,
-      sectorsByCorp: advertisingSectorsByCorp,
-      fxByCurrency: lookups.exchangeRatesByCurrency,
-      deliveredAnchorBySellerId: advertisingDeliveredAnchorBySellerId,
-      settledSpendAnchorByBuyerId: settledMarketingSpendAnchorByBuyerId,
-    });
-    effectiveAdvertisingAnchorByCorpId = advertisingResult.effectiveAnchorByCorpId;
-  }
-  mark("advertisingSettlement");
-
-  // Corporation products (issue #2125 slice): advance each active product one
-  // lifecycle step from the turn's in-memory corp inputs. Allocation view
-  // only — no cash, revenue, or market writes. Flag-off performs zero product
-  // reads or writes; the flag rides the preamble projection above.
-  await processCorporationProductTurn(db, {
-    enabled: corporationProductsEnabled,
-    turn: turn ?? gameState?.currentTurn,
-    corpsById: lookups.corpById,
-    fxByCurrency: lookups.exchangeRatesByCurrency,
-    effectiveAdvertisingAnchorByCorpId,
-  });
-
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's
   // mothball / production-policy / cash writes are visible. Matching before
   // the write would lock volume against a plant this pass just idled, and
@@ -719,9 +670,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // Route the reduced FX spreads skimmed from foreign operating income into the
   // CB system (reserve slice → corp's home CB in the source currency; revenue →
   // source-currency CB). Already deducted from the corp's credited income above.
-  for (const { fromCurrency, toCurrency, fee } of sectorFxSpreadFees) {
-    await distributeConversionSpread(db, fee, fromCurrency, toCurrency);
-  }
+  await distributeConversionSpreadsBatch(db, sectorFxSpreadFees);
 
   // v3 Phase 6: translate this turn's strike trigger/resolution events into
   // sentiment pulses. Fired after the bulk writes above, on the now-persisted
@@ -873,6 +822,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // same fund cash/positions, so serializing within a fund preserves exact
   // ordering + per-corporation tx-log granularity, while the ~32 independent
   // funds overlap. Per-corp dividend attribution is unchanged.
+  mark("rdInnovations");
   if (fundDividendAccruals.length > 0) {
     const { isIndexFundsEnabled } = await import("@/lib/indexFunds/featureFlag");
     if (await isIndexFundsEnabled()) {
@@ -971,7 +921,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     }
   }
 
-  mark("rd+fundDividends");
+  mark("fundDividends");
   // Phase 3c: Credit dividends to corporate shareholders, see
   // creditCorpDividends (FX spread skim, 50% dividend-received deduction tax,
   // corp_dividend ledger rows, same-turn corporationHistory tax record).
@@ -1307,6 +1257,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             .toArray()
         : [];
     const charById = new Map(divChars.map((c) => [c._id.toString(), c]));
+    const quoteContext = await loadConversionQuoteContext(db, gameState?.euroMonetaryUnion);
 
     for (const [charIdStr, currMap] of dividendPayments) {
       if (charIdStr.startsWith("imperial:") || charIdStr.startsWith("npp:")) continue;
@@ -1323,6 +1274,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           amount,
           turn,
           source: "auto_dividend",
+          quoteContext,
         });
       }
     }
@@ -1349,16 +1301,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       lookups.exchangeRatesByCurrency,
       now,
       makeSeededRng(`marketCapCandle:${turn}${CORP_TURN_RNG_SALT}`),
-      lookups.sectorsByCorp,
       dividendIncomeReceivedByCorpId,
-      dividendTaxPaidByCountry,
-      {
-        plantsEnabled: market.plantsEnabled,
-        eraUnitScale: lookups.eraUnitScale,
-        stateResourcesByState: lookups.stateResourceCapacityByState,
-        currentYear,
-        commandEconomyEnabled,
-      }
+      dividendTaxPaidByCountry
     );
   }
   mark("snapshotMarketCap");
@@ -1384,12 +1328,14 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // Await the resolver so vote effects are part of the completed corporation turn.
     await processVoteAutoResolve(db, turn, forexEnabled);
     void processVoteReminders(db, turn);
+    mark("voteAutoResolve");
     // Resolve nationalizations whose notice window has elapsed (spec §14): cure-cancel
     // or complete the taking. Awaited so its effects land within this corp turn.
     await processPendingNationalizations(db, turn);
     // Resolve privatization auctions whose bid window has closed (spec §13.3):
     // sell to the top bidder or re-absorb the unsold carve-out.
     await processNationalizationAuctions(db, turn);
+    mark("nationalizations");
 
     // Financial-distress clock for the executive-nationalization grace window.
     // Runs last, after pending takings may have removed seized corps and all
@@ -1400,6 +1346,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     } catch (err) {
       logger.error("corporationTurn", "financial-distress tracking failed", err);
     }
+    mark("financialDistress");
 
     // Subsidiary corporations (feature-gated, dynamic import to avoid circular
     // deps): clear the formalization marker + dividend-floor fields on any corp
@@ -1432,6 +1379,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // divestiture order. Runs after subsidiary cleanup so the controlled-group
     // measurement reads settled ownership. Best-effort: a hiccup must not fail
     // the turn.
+    mark("subsidiaryCleanup");
     try {
       const { resolveDueMergerReviews, fineOverdueDivestitures } =
         await import("@/lib/corporations/mergerReview/lifecycle");
@@ -1460,6 +1408,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // negative liquidCapital forever. Wind down the terminally-insolvent ones
     // (see nppInsolvencyDissolution.ts). Runs after distress tracking so it
     // reads the same post-turn cash. Best-effort.
+    mark("mergerReview");
     try {
       const { processNppInsolventCorpDissolution } =
         await import("@/lib/turn/corporation/nppInsolvencyDissolution");
@@ -1473,7 +1422,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       logger.error("corporationTurn", "NPP insolvency dissolution failed", err);
     }
   }
-  mark("votes+nationalizations+distress");
+  mark("nppInsolvencyDissolution");
 
   // One bulk write for the whole turn's aggregate corp-audit entries, never
   // per-corp (perf guard, see comment above `corpAuditEntries`).

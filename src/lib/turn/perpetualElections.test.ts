@@ -389,6 +389,226 @@ describe("perpetualElections", () => {
       });
       expect(deletionCalls).toHaveLength(0);
     });
+
+    it("cancels a duplicate election and withdraws its active candidates", async () => {
+      const now = new Date("2026-04-17T12:00:00Z");
+      const first = {
+        _id: new ObjectId(),
+        countryId: "DD",
+        electionType: "landAssembly",
+        state: "SN",
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      } as Election;
+      const duplicate = {
+        ...first,
+        _id: new ObjectId(),
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      } as Election;
+      const elections = {
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([first, duplicate]),
+        }),
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      };
+      const candidates = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 2 }),
+      };
+      const campaigns = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 2 }),
+      };
+      const db = {
+        collection: vi.fn((name: string) => {
+          if (name === "elections") return elections;
+          if (name === "campaigns") return campaigns;
+          return candidates;
+        }),
+      } as never;
+
+      const { cleanupDuplicateElections } = await import("./perpetualElections");
+      await cleanupDuplicateElections(db, now);
+
+      expect(elections.updateMany).toHaveBeenCalledWith(
+        {
+          _id: { $in: [duplicate._id] },
+          status: { $in: ["active", "upcoming"] },
+        },
+        { $set: { status: "cancelled", updatedAt: now } }
+      );
+      expect(candidates.updateMany).toHaveBeenCalledWith(
+        { electionId: { $in: [duplicate._id] }, status: "active" },
+        { $set: { status: "withdrawn", withdrawnAt: now } }
+      );
+      expect(campaigns.updateMany).toHaveBeenCalledWith(
+        { electionId: { $in: [duplicate._id] }, status: { $ne: "archived" } },
+        {
+          $set: {
+            status: "archived",
+            archivedAt: now,
+            archivedReason: "withdrawn",
+            updatedAt: now,
+          },
+        }
+      );
+      expect(candidates.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        campaigns.updateMany.mock.invocationCallOrder[0]
+      );
+      expect(campaigns.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+        elections.updateMany.mock.invocationCallOrder[0]
+      );
+    });
+
+    it("preserves an active race over an older upcoming duplicate", async () => {
+      const now = new Date("2026-04-17T12:00:00Z");
+      const upcoming = {
+        _id: new ObjectId(),
+        countryId: "DD",
+        electionType: "landAssembly",
+        state: "SN",
+        status: "upcoming",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      } as Election;
+      const active = {
+        ...upcoming,
+        _id: new ObjectId(),
+        status: "active",
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      } as Election;
+      const elections = {
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([upcoming, active]),
+        }),
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      };
+      const candidates = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      };
+      const campaigns = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      };
+      const db = {
+        collection: vi.fn((name: string) => {
+          if (name === "elections") return elections;
+          if (name === "campaigns") return campaigns;
+          return candidates;
+        }),
+      } as never;
+
+      const { cleanupDuplicateElections } = await import("./perpetualElections");
+      await cleanupDuplicateElections(db, now);
+
+      expect(elections.updateMany).toHaveBeenCalledWith(
+        {
+          _id: { $in: [upcoming._id] },
+          status: { $in: ["active", "upcoming"] },
+        },
+        { $set: { status: "cancelled", updatedAt: now } }
+      );
+    });
+
+    it("preserves one active and one upcoming House race", async () => {
+      const now = new Date("2026-04-17T12:00:00Z");
+      const firstActive = {
+        _id: new ObjectId(),
+        countryId: "US",
+        electionType: "house",
+        state: "NY",
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      } as Election;
+      const duplicateActive = {
+        ...firstActive,
+        _id: new ObjectId(),
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      } as Election;
+      const upcoming = {
+        ...firstActive,
+        _id: new ObjectId(),
+        status: "upcoming",
+        createdAt: new Date("2026-01-03T00:00:00Z"),
+      } as Election;
+      const elections = {
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([firstActive, duplicateActive, upcoming]),
+        }),
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      };
+      const candidates = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      };
+      const campaigns = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      };
+      const db = {
+        collection: vi.fn((name: string) => {
+          if (name === "elections") return elections;
+          if (name === "campaigns") return campaigns;
+          return candidates;
+        }),
+      } as never;
+
+      const { cleanupDuplicateElections } = await import("./perpetualElections");
+      await cleanupDuplicateElections(db, now);
+
+      expect(elections.updateMany).toHaveBeenCalledWith(
+        {
+          _id: { $in: [duplicateActive._id] },
+          status: { $in: ["active", "upcoming"] },
+        },
+        { $set: { status: "cancelled", updatedAt: now } }
+      );
+    });
+
+    it("cancels the newer of exactly two active House races", async () => {
+      const now = new Date("2026-04-17T12:00:00Z");
+      const firstActive = {
+        _id: new ObjectId(),
+        countryId: "US",
+        electionType: "house",
+        state: "NY",
+        status: "active",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      } as Election;
+      const duplicateActive = {
+        ...firstActive,
+        _id: new ObjectId(),
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+      } as Election;
+      const elections = {
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([firstActive, duplicateActive]),
+        }),
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      };
+      const candidates = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      };
+      const campaigns = {
+        updateMany: vi.fn().mockResolvedValue({ modifiedCount: 0 }),
+      };
+      const db = {
+        collection: vi.fn((name: string) => {
+          if (name === "elections") return elections;
+          if (name === "campaigns") return campaigns;
+          return candidates;
+        }),
+      } as never;
+
+      const { cleanupDuplicateElections } = await import("./perpetualElections");
+      await cleanupDuplicateElections(db, now);
+
+      expect(elections.updateMany).toHaveBeenCalledWith(
+        {
+          _id: { $in: [duplicateActive._id] },
+          status: { $in: ["active", "upcoming"] },
+        },
+        { $set: { status: "cancelled", updatedAt: now } }
+      );
+    });
   });
 
   describe("ensurePerpetualElections — excludes non-electoral US regions (DC)", () => {
@@ -548,6 +768,7 @@ describe("perpetualElections", () => {
       currentTurn: number
     ) {
       const insertCalls: Omit<Election, "_id">[][] = [];
+      const bulkWriteCalls: unknown[][] = [];
       const electionsCollection = {
         find: vi.fn().mockImplementation((filter: Record<string, unknown>) => {
           // Duplicate-guard query uses $or — return empty so planned inserts go through.
@@ -572,6 +793,10 @@ describe("perpetualElections", () => {
           insertCalls.push(docs);
           return Promise.resolve({ insertedIds: {} });
         }),
+        bulkWrite: vi.fn().mockImplementation((ops: unknown[]) => {
+          bulkWriteCalls.push(ops);
+          return Promise.resolve({ modifiedCount: ops.length });
+        }),
       };
       const statesCollection = {
         find: vi.fn().mockReturnValue({
@@ -581,7 +806,13 @@ describe("perpetualElections", () => {
       const gameStateCollection = {
         findOne: vi.fn().mockResolvedValue({ currentTurn }),
       };
-      return { electionsCollection, statesCollection, gameStateCollection, insertCalls };
+      return {
+        electionsCollection,
+        statesCollection,
+        gameStateCollection,
+        insertCalls,
+        bulkWriteCalls,
+      };
     }
 
     function mountDb(
@@ -722,6 +953,63 @@ describe("perpetualElections", () => {
       expect(new Date(inserted[0].endTime!).getTime()).toBe(
         now.getTime() + (459 - currentTurn) * MS
       );
+    });
+
+    it("heals a live class-2 race that carried the old ceil seat count", async () => {
+      const currentTurn = 348;
+      const now = new Date("2026-03-01T00:00:00Z");
+      const live = {
+        _id: new ObjectId(),
+        electionType: "sangiin",
+        countryId: "JP",
+        state: "HOK",
+        chamberClass: 2,
+        cycle: 2,
+        status: "active",
+        totalSeats: 4,
+      } as Election;
+      const mock = makeMockDb(["HOK"], [live], [], currentTurn);
+      await mountDb(mock.electionsCollection, mock.statesCollection, mock.gameStateCollection)();
+
+      const { ensureJPCouncillorElections } = await import("./perpetualElections");
+      await ensureJPCouncillorElections(now, 2);
+
+      expect(mock.bulkWriteCalls.flat()).toEqual([
+        {
+          updateOne: {
+            filter: {
+              _id: live._id,
+              totalSeats: 4,
+              status: { $in: ["active", "upcoming"] },
+            },
+            update: { $set: { totalSeats: 3, updatedAt: now } },
+          },
+        },
+      ]);
+      expect(mock.insertCalls.flat()).toHaveLength(0);
+    });
+
+    it("does not carry an obsolete class seat count into the next cycle", async () => {
+      const currentTurn = 291;
+      const now = new Date("2026-04-21T04:00:00Z");
+      const resolved = {
+        _id: new ObjectId(),
+        electionType: "sangiin",
+        countryId: "JP",
+        state: "HOK",
+        chamberClass: 2,
+        cycle: 1,
+        status: "resolved",
+        totalSeats: 4,
+        updatedAt: new Date(now.getTime() - MS),
+      } as Election;
+      const mock = makeMockDb(["HOK"], [], [resolved], currentTurn);
+      await mountDb(mock.electionsCollection, mock.statesCollection, mock.gameStateCollection)();
+
+      const { ensureJPCouncillorElections } = await import("./perpetualElections");
+      await ensureJPCouncillorElections(now, 2);
+
+      expect(mock.insertCalls.flat()[0]?.totalSeats).toBe(3);
     });
 
     it("skips a canonical cycle when <24h of primary would remain, advancing to the next half-election", async () => {
@@ -908,6 +1196,142 @@ describe("perpetualElections", () => {
       );
     });
 
+    it("labels the post-snap Commons race by its shifted deadline, including the founding offset", async () => {
+      const now = new Date("2026-09-29T14:00:00Z");
+      const snapEnd = new Date(now.getTime() - MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "snap_commons",
+        state: "LON",
+        cycle: 6,
+        status: "resolved",
+        endTurn: 1228,
+        endTime: snapEnd,
+        updatedAt: snapEnd,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [], [resolved], 1229);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1229,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      const inserted = mock.insertCalls.flat();
+      expect(inserted[0].endTurn).toBe(1468);
+      expect(inserted[0].electionYear).toBe(1982);
+    });
+
+    it("repairs an existing post-snap race's label without changing its deadline", async () => {
+      const now = new Date("2026-09-29T23:00:00Z");
+      const snapEnd = new Date(now.getTime() - 10 * MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "snap_commons",
+        state: "LON",
+        cycle: 6,
+        status: "resolved",
+        endTurn: 1228,
+        endTime: snapEnd,
+        updatedAt: snapEnd,
+      } as Election;
+      const live = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "commons",
+        state: "LON",
+        cycle: 7,
+        status: "active",
+        endTurn: 1467,
+        electionYear: 1985,
+        totalSeats: 91,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [live], [resolved], 1238);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1238,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: { _id: live._id },
+            update: { $set: { electionYear: 1982, shiftedScheduleEndTurn: 1467, updatedAt: now } },
+          },
+        },
+      ]);
+      expect(mock.insertCalls.flat()).toHaveLength(0);
+    });
+
+    it("stamps the post-snap Commons race with its shifted deadline", async () => {
+      const now = new Date("2026-09-29T14:00:00Z");
+      const snapEnd = new Date(now.getTime() - MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "snap_commons",
+        state: "LON",
+        cycle: 6,
+        status: "resolved",
+        endTurn: 1228,
+        endTime: snapEnd,
+        updatedAt: snapEnd,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [], [resolved], 1229);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1229,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      expect(mock.insertCalls.flat()[0].shiftedScheduleEndTurn).toBe(1468);
+    });
+
+    it("keeps the snap-reset term clock for the Parliament after the post-snap one", async () => {
+      // The 1982 post-snap Parliament resolves. Its successor must land five
+      // years later (1987), not on the canonical 1990 cycle.
+      const now = new Date("2026-10-09T14:00:00Z");
+      const end = new Date(now.getTime() - MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "commons",
+        state: "LON",
+        cycle: 7,
+        status: "resolved",
+        endTurn: 1467,
+        endTime: end,
+        updatedAt: end,
+        shiftedScheduleEndTurn: 1467,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [], [resolved], 1468);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1468,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      const inserted = mock.insertCalls.flat();
+      expect(inserted[0].cycle).toBe(8);
+      expect(inserted[0].endTurn).toBe(1707);
+      expect(inserted[0].electionYear).toBe(1987);
+      expect(inserted[0].shiftedScheduleEndTurn).toBe(1707);
+    });
+
     it("does NOT let an admin-accelerated regular commons drag the LARP calendar — cycle formula preserves canonical anchor", async () => {
       // Admin accelerated cycle 1 to resolve early at turn 100 (canonical was 267).
       // Canonical cycle 2 must still end at 267 + 240 = 507 regardless of the admin edit.
@@ -955,7 +1379,8 @@ describe("perpetualElections", () => {
       regions: string[],
       liveOrUpcoming: Election[],
       completed: Election[],
-      currentTurn: number
+      currentTurn: number,
+      preset?: string
     ) {
       const insertCalls: Omit<Election, "_id">[][] = [];
       const electionsCollection = {
@@ -982,7 +1407,7 @@ describe("perpetualElections", () => {
           toArray: vi.fn().mockResolvedValue(regions.map((id) => ({ _id: id }))),
         }),
       };
-      const gameStateCollection = { findOne: vi.fn().mockResolvedValue({ currentTurn }) };
+      const gameStateCollection = { findOne: vi.fn().mockResolvedValue({ currentTurn, preset }) };
       return { electionsCollection, statesCollection, gameStateCollection, insertCalls };
     }
 
@@ -1005,7 +1430,7 @@ describe("perpetualElections", () => {
         _id: new ObjectId(),
         countryId: "JP",
         electionType: "snap_shugiin",
-        state: "tokyo",
+        state: "KAN",
         cycle: 2,
         status: "active",
         startTime: new Date(now.getTime() - 12 * MS),
@@ -1022,6 +1447,38 @@ describe("perpetualElections", () => {
       expect(mock.insertCalls.flat()).toHaveLength(0);
     });
 
+    it("heals a live 1953 Shugiin race to its authored regional apportionment", async () => {
+      const now = new Date("2026-04-01T00:00:00Z");
+      const live = {
+        _id: new ObjectId(),
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "HOK",
+        cycle: 2,
+        status: "active",
+        totalSeats: 12,
+      } as Election;
+      const mock = makeJPMockDb(["HOK"], [live], [], 300, "1953-default");
+      await mountJPDb(mock);
+
+      const { ensureJPElections } = await import("./perpetualElections");
+      await ensureJPElections(now);
+
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: {
+              _id: live._id,
+              totalSeats: 12,
+              status: { $in: ["active", "upcoming"] },
+            },
+            update: { $set: { totalSeats: 21, updatedAt: now } },
+          },
+        },
+      ]);
+      expect(mock.insertCalls.flat()).toHaveLength(0);
+    });
+
     it("spawns the next regular shugiin 'upcoming' with snap.endTurn + 192 anchor right after snap resolves", async () => {
       // Snap cycle 2 ended at LARP turn 299 (one turn before currentTurn).
       // Canonical post-snap cycle 3 endTurn = 299 + 192 = 491. startTurn = 491 − 192 = 299.
@@ -1034,7 +1491,7 @@ describe("perpetualElections", () => {
         _id: new ObjectId(),
         countryId: "JP",
         electionType: "snap_shugiin",
-        state: "tokyo",
+        state: "KAN",
         cycle: 2,
         status: "resolved",
         endTime: snapEnd,
@@ -1042,7 +1499,7 @@ describe("perpetualElections", () => {
         updatedAt: snapEnd,
       } as Election;
 
-      const mock = makeJPMockDb(["tokyo"], [], [resolved], currentTurn);
+      const mock = makeJPMockDb(["KAN"], [], [resolved], currentTurn);
       await mountJPDb(mock);
 
       const { ensureJPElections } = await import("./perpetualElections");
@@ -1070,7 +1527,7 @@ describe("perpetualElections", () => {
         _id: new ObjectId(),
         countryId: "JP",
         electionType: "shugiin",
-        state: "tokyo",
+        state: "KAN",
         cycle: 1,
         status: "resolved",
         endTime: acceleratedEnd,
@@ -1078,7 +1535,7 @@ describe("perpetualElections", () => {
         updatedAt: acceleratedEnd,
       } as Election;
 
-      const mock = makeJPMockDb(["tokyo"], [], [resolved], currentTurn);
+      const mock = makeJPMockDb(["KAN"], [], [resolved], currentTurn);
       await mountJPDb(mock);
 
       const { ensureJPElections } = await import("./perpetualElections");

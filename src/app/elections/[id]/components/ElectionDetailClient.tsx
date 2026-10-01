@@ -28,6 +28,8 @@ import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types"
 import { BLEND } from "@/components/blend/tokens";
 import { BlendScope } from "@/components/blend/BlendScope";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
+import { captureProductEvent } from "@/lib/analytics/capture";
+import { getStoredConsent } from "@/components/CookieConsent";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -156,7 +158,10 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // legacy view. `election.id` is always the resolved ObjectId. Same rule the
   // sub-region maps in GeneralPhaseView already follow.
   const resultsId = election?.id ?? null;
-  const needsResults = election?.electionType === "president" && election?.isEnded === true;
+  const needsResults =
+    election?.isEnded === true &&
+    (election.electionType === "president" ||
+      election.allCandidates.some((candidate) => candidate.isYou));
   useEffect(() => {
     if (!needsResults || !resultsId) return;
     let cancelled = false;
@@ -176,6 +181,48 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       cancelled = true;
     };
   }, [resultsId, needsResults]);
+
+  useEffect(() => {
+    if (
+      !election?.isEnded ||
+      !results ||
+      !["resolved", "completed"].includes(results.election.status) ||
+      getStoredConsent() !== "accepted"
+    )
+      return;
+    const ownCandidateIds = new Set(
+      election.allCandidates.filter((candidate) => candidate.isYou).map((candidate) => candidate.id)
+    );
+    const ownSeatedCandidate = results.candidates.find(
+      (candidate) => ownCandidateIds.has(candidate.id) && (candidate.seatsProjected ?? 0) > 0
+    );
+    const winnerId =
+      results.summary.projectedWinner && ownCandidateIds.has(results.summary.projectedWinner)
+        ? results.summary.projectedWinner
+        : ownSeatedCandidate?.id;
+    if (!winnerId) return;
+    const key = `ahd:election-won:${results.election.id}`;
+    try {
+      if (window.localStorage.getItem(key)) return;
+      window.localStorage.setItem(key, "1");
+      const ranked = [...results.candidates].sort((a, b) => b.voteSharePct - a.voteSharePct);
+      const winner = ranked.find((candidate) => candidate.id === winnerId);
+      const runner = ownSeatedCandidate
+        ? ranked.find((candidate) => (candidate.seatsProjected ?? 0) === 0)
+        : ranked.find((candidate) => candidate.id !== winnerId);
+      void captureProductEvent("election_won", {
+        office: results.election.electionType,
+        nation_id: results.election.countryId,
+        margin: (winner?.voteSharePct ?? 0) - (runner?.voteSharePct ?? 0),
+      });
+      void captureProductEvent("office_won", {
+        office: results.election.electionType,
+        nation_id: results.election.countryId,
+      });
+    } catch {
+      // Analytics storage is optional.
+    }
+  }, [election, results]);
 
   useEffect(() => {
     let visibilityTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -207,12 +254,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   const handleEnter = async () => {
     if (!election) return;
+    if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/enter`, { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         showToast(data.message ?? "Entered race", "success");
+        void import("@/lib/analytics/capture")
+          .then(({ captureProductEvent }) => captureProductEvent("election_entered"))
+          .catch(() => {});
         await fetchElection();
       } else {
         showToast(data.error ?? "Failed to enter race", "error");

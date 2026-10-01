@@ -1,0 +1,423 @@
+{
+  "schemaVersion": 1,
+  "collectorSha256": "da560bd6e71cb50c69133025c3a12c4b15f96a9a036894de5df4502b3df4bee1",
+  "collectorCommit": "4b5d0d310aaee170ae34128b4acb9e567b4194c1",
+  "collectorDirty": true,
+  "runId": "a2b5adb8-dd9a-4480-8781-50befc0fd53d",
+  "sourceCommit": "47bb364e1f605c895d186e51f6a19b6ed4de5ff3",
+  "preset": "2027-default",
+  "seed": "audit_europe_control_2027_0929",
+  "actorMode": "pure-npp",
+  "status": "completed",
+  "completedTurn": 49,
+  "effectiveFlags": {
+    "livingConflictsEnabled": true,
+    "crisisInteractionEnabled": true,
+    "crisisAidBillsEnabled": true
+  },
+  "peakAuthoredWindowOverlap": 5,
+  "caveats": [
+    "Overlap uses authored response-window intervals, not reconstructed early resolution turns.",
+    "Consequences and tracks are endpoint observations, not a retained recovery trajectory.",
+    "Missing interactions remain null and are counted explicitly.",
+    "This is subsystem telemetry from a completed world, not reset qualification."
+  ],
+  "missingInteractions": 0,
+  "states": [
+    {
+      "key": "arab_uprisings",
+      "opened": true,
+      "openedYear": 2027,
+      "status": "active",
+      "phase": 1,
+      "durationTurns": 47,
+      "tracks": {
+        "legitimacy": 42,
+        "protestMobilization": 25,
+        "repression": 35,
+        "eliteCohesion": 65,
+        "armedOpposition": 0,
+        "civilianStrain": 8,
+        "displacement": 0,
+        "extremistSpace": 5,
+        "settlementMomentum": 11,
+        "reconstruction": 0
+      },
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 9.2,
+        "regionalSpillover": 4.6,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "berlin",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "congo",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "global_financial_crisis",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "northern_ireland",
+      "opened": true,
+      "openedYear": 2027,
+      "status": "active",
+      "phase": 1,
+      "durationTurns": 47,
+      "tracks": {
+        "violence": 70,
+        "settlementMomentum": 18,
+        "legitimacy": 35,
+        "unionistConsent": 28,
+        "nationalistConsent": 28,
+        "decommissioning": 5,
+        "institutionalStability": 10,
+        "domesticConsent": 30,
+        "ratificationAuthorization": 0,
+        "ratificationFailureCount": 0
+      },
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "nuclear_incident",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "oil_disruption",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "pandemic",
+      "opened": true,
+      "openedYear": 2027,
+      "status": "active",
+      "phase": 1,
+      "durationTurns": 47,
+      "tracks": {
+        "transmission": 33,
+        "surveillance": 24,
+        "healthCapacity": 68,
+        "publicTrust": 60,
+        "restrictionFatigue": 0,
+        "vaccineResearch": 0,
+        "manufacturing": 8,
+        "distributionEquity": 28,
+        "supplyChainStrain": 5,
+        "immunity": 14
+      },
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 9.2,
+        "regionalSpillover": 4.6,
+        "casualties": 0,
+        "settlementMomentum": 10
+      }
+    },
+    {
+      "key": "russia_ukraine_security",
+      "opened": true,
+      "openedYear": 2027,
+      "status": "negotiating",
+      "phase": 1,
+      "durationTurns": 47,
+      "tracks": {
+        "ukrainianLegitimacy": 48,
+        "territorialControl": 100,
+        "coercivePressure": 25,
+        "separatistCapacity": 8,
+        "deterrence": 30,
+        "allianceCohesion": 45,
+        "sanctionsPressure": 0,
+        "westernAid": 0,
+        "displacement": 0,
+        "infrastructureDamage": 0,
+        "escalationRisk": 7,
+        "warWeariness": 0,
+        "settlementMomentum": 32,
+        "reconstruction": 0
+      },
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 9.2,
+        "regionalSpillover": 4.6,
+        "casualties": 0,
+        "settlementMomentum": 18
+      }
+    },
+    {
+      "key": "suez_aftermath",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "transnational_terrorism",
+      "opened": true,
+      "openedYear": 2027,
+      "status": "active",
+      "phase": 1,
+      "durationTurns": 47,
+      "tracks": {
+        "threatCapability": 34,
+        "intelligenceCoverage": 38,
+        "plotReadiness": 10,
+        "attributionConfidence": 16,
+        "publicFear": 8,
+        "civilLiberties": 78,
+        "allianceCohesion": 48,
+        "interventionCommitment": 0,
+        "insurgency": 5,
+        "warWeariness": 0
+      },
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 9.2,
+        "regionalSpillover": 4.6,
+        "casualties": 0,
+        "settlementMomentum": 8
+      }
+    },
+    {
+      "key": "vietnam",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    },
+    {
+      "key": "yugoslav_dissolution",
+      "opened": false,
+      "openedYear": null,
+      "status": "dormant",
+      "phase": 0,
+      "durationTurns": 0,
+      "tracks": {},
+      "consequences": {
+        "civilianStrain": 0,
+        "refugees": 0,
+        "infrastructureDamage": 0,
+        "armsProliferation": 0,
+        "regionalSpillover": 0,
+        "casualties": 0,
+        "settlementMomentum": 0
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "conflict": "arab_uprisings",
+      "openedTurn": 2,
+      "authoredEndTurn": 26,
+      "status": "resolved",
+      "interactionPresent": true,
+      "resolved": true,
+      "outcome": "protected_relief",
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "northern_ireland",
+      "openedTurn": 2,
+      "authoredEndTurn": 26,
+      "status": "resolved",
+      "interactionPresent": true,
+      "resolved": true,
+      "outcome": null,
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "pandemic",
+      "openedTurn": 2,
+      "authoredEndTurn": 26,
+      "status": "resolved",
+      "interactionPresent": true,
+      "resolved": true,
+      "outcome": "equitable_rollout",
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "russia_ukraine_security",
+      "openedTurn": 2,
+      "authoredEndTurn": 26,
+      "status": "resolved",
+      "interactionPresent": true,
+      "resolved": true,
+      "outcome": "negotiated_neutrality",
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "transnational_terrorism",
+      "openedTurn": 2,
+      "authoredEndTurn": 26,
+      "status": "resolved",
+      "interactionPresent": true,
+      "resolved": true,
+      "outcome": "plot_disrupted",
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "arab_uprisings",
+      "openedTurn": 26,
+      "authoredEndTurn": 50,
+      "status": "active",
+      "interactionPresent": true,
+      "resolved": false,
+      "outcome": null,
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "northern_ireland",
+      "openedTurn": 26,
+      "authoredEndTurn": 50,
+      "status": "active",
+      "interactionPresent": true,
+      "resolved": false,
+      "outcome": null,
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "pandemic",
+      "openedTurn": 26,
+      "authoredEndTurn": 50,
+      "status": "active",
+      "interactionPresent": true,
+      "resolved": false,
+      "outcome": null,
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "russia_ukraine_security",
+      "openedTurn": 26,
+      "authoredEndTurn": 50,
+      "status": "active",
+      "interactionPresent": true,
+      "resolved": false,
+      "outcome": null,
+      "recordedChoices": 0
+    },
+    {
+      "conflict": "transnational_terrorism",
+      "openedTurn": 26,
+      "authoredEndTurn": 50,
+      "status": "active",
+      "interactionPresent": true,
+      "resolved": false,
+      "outcome": null,
+      "recordedChoices": 0
+    }
+  ]
+}

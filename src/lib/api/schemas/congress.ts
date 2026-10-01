@@ -236,6 +236,10 @@ export const centralBankIndependenceProvisionSchema = z.object({
   action: z.enum(["grant", "revoke"]),
 });
 
+export const euroAdoptionProvisionSchema = z.object({
+  type: z.literal("euro_adoption"),
+});
+
 export const unionLawProvisionSchema = z.object({
   type: z.literal("union_law"),
   bias: z.number().min(-50).max(50),
@@ -260,6 +264,12 @@ export function moderatedBillText(base: z.ZodString) {
     message: "Text contains prohibited language",
   });
 }
+
+export const europeanTreatyProvisionSchema = z.object({
+  type: z.literal("european_treaty"),
+  treaty: z.literal("maastricht"),
+  action: z.enum(["ratify", "reject"]),
+});
 
 export const proposeBillSchema = z
   .object({
@@ -286,6 +296,8 @@ export const proposeBillSchema = z
           unionLawProvisionSchema,
           electoralLawProvisionSchema,
           centralBankIndependenceProvisionSchema,
+          euroAdoptionProvisionSchema,
+          europeanTreatyProvisionSchema,
           policyProvisionSchema,
         ])
       )

@@ -28,14 +28,14 @@ function outcome(id: string) {
 }
 
 describe("Arab uprisings living crisis", () => {
-  it("diffuses pressure through one regional crisis", () => {
+  it("does not substitute calendar pressure for live regional observations", () => {
     expect(
       scheduledPressureDeltas(
         ARAB_UPRISINGS_DEF,
         { ...stateAt("structural_pressure"), totalTurns: 12 },
         2011
       )
-    ).toEqual({ legitimacy: -4, protestMobilization: 5, civilianStrain: 3 });
+    ).toEqual({});
     expect(ARAB_UPRISINGS_DEF.key).toBe("arab_uprisings");
   });
 

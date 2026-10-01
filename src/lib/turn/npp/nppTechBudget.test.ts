@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 import { CAPACITY_ANCHOR_YEAR } from "@/lib/constants/capacityEconomy";
 import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
-import { pickBestNppTechNode } from "./corpBehaviorConfig";
+import { maybePushNppTechUnlock, pickBestNppTechNode } from "./corpBehaviorConfig";
 import { makeNppCorpDecision, type NppPlantsContext } from "../nppCorporationBehavior";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 
@@ -49,6 +49,23 @@ function sector(corporationId: ObjectId): CorporateSector {
 }
 
 describe("NPP tech spending budget", () => {
+  it("prices an autonomous unlock from daily revenue without multiplying it by turns", () => {
+    const corp = corporation();
+    const corpUpdates: Parameters<typeof maybePushNppTechUnlock>[0]["corpUpdates"] = [];
+
+    maybePushNppTechUnlock({
+      corp,
+      dailyGrossRevenueLocal: 10_000_000,
+      techCurrentYear: 2020,
+      turn: 200,
+      now: new Date("2026-09-15T12:00:00Z"),
+      corpUpdates,
+    });
+
+    expect(corpUpdates).toHaveLength(1);
+    expect(corpUpdates[0].update.$inc?.liquidCapital).toBe(-1_500_000);
+  });
+
   it("does not spend the opening cash twice after capacity reinvestment", () => {
     const corp = corporation();
     const decision = makeNppCorpDecision(

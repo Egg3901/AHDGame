@@ -109,6 +109,9 @@ export function MailThreadView({ item, onArchive, onSent }: MailThreadViewProps)
       }
 
       onSent?.();
+      void import("@/lib/analytics/capture")
+        .then(({ captureProductEvent }) => captureProductEvent("message_sent"))
+        .catch(() => {});
     } catch {
       setMessages((prev) => prev.filter((m) => m !== optimistic));
       setDraft(body);

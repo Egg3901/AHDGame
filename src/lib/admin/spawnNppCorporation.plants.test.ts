@@ -19,6 +19,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { DEFAULT_SECTOR_STARTING_REVENUE } from "@/lib/constants/corporations";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/npp/generator", () => ({
@@ -79,6 +80,7 @@ describe("spawnNppCorporation — plants", () => {
       "corporateSectors",
       "unownedSectors",
       "politicalParties",
+      "gameState",
     ]) {
       db.collection(name);
       const cursor = {
@@ -102,6 +104,13 @@ describe("spawnNppCorporation — plants", () => {
       sectorType: "manufacturing",
       revenue: POOL_REVENUE,
       headroomUnits: POOL_UNITS,
+    });
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      sectorTechTreesEnabled: true,
+      currentYear: 1953,
+      currentTurn: 1,
+      startingYear: 1953,
     });
   });
 
@@ -143,6 +152,32 @@ describe("spawnNppCorporation — plants", () => {
     // Seed context: instant, so nothing is queued.
     expect(sector.buildQueue).toBeUndefined();
     expect(sector.plantsStartTurn).toBe(0);
+  });
+
+  it("grants passed-decade tech prerequisites to a new NPP corporation", async () => {
+    await spawn(true);
+    const corporation = db.collectionMocks.corporations!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+
+    expect(corporation.unlockedTechNodeIds).toEqual(autoGrantedNodeIds("manufacturing", 1953));
+  });
+
+  it("leaves tech state absent while the tech-tree feature is disabled", async () => {
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({
+      _id: "current",
+      sectorTechTreesEnabled: false,
+      currentYear: 1953,
+    });
+
+    await spawn(true);
+    const corporation = db.collectionMocks.corporations!.insertOne.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+
+    expect(corporation.unlockedTechNodeIds).toBeUndefined();
   });
 
   it("founds a focused extraction sector with strategy-normalized capacity", async () => {
@@ -194,6 +229,52 @@ describe("spawnNppCorporation — plants", () => {
     const { poolSet } = await spawn(true);
     expect(poolSet.headroomUnits).toBeCloseTo(POOL_UNITS - CAPTURE_UNITS, 6);
     expect(poolSet.revenue).toBe(Math.max(0, POOL_REVENUE - CAPTURE_REVENUE));
+  });
+
+  it("conserves a small sim pool across repeated seeded spawns", async () => {
+    const { batchSpawnNppCorporations, spawnNppCorporation } =
+      await import("./spawnNppCorporation");
+    const poolRevenue = 1_500_000;
+    const initialUnits = computeUnownedHeadroomUnits("manufacturing", poolRevenue, 1);
+    const pool = {
+      _id: new ObjectId(),
+      stateId: "CA",
+      countryId: "US",
+      sectorType: "manufacturing",
+      revenue: poolRevenue,
+      headroomUnits: initialUnits,
+    };
+    db.collectionMocks.unownedSectors!.findOne.mockImplementation(async () => ({ ...pool }));
+    db.collectionMocks.unownedSectors!.updateOne.mockImplementation(
+      async (_filter: unknown, update: { $set: { revenue: number; headroomUnits: number } }) => {
+        pool.revenue = update.$set.revenue;
+        pool.headroomUnits = update.$set.headroomUnits;
+      }
+    );
+    const spawned = await batchSpawnNppCorporations(db as unknown as Db, "US", {
+      sectorTypes: ["manufacturing"],
+      perSectorCount: 3,
+      headquartersState: "CA",
+      limitToUnownedPool: true,
+    });
+    expect(spawned).toHaveLength(2);
+    await expect(
+      spawnNppCorporation(db as unknown as Db, {
+        name: "Three",
+        type: "manufacturing",
+        countryId: "US",
+        headquartersState: "CA",
+        limitToUnownedPool: true,
+      })
+    ).rejects.toThrow("No unowned manufacturing capacity remains");
+    const grantedUnits = db.collectionMocks.corporateSectors!.insertOne.mock.calls.reduce(
+      (sum: number, call) => sum + (call[0] as { capitalStock: number }).capitalStock,
+      0
+    );
+    expect(grantedUnits).toBeCloseTo(initialUnits, 6);
+    expect(pool.revenue).toBe(0);
+    expect(pool.headroomUnits).toBeCloseTo(0, 6);
+    expect(db.collectionMocks.corporateSectors!.insertOne).toHaveBeenCalledTimes(2);
   });
 
   it("never drives the pool negative", async () => {

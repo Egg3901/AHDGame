@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BankingHubClient } from "./BankingHubClient";
 
+const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("@/contexts/ToastContext", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast }),
 }));
 
 vi.mock("@/components/CountryFlag", () => ({
@@ -60,7 +61,31 @@ const payload = {
       totalDeposits: 2_400_000,
       cashReserves: 1_200_000,
       lendableHeadroom: 900_000,
+      logoUrl: "/api/logos/corporations/17",
+      ceoName: "Ada CEO",
+      ceoAvatarUrl: null,
       href: "/corporation/17?tab=bank",
+    },
+    {
+      corporationId: "bank-2",
+      sequentialId: 23,
+      name: "Meridian Mutual",
+      countryId: "UK",
+      countryName: "United Kingdom",
+      currency: "GBP",
+      operatorType: "npp",
+      charterType: "retail",
+      depositRatePercent: 4.0,
+      lendingRatePercent: 6.0,
+      warningBand: "amber",
+      confidence: 0.55,
+      totalDeposits: 800_000,
+      cashReserves: 200_000,
+      lendableHeadroom: 300_000,
+      logoUrl: undefined,
+      ceoName: "NPP Director",
+      ceoAvatarUrl: null,
+      href: "/corporation/23?tab=bank",
     },
   ],
   savings: [
@@ -74,7 +99,9 @@ const payload = {
       ],
     },
   ],
+  savingsBalances: { USD: 125_000 },
   personalCash: { USD: 40_000 },
+  displayFxRates: { USD: 1 },
   personalIncomeByCurrency: { USD: 50_000 },
   currentTurn: 115,
   ceoCorporations: [
@@ -128,10 +155,24 @@ const payload = {
 };
 
 beforeEach(() => {
+  showToast.mockClear();
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
 });
 
 describe("BankingHubClient", () => {
+  it("keeps bank IDs as option values without showing them in the admin picker", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...payload, isAdmin: true }) })
+    );
+    render(<BankingHubClient />);
+
+    const picker = (await screen.findByLabelText("Bank to unwind")) as HTMLSelectElement;
+    expect(picker.value).toBe("bank-1");
+    expect(picker.options[0]?.textContent).toBe("Continental Trust (United States #17)");
+    expect(picker.options[0]?.textContent).not.toContain("bank-1");
+  });
+
   it("puts private-bank customer actions in the first screen shortcuts", async () => {
     render(<BankingHubClient />);
 
@@ -146,34 +187,48 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
   });
 
-  it("uses tabs for the policy, commercial banking, and account hierarchy", async () => {
+  it("uses tabs for the commercial banking, policy, and account hierarchy", async () => {
     render(<BankingHubClient />);
 
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Banking & Credit" })).toBeTruthy()
     );
 
-    expect(screen.getByRole("tab", { name: /Central banks/ }).getAttribute("aria-selected")).toBe(
+    expect(screen.getByRole("tab", { name: /Private banks/ }).getAttribute("aria-selected")).toBe(
       "true"
     );
-    expect(screen.getByRole("heading", { name: "Central banks" })).toBeTruthy();
-    expect(screen.getAllByTestId("country-flag-US").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("heading", { name: "Private banks" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("tab", { name: /Private banks/ }));
     expect(screen.getByRole("heading", { name: "Private banks" })).toBeTruthy();
     expect(screen.getByText("Continental Trust")).toBeTruthy();
     expect(screen.getByText("Player-run")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Central banks" })).toBeNull();
     expect(
-      screen
-        .getByRole("link", { name: "Deposit savings at Continental Trust" })
-        .getAttribute("href")
-    ).toBe("/corporation/17?tab=bank#customer-deposit");
+      screen.getByRole("button", { name: "Deposit savings at Continental Trust" })
+    ).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: "Apply for a loan at Continental Trust" })
-        .getAttribute("href")
-    ).toBe("/corporation/17?tab=bank#customer-loan");
+      screen.getByRole("button", { name: "Apply for a loan at Continental Trust" })
+    ).toBeTruthy();
+    expect(screen.getByText("Ada CEO")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+    expect(screen.getByRole("heading", { name: "Deposit with Continental Trust" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply for a loan at Continental Trust" }));
+    expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
+    expect((screen.getByLabelText("Lending bank") as HTMLSelectElement).value).toBe("bank-1");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    // Hero: account balances plus the link to the player's central bank.
+    expect(screen.getByText("Liquid funds")).toBeTruthy();
+    expect(screen.getAllByText(/40,000/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/125,000/).length).toBeGreaterThan(0);
+    const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
+    expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Central banks/ }));
+    expect(screen.getByRole("heading", { name: "Central banks" })).toBeTruthy();
+    expect(screen.getByText("Bank of England")).toBeTruthy();
+    expect(screen.getAllByTestId("country-flag-US").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { name: "Private banks" })).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
     expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
@@ -186,9 +241,182 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
     expect(screen.getByText(/Private-bank maximum/)).toBeTruthy();
     expect(screen.getByText(/separate from bond issuance capacity/i)).toBeTruthy();
+  });
 
-    const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
-    expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");
+  it("deposits from the bank table using a review modal and routes savings to that bank", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === "/api/character/savings/deposit") {
+        return { ok: true, json: async () => ({ success: true, holderRouted: true }) };
+      }
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BankingHubClient />);
+    await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+    fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
+      target: { value: "500" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Deposit savings" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/character/savings/deposit",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ currency: "USD", amount: 500, holder: "bank-1" }),
+        })
+      )
+    );
+  });
+
+  it("sorts the private-bank table by savings APY, loan rate, and health", async () => {
+    render(<BankingHubClient />);
+    await waitFor(() => expect(screen.getByText("Meridian Mutual")).toBeTruthy());
+
+    const bankRows = () =>
+      screen
+        .getAllByRole("row")
+        .filter((row) => row.textContent?.includes("Mutual") || row.textContent?.includes("Trust"));
+
+    // Default sort: savings APY descending puts Meridian (4.00%) on top.
+    expect(bankRows()[0].textContent).toContain("Meridian Mutual");
+
+    // Estimated personal rate renders next to the posted base rate.
+    expect(screen.getAllByText(/Est\. yours/).length).toBe(2);
+    expect(screen.getByText(/Est\. yours 9\.00%/)).toBeTruthy();
+
+    // Health column shows the published score.
+    expect(screen.getByText("91")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Savings APY/ }));
+    expect(bankRows()[0].textContent).toContain("Continental Trust");
+
+    fireEvent.click(screen.getByRole("button", { name: /Loan rate/ }));
+    expect(bankRows()[0].textContent).toContain("Meridian Mutual");
+
+    fireEvent.click(screen.getByRole("button", { name: /Health/ }));
+    expect(bankRows()[0].textContent).toContain("Continental Trust");
+  });
+
+  it("lets a player withdraw from savings held at a private bank", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === "/api/character/savings/withdraw") {
+        return {
+          ok: true,
+          json: async () => ({ success: true, currency: "USD", amount: 250 }),
+        };
+      }
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BankingHubClient />);
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Banking & Credit" })).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
+
+    fireEvent.change(screen.getByLabelText("Withdrawal amount in USD"), {
+      target: { value: "250" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw USD savings" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/character/savings/withdraw",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ currency: "USD", amount: 250 }),
+        })
+      )
+    );
+  });
+
+  it.each([true, false])(
+    "closes a completed deposit before a delayed refresh (holder routed=%s)",
+    async (holderRouted) => {
+      let reads = 0;
+      let finishRefresh!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        finishRefresh = resolve;
+      });
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        if (url === "/api/banking/hub" && ++reads > 1) await pending;
+        if (url === "/api/character/savings/deposit")
+          return {
+            ok: true,
+            json: async () => ({
+              success: true,
+              holderRouted,
+              holderError: "Bank no longer accepts deposits",
+            }),
+          };
+        return { ok: true, json: async () => payload };
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      render(<BankingHubClient />);
+      await waitFor(() => expect(screen.getByText("Continental Trust")).toBeTruthy());
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings at Continental Trust" }));
+      fireEvent.change(screen.getByLabelText("Deposit amount in USD"), {
+        target: { value: "500" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Deposit savings" }));
+      try {
+        await waitFor(() => expect(reads).toBe(2));
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("dialog", { name: "Deposit with Continental Trust" })
+          ).toBeNull()
+        );
+        expect(
+          fetchMock.mock.calls.filter(([url]) => url === "/api/character/savings/deposit")
+        ).toHaveLength(1);
+        expect(showToast).toHaveBeenCalledWith(
+          expect.stringContaining(holderRouted ? "Deposited" : "could not route"),
+          holderRouted ? "success" : "error"
+        );
+      } finally {
+        finishRefresh();
+      }
+    }
+  );
+
+  it("shows a recovery message and releases the holder selector when delivery fails", async () => {
+    let attempts = 0;
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === "/api/character/savings-holder") {
+        attempts++;
+        if (attempts === 1) throw new TypeError("Network request failed");
+        return { ok: true, json: async () => ({ success: true }) };
+      }
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<BankingHubClient />);
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Your accounts" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
+    fireEvent.change(screen.getByLabelText("Savings holder for USD"), {
+      target: { value: "centralBank" },
+    });
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        "Could not move savings. Check your connection and try again.",
+        "error"
+      )
+    );
+    expect((screen.getByLabelText("Savings holder for USD") as HTMLSelectElement).disabled).toBe(
+      false
+    );
+    expect(attempts).toBe(1);
+    fireEvent.change(screen.getByLabelText("Savings holder for USD"), {
+      target: { value: "centralBank" },
+    });
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("Savings holder updated", "success")
+    );
+    expect(attempts).toBe(2);
   });
 
   it("keeps private banking surfaces hidden behind the feature flag", async () => {

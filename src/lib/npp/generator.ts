@@ -342,6 +342,17 @@ interface NPPGenerationConfig {
 }
 
 /**
+ * Reusable state for callers that generate several NPPs in one operation.
+ *
+ * One-off callers can omit this and retain the database-backed uniqueness
+ * check. Bulk callers should load active names once, then share this context
+ * across calls so generation does not rescan the whole NPP collection per row.
+ */
+export interface NPPGenerationContext {
+  existingNames: Set<string>;
+}
+
+/**
  * Generate a random number within a range
  */
 function randomInRange(min: number, max: number): number {
@@ -405,7 +416,17 @@ async function getLegislationTypesCached(
   }
   legislationTypeCache = await db
     .collection<LegislationType>("legislationTypes")
-    .find({})
+    .find(
+      {},
+      {
+        projection: {
+          _id: 1,
+          "policyOptions.stance": 1,
+          "policyOptions.economic": 1,
+          "policyOptions.social": 1,
+        },
+      }
+    )
     .toArray();
   legislationTypeCacheAt = now;
   return legislationTypeCache;
@@ -480,16 +501,19 @@ function generateFavorability(quality: number = 0): number {
 /**
  * Generate a single NPP
  */
-export async function generateNPP(config: NPPGenerationConfig): Promise<NPP> {
+export async function generateNPP(
+  config: NPPGenerationConfig,
+  context?: NPPGenerationContext
+): Promise<NPP> {
   const db = await getDb();
 
-  // Get existing NPP names to ensure uniqueness
-  const existingNPPs = await db
-    .collection<NPP>("npps")
-    .find({ retiredAt: null })
-    .project({ name: 1 })
-    .toArray();
-  const existingNames = existingNPPs.map((n) => n.name);
+  // One-off creation checks the database. Bulk callers share a set loaded once
+  // for the operation, avoiding one full NPP scan for every generated row.
+  const existingNames = context
+    ? [...context.existingNames]
+    : (
+        await db.collection<NPP>("npps").find({ retiredAt: null }).project({ name: 1 }).toArray()
+      ).map((n) => n.name);
 
   const quality = config.quality ?? 0;
   const now = new Date();
@@ -503,6 +527,7 @@ export async function generateNPP(config: NPPGenerationConfig): Promise<NPP> {
     throw new Error("Failed to generate unique NPP name");
   }
   const { name, gender } = nameResult;
+  context?.existingNames.add(name);
 
   // Assign ethnicity weighted by country demographics, then pick a matching portrait
   const ethnicity = weightedRandomEthnicity(countryId);
@@ -552,9 +577,12 @@ export async function generateNPP(config: NPPGenerationConfig): Promise<NPP> {
 /**
  * Generate and save an NPP to the database
  */
-export async function createNPP(config: NPPGenerationConfig): Promise<NPP> {
+export async function createNPP(
+  config: NPPGenerationConfig,
+  context?: NPPGenerationContext
+): Promise<NPP> {
   const db = await getDb();
-  const npp = await generateNPP(config);
+  const npp = await generateNPP(config, context);
 
   // Assign sequential ID
   const sequentialId = await getNextSequentialId(db, "npp");

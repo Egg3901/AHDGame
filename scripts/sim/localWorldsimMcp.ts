@@ -61,12 +61,12 @@ import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
 import { parseActorsField } from "./simJobArgs";
 import { assertSimSourceShape } from "./simSource";
 import { pickSovereignDemandExperimentFlags } from "./sovereignDemandExperimentFlags";
+import { readExperimentReport } from "./experimentReportStorage";
 
 const SIM_CONTROL_URI = process.env.SIM_CONTROL_URI || "mongodb://127.0.0.1:27018";
 const SIM_CONTROL_DB = process.env.SIM_CONTROL_DB || "sim_control";
 
 const SIM_JOBS = "simJobs";
-const SIM_EXPERIMENT_REPORTS = "simExperimentReports";
 const SIM_ELECTION_REPORTS = "simElectionReports";
 
 /** Mirrors worker.ts's assertSafeToken. A seed/preset becomes both a Mongo db
@@ -193,6 +193,9 @@ const TOOLS: ToolDef[] = [
         indexFundBondLiquidityEnabled: bool(
           "Whether index funds target 20 percent sovereign bonds while retaining a 5 percent cash buffer in this sandbox only."
         ),
+        nppFundRedemptionEnabled: bool(
+          "Whether autonomous NPPs can request bounded index-fund redemptions in this sandbox only (#2120). Explicit false pins the control arm."
+        ),
         sovereignIssuanceConsolidationEnabled: bool(
           "Whether below-floor sovereign issuance rungs consolidate into the largest rung in this sandbox only (#1001). Explicit false pins the control arm."
         ),
@@ -260,6 +263,12 @@ const TOOLS: ToolDef[] = [
       ) {
         throw new Error("indexFundBondLiquidityEnabled must be boolean");
       }
+      if (
+        a.nppFundRedemptionEnabled !== undefined &&
+        typeof a.nppFundRedemptionEnabled !== "boolean"
+      ) {
+        throw new Error("nppFundRedemptionEnabled must be boolean");
+      }
       // #1001 dark gates share one validated mapping with the worker, so a
       // queued scenario can never persist a value the worker cannot run.
       const sovereignDemandFlags = pickSovereignDemandExperimentFlags(a);
@@ -318,6 +327,9 @@ const TOOLS: ToolDef[] = [
         ...(a.indexFundBondLiquidityEnabled !== undefined
           ? { indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled }
           : {}),
+        ...(a.nppFundRedemptionEnabled !== undefined
+          ? { nppFundRedemptionEnabled: a.nppFundRedemptionEnabled }
+          : {}),
         ...sovereignDemandFlags,
         ...(a.equityLiquidityFacilityEnabled !== undefined
           ? { equityLiquidityFacilityEnabled: a.equityLiquidityFacilityEnabled }
@@ -346,6 +358,7 @@ const TOOLS: ToolDef[] = [
         canonicalFreightBillingEnabled: a.canonicalFreightBillingEnabled ?? "preset default",
         shortageResponsiveSourcingEnabled: a.shortageResponsiveSourcingEnabled ?? "preset default",
         indexFundBondLiquidityEnabled: a.indexFundBondLiquidityEnabled ?? "preset default",
+        nppFundRedemptionEnabled: a.nppFundRedemptionEnabled ?? "preset default",
         sovereignIssuanceConsolidationEnabled:
           a.sovereignIssuanceConsolidationEnabled ?? "preset default",
         domesticSovereignBondCoverageEnabled:
@@ -450,6 +463,7 @@ const TOOLS: ToolDef[] = [
         currentTurn: job.currentTurn ?? 0,
         lastMessage: job.lastMessage,
         lastWarnings: job.lastWarnings,
+        health: job.health ?? null,
         error: job.error,
         metricsAvailable: !!job.metrics,
         metricsError: job.metricsError,
@@ -573,9 +587,7 @@ const TOOLS: ToolDef[] = [
     ),
     handler: async (a, db) => {
       const max = Number(a.maxPoints ?? 500);
-      const report = await db
-        .collection(SIM_EXPERIMENT_REPORTS)
-        .findOne({ _id: String(a.runId) as never });
+      const report = await readExperimentReport(db, String(a.runId));
       if (!report) {
         const job = await db.collection(SIM_JOBS).findOne({ _id: String(a.runId) as never });
         return {

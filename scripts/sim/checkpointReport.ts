@@ -22,11 +22,25 @@
  * entries rendered at the top of the report.
  */
 import { MongoClient } from "mongodb";
+import { collectElectionTurnoverReport } from "@/lib/sim/electionTurnover";
 import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
+import type { GameHealthSnapshot } from "@/lib/db/types/gameHealthSnapshot";
+import {
+  aggregateGameHealth,
+  gameHealthRunSummary,
+  type GameHealthAggregate,
+} from "@/lib/turn/rules/gameHealth";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
 import { readFileSync, writeFileSync } from "node:fs";
+import {
+  qualifyPresidentialRace,
+  presidentialPersonTurnover,
+  type PresidentialOfficeSnapshot,
+} from "./presidentialQualification";
+import type { ElectionResultSnapshot } from "@/lib/db/types/electionResultSnapshot";
+import type { ElectionVoteTally } from "@/lib/db/types/voteTally";
 
 // ── Country grouping ────────────────────────────────────────────────────────
 /** The four countries playable this iteration — always highlighted. */
@@ -147,7 +161,7 @@ async function main(): Promise<void> {
       )[0]?.turn ?? 0);
 
   const snaps = await db
-    .collection("gameHealthSnapshots")
+    .collection<GameHealthSnapshot>("gameHealthSnapshots")
     .find({ turn: { $lte: maxTurn } })
     .sort({ turn: 1 })
     .toArray();
@@ -345,7 +359,7 @@ async function main(): Promise<void> {
   const label = (countryId: string, party: string): string =>
     partyName.get(`${countryId}|${party}`) ?? party;
   const seatRows = await db
-    .collection("parliamentSeatsHistory")
+    .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
     .find({ countryId: { $in: CONTROL_COUNTRIES } })
     .sort({ turn: 1 })
     .toArray();
@@ -570,6 +584,57 @@ async function main(): Promise<void> {
     });
   }
 
+  const presidentialElections = await db
+    .collection("elections")
+    .find({ countryId: "US", electionType: "president", status: "resolved" })
+    .toArray();
+  const presidentialIds = presidentialElections.map((e) => e._id);
+  const [presidentialSnapshots, presidentialTallies] = await Promise.all([
+    db
+      .collection<ElectionResultSnapshot>("electionResultSnapshots")
+      .find({ electionId: { $in: presidentialIds } })
+      .toArray(),
+    db
+      .collection<ElectionVoteTally>("electionVoteTallies")
+      .find({ electionId: { $in: presidentialIds } })
+      .toArray(),
+  ]);
+  const snapshotsByElection = new Map(
+    presidentialSnapshots.map((snapshot) => [String(snapshot.electionId), snapshot])
+  );
+  const talliesByElection = new Map(
+    presidentialTallies.map((tally) => [String(tally.electionId), tally])
+  );
+  const presidentialRaces = presidentialElections.map((election) => {
+    const electionId = String(election._id);
+    return {
+      electionYear: election.electionYear ?? null,
+      ...qualifyPresidentialRace(
+        electionId,
+        snapshotsByElection.get(electionId) ?? null,
+        talliesByElection.get(electionId) ?? null
+      ),
+    };
+  });
+  const presidentControl = control.find(
+    (entry) => entry.countryId === "US" && entry.officeType === "president"
+  );
+  const presidentialQualification = {
+    partyAlternations: presidentControl?.alternations ?? null,
+    ...presidentialPersonTurnover(seatRows),
+    races: presidentialRaces,
+    reconciled: presidentialRaces.filter((race) => race.reconciliation.length === 0).length,
+    contingent: presidentialRaces.filter((race) => race.contingent).length,
+    playerWins: presidentialRaces.filter((race) => race.winnerIsNPP === false).length,
+    nppWins: presidentialRaces.filter((race) => race.winnerIsNPP === true).length,
+    actorMix: Object.fromEntries(
+      ["npp-only", "player-only", "mixed", "unknown"].map((mix) => [
+        mix,
+        presidentialRaces.filter((race) => race.actorMix === mix).length,
+      ])
+    ),
+  };
+
   // Governors: sub-national executive control, counted per country per party.
   const govRows = await db
     .collection("electedOfficials")
@@ -741,19 +806,19 @@ async function main(): Promise<void> {
 
   // ── Engine health ─────────────────────────────────────────────────────────
   const last = snaps[snaps.length - 1];
+  const runHealth = aggregateGameHealth(snaps.map(gameHealthRunSummary));
   const health = {
+    ...runHealth,
     turn: last.turn as number,
     year: (last.year as number) ?? null,
-    errors: snaps.reduce((n, s) => n + ((s.turnProcessing?.errorCount as number) ?? 0), 0),
-    warnings: snaps.reduce((n, s) => n + ((s.turnProcessing?.warningCount as number) ?? 0), 0),
     phases: (last.turnProcessing?.phaseCount as number) ?? 0,
     medianTurnMs: median(
       snaps.map((s) => (s.turnProcessing?.durationMs as number) ?? 0).filter((v) => v > 0)
     ),
-    issues: ((last.dataIntegrity?.issues ?? []) as Array<Record<string, string>>).map((i) => ({
-      category: String(i.category),
-      severity: String(i.severity),
-      message: String(i.message ?? "").slice(0, 200),
+    issues: (last.dataIntegrity?.issues ?? []).map((issue) => ({
+      category: issue.category,
+      severity: issue.severity,
+      message: issue.message.slice(0, 200),
     })),
     npps: (last.population?.totalNPPs as number) ?? 0,
   };
@@ -1281,7 +1346,7 @@ async function main(): Promise<void> {
   // anyway.
   const SEAT_SHARE_OFFICES = ["house", "senate", "commons"];
   const seatShareSeatRows = await db
-    .collection("parliamentSeatsHistory")
+    .collection<PresidentialOfficeSnapshot>("parliamentSeatsHistory")
     .find({ countryId: { $in: CONTROL_COUNTRIES }, officeType: { $in: SEAT_SHARE_OFFICES } })
     .sort({ turn: 1 })
     .toArray();
@@ -1381,7 +1446,15 @@ async function main(): Promise<void> {
   // warn, not pass silently.
   const simRunDoc = (
     await db.collection("simRuns").find({}).sort({ startedAt: -1 }).limit(1).toArray()
-  )[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
+  )[0] as
+    | {
+        actorCoverage?: ActorCoverageManifest;
+        runId?: string;
+        seed?: string;
+        preset?: string;
+        source?: { requestedCommit?: string; executedCommit?: string };
+      }
+    | undefined;
   const { summarizeActorCoverageForVerdict } = await import("@/lib/sim/actorReport");
   const actorCoverageVerdict = summarizeActorCoverageForVerdict(simRunDoc?.actorCoverage ?? null);
   // Seed provenance (#1992): the fresh-bootstrap conformance report plus the
@@ -1406,6 +1479,15 @@ async function main(): Promise<void> {
     seedBaselineDoc,
     maxTurn
   );
+  const presidentialProvenance = {
+    telemetryVersion: 2,
+    runId: simRunDoc?.runId ?? null,
+    seed: simRunDoc?.seed ?? null,
+    preset: simRunDoc?.preset ?? (presetId || null),
+    requestedReleaseSha: simRunDoc?.source?.requestedCommit ?? null,
+    executedReleaseSha: simRunDoc?.source?.executedCommit ?? null,
+    featureManifest: (bootstrapConformanceDoc?.featureManifest as Record<string, unknown>) ?? null,
+  };
   const verdict = buildVerdict({
     health,
     market,
@@ -1444,7 +1526,9 @@ async function main(): Promise<void> {
     s.corpRevenue = keep(s.corpRevenue);
   }
 
+  const electionTurnover = await collectElectionTurnoverReport(db);
   const payload = {
+    electionTurnover,
     dbName,
     maxTurn,
     ordered,
@@ -1464,6 +1548,8 @@ async function main(): Promise<void> {
     corporate,
     marginVariation,
     control,
+    presidentialQualification,
+    presidentialProvenance,
     governors,
     changelog,
     narrative,
@@ -2164,7 +2250,7 @@ function buildNarrative(
     crisis: string;
   }>,
   market: { mode: string; trips: number; guardEnabled: boolean },
-  health: { errors: number; warnings: number; turn: number }
+  health: GameHealthAggregate & { turn: number }
 ): Array<{ countryId: string; title: string; body: string }> {
   const out: Array<{ countryId: string; title: string; body: string }> = [];
 
@@ -2243,7 +2329,11 @@ function buildNarrative(
     countryId: "WORLD",
     title: "The world",
     body:
-      `Through turn ${health.turn} the engine logged ${health.errors} errors and ${health.warnings} warnings. ` +
+      `Through turn ${health.turn}, ${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Health severity is ${health.severity} with ${health.errorCount} errors and ${health.warningCount} warnings ` +
+      `(${health.processingErrorCount} processing errors, ${health.processingWarningCount} processing warnings, ` +
+      `${health.integrityErrorCount} integrity errors, ${health.integrityWarningCount} integrity warnings); ` +
+      `qualification is ${health.qualification}. ` +
       `The market ran in ${market.mode} mode with the launch guard ${market.guardEnabled ? "armed" : "disarmed"}` +
       (market.trips > 0
         ? `, having tripped ${market.trips} time${market.trips === 1 ? "" : "s"} — so the capital tier was not exercised for the full window.`
@@ -2266,7 +2356,7 @@ export interface VerdictLine {
  * conclusion the charts below back up.
  */
 function buildVerdict(input: {
-  health: { errors: number; warnings: number; turn: number };
+  health: GameHealthAggregate & { turn: number };
   market: { trips: number; guardEnabled: boolean };
   corpTrend: { turn: number[]; firms: number[] };
   labour: {
@@ -2316,10 +2406,18 @@ function buildVerdict(input: {
   });
 
   out.push({
-    status: health.errors === 0 ? "good" : health.errors < 10 ? "warn" : "bad",
-    title: `${health.errors} engine error(s), ${health.warnings} warning(s) across ${health.turn} turns`,
+    status:
+      health.qualification === "non-passing"
+        ? "bad"
+        : health.severity === "warning" || health.qualification === "unverified"
+          ? "warn"
+          : "good",
+    title: `Health ${health.severity}: ${health.errorCount} error(s), ${health.warningCount} warning(s)`,
     detail:
-      "Phase throws are converted to warnings by the runtime, so a non-zero error count is the only signal a phase died silently.",
+      `${health.successfulTurns}/${health.completedTurns} completed turns succeeded. ` +
+      `Processing contributes ${health.processingErrorCount} errors and ${health.processingWarningCount} warnings; ` +
+      `integrity contributes ${health.integrityErrorCount} errors and ${health.integrityWarningCount} warnings. ` +
+      `Qualification is ${health.qualification}.`,
   });
 
   out.push({
@@ -2771,6 +2869,7 @@ function render() {
   let html = "";
   html += '<h1>Grand Sim 1953 — Checkpoint '+h.turn+'</h1>';
   html += '<p class="sub">Database <code>'+esc(D.dbName)+'</code>'+(h.year?' · in-game year '+h.year:'')+' · '+D.ordered.length+' instrumented economies</p>';
+  html += '<div class="note">Completion '+h.successfulTurns+'/'+h.completedTurns+' successful turns · health severity '+esc(h.severity)+' · qualification '+esc(h.qualification)+'</div>';
 
   if (D.missingPlayers && D.missingPlayers.length) {
     html += '<div class="warnbox"><b>Instrumentation gap:</b> player '+(D.missingPlayers.length===1?"country":"countries")+' '
@@ -3067,6 +3166,41 @@ function render() {
         html += '<div class="warnbox"><b>Diagnosis:</b> ' + esc(c.diagnosis) + '</div>';
       }
     }
+  }
+  if (D.presidentialQualification) {
+    const P = D.presidentialQualification;
+    html += '<h2>Presidential qualification</h2>';
+    if (D.presidentialProvenance) {
+      const V = D.presidentialProvenance;
+      html += '<div class="note">Telemetry v'+esc(V.telemetryVersion)+' · run '+esc(V.runId || 'unknown')+' · seed '+esc(V.seed || 'unknown')+' · preset '+esc(V.preset || 'unknown')+' · requested release '+esc(V.requestedReleaseSha || 'unknown')+' · executed release '+esc(V.executedReleaseSha || 'unknown')+' · feature manifest '+esc(V.featureManifest ? JSON.stringify(V.featureManifest) : 'unavailable')+'</div>';
+    }
+    html += '<div class="note">Party alternations come from the per-turn office snapshot, including the seeded presidency. Race margins and reconciliation use stored election-time results and final tallies. Missing snapshots remain visible as gaps.</div>';
+    html += '<div class="card">' + P.partyAlternations + ' party alternation(s); ' + P.reconciled + '/' + P.races.length + ' races reconcile; ' + P.playerWins + ' player wins; ' + P.nppWins + ' NPP wins; ' + P.contingent + ' contingent resolutions.</div>';
+    html += '<div class="note">Person turnover: ' + esc(P.personTurnover ?? 'unknown') + '; ' + P.knownTurns + ' holder snapshots, ' + P.unknownTurns + ' snapshots missing holder identity.</div>';
+    html += '<div class="note">Actor mix: ' + P.actorMix['npp-only'] + ' NPP-only, ' + P.actorMix['player-only'] + ' player-only, ' + P.actorMix.mixed + ' mixed, ' + P.actorMix.unknown + ' unknown. Per-race election-time apportionment is included in the report data.</div>';
+    html += '<div class="card scroll"><table><thead><tr><th>Year</th><th>Actors</th><th>Winner</th><th>Popular margin</th><th>EV margin</th><th>Resolution</th><th>Reconciliation</th></tr></thead><tbody>';
+    for (const race of P.races) {
+      html += '<tr><td>' + esc(race.electionYear ?? race.electionId) + '</td>'
+        + '<td>' + esc(race.actorMix) + '</td>'
+        + '<td>' + esc(race.winnerParty ?? 'unknown') + '</td>'
+        + '<td>' + (race.popularMarginPct === null ? 'unknown' : race.popularMarginPct.toFixed(1) + 'pt') + '</td>'
+        + '<td>' + (race.evMargin === null ? 'unknown' : race.evMargin) + '</td>'
+        + '<td>' + (race.contingent ? 'contingent' : 'majority') + '</td>'
+        + '<td>' + (race.reconciliation.length ? esc(race.reconciliation.join('; ')) : 'matched') + '</td></tr>';
+    }
+    html += '</tbody></table></div>';
+  }
+  if (D.electionTurnover) {
+    const T = D.electionTurnover;
+    const rateText = (rate) => rate.per100 === null ? 'unknown (0 comparable)' : rate.per100.toFixed(1) + ' (' + rate.count + '/' + rate.comparableCycles + ')';
+    html += '<h2>Election turnover per 100 comparable cycles</h2><div class="note">' + esc(T.basis) + ' ' + esc(T.denominators) + ' ' + esc(T.legacyLimit) + '</div>';
+    html += '<div class="card scroll"><table><thead><tr><th>Family and outcome coverage</th><th>Resolved</th><th>Seat vector changed</th><th>Unique control flip</th><th>Tied cycles</th><th>Representative replaced</th><th>All incumbents held</th><th>Player win</th><th>NPP win</th><th>Executed resolver shares</th></tr></thead><tbody>';
+    for (const family of T.families) {
+      html += '<tr><td>' + esc(family.key) + '<br>' + esc(Object.entries(family.outcomeScopes).map(([scope, count]) => scope + ': ' + count).join('; ')) + '</td><td>' + family.resolvedCycles + '</td>';
+      for (const metric of ['partySeatVectorChange', 'uniqueControlFlips', 'tiedControlCycles', 'personReplacement', 'completeIncumbentHold', 'playerWinCycles', 'nppWinCycles']) html += '<td>' + esc(rateText(family[metric])) + '</td>';
+      html += '<td>' + esc(Object.entries(family.resolverPathShares).map(([name, rate]) => name + ': ' + rateText(rate)).join('; ')) + '</td></tr>';
+    }
+    html += '</tbody></table></div><div class="note">Representative identities count each actual character or NPP once, including representatives holding aggregate seatsHeld voting weight. They do not assert one individual per physical seat. Actor mix, missing evidence and excluded comparisons are preserved in the report data.</div>';
   }
   if (D.governors && D.governors.length) {
     html += '<h2>Governorships</h2><div class="card scroll"><table><thead><tr><th>country</th><th>party</th><th>governorships</th></tr></thead><tbody>';

@@ -558,6 +558,9 @@ export async function sellFundHoldingShares(
     session?: ClientSession;
     note?: string;
     settlementCounterparty?: "market" | "issuer";
+    thresholds?: TxThresholds;
+    fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
+    turn?: number;
   }
 ): Promise<SellHoldingsForRedemptionResult> {
   const holding = fund.holdings.find(
@@ -604,7 +607,7 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
   const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const pricePerShareAnchor = shareTradeAnchorValue(
     1,
@@ -615,7 +618,7 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const turn = await getCurrentTurn(db);
+  const turn = options?.turn ?? (await getCurrentTurn(db));
   const now = new Date();
 
   const saleResult = await executeOneHoldingSale(
@@ -626,7 +629,7 @@ export async function sellFundHoldingShares(
     [...fund.holdings],
     turn,
     now,
-    { ...options, thresholds: await loadTxThresholds(db), fxByCurrency }
+    { ...options, thresholds: options?.thresholds ?? (await loadTxThresholds(db)), fxByCurrency }
   );
 
   if (!saleResult) {

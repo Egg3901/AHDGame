@@ -26,10 +26,13 @@ import {
   rdMoraleFactor,
   TURNS_PER_DAY,
   MAX_DIVIDEND_RATE,
-  SECTOR_RISK_PREMIUM,
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
   CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
 } from "@/lib/constants/corporations";
+import {
+  bankNpvBoostMultiplier,
+  sectorRiskPremiumAtTurn,
+} from "@/lib/corporations/rules/marketBoost";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   anchorToCorpCapital,
@@ -86,7 +89,7 @@ const SECTOR_RD_COMMODITIES: Partial<Record<string, [string, string?]>> = {
   technology: ["electronics", "rare_earth"],
   pharmaceuticals: ["pharmaceuticals", "industrial_chemicals"],
   finance: ["consulting_services", "software"],
-  media_entertainment: ["software", "consulting_services"],
+  media: ["software", "consulting_services"],
   retail: ["consumer_goods", "produce"],
   healthcare: ["pharmaceuticals", "consulting_services"],
   education: ["consulting_services", "software"],
@@ -759,7 +762,12 @@ export function processSectors(
     ) {
       const rawDividendPool = netIncomeBeforeDividends * (payoutDividendRate / 100);
       hourlyDividendPayout = Math.min(rawDividendPool, Math.max(0, netIncomeBeforeDividends));
-      const totalShares = corp.totalShares ?? 10_000_000;
+      // Shares issued for an IPO but not yet placed have no holder and earn no dividend.
+      const unplacedIpoShares =
+        corp.pendingShareIssuance?.issuedUpfront && corp.pendingShareIssuance.source === "ipo"
+          ? corp.pendingShareIssuance.remainingShares
+          : 0;
+      const totalShares = Math.max(1, (corp.totalShares ?? 10_000_000) - unplacedIpoShares);
       for (const sh of corp.shareholders) {
         const share = totalShares > 0 ? sh.shares / totalShares : 0;
         const payment = hourlyDividendPayout * share;
@@ -803,7 +811,10 @@ export function processSectors(
           }
         }
       }
-      const floatShares = Math.max(0, Math.min(totalShares, corp.publicFloat ?? 0));
+      const floatShares = Math.max(
+        0,
+        Math.min(totalShares, (corp.publicFloat ?? 0) - unplacedIpoShares)
+      );
       const floatDividendAnchor = hourlyDividendPayout * (floatShares / totalShares);
       if (floatDividendAnchor > 0) {
         equityPoolDividendAccruals.push({
@@ -1249,7 +1260,7 @@ export function processSectors(
     const corpPrimeRate =
       (lookups.primeRateByCountry.get(corp.countryId) ??
         getCountryConfig(corp.countryId).centralBank.defaultPrimeRate) / 100;
-    const riskPremium = SECTOR_RISK_PREMIUM[corp.type as string] ?? SECTOR_RISK_PREMIUM.default;
+    const riskPremium = sectorRiskPremiumAtTurn(corp.type, currentTurn);
     const growthNumer = corpGrowthNumerByCorpId.get(id) ?? 0;
     const growthDenom = corpGrowthDenomByCorpId.get(id) ?? 0;
     const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
@@ -1260,7 +1271,10 @@ export function processSectors(
       ? corpCapitalToAnchor(bankEquity(activeBankCharter), activeBankCharter.currency, bankFxRate)
       : 0;
     const bankNpvAnchor = activeBankCharter
-      ? bankNpvFromPerTurnIncome((activeBankCharter.lastBankingIncome ?? 0) / bankFxRate)
+      ? bankNpvFromPerTurnIncome(
+          (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate,
+          bankNpvBoostMultiplier(currentTurn)
+        )
       : 0;
     return {
       corpId: id,
@@ -1348,11 +1362,5 @@ export function processSectors(
     ),
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
-    // Advertising settlement inputs (allocation view only): the sector pass
-    // already moved the cash via the marketing transfer legs above. These maps
-    // let the settlement phase attribute the settled spend without re-reading
-    // or re-moving anything.
-    settledMarketingSpendAnchorByBuyerId: new Map(marketingSpendAnchorByBuyerId),
-    advertisingDeliveredAnchorBySellerId: new Map(advertisingSellerDeliveredValues),
   };
 }

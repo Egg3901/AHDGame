@@ -39,3 +39,23 @@ describe("BillVoteIndicator shift preview", () => {
     expect(screen.getByText("Aye:")).toBeTruthy();
   });
 });
+
+describe("BillVoteIndicator national override voting", () => {
+  it("starts blank, omits abstain, and posts a veto override vote", async () => {
+    render(<BillVoteIndicator billId="b1" myVote={null} canVote nationalOverrideVote />);
+
+    expect(screen.getByText("Not yet voted")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Abstain" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Override" }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/congress/bills/b1",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ action: "veto_override_vote", vote: "for" }),
+        })
+      )
+    );
+  });
+});

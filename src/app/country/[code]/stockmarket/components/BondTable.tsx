@@ -12,13 +12,38 @@ import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 
 type BondTypeFilter = "corporate" | "sovereign";
+type BondSortField = "yield" | "coupon" | "maturity" | "available" | "holders";
+type SortDir = "asc" | "desc";
 
-export function BondTable({ bonds }: { bonds: BondListing[] }) {
+const PAGE_SIZE = 10;
+
+const BOND_SORT_OPTIONS: { field: BondSortField; label: string }[] = [
+  { field: "yield", label: "Yield" },
+  { field: "coupon", label: "Coupon" },
+  { field: "maturity", label: "Maturity" },
+  { field: "available", label: "Available" },
+  { field: "holders", label: "Holders" },
+];
+
+export function BondTable({
+  bonds,
+  totalOutstanding,
+  ownedUnits,
+}: {
+  bonds: BondListing[];
+  /** Board-wide outstanding notional in anchor units (from /api/bonds). */
+  totalOutstanding?: number;
+  /** Viewer bond units by bond id. */
+  ownedUnits?: Map<string, number>;
+}) {
   const preset = useActivePreset();
-  const { formatPrice, toInternalFrom } = useCurrency();
+  const { formatAmount, formatPrice, toInternalFrom } = useCurrency();
   const [filter, setFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<BondTypeFilter>("corporate");
   const [availableOnly, setAvailableOnly] = useState(false);
+  const [sortField, setSortField] = useState<BondSortField>("yield");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(1);
 
   const filteredBonds = useMemo(() => {
     let list = bonds.filter((b) =>
@@ -35,10 +60,44 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
           b.maturityLabel.toLowerCase().includes(lower)
       );
     }
-    // Default sort by yield descending
-    list.sort((a, b) => b.yieldToMaturity - a.yieldToMaturity);
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "yield":
+          cmp = a.yieldToMaturity - b.yieldToMaturity;
+          break;
+        case "coupon":
+          cmp = a.couponRate - b.couponRate;
+          break;
+        case "maturity":
+          cmp = a.turnsRemaining - b.turnsRemaining;
+          break;
+        case "available":
+          cmp = (a.publicFloat ?? 0) - (b.publicFloat ?? 0);
+          break;
+        case "holders":
+          cmp = a.holders - b.holders;
+          break;
+      }
+      return sortDir === "desc" ? -cmp : cmp;
+    });
     return list;
-  }, [bonds, filter, typeFilter, availableOnly]);
+  }, [bonds, filter, typeFilter, availableOnly, sortField, sortDir]);
+
+  const totalCount = filteredBonds.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedBonds = filteredBonds.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const handleSort = (field: BondSortField) => {
+    setPage(1);
+    if (field === sortField) {
+      setSortDir(sortDir === "desc" ? "asc" : "desc");
+    } else {
+      setSortField(field);
+      setSortDir("desc");
+    }
+  };
 
   const corporateCount = bonds.filter((b) => b.issuerType !== "sovereign").length;
   const sovereignCount = bonds.filter((b) => b.issuerType === "sovereign").length;
@@ -48,7 +107,10 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-1 rounded-lg border border-card-border bg-card p-0.5">
           <button
-            onClick={() => setTypeFilter("corporate")}
+            onClick={() => {
+              setTypeFilter("corporate");
+              setPage(1);
+            }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
               typeFilter === "corporate"
                 ? "bg-primary/15 text-primary border border-primary/30"
@@ -58,7 +120,10 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
             Corporate ({corporateCount})
           </button>
           <button
-            onClick={() => setTypeFilter("sovereign")}
+            onClick={() => {
+              setTypeFilter("sovereign");
+              setPage(1);
+            }}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
               typeFilter === "sovereign"
                 ? "bg-secondary/15 text-secondary border border-secondary/30"
@@ -70,7 +135,10 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <button
-            onClick={() => setAvailableOnly((v) => !v)}
+            onClick={() => {
+              setAvailableOnly((v) => !v);
+              setPage(1);
+            }}
             aria-pressed={availableOnly}
             title="Show only bonds with units currently available to buy"
             className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
@@ -86,7 +154,10 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
               type="text"
               placeholder="Search bonds..."
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                setPage(1);
+              }}
               className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm pl-9 focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all"
             />
             <svg
@@ -103,6 +174,34 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
               />
             </svg>
           </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <p className="text-xs text-muted tabular-nums">
+          {bonds.length} issue{bonds.length === 1 ? "" : "s"}
+          {totalOutstanding != null && totalOutstanding > 0
+            ? ` · ${formatAmount(totalOutstanding)} outstanding`
+            : ""}
+        </p>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
+          <span className="text-xs font-semibold text-muted uppercase tracking-wider shrink-0">
+            Sort by:
+          </span>
+          {BOND_SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.field}
+              type="button"
+              onClick={() => handleSort(opt.field)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                sortField === opt.field
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "bg-card border border-card-border text-muted hover:text-foreground hover:bg-card-elevated"
+              }`}
+            >
+              {opt.label} {sortField === opt.field && (sortDir === "desc" ? "↓" : "↑")}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -134,17 +233,21 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
                   Available
                   <Tooltip content="Bond units currently on offer for purchase" />
                 </th>
+                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden lg:table-cell">
+                  Holders
+                  <Tooltip content="Players and corporations currently holding this bond" />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-card-border">
               {filteredBonds.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted">
                     No bonds found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                filteredBonds.map((bond) => (
+                paginatedBonds.map((bond) => (
                   <tr
                     key={bond._id}
                     className="group hover:bg-card-elevated/50 transition-colors cursor-pointer"
@@ -183,6 +286,14 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
                               </span>
                             )}
                             <span className="truncate">Series {bond.maturityLabel}</span>
+                            {(ownedUnits?.get(bond._id) ?? 0) > 0 && (
+                              <span
+                                className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/15 border border-primary/30 text-primary uppercase text-[9px] tracking-wide font-semibold whitespace-nowrap"
+                                title="Units you hold. See Portfolio for the full position."
+                              >
+                                You: {(ownedUnits?.get(bond._id) ?? 0).toLocaleString("en-US")}
+                              </span>
+                            )}
                             <span className="md:hidden text-muted/70">
                               · {(bond.publicFloat ?? 0).toLocaleString("en-US")} units avail
                             </span>
@@ -224,6 +335,24 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
                       <div className="font-medium tabular-nums text-muted">
                         {(bond.publicFloat ?? 0).toLocaleString("en-US")} units
                       </div>
+                      {bond.totalUnits > 0 && (
+                        <div
+                          className="mt-1 h-1 w-20 ml-auto overflow-hidden rounded-full bg-card-elevated"
+                          title={`${bond.totalUnitsHeld.toLocaleString("en-US")} of ${bond.totalUnits.toLocaleString("en-US")} units absorbed`}
+                        >
+                          <div
+                            className="h-full rounded-full bg-primary/70"
+                            style={{
+                              width: `${Math.min(100, (bond.totalUnitsHeld / bond.totalUnits) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right hidden lg:table-cell">
+                      <div className="font-medium tabular-nums text-muted">
+                        {bond.holders.toLocaleString("en-US")}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -231,6 +360,36 @@ export function BondTable({ bonds }: { bonds: BondListing[] }) {
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex flex-col gap-3 border-t border-card-border bg-card-elevated/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted tabular-nums">
+              Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, totalCount)}{" "}
+              of {totalCount}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="rounded-lg border border-card-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated disabled:pointer-events-none disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs font-medium text-muted tabular-nums px-1">
+                Page {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="rounded-lg border border-card-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated disabled:pointer-events-none disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

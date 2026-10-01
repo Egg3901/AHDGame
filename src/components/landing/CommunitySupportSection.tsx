@@ -151,8 +151,11 @@ export function CommunitySupportSection({
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
         <SectionLabel as="h2">Join the community</SectionLabel>
         <p className="mb-8 max-w-2xl text-body-lg leading-relaxed text-muted">
-          Meet other players, get help from the team, and help keep the simulation running. The game
-          is free — Patreon support is optional but deeply appreciated.
+          Meet other players, get help from the team, and help keep the simulation running.
+          <span className="store-purchase-cta">
+            {" "}
+            The game is free, and Patreon support is optional but deeply appreciated.
+          </span>
         </p>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -196,7 +199,7 @@ export function CommunitySupportSection({
           </article>
 
           {/* Patreon */}
-          <article className="group relative overflow-hidden rounded-xl border border-card-border bg-card p-6 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-gold/35 hover:shadow-lg sm:p-7">
+          <article className="store-purchase-cta group relative overflow-hidden rounded-xl border border-card-border bg-card p-6 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-gold/35 hover:shadow-lg sm:p-7">
             <div
               className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gold"
               aria-hidden="true"

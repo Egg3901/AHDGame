@@ -1,4 +1,5 @@
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { CommodityPriceAttribution } from "@/lib/market/priceAttribution";
 
 export interface StockListing {
   _id: string;
@@ -88,6 +89,8 @@ export interface CommodityData {
   priceChange: number;
   recentPriceChange?: number | null;
   annualPriceChange?: number;
+  /** Additive price explanation from the pricing engine (global scope). */
+  priceAttribution?: CommodityPriceAttribution | null;
   /** Per-state prices restricted to the selected exchange's country (empty on global view). */
   statePrices?: Record<string, number>;
   /** Per-state supply matching `statePrices`, used to volume-weight national averages. */
@@ -202,7 +205,8 @@ export type SortField =
   | "revenue"
   | "priceChange"
   | "publicFloat"
-  | "tickerSymbol";
+  | "tickerSymbol"
+  | "dividend";
 export type SortDir = "asc" | "desc";
 export type ExchangeFilter = "global" | (string & {});
 export type WealthSortField =

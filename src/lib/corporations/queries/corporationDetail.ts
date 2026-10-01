@@ -272,6 +272,11 @@ export async function loadCorporationDetailView(args: {
       marketDepthShares: equityQuote.bidDepthShares,
       totalShares: income.totalShares,
       publicFloat: corporation.publicFloat ?? 0,
+      pendingIpoShares:
+        corporation.pendingShareIssuance?.source === "ipo" &&
+        corporation.pendingShareIssuance.issuedUpfront
+          ? corporation.pendingShareIssuance.remainingShares
+          : 0,
       shareholders,
       superShareMultiplier: corporation.superShareMultiplier ?? undefined,
       superSharesAdoptedAtTurn: corporation.superSharesAdoptedAtTurn ?? undefined,

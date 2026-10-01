@@ -29,7 +29,7 @@ export type SimActorMode = "pure-npp" | "synthetic";
 export type ActorGateStatus = "covered" | "partial" | "unreachable";
 
 /** Registry version stamped into every manifest; bump on entry changes. */
-export const ACTOR_COVERAGE_REGISTRY_VERSION = 1;
+export const ACTOR_COVERAGE_REGISTRY_VERSION = 2;
 
 /** Exact explicit result for the presidential-nomination gate in pure NPP mode. */
 export const UNCOVERED_PRESIDENTIAL_NOMINATION = "uncovered: presidential nomination";
@@ -180,6 +180,11 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
     seams: [
       seam("src/lib/db/types/campaign.ts", "One lever's branch-tree state"),
       seam("src/lib/campaigns/actions.ts", "The whole per-turn accrual rule, in one place."),
+      seam(
+        "src/lib/campaigns/commands/campaignCommands.ts",
+        "Target required for opposition research"
+      ),
+      seam("src/lib/sim/oppositionResearchDriver.ts", "opposition-research flow driver"),
     ],
     pureNpp: {
       status: "unreachable",
@@ -191,8 +196,9 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
       status: "partial",
       reason:
         "synthetic actors accrue per-turn campaign actions through the production " +
-        "accrual rule, but no campaign-entry or action-spend driver exists, so no " +
-        "campaign is entered and no action is spent in a turned world.",
+        "accrual rule, and an opposition-research entry/spend flow driver exists — " +
+        "but this run retained no successful full-sequence purchase, so no campaign " +
+        "is entered and no action is spent here.",
     },
   },
   {
@@ -312,6 +318,38 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
         "inserted survey.",
     },
   },
+  {
+    id: "uk-no-confidence-lifecycle",
+    label: "UK no-confidence motion lifecycle",
+    requires:
+      "an eligible opposition Commons MP to propose plus seated voters for a deterministic ballot",
+    seams: [
+      seam(
+        "src/lib/government/commands/parliamentaryGovernment.ts",
+        "A no-confidence vote is already in progress"
+      ),
+      seam(
+        "src/lib/turn/parliamentaryGovernment.ts",
+        "Resolve an expired no-confidence vote for the given country."
+      ),
+      seam("src/lib/government/queries/parliamentaryGovernment.ts", "No-confidence vote not found"),
+    ],
+    pureNpp: {
+      status: "unreachable",
+      reason:
+        "uncovered: no-confidence lifecycle — proposing requires an eligible " +
+        "elected Commons MP and pure NPP runs contain zero player characters, " +
+        "so no motion can ever reach the query surface or the turn resolver.",
+    },
+    synthetic: {
+      status: "covered",
+      reason:
+        "a synthetic opposition MP proposes through the real no-confidence " +
+        "command, a fixed ballot is cast through the real vote seam, and the " +
+        "same vote identity is retained through closesOnTurn into exactly-once " +
+        "turn resolution.",
+    },
+  },
 ];
 
 /** Every known actor-gated mechanic id. Reports and probes must resolve through
@@ -360,6 +398,14 @@ export interface ActorPopulationSnapshot {
   playerFoundedCorps: number;
   /** World preset, for evidence context (e.g. "1953-default"). */
   preset: string;
+  /**
+   * True when a run retained a successful full opposition-research command
+   * sequence (entry, eligible query, stable selection, purchase, reconciled
+   * debits, persisted target, four-turn effects) via the flow driver. The
+   * pinned report marks campaigns covered ONLY on this evidence — a generic
+   * actor run without it stays partial.
+   */
+  oppoFlowSucceeded: boolean;
 }
 
 export interface ActorCoverageEntry {
@@ -398,7 +444,7 @@ function evidenceFor(id: string, s: ActorPopulationSnapshot): string {
     case "state-party-leadership":
       return `${pop}; statePartyCandidates=${s.statePartyCandidates}`;
     case "campaigns-player-actions":
-      return `${pop}; campaigns are absent when characters=0`;
+      return `${pop}; campaigns are absent when characters=0; oppoFlowSucceeded=${s.oppoFlowSucceeded}`;
     case "crisis-decisions":
       return `${pop}; crisisDecidedInteractions=${s.crisisDecidedInteractions}`;
     case "character-wealth":
@@ -412,6 +458,8 @@ function evidenceFor(id: string, s: ActorPopulationSnapshot): string {
       return `${pop}; caretaker path only`;
     case "dd-finance-minister-survey":
       return `${pop}; no seated minister without actors`;
+    case "uk-no-confidence-lifecycle":
+      return `${pop}; no Commons proposer without actors`;
     default:
       return pop;
   }
@@ -439,11 +487,29 @@ export function evaluateActorCoverage(
   const entries = ACTOR_GATED_MECHANICS.map((m) => {
     const perMode = snapshot.mode === "synthetic" ? m.synthetic : m.pureNpp;
     const degraded = snapshot.mode === "synthetic" && !seeded && perMode.status === "covered";
+    // Campaigns upgrade to covered only on retained full-sequence evidence
+    // from the opposition-research flow driver: a generic synthetic run with
+    // no entry, purchase, or effects stays partial, never covered.
+    const oppoCovered =
+      m.id === "campaigns-player-actions" &&
+      snapshot.mode === "synthetic" &&
+      seeded &&
+      snapshot.oppoFlowSucceeded;
     return {
       id: assertKnownActorMechanic(m.id),
       label: m.label,
-      status: (degraded ? "unreachable" : perMode.status) as ActorGateStatus,
-      reason: degraded ? SYNTHETIC_UNSEEDED_REASON : perMode.reason,
+      status: (degraded
+        ? "unreachable"
+        : oppoCovered
+          ? "covered"
+          : perMode.status) as ActorGateStatus,
+      reason: degraded
+        ? SYNTHETIC_UNSEEDED_REASON
+        : oppoCovered
+          ? "synthetic actors entered campaigns, selected a stable eligible target, " +
+            "purchased opposition research through the production command, and retained " +
+            "reconciled debits plus four-turn effects (opposition-research flow driver)."
+          : perMode.reason,
       evidence: evidenceFor(m.id, snapshot),
     };
   });

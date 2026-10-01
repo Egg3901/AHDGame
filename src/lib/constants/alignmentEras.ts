@@ -14,7 +14,20 @@ import type { InternationalOrganizationId } from "./internationalOrganizations";
  * it is not a pole anyone pushes for, it is the remainder — whatever share of a
  * country neither bloc has managed to persuade. See {@link AlignmentShares}.
  */
-export type AlignmentPoleId = "WEST" | "EAST" | "WASHINGTON" | "MOSCOW" | "BEIJING";
+export type BuiltInAlignmentPoleId = "WEST" | "EAST" | "WASHINGTON" | "MOSCOW" | "BEIJING";
+
+/** Independent pole owned by a player-founded Bloc organization. */
+export type CustomAlignmentPoleId = `ORG:${string}`;
+
+export type AlignmentPoleId = BuiltInAlignmentPoleId | CustomAlignmentPoleId;
+
+export function customAlignmentPoleId(organizationId: string): CustomAlignmentPoleId {
+  return `ORG:${organizationId}`;
+}
+
+export function isCustomAlignmentPoleId(id: string): id is CustomAlignmentPoleId {
+  return id.startsWith("ORG:") && id.length > 4;
+}
 
 /**
  * Semantic design token a pole renders in. NOT a hex value — the app ships 11
@@ -26,6 +39,14 @@ export type AlignmentPoleId = "WEST" | "EAST" | "WASHINGTON" | "MOSCOW" | "BEIJI
  * pole but is rendered alongside them.
  */
 export type AlignmentPoleToken = "info" | "error" | "warning" | "success";
+
+/** Semantic colors available to a player-founded pole. Green remains the remainder color. */
+export const CUSTOM_ALIGNMENT_POLE_TOKENS = ["info", "error", "warning"] as const;
+export type CustomAlignmentPoleToken = (typeof CUSTOM_ALIGNMENT_POLE_TOKENS)[number];
+
+export function isCustomAlignmentPoleToken(value: string): value is CustomAlignmentPoleToken {
+  return (CUSTOM_ALIGNMENT_POLE_TOKENS as readonly string[]).includes(value);
+}
 
 export interface AlignmentPole {
   id: AlignmentPoleId;
@@ -74,7 +95,7 @@ export interface AlignmentEra {
   inherit: Partial<Record<AlignmentPoleId, AlignmentPoleId>>;
 }
 
-export const ALIGNMENT_POLES: Record<AlignmentPoleId, AlignmentPole> = {
+export const ALIGNMENT_POLES: Record<BuiltInAlignmentPoleId, AlignmentPole> = {
   WEST: { id: "WEST", label: "West", shortLabel: "W", accentToken: "info", leaderCountryId: "US" },
   EAST: { id: "EAST", label: "East", shortLabel: "E", accentToken: "error", leaderCountryId: "RU" },
   WASHINGTON: {

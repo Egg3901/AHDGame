@@ -144,6 +144,19 @@ describe("computeRegionThreats", () => {
     );
     expect(RANK[t.cas]).toBeGreaterThanOrEqual(RANK.Medium);
   });
+
+  it("rates a player-founded Bloc buildup like any other foreign alliance", () => {
+    const custom = computeRegionThreats(
+      input({
+        blocs: { ...BLOCS, BR: "ORG:andes-pact" },
+        committedByCountry: [{ country: "BR", committed: { afghan: 500 } }],
+      })
+    );
+    const preset = computeRegionThreats(
+      input({ committedByCountry: [{ country: "RU", committed: { afghan: 500 } }] })
+    );
+    expect(custom.cas).toBe(preset.cas);
+  });
 });
 
 // Non-aligned is a real bloc now, not the absence of one. Its predecessor answered

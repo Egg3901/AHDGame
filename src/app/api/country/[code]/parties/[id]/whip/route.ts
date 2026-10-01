@@ -53,6 +53,7 @@ import { createNotification } from "@/lib/notifications";
 import type { CountryId } from "@/lib/constants/countries";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { getBillWhipWindowStart } from "@/lib/congress/billWhipPhase";
 import {
   getCabinetWhipChamber,
   getConfidenceWhipChamber,
@@ -244,6 +245,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           status: 404,
         });
       }
+      whipWindowStart = getBillWhipWindowStart(bill);
     } else if (targetType === "speakerElection") {
       const speakerElection = isUSCongressLeadershipTarget
         ? normalizedTargetId === "current"

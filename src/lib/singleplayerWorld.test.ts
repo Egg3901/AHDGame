@@ -100,6 +100,7 @@ describe("singleplayer worldsim contract", () => {
       turn: ++turn,
       message: "ok",
       warnings: [],
+      health: null,
     }));
     await expect(advanceWorldsim(3, advance)).resolves.toMatchObject({
       completed: 3,
@@ -111,8 +112,14 @@ describe("singleplayer worldsim contract", () => {
   it("stops when the authoritative engine fails", async () => {
     const advance = vi
       .fn()
-      .mockResolvedValueOnce({ success: true, turn: 2, message: "ok", warnings: [] })
-      .mockResolvedValueOnce({ success: false, turn: 0, message: "locked", warnings: ["busy"] });
+      .mockResolvedValueOnce({ success: true, turn: 2, message: "ok", warnings: [], health: null })
+      .mockResolvedValueOnce({
+        success: false,
+        turn: 0,
+        message: "locked",
+        warnings: ["busy"],
+        health: null,
+      });
     await expect(advanceWorldsim(3, advance)).rejects.toThrow("locked");
     expect(advance).toHaveBeenCalledTimes(2);
   });
@@ -123,6 +130,7 @@ describe("singleplayer worldsim contract", () => {
       turn: 2,
       message: "Turn 2 processed with 1 warning(s)",
       warnings: ["Optional summary unavailable"],
+      health: null,
     }));
     await expect(advanceWorldsim(1, advance)).resolves.toMatchObject({
       completed: 1,

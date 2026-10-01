@@ -1,5 +1,11 @@
-// src/lib/currency/marketMaker.ts
-import type { Db, ObjectId } from "mongodb";
+/**
+ * Market-maker conversion exchanges balances at live quotes with a spread fee.
+ * executeMarketMakerTrade uses fixed, fee-free settlement within the euro area.
+ */
+import { resolveEuroConversionQuotes, type ConversionQuoteContext } from "./euro/quotes";
+import { euroLedgerCrossRate } from "./euro/rules";
+import { loadEuroMonetaryUnion } from "./euro/service";
+import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ExchangeRate, TradeHistoryEntry, TradeSource } from "@/lib/db/types";
@@ -7,12 +13,23 @@ import {
   MARKET_MAKER_SPREAD,
   CURRENCY_ANCHOR_COUNTRY,
   COUNTRY_CURRENCY_MAP,
+  SPREAD_FEE_FOREX_REVENUE_RATIO,
+  SPREAD_FEE_RESERVE_RATIO,
   clampForexSpreadStrength,
 } from "@/lib/constants/currencies";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
+import type { CentralBank } from "@/lib/db/types/centralBank";
+import { getBankId } from "@/lib/centralBank/helpers";
+import {
+  replayMarketMakerReceipt,
+  settleMarketMakerReceipt,
+  recordMarketMakerRefusal,
+} from "./marketMakerReceipt";
 
 interface MarketMakerTradeParams {
+  /** Stable accepted income-event identity for garnished residual conversions. */
+  commandId?: string;
   characterId: ObjectId;
   countryId: CountryId;
   fromCurrency: CurrencyCode;
@@ -25,6 +42,8 @@ interface MarketMakerTradeParams {
   source?: TradeSource;
   /** Optional reference to the originating entity (corp id, bond id, etc.). */
   sourceRef?: string;
+  /** One quote snapshot per turn phase, avoiding quote reads for each payout. */
+  quoteContext?: ConversionQuoteContext;
 }
 
 interface MarketMakerTradeResult {
@@ -85,6 +104,57 @@ export async function distributeConversionSpread(
 }
 
 /**
+ * Batch already-computed conversion spreads without changing per-fee rounding.
+ * Corporation turns can produce thousands of fee rows that ultimately touch a
+ * small, fixed set of central-bank documents. Accumulating their individually
+ * rounded legs first collapses that work to at most one update per bank.
+ */
+export async function distributeConversionSpreadsBatch(
+  db: Db,
+  spreads: readonly {
+    fee: number;
+    fromCurrency: CurrencyCode;
+    toCurrency: CurrencyCode;
+  }[]
+): Promise<void> {
+  const incrementsByBank = new Map<string, Record<string, number>>();
+  const add = (bankId: string, field: string, amount: number) => {
+    if (amount === 0) return;
+    const increments = incrementsByBank.get(bankId) ?? {};
+    increments[field] = (increments[field] ?? 0) + amount;
+    incrementsByBank.set(bankId, increments);
+  };
+
+  for (const { fee, fromCurrency, toCurrency } of spreads) {
+    if (!Number.isFinite(fee) || fee <= 0 || fromCurrency === toCurrency) continue;
+    const fromCountryId = getCountryForCurrency(fromCurrency);
+    if (!fromCountryId) continue;
+    const toCountryId = getCountryForCurrency(toCurrency);
+    const reserveAmount = Math.round(fee * SPREAD_FEE_RESERVE_RATIO);
+    const revenueAmount = Math.round(fee * SPREAD_FEE_FOREX_REVENUE_RATIO);
+    add(getBankId(fromCountryId), "forexRevenue", revenueAmount);
+    add(
+      getBankId(toCountryId ?? fromCountryId),
+      `spreadFeeReserveBalances.${fromCurrency}`,
+      reserveAmount
+    );
+  }
+
+  const operations: AnyBulkWriteOperation<CentralBank>[] = [...incrementsByBank].map(
+    ([bankId, increments]) => ({
+      updateOne: {
+        filter: { _id: bankId },
+        update: { $inc: increments },
+        upsert: true,
+      },
+    })
+  );
+  if (operations.length > 0) {
+    await db.collection<CentralBank>("centralBanks").bulkWrite(operations);
+  }
+}
+
+/**
  * Best-effort {@link distributeConversionSpread} for post-commit route side
  * effects (sector acquisition / takeover / relocation): the payer's spread is
  * already removed, so a transient CB-write failure must never reverse or fail
@@ -136,7 +206,7 @@ function resolveMarketMakerSpend(
  *   netAmount = amount - spreadFee
  *   toAmount = netAmount * crossRate
  */
-export async function executeMarketMakerTrade(
+async function executeMarketMakerTradeInner(
   db: Db,
   params: MarketMakerTradeParams
 ): Promise<MarketMakerTradeResult> {
@@ -192,11 +262,25 @@ export async function executeMarketMakerTrade(
   }
   const spendAmount = spendResolution.spend;
 
-  const [fromExRate, toExRate] = await Promise.all([
-    db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
-    db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
-  ]);
+  const [rawFromExRate, rawToExRate, union] = params.quoteContext
+    ? ([
+        params.quoteContext.quotes.get(fromCurrency) ?? null,
+        params.quoteContext.quotes.get(toCurrency) ?? null,
+        params.quoteContext.union,
+      ] as const)
+    : await Promise.all([
+        db.collection<ExchangeRate>("exchangeRates").findOne({ _id: fromCountryId }),
+        db.collection<ExchangeRate>("exchangeRates").findOne({ _id: toCountryId }),
+        loadEuroMonetaryUnion(db),
+      ]);
 
+  const [fromExRate, toExRate] = await resolveEuroConversionQuotes(
+    db,
+    rawFromExRate,
+    rawToExRate,
+    union,
+    params.quoteContext?.quotes
+  );
   if (!fromExRate || !toExRate) {
     return {
       success: false,
@@ -208,6 +292,8 @@ export async function executeMarketMakerTrade(
     };
   }
 
+  const fixedCrossRate = euroLedgerCrossRate(union, fromCurrency, toCurrency);
+
   // Guard against malformed rate documents. If either `.rate` is non-finite
   // or non-positive, getCrossRate() returns NaN/Infinity and Math.floor of
   // that propagates into the $inc update — the source balance still gets
@@ -217,10 +303,11 @@ export async function executeMarketMakerTrade(
   // drained ~$41M from a single bond-maturity payout. Reject up front so
   // the source balance is never touched on a broken rate.
   if (
-    !Number.isFinite(fromExRate.rate) ||
-    fromExRate.rate <= 0 ||
-    !Number.isFinite(toExRate.rate) ||
-    toExRate.rate <= 0
+    fixedCrossRate == null &&
+    (!Number.isFinite(fromExRate.rate) ||
+      fromExRate.rate <= 0 ||
+      !Number.isFinite(toExRate.rate) ||
+      toExRate.rate <= 0)
   ) {
     return {
       success: false,
@@ -236,10 +323,16 @@ export async function executeMarketMakerTrade(
   // The source currency chair's spread-strength (0.5–1.5×) scales the fee; read
   // from the already-loaded fromExRate doc so the hot path takes no extra query.
   const spreadStrength = clampForexSpreadStrength(fromExRate.forexSpreadStrength);
-  const spreadFee = calculateSpreadFee(spendAmount, MARKET_MAKER_SPREAD * spreadStrength);
+  const spreadFee =
+    fixedCrossRate == null
+      ? calculateSpreadFee(spendAmount, MARKET_MAKER_SPREAD * spreadStrength)
+      : 0;
   const netAmount = spendAmount - spreadFee;
-  const crossRate = getCrossRate(fromExRate.rate, toExRate.rate);
-  const toAmount = Math.round(netAmount * crossRate);
+  const crossRate = fixedCrossRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
+  // Whole ledger units round down within the union so repeated conversions
+  // cannot manufacture value from rounding now that there is no FX spread.
+  const toAmount =
+    fixedCrossRate == null ? Math.round(netAmount * crossRate) : Math.floor(netAmount * crossRate);
 
   // Belt-and-braces: guard against non-finite derived values even when the
   // rate inputs passed the check above (extreme denormals, etc.). Fail before
@@ -253,6 +346,46 @@ export async function executeMarketMakerTrade(
       effectiveRate: 0,
       spreadCharged: 0,
     };
+  }
+
+  if (fixedCrossRate != null && toAmount <= 0)
+    return {
+      success: false,
+      error: "Amount is too small to convert into whole ledger units",
+      fromAmount: amount,
+      toAmount: 0,
+      effectiveRate: 0,
+      spreadCharged: 0,
+    };
+
+  if (params.commandId) {
+    if (collection !== "characters")
+      throw new Error("Residual FX receipts require a regular character");
+    return (await settleMarketMakerReceipt(
+      db,
+      { ...params, commandId: params.commandId },
+      {
+        fromCountryId,
+        toCountryId,
+        spend: spendAmount,
+        received: toAmount,
+        rate: crossRate,
+        fee: spreadFee,
+        trade: {
+          buyerCharacterId: characterId,
+          sellerCharacterId: null,
+          fromCurrency,
+          toCurrency,
+          amount: spendAmount,
+          rate: crossRate,
+          spread: spreadFee,
+          turn,
+          createdAt: new Date(),
+          source: source ?? "manual",
+          ...(sourceRef ? { sourceRef } : {}),
+        },
+      }
+    )) as unknown as MarketMakerTradeResult;
   }
 
   // Atomic balance update with race-condition guard:
@@ -311,4 +444,21 @@ export async function executeMarketMakerTrade(
     spreadCharged: spreadFee,
     tradeHistoryId,
   };
+}
+
+/** Existing callers remain unchanged; a supplied identity freezes this conversion's quote. */
+export async function executeMarketMakerTrade(
+  db: Db,
+  params: MarketMakerTradeParams
+): Promise<MarketMakerTradeResult> {
+  if (!params.commandId) return executeMarketMakerTradeInner(db, params);
+  const request = { ...params, commandId: params.commandId };
+  const prior = await replayMarketMakerReceipt(db, request);
+  if (prior) return prior as unknown as MarketMakerTradeResult;
+  const result = await executeMarketMakerTradeInner(db, params);
+  if (!result.success)
+    return (await recordMarketMakerRefusal(db, request, {
+      ...result,
+    })) as unknown as MarketMakerTradeResult;
+  return result;
 }

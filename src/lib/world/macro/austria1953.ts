@@ -29,7 +29,8 @@ const AUSTRIA_1953_SECTOR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 2,
   defense: 2,
   telecommunications: 2,
-  media_entertainment: 4,
+  media: 2,
+  entertainment: 2,
   technology: 0,
 };
 

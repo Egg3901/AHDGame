@@ -13,10 +13,8 @@ import type { CorporationType } from "@/lib/constants/corporations";
 export const UNION_BAN_STRIKE_TEMPLATE_KEY = "union_ban_general_strike";
 
 /**
- * Hard cap on the strike, in turns. The workers cannot stay out forever: with
- * no resolution the crisis expires on the ordinary crisis-turn path and the
- * effects unwind with it. 24 is also `MIN_CRISIS_DURATION_TURNS`, so the floor
- * in `floorCrisisDuration` leaves it exactly where it is authored.
+ * Baseline duration. Underground mass drives may extend it by six turns at
+ * most; the crisis still expires on the ordinary crisis-turn path.
  */
 export const UNION_BAN_STRIKE_DURATION_TURNS = 24;
 

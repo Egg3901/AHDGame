@@ -213,9 +213,16 @@ export async function ParliamentaryExecutiveHub({ countryId }: { countryId: Coun
     }
   }
 
-  // Viewer appointment eligibility via shared function
+  // Viewer appointment eligibility via shared function. Nominations run while
+  // pending, and in parallel with an active no-confidence vote on a formed
+  // government. This mirrors the proposePmAppointment gate, so an eligible
+  // chair always sees the CTA the server would accept.
   let viewerMayAppoint = false;
-  if (user?.character && govFormation?.status === "pending") {
+  if (
+    user?.character &&
+    (govFormation?.status === "pending" ||
+      (govFormation?.status === "formed" && activeNoConfidenceVote != null))
+  ) {
     const eligibility = await checkAppointmentEligibility(
       db,
       countryId,

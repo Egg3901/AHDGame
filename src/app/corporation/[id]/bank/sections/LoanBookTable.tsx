@@ -11,8 +11,8 @@ import {
   type LendingProfileId,
 } from "@/lib/banking/creditBands";
 import { MAX_NPC_FLOW_PER_TURN_FRACTION } from "@/lib/banking/rules/loans";
-import type { ConsolePayload } from "../types";
-import { partyHref } from "../lib/helpers";
+import type { ConsolePayload, OutlookPayload } from "../types";
+import { partyHref, turnsToHours } from "../lib/helpers";
 import { Eyebrow } from "../components/BankSection";
 
 /** Colour ramp for the rating column: investment grade cools, junk warms. */
@@ -142,13 +142,18 @@ function HouseholdBookTable({
 
 function LendingProfilePicker({
   corporationId,
+  currency,
   current,
+  stancePreview,
   canMutate,
   onChanged,
   showToast,
 }: {
   corporationId: string;
+  currency: CurrencyCode;
   current: LendingProfileId;
+  /** Per-stance economics from the outlook: return, loss, funding, travel time. */
+  stancePreview: OutlookPayload["stancePreview"] | null;
   canMutate: boolean;
   onChanged: () => void;
   showToast: (message: string, tone?: "success" | "error") => void;
@@ -169,7 +174,13 @@ function LendingProfilePicker({
         showToast(json.error ?? "Could not set the lending profile", "error");
         return;
       }
-      showToast(json.message ?? "Lending profile saved", "success");
+      const preview = stancePreview?.find((s) => s.profile === profile);
+      showToast(
+        preview
+          ? `${profile === "conservative" ? "Conservative" : profile === "balanced" ? "Balanced" : "Aggressive"} stance saved: steers toward a ${formatBankMoney(preview.fundingTied, currency)} book, earning about ${formatBankMoney(preview.expectedReturnPerTurn, currency)} a turn against ${formatBankMoney(preview.expectedLossPerTurn, currency)} of expected losses, arriving in about ${turnsToHours(preview.turnsToTarget)}.`
+          : (json.message ?? "Lending profile saved"),
+        "success"
+      );
       onChanged();
     } catch {
       showToast("Could not set the lending profile", "error");
@@ -186,12 +197,13 @@ function LendingProfilePicker({
         Sets which ratings the bank will lend to from the next turn. Loans already on the book keep
         their rate and rating. Both directions move slowly: open bands build at up to{" "}
         {MAX_NPC_FLOW_PER_TURN_FRACTION * 100}% of target per turn and closed bands run off at the
-        same pace, so a large mix shift takes dozens of turns. The Target column shows where each
-        band is heading under the current stance.
+        same pace, so a large mix shift takes {turnsToHours(48)} or more. The Target column shows
+        where each band is heading under the current stance.
       </p>
       <div className="grid gap-2 sm:grid-cols-3">
         {LENDING_PROFILES.map((profile) => {
           const active = profile.id === current;
+          const preview = stancePreview?.find((s) => s.profile === profile.id);
           return (
             <button
               key={profile.id}
@@ -209,6 +221,34 @@ function LendingProfilePicker({
                 </span>
               </div>
               <p className="mt-1 text-xs leading-snug text-muted">{profile.blurb}</p>
+              {preview && (
+                <dl className="mt-2 space-y-0.5 text-[11px] text-muted">
+                  <div className="flex justify-between gap-2">
+                    <dt>Target book</dt>
+                    <dd className="font-mono tabular-nums text-foreground">
+                      {formatBankMoney(preview.fundingTied, currency)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Earns / turn</dt>
+                    <dd className="font-mono tabular-nums text-foreground">
+                      {formatBankMoney(preview.expectedReturnPerTurn, currency)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Loses / turn</dt>
+                    <dd className="font-mono tabular-nums text-foreground">
+                      {formatBankMoney(preview.expectedLossPerTurn, currency)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt>Gets there in</dt>
+                    <dd className="font-mono tabular-nums text-foreground">
+                      {turnsToHours(preview.turnsToTarget)}
+                    </dd>
+                  </div>
+                </dl>
+              )}
             </button>
           );
         })}
@@ -221,6 +261,7 @@ export function LoanBookTable({
   loans,
   currency,
   householdBook,
+  stancePreview = null,
   corporationId,
   canMutate,
   onChanged,
@@ -229,6 +270,7 @@ export function LoanBookTable({
   loans: ConsolePayload["loans"];
   currency: CurrencyCode;
   householdBook: ConsolePayload["householdBook"];
+  stancePreview?: OutlookPayload["stancePreview"] | null;
   corporationId: string;
   canMutate: boolean;
   onChanged: () => void;
@@ -253,7 +295,16 @@ export function LoanBookTable({
         showToast(json.error ?? "Could not update the loan", "error");
         return;
       }
-      showToast(decision === "accept" ? "Loan approved" : "Loan declined", "success");
+      const subject = loans.find((l) => l.id === loanId);
+      const amount = subject ? formatBankMoney(subject.outstanding, currency) : null;
+      showToast(
+        decision === "accept"
+          ? amount
+            ? `Loan approved: ${amount} moves into the book and starts earning ${subject?.ratePercent.toFixed(2)}% next turn.`
+            : "Loan approved: it funds next turn and starts earning interest."
+          : "Loan declined: nothing leaves the vault.",
+        "success"
+      );
       onChanged();
     } catch {
       showToast("Could not update the loan", "error");
@@ -270,7 +321,9 @@ export function LoanBookTable({
       {householdBook && (
         <LendingProfilePicker
           corporationId={corporationId}
+          currency={currency}
           current={householdBook.lendingProfile}
+          stancePreview={stancePreview}
           canMutate={canMutate}
           onChanged={onChanged}
           showToast={showToast}
@@ -325,7 +378,10 @@ export function LoanBookTable({
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     {formatRatePercent(loan.ratePercent)}
                   </td>
-                  <td className="px-4 py-3 text-muted">
+                  <td
+                    className="px-4 py-3 text-muted"
+                    title={`Term runs ${turnsToHours(loan.termTurns)} from origination`}
+                  >
                     T{loan.originatedTurn} · {loan.termTurns}t
                   </td>
                   <td className="px-4 py-3">

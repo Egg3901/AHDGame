@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import type { InboxItem } from "@/lib/inbox";
-import { LocalTime } from "@/components/time/LocalTime";
+import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { formatGameMonth } from "@/lib/utils/gameDate";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { Button } from "@/components/ui/Button";
 import { CatChip } from "./CatChip";
 import { CATEGORY_VISUALS, URGENCY_VISUALS } from "./inboxVisuals";
@@ -14,6 +16,17 @@ interface NotifDetailProps {
 }
 
 export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
+  const turnStatus = useGameTurnStatus();
+  const gameMonth =
+    item.createdAt && turnStatus?.lastTurnProcessed
+      ? formatGameMonth(item.createdAt, {
+          currentTurn: turnStatus.currentTurn,
+          lastTurnProcessed: turnStatus.lastTurnProcessed,
+          startingYear: turnStatus.startingYear ?? STARTING_YEAR,
+          preIterationActive: turnStatus.preIterationActive,
+          preIterationTurns: turnStatus.preIterationTurns,
+        })
+      : null;
   const category = CATEGORY_VISUALS[item.category];
   const urgency = URGENCY_VISUALS[item.urgency];
 
@@ -41,13 +54,10 @@ export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                 <span>{item.time === "now" ? "Just now" : `${item.time} ago`}</span>
                 {item.turn && <span>· Turn {item.turn}</span>}
-                {item.createdAt && (
+                {gameMonth && (
                   <>
                     <span>·</span>
-                    <LocalTime
-                      value={item.createdAt}
-                      options={{ dateStyle: "medium", timeStyle: "short" }}
-                    />
+                    <span>{gameMonth}</span>
                   </>
                 )}
               </div>

@@ -18,7 +18,7 @@ describe("observability/context", () => {
   beforeEach(() => vi.clearAllMocks());
 
   describe("setUserContext", () => {
-    it("sets user id + username and role tags, never email", () => {
+    it("sets the opaque user id and role tags, never name or email", () => {
       setUserContext({
         userId: "u1",
         username: "alice",
@@ -26,12 +26,13 @@ describe("observability/context", () => {
         role: "user",
         isModerator: true,
       } as never);
-      expect(setUser).toHaveBeenCalledWith({ id: "u1", username: "alice" });
+      expect(setUser).toHaveBeenCalledWith({ id: "u1" });
       const tags = setTags.mock.calls[0][0];
       expect(tags["user.role"]).toBe("user");
       expect(tags["user.isModerator"]).toBe(true);
       // Email must not be sent anywhere
       const allArgs = JSON.stringify([setUser.mock.calls, setTags.mock.calls, setTag.mock.calls]);
+      expect(allArgs).not.toContain("alice");
       expect(allArgs).not.toContain("alice@example.com");
     });
 

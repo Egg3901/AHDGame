@@ -6,6 +6,7 @@
 import * as Sentry from "@sentry/nextjs";
 
 import { isValuelessNonErrorRejection } from "@/lib/observability/sentryFilters";
+import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 
 export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
   // Browser bundles only receive NEXT_PUBLIC_* environment variables.
@@ -24,11 +25,12 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
     // NEXT_PUBLIC_ var so the browser bundle can read it. Matches the uploaded
     // source-map artifacts so minified client stacks symbolicate.
     release: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
+    environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
 
     sendDefaultPii: false,
 
     // Keep production traces useful without making hot polling endpoints expensive.
-    tracesSampleRate: isProduction ? 0.02 : 1.0,
+    tracesSampleRate: isProduction ? 0.1 : 1.0,
     ignoreTransactions: [
       "GET /api/events",
       "GET /api/game/turn/status",
@@ -38,14 +40,8 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
       "POST /api/analytics/pageview",
     ],
 
-    // Structured logs shipped to GlitchTip's Logs view in every environment.
-    enableLogs: true,
-
-    integrations: [
-      // Route browser console.warn/console.error into GlitchTip Logs so client
-      // side console-only failures become queryable instead of vanishing.
-      Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
-    ],
+    // Enable logs only after SaaS volume and cost have been measured.
+    enableLogs: false,
 
     // Errors that originate entirely in browser extensions / injected third-party
     // scripts. These are never actionable from our code and were the bulk of the
@@ -120,7 +116,7 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
       if (message.includes("insertBefore") && message.includes("not a child")) return null;
       if (message.includes("The object can not be found here")) return null;
 
-      return event;
+      return scrubSentryEvent(event);
     },
 
     // Drop navigation transactions that were cancelled because the user hid the tab

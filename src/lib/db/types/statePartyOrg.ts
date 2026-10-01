@@ -84,12 +84,10 @@ export interface StatePartyOrg {
    * derived from era polling/vote-share tables at seed time (today written
    * only by the UK org calculation path — `ukStatePartyOrgCalculations.ts`).
    *
-   * Consumed by `regBaselineMultiplier` as a concave (`share^0.5`) structural
-   * vote-weight scalar in general elections. Deliberately SEPARATE from
-   * `registration` so the US registration lanes (regResistance / peel curves)
-   * are never double-counted: undefined → the multiplier is exactly 1.0 and
-   * behavior is byte-identical to pre-field worlds. Static after seeding —
-   * no turn phase mutates it.
+   * Retained as seed provenance and for regional aggregation/backfill paths.
+   * Ongoing election vote weighting uses current `registration` instead, so
+   * this static value cannot outlive its initial-world purpose or privilege a
+   * party created after seeding. No turn phase mutates it.
    */
   registrationShare?: number;
 

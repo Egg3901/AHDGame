@@ -42,6 +42,7 @@ import {
   resolveHouseIncumbentTenures,
 } from "./singleSeatIncumbency";
 import { getFundsByPartyForElection } from "./fundsByParty";
+import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
 import {
   isHeadOfGovernmentRace,
   resolvePresidentApproval,
@@ -75,6 +76,7 @@ import {
   resolveElectionManifestoMultipliers,
   deriveGroupLeans,
 } from "@/lib/uk/manifesto/electionManifestoResolver";
+import { buildCurrentRegistrationBaseline } from "./electionFormulaFactors";
 
 // ─── Accumulate one turn of votes into a tally ───────────────────────────────
 
@@ -137,7 +139,9 @@ export async function accumulateVoteTurn(
 
   const [tally, candidates]: [ElectionVoteTally | null, ElectionCandidate[]] = await Promise.all([
     options?.tally ??
-      db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId }),
+      db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .findOne({ electionId }, { projection: TALLY_WITH_SNAPSHOT_TURNS_ONLY }),
     options?.candidates ??
       db
         .collection<ElectionCandidate>("electionCandidates")
@@ -244,17 +248,11 @@ export async function accumulateVoteTurn(
   for (const po of statePartyOrgs) {
     if (typeof po.registration === "number") regByParty.set(po.partyId, po.registration);
   }
-  // Seeded party-baseline share (0-100) for `regBaselineMultiplier`. Only
-  // written by seeds that author regional partisan baselines (UK era polling
-  // via ukStatePartyOrgCalculations). Absent everywhere else → empty map →
-  // exactly 1.0× downstream (byte-identical for worlds without the field;
-  // never double-counts the US `registration` resistance/peel lane).
-  const regShareByParty = new Map<string, number>();
-  for (const po of statePartyOrgs) {
-    if (typeof po.registrationShare === "number") {
-      regShareByParty.set(po.partyId, po.registrationShare);
-    }
-  }
+  // UK general elections use current Reg as their structural party baseline.
+  // Other countries keep the lane disabled so their existing Reg resistance
+  // and peel behavior is unchanged. If an old UK world has no current Reg data
+  // at all, the helper also disables the lane rather than flooring every party.
+  const regBaselineByParty = buildCurrentRegistrationBaseline(statePartyOrgs, election.countryId);
 
   // Turn-first surge window (drift-immune) with a Date fallback for legacy docs.
   // Keying the closing surge off turn numbers makes the final-turn band coincide
@@ -670,9 +668,8 @@ export async function accumulateVoteTurn(
       // elections. Empty / partial maps fall through to the neutral 1.0×
       // per `regResistanceMultiplier`'s undefined branch.
       regByParty,
-      // Seeded party-baseline share — 1.0× wherever the field was never
-      // seeded (see regBaselineMultiplier's compatibility contract).
-      regShareByParty,
+      // Current-registration baseline. Undefined disables the lane.
+      regBaselineByParty,
       // Governor coattail (§7.3.2 govModifier) — in-state down-ballot only.
       govModifierByParty,
       // A1 — per-party prior seat-share for the incumbency driver.
@@ -746,7 +743,7 @@ export async function accumulateVoteTurn(
     // "re-admit everyone when eligible < min(seats, candidates)" fallback let
     // sub-1% candidates collect largest-remainder seats in any race with more
     // seats than candidates (e.g. 12 candidates vs 27-90 UK Commons seats).
-    const minShare = getMultiSeatMinShare(electionType);
+    const minShare = getMultiSeatMinShare(electionType, totalSeats, election.countryId ?? "US");
     const groupKey = (ec: (typeof enriched)[number]) =>
       ec.party && ec.party !== "independent" ? `party:${ec.party}` : `cand:${ec.candidateId}`;
     const votesByGroup = new Map<string, number>();

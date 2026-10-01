@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import { customAlignmentPoleId } from "@/lib/constants/alignmentEras";
 
 // The waiver and the candidate pool now read the VOTING roll, so these cases
 // need an access table. Every country here is player-enabled, which keeps the
@@ -37,6 +38,33 @@ vi.mock("@/lib/internationalOrganizations/diplomaticActions", () => ({
 }));
 vi.mock("@/lib/internationalOrganizations/commands/buildMembershipBill", () => ({
   buildMembershipBill: vi.fn().mockResolvedValue(new ObjectId()),
+}));
+vi.mock("@/lib/alignment/topology", () => ({
+  loadAlignmentTopology: vi.fn().mockImplementation(async () => {
+    const poleId = "ORG:andes-pact";
+    return {
+      channels: [
+        {
+          organizationId: "andes-pact",
+          poleId,
+          weight: 1,
+          alignmentAccession: true,
+        },
+      ],
+      poleDefinitions: new Map([
+        [
+          poleId,
+          {
+            id: poleId,
+            label: "Andes Pact",
+            shortLabel: "AP",
+            accentToken: "warning",
+            leaderCountryId: "BR",
+          },
+        ],
+      ]),
+    };
+  }),
 }));
 
 const { getDb } = await import("@/lib/mongodb");
@@ -201,5 +229,23 @@ describe("propose-join — alignment gate", () => {
     const res = await post("COMMONWEALTH");
     expect(res.status).toBe(200);
     expect(proposalInsert).toHaveBeenCalled();
+  });
+
+  it("applies the independent membership gate to a custom Bloc", async () => {
+    const poleId = customAlignmentPoleId("andes-pact");
+    vi.mocked(loadOrganizationDef).mockResolvedValue({
+      id: "andes-pact",
+      name: "Andes Pact",
+      alignment: { poleId, accentToken: "warning" },
+    } as never);
+    makeDb({
+      alignmentEnabled: true,
+      shares: { WEST: 20, EAST: 10, [poleId]: 55 },
+      nonAligned: 15,
+    });
+
+    const res = await post("andes-pact");
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toMatch(/holds only 55 of Andes Pact/i);
   });
 });

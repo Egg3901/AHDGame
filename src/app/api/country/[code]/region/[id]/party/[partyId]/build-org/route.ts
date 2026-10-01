@@ -449,16 +449,26 @@ export async function POST(request: Request, { params }: RouteParams) {
     partyName?: string;
     abbreviation?: string;
   }> = [];
+  const rivalUpdates: Array<{
+    updateOne: {
+      filter: { _id: StatePartyOrg["_id"] };
+      update: { $set: { organization: number; updatedAt: Date } };
+    };
+  }> = [];
+  const poachLedgerRows: OrgRegLedger[] = [];
   for (const poach of appliedPoaches) {
     const rivalRow = rivalRows.find((r) => r.partyId === poach.partyId);
     if (!rivalRow) continue;
     const rivalParty = partyBySeq.get(poach.partyId);
     const rivalNewOrg =
       Math.round(Math.max(0, (rivalRow.organization ?? 0) - poach.loss) * 100) / 100;
-    await db
-      .collection<StatePartyOrg>("statePartyOrg")
-      .updateOne({ _id: rivalRow._id }, { $set: { organization: rivalNewOrg, updatedAt: now } });
-    await db.collection<OrgRegLedger>("orgRegLedger").insertOne({
+    rivalUpdates.push({
+      updateOne: {
+        filter: { _id: rivalRow._id },
+        update: { $set: { organization: rivalNewOrg, updatedAt: now } },
+      },
+    });
+    poachLedgerRows.push({
       _id: new ObjectId(),
       turn: currentTurn,
       countryId,
@@ -478,6 +488,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       newOrg: rivalNewOrg,
       ...(rivalParty ? { partyName: rivalParty.name, abbreviation: rivalParty.abbreviation } : {}),
     });
+  }
+  if (rivalUpdates.length > 0) {
+    await db.collection<StatePartyOrg>("statePartyOrg").bulkWrite(rivalUpdates);
+    await db.collection<OrgRegLedger>("orgRegLedger").insertMany(poachLedgerRows);
   }
 
   // Log the spender's Org gain in orgRegLedger.

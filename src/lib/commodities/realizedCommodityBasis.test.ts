@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   COMMODITY_BASE_PRICES,
   MARKETING_ADVERTISING_DEMAND_RATE,
+  SECTOR_SUPPLY,
   commodityMixWeight,
   dollarsToUnits,
   getCommodityStabilizer,
@@ -35,8 +36,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 
 /** Operating-strategy rate both surfaces actually use (differs from base tables). */
 function strategyRate(
-  sectorType:
-    "manufacturing" | "technology" | "energy" | "retail" | "media_entertainment" | "extraction",
+  sectorType: "manufacturing" | "technology" | "energy" | "retail" | "media" | "extraction",
   kind: "supply" | "demand",
   commodity: CommodityType
 ): number {
@@ -287,7 +287,7 @@ describe("realized basis reconciles market and corporation surfaces", () => {
     const sectors: FixtureSector[] = [
       mkSector({
         corpId: "corpM",
-        sectorType: "media_entertainment",
+        sectorType: "media",
         stateId: "CA",
         countryId: "US",
         revenue: 200_000,
@@ -336,7 +336,7 @@ describe("realized basis reconciles market and corporation surfaces", () => {
     expect(helperTotal).toBeCloseTo(retailInput, 1);
   });
 
-  it("preserves the extraction exception instead of reconstructing turn factors", () => {
+  it("preserves the extraction exception while using the ledger standard mix", () => {
     expect(isExtractionExceptionCommodity("iron")).toBe(true);
     expect(isExtractionExceptionCommodity("energy")).toBe(false);
     const sectors: FixtureSector[] = [
@@ -372,11 +372,10 @@ describe("realized basis reconciles market and corporation surfaces", () => {
       new Map(),
       context
     ).commodities.find((c) => c.commodity === "iron");
-    // Both surfaces share the nameplate basis (not the 5 measured units).
-    const nameplate = dollarsToUnits(
-      100_000 * strategyRate("extraction", "supply", "iron"),
-      COMMODITY_BASE_PRICES.iron
-    );
+    // Both surfaces share the ledger's standard nameplate mix (not the 5 measured units).
+    const ironRate = SECTOR_SUPPLY.extraction?.find((flow) => flow.commodity === "iron")?.rate;
+    expect(ironRate).toBeDefined();
+    const nameplate = dollarsToUnits(100_000 * ironRate!, COMMODITY_BASE_PRICES.iron);
     expect(round2(market.supplyByCorp.get("corpX") ?? 0)).toBeCloseTo(round2(nameplate), 1);
     expect(tab?.outputUnits).toBeCloseTo(round2(nameplate), 1);
     // And neither reconstructs the unpersisted realized fraction: a ledger leg

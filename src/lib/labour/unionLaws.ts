@@ -86,9 +86,17 @@ export async function applyUnionLawProvision(
 
   if (provision.banAction === "ban" || provision.banAction === "repeal_ban") {
     const banned = provision.banAction === "ban";
-    await db
-      .collection<FederalBudget>("federalBudget")
-      .updateOne({ _id: budgetId }, { $set: { unionsBanned: banned, updatedAt: now } });
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budgetId },
+      {
+        $set: {
+          unionsBanned: banned,
+          unionEnforcementPosture: "normal",
+          updatedAt: now,
+        },
+        $unset: { unionEnforcementPostureChangedTurn: "" },
+      }
+    );
     if (banned) {
       // A fresh ban starts every cell at zero heat and an empty shadow pool.
       const countryUnionIds = await db
@@ -104,6 +112,9 @@ export async function applyUnionLawProvision(
             heat: "",
             exposedUntilTurn: "",
             lastUndergroundDriveTurn: "",
+            recentUndergroundDriveCount: "",
+            undergroundProcessedTurn: "",
+            lastUndergroundRaidTurn: "",
           },
         }
       );
@@ -146,6 +157,9 @@ export async function applyUnionLawProvision(
                   heat: "",
                   exposedUntilTurn: "",
                   lastUndergroundDriveTurn: "",
+                  recentUndergroundDriveCount: "",
+                  undergroundProcessedTurn: "",
+                  lastUndergroundRaidTurn: "",
                 },
               },
             },

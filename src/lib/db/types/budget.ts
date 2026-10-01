@@ -470,7 +470,27 @@ export interface DepartmentAccount {
   programs: Record<string, DepartmentProgramState>;
 }
 
+/** Durable witness stored atomically with signed cash, recoverable on the next invocation. */
+export interface TreasuryAccrualReceipt {
+  turn: number;
+  openingCash: number;
+  cashDelta: number;
+  currencyCode: import("@/lib/constants/currencies").CurrencyCode;
+  anchorRate: number | null;
+  anchorRateSource?: "observed" | "authored_budget_only" | "unpriced";
+  anchorRatePreset?: string;
+  ledgerShadow: boolean;
+  components: {
+    revenue: number;
+    primarySpending: number;
+    debtService: number;
+    enforcement: number;
+    rounding: number;
+  };
+}
+
 export interface FederalBudget {
+  treasuryAccrual?: TreasuryAccrualReceipt;
   _id: BudgetDocumentId;
   countryId: string;
   fiscalYear: number;
@@ -522,6 +542,10 @@ export interface FederalBudget {
    * `LabourContext` via `buildUnionsBannedByCountry` (`src/lib/labour/laborCost.ts`).
    */
   unionsBanned?: boolean;
+  /** Executive enforcement stance while unions are banned. Defaults to normal. */
+  unionEnforcementPosture?: "tolerant" | "normal" | "crackdown";
+  /** Last turn the executive changed the enforcement stance. */
+  unionEnforcementPostureChangedTurn?: number;
   /** EMA-smoothed national GDP — debt-to-GDP / sovereign-default read this so
    *  year-over-year GDP swings can't trip a default threshold (design §5.4). */
   gdpSmoothed?: number;
@@ -539,6 +563,10 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Temporary executive crisis consolidation, consumed by normal fiscal recalculation. */
+  financialCrisisAusterityUntilTurn?: number;
+  /** Latest ordinary appropriations restored when temporary consolidation expires. */
+  financialCrisisAusterityBaseSpending?: FederalSpending;
   /**
    * Audit stamp written by `mergeNationalFisc` when this country dissolved into
    * another and its treasury, debt and bonds were assumed by the successor. The

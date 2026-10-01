@@ -21,13 +21,15 @@ export function applyEraCrossing(params: {
   shares: AlignmentShares;
   storedEraKey: string;
   year: number;
+  /** Live poles, including player-founded Blocs. */
+  poles?: readonly AlignmentPoleId[];
 }): EraCrossingResult {
   const era = resolveAlignmentEra(params.year);
   if (era.key === params.storedEraKey) {
     return { shares: params.shares, eraKey: params.storedEraKey, crossed: false };
   }
 
-  const poles = polesForYear(params.year);
+  const poles = params.poles ?? polesForYear(params.year);
   const next: Partial<Record<AlignmentPoleId, number>> = {};
   // Seed every surviving pole at zero so a pole nobody inherits into — Beijing
   // in 1991 — reads as a real zero rather than an absence.

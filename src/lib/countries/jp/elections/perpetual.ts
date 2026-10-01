@@ -1,12 +1,16 @@
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
-import { getJpShugiinSeats, getJpSangiinClassSeats } from "@/lib/constants/states";
+import {
+  getJpSangiinClassSeats,
+  getJpSangiinSeats,
+  getJpShugiinSeats,
+} from "@/lib/constants/states";
 import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   endTimeToLarpTurn,
   getCurrentTurnAndCtx,
@@ -22,12 +26,10 @@ import { ensureRegionalGovernorElections } from "@/lib/turn/perpetualElections/s
  * Spawns anchor to the **canonical LARP schedule** via
  * {@link pickNextCanonicalCycle}. When the admin fast-forwards a regular
  * cycle via "Modify Timers", the next regular stays on calendar
- * (endTurn = anchors.jpShugiin + (N - 1) x dur.durationHours). Snap elections still shift the schedule
- * for the immediate post-snap regular — when prev is a `snap_shugiin`, the
- * shared helper receives `priorEndTurn = snap.endTurn` and the new cycle
- * anchors to `snap.endTurn + 192` per docs/design/snap-elections.md.
- * Subsequent regulars past the first post-snap cycle fall back to canonical
- * LARP, preserving the calendar against later admin acceleration.
+ * (endTurn = anchors.jpShugiin + (N - 1) x dur.durationHours). A snap election
+ * resets the term clock: the post-snap regular anchors to `snap.endTurn + 192`,
+ * and later regulars keep counting from that shifted schedule until another
+ * snap moves it. See `planNextLowerChamberCycle`.
  *
  * 24h-primary / 24h-general gate: if currentTurn has eaten too deep into the
  * next canonical window, the spawner walks forward to the following cycle
@@ -37,14 +39,18 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
   const db = await getDb();
   const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
-  // 512 seats under the pre-1994 medium-constituency system, 465 after it.
+  // Era-specific apportionment: 466 in 1953, 512 in 1991, and 465 after 1994.
   const shugiinSeatsByRegion = getJpShugiinSeats(ctx.preset);
 
   const jpRegions = await db
     .collection<State>("states")
     .find({ countryId: "JP" }, { projection: { _id: 1 } })
     .toArray();
-  const regionIds = jpRegions.map((r) => r._id as string);
+  // Fail closed if a state row is added before its seat map. Inventing a
+  // one-seat race would make the malformed row self-perpetuating across cycles.
+  const regionIds = jpRegions
+    .map((r) => r._id as string)
+    .filter((regionId) => (shugiinSeatsByRegion[regionId] ?? 0) > 0);
   if (regionIds.length === 0) return;
 
   // Active/upcoming regular or snap Shugiin elections suppress spawning.
@@ -57,6 +63,26 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     })
     .toArray();
   const liveShugiin = new Set(liveElections.map((e) => e.state));
+  const seatHealOps = liveElections.flatMap((e) => {
+    const authoritative = shugiinSeatsByRegion[e.state];
+    if (typeof authoritative !== "number" || authoritative <= 0 || e.totalSeats === authoritative)
+      return [];
+    return [
+      {
+        updateOne: {
+          filter: {
+            _id: e._id,
+            totalSeats: e.totalSeats,
+            status: { $in: ["active", "upcoming"] as ElectionStatus[] },
+          },
+          update: { $set: { totalSeats: authoritative, updatedAt: now } },
+        },
+      },
+    ];
+  });
+  if (seatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(seatHealOps);
+  }
 
   const completedElections = await db
     .collection<Election>("elections")
@@ -83,19 +109,18 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only when prev is a snap the country called itself does its
-    // endTurn anchor the next regular's LARP schedule. See `snapAnchorEndTime`.
-    const snapAnchor = snapAnchorEndTime(prev, "snap_shugiin");
-    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-    const spawn = pickNextCanonicalCycle({
+    // A called snap, and every regular spawned on its shifted term clock,
+    // anchors the next regular. See `planNextLowerChamberCycle`.
+    const plan = planNextLowerChamberCycle({
       electionType: "shugiin",
-      prevCycle: prev?.cycle ?? 0,
+      snapType: "snap_shugiin",
+      prev,
       currentTurn,
-      priorEndTurn,
       ctx,
+      endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
     });
-    if (!spawn) continue;
+    if (!plan) continue;
+    const { spawn } = plan;
 
     const startTime = turnToWallClock(spawn.startTurn, now, currentTurn);
     const primaryEndTime = turnToWallClock(spawn.primaryEndTurn, now, currentTurn);
@@ -112,9 +137,14 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
         state: regionId,
       }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear("shugiin", spawn.cycle, undefined, undefined, ctx),
+      electionYear: plan.electionYear,
+      ...(plan.shiftedScheduleEndTurn != null && {
+        shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+      }),
       status,
-      totalSeats: prev?.totalSeats ?? shugiinSeatsByRegion[regionId] ?? 1,
+      // The preset apportionment is authoritative. A prior cycle may have been
+      // created before its era map existed (1953 carried the modern 465-seat map).
+      totalSeats: shugiinSeatsByRegion[regionId] ?? 1,
       startTime,
       primaryEndTime,
       endTime,
@@ -187,6 +217,7 @@ export async function ensureJPCouncillorElections(
   const db = await getDb();
   const { currentTurn: persistedTurn, ctx } = await getCurrentTurnAndCtx(db);
   const currentTurn = inFlightTurn ?? persistedTurn;
+  const sangiinSeatsByRegion = getJpSangiinSeats(ctx.preset);
 
   // Process both classes unless a specific override is given
   const classesToProcess: (1 | 2)[] = classOverride ? [classOverride] : [1, 2];
@@ -195,7 +226,9 @@ export async function ensureJPCouncillorElections(
     .collection<State>("states")
     .find({ countryId: "JP" }, { projection: { _id: 1 } })
     .toArray();
-  const regionIds = jpRegions.map((r) => r._id as string);
+  const regionIds = jpRegions
+    .map((r) => r._id as string)
+    .filter((regionId) => (sangiinSeatsByRegion[regionId] ?? 0) > 0);
   if (regionIds.length === 0) return;
 
   const dur = DEFAULT_DURATIONS.sangiin.durationHours;
@@ -214,6 +247,27 @@ export async function ensureJPCouncillorElections(
       })
       .toArray();
     const liveSangiin = new Set(liveElections.map((e) => e.state));
+    const seatHealOps = liveElections.flatMap((e) => {
+      const regionalTotal = sangiinSeatsByRegion[e.state];
+      if (typeof regionalTotal !== "number" || regionalTotal <= 0) return [];
+      const authoritative = getJpSangiinClassSeats(ctx.preset, e.state, chamberClass);
+      if (e.totalSeats === authoritative) return [];
+      return [
+        {
+          updateOne: {
+            filter: {
+              _id: e._id,
+              totalSeats: e.totalSeats,
+              status: { $in: ["active", "upcoming"] as ElectionStatus[] },
+            },
+            update: { $set: { totalSeats: authoritative, updatedAt: now } },
+          },
+        },
+      ];
+    });
+    if (seatHealOps.length > 0) {
+      await db.collection<Election>("elections").bulkWrite(seatHealOps);
+    }
 
     const completedElections = await db
       .collection<Election>("elections")
@@ -278,7 +332,9 @@ export async function ensureJPCouncillorElections(
         cycle: spawn.cycle,
         electionYear: electionToLarpYear("sangiin", spawn.cycle, undefined, chamberClass, ctx),
         status,
-        totalSeats: prev?.totalSeats ?? classSeats,
+        // The preset map is authoritative. Carrying a prior total forward made
+        // the old ceil-for-both-classes defect permanent in Hokkaido and Kyushu.
+        totalSeats: classSeats,
         startTime,
         primaryEndTime,
         endTime,

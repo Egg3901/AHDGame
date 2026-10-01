@@ -10,7 +10,7 @@ import { computeParliamentaryGovernmentTally } from "@/lib/congress/governmentVo
 import { autoAyeNPPsForParliamentaryAppointment } from "@/lib/turn/parliamentaryGovernment";
 import { createNotifications } from "@/lib/notifications";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
-import type { Character, ElectedOfficial } from "@/lib/db/types";
+import type { Character, ElectedOfficial, NPP } from "@/lib/db/types";
 
 /**
  * Resolve an expired head-of-state appointment vote (`office: "headOfState"`,
@@ -72,7 +72,19 @@ export async function resolveHeadOfStateAppointmentVote(
     ? null
     : await db
         .collection<Character>("characters")
-        .findOne({ _id: vote.nomineeCharacterId! }, { projection: { party: 1, userId: 1 } });
+        .findOne(
+          { _id: vote.nomineeCharacterId! },
+          { projection: { party: 1, userId: 1, avatarUrl: 1 } }
+        );
+  const nomineeAvatarUrl = isNppVote
+    ? vote.nomineeNppId
+      ? (
+          await db
+            .collection<NPP>("npps")
+            .findOne({ _id: vote.nomineeNppId }, { projection: { avatarUrl: 1 } })
+        )?.avatarUrl
+      : undefined
+    : nomineeChar?.avatarUrl;
   await db.collection<ElectedOfficial>("electedOfficials").insertOne({
     _id: new ObjectId(),
     countryId,
@@ -124,5 +136,15 @@ export async function resolveHeadOfStateAppointmentVote(
     color: DISCORD_COLORS.govFormed,
     footer: { text: "A House Divided" },
     timestamp: now.toISOString(),
+    // The appointment vote is a joint sitting of the legislature.
+    cardVoteSplit: [
+      {
+        label: config.legislature?.name ?? "Legislature",
+        votesFor: tally.votesFor,
+        votesAgainst: tally.votesAgainst,
+        votesAbstain: 0,
+      },
+    ],
+    ...(nomineeAvatarUrl ? { thumbnail: { url: nomineeAvatarUrl } } : {}),
   }).catch(() => {});
 }

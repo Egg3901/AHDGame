@@ -303,10 +303,17 @@ describe("processPartyActionGeneration — NPP-only state PS cap clamp-down", ()
     const { processPartyActionGeneration } = await import("./partyActionGeneration");
     await processPartyActionGeneration(new Date("2026-06-10T00:00:00Z"), db as unknown as Db, 100);
 
-    const spUpdates = db.collectionMocks.statePartyOrg!.updateOne.mock.calls;
-    const findUpdate = (id: string) => spUpdates.find((c) => (c[0] as { _id: string })._id === id);
-    const setOf = (call: unknown[] | undefined) =>
-      (call?.[1] as { $set: { politicalStrength: number } }).$set;
+    const spUpdates = db.collectionMocks.statePartyOrg!.bulkWrite.mock.calls.flatMap(
+      (call) => call[0]
+    ) as Array<{
+      updateOne: { filter: { _id: string }; update: { $set: { politicalStrength: number } } };
+    }>;
+    const findUpdate = (id: string) =>
+      spUpdates.find(
+        (op) =>
+          op.updateOne.filter._id === id && op.updateOne.update.$set.politicalStrength !== undefined
+      );
+    const setOf = (op: (typeof spUpdates)[number] | undefined) => op!.updateOne.update.$set;
 
     // TX clamped to 7.5
     const tx = findUpdate("TX_9");
@@ -366,12 +373,18 @@ describe("processPartyActionGeneration — NPP-only state PS cap clamp-down", ()
     const { processPartyActionGeneration } = await import("./partyActionGeneration");
     await processPartyActionGeneration(now, db as unknown as Db, 100);
 
-    const spUpdates = db.collectionMocks.statePartyOrg!.updateOne.mock.calls;
-    const mo = spUpdates.find((c) => (c[0] as { _id: string })._id === "MO_9");
-    expect(mo).toBeDefined();
-    expect((mo?.[1] as { $set: { politicalStrength: number } }).$set.politicalStrength).toBeCloseTo(
-      7.5
+    const spUpdates = db.collectionMocks.statePartyOrg!.bulkWrite.mock.calls.flatMap(
+      (call) => call[0]
+    ) as Array<{
+      updateOne: { filter: { _id: string }; update: { $set: { politicalStrength: number } } };
+    }>;
+    const mo = spUpdates.find(
+      (op) =>
+        op.updateOne.filter._id === "MO_9" &&
+        op.updateOne.update.$set.politicalStrength !== undefined
     );
+    expect(mo).toBeDefined();
+    expect(mo!.updateOne.update.$set.politicalStrength).toBeCloseTo(7.5);
   });
 });
 

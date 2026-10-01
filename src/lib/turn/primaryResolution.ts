@@ -21,6 +21,7 @@ import {
 import { getDb } from "@/lib/mongodb";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { accumulateNGPresidentVoteTurn } from "@/lib/turn/election/ngPresidentAccumulation";
+import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "@/lib/electionEngine/tallyProjections";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import type {
@@ -181,7 +182,7 @@ export async function resolvePrimariesIfNeeded(
         : Promise.resolve([] as StatePartyOrg[]),
       db
         .collection<ElectionVoteTally>("electionVoteTallies")
-        .find({ electionId: { $in: electionIds } })
+        .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_SNAPSHOT_TURNS_ONLY })
         .toArray(),
       uniqueRegionKeys.size > 0
         ? db
@@ -985,7 +986,7 @@ export async function recordPrimarySnapshots(
       : Promise.resolve([] as DemographicCategory[]),
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
-      .find({ electionId: { $in: electionIds } })
+      .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_SNAPSHOT_TURNS_ONLY })
       .project<Pick<ElectionVoteTally, "electionId" | "primaryVotes">>({
         electionId: 1,
         primaryVotes: 1,

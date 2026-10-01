@@ -3,10 +3,10 @@ import type { Db } from "mongodb";
 import { alliesOf, allianceBarBetween, loadAllianceRoll } from "../allianceBar";
 import type { BlocLookup } from "../bloc";
 
-const membershipSpy = vi.fn();
+const mapDataSpy = vi.fn();
 vi.mock("@/lib/world/blocMembership", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/world/blocMembership")>();
-  return { ...real, loadBlocMembership: (...a: unknown[]) => membershipSpy(...a) };
+  return { ...real, loadBlocMapData: (...a: unknown[]) => mapDataSpy(...a) };
 });
 
 const gameStateSpy = vi.fn();
@@ -22,7 +22,7 @@ function db(): Db {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  membershipSpy.mockResolvedValue(ROLL);
+  mapDataSpy.mockResolvedValue({ membership: ROLL, customBlocs: [] });
   gameStateSpy.mockResolvedValue({ preset: "1953-default" });
 });
 
@@ -31,7 +31,7 @@ describe("loadAllianceRoll", () => {
     const roll = await loadAllianceRoll(db());
     expect(roll.preset).toBe("1953-default");
     expect(roll.blocs).toEqual(ROLL);
-    expect(membershipSpy).toHaveBeenCalledWith(expect.anything(), "1953-default");
+    expect(mapDataSpy).toHaveBeenCalledWith(expect.anything(), "1953-default");
   });
 
   // The preset, not the live year: a 1953 world still has a Warsaw Pact in its year
@@ -40,7 +40,7 @@ describe("loadAllianceRoll", () => {
     gameStateSpy.mockResolvedValue(null);
     const roll = await loadAllianceRoll(db());
     expect(roll.preset).toBeTruthy();
-    expect(membershipSpy).toHaveBeenCalledWith(expect.anything(), roll.preset);
+    expect(mapDataSpy).toHaveBeenCalledWith(expect.anything(), roll.preset);
   });
 });
 
@@ -64,7 +64,7 @@ describe("allianceBarBetween", () => {
   // A modern preset has NATO but no eastern counterpart, so RU and CN read non-aligned.
   // If that counted as a shared bloc, no modern-era war could ever be declared.
   it("leaves an era with only one pole fully at war with itself", async () => {
-    membershipSpy.mockResolvedValue({ US: "west", UK: "west" });
+    mapDataSpy.mockResolvedValue({ membership: { US: "west", UK: "west" }, customBlocs: [] });
     gameStateSpy.mockResolvedValue({ preset: "2019-default" });
     expect(await allianceBarBetween(db(), "RU", "CN")).toBeNull();
     expect(await allianceBarBetween(db(), "US", "UK")).toBe("North Atlantic Treaty Organization");
@@ -73,9 +73,22 @@ describe("allianceBarBetween", () => {
   // The bloc is the bar even where the era gives it no readable org name, so the
   // refusal still holds rather than silently lapsing into a permit.
   it("still bars when the bloc has no named org in that world", async () => {
-    membershipSpy.mockResolvedValue({ RU: "east", DD: "east" });
+    mapDataSpy.mockResolvedValue({ membership: { RU: "east", DD: "east" }, customBlocs: [] });
     gameStateSpy.mockResolvedValue({ preset: "2019-default" });
     expect(await allianceBarBetween(db(), "RU", "DD")).toBe("same alliance bloc");
+  });
+
+  it("bars members of a player-founded Bloc and names their alliance", async () => {
+    mapDataSpy.mockResolvedValue({
+      membership: { BR: "ORG:andes-pact", AR: "ORG:andes-pact" },
+      customBlocs: [{ poleId: "ORG:andes-pact", label: "Andes Pact", accentToken: "warning" }],
+    });
+
+    expect(await allianceBarBetween(db(), "BR", "AR")).toBe("Andes Pact");
+    expect(alliesOf(await loadAllianceRoll(db()), "BR")).toEqual({
+      alliance: "Andes Pact",
+      mates: ["AR"],
+    });
   });
 });
 

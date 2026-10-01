@@ -146,6 +146,7 @@ import {
   acumenRateSensitivity,
   dominanceDensityFactor,
   getDominanceGrowthCostMultiplier,
+  getNationalDominanceGrowthCostMultiplier,
   type CorporationType,
 } from "./corporations";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -592,7 +593,8 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
   healthcare: 48,
   agriculture: 48,
   logistics: 36,
-  media_entertainment: 24,
+  entertainment: 24,
+  media: 24,
   financial: 24,
   technology: 24,
   // Asset-light: a store fit-out is weeks, not years.
@@ -821,6 +823,11 @@ export interface BuildCostInputs {
   /** Sector's (state, type) market share %, for the dominance multiplier. */
   marketSharePercent?: number;
   /**
+   * Owning corporation's aggregate share of this (country, type) market.
+   * The harsher of the local and national antitrust tolls prices the build.
+   */
+  nationalMarketSharePercent?: number;
+  /**
    * Distinct RIVAL corporations holding a sector in the same (state, type) cell
    * — the building corp's own sectors excluded. Scales the dominance toll by
    * how contested the market is (see {@link dominanceDensityFactor}).
@@ -875,7 +882,8 @@ export interface BuildCostBreakdown {
  * NPP behaviour and the tests can never disagree about what a build costs.
  *
  *     total = units × capacityPricePerUnit(type, year)
- *                   × dominanceMult(share, competitorCount)
+ *                   × max(localDominanceMult, nationalDominanceMult)
+ *                     adjusted for competitorCount
  *                   × rateMult(primeRate, acumen)
  *                   × acumenMult(acumen)
  *                   × techMult(growthCostMultiplier)
@@ -932,6 +940,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     year,
     eraUnitScale,
     marketSharePercent = 0,
+    nationalMarketSharePercent = 0,
     competitorCount,
     primeRate = 0,
     acumen = NEUTRAL_STAT,
@@ -945,7 +954,17 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   // toll's EXCESS over 1.0, so a market with no rivals still pays a monopoly
   // premium, just a smaller one — and a sub-threshold sector (multiplier 1) is
   // untouched at any density.
-  const rawDominance = getDominanceGrowthCostMultiplier(marketSharePercent);
+  // Local and national dominance are alternative views of the same antitrust
+  // condition, so take the harsher toll and density-adjust it once. Stacking
+  // both would double-charge a corporation dominant at both grains.
+  const localShare = Number.isFinite(marketSharePercent) ? marketSharePercent : 0;
+  const nationalShare = Number.isFinite(nationalMarketSharePercent)
+    ? nationalMarketSharePercent
+    : 0;
+  const rawDominance = Math.max(
+    getDominanceGrowthCostMultiplier(localShare),
+    getNationalDominanceGrowthCostMultiplier(nationalShare)
+  );
   const dominanceMultiplier = 1 + (rawDominance - 1) * dominanceDensityFactor(competitorCount);
   const rateMultiplier = Math.max(
     0.5,

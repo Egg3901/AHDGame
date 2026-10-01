@@ -64,6 +64,34 @@ describe("loadOrgInfluence", () => {
     expect(v.channel!.accentToken).toMatch(/^(info|error|warning|success)$/);
   });
 
+  it("reports a player-founded Bloc as a live influence channel", async () => {
+    const cursor = {
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          id: "andes-pact",
+          name: "Andes Pact",
+          shortName: "AP",
+          creatorCountryId: "BR",
+          category: "bloc",
+          alignment: { poleId: "ORG:andes-pact", accentToken: "warning" },
+        },
+      ]),
+    };
+    db.collection("customInternationalOrganizations").find.mockReturnValue(cursor);
+
+    const { loadOrgInfluence } = await import("./orgInfluence");
+    const v = await loadOrgInfluence(db as unknown as Db, "andes-pact");
+
+    expect(v.enabled).toBe(true);
+    expect(v.channel).toMatchObject({
+      poleId: "ORG:andes-pact",
+      poleLabel: "Andes Pact",
+      accentToken: "warning",
+      weight: 1,
+    });
+  });
+
   it("returns no channel for an org that carries no influence this era", async () => {
     const { loadOrgInfluence } = await import("./orgInfluence");
     // The EU carries influence only from 1991.

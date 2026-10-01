@@ -16,27 +16,32 @@ import { handleRouteError, badRequest } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
-import type { Character, CentralBank } from "@/lib/db/types";
+import type { Character } from "@/lib/db/types";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { isLineOfCreditEnabled } from "@/lib/lineOfCredit/featureFlag";
 import { getPersonalBalance } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { normalizeSavingsMutationAmount } from "@/lib/api/savings/savingsAmount";
 import { getGameState } from "@/lib/gameState";
-import { insertLocLedgerEntry } from "@/lib/lineOfCredit/ledger";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import {
+  loadLocSettlement,
+  settleLocPlan,
+  locInterestCredits,
+} from "@/lib/lineOfCredit/settlement";
+
 import {
   FOREX_ACTIVE_CURRENCIES,
   ZOD_ACTIVE_CURRENCY_ENUM,
   getCountryIdForCurrency,
 } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { getBankId } from "@/lib/centralBank/helpers";
+
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 
 const repaySchema = z.object({
   currency: z.enum(ZOD_ACTIVE_CURRENCY_ENUM),
   amount: z.number(),
+  commandId: z.string().uuid(),
 });
 
 export async function POST(request: Request) {
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { currency, amount: rawAmount } = parsed.data;
+    const { currency, amount: rawAmount, commandId } = parsed.data;
     const c = currency as CurrencyCode;
 
     const normalized = normalizeSavingsMutationAmount(rawAmount, c);
@@ -77,6 +82,18 @@ export async function POST(request: Request) {
       return NextResponse.json(badRequest("Character not found").toJson(), { status: 400 });
     }
 
+    const key = `loc:repay:${character._id}:${commandId}`;
+    const requestQuote = { operation: "repay", currency: c, amount: normalized };
+    const accepted = await loadLocSettlement(db, key);
+    if (accepted) {
+      const replay = await settleLocPlan(db, key, accepted.turn, {
+        ...accepted.locSettlement,
+        request: requestQuote,
+      });
+      return NextResponse.json(replay.error ? { error: replay.error } : replay.result, {
+        status: replay.error ? 409 : 200,
+      });
+    }
     const loc = character.lineOfCredit;
     if (!loc?.accountsOpened?.[c]) {
       return NextResponse.json(badRequest("No LOC account for this currency").toJson(), {
@@ -116,13 +133,6 @@ export async function POST(request: Request) {
     const applied = takeA + takeB;
     const fromPersonal = applied;
 
-    const inc: Record<string, number> = {};
-    if (fromPersonal > 0) {
-      inc[`currencyBalances.personal.${c}`] = -fromPersonal;
-    }
-    if (takeA > 0) inc[`lineOfCredit.arrears.${c}`] = -takeA;
-    if (takeB > 0) inc[`lineOfCredit.balances.${c}`] = -takeB;
-
     // Auto-clear the drawFrozen block as soon as all outstanding arrears are paid,
     // rather than waiting for the next turn's distress check (lineOfCreditTurn.ts:298)
     // to lift it. Total post-update arrears = sum across currencies, applying the
@@ -134,89 +144,80 @@ export async function POST(request: Request) {
     }
     const clearFreeze = loc.drawFrozen === true && postArrearsTotal <= 0;
 
-    const now = new Date();
-    const set: Record<string, unknown> = { updatedAt: now };
-    if (clearFreeze) set["lineOfCredit.drawFrozen"] = false;
-
-    // Atomic filter guards against concurrent personal-balance depletion between read and write.
-    const filter: Record<string, unknown> = { _id: character._id };
-    if (fromPersonal > 0) {
-      filter[`currencyBalances.personal.${c}`] = { $gte: fromPersonal };
-    }
-
-    const res = await db
-      .collection<Character>("characters")
-      .updateOne(filter, Object.keys(inc).length > 0 ? { $inc: inc, $set: set } : { $set: set });
-    if (res.matchedCount === 0) {
-      return NextResponse.json(badRequest("Insufficient personal balance").toJson(), {
-        status: 400,
-      });
-    }
-
-    // Only the interest portion (takeA) credits the lending bank's reserves —
-    // interest is bank revenue. Principal (takeB) is destroyed symmetrically to
-    // how `draw` created it: originating a loan doesn't debit any bank pool, so
-    // repayment of principal doesn't credit one either. Crediting principal here
-    // would mint free money for the bank on every borrow→repay cycle.
-    const reservesCredit = takeA;
-    if (reservesCredit > 0) {
-      const lendingBankId = getBankId(getCountryIdForCurrency(c));
-      await db
-        .collection<CentralBank>("centralBanks")
-        .updateOne({ _id: lendingBankId }, { $inc: { reserveBalance: reservesCredit } });
-    }
-
-    const gameState = await getGameState();
-    const turn = gameState?.currentTurn ?? 0;
-    const after = await db.collection<Character>("characters").findOne({ _id: character._id });
-
-    // Remove currency keys that hit exactly zero to keep the document clean.
-    const zeroUnset: Record<string, 1> = {};
-    if ((after?.lineOfCredit?.balances?.[c] ?? -1) <= 0)
-      zeroUnset[`lineOfCredit.balances.${c}`] = 1;
-    if ((after?.lineOfCredit?.arrears?.[c] ?? -1) <= 0) zeroUnset[`lineOfCredit.arrears.${c}`] = 1;
-    if (Object.keys(zeroUnset).length > 0) {
-      await db
-        .collection<Character>("characters")
-        .updateOne({ _id: character._id }, { $unset: zeroUnset });
-    }
-
-    if (after?.lineOfCredit) {
-      await insertLocLedgerEntry(db, {
-        characterId: character._id,
-        currencyCode: c,
-        type: "repay",
-        amount: applied,
-        interestPortion: takeA,
-        principalPortion: takeB,
-        balanceAfter: after.lineOfCredit.balances?.[c] ?? 0,
-        arrearsAfter: after.lineOfCredit.arrears?.[c] ?? 0,
-        turn,
-      });
-      if (clearFreeze) {
-        await insertLocLedgerEntry(db, {
-          characterId: character._id,
-          currencyCode: c,
-          type: "unfreeze",
-          amount: 0,
-          balanceAfter: after.lineOfCredit.balances?.[c] ?? 0,
-          arrearsAfter: after.lineOfCredit.arrears?.[c] ?? 0,
-          turn,
-        });
-      }
-    }
-
-    void emitTx(db, {
-      type: "loc_repay",
-      turn,
+    const now = new Date(),
+      turn = (await getGameState())?.currentTurn ?? 0;
+    const newPrincipal = { ...principal },
+      newArrears = { ...arrears };
+    if (principal[c]! - takeB > 0) newPrincipal[c] = principal[c]! - takeB;
+    else delete newPrincipal[c];
+    if (arrearsCurrent - takeA > 0) newArrears[c] = arrearsCurrent - takeA;
+    else delete newArrears[c];
+    const locAfter = {
+      ...loc,
+      balances: newPrincipal,
+      arrears: newArrears,
+      ...(clearFreeze ? { drawFrozen: false } : {}),
+    };
+    const settled = await settleLocPlan(db, key, turn, {
+      characterId: character._id,
+      expectedLoc: loc,
+      expectedRevision:
+        (character as Character & { lineOfCreditRevision?: number }).lineOfCreditRevision ?? null,
+      request: requestQuote,
       createdAt: now,
-      subjectType: "character",
-      subjectId: character._id,
-      subjectName: character.name,
-      amount: -applied,
-      currencyCode: c,
-      meta: { interestPortion: takeA, principalPortion: takeB },
+      effect: {
+        locAfter,
+        walletInc: { [`currencyBalances.personal.${c}`]: -fromPersonal },
+        reserves: locInterestCredits({ [c]: takeA }),
+        ledger: [
+          {
+            characterId: character._id,
+            countryId: getCountryIdForCurrency(c),
+            currencyCode: c,
+            type: "repay",
+            amount: applied,
+            interestPortion: takeA,
+            principalPortion: takeB,
+            balanceAfter: newPrincipal[c] ?? 0,
+            arrearsAfter: newArrears[c] ?? 0,
+            turn,
+          },
+          ...(clearFreeze
+            ? [
+                {
+                  characterId: character._id,
+                  countryId: getCountryIdForCurrency(c),
+                  currencyCode: c,
+                  type: "unfreeze" as const,
+                  amount: 0,
+                  balanceAfter: newPrincipal[c] ?? 0,
+                  arrearsAfter: newArrears[c] ?? 0,
+                  turn,
+                },
+              ]
+            : []),
+        ],
+        transactions: [
+          {
+            type: "loc_repay",
+            turn,
+            subjectType: "character",
+            subjectId: character._id,
+            subjectName: character.name,
+            amount: -applied,
+            currencyCode: c,
+            meta: { interestPortion: takeA, principalPortion: takeB },
+          },
+        ],
+        flows: [
+          { kind: "debit", currency: c, amount: applied, note: "Borrower personal wallet" },
+          { kind: "credit", currency: c, amount: takeA, note: "Lender interest reserve" },
+          { kind: "burn", currency: c, amount: takeB, note: "LOC principal retired" },
+        ].filter((flow) => flow.amount > 0),
+        result: { success: true, currency: c, amount: applied, fromPersonal },
+      },
     });
+    if (settled.error) return NextResponse.json({ error: settled.error }, { status: 409 });
 
     return NextResponse.json({
       success: true,

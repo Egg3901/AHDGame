@@ -13,6 +13,7 @@ import {
 import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { resolveDefenseLineFrom } from "./defenseEnvelope";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import {
   getDefenseAppropriation,
   applyAppropriationSettlementWithOverdraft,
@@ -51,11 +52,14 @@ export async function applyDefenseAppropriation(
   db: Db,
   countryId: string,
   turn: number,
-  preset: string
+  preset: string,
+  knownUnits?: MilitaryUnit[]
 ): Promise<AppropriationSettlement | null> {
-  const units = await getMilitaryUnitsCollection(db)
-    .find({ countryId: countryId as CountryId })
-    .toArray();
+  const units =
+    knownUnits ??
+    (await getMilitaryUnitsCollection(db)
+      .find({ countryId: countryId as CountryId })
+      .toArray());
   if (units.length === 0) return null;
 
   // The force tier scales upkeep AND the readiness baseline the drift below walks toward.

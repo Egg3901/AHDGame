@@ -148,10 +148,7 @@ function GoPublicCard({
         return;
       }
       setSuccess(
-        `IPO complete: ${data.newShares.toLocaleString("en-US")} shares listed to the public float. Up to ${formatAmount(
-          toInternal(data.proceeds),
-          liquidCode
-        )} flows into the treasury as those shares are bought.`
+        `IPO complete: ${data.newShares.toLocaleString("en-US")} shares issued and available on the exchange now. The treasury receives proceeds only as those shares are bought.`
       );
       onRefresh();
     } catch {
@@ -359,7 +356,10 @@ function PrivatizeCard({
 
   const lockedPrice = corporation.sharePrice * (1 + PRIVATIZATION_BUYOUT_PREMIUM);
   const ceoShares = Math.round((ceoOwnershipPct / 100) * corporation.totalShares);
-  const nonCeoShares = Math.max(0, corporation.totalShares - ceoShares);
+  const nonCeoShares = Math.max(
+    0,
+    corporation.totalShares - ceoShares - (corporation.pendingIpoShares ?? 0)
+  );
   const estimatedCost = Math.ceil(nonCeoShares * lockedPrice);
   const isFullOwner = nonCeoShares === 0;
 

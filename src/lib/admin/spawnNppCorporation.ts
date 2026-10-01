@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, CorporateSector, NPP, PoliticalParty } from "@/lib/db/types";
+import type { Corporation, CorporateSector, GameState, NPP, PoliticalParty } from "@/lib/db/types";
 import {
   buildCeoAffiliations,
   chooseNppCorpCeo,
@@ -18,6 +18,9 @@ import {
   loadWorldPreset,
 } from "@/lib/currency/gdpAnchorRate";
 import { getEraFounderShares, getEraNominalScale } from "@/lib/constants/sectorSeedEra";
+import { autoGrantedNodeIds } from "@/lib/constants/techTree";
+import { resolveGameYear } from "@/lib/era/era";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import {
   CORPORATION_TYPES,
   type CorporationType,
@@ -166,7 +169,11 @@ export interface SpawnNppCorporationInput {
   foundedAtTurn?: number;
   /** Initial operating strategy for the founding sector. Defaults to standard. */
   initialStrategyId?: string;
+  /** Sim-only: never grant more opening plant capacity than the unowned pool holds. */
+  limitToUnownedPool?: boolean;
 }
+
+class UnownedSeedCapacityExhaustedError extends Error {}
 
 /**
  * Gather the per-affiliation inputs {@link chooseNppCorpCeo} needs for one
@@ -293,6 +300,30 @@ export async function spawnNppCorporation(
       `State "${headquartersState}" belongs to country "${state.countryId}", not "${countryId}"`
     );
   }
+  const eraUnitScale = await loadWorldEraUnitScale(db);
+  const boundedPool = input.limitToUnownedPool
+    ? await db
+        .collection("unownedSectors")
+        .findOne({ stateId: headquartersState, sectorType: type })
+    : null;
+  // Reject before allocating an NPP CEO or corporation when the sim pool is
+  // exhausted. The regular admin spawn path retains its historical floor.
+  const boundedPoolRevenue = boundedPool
+    ? Math.min(
+        boundedPool.revenue,
+        typeof boundedPool.headroomUnits === "number" && Number.isFinite(boundedPool.headroomUnits)
+          ? Math.floor(
+              Math.max(0, boundedPool.headroomUnits) /
+                unownedHeadroomUnitsPerAnchor(type, eraUnitScale)
+            )
+          : boundedPool.revenue
+      )
+    : 0;
+  if (input.limitToUnownedPool && !(boundedPoolRevenue > 0)) {
+    throw new UnownedSeedCapacityExhaustedError(
+      `No unowned ${type} capacity remains in ${headquartersState}`
+    );
+  }
 
   // Get currency for the country
   const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
@@ -335,6 +366,21 @@ export async function spawnNppCorporation(
   //     by the era's nominal scale keeps the founding book the same share of
   //     the economy it is in a 2019 world. No-op for every modern preset.
   const preset = await loadWorldPreset(db);
+  const techGameState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        sectorTechTreesEnabled: 1,
+        currentYear: 1,
+        currentTurn: 1,
+        startingYear: 1,
+      },
+    }
+  );
+  const techGrantIds =
+    techGameState?.sectorTechTreesEnabled === true
+      ? autoGrantedNodeIds(type, resolveGameYear(techGameState) ?? getStartingYearForPreset(preset))
+      : [];
   const startingCapital =
     customCapital ??
     Math.round(
@@ -356,9 +402,11 @@ export async function spawnNppCorporation(
   if (customRevenue !== undefined) {
     startingRevenue = customRevenue;
   } else {
-    const unowned = await db
-      .collection("unownedSectors")
-      .findOne({ stateId: headquartersState, sectorType: type });
+    const unowned =
+      boundedPool ??
+      (await db
+        .collection("unownedSectors")
+        .findOne({ stateId: headquartersState, sectorType: type }));
     if (unowned?.revenue) {
       startingRevenue = Math.round(unowned.revenue * 0.25);
     } else {
@@ -373,6 +421,9 @@ export async function spawnNppCorporation(
   }
 
   startingRevenue = Math.max(startingRevenue, DEFAULT_SECTOR_STARTING_REVENUE);
+  if (input.limitToUnownedPool && boundedPool) {
+    startingRevenue = Math.min(startingRevenue, boundedPoolRevenue);
+  }
   const profitMargin = customMargin ?? DEFAULT_PROFIT_MARGIN;
 
   // Get next sequential ID for corporation
@@ -415,6 +466,7 @@ export async function spawnNppCorporation(
     logisticsStrength: 0,
     rdBudget: Math.round(startingCapital * 0.01), // 1% R&D
     rdScore: 0,
+    ...(techGrantIds.length > 0 ? { unlockedTechNodeIds: techGrantIds } : {}),
     ceoSalary: 0,
     brandColor: pickBrandColor(brandColor),
     sequentialId,
@@ -446,7 +498,6 @@ export async function spawnNppCorporation(
   // a seeded world's opening capacity is unchanged; only its BASIS changes from
   // ₳/day to units/day.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
-  const eraUnitScale = await loadWorldEraUnitScale(db);
   const startingCapacityUnitsStandard = plantsEnabled
     ? computeUnownedHeadroomUnits(type, startingRevenue, eraUnitScale)
     : 0;
@@ -508,9 +559,11 @@ export async function spawnNppCorporation(
   await db.collection<CorporateSector>("corporateSectors").insertOne(sectorDoc as CorporateSector);
 
   // Reduce the unowned sector pool to reflect market capture.
-  const unownedSector = await db
-    .collection("unownedSectors")
-    .findOne({ stateId: headquartersState, sectorType: type });
+  const unownedSector =
+    boundedPool ??
+    (await db
+      .collection("unownedSectors")
+      .findOne({ stateId: headquartersState, sectorType: type }));
   if (unownedSector) {
     const captureAmount = startingRevenue;
     const newRevenue = Math.max(0, unownedSector.revenue - captureAmount);
@@ -584,6 +637,8 @@ export async function batchSpawnNppCorporations(
      * aggregate economic output.
      */
     perSectorCount?: number;
+    /** Sim-only: bound grants by the currently available unowned pool. */
+    limitToUnownedPool?: boolean;
   }
 ): Promise<SpawnNppCorporationResult[]> {
   const defaultHq = NPP_CAPITAL_STATES[countryId];
@@ -626,9 +681,13 @@ export async function batchSpawnNppCorporations(
           countryId,
           headquartersState: hqState,
           startingCapital: options?.startingCapital,
+          limitToUnownedPool: options?.limitToUnownedPool,
         });
         results.push(result);
       } catch (err) {
+        if (options?.limitToUnownedPool && err instanceof UnownedSeedCapacityExhaustedError) {
+          break;
+        }
         console.error(`[spawnNpp] Failed to spawn ${type} corp for ${countryId}:`, err);
         // Continue with other sectors/slots
       }
@@ -642,8 +701,7 @@ export async function batchSpawnNppCorporations(
 
 const SECTOR_NAME_PREFIXES: Record<CorporationType, string[]> = {
   financial: ["First", "National", "Union", "Metro", "Central"],
-  // issue #2234: merged newsroom and venue prefixes in one bank.
-  media_entertainment: ["Daily", "Metro", "National", "Global", "Prime", "Star", "Show"],
+  media: ["Daily", "Metro", "National", "Global", "Prime"],
   manufacturing: ["Atlas", "Prime", "National", "United", "Standard"],
   chemical_industries: ["Nova", "Chem", "Atlas", "Prime", "National"],
   healthcare: ["Med", "Health", "Care", "Life", "Prime"],
@@ -656,24 +714,14 @@ const SECTOR_NAME_PREFIXES: Record<CorporationType, string[]> = {
   construction: ["Build", "Construct", "Atlas", "Prime", "United"],
   defense: ["Defense", "Shield", "Atlas", "Prime", "National"],
   telecommunications: ["Tele", "Comms", "Net", "Prime", "National"],
+  entertainment: ["Star", "Prime", "Show", "Media", "Global"],
   logistics: ["Logi", "Freight", "Transport", "Prime", "National"],
   extraction: ["Mine", "Extract", "Resource", "Atlas", "Prime"],
 };
 
 const SECTOR_NAME_SUFFIXES: Record<CorporationType, string[]> = {
   financial: ["Bank", "Financial", "Capital", "Trust", "Holdings"],
-  // issue #2234: merged newsroom and venue suffixes in one bank.
-  media_entertainment: [
-    "Media",
-    "News",
-    "Broadcasting",
-    "Press",
-    "Communications",
-    "Entertainment",
-    "Studios",
-    "Productions",
-    "Group",
-  ],
+  media: ["Media", "News", "Broadcasting", "Press", "Communications"],
   manufacturing: ["Industries", "Manufacturing", "Works", "Products", "Group"],
   chemical_industries: ["Chemicals", "Industries", "Materials", "Science", "Group"],
   healthcare: ["Healthcare", "Medical", "Health", "Clinics", "Systems"],
@@ -686,6 +734,7 @@ const SECTOR_NAME_SUFFIXES: Record<CorporationType, string[]> = {
   construction: ["Construction", "Builders", "Contracting", "Development", "Engineering"],
   defense: ["Systems", "Industries", "Defense", "Technologies", "Contractors"],
   telecommunications: ["Communications", "Telecom", "Networks", "Wireless", "Systems"],
+  entertainment: ["Entertainment", "Studios", "Productions", "Media", "Group"],
   logistics: ["Logistics", "Shipping", "Transport", "Freight", "Supply"],
   extraction: ["Mining", "Resources", "Materials", "Extraction", "Industries"],
 };

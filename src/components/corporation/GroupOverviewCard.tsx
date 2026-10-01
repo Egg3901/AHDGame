@@ -86,7 +86,7 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
   return (
     <section className="rounded-xl border border-card-border bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-bold text-foreground">{group.rootName} Group</h2>
+        <h2 className="text-base font-bold text-foreground">{group.rootName}</h2>
         <span className="text-xs text-muted">
           {group.memberCount} members across {group.countries.length}{" "}
           {group.countries.length === 1 ? "country" : "countries"}

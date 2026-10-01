@@ -1,6 +1,7 @@
 import type { CountryId } from "./countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { OrganizationCategory } from "./orgCategory";
+import type { CustomAlignmentPoleId, CustomAlignmentPoleToken } from "./alignmentEras";
 import { JP_CABINET_SEAT_IDS } from "@/lib/countries/jp/institutionsFacts";
 import { US_CABINET_SEAT_IDS } from "@/lib/countries/us/institutionsFacts";
 import { UK_CABINET_SEAT_IDS } from "@/lib/countries/uk/institutionsFacts";
@@ -107,6 +108,19 @@ export interface InternationalOrganizationDef {
   charter: string;
   /** Shared classification driving powers, flagship, and group label. */
   category: OrganizationCategory;
+  /**
+   * The charter itself binds members to defend each other, at every alert posture.
+   * Honoured only where the org's EFFECTIVE category allows a standing charter
+   * (`ORGANIZATION_CATEGORY_META[category].mutualDefence.honoursStandingCharter`),
+   * which today means NATO and the Warsaw Pact in a world where they are blocs.
+   * Everywhere else mutual defence comes from the Article 5 posture.
+   */
+  standingMutualDefence?: boolean;
+  /** Independent alignment identity for a player-founded Bloc. */
+  alignment?: {
+    poleId: CustomAlignmentPoleId;
+    accentToken: CustomAlignmentPoleToken;
+  };
   /** True for player-created orgs so the UI can badge / filter them. */
   isCustom?: boolean;
 }
@@ -324,6 +338,7 @@ export const INTERNATIONAL_ORGANIZATIONS: Record<
     charter:
       "Article 5 commits each member to treat an armed attack against any one ally as an attack against all. Members coordinate defense planning, joint exercises, and integrated command structures.",
     category: "security",
+    standingMutualDefence: true,
   },
   UN: {
     id: "UN",
@@ -523,6 +538,7 @@ export const INTERNATIONAL_ORGANIZATIONS: Record<
     charter:
       "An armed attack against any member shall be considered an attack against them all. Members place their forces under a unified command and render immediate assistance by all means deemed necessary.",
     category: "security",
+    standingMutualDefence: true,
   },
   NON_ALIGNED: {
     id: "NON_ALIGNED",

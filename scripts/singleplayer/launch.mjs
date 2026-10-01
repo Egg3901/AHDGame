@@ -240,7 +240,10 @@ export async function publishMongoInstall(staging, destination, completeName, bi
     const complete = path.join(destination, completeName);
     const binary = path.join(destination, binaryName);
     if (
-      !["EEXIST", "ENOTEMPTY"].includes(error?.code) ||
+      // Windows reports EPERM when the competing installer has already
+      // published the destination directory. The completeness checks below
+      // distinguish that benign race from a real permission failure.
+      !["EEXIST", "ENOTEMPTY", "EPERM"].includes(error?.code) ||
       !existsSync(complete) ||
       !existsSync(binary)
     ) {
@@ -916,7 +919,11 @@ async function stopEverything(code) {
     log(clean ? "database stopped cleanly" : "database stopped");
   }
   await exited(app, 3_000);
-  process.exit(code);
+  // Let Node close its Windows pipe handles in their normal order. Calling
+  // process.exit() while the stdin control pipe is closing can trip libuv's
+  // UV_HANDLE_CLOSING assertion and turn a clean shutdown into 0xC0000409.
+  process.exitCode = code;
+  process.stdin.destroy();
 }
 
 function shutdown(code = 0) {

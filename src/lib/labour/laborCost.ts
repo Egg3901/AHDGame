@@ -77,11 +77,13 @@ export interface LabourContext {
    * Union ban (player suggestion #93): countries whose `FederalBudget` has
    * `unionsBanned: true` (an enacted union-ban law). Read at the `unions`
    * tier and above: while banned, a country's sectors decay unionization
-   * toward 0 (`decayUnionizationUnderBan`), skip the union wage premium, and
+   * toward underground cell strength, skip the union wage premium, and
    * can't trigger strikes (active ones force-resolve). See
    * `buildUnionsBannedByCountry` below and `src/lib/labour/unionLaws.ts`.
    */
   unionsBannedByCountry?: ReadonlySet<string>;
+  /** Strongest clandestine cell per banned country and industry. No legal union powers follow from it. */
+  undergroundStrengthByCountrySector?: ReadonlyMap<string, number>;
 }
 
 /** Inert context, labor folded into maintenance exactly as before the system. */
@@ -184,7 +186,8 @@ export function clampWageLevel(value: number): number {
 export const SECTOR_LABOR_INTENSITY: Record<CorporationType, number> = {
   technology: 0.3,
   healthcare: 0.3,
-  media_entertainment: 0.28,
+  media: 0.28,
+  entertainment: 0.28,
   construction: 0.28,
   financial: 0.25,
   defense: 0.24,
@@ -259,11 +262,12 @@ export const SECTOR_WAGE_LEVEL: Record<CorporationType, number> = {
   chemical_industries: 1.2,
   telecommunications: 1.2,
   extraction: 1.1,
-  media_entertainment: 1.0,
+  media: 1.1,
   automobiles: 1.0,
   manufacturing: 0.95,
   construction: 0.9,
   real_estate: 0.9,
+  entertainment: 0.85,
   logistics: 0.8,
   retail: 0.6,
   agriculture: 0.55,

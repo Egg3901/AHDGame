@@ -12,7 +12,7 @@
  * there is no bidding, no escrow, no losing countries, no multi-turn state
  * machine.
  *
- * `sectorType: "media_entertainment"` stands in for tourism (no dedicated
+ * `sectorType: "entertainment"` stands in for tourism (no dedicated
  * `CorporationType` exists — see `royalEvent.ts`'s doc comment for the same
  * finding); `construction` is a real sector and used as-is for the venue
  * build-out.
@@ -42,12 +42,7 @@ registerEventHandler({
           effects: [
             { type: "approvalDelta", delta: 6 },
             { type: "sectorDemandModifier", sectorType: "construction", pct: 8, durationTurns: 6 },
-            {
-              type: "sectorDemandModifier",
-              sectorType: "media_entertainment",
-              pct: 8,
-              durationTurns: 6,
-            },
+            { type: "sectorDemandModifier", sectorType: "entertainment", pct: 8, durationTurns: 6 },
             { type: "wireOnly" },
           ],
           newsWire: {

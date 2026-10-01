@@ -42,6 +42,79 @@ export function computeMarketSharePercent(
   return Math.max(0, Math.min(100, pct));
 }
 
+/** Stable key for a corporation's share of one national sector market. */
+export function corporationNationalSectorShareKey(
+  corporationId: { toString(): string },
+  countryId: CountryId,
+  sectorType: CorporateSector["sectorType"]
+): string {
+  return `${corporationId.toString()}::${countryId}::${sectorType}`;
+}
+
+/**
+ * Pure national revenue-share lookup for shells that already hold a sector
+ * snapshot. All rows within one country use the same host currency, so the FX
+ * factor cancels in the ratio.
+ */
+export function buildCorporationNationalRevenueShareByMarket(
+  sectors: ReadonlyArray<
+    Pick<CorporateSector, "corporationId" | "countryId" | "stateId" | "sectorType" | "revenue">
+  >,
+  countryByStateId: ReadonlyMap<string, CountryId> = new Map()
+): Map<string, number> {
+  // A legacy row may lack its denormalized countryId even though another row
+  // in the same state has it. Learn that mapping from the snapshot before
+  // resolving rows, then fall back to the caller's authoritative state map.
+  const resolvedCountryByStateId = new Map(countryByStateId);
+  for (const sector of sectors) {
+    if (sector.countryId) {
+      resolvedCountryByStateId.set(sector.stateId, sector.countryId as CountryId);
+    }
+  }
+  const marketRevenueByKey = new Map<string, number>();
+  const corporationRevenueByKey = new Map<string, number>();
+  const marketKey = (countryId: CountryId, sectorType: CorporateSector["sectorType"]) =>
+    `${countryId}::${sectorType}`;
+
+  for (const sector of sectors) {
+    const countryId =
+      (sector.countryId as CountryId | undefined) ?? resolvedCountryByStateId.get(sector.stateId);
+    if (!countryId) continue;
+    const revenue =
+      typeof sector.revenue === "number" && Number.isFinite(sector.revenue)
+        ? Math.max(0, sector.revenue)
+        : 0;
+    const nationalMarketKey = marketKey(countryId, sector.sectorType);
+    const corporationKey = corporationNationalSectorShareKey(
+      sector.corporationId,
+      countryId,
+      sector.sectorType
+    );
+    marketRevenueByKey.set(
+      nationalMarketKey,
+      (marketRevenueByKey.get(nationalMarketKey) ?? 0) + revenue
+    );
+    corporationRevenueByKey.set(
+      corporationKey,
+      (corporationRevenueByKey.get(corporationKey) ?? 0) + revenue
+    );
+  }
+
+  const shareByKey = new Map<string, number>();
+  for (const [corporationKey, corporationRevenue] of corporationRevenueByKey) {
+    const [, countryId, sectorType] = corporationKey.split("::") as [string, CountryId, string];
+    shareByKey.set(
+      corporationKey,
+      computeMarketSharePercent(
+        corporationRevenue,
+        marketRevenueByKey.get(marketKey(countryId, sectorType as CorporateSector["sectorType"])) ??
+          0
+      )
+    );
+  }
+  return shareByKey;
+}
+
 /**
  * GDP-derived baseline market size for one (state, sectorType) bucket, in ₳.
  * Mirrors the formula used by attack/economy/sector-detail routes.
@@ -465,6 +538,78 @@ export async function fetchSectorMarketSharePercent(
   }
 
   return computeMarketSharePercent(thisSectorAnchor, cellRevenue);
+}
+
+/**
+ * Compute one corporation's aggregate revenue share in each requested
+ * (country, sectorType) market. This is the API-route twin of
+ * {@link buildNationalDominanceShareBySectorId}; turn processing should keep
+ * using its already-loaded global snapshot.
+ *
+ * The query is state-scoped rather than trusting `corporateSectors.countryId`
+ * so pre-migration rows without that denormalized field still count. Countries
+ * with no real sector revenue are returned as 0.
+ */
+export async function fetchCorporationNationalSectorSharesByCountry(
+  db: Db,
+  inputs: {
+    corporationId: Corporation["_id"];
+    sectorType: CorporateSector["sectorType"];
+    countryIds: readonly CountryId[];
+  }
+): Promise<Map<CountryId, number>> {
+  const countryIds = [...new Set(inputs.countryIds)];
+  const result = new Map<CountryId, number>(countryIds.map((countryId) => [countryId, 0]));
+  if (countryIds.length === 0) return result;
+
+  const states = await db
+    .collection<State>("states")
+    .find({ countryId: { $in: countryIds } }, { projection: { _id: 1, countryId: 1 } })
+    .toArray();
+  const countryByStateId = new Map(
+    states.map((state) => [state._id, state.countryId as CountryId])
+  );
+  const stateIds = [...countryByStateId.keys()];
+  if (stateIds.length === 0) return result;
+
+  const nationalSectors = await db
+    .collection<CorporateSector>("corporateSectors")
+    .find(
+      { stateId: { $in: stateIds }, sectorType: inputs.sectorType },
+      { projection: { corporationId: 1, stateId: 1, sectorType: 1, revenue: 1 } }
+    )
+    .toArray();
+
+  const shareByMarket = buildCorporationNationalRevenueShareByMarket(
+    nationalSectors,
+    countryByStateId
+  );
+  for (const countryId of countryIds) {
+    result.set(
+      countryId,
+      shareByMarket.get(
+        corporationNationalSectorShareKey(inputs.corporationId, countryId, inputs.sectorType)
+      ) ?? 0
+    );
+  }
+  return result;
+}
+
+/** One-country convenience wrapper for build and founding commands. */
+export async function fetchCorporationNationalSectorSharePercent(
+  db: Db,
+  inputs: {
+    corporationId: Corporation["_id"];
+    countryId: CountryId;
+    sectorType: CorporateSector["sectorType"];
+  }
+): Promise<number> {
+  const shares = await fetchCorporationNationalSectorSharesByCountry(db, {
+    corporationId: inputs.corporationId,
+    sectorType: inputs.sectorType,
+    countryIds: [inputs.countryId],
+  });
+  return shares.get(inputs.countryId) ?? 0;
 }
 
 /**

@@ -232,11 +232,13 @@ function appealWeight(
   // of the swing-layer's persuasion-resistance. Neutral 1.0× when Reg is absent.
   const regResist = regResistanceMultiplier(options?.regByParty?.get(ec.party));
 
-  // Seeded party-baseline (registrationShare): concave share^0.5 scalar so a
-  // 2.5%-baseline party lands in single digits instead of the twenties.
-  // Exactly 1.0× when the seeded field is absent (all pre-existing worlds and
-  // every US lane) — see regBaselineMultiplier's compatibility contract.
-  const regBaseline = regBaselineMultiplier(options?.regShareByParty?.get(ec.party));
+  // Current-Reg party baseline: concave share^0.5 scalar so a low-registration
+  // party lands in single digits instead of the twenties. Undefined disables
+  // the lane; a missing party in an enabled region receives the zero-share
+  // floor rather than a neutral advantage.
+  const regBaseline = options?.regBaselineByParty
+    ? regBaselineMultiplier(options.regBaselineByParty.get(ec.party) ?? 0)
+    : 1;
 
   // Regional bases L1 — per-candidate state-org multiplier, ported from the
   // legacy general path (voteDistribution.ts). Gated only on map presence;

@@ -9,6 +9,7 @@ import { monetizeUnsoldSovereignUnits } from "@/lib/bonds/primaryMarket";
 
 function world() {
   const db = createInMemoryDb();
+  db.seed("exchangeRates", [{ _id: "USD", currencyCode: "USD", rate: 1 }]);
   const snapshots = db.collection("moneySupplySnapshots");
   Object.assign(snapshots, {
     replaceOne: (
@@ -215,10 +216,24 @@ describe("monetary stock boundaries", () => {
     expect(db.collection("centralBanks").docs[0].externalBroadMoney).toBe(1000);
   });
 
-  it("retains the single external cash destination for primary monetization", async () => {
+  it("credits only the issuer treasury for primary monetization", async () => {
     const db = world();
+    await db
+      .collection("federalBudget")
+      .updateOne({ _id: "federal" }, { $set: { revenue: { total: 0 }, gdp: 100000 } });
     const id = new ObjectId();
-    db.seed("bonds", [{ _id: id, unsoldUnits: 1, centralBankHoldings: 0, totalIssued: 0 }]);
+    db.seed("bonds", [
+      {
+        _id: id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        unsoldUnits: 1,
+        centralBankHoldings: 0,
+        totalIssued: 0,
+        couponRate: 5,
+      },
+    ]);
     const before = await observe(db, 0);
     expect(
       await monetizeUnsoldSovereignUnits(db as unknown as Db, {
@@ -231,6 +246,8 @@ describe("monetary stock boundaries", () => {
       })
     ).toBe(true);
     expect(Number((await observe(db, 1)).m2) - Number(before.m2)).toBe(1000);
+    expect(db.collection("federalBudget").docs[0].treasuryBalance).toBe(1100);
+    expect(db.collection("centralBanks").docs[0].externalBroadMoney).toBe(1000);
   });
 
   it("reports only newly positive cash when a treasury advance crosses a deficit", async () => {

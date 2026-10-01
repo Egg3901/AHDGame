@@ -2,6 +2,8 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation } from "mongodb";
 import type { Character, CorporateSector, State, Union, User } from "@/lib/db/types";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import type { CountryId } from "@/lib/constants/countries";
 import type { UnionOrganizer } from "@/lib/db/types/union";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
@@ -32,6 +34,7 @@ import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoS
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { processUndergroundTurn } from "./undergroundTurn";
+import { processCrackdownLabourApprovalTurn } from "@/lib/unions/crackdownLabourApproval";
 import { getBannedUnionCountryIds } from "@/lib/labour/unionLaws";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -166,6 +169,7 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
   }
 
   const currentTurn = turn ?? (await getCurrentTurn(db));
+  await processCrackdownLabourApprovalTurn(db, currentTurn);
   const labourRelations = await processLabourRelationsTurn(db, currentTurn);
 
   // Safety net: at "full" the roster must be COMPLETE, one union per
@@ -203,6 +207,16 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
   // weights have to decay in step with the pool they came from or the two
   // numbers drift apart. Suspended unions stay frozen, same as dues.
   const bannedUnionCountryIds = await getBannedUnionCountryIds(db);
+  const enforcementBudgets = await db
+    .collection<FederalBudget>("federalBudget")
+    .find({ unionsBanned: true }, { projection: { countryId: 1, unionEnforcementPosture: 1 } })
+    .toArray();
+  const enforcementPostures = new Map(
+    enforcementBudgets.map(
+      (budget) =>
+        [budget.countryId as CountryId, budget.unionEnforcementPosture ?? "normal"] as const
+    )
+  );
   const bannedCountryList = Array.from(bannedUnionCountryIds);
   const suspendedUnionFilter =
     bannedCountryList.length > 0 ? { countryId: { $in: bannedCountryList } } : { suspended: true };
@@ -229,7 +243,12 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
   // Illicit unions under ban: heat decay, detection rolls, and exposure
   // windows for suspended cells. Suspended unions never reach the owned
   // pass below, so this runs unconditionally (even with zero owned unions).
-  const underground = await processUndergroundTurn(db, currentTurn, bannedUnionCountryIds);
+  const underground = await processUndergroundTurn(
+    db,
+    currentTurn,
+    bannedUnionCountryIds,
+    enforcementPostures
+  );
   if (underground.newlyExposed > 0) {
     console.warn(`[unionsTurn] exposed ${underground.newlyExposed} underground union(s)`);
   }

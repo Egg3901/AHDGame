@@ -12,7 +12,8 @@
  * that hold anchor values convert before calling.
  */
 
-import type { ClientSession, Db } from "mongodb";
+import type { ClientSession, Db, Filter, UpdateFilter } from "mongodb";
+import { SETTLED_KEYS_CAP, SETTLED_KEYS_FIELD } from "@/lib/banking/moneyMove";
 import type { Bond, BondMarketPool, BondMarketPoolFlowKind } from "@/lib/db/types";
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
@@ -79,17 +80,28 @@ export async function debitBondPoolGated(
   amountLocal: number,
   kind: BondMarketPoolFlowKind,
   now: Date = new Date(),
-  options?: { session?: ClientSession }
+  options?: { session?: ClientSession; stamp?: string }
 ): Promise<{ ok: true; cashAfter: number } | { ok: false }> {
   const amount = roundCents(amountLocal);
   if (!Number.isFinite(amount) || amount < 0) return { ok: false };
   if (amount === 0) return { ok: true, cashAfter: await readBondPoolCash(db, currency) };
+  const stamp = options?.stamp;
   const result = await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).findOneAndUpdate(
-    { _id: currency, cashLocal: { $gte: amount } },
+    {
+      _id: currency,
+      cashLocal: { $gte: amount },
+      // A stamped debit that already landed does not match, so a resumed or
+      // racing write of the same sale moves nothing twice. Same convention as
+      // the banking moneyMove leg stamps.
+      ...(stamp ? { [SETTLED_KEYS_FIELD]: { $ne: stamp } } : {}),
+    } as Filter<BondMarketPool>,
     {
       $inc: { cashLocal: -amount, [`lifetime.${kind}`]: amount },
       $set: { updatedAt: now },
-    },
+      ...(stamp
+        ? { $push: { [SETTLED_KEYS_FIELD]: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } } }
+        : {}),
+    } as unknown as UpdateFilter<BondMarketPool>,
     {
       returnDocument: "after",
       projection: { cashLocal: 1 },

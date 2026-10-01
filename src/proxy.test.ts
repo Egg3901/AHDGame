@@ -66,6 +66,18 @@ describe("proxy() — behaviors preserved from the deleted root middleware.ts", 
     expect(res.headers.get("location")).toBeNull();
   });
 
+  it("hops a www OAuth callback GET to the apex, where the link-flow cookie lives", async () => {
+    const res = await proxy(
+      makeRequest("https://www.ahousedividedgame.com/api/auth/discord/callback?code=c&state=s", {
+        host: "www.ahousedividedgame.com",
+      })
+    );
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe(
+      "https://ahousedividedgame.com/api/auth/discord/callback?code=c&state=s"
+    );
+  });
+
   it("rewrites a wiki-subdomain page path under /wiki", async () => {
     const res = await proxy(
       makeRequest("https://wiki.ahousedividedgame.com/elections/123", {

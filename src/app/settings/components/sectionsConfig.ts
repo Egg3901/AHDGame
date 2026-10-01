@@ -23,8 +23,9 @@ export interface CharacterData {
   googleEmail?: string;
   googleName?: string;
   googleAvatar?: string;
+  appleId?: string;
+  appleEmail?: string;
   campaignSongUrl?: string;
-  campaignSongAutoplay?: boolean;
   demographics?: { race: string; gender: string; education: string; wealth: string };
   autoRunForReelection?: boolean;
 }
@@ -44,6 +45,8 @@ export interface OAuthData {
   googleEmail?: string;
   googleName?: string;
   googleAvatar?: string;
+  appleId?: string;
+  appleEmail?: string;
 }
 
 /** Message ids resolved against the "settings" namespace via t(). */
@@ -67,6 +70,16 @@ export const GOOGLE_MESSAGES: Record<string, { key: string; ok: boolean }> = {
   missing_params: { key: "oauth.google.failed", ok: false },
   invalid_state: { key: "oauth.google.expired", ok: false },
   access_denied: { key: "oauth.google.denied", ok: false },
+};
+
+export const APPLE_MESSAGES: Record<string, { key: string; ok: boolean }> = {
+  linked: { key: "oauth.apple.linked", ok: true },
+  not_configured: { key: "oauth.apple.notConfigured", ok: false },
+  already_linked: { key: "oauth.apple.alreadyLinked", ok: false },
+  exchange_failed: { key: "oauth.apple.failed", ok: false },
+  missing_params: { key: "oauth.apple.failed", ok: false },
+  invalid_state: { key: "oauth.apple.expired", ok: false },
+  access_denied: { key: "oauth.apple.denied", ok: false },
 };
 
 export interface SectionDef {

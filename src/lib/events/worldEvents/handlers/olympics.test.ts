@@ -61,10 +61,7 @@ describe("worldEvents.olympics — simple host flavor event (Phase 3, rewritten)
       (call) => call[0]
     );
     expect(modifierDocs).toHaveLength(2);
-    expect(modifierDocs.map((d) => d.sectorType).sort()).toEqual([
-      "construction",
-      "media_entertainment",
-    ]);
+    expect(modifierDocs.map((d) => d.sectorType).sort()).toEqual(["construction", "entertainment"]);
     for (const doc of modifierDocs) {
       expect(doc.countryId).toBe("US");
       expect(doc.pct).toBe(8);

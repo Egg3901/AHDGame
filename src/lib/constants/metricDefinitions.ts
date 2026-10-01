@@ -1580,8 +1580,8 @@ export const metricCategories: MetricCategory[] = [
       },
       {
         id: "euCohesionScore",
-        name: "EU Cohesion Score",
-        shortName: "EU Cohesion",
+        name: "European Cohesion Score",
+        shortName: "European Cohesion",
         unit: "index",
         description: "DE-EU integration alignment and pro-European foreign-policy score",
         isHigherBetter: true,

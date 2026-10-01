@@ -3,6 +3,7 @@
 import React, { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 
 interface WikiElectionSummary {
   id: string;
@@ -29,6 +30,10 @@ const TYPE_LABELS: Record<string, string> = {
   stateSenate: "State Senate",
   president: "President",
   // UK
+  snap_commons: "Snap Commons",
+  special_commons: "Commons By-Election",
+  snap_bundestag: "Snap Bundestag",
+  snap_shugiin: "Snap Shūgiin",
   commons: "House of Commons",
   primeMinister: "Prime Minister",
   regionalCouncil: "Regional Council",
@@ -80,7 +85,7 @@ export default function WikiElectionsGroupPage({
       .finally(() => setLoading(false));
   }, [key1, key2, isYear]);
 
-  const typeLabel = TYPE_LABELS[key2] ?? key2;
+  const typeLabel = TYPE_LABELS[key2] ?? formatElectionTypeLabel(key2);
   const pageTitle = isYear
     ? `${key1} ${typeLabel} Elections`
     : elections[0]?.stateName

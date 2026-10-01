@@ -131,6 +131,41 @@ describe("POST defence-contracts", () => {
     expect((await res.json()).contract.status).toBe("active");
   });
 
+  it("activates a contract awarded to a true NPP-owned supplier", async () => {
+    db.collection("notifications");
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: CORP_ID,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      ceoType: "npp",
+      userId: new ObjectId("000000000000000000000000"),
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.status).toBe("active");
+    expect(db.collectionMocks.notifications.insertMany).not.toHaveBeenCalled();
+  });
+
+  it("leaves an NPP caretaker's player-owned supplier pending the owner's answer", async () => {
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: CORP_ID,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      ceoType: "npp",
+      userId: new ObjectId(),
+      caretakerCeo: {
+        underlyingUserId: new ObjectId(),
+        appointedTurn: 1,
+        appointmentSource: "owner",
+      },
+    });
+    const { POST } = await import(ROUTE);
+    const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).contract.status).toBe("pending");
+  });
+
   it("leaves a private supplier's contract pending the CEO's answer", async () => {
     const { POST } = await import(ROUTE);
     const res = await POST(req({ sectorId: SECTOR_ID.toString(), lotsOrdered: 1 }), params);

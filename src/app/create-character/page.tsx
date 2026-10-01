@@ -425,10 +425,20 @@ export default function CreateCharacterPage() {
         }),
       });
 
+      const characterData = await characterRes.json().catch(() => ({}));
       if (!characterRes.ok) {
-        const data = await characterRes.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to create character");
+        throw new Error(characterData.error || "Failed to create character");
       }
+      await import("@/lib/analytics/capture")
+        .then(({ rememberNewCharacter }) => {
+          if (
+            typeof characterData.characterId === "string" &&
+            typeof characterData.createdTurn === "number"
+          ) {
+            rememberNewCharacter(characterData.characterId, characterData.createdTurn);
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
       setIsLoading(false);

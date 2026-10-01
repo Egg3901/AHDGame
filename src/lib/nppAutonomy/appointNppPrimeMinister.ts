@@ -77,7 +77,9 @@ export async function appointNppPrimeMinister(
   const pmOfficial = nppMps[0];
   if (!pmOfficial.nppId) return false;
 
-  const npp = await db.collection<NPP>("npps").findOne({ _id: pmOfficial.nppId });
+  const npp = await db
+    .collection<NPP>("npps")
+    .findOne({ _id: pmOfficial.nppId }, { projection: { name: 1 } });
   if (!npp) return false;
 
   // Seat the NPP as head of government: clears any prior PM, sets the NPP's

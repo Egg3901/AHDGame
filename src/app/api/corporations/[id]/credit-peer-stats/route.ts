@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
+import { getAuthUser } from "@/lib/auth";
+import { shouldRedactCorporation } from "@/lib/corporations/redaction";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
 import { getBondCouponRate } from "@/lib/constants/bonds";
@@ -27,7 +29,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { id } = await params;
     const db = await getDb();
 
-    const [resolved, gameState] = await Promise.all([resolveCorporation(db, id), getGameState()]);
+    const [resolved, gameState, authUser] = await Promise.all([
+      resolveCorporation(db, id),
+      getGameState(),
+      getAuthUser().catch(() => null),
+    ]);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
     const currentTurn = gameState?.currentTurn ?? 0;
@@ -43,10 +49,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
         .collection<Corporation>("corporations")
         .find({ countryId })
         .project<
-          Pick<Corporation, "_id" | "type" | "creditCompositeSnapshot" | "creditRatingSnapshot">
+          Pick<
+            Corporation,
+            "_id" | "type" | "isPrivate" | "creditCompositeSnapshot" | "creditRatingSnapshot"
+          >
         >({
           _id: 1,
           type: 1,
+          isPrivate: 1,
           creditCompositeSnapshot: 1,
           creditRatingSnapshot: 1,
         })
@@ -59,9 +69,23 @@ export async function GET(_request: Request, { params }: RouteParams) {
       centralBanks.find((b) => b.countryId === countryId)?.primeRate ??
       getCountryConfig(countryId).centralBank.defaultPrimeRate;
 
+    // Fog of war: creditCompositeSnapshot is on redactPrivateCorporation's
+    // field list — private for private corps — but this route previously
+    // returned it verbatim to anonymous callers and folded private corps into
+    // the peer averages. `you` only answers for an insider; aggregates count
+    // public corps only.
+    const redact = shouldRedactCorporation(
+      corporation,
+      authUser?.userId ?? undefined,
+      authUser?.isAdmin === true
+    );
+
     const selfId = corporation._id.toString();
     const sameCountry = sameCountryCorps.filter(
-      (c) => c._id.toString() !== selfId && typeof c.creditCompositeSnapshot === "number"
+      (c) =>
+        c._id.toString() !== selfId &&
+        c.isPrivate !== true &&
+        typeof c.creditCompositeSnapshot === "number"
     );
     const sameSector = sameCountry.filter((c) => c.type === sectorType);
 
@@ -84,10 +108,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       countryId,
       sectorType,
-      you: {
-        composite: corporation.creditCompositeSnapshot ?? null,
-        rating: corporation.creditRatingSnapshot ?? null,
-      },
+      you: redact
+        ? null
+        : {
+            composite: corporation.creditCompositeSnapshot ?? null,
+            rating: corporation.creditRatingSnapshot ?? null,
+          },
       countryPeers: avgStats(sameCountry),
       sectorPeers: avgStats(sameSector),
     });

@@ -181,8 +181,8 @@ describe("branch-only report fields survive collection (#2083)", () => {
     };
     expect(section.manifest).not.toBeNull();
     expect(section.verdict.status).toBe("warn");
-    expect(section.warnings).toHaveLength(12);
-    expect(section.lines[0]).toContain("0/12 mechanics covered");
+    expect(section.warnings).toHaveLength(13);
+    expect(section.lines[0]).toContain("0/13 mechanics covered");
     expect(report.turn).toBe(7);
   });
 

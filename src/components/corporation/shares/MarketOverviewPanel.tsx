@@ -30,6 +30,7 @@ import { brandShades, resolveCorpColor } from "@/lib/corporations/brandColor";
 // Public float is deliberately OUTSIDE the ramp: those shares belong to no
 // named holder, and a neutral grey says so at any brand hue.
 const PUBLIC_FLOAT_COLOR = "hsl(215, 10%, 56%)";
+const PENDING_IPO_COLOR = "hsl(42, 70%, 54%)";
 /** Holders named individually in the pie; the rest collapse into one slice. */
 const MAX_NAMED_SLICES = 10;
 const PAGE_SIZE = 8;
@@ -102,12 +103,22 @@ function buildSlices(corporation: CorporationDetail): PieSlice[] {
     totalShares
   );
 
-  if ((publicFloat ?? 0) > 0) {
+  const poolFloat = Math.max(0, (publicFloat ?? 0) - (corporation.pendingIpoShares ?? 0));
+  if (poolFloat > 0) {
     slices.push({
-      label: "Public Float",
-      shares: publicFloat,
+      label: "Market-held public float",
+      shares: poolFloat,
       color: PUBLIC_FLOAT_COLOR,
-      pct: (publicFloat / totalShares) * 100,
+      pct: (poolFloat / totalShares) * 100,
+    });
+  }
+
+  if ((corporation.pendingIpoShares ?? 0) > 0) {
+    slices.push({
+      label: "Issuer shares available to buy",
+      shares: corporation.pendingIpoShares!,
+      color: PENDING_IPO_COLOR,
+      pct: (corporation.pendingIpoShares! / totalShares) * 100,
     });
   }
 
@@ -521,6 +532,19 @@ export default function MarketOverviewPanel({
                           : "0.00"}
                         %
                       </div>
+                    </div>
+                  </div>
+                )}
+                {(corporation.pendingIpoShares ?? 0) > 0 && page === 0 && (
+                  <div className="flex items-center justify-between py-2.5 gap-4">
+                    <div className="text-sm text-muted">
+                      Issuer shares available on the exchange
+                      <div className="text-xs">
+                        Proceeds reach the company when these shares are bought
+                      </div>
+                    </div>
+                    <div className="text-sm tabular-nums text-foreground">
+                      {corporation.pendingIpoShares!.toLocaleString("en-US")}
                     </div>
                   </div>
                 )}

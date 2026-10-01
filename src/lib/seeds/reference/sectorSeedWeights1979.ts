@@ -8,7 +8,7 @@
 /**
  * 1979-era national sector weights for all 15 player/ECON countries.
  *
- * Relative percentage-of-GDP allocations across the 16 game sectors, calibrated
+ * Relative percentage-of-GDP allocations across the 17 game sectors, calibrated
  * to ~1979 historical value-added shares. Era characteristics:
  *   - Manufacturing HIGH for industrialized countries (peak before de-industrialization)
  *   - Technology/Telecommunications VERY LOW (pre-PC, pre-mobile, PTT monopolies)
@@ -106,7 +106,8 @@ export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
     financial: 0,
     automobiles: 0,
     technology: 0,
-    media_entertainment: 1,
+    media: 0,
+    entertainment: 1,
   },
   // DD: GDR Kombinat system — chemical (Leuna), machinery, textiles, brown coal
   // (lignite). Honecker hard-line communist. No financial market, no real estate.
@@ -116,7 +117,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
   //  WARSAW-PACT SATELLITES — 1979
   //
   //  These eight were previously ABSENT from this map entirely. On a miss
-  //  `getCountrySectorWeights1979` returns an even 1/N across all 16 sectors,
+  //  `getCountrySectorWeights1979` returns an even 1/N across all 17 sectors,
   //  so a 1979 Poland got a perfectly flat economy — no Silesian coal, no
   //  shipyards, and technology/media/financial weighted the same as heavy
   //  manufacturing. The 1953 bundle has all eight; only 1979 was missing them.
@@ -175,7 +176,8 @@ export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
     retail: 2,
     automobiles: 1,
     telecommunications: 1,
-    media_entertainment: 1,
+    media: 1,
+    entertainment: 0,
     financial: 0,
     real_estate: 0,
     technology: 0,

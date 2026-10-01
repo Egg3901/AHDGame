@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
 
-interface GlitchTipIssue {
+interface SentryIssue {
   id: string;
   shortId: string;
   title: string;
@@ -18,7 +18,7 @@ interface GlitchTipIssue {
 }
 
 export function AdminObservabilityTab() {
-  const [issues, setIssues] = useState<GlitchTipIssue[]>([]);
+  const [issues, setIssues] = useState<SentryIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
@@ -60,15 +60,15 @@ export function AdminObservabilityTab() {
       <div>
         <h2 className="text-heading-lg font-semibold text-foreground">Observability</h2>
         <p className="mt-1 text-sm text-muted">
-          Live GlitchTip error feed. Issues from the last 24 hours.
+          Live Sentry error feed. Issues from the last 24 hours.
         </p>
       </div>
 
       {!configured && (
         <div className="rounded-lg border border-card-border bg-card-muted/30 p-4">
           <p className="text-sm text-muted">
-            GlitchTip is not configured. Set <code className="text-foreground">GLITCHTIP_URL</code>{" "}
-            and <code className="text-foreground">GLITCHTIP_API_TOKEN</code> environment variables.
+            Sentry issue feed is not configured. Set{" "}
+            <code className="text-foreground">SENTRY_API_TOKEN</code> in the server environment.
           </p>
         </div>
       )}

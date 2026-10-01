@@ -22,7 +22,7 @@ import {
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { bondPoolCurrency, debitBondPoolUpTo } from "@/lib/bonds/marketPool";
-import { previewQuickDissolve } from "@/lib/corporation/previewQuickDissolve";
+import { previewQuickDissolve } from "@/lib/corporations/previewQuickDissolve";
 import {
   cleanupShareMarketActivityForCorporations,
   cleanupShareMarketActivityForCorporationTargets,

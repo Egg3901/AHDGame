@@ -18,20 +18,6 @@ import { containsBlockedName } from "@/lib/moderation";
 import { ZOD_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import { countryIdSchema } from "@/lib/api/schemas/country";
 import { schemas } from "@/lib/api/validate";
-import {
-  canonicalizeMediaStrategyIdInput,
-  canonicalizeSectorTypeInput,
-} from "@/lib/corporations/mediaConsolidation/rules";
-
-/**
- * Corporation/sector type field (issue #2234). Retired `media` and
- * `entertainment` labels canonicalize to `media_entertainment` at the
- * boundary; every other value must already be a valid CorporationType.
- */
-export const corporationTypeField = z.preprocess(
-  canonicalizeSectorTypeInput,
-  z.enum(CORPORATION_TYPES)
-);
 
 function moderatedNameSchema(label: string, minLength: number, maxLength: number) {
   return z
@@ -81,7 +67,7 @@ export const foundCorporationSchema = z.object({
           message: "Ticker contains prohibited language",
         })
     ),
-  type: corporationTypeField,
+  type: z.enum(CORPORATION_TYPES),
   /**
    * Shape only. The real bounds are era-scaled and therefore not knowable
    * here: a 1953 world's minimum is ~1/70th of the modern one, so validating
@@ -95,7 +81,7 @@ export const foundCorporationSchema = z.object({
     .int("Starting capital must be a whole number")
     .positive("Starting capital must be a positive amount")
     .optional(),
-  secondaryType: corporationTypeField.optional(),
+  secondaryType: z.enum(CORPORATION_TYPES).optional(),
   ipo: ipoTermsSchema.optional(),
 });
 
@@ -127,8 +113,8 @@ export const updateCorporationSettingsSchema = z.object({
       z.null(),
     ])
     .optional(),
-  secondaryType: corporationTypeField.nullable().optional(),
-  primaryType: corporationTypeField.optional(),
+  secondaryType: z.enum(CORPORATION_TYPES).nullable().optional(),
+  primaryType: z.enum(CORPORATION_TYPES).optional(),
 });
 
 export const renameCorporationSchema = z.object({
@@ -153,7 +139,7 @@ export const expandSectorSchema = z.object({
     .trim()
     .min(1, "Invalid state ID")
     .max(MAX_REGION_ID_LENGTH, "Invalid state ID"),
-  sectorType: corporationTypeField.optional(),
+  sectorType: z.enum(CORPORATION_TYPES).optional(),
 });
 
 export const setGrowthRateSchema = z.object({
@@ -217,7 +203,7 @@ export const fillOrderSchema = z.object({
 });
 
 export const setSectorStrategySchema = z.object({
-  strategyId: z.preprocess(canonicalizeMediaStrategyIdInput, z.string().min(1).max(50)),
+  strategyId: z.string().min(1).max(50),
 });
 
 export const setSectorPolicySchema = z.object({
@@ -243,7 +229,7 @@ export const bulkSectorOperationsSchema = z
   .object({
     countryId: countryIdSchema,
     // Omitted/null → apply to every sector type the corp holds in this country (Corporate-Wide).
-    sectorType: corporationTypeField.optional(),
+    sectorType: z.enum(CORPORATION_TYPES).optional(),
     targetGrowthRate: z
       .number()
       .min(MIN_GROWTH_RATE, `Growth rate cannot be below ${MIN_GROWTH_RATE}%`)
@@ -297,21 +283,6 @@ export const acceptOfferSchema = z.object({
 
 export const hostileTakeoverSchema = z.object({
   parentCorporationId: schemas.objectId,
-});
-
-/** Product Studio: start a product project for the corporation. */
-export const startProductSchema = z.object({
-  kindId: z.string().trim().min(1, "Product kind is required").max(64, "Invalid product kind"),
-  name: moderatedNameSchema("Product name", 2, 60),
-});
-
-/** Product Studio: attach a Media and Entertainment operating model. */
-export const addOperatingModelSchema = z.object({
-  operatingModel: z
-    .string()
-    .trim()
-    .min(1, "Operating model is required")
-    .max(64, "Invalid operating model"),
 });
 
 export const parentBondPayoffSchema = z.object({

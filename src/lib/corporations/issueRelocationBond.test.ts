@@ -117,6 +117,17 @@ describe("previewRelocationBond — ticket #1198 exit-equity ceiling", () => {
     expect(preflight.ok).toBe(true);
   });
 
+  it("keeps the same quote with preloaded bank rates and skips the repeated bank read", async () => {
+    const liveQuote = await previewRelocationBond(makeDb(), CORP, 5_000_000, 500, FX);
+    const db = makeDb();
+    const preloadedQuote = await previewRelocationBond(db, CORP, 5_000_000, 500, FX, [
+      { _id: "US", countryId: "US", primeRate: 5 },
+    ]);
+
+    expect(preloadedQuote).toEqual(liveQuote);
+    expect(db.collection("centralBanks").find).not.toHaveBeenCalled();
+  });
+
   it("counts the corp's bond portfolio toward the capacity", async () => {
     const preflight = await previewRelocationBond(
       makeDb({ heldBondUnits: 50_000 }), // A50,000,000 of face held as a creditor

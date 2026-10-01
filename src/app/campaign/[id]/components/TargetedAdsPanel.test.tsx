@@ -49,6 +49,7 @@ function mount(campaignId: string | undefined = "campaign-1") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockResolvedValue(response(quote));
 });
@@ -65,7 +66,9 @@ describe("targeted ad campaign controls", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(screen.getByText(/Personal cost: ₳600 campaign funds and 3 actions/)).toBeDefined();
     fetchMock.mockResolvedValueOnce(response({ scheduledThrough: 12 }));
-    fireEvent.click(screen.getByRole("button", { name: "Run targeted ads" }));
+    const purchase = screen.getByRole("button", { name: "Run targeted ads" });
+    await waitFor(() => expect((purchase as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(purchase);
     await waitFor(() => expect(onSpent).toHaveBeenCalledOnce());
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(post![1].body)).toEqual({

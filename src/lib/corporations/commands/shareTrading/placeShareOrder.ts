@@ -1,3 +1,9 @@
+/**
+ * Share orders reserve funding for purchases and expose shares for sale.
+ * placeShareOrder prices corporate currency conversion using the source authority.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -21,6 +27,7 @@ import {
   debitSharesFromCorp,
 } from "@/lib/corporations/shareholderOps";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   buildPersonalBalanceInc,
@@ -131,6 +138,10 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     if (!character) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
+    // Resting orders move value between players at fill time — same
+    // disguised-transfer surface the new-character barrier covers elsewhere.
+    const barrier = await newCharacterTransferBarrierResponse(character);
+    if (barrier) return barrier;
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
       return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
@@ -242,6 +253,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             targetFxRate
           );
           const corpPurchaseEstimate = estimateCorpWalletSpend({
+            union: await loadEuroMonetaryUnion(db),
+            spreadStrengths: await loadForexSpreadStrengths(db),
             requiredAmount: shares * executionPrice,
             availableBalance: placerCorp.liquidCapital ?? 0,
             fromCurrency: placerCurrency,
@@ -331,7 +344,9 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
 
             // Treasury-backed market maker: inject the buyer's payment into the
             // issuer treasury. Last in the try — a throw rolls back via the catch.
-            await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+            await applyFloatBuyCredit(db, corporation, shares * executionPrice, {
+              sharesBought: shares,
+            });
 
             // Cross-currency immediate fill realizes the spread now — route it to
             // the CB system. (Resting-order escrow defers its spread to fill time.)
@@ -402,6 +417,8 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         const escrowAmount = shares * pricePerShare;
         const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corporation, targetFxRate);
         const escrowEstimate = estimateCorpWalletSpend({
+          union: await loadEuroMonetaryUnion(db),
+          spreadStrengths: await loadForexSpreadStrengths(db),
           requiredAmount: escrowAmount,
           availableBalance: placerCorp.liquidCapital ?? 0,
           fromCurrency: placerCurrency,
@@ -832,7 +849,9 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
 
           // Treasury-backed market maker: inject the buyer's payment into the
           // issuer treasury. Last in the try — a throw rolls back via the catch.
-          await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+          await applyFloatBuyCredit(db, corporation, shares * executionPrice, {
+            sharesBought: shares,
+          });
         } catch (err) {
           if (sharesCredited) {
             await debitShares(

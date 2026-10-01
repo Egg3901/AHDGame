@@ -48,7 +48,8 @@ const sectorWeightsBase = {
   chemical_industries: 5,
   extraction: 5,
   agriculture: 4,
-  media_entertainment: 5,
+  media: 3,
+  entertainment: 2,
   defense: 2,
 };
 // No REP_ECON row; the folder omits `repEcon` rather than defaulting it.
@@ -102,7 +103,7 @@ export const FI_ECONOMY: CountryEconomy = {
         real_estate: 3,
         defense: 2,
         healthcare: 2,
-        media_entertainment: 2,
+        media: 2,
         telecommunications: 1,
       },
       "1991": {
@@ -118,7 +119,7 @@ export const FI_ECONOMY: CountryEconomy = {
         agriculture: 6,
         chemical_industries: 4,
         technology: 3,
-        media_entertainment: 2,
+        media: 2,
         defense: 1,
       },
     },

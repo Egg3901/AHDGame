@@ -1,3 +1,4 @@
+import { northernIrelandAssemblyAllows } from "@/lib/countries/uk/northernIreland/service";
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import {
@@ -43,6 +44,15 @@ export async function castStateBillVote(
   // (e.g. "AZ"); callers may pass either case depending on URL formatting.
   // Normalize here so the same command works regardless.
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const now = new Date();
   const character = user.character;
   if (!character) {
@@ -161,6 +171,15 @@ export async function castStateBillOverrideVote(
   vote: "for" | "against"
 ): Promise<LegislatureCommandResult> {
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const character = user.character;
   if (!character) {
     return { status: 400, body: { error: "No character found" } };
@@ -253,6 +272,15 @@ export async function takeStateBillGovernorAction(
   // (resolveStateBillVoting) auto-enacts the bill instead of routing it here,
   // so there is no parliamentary carve-out at this stage.
   stateId = stateId.toUpperCase();
+  if (!(await northernIrelandAssemblyAllows(db, countryId, stateId))) {
+    return {
+      status: 403,
+      body: {
+        error:
+          "Northern Ireland's devolved institutions are suspended pending a ratified settlement.",
+      },
+    };
+  }
   const character = user.character;
   if (!character) {
     return { status: 400, body: { error: "No character found" } };
@@ -299,10 +327,16 @@ export async function takeStateBillGovernorAction(
       const { validateStateBudgetImpact } = await import("@/lib/budget/validation");
       const budgetResult = await validateStateBudgetImpact(db, stateId, countryId, bill);
       if (!budgetResult.allowed) {
+        const formatBudgetAmount = (amount: number) =>
+          amount >= 1_000_000_000
+            ? `${(amount / 1_000_000_000).toFixed(1)}B`
+            : `${Math.round(amount / 1_000_000)}M`;
+        const shortfall = Math.max(0, budgetResult.shortfall ?? 0);
+        const headroom = Math.max(0, budgetResult.costAmount - shortfall);
         return {
           status: 400,
           body: {
-            error: `Cannot sign: the state cannot fund this bill (shortfall $${Math.round((budgetResult.shortfall ?? 0) / 1_000_000)}M).`,
+            error: `Cannot sign: this bill has an annual cost of ${formatBudgetAmount(budgetResult.costAmount)}, but the state has ${formatBudgetAmount(headroom)} funding headroom. Shortfall: ${formatBudgetAmount(shortfall)}. Amounts are in the state budget currency.`,
           },
         };
       }

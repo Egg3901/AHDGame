@@ -1,6 +1,7 @@
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import type { Metadata } from "next";
 import { getWikiSiteUrl } from "@/lib/siteMetadata";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,6 +14,10 @@ const TYPE_LABELS: Record<string, string> = {
   senate: "Senate",
   stateSenate: "State Senate",
   president: "President",
+  snap_commons: "Snap Commons",
+  special_commons: "Commons By-Election",
+  snap_bundestag: "Snap Bundestag",
+  snap_shugiin: "Snap Shūgiin",
   commons: "Parliamentary",
   regionalCouncil: "Regional Council",
   primeMinister: "Prime Minister",
@@ -31,13 +36,13 @@ export async function generateMetadata({
   let description: string;
 
   if (isYearKey(key1)) {
-    const typeLabel = TYPE_LABELS[key2] ?? key2;
+    const typeLabel = TYPE_LABELS[key2] ?? formatElectionTypeLabel(key2);
     title = `${key1} ${typeLabel} Elections — Wiki | A House Divided`;
     description = `${typeLabel} election results from ${key1}. Historical outcomes, candidates, and margins.`;
   } else {
-    const typeLabel = TYPE_LABELS[key1] ?? key1;
-    title = `${typeLabel} Elections — ${key2} | A House Divided`;
-    description = `${typeLabel} election history for ${key2}. Cycles, winners, and results.`;
+    const typeLabel = TYPE_LABELS[key2] ?? formatElectionTypeLabel(key2);
+    title = `${key1} ${typeLabel} Elections | A House Divided`;
+    description = `${typeLabel} election history for ${key1}. Cycles, winners, and results.`;
   }
 
   const url = `${getWikiSiteUrl()}/elections/browse/${key1}/${key2}`;

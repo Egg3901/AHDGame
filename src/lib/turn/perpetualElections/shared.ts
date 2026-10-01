@@ -1,3 +1,10 @@
+import { reconcileUKDevolution } from "@/lib/countries/uk/devolution/service";
+import {
+  executiveCycleAnchor,
+  usesUKDevolution,
+  type UKExecutiveRegion,
+} from "@/lib/countries/uk/devolution/rules";
+import { yearOfTurn } from "@/lib/utils/gameDate";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -8,7 +15,7 @@ import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   buildCanonicalSpawn,
   endTimeToLarpTurn,
@@ -452,22 +459,20 @@ export async function ensureBetaParliamentElections(
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only a resolved snap the country called itself drags the
-    // anchor (priorEndTurn + period). Admin-accelerated regulars must NOT move
-    // the LARP calendar, and neither must an IMPOSED snap. See
-    // `snapAnchorEndTime`.
-    const snapAnchor = snapAnchorEndTime(prev, snapType);
-    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-    const spawn = pickNextCanonicalCycle({
+    // A called snap, and every regular spawned on its shifted term clock,
+    // anchors the next regular; an IMPOSED snap and admin-accelerated regulars
+    // do not move the calendar. See `planNextLowerChamberCycle`.
+    const plan = planNextLowerChamberCycle({
       electionType,
-      countryId,
-      prevCycle: prev?.cycle ?? 0,
+      snapType,
+      prev,
       currentTurn,
-      priorEndTurn,
       ctx,
+      endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
+      countryId,
     });
-    if (!spawn) continue; // era-gated (ES 1953) or gate exhausted
+    if (!plan) continue; // era-gated (ES 1953) or gate exhausted
+    const { spawn } = plan;
 
     // Open the primary immediately (mirrors IE/BR/UK): the multi-year cycle
     // far exceeds the 48h window, so the canonical startTurn would otherwise
@@ -484,7 +489,10 @@ export async function ensureBetaParliamentElections(
       state: regionId,
       seatId: getSeatIdFromElection({ countryId, electionType, state: regionId }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear(electionType, spawn.cycle, undefined, undefined, ctx),
+      electionYear: plan.electionYear,
+      ...(plan.shiftedScheduleEndTurn != null && {
+        shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+      }),
       status: "active",
       totalSeats: prev?.totalSeats ?? seatsByRegion.get(regionId) ?? 1,
       startTime,
@@ -597,6 +605,25 @@ export async function ensureBetaSenateElections(
     })
     .toArray();
   const liveRegions = new Set(liveElections.map((e) => e.state));
+  const seatHealOps: AnyBulkWriteOperation<Election>[] = liveElections.flatMap((election) => {
+    const authoritative = seatsByRegion.get(election.state);
+    if (!authoritative || election.totalSeats === authoritative) return [];
+    return [
+      {
+        updateOne: {
+          filter: {
+            _id: election._id,
+            totalSeats: election.totalSeats,
+            status: { $in: ["active", "upcoming"] as ElectionStatus[] },
+          },
+          update: { $set: { totalSeats: authoritative, updatedAt: now } },
+        },
+      },
+    ];
+  });
+  if (seatHealOps.length > 0) {
+    await db.collection<Election>("elections").bulkWrite(seatHealOps);
+  }
 
   const completedElections = await db
     .collection<Election>("elections")
@@ -648,7 +675,9 @@ export async function ensureBetaSenateElections(
       cycle: spawn.cycle,
       electionYear: electionToLarpYear(electionType, spawn.cycle, undefined, undefined, ctx),
       status: "active",
-      totalSeats: prev?.totalSeats ?? seatsByRegion.get(regionId) ?? 1,
+      // Region data is authoritative. Carrying a prior cycle forward makes a
+      // corrected apportionment ineffective forever after the first bad race.
+      totalSeats: seatsByRegion.get(regionId) ?? prev?.totalSeats ?? 1,
       startTime,
       primaryEndTime,
       endTime,
@@ -893,6 +922,10 @@ export async function ensureRegionalGovernorElections(
     .sort({ updatedAt: -1 })
     .toArray();
 
+  const ukInstitutions = usesUKDevolution(countryId)
+    ? await reconcileUKDevolution(db, ctx.startingYear, completedElections, now)
+    : null;
+
   function lastCompleted(stateId: string): Election | undefined {
     return completedElections.find((e) => e.state === stateId);
   }
@@ -903,13 +936,15 @@ export async function ensureRegionalGovernorElections(
   const toInsert: Omit<Election, "_id">[] = [];
 
   for (const stateId of stateIds) {
+    const institution = ukInstitutions?.regions[stateId as UKExecutiveRegion];
+    if (ukInstitutions && !institution?.active) continue;
     if (liveGov.has(stateId)) continue;
 
     const prev = lastCompleted(stateId);
 
     // A region joining mid-cycle (NI reunifying → Cathaoirleach) syncs to a live
     // peer governor race so they resolve together, instead of opening its own.
-    if (!prev && liveElections[0]) {
+    if (!ukInstitutions && !prev && liveElections[0]) {
       toInsert.push(mirrorPeerRaceTiming(countryId, liveElections[0], stateId, "governor", 1, now));
       continue;
     }
@@ -917,10 +952,14 @@ export async function ensureRegionalGovernorElections(
     const spawn = pickNextCanonicalCycle({
       electionType: "governor",
       countryId,
-      prevCycle: prev?.cycle ?? 0,
+      prevCycle: Math.max(prev?.cycle ?? 0, institution ? institution.firstCycle - 1 : 0),
       currentTurn,
       priorEndTurn: null,
-      ctx,
+      customCycle1EndTurn: institution ? executiveCycleAnchor(institution, dur) : undefined,
+      ctx:
+        institution?.firstElectionEndTurn !== undefined
+          ? { ...ctx, preIterationActive: false }
+          : ctx,
     });
     if (!spawn) continue;
 
@@ -933,14 +972,12 @@ export async function ensureRegionalGovernorElections(
       state: stateId,
       seatId: getSeatIdFromElection({ countryId, electionType: "governor", state: stateId }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear(
-        "governor",
-        spawn.cycle,
-        undefined,
-        undefined,
-        ctx,
-        countryId
-      ),
+      electionYear:
+        institution?.firstElectionEndTurn !== undefined
+          ? yearOfTurn(spawn.endTurn, ctx.startingYear, {
+              preIterationTurns: ctx.preIterationTurns,
+            })
+          : electionToLarpYear("governor", spawn.cycle, undefined, undefined, ctx, countryId),
       status: "active",
       totalSeats: 1,
       startTime: now,

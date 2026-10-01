@@ -9,7 +9,7 @@
 /**
  * Projected 2027 national sector weights, US only.
  *
- * Numbers are relative percentage-of-GDP allocations across the 16 game sectors,
+ * Numbers are relative percentage-of-GDP allocations across the 17 game sectors,
  * calibrated to 2023 BEA value-added shares. Relative to the 2019-default bundle:
  *   - technology +2 (platform software, cloud, AI services now ~9–10% of GDP)
  *   - healthcare +1 (persistent post-COVID demand, now ~10% of private GDP)
@@ -40,9 +40,10 @@ export const COUNTRY_SECTOR_WEIGHTS_2027: Record<string, SectorWeightMap> = {
     chemical_industries: 4,
     automobiles: 4,
     defense: 4,
-    media_entertainment: 7,
+    media: 4,
     telecommunications: 4,
     energy: 3,
+    entertainment: 3,
     agriculture: 2,
     extraction: 2,
   },

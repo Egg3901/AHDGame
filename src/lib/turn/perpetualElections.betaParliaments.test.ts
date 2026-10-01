@@ -65,6 +65,7 @@ function makeMockDb(
       insertCalls.push(docs);
       return Promise.resolve({ insertedIds: {} });
     }),
+    bulkWrite: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
   };
   const statesCollection = {
     find: vi.fn().mockImplementation((filter: Record<string, unknown>) => {
@@ -542,6 +543,41 @@ describe("ensureBetaParliamentElections (FR/IT/ES/SE/TR, #3239)", () => {
       }
     });
 
+    it("heals a live FR Sénat race to the authoritative regional seat count", async () => {
+      const live = {
+        _id: new ObjectId(),
+        countryId: "FR",
+        electionType: "senat",
+        state: "FR_IDF",
+        cycle: 1,
+        status: "active",
+        totalSeats: 180,
+      } as Election;
+      const mock = makeMockDb("FR", [FR_SENATE_REGIONS[0]], [live], [], {
+        preset: "1953-default",
+        startingYear: 1953,
+        currentTurn: 1,
+        status: "beta",
+      });
+      await mountDb(mock);
+      const { ensureFRSenateElections } = await import("./perpetualElections");
+      await ensureFRSenateElections(NOW);
+
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: {
+              _id: live._id,
+              totalSeats: 180,
+              status: { $in: ["active", "upcoming"] },
+            },
+            update: { $set: { totalSeats: 40, updatedAt: NOW } },
+          },
+        },
+      ]);
+      expect(mock.insertCalls.flat()).toHaveLength(0);
+    });
+
     it("a vacant TR Senate seat (all prior terms lapsed) gets a NEW spawn on the next cycle — the vacancy-only-decay fix", async () => {
       // Mirrors the "TR cycle 2" lower-chamber steady-state test: a resolved
       // prior term two turns ago, spawner runs again, cycle 2 is created.
@@ -556,7 +592,7 @@ describe("ensureBetaParliamentElections (FR/IT/ES/SE/TR, #3239)", () => {
         state: "TR_MAR",
         cycle: 1,
         status: "resolved",
-        totalSeats: 10,
+        totalSeats: 99,
         endTime: new Date(NOW.getTime() - 2 * MS),
         durationHours: 48,
         updatedAt: new Date(NOW.getTime() - 2 * MS),
@@ -578,7 +614,7 @@ describe("ensureBetaParliamentElections (FR/IT/ES/SE/TR, #3239)", () => {
       expect(inserted[0].status).toBe("active");
       expect(inserted[0].electionType).toBe("senato");
       expect(inserted[0].startTurn).toBe(currentTurn); // primary opens immediately
-      expect(inserted[0].totalSeats).toBe(10); // carried from prev (stateSenateSeats)
+      expect(inserted[0].totalSeats).toBe(10); // authoritative map, not the stale prior race
     });
 
     it("IT Senato rides the SAME anchor as the Camera (concurrent election, not a simplification)", async () => {

@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { Character, Corporation, IndexFund } from "@/lib/db/types";
+import type { Character, Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { buildPersonalBalanceBulkOp } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -12,10 +12,8 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
+import { recordShareTrades } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
-import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
-import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
 import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
 import {
   allocateEquityPoolSellBudgets,
@@ -58,7 +56,29 @@ interface PendingHistoryEmit {
  * `turn` is stamped on every emitted `shareTradeHistory` row.
  */
 export async function fillPendingShareOrders(db: Db, now: Date, turn: number): Promise<void> {
-  const openOrders = await db.collection("shareOrders").find({ status: "open" }).toArray();
+  // Fill decisions and their escrow/history writes only use these order
+  // fields; the query filter still applies `status` server-side.
+  const openOrders = await db
+    .collection<ShareOrder>("shareOrders")
+    .find(
+      { status: "open" },
+      {
+        projection: {
+          _id: 1,
+          characterId: 1,
+          corporationId: 1,
+          escrowAmount: 1,
+          escrowAnchor: 1,
+          placerCorporationId: 1,
+          placerFundId: 1,
+          pricePerShare: 1,
+          sharesDebitedAtCreation: 1,
+          sharesRemaining: 1,
+          type: 1,
+        },
+      }
+    )
+    .toArray();
 
   if (openOrders.length === 0) return;
 
@@ -72,9 +92,26 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   }
 
   const corpIds = [...ordersByCorp.keys()].map((k) => new ObjectId(k));
+  // Keep the full shareholder array for live holding caps. Other corporation
+  // payload fields are not read by this matcher.
   const corpDocs = await db
     .collection<Corporation>("corporations")
-    .find({ _id: { $in: corpIds } })
+    .find(
+      { _id: { $in: corpIds } },
+      {
+        projection: {
+          _id: 1,
+          countryId: 1,
+          liquidCurrencyCode: 1,
+          fundamentalSharePrice: 1,
+          publicFloat: 1,
+          sharePrice: 1,
+          totalShares: 1,
+          liquidCapital: 1,
+          shareholders: 1,
+        },
+      }
+    )
     .toArray();
   const corpMap = new Map(corpDocs.map((c) => [c._id.toString(), c]));
 
@@ -681,6 +718,23 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   // $inc because that would double-decrement). Pool-backed fills have already posted
   // the matching buyer cash leg above.
   if (fundShareholderUpdates.size > 0) {
+    const fundIds = [
+      ...new Set(
+        [...fundShareholderUpdates.values()].flatMap((fundDeltas) => [...fundDeltas.keys()])
+      ),
+    ];
+    const funds = await db
+      .collection<IndexFund>("indexFunds")
+      .find({ _id: { $in: fundIds.map((id) => new ObjectId(id)) } })
+      .project<Pick<IndexFund, "_id" | "holdings">>({ _id: 1, holdings: 1 })
+      .toArray();
+    const fundMap = new Map(funds.map((fund) => [fund._id.toString(), fund]));
+    const fundCapTableOps: {
+      updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
+    }[] = [];
+    const fundHoldingOps: {
+      updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
+    }[] = [];
     for (const [corpIdStr, fundDeltas] of fundShareholderUpdates) {
       const corp = corpMap.get(corpIdStr);
       if (!corp) continue;
@@ -689,24 +743,90 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         if (delta <= 0) continue;
         // Stamp ₳ cost basis on the fund holding (pricePerShare is corp-local).
         const fillPriceAnchor = corpLiquidCapitalToAnchor(pricePerShare ?? 0, corp, targetFxRate);
-        await creditSharesToFund(
-          db,
-          new ObjectId(corpIdStr),
-          new ObjectId(fundIdStr),
-          delta,
-          fillPriceAnchor,
-          { $set: { updatedAt: now } },
-          // The cap table was loaded with the corp at the top of the fill.
-          { knownShareholders: corp.shareholders }
+        const fundId = new ObjectId(fundIdStr);
+        const existing = corp.shareholders?.find(
+          (shareholder) => shareholder.fundId?.toString() === fundIdStr
         );
-        await upsertFundHoldingShares(
-          db,
-          new ObjectId(fundIdStr),
-          new ObjectId(corpIdStr),
-          delta,
-          fillPriceAnchor
-        );
+        if (existing) {
+          const existingShares = existing.shares ?? 0;
+          const oldAvg = existing.avgCostPerShare ?? fillPriceAnchor;
+          const avgCostPerShare =
+            existingShares > 0
+              ? (existingShares * oldAvg + delta * fillPriceAnchor) / (existingShares + delta)
+              : fillPriceAnchor;
+          fundCapTableOps.push({
+            updateOne: {
+              filter: { _id: new ObjectId(corpIdStr), "shareholders.fundId": fundId },
+              update: {
+                $inc: { "shareholders.$.shares": delta },
+                $set: { "shareholders.$.avgCostPerShare": avgCostPerShare, updatedAt: now },
+              },
+            },
+          });
+        } else {
+          fundCapTableOps.push({
+            updateOne: {
+              filter: { _id: new ObjectId(corpIdStr) },
+              update: {
+                $push: {
+                  shareholders: { fundId, shares: delta, avgCostPerShare: fillPriceAnchor },
+                },
+                $set: { updatedAt: now },
+              },
+            },
+          });
+        }
+        const holding = fundMap
+          .get(fundIdStr)
+          ?.holdings?.find((item) => item.corporationId.toString() === corpIdStr);
+        if (holding) {
+          const newShares = holding.shares + delta;
+          const avgCostPerShareAnchor =
+            holding.avgCostPerShareAnchor !== undefined
+              ? (holding.shares * holding.avgCostPerShareAnchor + delta * fillPriceAnchor) /
+                newShares
+              : fillPriceAnchor;
+          fundHoldingOps.push({
+            updateOne: {
+              filter: {
+                _id: fundId,
+                "holdings.corporationId": new ObjectId(corpIdStr),
+              },
+              update: {
+                $inc: { "holdings.$.shares": delta },
+                $set: {
+                  "holdings.$.avgCostPerShareAnchor": avgCostPerShareAnchor,
+                  "holdings.$.lastValueAnchor": newShares * fillPriceAnchor,
+                  updatedAt: now,
+                },
+              },
+            },
+          });
+        } else {
+          fundHoldingOps.push({
+            updateOne: {
+              filter: { _id: fundId },
+              update: {
+                $push: {
+                  holdings: {
+                    corporationId: new ObjectId(corpIdStr),
+                    shares: delta,
+                    avgCostPerShareAnchor: fillPriceAnchor,
+                    lastValueAnchor: delta * fillPriceAnchor,
+                  },
+                },
+                $set: { updatedAt: now },
+              },
+            },
+          });
+        }
       }
+    }
+    if (fundCapTableOps.length > 0) {
+      await db.collection("corporations").bulkWrite(fundCapTableOps);
+    }
+    if (fundHoldingOps.length > 0) {
+      await db.collection("indexFunds").bulkWrite(fundHoldingOps);
     }
   }
 
@@ -826,8 +946,9 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
       return null;
     };
 
-    for (const emit of historyEmits) {
-      await recordShareTrade(db, {
+    await recordShareTrades(
+      db,
+      historyEmits.map((emit) => ({
         corporationId: emit.corporationId,
         kind: emit.kind,
         turn,
@@ -836,7 +957,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         corpCurrencyCode: emit.corpCurrencyCode,
         from: toParty(emit.fromPartyRef),
         to: toParty(emit.toPartyRef),
-      });
-    }
+      }))
+    );
   }
 }

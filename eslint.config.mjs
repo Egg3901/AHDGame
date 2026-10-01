@@ -21,6 +21,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Stale git worktrees — not part of the project build
     ".worktrees/**",
+    "worktrees/**",
     // Claude Code agent worktrees and tooling files
     ".claude/**",
     // Codex-managed branch worktrees and tooling directories

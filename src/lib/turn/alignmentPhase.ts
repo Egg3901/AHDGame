@@ -28,8 +28,6 @@ import { leadFor } from "@/lib/alignment/project";
 import {
   ALIGNMENT_GATES,
   CRISIS_TURN_CAP,
-  polesForYear,
-  resolveAlignmentEra,
   type AlignmentPoleId,
 } from "@/lib/constants/alignmentEras";
 import { ROSTER_BY_KEY, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
@@ -64,6 +62,7 @@ import {
   SPHERE_MEMBERSHIPS_COLLECTION,
   type PersistedSphereMembership,
 } from "@/lib/world/spheres/membershipStore";
+import { loadAlignmentTopology } from "@/lib/alignment/topology";
 
 // Membership pull lives in `drift.ts` as `membershipPullForTurn`, alongside the
 // ceiling it is bounded by.
@@ -148,8 +147,8 @@ export async function processAlignmentTurn(
   }
 
   const year = (gs ? resolveGameYear(gs) : null) ?? new Date().getFullYear();
-  const era = resolveAlignmentEra(year);
-  const poles = polesForYear(year);
+  const topology = await loadAlignmentTopology(db, year);
+  const { poles } = topology;
 
   const col = await getCountryAlignmentsCollection(db);
   const [allDocs, memberships, dissolved] = await Promise.all([
@@ -197,7 +196,7 @@ export async function processAlignmentTurn(
   // or freshly acceded pushes less hard everywhere until it settles.
   const sharesByEntity = new Map(docs.map((d) => [d.entityId, d.shares ?? {}]));
   const stressByOrg = new Map<string, BlocStressBreakdown>();
-  for (const channel of era.channels) {
+  for (const channel of topology.channels) {
     const orgMembers = memberships.filter((m) => m.organizationId === channel.organizationId);
     stressByOrg.set(
       channel.organizationId,
@@ -264,7 +263,7 @@ export async function processAlignmentTurn(
   // once rather than per play. USD *millions* — scaled to absolute USD at use.
   const targetGdpMillions = await loadGdpUsdMillionsByEntity(db, [...playsByTarget.keys()]);
   const channelFor = (organizationId: string) =>
-    era.channels.find((c) => c.organizationId === organizationId);
+    topology.channels.find((c) => c.organizationId === organizationId);
 
   // Declared here rather than with the counters below because `resolvePlay`
   // closes over it and is defined above them.
@@ -390,6 +389,7 @@ export async function processAlignmentTurn(
       shares: before,
       storedEraKey: doc.eraKey,
       year,
+      poles,
     });
     if (crossing.crossed) erasCrossed++;
 
@@ -401,7 +401,7 @@ export async function processAlignmentTurn(
     const orgIds = orgsByCountry.get(doc.entityId as CountryId);
     const pull: Partial<Record<AlignmentPoleId, number>> = {};
     if (orgIds) {
-      for (const channel of era.channels) {
+      for (const channel of topology.channels) {
         if (!orgIds.has(channel.organizationId)) continue;
         // Read against the POST-crossing shares, which is what computeDrift is
         // handed — a nation whose era just changed is measured in the pole it
@@ -421,7 +421,7 @@ export async function processAlignmentTurn(
     // uncommitted remainder absorb it, and a rival only gains by acting.
     const sanctioningOrgs = sanctionsByTarget.get(doc.entityId);
     if (sanctioningOrgs) {
-      for (const channel of era.channels) {
+      for (const channel of topology.channels) {
         if (!sanctioningOrgs.has(channel.organizationId)) continue;
         pull[channel.poleId] =
           (pull[channel.poleId] ?? 0) - SANCTIONS_ALIGNMENT_EROSION * channel.weight;
@@ -535,6 +535,8 @@ export async function processAlignmentTurn(
         },
         shares: drifted,
         year,
+        poles,
+        poleDefinitions: topology.poleDefinitions,
       });
       await saveSphereMembership(db, next, currentTurn);
       spheresSynced++;
@@ -554,6 +556,7 @@ export async function processAlignmentTurn(
     year,
     rows: [...sharedAfterDrift].map(([entityId, shares]) => ({ entityId, shares })),
     memberships: liveMemberships,
+    poles,
   });
   crisesOpened = openedResult.crisesOpened;
 
@@ -581,6 +584,7 @@ export async function processAlignmentTurn(
       shares,
       year,
       organizationId: membership.organizationId,
+      channels: topology.channels,
     });
     if (!standing) continue; // no channel — alignment has no opinion
     // The Commonwealth and the EU carry influence but are not left because a
@@ -645,7 +649,7 @@ export async function processAlignmentTurn(
     // Players choose their own alliances; this is the NPP's autonomy only.
     if (access[countryId]?.enabledForPlayers) continue;
 
-    for (const channel of era.channels) {
+    for (const channel of topology.channels) {
       // Only the blocs a nation joins by picking a side. A nation at 60 Western
       // asks to join NATO — not the Commonwealth, which it has no claim on.
       if (channel.alignmentAccession !== true) continue;

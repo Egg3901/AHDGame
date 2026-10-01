@@ -1,3 +1,4 @@
+import { euroLedgerCrossRate } from "@/lib/currency/euro/rules";
 // POST: create a public limit order (escrow funds from personal balance)
 // GET: list the authenticated player's own open/partial orders
 // Auth: requireAuthWithCharacter
@@ -19,6 +20,7 @@ import {
   nonConvertibleTradeCurrency,
 } from "@/lib/constants/commandEconomy";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import type { CurrencyOrder, CurrencyOrderStatus, GameConfig, GameState } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
@@ -48,10 +50,12 @@ async function handleGET(request: Request) {
     const view = searchParams.get("view"); // "history" for filled/cancelled/expired
 
     const db = await getDb();
+    // `processing` orders are included so a fill that crashed mid-claim stays
+    // visible to its owner instead of vanishing until recovery resolves it.
     const statusFilter =
       view === "history"
         ? { $in: ["filled", "cancelled", "expired"] as CurrencyOrderStatus[] }
-        : { $in: ["open", "partial"] as CurrencyOrderStatus[] };
+        : { $in: ["open", "partial", "processing"] as CurrencyOrderStatus[] };
 
     const orders = await db
       .collection<CurrencyOrder>("currencyOrders")
@@ -107,9 +111,19 @@ export async function POST(request: Request) {
     const { fromCurrency, toCurrency, amount, limitRate, direction, expiresInTurns } = parsed.data;
     const character = auth.user.character;
 
+    // A resting order is escrowed now and pays the filler later — the same
+    // disguised-transfer surface the barrier already covers on direct trades.
+    const barrier = await newCharacterTransferBarrierResponse(character);
+    if (barrier) return barrier;
+
     const db = await getDb();
     const gs = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     const currentTurn = gs?.currentTurn ?? 0;
+    if (euroLedgerCrossRate(gs?.euroMonetaryUnion, fromCurrency, toCurrency) != null) {
+      throw badRequest(
+        "These denominations share a fixed euro rate. Use currency conversion instead of an FX order."
+      );
+    }
 
     // Non-convertible command currencies cannot be limit-traded on the open market.
     const gameConfig = await db

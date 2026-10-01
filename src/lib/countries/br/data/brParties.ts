@@ -101,10 +101,10 @@ export const brParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["1979-default", "1991-default", "2019-default"],
+    validForPresets: ["1979-default", "1991-default", "2019-default", "2027-default"],
   },
   {
-    // 2019-only: PL in its post-2006 incarnation is Bolsonaro's vehicle.
+    // Modern-only: PL in its post-2006 incarnation is Bolsonaro's vehicle.
     // The 1991-era PL existed but was a small free-market party with
     // entirely different positioning; the 1991 roster lists no PL.
     seedOrder: 2,
@@ -124,10 +124,10 @@ export const brParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
-    // 2019-only: MDB is the rump that survived after PMDB shed the "P"
+    // Modern-only: MDB is the rump that survived after PMDB shed the "P"
     // in 2017. For 1991 the equivalent is PMDB (seedOrder 10).
     seedOrder: 3,
     countryId: "BR",
@@ -146,10 +146,10 @@ export const brParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
-    // 2019-only: União Brasil is the 2022 DEM+PSL merger. No 1991 analogue.
+    // Modern-only: União Brasil is the 2022 DEM+PSL merger. No 1991 analogue.
     seedOrder: 4,
     countryId: "BR",
     name: "União Brasil",
@@ -167,7 +167,7 @@ export const brParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     // Modern PSD founded 2011 — not the Vargas-era PSD. Keep off 1953;
@@ -189,7 +189,7 @@ export const brParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["1979-default", "1991-default", "2019-default"],
+    validForPresets: ["1979-default", "1991-default", "2019-default", "2027-default"],
   },
   // ─── 1991-only defaults ────────────────────────────────────────────────
   {

@@ -3,8 +3,9 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { UnitDomain } from "@/lib/db/types/militaryUnit";
 
 /**
- * `pending` is where every contract starts: a minister awards it, and it does nothing until
- * the supplying CEO accepts. Only `active` delivers or draws on the appropriation.
+ * `pending` is where every player-supplied contract starts: a minister awards it, and it does
+ * nothing until the supplying CEO accepts. Suppliers without a player CEO start `active`.
+ * Only `active` delivers or draws on the appropriation.
  * `declined` is the CEO's refusal, kept distinct from the minister's `cancelled` so the
  * order book records who walked away.
  */

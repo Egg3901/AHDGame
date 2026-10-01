@@ -39,6 +39,7 @@ export async function seedFRRegions(
     await db.collection("states").deleteMany({ countryId: "FR" });
   }
   const { frRegions } = await import("@/lib/seeds/fr/frRegions");
+  const { frRegions1991 } = await import("@/lib/countries/fr/data/frRegions1991");
   const { frRegions1953 } = await import("@/lib/seeds/fr/frRegions1953");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
@@ -47,6 +48,7 @@ export async function seedFRRegions(
       "2019-default": frRegions,
       "1953-default": frRegions1953,
       "1979-default": frRegions,
+      "1991-default": frRegions1991,
     },
     "seedFR:frRegions"
   );

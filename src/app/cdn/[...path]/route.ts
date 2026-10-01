@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
+import { randomUUID } from "node:crypto";
 import path from "path";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { singleplayerCdnDir } from "@/lib/singleplayerServer";
@@ -21,6 +22,9 @@ import { singleplayerCdnDir } from "@/lib/singleplayerServer";
 export const dynamic = "force-dynamic";
 
 const UPSTREAM = "https://cdn.ahousedividedgame.com";
+const MAX_ASSET_BYTES = 20 * 1024 * 1024;
+/** A hung upstream socket must not pin the request handler forever. */
+const UPSTREAM_TIMEOUT_MS = 30_000;
 
 const CONTENT_TYPES: Record<string, string> = {
   ".json": "application/json",
@@ -76,7 +80,9 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${UPSTREAM}/${relative}`);
+    upstream = await fetch(`${UPSTREAM}/${relative}`, {
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
   } catch {
     return new NextResponse(null, { status: 502 });
   }
@@ -84,12 +90,42 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
     return new NextResponse(null, { status: upstream.status });
   }
 
-  const body = new Uint8Array(await upstream.arrayBuffer());
+  const declaredLength = Number(upstream.headers.get("content-length"));
+  if (declaredLength > MAX_ASSET_BYTES) {
+    await upstream.body?.cancel();
+    return new NextResponse(null, { status: 502 });
+  }
+
+  const reader = upstream.body?.getReader();
+  if (!reader) return new NextResponse(null, { status: 502 });
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_ASSET_BYTES) {
+        await reader.cancel();
+        return new NextResponse(null, { status: 502 });
+      }
+      chunks.push(value);
+    }
+  } catch {
+    // A timeout can fire after the response headers arrive, while streaming.
+    return new NextResponse(null, { status: 502 });
+  }
+  const body = new Uint8Array(Buffer.concat(chunks));
+  // Publish via tmp + rename: a mid-write kill would otherwise leave a
+  // truncated file that is then served (and browser-cached immutable) forever.
+  const tmpFile = `${localFile}.${randomUUID()}.tmp`;
   try {
     await fs.mkdir(path.dirname(localFile), { recursive: true });
-    await fs.writeFile(localFile, body);
+    await fs.writeFile(tmpFile, body);
+    await fs.rename(tmpFile, localFile);
   } catch (error) {
     // A read-only or full disk should not break rendering; serve it anyway.
+    await fs.rm(tmpFile, { force: true }).catch(() => {});
     console.warn(`[singleplayer/cdn] could not mirror ${relative}:`, error);
   }
   return new NextResponse(body, { headers });

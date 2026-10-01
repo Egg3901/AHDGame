@@ -54,3 +54,12 @@ export function applyQePriceSupport(rateDerivedPrice: number, qeSupportRatio: nu
   const support = Math.min(0.2, Math.max(0, qeSupportRatio) * 0.5);
   return Math.min(2, Math.max(0.05, rateDerivedPrice * (1 + support)));
 }
+
+/** Original bond quote adjustment when central-bank support changes. */
+export function quotedQeMarketPrice(
+  marketPrice: number,
+  previousSupport: number,
+  nextSupport: number
+): number {
+  return Math.min(2, Math.max(0.05, marketPrice * (1 + (nextSupport - previousSupport) * 0.5)));
+}

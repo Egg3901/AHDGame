@@ -1,10 +1,13 @@
 import type { Db } from "mongodb";
 import { ensureIndex } from "./helpers";
+import { seedTurnHotPathIndexes } from "./turnHotPath";
 
 // Indexes for collections identified via MongoDB profiler as COLLSCAN offenders.
 // Each of these was doing full collection scans on hot paths before the index landed.
 export async function seedSlowQueryIndexes(db: Db, log: (msg: string) => void) {
   log("Slow-query indexes:");
+
+  await seedTurnHotPathIndexes(db, log);
 
   // corporationHistory — stock exchange / market cap / bonds aggregations
   await ensureIndex(

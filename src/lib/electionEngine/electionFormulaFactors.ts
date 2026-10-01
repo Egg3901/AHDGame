@@ -352,36 +352,30 @@ export function supportMoodMultiplier(support: number | undefined): number {
 }
 
 /**
- * Party-baseline registration-share multiplier — seeded partisan baseline as
- * a structural vote-weight scalar, distinct from `regResistanceMultiplier`
- * (which models Reg only as a small 1.0-1.3× persuasion-resistance tilt).
+ * Party-baseline registration multiplier. This is a structural vote-weight
+ * scalar, distinct from `regResistanceMultiplier` (which models Reg only as a
+ * small 1.0-1.3× persuasion-resistance tilt).
  *
  * Motivation (1953 sim forensics): seeded polling entered the vote kernel only
  * through Org's `share^0.2` curve, so a 2.5%-polling party (1951 Liberals) paid
  * a mere ~0.66× penalty vs a ~49% party and landed at ~24% of the vote. This
- * multiplier makes the seeded partisan baseline bite: weight scales by
- * `share^REG_BASELINE_EXPONENT` (concave — sqrt by default), so 2.5%
+ * multiplier makes the partisan baseline bite: weight scales by
+ * `share^REG_BASELINE_EXPONENT` (concave, sqrt by default), so 2.5%
  * registration ≈ 0.16× while 45-50% registration ≈ 0.67-0.71×; after
  * normalization a 2.5% party lands in single digits, not the twenties.
  *
- * Input is `statePartyOrg.registrationShare` (0-100) — a SEED-authored share
- * of the region's partisan electorate, written today only by the UK org
- * calculation path from era polling tables. It is deliberately a separate
- * field from `registration`:
+ * Input is the party's current `statePartyOrg.registration` (0-100). The host
+ * decides whether a region uses this baseline. UK regions opt in; other
+ * countries remain unchanged so their existing registration resistance and
+ * peel curves are not double-counted.
  *
- *   COMPATIBILITY CONTRACT — returns exactly 1.0 when the share is
- *   undefined/NaN. Every world without seeded `registrationShare` rows (all
- *   already-running worlds, and every US/DE/JP/... world — the US lanes seed
- *   `registration` but never `registrationShare`) is byte-identical. This
- *   also guarantees the US `registration` lane (regResistance + peel curves)
- *   is never double-counted here, and the healthy ~55/45 US House shares are
- *   untouched.
+ * COMPATIBILITY CONTRACT: returns exactly 1.0 when the baseline lane is not
+ * enabled, represented by an undefined or non-finite input. Once a region has
+ * current registration data, a party with no row is passed 0 and receives the
+ * same minimum-share floor as any registered party at 0.
  *
- * Parties present in a seeded region but with a 0-share row (e.g. SNP's 0.3%
- * in 1951 Scotland, seeded 0) are floored at `REG_BASELINE_MIN_SHARE` rather
- * than hard-zeroed — the Org gate and appeal still decide the rest.
- * Player-created parties never get a seeded row → neutral 1.0 (no permanent
- * hidden penalty; building Org remains their path).
+ * Parties at 0 current registration are floored at `REG_BASELINE_MIN_SHARE`
+ * rather than hard-zeroed. The Org gate and appeal still decide the rest.
  */
 export const REG_BASELINE_EXPONENT = 0.5;
 export const REG_BASELINE_MIN_SHARE = 0.005;
@@ -390,6 +384,35 @@ export function regBaselineMultiplier(regShare: number | undefined): number {
   const pct = Math.max(0, Math.min(100, regShare));
   const share = Math.max(REG_BASELINE_MIN_SHARE, pct / 100);
   return Math.pow(share, REG_BASELINE_EXPONENT);
+}
+
+export interface CurrentRegistrationBaselineRow {
+  partyId: string;
+  registration?: number;
+}
+
+/**
+ * Builds the current-registration baseline for one region. An undefined map
+ * disables the lane and preserves prior behavior. Once any current Reg data
+ * exists, missing party values become 0 so a late-created or incomplete row
+ * cannot receive the neutral multiplier reserved for disabled regions.
+ */
+export function buildCurrentRegistrationBaseline(
+  rows: ReadonlyArray<CurrentRegistrationBaselineRow>,
+  countryId: string
+): Map<string, number> | undefined {
+  if (countryId !== "UK" || !rows.some((row) => Number.isFinite(row.registration))) {
+    return undefined;
+  }
+
+  return new Map(
+    rows.map((row) => [
+      row.partyId,
+      typeof row.registration === "number" && Number.isFinite(row.registration)
+        ? row.registration
+        : 0,
+    ])
+  );
 }
 
 // ─── §7.3.2 swing-flow curves ───────────────────────────────────────────────

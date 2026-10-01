@@ -118,7 +118,6 @@
       "aboutPosition": "About position",
       "position": "Position",
       "pendingDecisions": "{count} awaiting decision",
-      "fundingAttention": "capital or reserves need attention",
       "needsAttention": "needs attention",
       "actions": {
         "postCapital": "Post capital",
@@ -129,10 +128,10 @@
       "tooltips": {
         "position": "Where the bank stands right now. Each figure links to the tab that moves it.",
         "postedCapital": "Capital posted from the treasury plus retained earnings. It stands behind depositors and sets the deposit ceiling.",
-        "deposits": "Household savings plus player deposits pointed at the bank. More deposits raise the reserve requirement.",
-        "depositCeiling": "The most deposits the bank may hold: the lower of branch capacity and 12x book equity.",
+        "deposits": "Household savings arrive as cash in the vault; player savings pointed at the bank are pointers, not cash. Only the cash half raises the reserve requirement, but both count toward the deposit ceiling.",
+        "depositCeiling": "The most deposits the bank may hold: the lower of deposit-network capacity and 12x book equity.",
         "loansOut": "Named player loans plus the household book. Lending earns interest but consumes reserves.",
-        "rates": "Your offsets versus central bank prime, inside the Regulation Q corridor. Pay more to attract savers; charge more to earn, at the cost of demand.",
+        "rates": "Your offsets versus central bank prime, inside the legal rate limits. Pay more to attract savers; charge more to earn, at the cost of demand.",
         "capitalUndercapitalized": "Post {amount} or lose the charter",
         "capitalStressed": "Survives today, fails the stress scenario",
         "capitalAdequate": "Above the minimum and the stress scenario",
@@ -153,8 +152,10 @@
         "interestPaid": "Deposit interest credited to savers plus any interbank or central-bank facility interest paid, last banking pass. A cost to the bank, in charter currency.",
         "netInterest": "Interest earned minus interest paid, last banking pass. Positive means lending covers the cost of deposits; negative means deposits cost more than loans earn.",
         "otherCharges": "Deposit-insurance premium and defaulted principal written off, last banking pass. Both reduce the bottom line below net interest.",
-        "takeProfits": "Earnings stay in the bank until moved. Withdraw cash under Funding, limited by withdrawable reserves."
-      }
+        "takeProfits": "Earnings stay in the bank until moved. Withdraw cash under Treasury, limited by withdrawable reserves."
+      },
+      "capitalAttention": "Capital needs attention",
+      "reservesAttention": "Reserves low"
     },
     "bulkWages": {
       "label": "Wage multiplier",

@@ -11,10 +11,16 @@ import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import { countryFiscalBase, regionFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
+import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { Bill, LegislationType } from "@/lib/db/types/legislation";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
 import type { State } from "@/lib/db/types/state";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  getCountryConfig,
+  isParliamentarySystem,
+  type CountryId,
+} from "@/lib/constants/countries";
 import {
   calculatePolicyOptionAnnualCost,
   getSelectedPolicyOption,
@@ -179,17 +185,30 @@ export async function validateStateBudgetImpact(
   countryId: CountryId,
   bill: Pick<Bill, "legislationTypeId" | "effectDirection" | "provisions">
 ): Promise<BudgetValidationResult> {
-  const stateBudget = await db
-    .collection<StateBudget>("stateBudgets")
-    .findOne({ _id: stateId, countryId });
-  if (!stateBudget) {
+  // Parliamentary regions fund bills from regionalBudgets. Reading the old
+  // stateBudgets row here can reject a bill while the region page shows ample
+  // funding from the live regional budget.
+  const regionalBudget = isParliamentarySystem(getCountryConfig(countryId))
+    ? await db.collection<RegionalBudget>("regionalBudgets").findOne({ _id: stateId, countryId })
+    : null;
+  const stateBudget = regionalBudget
+    ? null
+    : await db.collection<StateBudget>("stateBudgets").findOne({ _id: stateId, countryId });
+  if (!regionalBudget && !stateBudget) {
     return { allowed: true, costAmount: 0, newTotalSpending: 0 };
   }
 
   const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
+  const budgetCapacity = regionalBudget?.totalBudget ?? stateBudget?.revenue.total ?? 0;
+  const currentSpending = regionalBudget
+    ? regionalBudget.totalBudget - regionalBudget.surplus
+    : (stateBudget?.spending.total ?? 0);
+  const availableFunds = regionalBudget
+    ? regionalBudget.totalBudget
+    : (stateBudget?.revenue.total ?? 0) + (stateBudget?.balance ?? 0);
   const costAmount = await calculateBillAnnualCost(db, bill, {
-    budgetCapacity: stateBudget.revenue.total,
-    gdp: stateBudget.stateGdp,
+    budgetCapacity,
+    gdp: regionalBudget ? (state?.gdp ?? 0) * 1_000_000 : (stateBudget?.stateGdp ?? 0),
     population: state?.population ?? 0,
     countryId,
     nationalGdpPerCapita: await resolveNationalGdpPerCapita(db, countryId),
@@ -200,11 +219,10 @@ export async function validateStateBudgetImpact(
     incomeBandIndex: (await getEraContext(db)).incomeBandIndexByCountry?.[countryId] ?? null,
   });
   if (costAmount === 0) {
-    return { allowed: true, costAmount: 0, newTotalSpending: stateBudget.spending.total };
+    return { allowed: true, costAmount: 0, newTotalSpending: currentSpending };
   }
 
-  const newTotalSpending = stateBudget.spending.total + costAmount;
-  const availableFunds = stateBudget.revenue.total + stateBudget.balance;
+  const newTotalSpending = currentSpending + costAmount;
 
   if (newTotalSpending > availableFunds) {
     return {

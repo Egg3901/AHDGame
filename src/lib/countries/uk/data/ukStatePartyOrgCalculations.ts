@@ -121,16 +121,15 @@ export async function calculateUKStatePartyOrgs(
         stateId: regionId,
         partyId: partySeqId,
         organization: org,
-        // Era polling share doubles as the seeded partisan baseline:
+        // Era polling share seeds both registration fields:
         //  - `registration` feeds the existing Reg lanes (regResistance +
         //    transferable/peel curves) exactly like the US lane values do.
         //    For the 2019 preset the curated UK lanes in registrationLanes.ts
         //    overwrite this afterwards; for era presets without UK lanes
         //    (1953/1979/1991) the polling share IS the registration seed.
-        //  - `registrationShare` feeds `regBaselineMultiplier` (concave
-        //    share^0.5 vote-weight scalar) so a 2.5%-polling party lands in
-        //    single-digit vote share instead of the twenties. Never written
-        //    by any other seed path — worlds without it are byte-identical.
+        //  - `registrationShare` preserves the original era share for seed
+        //    provenance and aggregation/backfill paths. Ongoing elections use
+        //    the live `registration` value above.
         registration: voteShare,
         registrationShare: voteShare,
         chairId: null,

@@ -158,9 +158,10 @@ describe("ensureFoundingMembershipsAndLeadership — era + founding-year aware",
     expect(insertedMemberships().some((r) => r.organizationId === "WARSAW_PACT")).toBe(false);
   });
 
-  it("never touches an org founded after the preset start (EU in a 1979 game), even past its founding year", async () => {
+  it("does not force Community membership into an existing historical save", async () => {
     db.collection("gameState").findOne.mockResolvedValue({
-      currentYear: 1994, // past 1993 — founding is the turn phase's job, and it founds EMPTY
+      currentYear: 1994,
+      currentTurn: 700,
       preset: "1979-default",
     });
     const { ensureFoundingMembershipsAndLeadership } = await import("./service");

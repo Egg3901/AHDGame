@@ -62,6 +62,7 @@ import {
 import { createSystemNewsPost } from "@/lib/news";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
+import { isNppOwned } from "@/lib/corporations/nppOwned";
 import { createNotifications } from "@/lib/notifications";
 import { COUNTRY_CONFIGS as COUNTRIES } from "@/lib/constants/countries";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
@@ -229,6 +230,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const component = (requestedComponent ?? components[0]) as UnitDomain;
 
     const stateOwned = isStateOwned(corp);
+    // A true NPP-owned corporation has no authenticated player who can answer an offer.
+    // Caretaker-run player corporations are deliberately excluded: their underlying owner
+    // keeps CEO authorization and the choice to accept or decline the order.
+    const nppOwned = isNppOwned(corp);
+    const activateImmediately = stateOwned || nppOwned;
     const usedSlots = await assignedFactoriesForSector(
       db,
       sector._id,
@@ -414,7 +420,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               },
             }
           : {}),
-        activateImmediately: stateOwned,
+        activateImmediately,
       });
     } catch (error) {
       await releaseEncumbrance(db, countryId, contractValue);
@@ -448,16 +454,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // A private CEO must learn of the offer or it sits pending forever. A National
-    // Corporation has no one to accept; the order is already active.
-    if (corp.userId) {
+    // A private player CEO must learn of the offer or it sits pending forever. State-owned
+    // and true NPP-owned suppliers have no player to answer, so their orders are already active.
+    // Do not send an NPP-owned corporation's notice to its system-placeholder user account.
+    if (corp.userId && !nppOwned) {
       const buyer = COUNTRIES[countryId]?.name ?? countryId;
       await createNotifications([
         {
           userId: corp.userId,
           type: "defence_contract_offered",
-          title: stateOwned ? "Defence Contract Awarded" : "Defence Contract Offered",
-          message: stateOwned
+          title: activateImmediately ? "Defence Contract Awarded" : "Defence Contract Offered",
+          message: activateImmediately
             ? `${buyer} has placed an order with ${corp.name ?? "your corporation"} for ` +
               `${parsed.data.lotsOrdered.toLocaleString("en-US")} lots of ${component} ` +
               `materiel at ${Math.round(pricePerLot).toLocaleString("en-US")} per lot, paid on ` +

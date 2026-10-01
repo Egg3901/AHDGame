@@ -1,3 +1,9 @@
+/**
+ * Share-order settlement exchanges funding and ownership.
+ * fillShareOrder includes the source monetary authority spread for corporate buyers.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -28,6 +34,7 @@ import {
   settleBuyOrderFill,
 } from "@/lib/corporations/commands/shareTrading/fillShareOrderSettlement";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   buildPersonalBalanceInc,
@@ -141,6 +148,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     let fillerCollectionName: "characters" | "imperialCharacters";
     let fillerCountryId: string;
     let fillerName: string;
+    let fillerCreated: { createdTurn?: number | null; createdAt?: Date | string | null };
 
     if (isImperialFiller) {
       const imperial = await db.collection<ImperialCharacter>("imperialCharacters").findOne({
@@ -154,6 +162,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       fillerCollectionName = "imperialCharacters";
       fillerCountryId = imperial.countryId;
       fillerName = imperial.name;
+      fillerCreated = imperial;
     } else {
       const characterQuery = userDoc?.activeCharacterId
         ? { _id: userDoc.activeCharacterId, userId: new ObjectId(auth.user.userId) }
@@ -166,7 +175,15 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       fillerCollectionName = "characters";
       fillerCountryId = character.countryId;
       fillerName = character.name;
+      fillerCreated = character;
     }
+
+    // A fill moves value between players either way — cash to the poster on a
+    // sell order, shares (bought with a confederate's escrow) on a buy order.
+    // Checked on the resolved actor even when the fill runs as a corporation:
+    // a fresh account's corp can only hold what the account put in.
+    const barrier = await newCharacterTransferBarrierResponse(fillerCreated);
+    if (barrier) return barrier;
 
     if (
       !fillAsCorporation &&
@@ -537,6 +554,8 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         const buyerFxRate = await getCorpFxRate(db, buyingCorp);
         const fxRates = await loadFxRatesRecord(db);
         const corpPurchaseEstimate = estimateCorpWalletSpend({
+          union: await loadEuroMonetaryUnion(db),
+          spreadStrengths: await loadForexSpreadStrengths(db),
           requiredAmount: totalLocal,
           availableBalance: buyingCorp.liquidCapital ?? 0,
           fromCurrency: buyingCurrency,

@@ -3,6 +3,7 @@ import {
   isClientShellUserAgent,
   isInAppWebViewUserAgent,
   isNativeAppUserAgent,
+  isStoreAppUserAgent,
 } from "./displayMode";
 
 const CAPACITOR =
@@ -40,5 +41,13 @@ describe("in-app webview user agents", () => {
     expect(isInAppWebViewUserAgent(SHELL_IOS)).toBe(true);
     expect(isInAppWebViewUserAgent(BROWSER)).toBe(false);
     expect(isInAppWebViewUserAgent("")).toBe(false);
+  });
+
+  it("marks only the phone app as a store build that hides purchase links", () => {
+    expect(isStoreAppUserAgent(SHELL_IOS)).toBe(true);
+    expect(isStoreAppUserAgent(SHELL_ANDROID)).toBe(true);
+    expect(isStoreAppUserAgent(SHELL_DESKTOP)).toBe(false);
+    expect(isStoreAppUserAgent(CAPACITOR)).toBe(false);
+    expect(isStoreAppUserAgent(BROWSER)).toBe(false);
   });
 });

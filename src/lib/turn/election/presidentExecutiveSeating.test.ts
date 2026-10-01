@@ -55,6 +55,70 @@ beforeEach(() => {
 });
 
 describe("seatPresidentialExecutive", () => {
+  it.each([
+    ["NPP to player", true, false, false],
+    ["player to NPP", false, true, false],
+    ["player A to player B", false, false, false],
+    ["same player incumbent", false, false, true],
+    ["same NPP incumbent", true, true, true],
+  ] as const)(
+    "handles %s presidential transition and cabinet policy",
+    async (_label, priorIsNpp, winnerIsNpp, samePerson) => {
+      const priorId = new ObjectId();
+      const winnerId = samePerson ? priorId : new ObjectId();
+      const election = makeElection();
+      db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue({
+        countryId: "US",
+        officeType: "president",
+        characterId: priorIsNpp ? null : priorId,
+        nppId: priorIsNpp ? priorId : null,
+      });
+      if (winnerIsNpp) {
+        db.collectionMocks["npps"]!.findOne.mockResolvedValue({
+          _id: winnerId,
+          name: "Winner",
+          party: "2",
+        });
+      }
+      const winnerCandidate = {
+        _id: new ObjectId(),
+        isNPP: winnerIsNpp,
+        characterId: winnerIsNpp ? undefined : winnerId,
+        nppId: winnerIsNpp ? winnerId : undefined,
+        characterName: "Winner",
+        party: "2",
+      } as unknown as ElectionCandidate;
+
+      const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
+      await seatPresidentialExecutive(db as unknown as Db, {
+        election,
+        winnerCandidate,
+        now: NOW,
+      });
+
+      expect(clearCabinetOnTransition).toHaveBeenCalledTimes(samePerson ? 0 : 1);
+      expect(db.collectionMocks["electedOfficials"]!.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({ officeType: "president" }),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            party: "2",
+            isNPP: winnerIsNpp,
+            characterId: winnerIsNpp ? null : winnerId,
+            nppId: winnerIsNpp ? winnerId : undefined,
+          }),
+        }),
+        { upsert: true }
+      );
+      const actorCollection = winnerIsNpp ? "npps" : "characters";
+      expect(db.collectionMocks[actorCollection]!.updateOne).toHaveBeenCalledWith(
+        expect.objectContaining({ _id: winnerId }),
+        expect.objectContaining({
+          $set: expect.objectContaining({ currentOffice: { type: "president" } }),
+        })
+      );
+    }
+  );
+
   it("withdraws the President's and VP's still-active candidacies in other races", async () => {
     const presId = new ObjectId();
     const vpId = new ObjectId();

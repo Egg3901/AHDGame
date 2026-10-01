@@ -79,7 +79,7 @@ export function buildWorldNavItems({
     },
     {
       id: "map",
-      label: "Map",
+      label: "Country Map",
       labelKey: "menus.world.map",
       href: getCountryConfig(countryId as CountryId).mapPath,
       section: "main",

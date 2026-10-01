@@ -31,6 +31,7 @@ export async function GET() {
       name: d.name,
       sideALabel: d.sideA.label,
       sideBLabel: d.sideB.label,
+      declaredByBillId: d.declaredByBillId,
     }));
 
     return NextResponse.json({ conflicts });

@@ -8,6 +8,10 @@ import { createNotification } from "@/lib/notifications";
 import { isUnionLeadershipElectionOpen } from "@/lib/unions/unionEconomy";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
 import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
+import {
   loadUnionVoteWeights,
   seatedPlayerPresidentId,
   tallyUnionLeaderVotes,
@@ -31,6 +35,9 @@ export async function voteUnionLeader(
   union: Union,
   candidateCharacterId: ObjectId
 ): Promise<VoteUnionLeaderResult> {
+  if (await isUnionProsecutionBarred(db, voter._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   if (!isUnionLeadershipElectionOpen(union)) {
     return {
       ok: false,

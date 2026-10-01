@@ -295,6 +295,7 @@ export async function resolvePresidentElection(
   tally: ElectionVoteTally,
   now: Date
 ): Promise<boolean> {
+  if (tally.finalized === true && tally.executiveSeatingPending !== true) return true;
   const seatingRetryOnly = tally.finalized === true && tally.executiveSeatingPending === true;
 
   let electoralVotesByCandidate = tally.electoralVotesByCandidate;
@@ -492,6 +493,12 @@ export async function resolvePresidentElection(
       vpNppId,
       now,
     });
+    await recordPresidentialTenure(
+      db,
+      election.countryId ?? "US",
+      winnerCandidate.party,
+      election._id.toString()
+    );
   } catch (err) {
     console.error(
       `[Turn] President election ${election._id}: executive seating failed — will retry next turn`,
@@ -513,18 +520,9 @@ export async function resolvePresidentElection(
       { $set: { executiveSeatingPending: false, updatedAt: now } }
     );
 
-  // Advance the consecutive-tenure ledger: same party extends the streak, a
-  // flip resets it. Feeds the party-tenure voter-fatigue penalty on the next
-  // presidential race. Best-effort — a ledger write must not fail resolution.
-  try {
-    await recordPresidentialTenure(db, election.countryId ?? "US", winnerCandidate.party);
-  } catch (err) {
-    logger.error("Turn", "Failed to record presidential tenure ledger", err);
-  }
-
   const candidateIds = Object.keys(electoralVotesByCandidate).map((id) => new ObjectId(id));
   const winnerCandidateIds = new Set([winnerId]);
-  const loserCandidateIds = new Set(ranked.slice(1).map(([id]) => id));
+  const loserCandidateIds = new Set(ranked.filter(([id]) => id !== winnerId).map(([id]) => id));
   updatePoliticianPagesAfterElection(
     db,
     election,

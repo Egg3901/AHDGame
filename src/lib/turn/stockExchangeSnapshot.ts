@@ -36,6 +36,7 @@ import {
   fxRateForSectorHostFromMap,
 } from "@/lib/currency/corporationCapital";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { recordIntradayLevels } from "@/lib/stockExchange/intraday";
 import {
   CORPORATION_TYPE_LABELS,
   CEO_INITIAL_SHARES,
@@ -220,12 +221,49 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
             h24: { turn: number; sharePrice: number; totalShares: number };
             h48: { turn: number; sharePrice: number; totalShares: number };
           }>([
+            // Bounded read (#2693). Every target turn is at or after turn48Ago,
+            // so the answer only needs the rows inside that window plus each
+            // corporation's newest row before it. The earliest-row fallback
+            // applies only when no row is at or before the target, in which case
+            // no older rows exist and the window holds the whole history. This
+            // replaces pushing every corporation's entire history, which grew
+            // with world age.
             {
               $match: {
                 corporationId: { $in: corpIds },
+                turn: { $gte: turn48Ago },
               },
             },
-            { $sort: { turn: -1 } },
+            { $project: { _id: 0, corporationId: 1, turn: 1, sharePrice: 1, totalShares: 1 } },
+            {
+              $unionWith: {
+                coll: "corporationHistory",
+                pipeline: [
+                  { $match: { corporationId: { $in: corpIds }, turn: { $lt: turn48Ago } } },
+                  // Group key first: the {corporationId, turn} index answers
+                  // this as a DISTINCT_SCAN, one entry per corporation.
+                  { $sort: { corporationId: 1, turn: -1 } },
+                  {
+                    $group: {
+                      _id: "$corporationId",
+                      turn: { $first: "$turn" },
+                      sharePrice: { $first: "$sharePrice" },
+                      totalShares: { $first: "$totalShares" },
+                    },
+                  },
+                  {
+                    $project: {
+                      _id: 0,
+                      corporationId: "$_id",
+                      turn: 1,
+                      sharePrice: 1,
+                      totalShares: 1,
+                    },
+                  },
+                ],
+              },
+            },
+            { $sort: { corporationId: 1, turn: -1 } },
             {
               $group: {
                 _id: "$corporationId",
@@ -466,7 +504,10 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           .collection<{ corporationId: ObjectId; income?: number }>("corporationHistory")
           .aggregate<{ _id: ObjectId; income: number }>([
             { $match: { corporationId: { $in: bailoutCorpIds } } },
-            { $sort: { turn: -1 } },
+            // Sort on the group key first so the {corporationId, turn} index serves
+            // match, sort and $first as a DISTINCT_SCAN (one entry per corporation)
+            // instead of walking the whole history by turn (#2693).
+            { $sort: { corporationId: 1, turn: -1 } },
             { $group: { _id: "$corporationId", income: { $first: "$income" } } },
           ])
           .toArray();
@@ -1016,6 +1057,23 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
         snapshots.map((snapshot) =>
           collection.updateOne({ _id: snapshot._id }, { $set: snapshot }, { upsert: true })
         )
+      );
+
+      // Intraday index levels for real OHLC candles. Raw anchor market cap per
+      // venue, recorded on every rebuild (turn + 15-minute refreshes), so each
+      // turn accumulates observed high/low extremes. Additive only: no pricing
+      // input, and snapshot logic above is untouched.
+      await recordIntradayLevels(
+        database,
+        currentTurn,
+        snapshots.map((snapshot) => ({
+          exchange: snapshot._id,
+          marketCap: snapshot.listings.reduce(
+            (sum, l) => sum + (l.marketCapAnchor ?? l.marketCap),
+            0
+          ),
+        })),
+        now
       );
     }
   );

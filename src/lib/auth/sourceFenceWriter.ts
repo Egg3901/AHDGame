@@ -326,7 +326,7 @@ function isUnknownCommit(error: unknown): boolean {
 
 function hasNoUsableSocialMethod(
   user: SourceSecuritySnapshotUser,
-  key: "googleId" | "discordId"
+  key: "googleId" | "discordId" | "appleId"
 ): boolean {
   if (!Object.hasOwn(user, key)) return true;
   const value = user[key];
@@ -498,6 +498,7 @@ export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
               ? user.role !== "admin" || user.isAdmin !== true
               : !hasNoUsableSocialMethod(user, "googleId") ||
                 !hasNoUsableSocialMethod(user, "discordId") ||
+                !hasNoUsableSocialMethod(user, "appleId") ||
                 user.role !== "player" ||
                 (Object.hasOwn(user, "isAdmin") && user.isAdmin !== false))
           ) {

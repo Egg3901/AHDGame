@@ -90,6 +90,7 @@ describe("POST /api/admin/users/reset-discord", () => {
       password: "synthetic-password-digest",
       googleId: "synthetic-google-id",
       discordId: "synthetic-discord-id",
+      appleId: { $exists: false },
       authRevokedAt: cutoff,
       authMigrationFence: { $exists: false },
     });

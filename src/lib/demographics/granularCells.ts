@@ -127,16 +127,14 @@ function priorKey(aDim: string, aKey: string, bDim: string, bKey: string): strin
 }
 
 /** Product of all applicable pairwise association priors for a generic cell. */
-function cellPriorGeneric(buckets: Record<string, string>, priors: Record<string, number>): number {
-  const dimNames = Object.keys(buckets);
+function cellPriorGeneric(
+  combo: string[],
+  pairPriors: Record<string, Record<string, number>>[][]
+): number {
   let p = 1;
-  for (let i = 0; i < dimNames.length; i++) {
-    const dimA = dimNames[i];
-    const keyA = buckets[dimA];
-    for (let j = i + 1; j < dimNames.length; j++) {
-      const dimB = dimNames[j];
-      const keyB = buckets[dimB];
-      p *= priors[priorKey(dimA, keyA, dimB, keyB)] ?? 1;
+  for (let i = 0; i < combo.length; i++) {
+    for (let j = i + 1; j < combo.length; j++) {
+      p *= pairPriors[i][j][combo[i]][combo[j]];
     }
   }
   return p;
@@ -325,6 +323,20 @@ export function deriveGranularCellsGeneric(input: {
 
   // Build raw cells from the independence product × priors.
   const combos = buildCombinations(dimNames, buckets);
+  const pairPriors: Record<string, Record<string, number>>[][] = dimNames.map(() => []);
+  for (let i = 0; i < dimNames.length; i++) {
+    for (let j = i + 1; j < dimNames.length; j++) {
+      const lookup: Record<string, Record<string, number>> = {};
+      for (const keyA of buckets[dimNames[i]]) {
+        const byKey: Record<string, number> = {};
+        for (const keyB of buckets[dimNames[j]]) {
+          byKey[keyB] = priors[priorKey(dimNames[i], keyA, dimNames[j], keyB)] ?? 1;
+        }
+        lookup[keyA] = byKey;
+      }
+      pairPriors[i][j] = lookup;
+    }
+  }
   const cells: GenericGranularCell[] = [];
   for (const combo of combos) {
     const cellBuckets: Record<string, string> = {};
@@ -335,7 +347,7 @@ export function deriveGranularCellsGeneric(input: {
       cellBuckets[dimName] = key;
       raw *= targets[dimName][key];
     }
-    raw *= cellPriorGeneric(cellBuckets, priors);
+    raw *= cellPriorGeneric(combo, pairPriors);
     cells.push({
       id: combo.join("|"),
       buckets: cellBuckets,

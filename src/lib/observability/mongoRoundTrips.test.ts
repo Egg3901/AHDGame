@@ -5,6 +5,7 @@ import {
   formatRoundTripReport,
   recordRoundTrip,
   phaseRoundTrips,
+  phaseTopCollectionsByRoundTrips,
   recordDocumentsReturned,
   totalBytesReturned,
   resetRoundTripProfiler,
@@ -46,6 +47,21 @@ describe("round-trip profiler", () => {
     expect(phaseRoundTrips("corporationTurn")).toBe(2);
     expect(totalRoundTrips()).toBe(2);
     expect(formatRoundTripReport()).toBeNull();
+  });
+
+  it("ranks a phase's command sources without BSON profiling", () => {
+    delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
+    resetRoundTripProfiler();
+    beginPhaseProfiling("indexFunds");
+    recordRoundTrip("shareOrders");
+    recordRoundTrip("indexFunds");
+    recordRoundTrip("shareOrders");
+    endPhaseProfiling("indexFunds");
+
+    expect(phaseTopCollectionsByRoundTrips("indexFunds")).toEqual([
+      { collection: "shareOrders", roundTrips: 2 },
+      { collection: "indexFunds", roundTrips: 1 },
+    ]);
   });
 
   it("attributes commands to the phase that is open", () => {
@@ -291,5 +307,30 @@ describe("attribution via the audit context", () => {
     runInAuditContext("api:some-request", () => recordRoundTrip("things"));
 
     expect(roundTripReport()[0]!.phase).toBe("(outside any phase)");
+  });
+
+  it("follows the trace id across phases without inheriting the previous one", async () => {
+    enable();
+    const { runInAuditContext, turnPhaseTraceId } = await import("@/lib/observability/context");
+
+    // Two commands inside one phase exercise the cached trace id; the next
+    // phase must not inherit that cache entry.
+    runInAuditContext(turnPhaseTraceId(122, "corporationTurn"), () => {
+      recordRoundTrip("corporateSectors");
+      recordRoundTrip("corporations");
+    });
+    runInAuditContext(turnPhaseTraceId(122, "indexFunds"), () => {
+      recordRoundTrip("bonds");
+    });
+    // The phase segment itself may contain colons; only the first two delimit
+    // turn and phase.
+    runInAuditContext(turnPhaseTraceId(122, "state:elections"), () => {
+      recordRoundTrip("elections");
+    });
+
+    const byPhase = new Map(roundTripReport().map((row) => [row.phase, row.roundTrips]));
+    expect(byPhase.get("corporationTurn")).toBe(2);
+    expect(byPhase.get("indexFunds")).toBe(1);
+    expect(byPhase.get("state:elections")).toBe(1);
   });
 });

@@ -372,6 +372,22 @@ export function getSplitCaptureMultiplier(
   return 1.0 - (T / 100) * 0.5;
 }
 
+/** Match the same tariff scope in enactment and idempotent reconciliation. */
+export function tariffProvisionFilter(
+  countryId: CountryId,
+  provision: TariffProvision
+): Record<string, unknown> {
+  return {
+    countryId,
+    scopeType: provision.scopeType,
+    targetSectorType: provision.targetSectorType ?? null,
+    targetOriginCountryId: provision.targetOriginCountryId ?? null,
+    targetCorporationId: provision.targetCorporationId
+      ? new ObjectId(String(provision.targetCorporationId))
+      : null,
+  };
+}
+
 /**
  * Upsert a tariff document for a trade bill provision and report whether the
  * rate materially changed. Uses the five-field composite key so re-enacting the
@@ -396,15 +412,7 @@ export async function applyTariffProvision(
   sourceBillId: ObjectId
 ): Promise<{ rateChanged: boolean }> {
   const now = new Date();
-  const filter: Record<string, unknown> = {
-    countryId,
-    scopeType: provision.scopeType,
-    targetSectorType: provision.targetSectorType ?? null,
-    targetOriginCountryId: provision.targetOriginCountryId ?? null,
-    targetCorporationId: provision.targetCorporationId
-      ? new ObjectId(String(provision.targetCorporationId))
-      : null,
-  };
+  const filter = tariffProvisionFilter(countryId, provision);
 
   // Read-before-write so the caller can distinguish a no-op replay (idempotent
   // reconcile) from a real policy change. Worst-case race: two concurrent

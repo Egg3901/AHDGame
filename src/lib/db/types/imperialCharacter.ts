@@ -23,6 +23,7 @@ export interface ImperialCharacter {
   tintColor?: string;
   bio?: string;
   campaignSongUrl?: string;
+  /** @deprecated Campaign songs no longer autoplay; legacy documents may still carry it. */
   campaignSongAutoplay?: boolean;
 
   // Personal Wealth

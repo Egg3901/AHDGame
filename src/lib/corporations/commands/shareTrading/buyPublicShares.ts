@@ -1,3 +1,9 @@
+/**
+ * Public share purchases exchange funding for available shares.
+ * buyPublicShares uses source-authority spread settings for corporate conversion.
+ */
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -184,6 +190,8 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         targetFxRate
       );
       const corpPurchaseEstimate = estimateCorpWalletSpend({
+        union: await loadEuroMonetaryUnion(db),
+        spreadStrengths: await loadForexSpreadStrengths(db),
         requiredAmount: shares * executionPrice,
         availableBalance: buyingCorp.liquidCapital ?? 0,
         fromCurrency: buyingCurrency,
@@ -342,7 +350,9 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         // the issuer's liquidCapital so a float buy conserves money instead of
         // vanishing. Last statement in the try — if it throws, the catch rolls
         // back the shares + buyer cash, so the issuer simply isn't credited.
-        await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+        await applyFloatBuyCredit(db, corporation, shares * executionPrice, {
+          sharesBought: shares,
+        });
 
         // Route the FX spread the corp already paid on a cross-currency share
         // buy into the CB system (reserve slice → target-currency CB; revenue →
@@ -634,7 +644,9 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         // Treasury-backed market maker: inject the buyer's payment into the
         // issuer's liquidCapital so the float buy conserves money. Last in the
         // try — a throw here is rolled back by the catch below.
-        await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+        await applyFloatBuyCredit(db, corporation, shares * executionPrice, {
+          sharesBought: shares,
+        });
       } catch (err) {
         if (sharesCredited) {
           await debitSharesFromImperial(
@@ -869,7 +881,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       // Treasury-backed market maker: inject the buyer's payment into the
       // issuer's liquidCapital so the float buy conserves money. Last in the
       // try — a throw here is rolled back by the catch below.
-      await applyFloatBuyCredit(db, corporation, shares * executionPrice);
+      await applyFloatBuyCredit(db, corporation, shares * executionPrice, { sharesBought: shares });
     } catch (err) {
       if (sharesCredited) {
         await debitShares(

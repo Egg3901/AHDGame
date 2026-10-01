@@ -313,6 +313,7 @@ export async function loadRegionPoliticalMetrics(
       residual,
       cabinet: cabinet.total,
       labour: regionDoc.labourResiduals?.[metricId] ?? 0,
+      livingConflict: regionDoc.livingConflictResiduals?.[metricId] ?? 0,
       cabinetBySource: cabinet.bySource,
       cabinetAtCap: cabinet.saturated,
       currentValue: regionDoc.values[metricId] ?? 0,

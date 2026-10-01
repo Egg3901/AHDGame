@@ -5,7 +5,7 @@
 
 import type { Db } from "mongodb";
 import type { Posture } from "@/lib/db/types/militaryUnit";
-import type { Bloc } from "@/lib/military/bloc";
+import type { WorldBloc } from "@/lib/world/bloc";
 import { conflictExists } from "@/lib/db/collections/conflicts";
 import { US_IDENTITY } from "@/lib/countries/us/identity";
 import { UK_IDENTITY } from "@/lib/countries/uk/identity";
@@ -101,7 +101,7 @@ export const COUNTRY_COMMAND_FLAVOR: Record<string, CountryCommandFlavor> = {
 };
 
 /** How the board names the viewer's alignment, from the live bloc roll. */
-export const BLOC_BOARD_NAME: Record<Bloc, string> = {
+export const BLOC_BOARD_NAME: Record<WorldBloc, string> = {
   west: "WESTERN BLOC",
   east: "EASTERN BLOC",
   nonAligned: "NON-ALIGNED",

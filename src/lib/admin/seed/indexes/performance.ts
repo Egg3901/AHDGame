@@ -186,6 +186,17 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // Federal budget history is filtered by country and returned by newest turn.
+  // The former collection scan examined all 577 local rows and performed a
+  // blocking sort; this compound supports both the country filter and ordering.
+  await ensureIndex(
+    db,
+    "federalBudgetSnapshots",
+    { countryId: 1, turn: -1 },
+    { name: "federalBudgetSnapshots_country_turn" },
+    log
+  );
+
   // npps — active NPP filter
   await ensureIndex(
     db,
@@ -479,6 +490,17 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     "shareOrders",
     { characterId: 1, status: 1 },
     { name: "shareOrders_char_status" },
+    log
+  );
+  // The index-fund rebalance reads open buy bids by fund before and after
+  // cancellation. The one-off 2026-08-10 migration creates this index in
+  // existing worlds, but a reset drops it while migration markers survive.
+  // Seed the same name and options so new/reset worlds retain that coverage.
+  await ensureIndex(
+    db,
+    "shareOrders",
+    { placerFundId: 1, type: 1, status: 1 },
+    { name: "share_orders_fund_open_bids", sparse: true, background: true },
     log
   );
   await ensureIndex(

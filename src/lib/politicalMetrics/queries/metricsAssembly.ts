@@ -70,6 +70,7 @@ export interface MetricModifiersInfo {
    * cause on any surface.
    */
   labour: number;
+  livingConflict?: number;
   /**
    * Which cabinet channels actually contribute, largest first, so a player can
    * see WHICH one is moving the metric rather than one aggregate label
@@ -212,6 +213,7 @@ export interface ModifiersInput {
   residual: number;
   cabinet: number;
   labour: number;
+  livingConflict?: number;
   cabinetBySource: CabinetSourceContribution[];
   cabinetAtCap: boolean;
   /** The value the target is compared against, for `direction`. */
@@ -235,7 +237,7 @@ export function buildModifiers(input: ModifiersInput): MetricModifiersInfo {
   const target = composeTarget(
     input.nationalPoints,
     input.regionalSupplementPoints,
-    input.residual + input.cabinet + input.labour
+    input.residual + input.cabinet + input.labour + (input.livingConflict ?? 0)
   );
   const gap = target - input.currentValue;
   return {
@@ -244,6 +246,7 @@ export function buildModifiers(input: ModifiersInput): MetricModifiersInfo {
     residual: Math.round(input.residual * 10) / 10,
     cabinet: Math.round(input.cabinet * 10) / 10,
     labour: Math.round(input.labour * 10) / 10,
+    livingConflict: Math.round((input.livingConflict ?? 0) * 10) / 10,
     cabinetBySource: input.cabinetBySource,
     cabinetAtCap: input.cabinetAtCap,
     cabinetCap: CABINET_RESIDUAL_CAP_PER_SOURCE,

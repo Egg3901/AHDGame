@@ -8,7 +8,7 @@
 /**
  * 2007-era national sector weights, US only.
  *
- * Relative percentage-of-GDP allocations across the 16 game sectors, calibrated
+ * Relative percentage-of-GDP allocations across the 17 game sectors, calibrated
  * to 2007 BEA value-added shares — a *pre-Great-Recession, housing-bubble-peak,
  * pre-smartphone* economy. Relative to the 2023-default bundle:
  *   - real_estate + construction elevated (residential bubble at its 2006–07 peak)
@@ -44,10 +44,11 @@ export const COUNTRY_SECTOR_WEIGHTS_2007: Record<string, SectorWeightMap> = {
     automobiles: 5,
     defense: 4,
     energy: 4,
-    media_entertainment: 7,
+    media: 4,
     telecommunications: 4,
     chemical_industries: 4,
     extraction: 3,
+    entertainment: 3,
     agriculture: 2,
   },
 };

@@ -31,13 +31,27 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     if (!ObjectId.isValid(orderId)) throw badRequest("Invalid order ID");
 
     const db = await getDb();
-    const order = await db
+    const { applyCancelRefund, cancelClaimKey, recoverFillClaim } =
+      await import("@/lib/forex/fillRecovery");
+    let order = await db
       .collection<CurrencyOrder>("currencyOrders")
       .findOne({ _id: new ObjectId(orderId) });
 
     if (!order) throw notFound("Order not found");
     if (order.characterId.toString() !== auth.user.character._id.toString()) {
       throw forbidden("You can only cancel your own orders");
+    }
+    if (order.status === "processing" && order.processingFill) {
+      // A peer fill crashed after claiming. A stale claim is finished or
+      // undone first so the cancel can proceed; a live one is never stolen.
+      const recovery = await recoverFillClaim(db, order._id);
+      if (recovery.outcome === "completed" || recovery.outcome === "rolled-back") {
+        const reread = await db
+          .collection<CurrencyOrder>("currencyOrders")
+          .findOne({ _id: order._id });
+        if (!reread) throw notFound("Order not found");
+        order = reread;
+      }
     }
     if (order.status !== "open" && order.status !== "partial") {
       throw badRequest("Only open or partial orders can be cancelled");
@@ -94,14 +108,17 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         if (!claimedOrder) throw badRequest("Only open or partial orders can be cancelled");
 
         try {
-          if (refundAmount > 0) {
-            await db
-              .collection("characters")
-              .updateOne(
-                { _id: order.characterId },
-                { $inc: buildPersonalBalanceInc(refundAmount, order.fromCurrency, true) }
-              );
-          }
+          // Stamped: a crash after the refund leaves `processing`, and the
+          // turn sweeper resets intent-less claims to open. The retry then
+          // no-ops the refund instead of paying it twice.
+          await applyCancelRefund(
+            db,
+            order.characterId,
+            order.fromCurrency,
+            refundAmount,
+            cancelClaimKey(order._id.toHexString()),
+            now
+          );
 
           const cancelResult = await db
             .collection<CurrencyOrder>("currencyOrders")

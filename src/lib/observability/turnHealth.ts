@@ -5,7 +5,7 @@ import { SLO_TAG } from "./slo";
  * Emit a structured turn-health metric to Sentry after each turn.
  *
  * This is a normal-level captureMessage (i.e. not an error) that carries
- * structured tags + extras so you can query turn health trends in GlitchTip:
+ * structured tags + extras so you can query turn health trends in Sentry:
  *   - tag `component: turn`
  *   - tag `turn.health: ok | degraded | failed`
  *   - extra fields: turn number, duration, warning count, phase statuses
@@ -31,7 +31,7 @@ export function captureTurnHealth(
   Sentry.setTag(SLO_TAG.TURN_SUCCESS, health === "failed" ? "false" : "true");
 
   // Only capture if something interesting happened — skip healthy turns
-  // to avoid flooding GlitchTip with noise.
+  // to avoid flooding Sentry with noise.
   if (health === "ok") return;
 
   const phaseSummary = phaseStatuses

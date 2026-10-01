@@ -375,6 +375,12 @@ export const ENDPOINTS: PublicEndpointDefinition[] = [
   },
   {
     method: "GET",
+    path: "/api/public/v1/cdn",
+    description: "Static CDN base URL, asset URL conventions by category, and curated asset URLs.",
+    params: [],
+  },
+  {
+    method: "GET",
     path: "/api/public/v1/openapi.json",
     description: "OpenAPI 3.1 contract for every public v1 route.",
     params: [],

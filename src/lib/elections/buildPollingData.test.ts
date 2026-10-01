@@ -259,6 +259,27 @@ describe("buildPollingData — primary phase", () => {
 // shapes that used to diverge.
 
 describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", () => {
+  it("uses totalSeats for the House delegation-aware threshold (#2466)", () => {
+    const tally = {
+      totalVotes: { major: 830, minor: 170 },
+      candidateParties: { major: "major", minor: "minor" },
+    } as never;
+    const active = new Set(["major", "minor"]);
+
+    expect(computeSeatEstimates("house", 5, tally, active, "US")).toEqual({
+      major: 4,
+      minor: 1,
+    });
+    expect(computeSeatEstimates("house", 4, tally, active, "US")).toEqual({
+      major: 4,
+      minor: 0,
+    });
+    expect(computeSeatEstimates("house", 5, tally, active, "NG")).toEqual({
+      major: 5,
+      minor: 0,
+    });
+  });
+
   /** Runs both engines over the same votes and returns per-party seat totals. */
   function bothEngines(
     region: string,
@@ -320,7 +341,7 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
     expect(projection["minor"]).toBeUndefined();
   });
 
-  it("matches the resolver when a major party sits just under the gate", () => {
+  it("matches the resolver when a party clears the 10% Commons gate", () => {
     // Live WAL shape: Labour 75.1% pooled across two candidates, Conservative
     // 17.9% on one, and two minors at 4.2% / 2.8%. The minors used to collect
     // largest-remainder seats on the panel that the resolver never awards.
@@ -361,10 +382,34 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
   });
 
   it("still fills seats when no party clears the gate at all", () => {
-    // Degenerate: five parties, none above 10%. Both engines fall back to
+    // Degenerate: eleven parties at about 9.1% each. Both engines fall back to
     // ranked order rather than returning nothing.
-    const votes = { a: 21, b: 20, c: 20, d: 20, e: 19 };
-    const parties = { a: "pa", b: "pb", c: "pc", d: "pd", e: "pe" };
+    const votes = {
+      a: 91,
+      b: 91,
+      c: 91,
+      d: 91,
+      e: 91,
+      f: 91,
+      g: 91,
+      h: 91,
+      i: 91,
+      j: 91,
+      k: 91,
+    };
+    const parties = {
+      a: "pa",
+      b: "pb",
+      c: "pc",
+      d: "pd",
+      e: "pe",
+      f: "pf",
+      g: "pg",
+      h: "ph",
+      i: "pi",
+      j: "pj",
+      k: "pk",
+    };
     const { projection, resolution } = bothEngines("UNKNOWN_REGION", 10, votes, parties);
     expect(projection).toEqual(resolution);
     const total = Object.values(projection).reduce((s, v) => s + v, 0);

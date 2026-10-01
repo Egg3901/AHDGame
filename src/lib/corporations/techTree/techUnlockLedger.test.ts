@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { isLedgerShadowEnabled } from "@/lib/ledger/featureFlag";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { Corporation } from "@/lib/db/types";
 import { unlockTechNode } from "@/lib/corporations/commands/techTree/unlockTechNode";
 import {
   buildTechUnlockFlushAudit,
@@ -370,17 +370,17 @@ describe("tech unlock ledger (ticket #1998)", () => {
 describe("NPP tech unlock ledger", () => {
   function nppSetup() {
     const corp = makeCorp({ ceoType: "npp" });
-    const sectors = [{ revenue: 2_000_000 }] as unknown as CorporateSector[];
+    const dailyGrossRevenueLocal = 2_000_000;
     const corpUpdates: Parameters<typeof maybePushNppTechUnlock>[0]["corpUpdates"] = [];
     const techLedger: TechUnlockLedgerInput[] = [];
-    return { corp, sectors, corpUpdates, techLedger };
+    return { corp, dailyGrossRevenueLocal, corpUpdates, techLedger };
   }
 
   it("autonomous unlock intent flushes an exact ITL debit once committed", async () => {
-    const { corp, sectors, corpUpdates, techLedger } = nppSetup();
+    const { corp, dailyGrossRevenueLocal, corpUpdates, techLedger } = nppSetup();
     maybePushNppTechUnlock({
       corp,
-      sectors,
+      dailyGrossRevenueLocal,
       techCurrentYear: 1953,
       turn: 82,
       now: new Date("1953-01-01"),
@@ -412,10 +412,10 @@ describe("NPP tech unlock ledger", () => {
   });
 
   it("uncommitted NPP unlocks emit nothing", async () => {
-    const { corp, sectors, corpUpdates, techLedger } = nppSetup();
+    const { corp, dailyGrossRevenueLocal, corpUpdates, techLedger } = nppSetup();
     maybePushNppTechUnlock({
       corp,
-      sectors,
+      dailyGrossRevenueLocal,
       techCurrentYear: 1953,
       turn: 82,
       now: new Date(),
@@ -432,10 +432,10 @@ describe("NPP tech unlock ledger", () => {
   });
 
   it("persistently failing NPP ledger rows refund the unlock, not the row", async () => {
-    const { corp, sectors, corpUpdates, techLedger } = nppSetup();
+    const { corp, dailyGrossRevenueLocal, corpUpdates, techLedger } = nppSetup();
     maybePushNppTechUnlock({
       corp,
-      sectors,
+      dailyGrossRevenueLocal,
       techCurrentYear: 1953,
       turn: 82,
       now: new Date(),
@@ -458,10 +458,10 @@ describe("NPP tech unlock ledger", () => {
   });
 
   it("already-logged NPP unlocks are not duplicated", async () => {
-    const { corp, sectors, corpUpdates, techLedger } = nppSetup();
+    const { corp, dailyGrossRevenueLocal, corpUpdates, techLedger } = nppSetup();
     maybePushNppTechUnlock({
       corp,
-      sectors,
+      dailyGrossRevenueLocal,
       techCurrentYear: 1953,
       turn: 82,
       now: new Date(),

@@ -188,6 +188,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           conflictId: w._id,
           conflictNumber: w.conflictId,
           name: w.name,
+          attackerNation: w.sideA.countries[0] ?? null,
+          defenderNation: w.sideB.countries[0] ?? null,
+          declaredByBillId: w.declaredByBillId ?? null,
           // Only countries that can actually be offered terms: the opposing roster,
           // which is empty for a generated force and correctly offers nobody.
           //

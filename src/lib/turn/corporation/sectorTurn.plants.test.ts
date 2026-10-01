@@ -366,9 +366,12 @@ describe("plants mode — derived revenue", () => {
 
   it("derives revenue as producedUnits × mixPrice (clearing/embargo legs = 1)", () => {
     const stock = 4_000;
+    // Pre-boost turn (< STOCK_BOOST_REVENUE_START_TURN): the phased
+    // stock-market revenue lift is 1.0 here, so the legacy P1 identity holds
+    // exactly. Boosted-turn behavior is covered in sectorCalculations.test.ts.
     const { result, update } = freeEnv(
       makeSector({ capitalStock: stock, plantsStartTurn: 100 }),
-      5000
+      1000
     );
     const producedUnits = update.producedUnits as number;
     // Capacity depreciated once, then run through the production legs. With no

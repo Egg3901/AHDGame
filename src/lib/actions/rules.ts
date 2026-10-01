@@ -238,10 +238,11 @@ export function getCampaignFundCost(
     stateGdpMillions,
     statePopulation,
     countryId,
-    preset,
-    priceLevel
+    preset
   );
-  return Math.round((CAMPAIGN_BASE_FUND_COST * tier * multiplier) / 1_000) * 1_000;
+  return Math.round(
+    Math.round((CAMPAIGN_BASE_FUND_COST * tier * multiplier) / 1_000) * 1_000 * priceLevel
+  );
 }
 
 /**
@@ -260,15 +261,10 @@ export function getAdvertiseFundCost(
   priceLevel = 1
 ): number {
   const tier = getAdvertiseActionCost(favorability) - 5; // tier index 0-4
-  const multiplier = getFundMultiplier(
-    tier,
-    stateGdpMillions,
-    statePopulation,
-    countryId,
-    preset,
-    priceLevel
+  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId, preset);
+  return Math.round(
+    Math.round((ADVERTISE_BASE_FUND_COST * multiplier) / 1_000) * 1_000 * priceLevel
   );
-  return Math.round((ADVERTISE_BASE_FUND_COST * multiplier) / 1_000) * 1_000;
 }
 
 /**
@@ -553,7 +549,7 @@ export function getBuildDonorBaseFundCost(
   const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (stateGdpMillions * 1_000_000) / statePopulation;
   const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return Math.round((baseCost * gdpScalar * priceLevel) / 1_000) * 1_000;
+  return Math.round(Math.round((baseCost * gdpScalar) / 1_000) * 1_000 * priceLevel);
 }
 
 /**

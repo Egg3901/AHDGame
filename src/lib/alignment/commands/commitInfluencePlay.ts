@@ -6,7 +6,7 @@
  * lands with the same cap, resistance and locked-gate rules as drift.
  */
 import { ObjectId, type Db } from "mongodb";
-import { ALIGNMENT_GATES, resolveAlignmentEra } from "@/lib/constants/alignmentEras";
+import { ALIGNMENT_GATES } from "@/lib/constants/alignmentEras";
 import { ROSTER_BY_KEY, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -25,6 +25,7 @@ import { isIntOrgAlignmentEnabled } from "../featureFlag";
 import { leadFor } from "../project";
 import { MIN_PLAY_POINTS, pointsForSpend } from "../influence";
 import { roundToShareGrid } from "../normalize";
+import { loadAlignmentTopology } from "../topology";
 
 export type CommitPlayFailure =
   | "gate-off"
@@ -56,8 +57,8 @@ export async function commitInfluencePlay(params: {
 
   // An org can only carry influence through a channel this era defines. Most
   // orgs have none in most eras, and that is a refusal, not an error.
-  const era = resolveAlignmentEra(params.year);
-  const channel = era.channels.find((c) => c.organizationId === params.organizationId);
+  const topology = await loadAlignmentTopology(db, params.year);
+  const channel = topology.channels.find((c) => c.organizationId === params.organizationId);
   if (!channel) return { ok: false, reason: "no-channel" };
 
   const key = params.targetEntityId as AlignmentCountryKey;

@@ -48,6 +48,7 @@ import {
   CHARACTER_SECTIONS,
   DISCORD_MESSAGES,
   GOOGLE_MESSAGES,
+  APPLE_MESSAGES,
   IMPERIAL_SECTIONS,
 } from "./components/sectionsConfig";
 import { RecommendationsBlurb } from "./components/RecommendationsBlurb";
@@ -91,6 +92,8 @@ export function SettingsPageContent() {
   const reason = searchParams.get("reason");
   const hasDiscordParams = discord === "linked" || (discord === "error" && reason);
   const hasGoogleParams = google === "linked" || (google === "error" && reason);
+  const apple = searchParams.get("apple");
+  const hasAppleParams = apple === "linked" || (apple === "error" && reason);
   const oauthBanner = (() => {
     if (oauthBannerDismissed) return null;
     if (hasDiscordParams) {
@@ -102,6 +105,11 @@ export function SettingsPageContent() {
       return google === "linked"
         ? GOOGLE_MESSAGES.linked
         : (GOOGLE_MESSAGES[reason ?? ""] ?? { key: "oauth.google.failed", ok: false });
+    }
+    if (hasAppleParams) {
+      return apple === "linked"
+        ? APPLE_MESSAGES.linked
+        : (APPLE_MESSAGES[reason ?? ""] ?? { key: "oauth.apple.failed", ok: false });
     }
     return null;
   })();
@@ -119,7 +127,6 @@ export function SettingsPageContent() {
       ? (requested as SectionId)
       : null;
   });
-  const [disableAutoplayOnOtherProfiles, setDisableAutoplayOnOtherProfiles] = useState(false);
   const [enableExperimentalUI, setEnableExperimentalUI] = useState(true);
   const [referralCount, setReferralCount] = useState(0);
   const [userId, setUserId] = useState("");
@@ -205,12 +212,15 @@ export function SettingsPageContent() {
   useEffect(() => {
     const discord = searchParams.get("discord");
     const google = searchParams.get("google");
+    const apple = searchParams.get("apple");
     const reason = searchParams.get("reason");
     if (
       discord === "linked" ||
       (discord === "error" && reason) ||
       google === "linked" ||
-      (google === "error" && reason)
+      (google === "error" && reason) ||
+      apple === "linked" ||
+      (apple === "error" && reason)
     ) {
       const t = setTimeout(() => {
         setOauthBannerDismissed(true);
@@ -225,7 +235,6 @@ export function SettingsPageContent() {
   useEffect(() => {
     if (!rawUser) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initialisation from already-fetched server data
-    setDisableAutoplayOnOtherProfiles(rawUser.disableAutoplayOnOtherProfiles ?? false);
     setEnableExperimentalUI(rawUser.enableExperimentalUI !== false);
     setReferralCount(rawUser.referralCount ?? 0);
     setUserId(rawUser.id ?? "");
@@ -241,6 +250,8 @@ export function SettingsPageContent() {
       googleEmail: rawUser.googleEmail,
       googleName: rawUser.googleName,
       googleAvatar: rawUser.googleAvatar,
+      appleId: rawUser.appleId,
+      appleEmail: rawUser.appleEmail,
     });
   }, [rawUser]);
 
@@ -274,6 +285,8 @@ export function SettingsPageContent() {
             c.googleEmail = rawUser.googleEmail;
             c.googleName = rawUser.googleName;
             c.googleAvatar = rawUser.googleAvatar;
+            c.appleId = rawUser.appleId;
+            c.appleEmail = rawUser.appleEmail;
           }
           setCharacter(c);
         }
@@ -300,19 +313,6 @@ export function SettingsPageContent() {
       controller.abort();
     };
   }, [loading, isImperial, activeRegularCharacterId, rawUser]);
-
-  const handleAutoplayPreference = async (value: boolean) => {
-    setDisableAutoplayOnOtherProfiles(value);
-    try {
-      await fetch("/api/settings/autoplay-preference", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disableAutoplayOnOtherProfiles: value }),
-      });
-    } catch {
-      // Silently fail
-    }
-  };
 
   const handleExperimentalUiPreference = async (value: boolean) => {
     setEnableExperimentalUI(value);
@@ -516,8 +516,6 @@ export function SettingsPageContent() {
       case "appearance":
         return (
           <AppearanceSection
-            disableAutoplayOnOtherProfiles={disableAutoplayOnOtherProfiles}
-            onAutoplayChange={handleAutoplayPreference}
             enableExperimentalUI={enableExperimentalUI}
             onExperimentalUiChange={handleExperimentalUiPreference}
           />
@@ -775,7 +773,7 @@ export function SettingsPageContent() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-replay-block>
       <div className="mx-auto max-w-7xl overflow-x-hidden px-4 py-7 md:px-6 md:py-10 lg:px-8">
         {/* OAuth result banner */}
         {oauthBanner && (
@@ -1174,7 +1172,7 @@ function BucketIcon({ id }: { id: SettingsBucketId }) {
 function SettingsPageFallback() {
   const t = useTranslations("settings");
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" data-replay-block>
       <div className="mx-auto flex min-h-[50vh] max-w-6xl items-center justify-center px-4 py-8 md:px-6 lg:px-8">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />

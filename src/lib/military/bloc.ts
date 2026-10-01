@@ -1,9 +1,10 @@
 import type { WorldBloc } from "@/lib/world/bloc";
+import type { CustomAlignmentPoleId } from "@/lib/constants/alignmentEras";
 
 /**
  * A country's Cold War bloc, for the military system.
  *
- * The same three values the globe uses, and for the same reason: a bloc is a TREATY, not
+ * Preset values plus player-founded pole ids, and for the same reason: a bloc is a TREATY, not
  * a sympathy (see `src/lib/world/blocMembership.ts`). This replaces a hand-written
  * 9-entry table in `theaters.ts` that was wrong two ways at once. It was INCOMPLETE —
  * 18 of 27 country ids were missing and its unknown-country fallback was the US row, so
@@ -12,7 +13,7 @@ import type { WorldBloc } from "@/lib/world/bloc";
  * STATIC — it said West Germany was NATO, which is false in the 1953 era the game runs,
  * and no entry could move when a nation acceded or withdrew.
  */
-export type Bloc = WorldBloc;
+export type Bloc = WorldBloc | CustomAlignmentPoleId;
 
 /**
  * countryId → bloc, read from live organisation membership for the running era.

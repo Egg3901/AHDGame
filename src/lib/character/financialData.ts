@@ -6,7 +6,7 @@ import { perTurnCouponPayment } from "@/lib/constants/bonds";
 import {
   estimateCorpDividendPaidLastTurn,
   fetchLatestCorpHistoryDividendRows,
-} from "@/lib/corporation/dividendIncomeFromHistory";
+} from "@/lib/corporations/dividendIncomeFromHistory";
 import {
   corpCapitalToAnchor,
   corpLiquidCapitalToAnchor,

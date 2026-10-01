@@ -105,8 +105,13 @@ describe("living-conflict engine", () => {
 
     it("produces deterministic, phase-scoped ids", () => {
       const s = openConflict(emptyConflictState("pandemic"), 2000);
-      const [f] = selectEvents(PANDEMIC_DEF, s, 5);
-      expect(f.id).toBe("pandemic:emergence:5:patient_zero");
+      const events = selectEvents(PANDEMIC_DEF, s, 5);
+      expect(events.find((event) => event.event.key === "patient_zero")?.id).toBe(
+        "pandemic:emergence:5:patient_zero"
+      );
+      expect(events.find((event) => event.event.key === "emergence_global_response")?.id).toBe(
+        "pandemic:emergence:5:emergence_global_response"
+      );
     });
 
     it("never emits reactive events from selection", () => {
@@ -310,7 +315,7 @@ describe("driver", () => {
     };
     const db = fakeDb();
     const gatedParticipants: ConflictParticipants = {
-      belligerents: [],
+      belligerents: ["CN"],
       neighbors: [],
       blocMembers: [],
     };
@@ -325,6 +330,47 @@ describe("driver", () => {
     });
     expect(opened.state.hasOpened).toBe(true);
     expect(opened.state.tracks?.fragility).toBe(35);
+  });
+
+  it.each([[], ["SVN"], ["SVN", "SVN"]])(
+    "keeps a conflict dormant when belligerent slots are missing: %j",
+    async (...belligerents: string[]) => {
+      const db = fakeDb();
+      const result = await driveConflictTurn(
+        db,
+        VIETNAM_DEF,
+        { ...participants, belligerents },
+        10,
+        1955
+      );
+      expect(result.state.hasOpened).toBe(false);
+      expect(result.events).toEqual([]);
+      expect(
+        await db.collection("livingConflicts").findOne({ defKey: VIETNAM_DEF.key })
+      ).toBeNull();
+    }
+  );
+
+  it("can open on a later turn when the missing belligerent becomes available", async () => {
+    const db = fakeDb();
+    await driveConflictTurn(db, VIETNAM_DEF, { ...participants, belligerents: [] }, 10, 1955);
+    const result = await driveConflictTurn(db, VIETNAM_DEF, participants, 11, 1955);
+    expect(result.state.hasOpened).toBe(true);
+    expect(result.events.length).toBeGreaterThan(0);
+  });
+
+  it("continues an existing conflict when its participant roster later shrinks", async () => {
+    const db = fakeDb();
+    await driveConflictTurn(db, VIETNAM_DEF, participants, 10, 1955);
+    const result = await driveConflictTurn(
+      db,
+      VIETNAM_DEF,
+      { ...participants, belligerents: [] },
+      11,
+      1955
+    );
+    expect(result.state.hasOpened).toBe(true);
+    expect(result.state.lastProcessedTurn).toBe(11);
   });
 
   it("opens in window and emits the phase-entry beat with its audience", async () => {

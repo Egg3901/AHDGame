@@ -30,6 +30,7 @@ describe("nppActionProcessing", () => {
   let mockFindOne: ReturnType<typeof vi.fn>;
   let mockNppFind: ReturnType<typeof vi.fn>;
   let mockPartyFind: ReturnType<typeof vi.fn>;
+  let mockCorpFind: ReturnType<typeof vi.fn>;
   let mockFxRows: Record<string, unknown>[] = [];
 
   function createAsyncCursor(items: any[]) {
@@ -68,6 +69,7 @@ describe("nppActionProcessing", () => {
     mockFindOne = vi.fn();
     mockNppFind = vi.fn();
     mockPartyFind = vi.fn();
+    mockCorpFind = vi.fn();
 
     mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
@@ -87,6 +89,12 @@ describe("nppActionProcessing", () => {
             bulkWrite: mockBulkWrite,
           };
         }
+        if (name === "corporations") {
+          return {
+            find: mockCorpFind,
+            findOne: mockFindOne,
+          };
+        }
         return {
           find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
           bulkWrite: mockBulkWrite,
@@ -104,6 +112,7 @@ describe("nppActionProcessing", () => {
     // care about parties still has to get an empty result rather than undefined.
     mockPartyFind.mockReturnValue(createAsyncCursor([]));
     mockNppFind.mockReturnValue(createAsyncCursor([]));
+    mockCorpFind.mockReturnValue(createAsyncCursor([]));
   });
 
   describe("processNppActions", () => {
@@ -317,6 +326,22 @@ describe("nppActionProcessing", () => {
       const op = mockBulkWrite.mock.calls[0][0][0];
       expect(op.updateOne.update.$inc.funds).toBe(-5_000);
       expect(op.updateOne.update.$inc).not.toHaveProperty("currencyBalances.savings.USD");
+    });
+
+    it("reads the candidate CEO seats once with $in, not a findOne per candidate (v3)", async () => {
+      const npp = createNpp();
+      mockFindOne.mockResolvedValue({ nppEconomyEnabled: true, nppAutonomyLevel: "v3" });
+      mockNppFind.mockReturnValue(createAsyncCursor([npp]));
+
+      await processNppActions(mockDb, 4);
+
+      // The whole candidate pool is resolved in one read. A per-candidate
+      // `findOne({ ceoId })` would show up as N calls here and as a Mongo round
+      // trip per candidate in production.
+      expect(mockCorpFind).toHaveBeenCalledWith(
+        { ceoId: { $in: [npp._id] }, ceoVacant: { $ne: true } },
+        { projection: { ceoId: 1 } }
+      );
     });
 
     it("does NOT sweep to savings below v3 either (funds inc excludes savings)", async () => {

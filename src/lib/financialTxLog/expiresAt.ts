@@ -17,7 +17,9 @@ import {
  * "168 turns" the meaningful unit even when admins re-time the game.
  */
 export async function computeExpiresAt(db: Db, createdAt: Date): Promise<Date> {
-  const cfg = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
+  const cfg = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { turnLengthMinutes: 1 } });
   const turnLength = cfg?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES;
   const ttlMs = TX_TTL_TURNS * turnLength * 60_000;
   return new Date(createdAt.getTime() + ttlMs);
@@ -37,7 +39,9 @@ export function computeExpiresAtSync(createdAt: Date, turnLengthMinutes: number)
  * default if absent. Used by emitTxBulk to load it once per call.
  */
 export async function loadTurnLengthMinutes(db: Db): Promise<number> {
-  const cfg = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
+  const cfg = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { turnLengthMinutes: 1 } });
   return cfg?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES;
 }
 

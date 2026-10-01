@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import type {
   GameHealthSnapshot,
+  GameHealthSummary,
   TurnWarning,
   TurnError,
   DataIntegrityResult,
@@ -23,6 +24,7 @@ import {
   findCountriesMissingFederalBudget,
   findFederalBudgetCountryMismatches,
 } from "@/lib/turn/ensureFederalBudget";
+import { summarizeGameHealth } from "@/lib/turn/rules/gameHealth";
 
 type SeatScopedOfficial = ElectedOfficial & { seatId?: string };
 
@@ -50,7 +52,7 @@ export async function processGameHealthSnapshot(
   success: boolean,
   warnings: string[],
   phaseStatuses?: TurnPhaseTelemetryMap
-): Promise<{ snapshotWritten: boolean; integrityCheckRan: boolean }> {
+): Promise<{ snapshotWritten: boolean; integrityCheckRan: boolean; health: GameHealthSummary }> {
   const now = new Date();
   const failureMessages = new Map<string, string>();
   for (const warning of warnings) {
@@ -149,12 +151,20 @@ export async function processGameHealthSnapshot(
     collectPopulationStats(db),
     collectEconomyStats(db),
   ]);
+  const health = summarizeGameHealth({
+    turnSuccess: success,
+    processingWarningCount: turnProcessing.warningCount,
+    processingErrorCount: turnProcessing.errorCount,
+    integrityChecked: shouldRunIntegrity,
+    integrityIssues: dataIntegrity?.issues ?? [],
+  });
 
   // Write the snapshot
   const snapshot: Omit<GameHealthSnapshot, "_id"> = {
     turn,
     year,
     timestamp: now,
+    health,
     turnProcessing,
     dataIntegrity,
     population,
@@ -163,7 +173,7 @@ export async function processGameHealthSnapshot(
 
   await db.collection("gameHealthSnapshots").insertOne(snapshot as GameHealthSnapshot);
 
-  return { snapshotWritten: true, integrityCheckRan: shouldRunIntegrity };
+  return { snapshotWritten: true, integrityCheckRan: shouldRunIntegrity, health };
 }
 
 async function runIntegrityChecks(

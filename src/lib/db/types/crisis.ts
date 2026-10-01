@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { CommodityType } from "@/lib/constants/commodities";
 import type {
   CampaignCapabilitySnapshot,
   CampaignCommitment,
@@ -144,11 +145,17 @@ export type CrisisOptionAction =
         | "protests_march"
         | "protests_crackdown";
     }
-  /** Apply a financial-crisis choice to live bank charters after the option's
-   *  GDP-scaled treasury charge has been booked. */
+  /** Apply a financial-crisis choice through balanced treasury and bank settlement. */
   | {
       kind: "financialCrisisResponse";
-      response: "recapitalize" | "guarantee" | "resolve";
+      response:
+        | "recapitalize"
+        | "guarantee"
+        | "resolve"
+        | "stimulus"
+        | "austerity"
+        | "restructure"
+        | "sovereign_support";
     }
   /** Move a negotiated living conflict through its persistent tracks and
    * lifecycle. The definition owns track bounds and valid phase keys. */
@@ -266,6 +273,8 @@ export interface CrisisDecisionNode {
    * Mongo ObjectIds.
    */
   requiredPartyAbbreviations?: string[];
+  /** Canonical cabinet position IDs, applied to the cabinet responder role. */
+  requiredCabinetPositionIds?: string[];
   timeLimitMinutes: number | null;
 }
 
@@ -299,6 +308,13 @@ export interface GlobalResponseOutcomeCondition {
   max?: number;
 }
 
+export interface CrisisTradeSanction {
+  participationAxis: string;
+  targetRole: GlobalResponseRole;
+  commodity: CommodityType;
+  durationTurns: number;
+}
+
 export interface GlobalResponseOutcome {
   outcomeId: string;
   label: string;
@@ -322,6 +338,8 @@ export interface GlobalResponseOutcome {
   nextCampaignStage?: CampaignStage;
   /** Discrete change to the shared Cold War tension ledger. */
   tensionDelta?: number;
+  /** Enforceable trade restriction for governments that explicitly participated. */
+  tradeSanction?: CrisisTradeSanction;
   wireMessage: string;
 }
 
@@ -411,6 +429,8 @@ export interface Crisis {
   startTurn: number;
   endTurn: number | null;
   durationTurns: number | null;
+  /** Last turn a mass underground drive prolonged a union-ban general strike. */
+  lastUndergroundExtensionTurn?: number;
   effects: CrisisEffect[];
   wireMessageOnStart: string;
   wireMessageOnEnd: string | null;

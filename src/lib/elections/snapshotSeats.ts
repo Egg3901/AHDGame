@@ -16,7 +16,8 @@ export function seatEstimateForVoteTotals(
   totalSeats: number | null | undefined,
   cumulativeVotes: Record<string, number>,
   houseSeats: Record<string, number> = HOUSE_SEATS,
-  candidateParties?: Record<string, string>
+  candidateParties?: Record<string, string>,
+  countryId?: string
 ): Record<string, number> | undefined {
   if (!totalSeats || totalSeats <= 1 || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
 
@@ -40,7 +41,10 @@ export function seatEstimateForVoteTotals(
     totalSeats,
     ranked,
     totalVotesCast,
-    houseSeats
+    houseSeats,
+    undefined,
+    undefined,
+    countryId
   );
   return Object.keys(seatsEstimate).length > 0 ? seatsEstimate : undefined;
 }

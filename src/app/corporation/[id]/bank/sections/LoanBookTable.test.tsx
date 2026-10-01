@@ -126,7 +126,7 @@ describe("LoanBookTable lending stance feedback", () => {
   it("states the per-turn pace so a slow move reads as working, not broken", () => {
     renderTable();
     expect(screen.getByText(/of target per turn/)).toBeTruthy();
-    expect(screen.getByText(/dozens of turns/)).toBeTruthy();
+    expect(screen.getByText(/48 turns \(about 48 hours\)/)).toBeTruthy();
   });
 
   it("toasts what changes and when after a stance flip", async () => {

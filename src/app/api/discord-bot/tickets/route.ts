@@ -109,6 +109,38 @@ const ticketIdFields = {
   discordChannelId: z.string().max(64).optional(),
 };
 
+function dmDeliveryNote(resolutionCreatedAt: unknown): string {
+  const value =
+    resolutionCreatedAt instanceof Date
+      ? resolutionCreatedAt.getTime()
+      : new Date(String(resolutionCreatedAt ?? "")).getTime();
+  return `discord-ticket-dm-delivered:${Number.isFinite(value) ? value : "legacy"}`;
+}
+
+function channelDeliveryNote(resolutionCreatedAt: unknown): string {
+  const value =
+    resolutionCreatedAt instanceof Date
+      ? resolutionCreatedAt.getTime()
+      : new Date(String(resolutionCreatedAt ?? "")).getTime();
+  return `discord-ticket-channel-delivered:${Number.isFinite(value) ? value : "legacy"}`;
+}
+
+function isCurrentLegacyDeliveryNote(
+  history: Array<{ note?: string; at?: Date }> | undefined,
+  note: string,
+  resolutionCreatedAt: unknown
+): boolean {
+  const resolutionTime = new Date(String(resolutionCreatedAt ?? "")).getTime();
+  return (
+    history?.some((entry) => {
+      if (entry.note !== note) return false;
+      if (!Number.isFinite(resolutionTime)) return true;
+      const deliveryTime = new Date(String(entry.at ?? "")).getTime();
+      return Number.isFinite(deliveryTime) && deliveryTime >= resolutionTime;
+    }) === true
+  );
+}
+
 // Discriminated on `action` so each variant only accepts (and requires) the
 // fields it actually uses — no runtime-only validation, no non-null assertions.
 const updateSchema = z
@@ -127,6 +159,12 @@ const updateSchema = z
       resolution: z.string().max(5000).optional(),
     }),
     z.object({ action: z.literal("retriage"), ...ticketIdFields }),
+    z.object({
+      action: z.literal("resolution-channel-delivered"),
+      ...ticketIdFields,
+      messageId: z.string().max(128).optional(),
+    }),
+    z.object({ action: z.literal("resolution-dm-delivered"), ...ticketIdFields }),
     z.object({ action: z.literal("resolution-delivered"), ...ticketIdFields }),
   ])
   .refine((d) => d.ticketNumber != null || d.discordChannelId, {
@@ -337,13 +375,71 @@ export async function PATCH(request: Request) {
       // Force the ops triage worker to re-assess on its next tick: clear the
       // prior assessment linkage and reopen the ticket with reviewAfter now.
       // The old `assessments` doc is intentionally left in place as history.
+      const current = await coll.findOne(filter, {
+        projection: { "resolution.message": 1 },
+      });
+      if (!current) {
+        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+      const hasResolution = Boolean(
+        (current as typeof current & { resolution?: { message?: string } }).resolution?.message
+      );
       const res = await coll.updateOne(filter, {
-        $unset: { assessmentId: "", assessedAt: "", triageStatus: "" },
-        $set: { status: "open", reviewAfter: now, updatedAt: now },
+        $unset: {
+          assessmentId: "",
+          assessedAt: "",
+          triageStatus: "",
+          ...(hasResolution ? { "resolution.channelDelivery": "" } : {}),
+        },
+        $set: {
+          status: "open",
+          reviewAfter: now,
+          updatedAt: now,
+          ...(hasResolution ? { "resolution.createdAt": now, "resolution.deliveredAt": null } : {}),
+        },
         $push: { statusHistory: { status: "open", at: now, source: "bot", note: "retriage" } },
       });
       if (!res.matchedCount) {
         return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "resolution-channel-delivered") {
+      const current = await coll.findOne(filter, {
+        projection: { status: 1, "resolution.createdAt": 1 },
+      });
+      if (!current) {
+        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+      const note = channelDeliveryNote(
+        (current as typeof current & { resolution?: { createdAt?: Date } }).resolution?.createdAt
+      );
+      const res = await coll.updateOne(
+        { ...filter, "statusHistory.note": { $ne: note } },
+        {
+          $set: {
+            "resolution.channelDelivery.status": "posted",
+            "resolution.channelDelivery.postedAt": now,
+            ...(body.messageId ? { "resolution.channelDelivery.messageId": body.messageId } : {}),
+            updatedAt: now,
+          },
+          $push: {
+            statusHistory: {
+              status: current.status,
+              at: now,
+              source: "bot",
+              note,
+            },
+          },
+        }
+      );
+      if (!res.matchedCount) {
+        const ticket = await coll.findOne(filter, { projection: { _id: 1 } });
+        if (!ticket) {
+          return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        }
+        return NextResponse.json({ ok: true, alreadyRecorded: true });
       }
       return NextResponse.json({ ok: true });
     }
@@ -358,21 +454,117 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    if (body.action === "resolution-dm-delivered") {
+      const current = await coll.findOne(filter, {
+        projection: { status: 1, "resolution.createdAt": 1 },
+      });
+      if (!current) {
+        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+      const note = dmDeliveryNote(
+        (current as typeof current & { resolution?: { createdAt?: Date } }).resolution?.createdAt
+      );
+      const res = await coll.updateOne(
+        { ...filter, "statusHistory.note": { $ne: note } },
+        {
+          $set: { "resolution.deliveredAt": now, updatedAt: now },
+          $push: {
+            statusHistory: {
+              status: current.status,
+              at: now,
+              source: "bot",
+              note,
+            },
+          },
+        }
+      );
+      if (!res.matchedCount) {
+        const ticket = await coll.findOne(filter, { projection: { _id: 1 } });
+        if (!ticket) {
+          return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        }
+        return NextResponse.json({ ok: true, alreadyRecorded: true });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     // action === "close"
     const closedBy = body.closedBy?.slice(0, 128);
+    const existing = await coll.findOne(filter, {
+      projection: {
+        status: 1,
+        discordChannelId: 1,
+        "resolution.message": 1,
+        "resolution.createdAt": 1,
+        "resolution.deliveredAt": 1,
+        "resolution.channelDelivery.status": 1,
+        "resolution.channelDelivery.postedAt": 1,
+        "statusHistory.note": 1,
+        "statusHistory.at": 1,
+      },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+    }
+    const deliveryState = existing as typeof existing & {
+      resolution?: {
+        message?: string;
+        createdAt?: Date;
+        deliveredAt?: Date | null;
+        channelDelivery?: { status?: string; postedAt?: Date };
+      };
+      discordChannelId?: string;
+      statusHistory?: Array<{ note?: string; at?: Date }>;
+    };
+    const currentDmDeliveryNote = dmDeliveryNote(deliveryState.resolution?.createdAt);
+    const hasDmDeliveryMarker =
+      deliveryState.statusHistory?.some((entry) => entry.note === currentDmDeliveryNote) === true;
+    // Before channel and DM delivery were tracked separately, Ops and the old
+    // bot wrote deliveredAt after posting in the ticket channel. Only channel-
+    // less legacy tickets can treat that timestamp as a delivered DM.
+    const resolutionDelivered = Boolean(
+      hasDmDeliveryMarker ||
+      (!deliveryState.discordChannelId && deliveryState.resolution?.deliveredAt)
+    );
+    const clearLegacyChannelMarker = Boolean(
+      deliveryState.discordChannelId &&
+      deliveryState.resolution?.deliveredAt &&
+      !hasDmDeliveryMarker
+    );
+    const resolutionCreatedAt = deliveryState.resolution?.createdAt;
+    const resolutionTime = new Date(String(resolutionCreatedAt ?? "")).getTime();
+    const channelDeliveryTime = new Date(
+      String(deliveryState.resolution?.channelDelivery?.postedAt ?? "")
+    ).getTime();
+    const channelDeliveryIsCurrent =
+      deliveryState.resolution?.channelDelivery?.status === "posted" &&
+      (!Number.isFinite(resolutionTime) ||
+        !Number.isFinite(channelDeliveryTime) ||
+        channelDeliveryTime >= resolutionTime);
+    const channelUpdatePosted =
+      channelDeliveryIsCurrent ||
+      deliveryState.statusHistory?.some(
+        (entry) => entry.note === channelDeliveryNote(resolutionCreatedAt)
+      ) === true ||
+      isCurrentLegacyDeliveryNote(
+        deliveryState.statusHistory,
+        "resolution-channel-delivered",
+        resolutionCreatedAt
+      );
+    const writesNewResolution = Boolean(
+      body.resolution && !resolutionDelivered && !channelUpdatePosted
+    );
     const res = await coll.updateOne(filter, {
       $set: {
         status: "closed",
         closedAt: now,
         ...(closedBy ? { closedBy } : {}),
-        ...(body.resolution
+        ...(clearLegacyChannelMarker ? { "resolution.deliveredAt": null } : {}),
+        ...(writesNewResolution
           ? {
-              resolution: {
-                message: body.resolution,
-                createdAt: now,
-                ...(closedBy ? { closedBy } : {}),
-                deliveredAt: null,
-              },
+              "resolution.message": body.resolution,
+              "resolution.createdAt": now,
+              ...(closedBy ? { "resolution.closedBy": closedBy } : {}),
             }
           : {}),
         updatedAt: now,
@@ -383,13 +575,28 @@ export async function PATCH(request: Request) {
           at: now,
           source: "bot",
           ...(closedBy ? { by: closedBy } : {}),
+          ...(body.resolution ? { note: "discord-ticket-close" } : {}),
         },
       },
     });
     if (!res.matchedCount) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      alreadyClosed: existing.status === "closed",
+      channelUpdatePosted,
+      resolutionDelivered,
+      resolutionVersion: writesNewResolution
+        ? now.getTime()
+        : Number.isFinite(resolutionTime)
+          ? resolutionTime
+          : null,
+      finalOutcome:
+        channelUpdatePosted || resolutionDelivered
+          ? deliveryState.resolution?.message
+          : body.resolution || deliveryState.resolution?.message,
+    });
   } catch (error) {
     return handleRouteError(error);
   }

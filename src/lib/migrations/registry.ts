@@ -12,10 +12,13 @@
 // Incident response scripts (heal-*, inspect-*, audit-*, fix-*) live in
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
+import { migration as locRecoveryOwnerIndex } from "./entries/2026-09-30-loc-recovery-owner-index";
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as electionResultSnapshots } from "./entries/2026-09-20-election-result-snapshots";
-import { migration as mediaEntertainmentPersistedConsolidation } from "./entries/2026-09-21-media-entertainment-persisted-consolidation";
+import { migration as federalBudgetSnapshotHistoryIndex } from "./entries/2026-09-25-federal-budget-snapshot-history-index";
+import { migration as marketChartIndexes } from "./entries/2026-09-26-market-chart-indexes";
+import { migration as unionProsecutionBarIndex } from "./entries/2026-09-29-union-prosecution-bar-index";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -90,6 +93,12 @@ import { migration as normalizeShareCorporateActions } from "./entries/2026-09-1
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
 import { migration as legislativeAdministrationMetadata } from "./entries/2026-09-21-legislative-administration-metadata";
+import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
+import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
+import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
+import { migration as financialTxLogCounterpartyIndex } from "./entries/2026-09-30-financial-tx-log-counterparty-index";
+import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-apple-provider-identity-index";
+import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -285,13 +294,31 @@ export const MIGRATIONS: Migration[] = [
   // scored against its own year. Additive: a new collection, nothing existing
   // is rewritten, and rollback is dropping it.
   electionResultSnapshots,
+  federalBudgetSnapshotHistoryIndex,
+  marketChartIndexes,
+  unionProsecutionBarIndex,
   turnClockIndexes,
   legislativeAdministrationMetadata,
-  // Issue #2234: persisted-data consolidation for the media/entertainment
-  // merge. Rekeys corps, sectors, unions, campaigns, agreements, designations,
-  // funds, and type-keyed histories onto media_entertainment with
-  // deterministic collision folds. Idempotent, dry-run safe.
-  mediaEntertainmentPersistedConsolidation,
+  // True NPP-owned suppliers never had a player who could answer an offer, so
+  // awards made before automatic activation shipped remain pending forever.
+  // Activate those legacy rows while preserving offers to player-owned corps
+  // that happen to be operated by an NPP caretaker.
+  activatePendingNppDefenceContracts,
+  // NPP founding omitted the passed-decade prerequisite nodes granted to
+  // player-founded corporations, leaving every current-era unlock blocked.
+  // Heal existing true NPP-owned corporations; the founding path now stamps
+  // these nodes for future spawns.
+  backfillNppTechBaselines,
+  locRecoveryOwnerIndex,
+  // #2688: also in the startup allowlist; listed here so `npm run migrate`
+  // reports it and `--only ... --force` can rerun it.
+  longHorizonTelemetryIndexes,
+  // #2693: deletion stamping scanned the whole ledger on the counterparty side.
+  financialTxLogCounterpartyIndex,
+  // Also in the startup allowlist, like longHorizonTelemetryIndexes.
+  appleProviderIdentityIndex,
+  // #2699: seed indexes a running world never received; skips text/TTL/duplicate-blocked.
+  reconcileSeedIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

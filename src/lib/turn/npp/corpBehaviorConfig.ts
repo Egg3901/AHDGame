@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { Corporation } from "@/lib/db/types";
 import {
   canUnlock,
   getTreeForType,
@@ -7,7 +7,6 @@ import {
   techNodeCashCost,
   type TechTreeNode,
 } from "@/lib/constants/techTree";
-import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
 
@@ -58,7 +57,8 @@ export interface NppTechCorpUpdate {
  */
 export function maybePushNppTechUnlock(args: {
   corp: Corporation;
-  sectors: CorporateSector[];
+  /** Already-daily gross revenue, converted into the corporation's currency. */
+  dailyGrossRevenueLocal: number;
   techCurrentYear: number;
   turn: number;
   now: Date;
@@ -73,13 +73,12 @@ export function maybePushNppTechUnlock(args: {
    */
   techLedger?: TechUnlockLedgerInput[];
 }): void {
-  const { corp, sectors, techCurrentYear, turn, now } = args;
-  const dailyGrossRevenue = sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0) * TURNS_PER_DAY;
+  const { corp, techCurrentYear, turn, now } = args;
   const cashAfterDecision = Math.max(0, (corp.liquidCapital ?? 0) + (args.liquidCapitalDelta ?? 0));
   const pick = pickBestNppTechNode(
     { ...corp, liquidCapital: cashAfterDecision },
     techCurrentYear,
-    dailyGrossRevenue,
+    args.dailyGrossRevenueLocal,
     { cashReserve: args.cashReserve }
   );
   if (!pick) return;

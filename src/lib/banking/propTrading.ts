@@ -17,12 +17,23 @@ import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 import { mayDistribute } from "./capitalAdequacy";
 import { getCashReserves } from "./bankCash";
 import { charterMay } from "@/lib/banking/rules/capabilities";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import { settlePropBookChange } from "./propSettlement";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
 
-/** Provisional - max propBookMarkValue / equityBase. */
-export const PROP_LEVERAGE_MULTIPLE = 3;
+/**
+ * Leverage math lives in the rules zone (`rules/propLeverage.ts`) so
+ * read-only consumers need no database import to use the same numbers.
+ * Imported for local use and re-exported so every existing import keeps
+ * resolving to the one implementation.
+ */
+import {
+  PROP_LEVERAGE_MULTIPLE,
+  computePropEquityBase,
+  sumPositionMarks,
+} from "@/lib/banking/rules/propLeverage";
+
+export { PROP_LEVERAGE_MULTIPLE, computePropEquityBase, sumPositionMarks };
 
 /** Provisional - max forex mark value per currency as a fraction of equityBase. */
 export const PER_CURRENCY_FOREX_CAP_FRACTION = 0.5;
@@ -137,42 +148,6 @@ async function resolvePositionRef(
   return corporation
     ? { ok: true, ref: corporation._id.toString() }
     : { ok: false, error: "Equity corporation not found" };
-}
-
-/**
- * Equity base for prop leverage: bank cash + prop mark - interbank debt - CB
- * margin debt. Corporations have no CB savings surface (characters do), so
- * nothing is netted for CB-held savings.
- *
- * `postedCapital` is deliberately absent. Posting capital moves cash into
- * `cashReserves` and increments the memo, so adding both counted the same money
- * twice and handed every bank a free slice of leverage headroom equal to its
- * contributed capital.
- */
-export function computePropEquityBase(
-  cashReserves: number,
-  charter: Pick<BankCharter, "propBookMarkValue" | "interbankDebt" | "cbMarginDebt" | "propBook">,
-  markValueOverride?: number
-): number {
-  const liquid = Math.max(0, finiteOrZero(cashReserves));
-  const mark =
-    markValueOverride !== undefined
-      ? Math.max(0, finiteOrZero(markValueOverride))
-      : charter.propBookMarkValue !== undefined
-        ? Math.max(0, finiteOrZero(charter.propBookMarkValue))
-        : sumPositionMarks(charter.propBook);
-  const interbank = Math.max(0, finiteOrZero(charter.interbankDebt ?? 0));
-  const margin = Math.max(0, finiteOrZero(charter.cbMarginDebt ?? 0));
-  return liquid + mark - interbank - margin;
-}
-
-export function sumPositionMarks(positions: PropPosition[] | undefined): number {
-  if (!positions || positions.length === 0) return 0;
-  let total = 0;
-  for (const p of positions) {
-    total += Math.max(0, finiteOrZero(p.markValue ?? p.costBasis));
-  }
-  return total;
 }
 
 function forexMarkByCurrency(positions: PropPosition[]): Map<string, number> {
@@ -386,53 +361,19 @@ export async function openPosition(
     }
   }
 
-  const updated = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corporationId,
-      "bankCharter.status": "active",
-      "bankCharter.cashReserves": { $gte: cost },
-      // Re-gate the supervisory standing IN the write, not just on the read
-      // above. Between the two the solvency pass can mark this bank stressed or
-      // undercapitalized, and putting depositor cash at risk on a bank the
-      // supervisor has just barred from taking risk is the check-then-write
-      // hole every other distribution path has already closed.
-      $or: [
-        { "bankCharter.capitalStanding": { $exists: false } },
-        { "bankCharter.capitalStanding": "adequate" },
-      ],
-    },
-    {
-      $inc: { "bankCharter.cashReserves": -cost },
-      $set: {
-        "bankCharter.propBook": nextBook,
-        "bankCharter.propBookMarkValue": nextMark,
-        updatedAt: new Date(),
-      },
-    }
-  );
-  if (updated.matchedCount !== 1) {
-    return { ok: false, error: "Failed to settle purchase (capital moved)" };
-  }
-
-  // A trade is a RECLASS between the bank's cash and its own trading book, not
-  // a loss, so only the cash side is a money movement and it derives to the
-  // shared `prop_book` reason. Same shape as capacity capex: the contra side is
-  // an asset account the shadow ledger does not carry, and pairing both
-  // directions on one reason lets the reconciler net a purchase against its own
-  // sale instead of reporting two unrelated single-sided flows.
-  await emitTx(db, {
-    type: "bank_prop_trade_buy",
+  const updated = await settlePropBookChange(db, {
+    bankId: corporationId,
+    bankName: corp.name,
+    charter,
+    revision: corp.bankPropBookRevision,
+    operation: "buy",
     turn: await getCurrentTurn(db),
-    createdAt: new Date(),
-    subjectType: "corporation",
-    subjectId: corporationId,
-    subjectName: corp.name,
-    amount: -cost,
-    currencyCode: homeCurrency,
-    counterpartyType: "system",
-    counterpartyName: "Prop book",
+    cashDelta: -cost,
+    nextBook,
+    nextMark,
     meta: { asset: positionInput.asset, ref: positionInput.ref, units: positionInput.units },
   });
+  if (!updated.ok) return { ok: false, error: "Failed to settle purchase (capital moved)" };
 
   const position = nextBook.find(
     (p) => p.asset === positionInput.asset && p.ref === positionInput.ref
@@ -506,37 +447,19 @@ export async function closePosition(
   const nextMark = sumPositionMarks(nextBook);
   const nextLiquid = Math.max(0, getCashReserves(corp.bankCharter) + proceeds);
 
-  const updated = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corporationId,
-      "bankCharter.status": "active",
-    },
-    {
-      $inc: { "bankCharter.cashReserves": proceeds },
-      $set: {
-        "bankCharter.propBook": nextBook,
-        "bankCharter.propBookMarkValue": nextMark,
-        updatedAt: new Date(),
-      },
-    }
-  );
-  if (updated.matchedCount !== 1) {
-    return { ok: false, error: "Failed to settle sale" };
-  }
-
-  await emitTx(db, {
-    type: "bank_prop_trade_sell",
+  const updated = await settlePropBookChange(db, {
+    bankId: corporationId,
+    bankName: corp.name,
+    charter,
+    revision: corp.bankPropBookRevision,
+    operation: "sell",
     turn: await getCurrentTurn(db),
-    createdAt: new Date(),
-    subjectType: "corporation",
-    subjectId: corporationId,
-    subjectName: corp.name,
-    amount: proceeds,
-    currencyCode: homeCurrency,
-    counterpartyType: "system",
-    counterpartyName: "Prop book",
+    cashDelta: proceeds,
+    nextBook,
+    nextMark,
     meta: { asset: input.asset, ref: input.ref, units: input.units },
   });
+  if (!updated.ok) return { ok: false, error: "Failed to settle sale" };
 
   return {
     ok: true,
@@ -557,8 +480,11 @@ export async function forceLiquidateToLeverageCap(
   corporationId: ObjectId,
   cashReserves: number,
   charter: BankCharter,
-  marked: MarkBookResult
-): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean }> {
+  marked: MarkBookResult,
+  revision?: number,
+  bankName?: string,
+  turn?: number
+): Promise<{ cashReserves: number; charter: BankCharter; forced: boolean; stale?: boolean }> {
   const equity = computePropEquityBase(cashReserves, charter, marked.propBookMarkValue);
   const cap = PROP_LEVERAGE_MULTIPLE * Math.max(0, equity);
   if (!(marked.propBookMarkValue > cap + 1e-9) || marked.propBookMarkValue <= 0) {
@@ -596,21 +522,26 @@ export async function forceLiquidateToLeverageCap(
   const nextLiquid = cashReserves + cashBack;
   const nextCharter: BankCharter = {
     ...charter,
+    cashReserves: nextLiquid,
     propBook: nextPositions,
     propBookMarkValue: nextMark,
   };
 
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: corporationId, "bankCharter.status": "active" },
-    {
-      $set: {
-        "bankCharter.cashReserves": nextLiquid,
-        "bankCharter.propBook": nextPositions,
-        "bankCharter.propBookMarkValue": nextMark,
-        updatedAt: new Date(),
-      },
-    }
-  );
+  const updated = await settlePropBookChange(db, {
+    bankId: corporationId,
+    bankName,
+    charter,
+    revision,
+    operation: "forced_liquidation",
+    turn: turn ?? (await getCurrentTurn(db)),
+    cashDelta: cashBack,
+    nextBook: nextPositions,
+    nextMark,
+    meta: { reason: "leverage_cap" },
+  });
+  if (!updated.ok) {
+    return { cashReserves, charter, forced: false, stale: true };
+  }
 
   return { cashReserves: nextLiquid, charter: nextCharter, forced: true };
 }

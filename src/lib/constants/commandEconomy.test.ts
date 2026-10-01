@@ -340,7 +340,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
   it("valid types only — every listed sector is a real CorporationType, no invented ids", () => {
     const VALID_TYPES = new Set([
       "financial",
-      "media_entertainment",
+      "media",
       "manufacturing",
       "chemical_industries",
       "healthcare",
@@ -353,6 +353,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
       "construction",
       "defense",
       "telecommunications",
+      "entertainment",
       "logistics",
       "extraction",
     ]);

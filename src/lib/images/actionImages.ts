@@ -100,6 +100,20 @@ export function countriesWithArt(era: string): string[] {
   return Object.keys(ERA_COUNTRY_SLUGS[era] ?? {});
 }
 
+/**
+ * Era → country → the slugs uploaded under `actions/<era>/<country>/`. The
+ * public CDN catalog publishes this so a client can construct a national art
+ * URL that exists rather than falling back through a 404.
+ */
+export function countryArtSlugs(): Record<string, Record<string, readonly ActionImageSlug[]>> {
+  return ERA_COUNTRY_SLUGS;
+}
+
+/** Eras with at least one country-specific image, for tests and tooling. */
+export function erasWithCountryArt(): string[] {
+  return Object.keys(ERA_COUNTRY_SLUGS);
+}
+
 /** True when this (era, country, slug) has bespoke national art, not the generic. */
 export function hasCountryActionImage(
   slug: ActionImageSlug,

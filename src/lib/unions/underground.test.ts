@@ -17,6 +17,7 @@ import {
   undergroundHeatText,
   undergroundStatus,
   undergroundStrength,
+  postureDetectionChance,
 } from "./underground";
 import { ORGANIZE_ACTION_COST } from "./unionEconomy";
 
@@ -95,6 +96,8 @@ describe("undergroundDetectionChance", () => {
     expect(at).toBeGreaterThan(0);
     expect(hotter).toBeGreaterThan(at);
     expect(undergroundDetectionChance(100)).toBeLessThanOrEqual(60);
+    expect(undergroundDetectionChance(30, 3)).toBeGreaterThan(undergroundDetectionChance(30, 0));
+    expect(undergroundDetectionChance(30, 100)).toBe(undergroundDetectionChance(30, 5));
   });
 
   it("pairs with a pure roll outcome so tests stay deterministic", () => {
@@ -109,6 +112,16 @@ describe("decayUndergroundHeat", () => {
     expect(decayUndergroundHeat(10)).toBe(8);
     expect(decayUndergroundHeat(1)).toBe(0);
     expect(decayUndergroundHeat(0)).toBe(0);
+  });
+});
+
+describe("postureDetectionChance", () => {
+  it("changes detection odds without escaping 0-100", () => {
+    expect(postureDetectionChance(35, "tolerant")).toBe(25);
+    expect(postureDetectionChance(35, "normal")).toBe(35);
+    expect(postureDetectionChance(35, "crackdown")).toBe(55);
+    expect(postureDetectionChance(2, "tolerant")).toBe(0);
+    expect(postureDetectionChance(95, "crackdown")).toBe(100);
   });
 });
 

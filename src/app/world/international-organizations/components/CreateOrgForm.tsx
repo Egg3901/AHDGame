@@ -15,6 +15,10 @@ import {
 } from "@/lib/constants/orgCategory";
 import type { OrgViewerInfo } from "../orgTypes";
 import { useEntityName } from "../useEntityName";
+import {
+  CUSTOM_ALIGNMENT_POLE_TOKENS,
+  type CustomAlignmentPoleToken,
+} from "@/lib/constants/alignmentEras";
 
 /** Derive a URL-safe, lowercase org id from the short name (players never see the slug). */
 function slugifyOrgName(value: string): string {
@@ -34,6 +38,7 @@ interface FormState {
   charter: string;
   leadershipTitle: string;
   category: OrganizationCategory;
+  alignmentAccentToken: CustomAlignmentPoleToken;
 }
 
 const EMPTY_FORM: FormState = {
@@ -43,6 +48,16 @@ const EMPTY_FORM: FormState = {
   charter: "",
   leadershipTitle: "Secretary-General",
   category: "political",
+  alignmentAccentToken: "info",
+};
+
+const POLE_COLOR_OPTIONS: Record<
+  CustomAlignmentPoleToken,
+  { label: string; swatch: string; selected: string }
+> = {
+  info: { label: "Blue", swatch: "bg-info", selected: "border-info ring-info/30" },
+  error: { label: "Red", swatch: "bg-error", selected: "border-error ring-error/30" },
+  warning: { label: "Gold", swatch: "bg-warning", selected: "border-warning ring-warning/30" },
 };
 
 /** Player-facing reserved short names, derived from the catalogue so it cannot go stale. */
@@ -134,6 +149,7 @@ export function CreateOrgForm({
           charter: form.charter.trim(),
           leadershipTitle: form.leadershipTitle.trim(),
           category: form.category,
+          ...(form.category === "bloc" ? { alignmentAccentToken: form.alignmentAccentToken } : {}),
           ...(logoPath ? { logoPath } : {}),
         }),
       });
@@ -251,6 +267,37 @@ export function CreateOrgForm({
                 {ORGANIZATION_CATEGORY_META[form.category].blurb}
               </p>
             </div>
+            {form.category === "bloc" && (
+              <fieldset className="sm:col-span-2">
+                <legend className="text-sm font-medium text-foreground">Alignment color</legend>
+                <p className="mt-1 text-[11px] text-muted">
+                  This color identifies the Bloc&apos;s independent pole on the world map, in
+                  alignment ledgers, and in influence views.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {CUSTOM_ALIGNMENT_POLE_TOKENS.map((token) => {
+                    const option = POLE_COLOR_OPTIONS[token];
+                    const selected = form.alignmentAccentToken === token;
+                    return (
+                      <button
+                        key={token}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => update("alignmentAccentToken", token)}
+                        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium text-foreground transition-colors ${
+                          selected
+                            ? `${option.selected} bg-card ring-2`
+                            : "border-card-border bg-background hover:border-foreground/30"
+                        }`}
+                      >
+                        <span className={`h-3 w-3 rounded-full ${option.swatch}`} />
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            )}
             <div className="sm:col-span-2">
               <Label htmlFor="org-logo">Logo (optional)</Label>
               <div className="mt-1 flex items-center gap-3">

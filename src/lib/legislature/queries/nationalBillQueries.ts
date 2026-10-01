@@ -26,6 +26,7 @@ import {
   formatCreateDepartmentLabel,
 } from "@/lib/congress/billEnrichment";
 import { buildBillWhipPanelData } from "@/lib/congress/billWhipPanelData";
+import { getBillWhipWindowStart } from "@/lib/congress/billWhipPhase";
 import type { BillWhip } from "@/lib/db/types/billWhip";
 import {
   buildScopedVoteInputs,
@@ -432,22 +433,24 @@ export async function listNationalLegislatureBills(
                         : provision.subType === "fund"
                           ? "Fund Organization"
                           : "Leave Organization"
-                      : provision.type === "euro_adoption"
-                        ? "Currency Adoption"
-                        : provision.type === "union_law"
-                          ? "Union Law"
-                          : provision.type === "electoral_law"
-                            ? "Electoral Law"
-                            : provision.type === "central_bank_independence"
-                              ? "Central Bank Independence"
-                              : // Ahead of the subsidy fallback, which is a catch-all.
-                                provision.type === "declare_war"
-                                ? "Declaration of War"
-                                : provision.type === "join_conflict"
-                                  ? "Entry into the Conflict"
-                                  : provision.type === "create_department"
-                                    ? formatCreateDepartmentLabel(provision).legislationTypeName
-                                    : describeSubsidyProvision(provision);
+                      : provision.type === "european_treaty"
+                        ? "Maastricht Treaty"
+                        : provision.type === "euro_adoption"
+                          ? "Currency Adoption"
+                          : provision.type === "union_law"
+                            ? "Union Law"
+                            : provision.type === "electoral_law"
+                              ? "Electoral Law"
+                              : provision.type === "central_bank_independence"
+                                ? "Central Bank Independence"
+                                : // Ahead of the subsidy fallback, which is a catch-all.
+                                  provision.type === "declare_war"
+                                  ? "Declaration of War"
+                                  : provision.type === "join_conflict"
+                                    ? "Entry into the Conflict"
+                                    : provision.type === "create_department"
+                                      ? formatCreateDepartmentLabel(provision).legislationTypeName
+                                      : describeSubsidyProvision(provision);
           return {
             legislationTypeId: provision.type,
             legislationTypeName,
@@ -905,6 +908,7 @@ export async function getNationalBillDetail(
 
   // Read-only per-party whip summary for the origin chamber: every seated party
   // shows its national whip direction, defaulting to "free vote" when none.
+  const whipWindowStart = getBillWhipWindowStart(bill);
   const originWhips = await db
     .collection<BillWhip>("billWhips")
     .find({
@@ -912,6 +916,7 @@ export async function getNationalBillDetail(
       targetId: bill._id,
       issuedBy: "nationalParty",
       chamber: bill.originChamber,
+      ...(whipWindowStart ? { createdAt: { $gte: whipWindowStart } } : {}),
     })
     .toArray();
   const whipDirectionByParty = new Map<string, "for" | "against">();

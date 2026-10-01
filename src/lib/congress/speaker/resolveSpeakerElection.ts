@@ -10,6 +10,7 @@ import { leadershipRoleLabel } from "@/lib/congress/leadership/electionRoleMap";
 import { computeCongressLeadershipTally } from "@/lib/congress/governmentVoteBreakdown";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 import type {
+  Character,
   CongressLeader,
   SpeakerElection,
   SpeakerNomination,
@@ -99,12 +100,18 @@ export async function resolveSpeakerElection(
 
   if (claimed) {
     const roleLabel = leadershipRoleLabel("speaker_of_the_house");
+    const nomineeAvatarUrl = (
+      await db
+        .collection<Character>("characters")
+        .findOne({ _id: winner.nomineeId }, { projection: { avatarUrl: 1 } })
+    )?.avatarUrl;
     sendCountryGameEvent("US", {
       title: `Leadership Election Result — ${roleLabel}`,
       description: `**${winner.nomineeName}** has been elected as **${roleLabel}**.`,
       color: DISCORD_COLORS.leadership,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(nomineeAvatarUrl ? { thumbnail: { url: nomineeAvatarUrl } } : {}),
     }).catch(() => {});
   }
 

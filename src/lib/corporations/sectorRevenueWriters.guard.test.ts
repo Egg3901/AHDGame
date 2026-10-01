@@ -154,6 +154,14 @@ interface WriterEntry {
 }
 
 const ALLOWED_WRITERS: Record<string, WriterEntry> = {
+  "scripts/sim/bankingParameterSetup.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "Isolated banking sensitivity fixture seeds authoritative capitalStock=250 with a " +
+      "legacy revenue nameplate. financialSectorCapacityUnits uses the positive stock; " +
+      "the replay runs banking/solvency only and journals cash independently of sector revenue.",
+  },
   // ─── Reviewed and gated (this sweep) ─────────────────────────────────────
   "src/lib/nationalization/reverseNationalization.ts": {
     writeSites: 1,

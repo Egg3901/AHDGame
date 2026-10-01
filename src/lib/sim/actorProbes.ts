@@ -27,12 +27,21 @@ import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporatio
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { roundCurrency } from "@/lib/wealth/computeCharacterWealth";
+import { getOppoDrainPerTurn } from "@/lib/campaigns/opsEffects";
+import { getEffectiveBranchCost } from "@/lib/campaigns/upgradeCosts";
+import type { Campaign } from "@/lib/db/types";
 import {
   UNCOVERED_PRESIDENTIAL_NOMINATION,
   assertKnownActorMechanic,
   type SimActorMode,
 } from "./actorCoverage";
 import { buildSyntheticActorPlan } from "./syntheticActors";
+import {
+  NO_CONFIDENCE_LIFECYCLE_MECHANIC_ID,
+  buildNoConfidenceBallotPlan,
+  expectedNoConfidenceOutcome,
+  noConfidenceClosesOnTurn,
+} from "./noConfidenceLifecycle";
 
 /** Fixed timestamp every probe passes to rules that default to `new Date()`. */
 export const PROBE_1953_NOW_ISO = "1953-01-01T00:00:00.000Z";
@@ -281,9 +290,10 @@ export interface CampaignProbeResult {
 }
 
 /** Per-turn accrual for one unendorsed synthetic player candidate, through the
- * REAL production rule (`campaignActionsPerTurn`). No entry/action driver
- * exists, so this is accrued capacity, not spent actions — the registry reads
- * this mechanic `partial` in synthetic mode for exactly that reason. */
+ * REAL production rule (`campaignActionsPerTurn`). This is accrued capacity,
+ * not spent actions — spend is covered only through the retained
+ * opposition-research flow driver, and the registry reads this mechanic
+ * `partial` in synthetic mode until that driver retains a full sequence. */
 export function syntheticCampaignActionsPerActor(): number {
   return campaignActionsPerTurn({
     nppEndorsements: 0,
@@ -328,9 +338,70 @@ export function probeCampaignsAndActions(mode: SimActorMode, seed: string): Camp
     mode,
     result:
       `${campaigns} synthetic campaigners accrue ${perActor} actions each ` +
-      `(${playerActions}/turn unspent: no entry/spend driver)`,
+      `(${playerActions}/turn unspent here: spend is covered only through ` +
+      `the retained opposition-research flow driver)`,
     campaigns,
     playerActions,
+  };
+}
+
+// ─── Opposition-research purchase (pure rules slice) ─────────────────────────
+
+export interface OppositionResearchProbeResult {
+  mechanicId: string;
+  mode: SimActorMode;
+  /** Exact uncovered string in pure NPP mode, else the priced drain. */
+  result: string;
+  /** Per-turn drain of a starter-only tree through the production rule. */
+  drainPerTurn: number | null;
+  starterFunds: number | null;
+  starterActions: number | null;
+}
+
+/**
+ * Price the opposition-research starter through the REAL rules: the per-turn
+ * drain via `getOppoDrainPerTurn` (the exact reader `campaignTurn` uses) and
+ * the purchase cost via `getEffectiveBranchCost` (the exact helper the
+ * purchase command gates on). The end-to-end entry/query/purchase/debit
+ * sequence with retained evidence lives in the flow driver
+ * (`oppositionResearchDriver.ts`); this probe covers the pure rules slice.
+ */
+export function probeOppositionResearch(
+  mode: SimActorMode,
+  seed: string
+): OppositionResearchProbeResult {
+  const mechanicId = assertKnownActorMechanic("campaigns-player-actions");
+  if (mode === "pure-npp") {
+    return {
+      mechanicId,
+      mode,
+      result: "zero campaigns, zero player actions",
+      drainPerTurn: null,
+      starterFunds: null,
+      starterActions: null,
+    };
+  }
+  const plan = buildSyntheticActorPlan(seed);
+  const buyer = plan.actors.find((a) => a.role === "us-state-party-member") ?? plan.actors[0];
+  const starterCampaign = {
+    oppositionResearchTree: { starter: true, a: 0, b: 0, c: 0 },
+    oppositionResearchLevel: 0,
+  } as Campaign;
+  const drainPerTurn = getOppoDrainPerTurn(starterCampaign);
+  const cost = getEffectiveBranchCost("oppositionResearch", null, 0, "president", false);
+  if (!cost) {
+    throw new Error("opposition-research probe: starter cost helper returned null");
+  }
+  return {
+    mechanicId,
+    mode,
+    result:
+      `synthetic ${buyer.characterIdHex} starter drains ${drainPerTurn}/turn ` +
+      `for ${cost.funds} funds + ${cost.actions} actions ` +
+      `(retained end-to-end only by the opposition-research flow driver)`,
+    drainPerTurn,
+    starterFunds: cost.funds,
+    starterActions: cost.actions,
   };
 }
 
@@ -706,5 +777,65 @@ export function probeDdFinanceSurvey(mode: SimActorMode, seed: string): SurveyPr
     seatPositionId,
     ministerCharacterIdHex: minister,
     seatMatchesIssuerGate: true,
+  };
+}
+
+// ─── UK no-confidence motion lifecycle ──────────────────────────────────────
+
+export interface NoConfidenceProbeResult {
+  mechanicId: string;
+  mode: SimActorMode;
+  result: string;
+  proposerCharacterIdHex: string | null;
+  expectedVotesFor: number | null;
+  expectedVotesAgainst: number | null;
+  expectedOutcome: "passed" | "failed" | null;
+  closesOnTurn: number | null;
+}
+
+/**
+ * Deterministic ballot expectation for the lifecycle driver. Pure NPP runs
+ * seat no Commons proposer, so no motion can ever reach the query surface.
+ * In synthetic mode the fixed ballot runs through the REAL carry rule
+ * (`noConfidenceMotionCarries`) with an explicit chamber threshold, and the
+ * deadline runs through the production duration constant — so the probe pins
+ * the ballot the live driver must reproduce, not a reworded copy of it.
+ * The live proposal/query/vote/resolution run itself is worldsim evidence,
+ * not something this probe pretends to run.
+ */
+export function probeNoConfidenceMotion(
+  mode: SimActorMode,
+  seed: string,
+  majorityThreshold: number,
+  turnProposed: number
+): NoConfidenceProbeResult {
+  const mechanicId = assertKnownActorMechanic(NO_CONFIDENCE_LIFECYCLE_MECHANIC_ID);
+  if (mode === "pure-npp") {
+    return {
+      mechanicId,
+      mode,
+      result:
+        "uncovered: no-confidence lifecycle — zero player characters, no eligible Commons proposer",
+      proposerCharacterIdHex: null,
+      expectedVotesFor: null,
+      expectedVotesAgainst: null,
+      expectedOutcome: null,
+      closesOnTurn: null,
+    };
+  }
+  const plan = buildNoConfidenceBallotPlan(seed);
+  const expectedOutcome = expectedNoConfidenceOutcome(plan, majorityThreshold);
+  return {
+    mechanicId,
+    mode,
+    result:
+      `synthetic proposer ${plan.proposer.characterIdHex} moves no confidence; ` +
+      `fixed ballot ${plan.expectedVotesFor}-${plan.expectedVotesAgainst} ` +
+      `resolves ${expectedOutcome} at threshold ${majorityThreshold}`,
+    proposerCharacterIdHex: plan.proposer.characterIdHex,
+    expectedVotesFor: plan.expectedVotesFor,
+    expectedVotesAgainst: plan.expectedVotesAgainst,
+    expectedOutcome,
+    closesOnTurn: noConfidenceClosesOnTurn(turnProposed),
   };
 }

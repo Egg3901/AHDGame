@@ -17,22 +17,31 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { createInternationalOrganization } from "@/lib/internationalOrganizations/commands/createOrganization";
+import { CUSTOM_ALIGNMENT_POLE_TOKENS } from "@/lib/constants/alignmentEras";
 
-const createSchema = z.object({
-  id: z.string().min(2).max(32),
-  name: z.string().min(3).max(80),
-  shortName: z.string().min(1).max(5),
-  description: z.string().min(1).max(500),
-  charter: z.string().min(1).max(2000),
-  leadershipTitle: z.string().min(1).max(60),
-  // Derived, not repeated: "bloc" is absent because it is a designation the world
-  // confers on the two alliances that WERE the Cold War, and a hand-copied list
-  // here would silently reject any category added to the constant later.
-  category: z.enum(
-    CREATABLE_ORGANIZATION_CATEGORIES as [OrganizationCategory, ...OrganizationCategory[]]
-  ),
-  logoPath: z.string().max(500).optional(),
-});
+const createSchema = z
+  .object({
+    id: z.string().min(2).max(32),
+    name: z.string().min(3).max(80),
+    shortName: z.string().min(1).max(5),
+    description: z.string().min(1).max(500),
+    charter: z.string().min(1).max(2000),
+    leadershipTitle: z.string().min(1).max(60),
+    category: z.enum(
+      CREATABLE_ORGANIZATION_CATEGORIES as [OrganizationCategory, ...OrganizationCategory[]]
+    ),
+    alignmentAccentToken: z.enum(CUSTOM_ALIGNMENT_POLE_TOKENS).optional(),
+    logoPath: z.string().max(500).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.category === "bloc" && !value.alignmentAccentToken) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["alignmentAccentToken"],
+        message: "Bloc organizations must choose an alignment color.",
+      });
+    }
+  });
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {

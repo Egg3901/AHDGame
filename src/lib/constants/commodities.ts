@@ -1615,10 +1615,7 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
   agriculture: [{ commodity: "food", rate: 0.5 }],
   automobiles: [{ commodity: "vehicles", rate: 0.5 }],
   financial: [{ commodity: "financial_services", rate: 0.5 }],
-  media_entertainment: [
-    { commodity: "advertising", rate: 0.35 },
-    { commodity: "entertainment_services", rate: 0.3 },
-  ],
+  media: [{ commodity: "advertising", rate: 0.5 }],
   defense: [
     { commodity: "vehicles", rate: 0.2 },
     { commodity: "electronics", rate: 0.15 },
@@ -1629,6 +1626,10 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
   telecommunications: [
     { commodity: "software", rate: 0.2 },
     { commodity: "network_services", rate: 0.4 },
+  ],
+  entertainment: [
+    { commodity: "advertising", rate: 0.2 },
+    { commodity: "entertainment_services", rate: 0.4 },
   ],
   retail: [{ commodity: "retail", rate: 0.5 }],
   logistics: [
@@ -1745,13 +1746,13 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "real_estate_services", rate: 0.04 },
     { commodity: "network_services", rate: 0.06 },
   ],
-  media_entertainment: [
+  media: [
     { commodity: "software", rate: 0.15 },
     { commodity: "electronics", rate: 0.1 },
-    { commodity: "energy", rate: 0.06 },
     { commodity: "consulting_services", rate: 0.06 },
     { commodity: "real_estate_services", rate: 0.03 },
     { commodity: "network_services", rate: 0.1 },
+    { commodity: "entertainment_services", rate: 0.06 },
   ],
   defense: [
     { commodity: "steel", rate: 0.2 },
@@ -1799,6 +1800,13 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "construction_services", rate: 0.08 },
     { commodity: "real_estate_services", rate: 0.03 },
     { commodity: "rare_earth", rate: 0.09 },
+  ],
+  entertainment: [
+    { commodity: "software", rate: 0.15 },
+    { commodity: "electronics", rate: 0.1 },
+    { commodity: "energy", rate: 0.06 },
+    { commodity: "real_estate_services", rate: 0.03 },
+    { commodity: "network_services", rate: 0.08 },
   ],
   logistics: [
     { commodity: "vehicles", rate: 0.2 },
@@ -1939,6 +1947,8 @@ export function computeRawSupplyDemand(
     sectorType: string;
     revenue: number;
     stateId: string;
+    /** Optional owner used to attribute this sector's realized ledger supply. */
+    corporationId?: string | { toString(): string };
     sectorId?: string;
     isNatcorp?: boolean;
     strategyId?: string;
@@ -2097,6 +2107,8 @@ export function computeRawSupplyDemand(
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
+  /** Corporation id -> commodity -> realized units contributed to global supply. */
+  supplyByCorporation: Map<string, Map<CommodityType, number>>;
   /**
    * commodity → demand units removed by the PLANTS_LEDGER_DEMAND_SUPPLY_CAP
    * pass this turn (#1460). Recorded, never applied. A capped commodity reports
@@ -2107,7 +2119,23 @@ export function computeRawSupplyDemand(
 } {
   const global = new Map<CommodityType, { supply: number; demand: number }>();
   const byState = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
+  const supplyByCorporation = new Map<string, Map<CommodityType, number>>();
   const demandTruncated = new Map<CommodityType, number>();
+  const recordCorporationSupply = (
+    corporationId: string | { toString(): string } | undefined,
+    commodity: CommodityType,
+    units: number
+  ): void => {
+    if (corporationId == null || !Number.isFinite(units) || units <= 0) return;
+    const id = corporationId.toString();
+    if (!id) return;
+    let output = supplyByCorporation.get(id);
+    if (!output) {
+      output = new Map<CommodityType, number>();
+      supplyByCorporation.set(id, output);
+    }
+    output.set(commodity, (output.get(commodity) ?? 0) + units);
+  };
 
   // Era ledger scale for every dollars-to-units leg (see `ledgerUnitScale` doc).
   // Garbage-tolerant like `safeUnitScale`: non-finite/non-positive means 1.
@@ -2264,6 +2292,7 @@ export function computeRawSupplyDemand(
         if (units > 0) {
           global.get(commodity)!.supply += units;
           stateMap.get(commodity)!.supply += units;
+          recordCorporationSupply(sector.corporationId, commodity, units);
           recordOutputDemandDelta(sector, st, commodity, units);
         }
         continue;
@@ -2308,6 +2337,7 @@ export function computeRawSupplyDemand(
       g.supply += units;
       const s = stateMap.get(commodity)!;
       s.supply += units;
+      recordCorporationSupply(sector.corporationId, commodity, units);
       recordOutputDemandDelta(sector, st, commodity, units);
     }
 
@@ -2541,5 +2571,5 @@ export function computeRawSupplyDemand(
 
   applyUnownedCommodityDrift(global, currentTurn);
 
-  return { global, byState, demandTruncated };
+  return { global, byState, supplyByCorporation, demandTruncated };
 }

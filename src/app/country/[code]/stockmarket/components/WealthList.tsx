@@ -57,6 +57,12 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
   const [filterText, setFilterText] = useState("");
   const [filterCountry, setFilterCountry] = useState("");
   const [page, setPage] = useState(0);
+  // Net Worth is net of line-of-credit debt; gross adds the debt leg back so
+  // leveraged players can be compared before borrowing.
+  const [showNet, setShowNet] = useState(true);
+
+  const displayWealth = (e: WealthEntry) =>
+    showNet ? e.totalWealth : e.totalWealth + (e.locDebtValue ?? 0);
 
   const countries = useMemo(() => [...new Set(entries.map((e) => e.country))].sort(), [entries]);
 
@@ -102,7 +108,30 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <h2 className="text-xl font-bold text-foreground">Wealth Leaderboard</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-foreground">Wealth Leaderboard</h2>
+            <div
+              className="flex items-center gap-1 rounded-lg border border-card-border bg-card p-0.5"
+              title="Net subtracts line-of-credit debt; gross compares wealth before borrowing"
+            >
+              <button
+                onClick={() => setShowNet(true)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  showNet ? "bg-primary/15 text-primary" : "text-muted hover:text-foreground"
+                }`}
+              >
+                Net
+              </button>
+              <button
+                onClick={() => setShowNet(false)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  !showNet ? "bg-primary/15 text-primary" : "text-muted hover:text-foreground"
+                }`}
+              >
+                Gross
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
             {WEALTH_SORT_OPTIONS.map((opt) => (
               <button
@@ -223,8 +252,10 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
                   </td>
                 </tr>
               ) : (
-                pagedEntries.map((entry, i) => {
-                  const rank = page * PAGE_SIZE + i;
+                pagedEntries.map((entry) => {
+                  // Canonical global rank from the snapshot: stable under
+                  // filtering, unlike a page-derived position.
+                  const rank = entry.rank;
                   return (
                     <tr
                       key={entry.characterId}
@@ -232,7 +263,7 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
                     >
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-center gap-0.5">
-                          <span className={`font-bold ${getRankColor(rank)}`}>{rank + 1}</span>
+                          <span className={`font-bold ${getRankColor(rank - 1)}`}>{rank}</span>
                           <RankChange value={entry.rankChange24h} />
                         </div>
                       </td>
@@ -273,7 +304,12 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold tabular-nums text-foreground">
-                        {formatAmount(entry.totalWealth)}
+                        {formatAmount(displayWealth(entry))}
+                        {(entry.locDebtValue ?? 0) > 0 && (
+                          <span className="block text-[10px] font-normal text-muted">
+                            −{formatAmount(entry.locDebtValue ?? 0)} debt
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right font-mono tabular-nums text-muted hidden sm:table-cell">
                         {formatAmount(entry.stockValue)}

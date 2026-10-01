@@ -42,6 +42,8 @@ export type DebitSharesOpts = {
    * concurrent sell/fill already consumed the inventory.
    */
   requireSufficient?: boolean;
+  /** Reject a trade priced from a snapshot if the corporation changed. */
+  guardFilter?: Record<string, unknown>;
   session?: ClientSession;
 };
 
@@ -790,9 +792,10 @@ export async function debitSharesFromNpp(
   const filter = opts?.requireSufficient
     ? {
         _id: targetCorpId,
+        ...opts?.guardFilter,
         shareholders: { $elemMatch: { nppId, shares: { $gte: shares } } },
       }
-    : { _id: targetCorpId, "shareholders.nppId": nppId };
+    : { _id: targetCorpId, ...opts?.guardFilter, "shareholders.nppId": nppId };
   const result = await db.collection<Corporation>(CORP).findOneAndUpdate(
     filter,
     {

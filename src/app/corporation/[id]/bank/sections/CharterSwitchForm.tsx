@@ -4,7 +4,7 @@ import { useReducer } from "react";
 import { Button } from "@/components/ui";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { ConsolePayload, ShowToast } from "../types";
-import { charterLabel, mergeState } from "../lib/helpers";
+import { charterLabel, mergeState, turnsToHours } from "../lib/helpers";
 import { Eyebrow } from "../components/BankSection";
 
 /** Retail and universal charters take deposits; investment charters do not. */
@@ -61,7 +61,7 @@ export function CharterSwitchForm({
       const ok = window.confirm(
         "Switching to an investment charter returns your entire deposit book: player savings go " +
           "back to the central bank and household deposits return to circulation. Nobody loses money, " +
-          "but you lose the funding base and cannot switch back for 24 turns. Continue?"
+          "but you lose the funding base and cannot switch back for 24 turns (about 24 hours). Continue?"
       );
       if (!ok) return;
     }
@@ -82,7 +82,12 @@ export function CharterSwitchForm({
         showToast(json.reasons?.join("; ") ?? json.error ?? "Could not switch charter", "error");
         return;
       }
-      showToast(`Charter switched to ${charterLabel(type)}`, "success");
+      showToast(
+        willReturnDeposits
+          ? `Charter switched to ${charterLabel(type)}: the deposit book was returned and the type is locked for ${turnsToHours(24)}.`
+          : `Charter switched to ${charterLabel(type)}: deposits stay where they are, and the type is locked for ${turnsToHours(24)}.`,
+        "success"
+      );
       await onChanged();
     } finally {
       update({ busy: false });
@@ -96,8 +101,8 @@ export function CharterSwitchForm({
         <h3 className="text-base font-semibold text-foreground">Change charter type</h3>
         <p className="mt-1 text-sm text-muted">
           Change what kind of bank you run without re-chartering or re-posting capital. Switching to
-          an investment charter returns your whole deposit book. A 24-turn cooldown applies after
-          any switch.
+          an investment charter returns your whole deposit book. A {turnsToHours(24)} cooldown
+          applies after any switch.
         </p>
       </div>
 
@@ -126,8 +131,7 @@ export function CharterSwitchForm({
 
           {onCooldown ? (
             <p className="text-sm text-muted">
-              Charter type is locked for {turnsRemaining} more turn{turnsRemaining === 1 ? "" : "s"}{" "}
-              after your last switch.
+              Charter type is locked for {turnsToHours(turnsRemaining)} after your last switch.
             </p>
           ) : canMutate ? (
             <Button type="button" onClick={() => void submit()} disabled={busy}>

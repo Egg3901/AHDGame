@@ -81,5 +81,15 @@ export async function seedIndexFundIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // Reset worlds drop the snapshot collection but retain migration markers.
+  // Recreate the migration's one-snapshot-per-turn guard on every seed run.
+  await ensureIndex(
+    db,
+    "equityLiquidityFacilitySnapshots",
+    { turn: -1 },
+    { unique: true, background: true, name: "equity_liquidity_snapshots_turn" },
+    log
+  );
+
   log("Index fund indexes ensured");
 }

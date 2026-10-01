@@ -2,7 +2,7 @@
  * Service Level Objectives (SLOs) for A House Divided.
  *
  * These are the reliability targets we hold ourselves to. Events are tagged
- * with `slo.*` booleans (see withApiMetrics and turnHealth) so GlitchTip can be
+ * with `slo.*` booleans (see withApiMetrics and turnHealth) so Sentry can be
  * queried for the error budget: the fraction of `slo.api_availability:false`
  * events over a window is the burn against the 99.5% availability target.
  *

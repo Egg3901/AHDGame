@@ -17,8 +17,8 @@ import MapControls from "./MapControls";
 import MapTooltip from "./MapTooltip";
 import MapSVGContent, { BACKGROUND_LAYER_KEY } from "./MapSVGContent";
 import { buildTierLookup, isTierInteractive } from "@/components/landing/countryTiers";
-import { buildBlocLookup, hasBlocData, BLOC_LABELS } from "../worldBlocs";
-import type { BlocMembership } from "@/lib/world/blocMembership";
+import { buildBlocLookup, buildBlocPalette, hasBlocData } from "../worldBlocs";
+import type { BlocMapData } from "@/lib/world/blocMembership";
 import { REGION_SHARDS } from "@/lib/maps/regionManifest";
 import { computeRegionBlobs, selectStructuralOverlayShards } from "@/lib/maps/regionOverlay";
 import { WORLD_OVERLAY_OWNER_FOLD } from "@/lib/maps/germanyGeometry";
@@ -37,21 +37,37 @@ import {
 import { type CountryId } from "@/lib/constants/countries";
 import { useActivePreset, useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
+import { backgroundMacroFeatureIds } from "@/lib/world/worldEntityMapInspection";
+import BackgroundMacroInspector from "./BackgroundMacroInspector";
 
 export default function WorldMapSVG({
   countryAccess,
   worldEntities,
-  blocMembership,
+  blocMapData,
 }: {
   countryAccess: CountryAccessMap;
   worldEntities: WorldEntityMapSnapshot;
-  blocMembership: BlocMembership;
+  blocMapData: BlocMapData;
 }) {
   const router = useRouter();
+  const [selectedMacro, setSelectedMacro] = useState<string | null>(null);
+  const inspectableFeatureIds = useMemo(
+    () => backgroundMacroFeatureIds(worldEntities),
+    [worldEntities]
+  );
+  const inspectableFeatureIdsRef = useRef(inspectableFeatureIds);
+  useEffect(() => {
+    inspectableFeatureIdsRef.current = inspectableFeatureIds;
+  }, [inspectableFeatureIds]);
   const preset = useActivePreset();
   const countryName = useCountryDisplayName();
   const { metricFilter, setMetricFilter, worldMetrics, partyData, corpsData, countryIdToIso } =
     useWorldMetricFilter();
+  const blocsAvailable = hasBlocData(preset, blocMapData.customBlocs.length);
+
+  useEffect(() => {
+    if (metricFilter.type === "blocs" && !blocsAvailable) setMetricFilter({ type: "none" });
+  }, [blocsAvailable, metricFilter.type, setMetricFilter]);
 
   // --- React state ---
   const [viewMode, setViewMode] = useState<"map" | "globe">("globe");
@@ -79,8 +95,8 @@ export default function WorldMapSVG({
 
   /**
    * Feature id → tier, built once per era rather than per path per frame. An
-   * absent key means Background Nations, which are drawn as a single inert
-   * merged path instead of ~120 interactive ones.
+   * absent key means Background Nations. Active aggregate records opt into
+   * inspection separately; unsimulated land remains in the merged inert path.
    */
   const tierLookup = useMemo(
     () =>
@@ -102,12 +118,17 @@ export default function WorldMapSVG({
     () =>
       buildBlocLookup({
         presetId: preset,
-        membership: blocMembership,
+        membership: blocMapData.membership,
+        customBlocCount: blocMapData.customBlocs.length,
         interactiveFeatureIds: [...tierLookup]
           .filter(([, tier]) => isTierInteractive(tier))
           .map(([featureId]) => featureId),
       }),
-    [preset, blocMembership, tierLookup]
+    [preset, blocMapData, tierLookup]
+  );
+  const blocPalette = useMemo(
+    () => buildBlocPalette(blocMapData.customBlocs, blocMapData.membership),
+    [blocMapData]
   );
 
   /**
@@ -287,8 +308,8 @@ export default function WorldMapSVG({
     // Background Nations are accumulated into ONE `d` string written once,
     // instead of ~120 individual setAttribute calls every animation frame.
     //
-    // A background nation that belongs to a BLOC is excluded here, exactly as it
-    // is excluded from the merged layer in MapSVGContent. The two rules have to
+    // Bloc members and inspectable aggregates are excluded here, exactly as
+    // they are excluded from the merged layer in MapSVGContent. The two rules have to
     // agree: when only the renderer knew about bloc members, they were drawn
     // once at mount and then never reprojected — so Canada and the Benelux sat
     // frozen in place while the globe turned under them, AND their geometry went
@@ -296,7 +317,12 @@ export default function WorldMapSVG({
     let backgroundD = "";
     for (const feature of featuresRef.current) {
       const id = String(feature.id);
-      if (lookup && !isTierInteractive(lookup.get(id) ?? "background") && !blocs?.get(id)) {
+      if (
+        lookup &&
+        !isTierInteractive(lookup.get(id) ?? "background") &&
+        !blocs?.get(id) &&
+        !inspectableFeatureIdsRef.current.has(id)
+      ) {
         const d = pathGen(feature);
         // Recorded like any other feature: `commitLivePaths` re-derives the
         // merged layer from these, so hovering must not blank the background.
@@ -356,6 +382,14 @@ export default function WorldMapSVG({
     if (!livePathsRef.current.size) return;
     setPaths(new Map(livePathsRef.current));
   }, []);
+
+  const selectMacro = useCallback(
+    (entityId: string | null) => {
+      commitLivePaths();
+      setSelectedMacro(entityId);
+    },
+    [commitLivePaths]
+  );
 
   // --- Sync React paths state with current projection (view/zoom changes) ---
   const syncPathsState = useCallback(() => {
@@ -905,11 +939,14 @@ export default function WorldMapSVG({
   const lastTouchDistRef = useRef<number | null>(null);
   const touchMovedRef = useRef(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const touchPathRef = useRef<Element | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isAnimatingRef.current) return;
 
     if (e.touches.length === 2) {
+      touchMovedRef.current = true;
+      touchPathRef.current = null;
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       lastTouchDistRef.current = Math.sqrt(dx * dx + dy * dy);
@@ -918,17 +955,21 @@ export default function WorldMapSVG({
 
     const touch = e.touches[0];
     const svg = svgRef.current;
-    if (svg) {
+    if (svg && svg.contains(e.target as Node)) {
+      commitLivePaths();
       isDraggingRef.current = true;
       setIsDragging(true);
       lastPosRef.current = { x: touch.clientX, y: touch.clientY };
       touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+      const path = document.elementFromPoint(touch.clientX, touch.clientY)?.closest("path");
+      touchPathRef.current = path && svg.contains(path) ? path : null;
       touchMovedRef.current = false;
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && lastTouchDistRef.current !== null) {
+      touchMovedRef.current = true;
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -945,7 +986,8 @@ export default function WorldMapSVG({
     const dx = touch.clientX - lastPosRef.current.x;
     const dy = touch.clientY - lastPosRef.current.y;
 
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    const start = touchStartPosRef.current;
+    if (start && (Math.abs(touch.clientX - start.x) > 3 || Math.abs(touch.clientY - start.y) > 3)) {
       touchMovedRef.current = true;
     }
 
@@ -973,28 +1015,52 @@ export default function WorldMapSVG({
     lastTouchDistRef.current = null;
 
     if (isDraggingRef.current) {
+      e.preventDefault();
+      const end = e.changedTouches[0];
+      const start = touchStartPosRef.current;
+      if (
+        end &&
+        start &&
+        (Math.abs(end.clientX - start.x) > 3 || Math.abs(end.clientY - start.y) > 3)
+      )
+        touchMovedRef.current = true;
       isDraggingRef.current = false;
       setIsDragging(false);
       lastPosRef.current = null;
       commitLivePaths();
 
       // If tap (no significant movement), navigate to country at touch point
-      if (!touchMovedRef.current && touchStartPosRef.current && e.changedTouches.length > 0) {
+      if (
+        e.type === "touchend" &&
+        !touchMovedRef.current &&
+        touchStartPosRef.current &&
+        e.changedTouches.length > 0
+      ) {
         const touch = e.changedTouches[0];
-        const el = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (el) {
-          const pathEl = el.closest("path");
-          if (pathEl) {
-            pathEl.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-          }
+        const pathEl = touchPathRef.current;
+        if (pathEl && svgRef.current?.contains(pathEl)) {
+          // Consume this tap once. A second compatibility click can hit a
+          // different country after opening the inspector changes the layout.
+          pathEl.dispatchEvent(
+            new MouseEvent("click", {
+              bubbles: true,
+              clientX: touch.clientX,
+              clientY: touch.clientY,
+            })
+          );
         }
       }
     }
     touchStartPosRef.current = null;
+    touchPathRef.current = null;
   };
 
   const handleCountryClick = (id: string) => {
     if (isAnimatingRef.current) return;
+    if (inspectableFeatureIds.has(id)) {
+      selectMacro(worldEntities.byFeatureId[id].entityId);
+      return;
+    }
     // Region-overlay feature → its live owner's country map (any manifest shard).
     // Id is `bi:<owner>:<regionCode>` (or legacy `bi:<owner>`) — take the owner.
     if (id.startsWith("bi:")) {
@@ -1043,17 +1109,22 @@ export default function WorldMapSVG({
       : hovered
     : undefined;
   const hoveredMapped = hoveredIso ? WORLD_MAPPED_COUNTRIES[hoveredIso] : null;
+  const hoveredMacro =
+    hovered && inspectableFeatureIds.has(hovered) ? worldEntities.byFeatureId[hovered] : null;
   const hoveredIsoCountryId = hoveredIso ? ISO_TO_COUNTRY_ID[hoveredIso] : undefined;
   // Era-aware tooltip label (e.g. "West Germany" in 1979) when the hovered base
   // country maps to a CountryId; otherwise fall back to the static registry label.
-  const hoveredLabel =
-    hoveredIsoCountryId && hoveredMapped
+  const hoveredLabel = hoveredMacro
+    ? hoveredMacro.displayName
+    : hoveredIsoCountryId && hoveredMapped
       ? countryName(hoveredIsoCountryId)
       : (hoveredMapped?.label ?? "");
 
-  const tooltipAccess = hovered
-    ? getMapTooltipAccessDisplay(hovered, hoveredMapped?.status, countryAccess)
-    : null;
+  const tooltipAccess = hoveredMacro
+    ? { label: "Background macro simulation", tone: "planned" as const }
+    : hovered
+      ? getMapTooltipAccessDisplay(hovered, hoveredMapped?.status, countryAccess)
+      : null;
 
   // In bloc mode the tooltip answers the question the map is asking — whose
   // side is this? — rather than a metric value.
@@ -1062,7 +1133,7 @@ export default function WorldMapSVG({
   const tooltipFilterHighlight =
     metricFilter.type === "blocs"
       ? hoveredBloc
-        ? { label: "Bloc", value: BLOC_LABELS[hoveredBloc] }
+        ? { label: "Bloc", value: blocPalette[hoveredBloc]?.label ?? hoveredBloc }
         : null
       : hoveredIsoCountryId && metricFilter.type !== "none"
         ? getMetricFilterHighlight(
@@ -1097,107 +1168,118 @@ export default function WorldMapSVG({
   const hasActiveFilter = metricFilter.type !== "none" && metricFilter.type !== "blocs";
 
   return (
-    <div
-      ref={cardRef}
-      className={
-        isFullscreen
-          ? "fixed inset-0 z-[60] bg-background overflow-hidden"
-          : "relative overflow-hidden rounded-xl border border-card-border bg-card shadow-lg"
-      }
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => {
-        handleMouseUp();
-        hoveredRef.current = null;
-        setHovered(null);
-        setTooltipPos(null);
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-      style={{ cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
-    >
-      <MapControls
-        viewMode={viewMode}
-        isAnimating={isAnimating}
-        isFullscreen={isFullscreen}
-        onViewChange={startTransition}
-        onFullscreenToggle={() => setIsFullscreen((v) => !v)}
-        zoomRef={zoomRef}
-        imperativeUpdate={imperativeUpdate}
-        syncPathsState={syncPathsState}
-      />
-
-      {/* Grid Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_800px_at_50%_50%,var(--primary-dark)_0%,transparent_100%)] opacity-5 pointer-events-none" />
-
-      {!isLoaded && (
-        <div
-          className={`w-full flex items-center justify-center text-muted text-sm ${isFullscreen ? "h-full" : ""}`}
-          style={isFullscreen ? undefined : { aspectRatio: `${SVG_W}/${SVG_H}` }}
-        >
-          Loading map...
-        </div>
-      )}
-
-      {isLoaded && (
-        <MapSVGContent
-          svgRef={svgRef}
-          sphereRef={sphereRef}
-          graticuleRef={graticuleRef}
-          warBorderPathRef={warBorderPathRef}
-          pathRefsMap={pathRefsMap}
-          features={featuresRef.current}
-          warBorderInitialD={warBorderInitialDRef.current}
-          paths={paths}
-          hovered={hovered}
+    <>
+      <div
+        ref={cardRef}
+        className={
+          isFullscreen
+            ? "fixed inset-0 z-[60] bg-background overflow-hidden"
+            : "relative overflow-hidden rounded-xl border border-card-border bg-card shadow-lg"
+        }
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => {
+          handleMouseUp();
+          hoveredRef.current = null;
+          setHovered(null);
+          setTooltipPos(null);
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        style={{ cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
+      >
+        <MapControls
+          viewMode={viewMode}
           isAnimating={isAnimating}
-          hasActiveFilter={hasActiveFilter}
           isFullscreen={isFullscreen}
-          getCountryColor={getCountryColor}
-          isAnimatingRef={isAnimatingRef}
-          viewModeRef={viewModeRef}
-          hoveredRef={hoveredRef}
-          // Hover repaints at the geometry already on screen. It must NOT
-          // reproject — that was the single biggest source of map lag.
-          syncPathsState={commitLivePaths}
-          tierLookup={activeTierLookup}
-          blocLookup={activeBlocLookup}
-          onHover={setHovered}
-          onTooltipClear={() => setTooltipPos(null)}
-          onCountryClick={handleCountryClick}
-          countryAccess={countryAccess}
-          worldEntities={worldEntities}
-          biCoveredCountries={biCoveredRef.current}
+          onViewChange={startTransition}
+          onFullscreenToggle={() => setIsFullscreen((v) => !v)}
+          zoomRef={zoomRef}
+          imperativeUpdate={imperativeUpdate}
+          syncPathsState={syncPathsState}
         />
-      )}
 
-      {hoveredMapped && tooltipPos && tooltipAccess && !isAnimating && (
-        <MapTooltip
-          countryLabel={hoveredLabel}
-          position={tooltipPos}
-          access={tooltipAccess}
-          filterHighlight={mergedTooltipHighlight}
-          corpsCount={
-            hovered && metricFilter.type === "corps"
-              ? corpsData?.countries[hovered]?.count
-              : undefined
-          }
-          showClickHint={showTooltipClickHint}
+        {/* Grid Background */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_800px_at_50%_50%,var(--primary-dark)_0%,transparent_100%)] opacity-5 pointer-events-none" />
+
+        {!isLoaded && (
+          <div
+            className={`w-full flex items-center justify-center text-muted text-sm ${isFullscreen ? "h-full" : ""}`}
+            style={isFullscreen ? undefined : { aspectRatio: `${SVG_W}/${SVG_H}` }}
+          >
+            Loading map...
+          </div>
+        )}
+
+        {isLoaded && (
+          <MapSVGContent
+            svgRef={svgRef}
+            sphereRef={sphereRef}
+            graticuleRef={graticuleRef}
+            warBorderPathRef={warBorderPathRef}
+            pathRefsMap={pathRefsMap}
+            features={featuresRef.current}
+            warBorderInitialD={warBorderInitialDRef.current}
+            paths={paths}
+            hovered={hovered}
+            isAnimating={isAnimating}
+            hasActiveFilter={hasActiveFilter}
+            isFullscreen={isFullscreen}
+            getCountryColor={getCountryColor}
+            isAnimatingRef={isAnimatingRef}
+            viewModeRef={viewModeRef}
+            hoveredRef={hoveredRef}
+            // Hover repaints at the geometry already on screen. It must NOT
+            // reproject — that was the single biggest source of map lag.
+            syncPathsState={commitLivePaths}
+            tierLookup={activeTierLookup}
+            inspectableFeatureIds={inspectableFeatureIds}
+            blocLookup={activeBlocLookup}
+            blocPalette={blocPalette}
+            onHover={setHovered}
+            onTooltipClear={() => setTooltipPos(null)}
+            onCountryClick={handleCountryClick}
+            countryAccess={countryAccess}
+            worldEntities={worldEntities}
+            biCoveredCountries={biCoveredRef.current}
+          />
+        )}
+
+        {hoveredLabel && tooltipPos && tooltipAccess && !isAnimating && (
+          <MapTooltip
+            countryLabel={hoveredLabel}
+            position={tooltipPos}
+            access={tooltipAccess}
+            filterHighlight={mergedTooltipHighlight}
+            corpsCount={
+              hovered && metricFilter.type === "corps"
+                ? corpsData?.countries[hovered]?.count
+                : undefined
+            }
+            showClickHint={showTooltipClickHint}
+          />
+        )}
+
+        {/* Metric filter panel — normal and fullscreen map */}
+        <GlobeMetricPanel
+          filter={metricFilter}
+          onFilterChange={setMetricFilter}
+          availableCategories={worldMetrics?.availableCategories ?? []}
+          availableMetrics={worldMetrics?.availableMetrics ?? {}}
+          blocsAvailable={blocsAvailable}
+          blocPalette={blocPalette}
         />
-      )}
-
-      {/* Metric filter panel — normal and fullscreen map */}
-      <GlobeMetricPanel
-        filter={metricFilter}
-        onFilterChange={setMetricFilter}
-        availableCategories={worldMetrics?.availableCategories ?? []}
-        availableMetrics={worldMetrics?.availableMetrics ?? {}}
-        blocsAvailable={hasBlocData(preset)}
+      </div>
+      <BackgroundMacroInspector
+        snapshot={worldEntities}
+        selectedEntityId={selectedMacro}
+        onSelect={selectMacro}
+        fullscreen={isFullscreen}
       />
-    </div>
+    </>
   );
 }

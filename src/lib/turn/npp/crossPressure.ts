@@ -14,7 +14,7 @@
  * | district | Selected policy option's archetype approvals weighted by home-state |
  * | donors   | Donor base multiplied by the same policy alignment as ideology      |
  */
-
+import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
 import type {
   Bill,
   LegislationPolicyOption,
@@ -211,6 +211,16 @@ export function computeIdeologyForce(
   bill: CrossPressureBill,
   legislationType: LegislationType | null = null
 ): number {
+  const european = bill.provisions?.find(
+    (provision) => provision.type === "european_treaty" || provision.type === "euro_adoption"
+  );
+  if (european) {
+    const support = europeanIntegrationSupport({
+      economic: npp.policies?.economic ?? 0,
+      social: npp.policies?.social ?? 0,
+    });
+    return european.type === "european_treaty" && european.action === "reject" ? -support : support;
+  }
   const alignment = computePolicyAlignment(npp, bill, legislationType);
   if (alignment == null) return 0;
   return clamp100(alignment * 100);

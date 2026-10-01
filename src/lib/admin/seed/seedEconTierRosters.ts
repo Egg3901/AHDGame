@@ -28,8 +28,8 @@ import { getGameStatePreset } from "@/lib/db/collections/gameState";
  *      (`canPartyFieldInState`) resolve — mirrors the US
  *      `generateStatePartyOrg` "major parties have presence in every state"
  *      convention (organization + hasPresence only; no fabricated
- *      registration/registrationShare, so general-election weighting stays
- *      byte-identical to pre-seed worlds).
+ *      registration, so general-election weighting stays byte-identical to
+ *      pre-seed worlds).
  *   2. One seated incumbent NPP per (region × MAJOR party × chamber) via the
  *      canonical `seedFromSeats` pipeline — enough that both major parties hold
  *      a seat to defend in every region, so the next cycle has a contested

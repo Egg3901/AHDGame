@@ -1,9 +1,12 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
 import { useState, useEffect, useMemo } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { Slider } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
+import { captureProductEvent } from "@/lib/analytics/capture";
 import {
   BILL_CATEGORIES,
   BILL_PROPOSE_ACTION_COST,
@@ -51,7 +54,7 @@ import {
   BillFiscalImpactStrip,
   LawProvisionComparison,
 } from "@/components/bills/LawProvisionComparison";
-import type { CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
@@ -176,6 +179,11 @@ export function ProposeLegislationModal({
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [cat, setCat] = useState(BILL_CATEGORIES[0] as string);
+  const { maastrichtEligibleCountries } = useWorldFlags();
+  const [treatyAction, setTreatyAction] = useState<"" | "ratify" | "reject">("");
+  const canDecideTreaty =
+    cat === "foreign policy" && maastrichtEligibleCountries?.includes(countryId) === true;
+  const includeTreaty = canDecideTreaty && treatyAction !== "";
   const [billChamber, setBillChamber] = useState<string>(
     defaultChamber ?? chambers[0]?.value ?? ""
   );
@@ -218,6 +226,9 @@ export function ProposeLegislationModal({
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
   const isNatCat = NATIONALIZATION_BILL_CATEGORIES.has(cat as BillCategory);
   const isElectoralCat = ELECTORAL_LAW_BILL_CATEGORIES.has(cat as BillCategory);
+  const { euroAdoptionEligibleCountries = [] } = useWorldFlags();
+  const canProposeEuro = cat === "economy" && euroAdoptionEligibleCountries.includes(countryId);
+  const [includeEuroAdoption, setIncludeEuroAdoption] = useState(false);
   const isCentralBankCat = CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(cat as BillCategory);
   // Custom (flavor/roleplay) bills carry no provisions and have no in-game effect.
   const isCustomCat = cat === "custom";
@@ -253,6 +264,8 @@ export function ProposeLegislationModal({
   // One provision each: an electoral-law bill carries the franchise and the
   // registration regime on a single provision, however many axes it sets.
   const standaloneProvisionCount =
+    (canProposeEuro && includeEuroAdoption ? 1 : 0) +
+    (includeTreaty ? 1 : 0) +
     (isCentralBankCat && includeCbIndependence ? 1 : 0) +
     (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
   const hasStandaloneProvision = standaloneProvisionCount > 0;
@@ -451,6 +464,15 @@ export function ProposeLegislationModal({
           ...(includeRegAccess ? { registrationAccess } : {}),
         });
       }
+      if (canProposeEuro && includeEuroAdoption) {
+        provisionsPayload.push({ type: "euro_adoption" });
+      }
+      if (includeTreaty)
+        provisionsPayload.push({
+          type: "european_treaty",
+          treaty: "maastricht",
+          action: treatyAction,
+        });
       if (isCentralBankCat && includeCbIndependence) {
         provisionsPayload.push({
           type: "central_bank_independence",
@@ -483,6 +505,7 @@ export function ProposeLegislationModal({
         showToast(data.error ?? "Failed to propose bill.", "error");
       } else {
         showToast("Bill proposed and opened for voting.", "success");
+        void captureProductEvent("bill_drafted");
         onSuccess();
       }
     } catch {
@@ -1079,7 +1102,20 @@ export function ProposeLegislationModal({
               />
             </div>
           )}
+          {canProposeEuro && (
+            <label className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={includeEuroAdoption}
+                onChange={(event) => setIncludeEuroAdoption(event.target.checked)}
+              />
+              Vote to participate in euro adoption
+            </label>
+          )}
           {/* Central bank independence — economy bills only. */}
+          {canDecideTreaty && (
+            <EuropeanTreatyProvisionEditor action={treatyAction} onChange={setTreatyAction} />
+          )}
           {isCentralBankCat && (
             <CentralBankProvisionEditor
               include={includeCbIndependence}

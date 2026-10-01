@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   recomputeNav,
+  refreshFundNavAfterBondDeployment,
   shouldRebalanceIndexFundConstituents,
   shouldRunCrossFundRebalancing,
   executeFundShareBuy,
@@ -13,6 +14,7 @@ import { ObjectId } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { INDEX_FUND_INITIAL_NAV } from "@/lib/indexFunds/unitAccounting";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
+import { getFundById, updateFundNav } from "@/lib/indexFunds/fundQueries";
 
 // ---------------------------------------------------------------------------
 // Mocks for executeFundShareBuy (avoids a live MongoDB dependency)
@@ -113,8 +115,10 @@ vi.mock("@/lib/bonds/fundBondHoldings", () => ({
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
 vi.mock("@/lib/currency/characterFunds", () => ({ buildPersonalBalanceInc: vi.fn() }));
+vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(4) }));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   resolveCorpLiquidCurrencyCode: vi.fn().mockReturnValue("USD"),
+  loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
   // A4: the bid loop reads the rate table it already loaded instead of a
   // findOne per bid, so the batch form is what the cron imports now.
   fxRateForCorpFromMap: vi.fn().mockReturnValue(1),
@@ -347,6 +351,38 @@ describe("fundCron — recomputeNav", () => {
     );
     expect(before).toBeCloseTo(100, 0);
     expect(after).toBeCloseTo(50, 0);
+  });
+});
+
+describe("fundCron — settled bond NAV", () => {
+  it("persists the marked NAV and backing after a dealer ask loss", async () => {
+    const fundId = new ObjectId();
+    vi.mocked(getFundById).mockResolvedValueOnce({
+      _id: fundId,
+      cashAnchor: 400,
+      holdings: [],
+      unitSupply: 500,
+      quotedNav: 101,
+      slug: "bond-nav-regression",
+      name: "Bond NAV regression",
+      tickerSymbol: "BNAV",
+      scope: "global",
+      kind: "bond",
+      anchorCurrencyCode: "USD",
+      status: "active",
+      reserveUnits: 500,
+      targetConstituents: [],
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+
+    await refreshFundNavAfterBondDeployment(createMockDb() as never, fundId, 50_000, 0);
+
+    expect(updateFundNav).toHaveBeenCalledWith(
+      expect.anything(),
+      fundId,
+      expect.objectContaining({ quotedNav: 100.8, backingRatio: 1 })
+    );
   });
 });
 

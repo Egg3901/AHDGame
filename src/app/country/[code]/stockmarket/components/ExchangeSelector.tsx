@@ -2,13 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import type { ExchangeFilter } from "../types";
 import type { ExchangeMetaEntry } from "../stockMarketRouting";
+
+export interface ExchangeCompareRow {
+  listings: number;
+  marketCap: number;
+}
 
 interface ExchangeSelectorProps {
   exchangeMeta: Record<string, ExchangeMetaEntry>;
   exchangeFilter: ExchangeFilter;
   onSelect: (key: string) => void;
+  /** Lazily loaded per-exchange size data for the compare panel. */
+  compareData?: Record<string, ExchangeCompareRow>;
+  compareLoading?: boolean;
+  compareOpen?: boolean;
+  onToggleCompare?: () => void;
 }
 
 /**
@@ -23,38 +34,91 @@ export function ExchangeSelector({
   exchangeMeta,
   exchangeFilter,
   onSelect,
+  compareData,
+  compareLoading,
+  compareOpen,
+  onToggleCompare,
 }: ExchangeSelectorProps) {
   const entries = Object.entries(exchangeMeta);
   const currentEntry = exchangeMeta[exchangeFilter] ?? exchangeMeta.global;
   const currentLabel = exchangeFilter === "global" ? "Global" : (currentEntry?.title ?? "Global");
+  const { formatAmount } = useCurrency();
 
   return (
-    <>
-      {/* Desktop: inline pill row */}
-      <div className="hidden sm:flex bg-black/50 backdrop-blur-sm rounded-lg p-1 border border-white/10">
-        {entries.map(([key, val]) => (
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2">
+        {onToggleCompare && entries.length > 2 && (
           <button
-            key={key}
-            onClick={() => onSelect(key)}
-            className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
-              exchangeFilter === key
-                ? "bg-primary text-white shadow-sm"
-                : "text-white/70 hover:text-white"
+            type="button"
+            onClick={onToggleCompare}
+            aria-expanded={compareOpen ?? false}
+            title="Compare exchanges by listings and market cap"
+            className={`rounded-lg px-3 py-1.5 border text-xs font-bold uppercase tracking-wider transition-colors ${
+              compareOpen
+                ? "bg-primary/20 border-primary/40 text-white"
+                : "bg-black/50 border-white/10 text-white/70 hover:text-white"
             }`}
           >
-            {key === "global" ? "Global" : val.title}
+            Compare
           </button>
-        ))}
+        )}
+        {/* Desktop: inline pill row */}
+        <div className="hidden sm:flex bg-black/50 backdrop-blur-sm rounded-lg p-1 border border-white/10">
+          {entries.map(([key, val]) => (
+            <button
+              key={key}
+              onClick={() => onSelect(key)}
+              className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
+                exchangeFilter === key
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-white/70 hover:text-white"
+              }`}
+            >
+              {key === "global" ? "Global" : val.title}
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile: compact chip + dropdown */}
+        <MobileExchangeDropdown
+          entries={entries}
+          exchangeFilter={exchangeFilter}
+          currentLabel={currentLabel}
+          onSelect={onSelect}
+        />
       </div>
 
-      {/* Mobile: compact chip + dropdown */}
-      <MobileExchangeDropdown
-        entries={entries}
-        exchangeFilter={exchangeFilter}
-        currentLabel={currentLabel}
-        onSelect={onSelect}
-      />
-    </>
+      {compareOpen && (
+        <div className="w-full min-w-64 rounded-lg border border-white/15 bg-black/85 backdrop-blur-md shadow-xl py-1">
+          {compareLoading && (
+            <p className="px-3 py-2 text-xs text-white/60">Loading exchange sizes…</p>
+          )}
+          {!compareLoading &&
+            entries.map(([key, val]) => {
+              const label = key === "global" ? "Global" : val.title;
+              const row = compareData?.[key];
+              const active = exchangeFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onSelect(key)}
+                  className={`w-full flex items-center justify-between gap-4 px-3 py-2 text-xs transition-colors ${
+                    active ? "bg-primary/30 text-white" : "text-white/80 hover:bg-white/10"
+                  }`}
+                >
+                  <span className="font-bold uppercase tracking-wider">{label}</span>
+                  <span className="tabular-nums text-white/60">
+                    {row
+                      ? `${row.listings.toLocaleString("en-US")} · ${formatAmount(row.marketCap)}`
+                      : "—"}
+                  </span>
+                </button>
+              );
+            })}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -38,7 +38,7 @@ interface KnownCase {
   sourceCorporationId: string;
   countryId: "DD" | "RU" | "UKR";
   stateId: string;
-  sectorType: "financial" | "technology" | "media_entertainment";
+  sectorType: "financial" | "technology" | "media";
   compensation: "none" | "book";
 }
 
@@ -104,7 +104,7 @@ const KNOWN_CASES: readonly KnownCase[] = [
     sourceCorporationId: "6a79fd1371e5d11a9601debc",
     countryId: "UKR",
     stateId: "UKR_KYI",
-    sectorType: "media_entertainment",
+    sectorType: "media",
     compensation: "book",
   },
 ] as const;

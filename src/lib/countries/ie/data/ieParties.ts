@@ -1,13 +1,15 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Ireland default political parties.
  *
  * Two preset rosters:
- *   - 2019-default: FG / FF / SF / Labour / Green — the modern roster.
+ *   - 2019-default: FG / FF / SF / Labour / Green — the modern base roster.
  *     Sinn Féin in 1991 was a tiny abstentionist party with no Dáil seats
  *     (didn't take seats until 1997). Modern Sinn Féin / Greens are gated
- *     to 2019-default only.
+ *     to modern presets only.
+ *   - 2027-default: the modern base plus parties elected in 2024.
  *   - 1991-default: FF / FG / Labour + Workers' Party (WP) + Progressive
  *     Democrats (PD). WP held 7 Dáil seats in 1989; PD held 6 (FF-PD
  *     formed government). WP split into Democratic Left in 1992 then
@@ -17,6 +19,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * seedOrder determines sequentialId assignment within IE.
  */
 export const ieParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.IE ?? []),
   {
     seedOrder: 1,
     countryId: "IE" as const,
@@ -56,7 +59,7 @@ export const ieParties: PartySeed[] = [
     createdBy: null,
   },
   {
-    // 2019-only: SF held no Dáil seats in 1991 (abstentionist) and the
+    // Modern-only: SF held no Dáil seats in 1991 (abstentionist) and the
     // modern positioning post-1986 ard fheis / 1997 seat-taking is the
     // wrong calibration for early-1990s republicanism.
     seedOrder: 3,
@@ -76,7 +79,7 @@ export const ieParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     seedOrder: 4,
@@ -98,7 +101,7 @@ export const ieParties: PartySeed[] = [
     createdBy: null,
   },
   {
-    // 2019-only: Green Party held a single Dublin South seat in 1989-1992
+    // Modern-only: Green Party held a single Dublin South seat in 1989-1992
     // (Roger Garland) at ~1.5% national vote share — far too small for a
     // top-roster default in 1991.
     seedOrder: 5,
@@ -118,7 +121,7 @@ export const ieParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   // ─── 1991-only defaults ────────────────────────────────────────────────
   {

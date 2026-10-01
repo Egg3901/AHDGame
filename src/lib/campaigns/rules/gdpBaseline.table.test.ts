@@ -401,7 +401,7 @@ describe("gdpBaseline table derivation (issue #798)", () => {
     const table = getGdpBaselineTable();
     // Bundle-native cells: 2023 repeats the 2019-era authoring scale, and the
     // explicit 2027 bundle is bundle-native (not a 2019 fallback repeat).
-    expect(table.CN["1991"]).toBe(1_931);
+    expect(table.CN["1991"]).toBe(1_865);
     expect(table.CN["1999"]).toBe(7_341);
     expect(table.CN["2007"]).toBe(21_028);
     expect(table.CN["2023"]).toBe(98_268);

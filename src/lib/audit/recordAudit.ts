@@ -117,6 +117,22 @@ function computeAuditExpiresAt(ts: Date, turnLengthMinutes: number): Date {
   return new Date(ts.getTime() + AUDIT_TTL_TURNS * turnLengthMinutes * 60_000);
 }
 
+/** Freeze a canonical audit envelope for a durable outbox before its command runs. */
+export function prepareAuditRecord(
+  entry: ActionAuditInput,
+  defaults: { turn: number; ts: Date; turnLengthMinutes: number }
+): ActionAuditRecord {
+  const normalized = withContextDefaults({ ...entry, delta: trimDelta(entry.delta) });
+  const ts = entry.ts ?? defaults.ts;
+  return {
+    ...normalized,
+    _id: new ObjectId(),
+    ts,
+    turn: entry.turn ?? defaults.turn,
+    expiresAt: computeAuditExpiresAt(ts, defaults.turnLengthMinutes),
+  };
+}
+
 async function flush(): Promise<void> {
   if (buffer.length === 0) return;
   const batch = buffer;

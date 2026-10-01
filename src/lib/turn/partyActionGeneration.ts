@@ -171,6 +171,7 @@ export async function processPartyActionGeneration(
   // Keyed by country + sequentialId: `sequentialId` is unique per country only,
   // so a country-blind key lets (say) BR party 8 decide UK party 8's tier.
   const nationalApOps: AnyBulkWriteOperation<PoliticalParty>[] = [];
+  const nationalPsOps: AnyBulkWriteOperation<PoliticalParty>[] = [];
   const tierByPartyKey = new Map<string, "major" | "minor">();
   for (const party of nationalParties) {
     const apTier = resolvePartyTier(party);
@@ -218,13 +219,12 @@ export async function processPartyActionGeneration(
     };
     if (gain.investmentDebit > 0) {
       // $set + $inc on different fields is fine in one update operation.
-      await db.collection<PoliticalParty>("politicalParties").updateOne(
-        { _id: party._id },
-        {
-          $set: update,
-          $inc: { treasury: -gain.investmentDebit },
-        }
-      );
+      nationalPsOps.push({
+        updateOne: {
+          filter: { _id: party._id },
+          update: { $set: update, $inc: { treasury: -gain.investmentDebit } },
+        },
+      });
       // Audit: emit treasury transaction for the investment debit.
       await emitTreasuryTransaction({
         db,
@@ -240,9 +240,9 @@ export async function processPartyActionGeneration(
         now,
       });
     } else {
-      await db
-        .collection<PoliticalParty>("politicalParties")
-        .updateOne({ _id: party._id }, { $set: update });
+      nationalPsOps.push({
+        updateOne: { filter: { _id: party._id }, update: { $set: update } },
+      });
     }
     result.nationalPartiesUpdated += 1;
     result.totalActionsGenerated += gain.total;
@@ -273,13 +273,16 @@ export async function processPartyActionGeneration(
     }
   }
 
-  if (nationalApOps.length > 0) {
-    await db.collection<PoliticalParty>("politicalParties").bulkWrite(nationalApOps);
+  if (nationalApOps.length > 0 || nationalPsOps.length > 0) {
+    await db
+      .collection<PoliticalParty>("politicalParties")
+      .bulkWrite([...nationalApOps, ...nationalPsOps]);
   }
 
   // ─── State parties ─────────────────────────────────────────────────────
   const stateParties = await db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray();
   const stateApOps: AnyBulkWriteOperation<StatePartyOrg>[] = [];
+  const statePsOps: AnyBulkWriteOperation<StatePartyOrg>[] = [];
 
   // Resolve which state parties have at least one homed Player Character member.
   // Key format matches StatePartyOrg._id (`${stateId}_${partyId}`). Ban-agnostic,
@@ -328,9 +331,12 @@ export async function processPartyActionGeneration(
     // player member is pulled straight down to the cap this turn, regardless of
     // treasury (broke hoarders drain too). Skip gain generation — already capped.
     if (currentPs > cap) {
-      await db
-        .collection<StatePartyOrg>("statePartyOrg")
-        .updateOne({ _id: sp._id }, { $set: { politicalStrength: cap, updatedAt: now } });
+      statePsOps.push({
+        updateOne: {
+          filter: { _id: sp._id },
+          update: { $set: { politicalStrength: cap, updatedAt: now } },
+        },
+      });
       stateLedgerRows.push({
         countryId: sp.countryId,
         partyId: sp.partyId,
@@ -360,13 +366,12 @@ export async function processPartyActionGeneration(
       updatedAt: now,
     };
     if (gain.investmentDebit > 0) {
-      await db.collection<StatePartyOrg>("statePartyOrg").updateOne(
-        { _id: sp._id },
-        {
-          $set: update,
-          $inc: { treasury: -gain.investmentDebit },
-        }
-      );
+      statePsOps.push({
+        updateOne: {
+          filter: { _id: sp._id },
+          update: { $set: update, $inc: { treasury: -gain.investmentDebit } },
+        },
+      });
       // Audit: emit treasury transaction for the state-party investment debit.
       await emitTreasuryTransaction({
         db,
@@ -382,9 +387,9 @@ export async function processPartyActionGeneration(
         now,
       });
     } else {
-      await db
-        .collection<StatePartyOrg>("statePartyOrg")
-        .updateOne({ _id: sp._id }, { $set: update });
+      statePsOps.push({
+        updateOne: { filter: { _id: sp._id }, update: { $set: update } },
+      });
     }
     result.statePartiesUpdated += 1;
     result.totalActionsGenerated += gain.total;
@@ -416,8 +421,8 @@ export async function processPartyActionGeneration(
     }
   }
 
-  if (stateApOps.length > 0) {
-    await db.collection<StatePartyOrg>("statePartyOrg").bulkWrite(stateApOps);
+  if (stateApOps.length > 0 || statePsOps.length > 0) {
+    await db.collection<StatePartyOrg>("statePartyOrg").bulkWrite([...stateApOps, ...statePsOps]);
   }
 
   const allLedgerRows = [...nationalLedgerRows, ...stateLedgerRows];

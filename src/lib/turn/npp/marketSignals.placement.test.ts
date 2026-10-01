@@ -229,9 +229,7 @@ describe("empty-market coverage treatment", () => {
   });
 
   it("does not redirect into an uncovered cell smaller than one facility", () => {
-    const pool = new Map([
-      ["US", [us("manufacturing", "TX", 10_000), us("media_entertainment", "AZ", 20)]],
-    ]);
+    const pool = new Map([["US", [us("manufacturing", "TX", 10_000), us("media", "AZ", 20)]]]);
     const pick = findBestUnownedSector(
       "US",
       "CA",

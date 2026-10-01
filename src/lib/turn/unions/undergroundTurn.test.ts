@@ -74,7 +74,7 @@ describe("processUndergroundTurn", () => {
     expect(writes[0].updateOne.update.$set.heat).toBe(8);
   });
 
-  it("decays heat on idle turns and writes nothing at zero", async () => {
+  it("decays heat on idle turns and stamps cold cells for replay safety", async () => {
     const warm = makeCell({ heat: 10, lastUndergroundDriveTurn: 40 });
     const cold = makeCell({ heat: 0 });
     const { db, bulkWrite } = stubDb([warm, cold]);
@@ -85,9 +85,84 @@ describe("processUndergroundTurn", () => {
     const writes = bulkWrite.mock.calls[0][0] as Array<{
       updateOne: { filter: { _id: ObjectId }; update: { $set: Record<string, unknown> } };
     }>;
-    expect(writes).toHaveLength(1);
+    expect(writes).toHaveLength(2);
     expect(writes[0].updateOne.filter._id).toEqual(warm._id);
     expect(writes[0].updateOne.update.$set.heat).toBe(8);
+    expect(writes[1].updateOne.update.$set.undergroundProcessedTurn).toBe(42);
+    expect(writes[1].updateOne.update.$set.heat).toBeUndefined();
+  });
+
+  it("applies idle decay, recent-drive decay, and detection only once on replay", async () => {
+    const cell = makeCell({
+      heat: 40,
+      recentUndergroundDriveCount: 4,
+      lastUndergroundDriveTurn: 40,
+    });
+    const bulkWrite = vi.fn(
+      async (
+        operations: Array<{
+          updateOne: {
+            filter: { $or: Array<{ undergroundProcessedTurn: { $lt?: number } }> };
+            update: { $set: Partial<Union> };
+          };
+        }>
+      ) => {
+        for (const { updateOne } of operations) {
+          if (
+            cell.undergroundProcessedTurn !== undefined &&
+            cell.undergroundProcessedTurn >=
+              (updateOne.filter.$or.find((condition) => condition.undergroundProcessedTurn.$lt)
+                ?.undergroundProcessedTurn.$lt ?? 42)
+          )
+            continue;
+          Object.assign(cell, updateOne.update.$set);
+        }
+        return { modifiedCount: operations.length };
+      }
+    );
+    const db = {
+      collection: (name: string) => {
+        if (name !== "unions") throw new Error(`unexpected collection ${name}`);
+        return { find: () => ({ toArray: async () => [cell] }), bulkWrite };
+      },
+    } as unknown as Db;
+    seededRollResult = 1;
+
+    const first = await processUndergroundTurn(db, 42);
+    const afterFirst = {
+      heat: cell.heat,
+      recentUndergroundDriveCount: cell.recentUndergroundDriveCount,
+      exposedUntilTurn: cell.exposedUntilTurn,
+      undergroundProcessedTurn: cell.undergroundProcessedTurn,
+    };
+    const replay = await processUndergroundTurn(db, 42);
+
+    expect(first.newlyExposed).toBe(1);
+    expect(replay.newlyExposed).toBe(0);
+    expect(cell).toMatchObject(afterFirst);
+    expect(afterFirst).toMatchObject({
+      heat: 38,
+      recentUndergroundDriveCount: 2,
+      exposedUntilTurn: 47,
+      undergroundProcessedTurn: 42,
+    });
+    expect(bulkWrite).toHaveBeenCalledTimes(1);
+    expect(bulkWrite.mock.calls[0][0][0].updateOne.filter).toMatchObject({
+      _id: cell._id,
+      $or: [
+        { undergroundProcessedTurn: { $exists: false } },
+        { undergroundProcessedTurn: { $lt: 42 } },
+      ],
+    });
+
+    await processUndergroundTurn(db, 43);
+    expect(cell.heat).toBe(36);
+    expect(cell.recentUndergroundDriveCount).toBe(1);
+    expect(bulkWrite).toHaveBeenCalledTimes(2);
+    await processUndergroundTurn(db, 42);
+    expect(cell.heat).toBe(36);
+    expect(cell.undergroundProcessedTurn).toBe(43);
+    expect(bulkWrite).toHaveBeenCalledTimes(2);
   });
 
   it("skips decay on turns with a drive but still clamps runaway heat", async () => {
@@ -111,6 +186,47 @@ describe("processUndergroundTurn", () => {
       updateOne: { update: { $set: Record<string, unknown> } };
     }>;
     expect(writes[0].updateOne.update.$set.exposedUntilTurn).toBe(42 + EXPOSURE_LENGTH_TURNS - 1);
+  });
+
+  it("uses the country's crackdown posture in the seeded detection roll", async () => {
+    const hot = makeCell({ heat: 30, lastUndergroundDriveTurn: 42 });
+    const { db } = stubDb([hot]);
+    seededRollResult = 15;
+    const normal = await processUndergroundTurn(db, 42, new Set(["US"]));
+    expect(normal.newlyExposed).toBe(0);
+    const crackdown = await processUndergroundTurn(
+      db,
+      42,
+      new Set(["US"]),
+      new Map([["US", "crackdown"]])
+    );
+    expect(crackdown.newlyExposed).toBe(1);
+  });
+
+  it("recent drives increase detection and decay after the roll", async () => {
+    const active = makeCell({
+      heat: 30,
+      lastUndergroundDriveTurn: 42,
+      recentUndergroundDriveCount: 4,
+    });
+    const { db, bulkWrite } = stubDb([active]);
+    seededRollResult = 15;
+    const result = await processUndergroundTurn(db, 42);
+    expect(result.newlyExposed).toBe(1);
+    const writes = bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { update: { $set: Record<string, unknown> } };
+    }>;
+    expect(writes[0].updateOne.update.$set.recentUndergroundDriveCount).toBe(2);
+  });
+
+  it("clears the fractional drive tail after the recent window", async () => {
+    const settled = makeCell({ recentUndergroundDriveCount: 0.5 });
+    const { db, bulkWrite } = stubDb([settled]);
+    await processUndergroundTurn(db, 42);
+    const writes = bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { update: { $set: Record<string, unknown> } };
+    }>;
+    expect(writes[0].updateOne.update.$set.recentUndergroundDriveCount).toBe(0);
   });
 
   it("stays dark when the roll misses and never rolls below threshold", async () => {

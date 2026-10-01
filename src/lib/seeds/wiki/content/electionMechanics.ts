@@ -166,7 +166,7 @@ Because the inputs are live national metrics, this channel is a lever, not weath
 House and State Senate (US), Bundestag constituency seats, UK Commons regions, and JP Shugiin use proportional allocation:
 
 - **Largest-remainder method** distributes seats proportional to vote share.
-- **Minimum threshold:** 20% of votes for House and Commons; 10% for State Senate and Regional Council (larger districts with more parties splitting the vote).
+- **Minimum threshold:** 20% of votes for the US House; 10% of pooled party votes for UK Commons, State Senate, and Regional Council races, which have larger delegations and more parties splitting the vote.
 - **2-seat special case (House only):** winner takes both unless the runner-up reaches the threshold.
 - **Seats estimate:** updated each turn as each candidate's live vote share times the number of seats.
 

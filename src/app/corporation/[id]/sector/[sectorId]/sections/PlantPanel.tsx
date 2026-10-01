@@ -92,9 +92,7 @@ export default function PlantPanel({
   const staffingShortfall =
     workersDesired > 0 && plants.workers < workersDesired ? 1 - plants.workers / workersDesired : 0;
   const primaryMediaSupply =
-    sectorType === "media_entertainment"
-      ? marketSupplies.find((supply) => supply.units > 0)
-      : undefined;
+    sectorType === "media" ? marketSupplies.find((supply) => supply.units > 0) : undefined;
   const mediaLedgerShare =
     hasRun && primaryMediaSupply && (plants.producedUnits ?? 0) > 0
       ? primaryMediaSupply.units / (plants.producedUnits ?? 1)

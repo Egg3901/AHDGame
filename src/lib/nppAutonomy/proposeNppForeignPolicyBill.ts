@@ -54,7 +54,9 @@ export async function proposeNppForeignPolicyBill(
   if (!official?.nppId) {
     return { ok: false, reason: "The governing party has no seated NPP bill sponsor." };
   }
-  const sponsor = await db.collection<NPP>("npps").findOne({ _id: official.nppId });
+  const sponsor = await db
+    .collection<NPP>("npps")
+    .findOne({ _id: official.nppId }, { projection: { name: 1, party: 1 } });
   if (!sponsor) {
     return { ok: false, reason: "The selected legislative sponsor no longer exists." };
   }

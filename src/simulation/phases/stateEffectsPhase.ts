@@ -4,6 +4,7 @@
  * it back into the registry array at the exact same position, so phase
  * registration ORDER — which is behavior — is unchanged.
  */
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { processStatePolicyEffects } from "@/lib/policyEffects";
 import { processAllStateDemographics } from "@/lib/demographicEffects";
 import { processEraCheckpointsTurn } from "@/lib/turn/eraCheckpointTurn";
@@ -79,6 +80,7 @@ import { resetRunningMateSurrogateActions } from "@/lib/turn/runningMateSurrogat
 import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 import { regionalBudgetPhaseDue, resolveRegionalBudgetCadence } from "./regionalBudgetCadence";
+import type { LegislationType } from "@/lib/db/types/legislation";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
   key: "stateEffectsAndNationalAggregation",
@@ -94,6 +96,18 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       warnings,
       phaseStatuses,
     } = context;
+    // Both policy processors need the complete immutable legislation catalog
+    // and run concurrently below. Share one decode rather than pulling the same
+    // ~2.4 MB / 1,030-document collection into JS twice in the same turn.
+    let legislationTypesPromise: Promise<LegislationType[]> | undefined;
+    const getLegislationTypes = () => {
+      legislationTypesPromise ??= db
+        .collection<LegislationType>("legislationTypes")
+        // full-read(legislationTypes): both policy processors evaluate every authored effect
+        .find({})
+        .toArray();
+      return legislationTypesPromise;
+    };
     // S4 (2026-07-16 core-sim audit): crisisTurn, ministerialOrders, and
     // policyEffects all write the SAME stateMetrics "<category>.<metric>.value"
     // field paths — crisisTurn and ministerialOrders via $inc, policyEffects
@@ -183,7 +197,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // windows are visible instead of treating the prior settlement as stale.
       await Promise.all([ukRegionalBudgetPromise, jpRegionalBudgetPromise]);
       const policyResult = await runtime.runPhase("policyEffects", () =>
-        processStatePolicyEffects(db)
+        getLegislationTypes().then((legislationTypes) =>
+          processStatePolicyEffects(db, legislationTypes)
+        )
       );
       return { ...prerequisiteResults, policyResult };
     })();
@@ -212,7 +228,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // destructured (mirrors the append-only results below); only
       // demoEffectResult is.
       runtime.runPhase("demographicEffects", async () => {
-        const result = await processAllStateDemographics(db);
+        const result = await processAllStateDemographics(db, await getLegislationTypes());
         // Isolated so a checkpoint bug can't mark the whole demographics phase
         // failed (and discard its result) after the demographics writes above
         // have already persisted — the sequencing constraint is the only
@@ -656,8 +672,11 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
 
     const [metricHistResult, approvalSnapshotResult] = await Promise.all([
       runtime.runPhase("metricHistory", async () => {
+        const steps = substepMarker();
         await snapshotMetricHistory(db, newTurn);
+        steps.mark("metricArrays");
         if (longHorizonCtx) await appendMacroTelemetry(db, longHorizonCtx, newTurn);
+        steps.mark("macroTelemetry");
       }),
       // Covers the active countries plus any belligerent that is not one of
       // them, so a war block is computed for every country actually fighting.

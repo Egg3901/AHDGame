@@ -149,6 +149,8 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Temporary receipts retained until an expired FX order acknowledges its refund. */
+  forexExpiryRefunds?: string[];
   /** Regional ad exposure follows this character across candidacies. */
   targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
   targetedAdsRevision?: number;
@@ -233,6 +235,10 @@ export interface Character {
   /** When true, insufficient foreign currency auto-converts from home currency */
   autoConvertEnabled?: boolean;
   actions: number;
+  /** Last turn this character ran any underground union drive, across all unions. */
+  lastUndergroundDriveTurn?: number | null;
+  /** Per-country turn claim for the labor-archetype cost of an active union crackdown. */
+  lastUnionCrackdownApprovalTurn?: Partial<Record<CountryId, number>>;
   /**
    * RPG stat block (Fallout-SPECIAL style). Each value is a float clamped to
    * [1, 10]. Absent on characters created before the stat system shipped —
@@ -286,6 +292,7 @@ export interface Character {
   lastPollLarge?: StoredPoll;
   highlightedAchievementIds?: ObjectId[];
   campaignSongUrl?: string;
+  /** @deprecated Campaign songs no longer autoplay; legacy documents may still carry it. */
   campaignSongAutoplay?: boolean;
   groupFavorability?: Record<string, number>;
   /**
@@ -390,6 +397,17 @@ export interface Character {
   /** Patreon highlight color for tintable borders */
   tintColor?: string | null;
   /** Multi-currency LOC — gated by gameConfig.lineOfCreditEnabled */
+  /** Monotonic receipt generation for atomic LOC debt and wallet settlements. */
+  lineOfCreditRevision?: number;
+  /** Protected LOC cash outcome until its original journal acknowledges delivery. */
+  locSettlementRevision?: number;
+  pendingLocSettlement?: {
+    key: string;
+    token: string;
+    generation: number;
+    status: "claimed" | "delivered" | "rejected";
+    error?: string;
+  };
   lineOfCredit?: LineOfCreditState;
   /**
    * Set when the character joins a party; unset when they leave or go

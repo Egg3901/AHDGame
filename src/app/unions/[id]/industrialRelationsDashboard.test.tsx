@@ -352,9 +352,8 @@ describe("union industrial-relations dashboard", () => {
     render(<UnionPage params={PARAMS} />);
 
     await screen.findByText(/Unions are banned under current law in United States/);
-    expect(
-      (screen.getByRole("button", { name: "Run Organize Drive" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Run Organize Drive" })).toBeNull();
+    expect(screen.getByText(/Underground cell details are available to characters/i)).toBeTruthy();
     // The recruitment drive is retired under union dues v1: growth happens by
     // organizing a sector from that sector's page, so there is no button here.
     expect(screen.queryByRole("button", { name: "Run Recruitment Drive" })).toBeNull();

@@ -91,7 +91,11 @@ function account(db: InMemoryDb): SavingsAccount {
 }
 function bank(db: InMemoryDb) {
   return db.collection("corporations").docs[0] as {
-    bankCharter: { cashReserves: number; playerDeposits?: number };
+    bankCharter: {
+      cashReserves: number;
+      playerDeposits?: number;
+      blacklist?: { characterIds: string[] };
+    };
   };
 }
 function pool(db: InMemoryDb): number {
@@ -180,6 +184,78 @@ describe("authoritative savings writes", () => {
     expect(owner(db).currencyBalances.personal.USD).toBe(5_500);
     expect(bank(db).bankCharter.cashReserves).toBe(100_500);
     expect(bank(db).bankCharter.playerDeposits).toBe(500);
+  });
+
+  it("lets a blacklisted depositor withdraw existing savings", async () => {
+    await moveCharacterSavings(db as unknown as Db, OWNER, "USD", BANK.toString());
+    bank(db).bankCharter.blacklist = { characterIds: [OWNER.toString()] };
+
+    const result = await runSavingsCommand(
+      db as unknown as Db,
+      OWNER,
+      "USD",
+      { type: "withdraw", amount: 500 },
+      "blacklisted-withdrawal"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(account(db).balance).toBe(500);
+    expect(owner(db).currencyBalances.personal.USD).toBe(5_500);
+    expect(bank(db).bankCharter.cashReserves).toBe(100_500);
+  });
+
+  it("recovers savings from a deleted bank before paying a withdrawal", async () => {
+    await moveCharacterSavings(db as unknown as Db, OWNER, "USD", BANK.toString());
+    db.collection("corporations").docs.splice(0, 1);
+    db.seed("depositInsuranceFunds", [
+      {
+        _id: "USD",
+        balance: 400,
+        insuredCap: 5_000,
+        premiumsCollectedLifetime: 0,
+        payoutsLifetime: 0,
+        treasuryBackstopLifetime: 0,
+      },
+    ]);
+    db.seed("federalBudget", [
+      {
+        _id: "federal",
+        treasuryBalance: 10_000,
+        spending: { total: 0, byCategory: {} },
+        surplus: 0,
+      },
+    ]);
+
+    const withdrawn = await runSavingsCommand(
+      db as unknown as Db,
+      OWNER,
+      "USD",
+      { type: "withdraw", amount: 250 },
+      "withdraw-after-bank-deletion"
+    );
+
+    expect(withdrawn.ok).toBe(true);
+    expect(account(db)).toMatchObject({ balance: 750, holder: "centralBank", status: "open" });
+    expect(owner(db).currencyBalances.personal.USD).toBe(5_250);
+    expect(owner(db).currencyBalances.savings.USD).toBe(750);
+    expect(owner(db).currencyBalances.savingsHolder?.USD).toBe("centralBank");
+    expect(pool(db)).toBe(49_750);
+    expect(
+      (db.collection("centralBanks").docs[0] as { householdSavingsLiability: number })
+        .householdSavingsLiability
+    ).toBe(750);
+
+    expect(db.collection("depositInsuranceFunds").docs[0]).toMatchObject({
+      _id: "USD",
+      balance: 0,
+      payoutsLifetime: 1_000,
+      treasuryBackstopLifetime: 600,
+    });
+    expect(db.collection("federalBudget").docs[0]).toMatchObject({
+      treasuryBalance: 9_400,
+      spending: { total: 600, byCategory: { depositInsurance: 600 } },
+      surplus: -600,
+    });
   });
 
   it("keeps the shadow comparison clean after a sequence of writes", async () => {

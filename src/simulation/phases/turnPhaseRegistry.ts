@@ -51,6 +51,7 @@ import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadershi
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
 import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
+import { reconcileMutualDefence } from "@/lib/military/treatyDefence";
 import { applyDecayToAllStates, processPartyGOTV } from "@/lib/turn/demographicTurnoutTurn";
 import {
   processPartyOrgTurn,
@@ -820,11 +821,10 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           return { billsProposed };
         });
 
-        // File bench challengers directly into otherwise-uncontested single-seat
-        // primaries (governor/senate) BEFORE nppBehavior, governor is last in
-        // RACE_PRIORITY so nppBehavior's own Phase-2 starves it. Running first
-        // means nppBehavior (which reloads context this same turn) sees the filed
-        // candidate and won't double-fill the race.
+        // File bench challengers directly into uncovered primaries before
+        // nppBehavior. Some direct chamber families are outside RACE_PRIORITY,
+        // while low-priority races can be starved by the shared NPP pool.
+        // nppBehavior reloads context afterward and sees the filed candidates.
         await runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow));
 
         const nppResult = await runtime.runPhase("nppBehavior", () =>
@@ -1319,6 +1319,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         phaseResults.settlement = await runtime.runPhase("settlement", () =>
           processSettlementTurn(db, newTurn)
         );
+
+        // Sequential and AFTER alignment/settlement: alliance membership and posture
+        // (both written by the batch above and by alignment defections) decide who is
+        // bound. Brings every declared war into line with the alliances as they stand
+        // now: a posture raised to Article 5 mid-war, or a country that joined a
+        // defender's alliance mid-war. Idempotent; see `reconcileMutualDefence`.
+        await runtime.runPhase("mutualDefence", () => reconcileMutualDefence(db, newTurn));
 
         await runtime.runPhase("autoReelectionEntry", () =>
           runAutoReelectionEntry(db, gameNow, newTurn)

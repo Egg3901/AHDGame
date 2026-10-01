@@ -133,6 +133,35 @@ describe("processElectionEntry", () => {
     });
   });
 
+  it("batches live-turn candidate inserts", async () => {
+    const election = createTestElection();
+    const npp = createTestNpp();
+    const ctx = buildContext(db, election, [npp], [], []);
+    ctx.batchCandidateInserts = true;
+    db.collection("electionCandidates");
+    db.collectionMocks.electionCandidates.bulkWrite.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 0,
+      upsertedCount: 1,
+      upsertedIds: { 0: new ObjectId() },
+      insertedCount: 0,
+      deletedCount: 0,
+    });
+
+    await expect(processElectionEntry(ctx)).resolves.toBe(1);
+
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.bulkWrite).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.bulkWrite.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        updateOne: expect.objectContaining({
+          filter: { characterId: npp._id, status: "active" },
+          upsert: true,
+        }),
+      }),
+    ]);
+  });
+
   it("does not abort the whole pass when a candidacy insert hits the active-candidate duplicate-key index", async () => {
     // Reproduces the production crash: an incumbent who already holds an active
     // candidacy in an upcoming election (not tracked) triggers a second active

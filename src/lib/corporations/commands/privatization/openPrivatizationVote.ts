@@ -107,7 +107,12 @@ export async function openPrivatizationVote(
     return { ok: false, error: "A privatization vote is already open", status: 400 };
   }
 
-  const nonCeoShares = corporation.totalShares - ceoShares;
+  const unplacedIpoShares =
+    corporation.pendingShareIssuance?.issuedUpfront &&
+    corporation.pendingShareIssuance.source === "ipo"
+      ? corporation.pendingShareIssuance.remainingShares
+      : 0;
+  const nonCeoShares = corporation.totalShares - ceoShares - unplacedIpoShares;
 
   // CEO holds 100% — no minority holders to buy out, skip the vote entirely.
   if (nonCeoShares === 0) {
@@ -127,6 +132,8 @@ export async function openPrivatizationVote(
           lastPrivatizationTurn: currentTurn,
           updatedAt: now,
           shareholders: cleanedShareholders,
+          totalShares: ceoShares,
+          publicFloat: 0,
         },
         $unset: {
           privatizationCooldownUntilTurn: "",
@@ -155,7 +162,11 @@ export async function openPrivatizationVote(
   const hasFundHolders = corporation.shareholders.some(
     (s) => s.fundId && !s.characterId && !s.corporationId
   );
-  if (!hasNonCeoCharOrCorp && (corporation.publicFloat ?? 0) === 0 && hasFundHolders) {
+  if (
+    !hasNonCeoCharOrCorp &&
+    (corporation.publicFloat ?? 0) - unplacedIpoShares === 0 &&
+    hasFundHolders
+  ) {
     const buyout = await executeFundOnlyBuyout(db, corporation, currentTurn);
     if (!buyout.ok) return buyout;
     return { ok: true, immediate: true };

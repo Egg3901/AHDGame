@@ -8,7 +8,7 @@ import type {
   StatePartyOrg,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { createNPP, calculateQualityBonus } from "@/lib/npp/generator";
+import { createNPP, calculateQualityBonus, type NPPGenerationContext } from "@/lib/npp/generator";
 import { canPartyFieldInState } from "@/lib/turn/nppEntryLogic";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
@@ -16,9 +16,7 @@ import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicate
 /**
  * Directly-elected SINGLE-SEAT offices that need a bench challenger to be
  * contested. Multi-seat chambers normally field both parties via incumbent
- * defense; the indirectly-elected executives (president/primeMinister/
- * chancellor/ministerPresident) resolve through government formation, not a
- * primary, so they are out of scope.
+ * defense, but a vacant chamber has no incumbent supply.
  */
 const CONTESTABLE_SINGLE_SEAT = ["governor", "special_governor", "senate"] as const;
 
@@ -47,11 +45,31 @@ const CONTESTABLE_MULTI_SEAT_ONEPARTY = ["peoplesCongress", "landAssembly"] as c
  */
 const CONTESTABLE_CONCURRENT_CHAMBERS = ["house", "milletMeclisi", "senato"] as const;
 
+/**
+ * Direct contest families observed empty in the 2027 qualification replay.
+ * These are not all represented in the generic NPP race-priority list, and a
+ * newly spawned cycle can have no incumbent to defend it. Give them the same
+ * bounded floor as the established chamber families.
+ */
+const CONTESTABLE_QUALIFICATION_FAMILIES = [
+  "ministerPresident",
+  "congresoDiputados",
+  "senado",
+  "eduskunta",
+  "vouli",
+  "dail",
+  "localCouncil",
+  "sangiin",
+  "president",
+  "regionalCouncil",
+] as const;
+
 /** All election types this phase files a floor candidate into. */
 const CONTESTABLE = [
   ...CONTESTABLE_SINGLE_SEAT,
   ...CONTESTABLE_MULTI_SEAT_ONEPARTY,
   ...CONTESTABLE_CONCURRENT_CHAMBERS,
+  ...CONTESTABLE_QUALIFICATION_FAMILIES,
 ] as const;
 
 /** Circuit breaker against malformed data — real turns file a handful. */
@@ -208,6 +226,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     )
     .toArray();
   const freeByBucket = new Map<string, NPP[]>();
+  const generationContext: NPPGenerationContext = {
+    existingNames: new Set(freeNpps.map((n) => n.name)),
+  };
   for (const n of freeNpps) {
     const id = String(n._id);
     if (incumbentNppIds.has(id) || nppsInActiveCandidacy.has(id)) continue;
@@ -248,12 +269,15 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
       const bucket = `${country}:${party}:${state}`;
       let npp = freeByBucket.get(bucket)?.pop();
       if (!npp) {
-        npp = await createNPP({
-          state,
-          party,
-          countryId: country as CountryId,
-          quality: calculateQualityBonus(spo?.organization ?? 0),
-        });
+        npp = await createNPP(
+          {
+            state,
+            party,
+            countryId: country as CountryId,
+            quality: calculateQualityBonus(spo?.organization ?? 0),
+          },
+          generationContext
+        );
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
@@ -296,7 +320,10 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
         const bucket = `${country}:${party}:${state}`;
         let npp = freeByBucket.get(bucket)?.pop();
         if (!npp) {
-          npp = await createNPP({ state, party, countryId: country as CountryId, quality: 0 });
+          npp = await createNPP(
+            { state, party, countryId: country as CountryId, quality: 0 },
+            generationContext
+          );
         }
         const candidateDoc: Omit<ElectionCandidate, "_id"> = {
           electionId: primary._id,

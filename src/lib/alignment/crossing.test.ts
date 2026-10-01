@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { polesForYear } from "@/lib/constants/alignmentEras";
+import { customAlignmentPoleId, polesForYear } from "@/lib/constants/alignmentEras";
 import { normalizeShares } from "./normalize";
 import { applyEraCrossing } from "./crossing";
 
@@ -49,5 +49,21 @@ describe("applyEraCrossing", () => {
     const sum =
       (Object.values(r.shares.shares) as number[]).reduce((a, b) => a + b, 0) + r.shares.nonAligned;
     expect(sum).toBe(100);
+  });
+
+  it("preserves a player-founded pole while built-in poles cross eras", () => {
+    const custom = customAlignmentPoleId("andes-pact");
+    const shares = normalizeShares({ WEST: 30, EAST: 10, [custom]: 50 }, ["WEST", "EAST", custom]);
+    const poles = [...polesForYear(1991), custom];
+    const result = applyEraCrossing({
+      shares,
+      storedEraKey: "cold-war",
+      year: 1991,
+      poles,
+    });
+
+    expect(result.shares.shares.WASHINGTON).toBe(30);
+    expect(result.shares.shares.MOSCOW).toBe(10);
+    expect(result.shares.shares[custom]).toBe(50);
   });
 });

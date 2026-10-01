@@ -1,4 +1,5 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { PARTY_ROSTERS_2027 } from "@/lib/seeds/partyRosters2027";
 
 /**
  * Sweden default political parties.
@@ -15,6 +16,7 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  * 1979/1991 and are multi-gated. Positions -5..+5.
  */
 export const seParties: PartySeed[] = [
+  ...(PARTY_ROSTERS_2027.SE ?? []),
   {
     seedOrder: 1,
     countryId: "SE",
@@ -25,7 +27,7 @@ export const seParties: PartySeed[] = [
     socialPosition: -1,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1953-default", "1979-default", "1991-default"],
+    validForPresets: ["1953-default", "1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 900_000,
     nationalTaxRate: 0,
@@ -68,7 +70,7 @@ export const seParties: PartySeed[] = [
     socialPosition: 1,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1979-default", "1991-default"],
+    validForPresets: ["1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 650_000,
     nationalTaxRate: 0,
@@ -111,7 +113,7 @@ export const seParties: PartySeed[] = [
     socialPosition: 0,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1979-default", "1991-default"],
+    validForPresets: ["1979-default", "1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 600_000,
     nationalTaxRate: 0,
@@ -198,7 +200,7 @@ export const seParties: PartySeed[] = [
     socialPosition: -2,
     memberCount: 0,
     isDefault: true,
-    validForPresets: ["1991-default"],
+    validForPresets: ["1991-default", "2027-default"],
     regimeStatus: "approved",
     treasury: 300_000,
     nationalTaxRate: 0,

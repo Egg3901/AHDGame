@@ -6,6 +6,7 @@
  */
 import type { BuiltInInternationalOrganizationId } from "./internationalOrganizations";
 import { ORGANIZATION_CATEGORY_META, type OrganizationCategory } from "./orgCategory";
+import type { CustomAlignmentPoleToken } from "./alignmentEras";
 
 export interface OrgIdentity {
   /** Primary accent (hex). Drives the `--org` CSS var. */
@@ -132,6 +133,15 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${to255(r)}${to255(g)}${to255(b)}`;
 }
 
+const CUSTOM_BLOC_PALETTES: Record<
+  CustomAlignmentPoleToken,
+  { accent: string; accentSoft: string }
+> = {
+  info: { accent: "#4f86d9", accentSoft: "#a9c7f2" },
+  error: { accent: "#c34d58", accentSoft: "#e7a5ab" },
+  warning: { accent: "#c58b20", accentSoft: "#efd08a" },
+};
+
 /**
  * Resolve the identity for any org. The `group` label is category-driven (so
  * all orgs read uniformly); built-ins keep their fixed accent/seal/HQ, while
@@ -144,17 +154,20 @@ export function resolveOrgIdentity(
   name: string,
   category: OrganizationCategory,
   /** Uploaded emblem URL for custom orgs (built-ins use their fixed flag). */
-  logoSrc?: string | null
+  logoSrc?: string | null,
+  /** A custom Bloc uses the same chosen color for its dossier and alignment pole. */
+  customBlocAccent?: CustomAlignmentPoleToken
 ): OrgIdentity {
   const group = ORGANIZATION_CATEGORY_META[category].label;
   if (!isCustom && orgId in BUILTIN_ORG_IDENTITY) {
     return { ...BUILTIN_ORG_IDENTITY[orgId as keyof typeof BUILTIN_ORG_IDENTITY], group };
   }
   const hue = hashString(orgId) % 360;
+  const selectedPalette = customBlocAccent ? CUSTOM_BLOC_PALETTES[customBlocAccent] : null;
   const glyphSource = name.trim() || orgId;
   return {
-    accent: hslToHex(hue, 0.65, 0.6),
-    accentSoft: hslToHex(hue, 0.7, 0.75),
+    accent: selectedPalette?.accent ?? hslToHex(hue, 0.65, 0.6),
+    accentSoft: selectedPalette?.accentSoft ?? hslToHex(hue, 0.7, 0.75),
     glyph: glyphSource.charAt(0).toUpperCase(),
     logoSrc: logoSrc ?? undefined,
     group,

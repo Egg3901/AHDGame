@@ -271,6 +271,17 @@ describe("vitals", () => {
     expect(campaignStrengthBoostPercent(412).toFixed(1)).not.toBe("8.2");
   });
 
+  it("uses the race-specific presidential strength cap in current and quoted boosts", () => {
+    const campaign = campaignFixture({ campaignStrengthMaxBonus: 0.25 });
+    const vm = buildCampaignBlendViewModel(input({ campaign }));
+    const current = campaignStrengthBoostPercent(412, 0.25).toFixed(1);
+    const quoted = campaignStrengthBoostPercent(418, 0.25).toFixed(1);
+
+    expect(vm.vitals.find((cell) => cell.label === "Strength")?.sub).toContain(current);
+    expect(vm.strength?.boostPct).toBe(current);
+    expect(vm.strength?.newBoostPct).toBe(quoted);
+  });
+
   it("omits the support vital entirely when fog withholds it", () => {
     const vm = buildCampaignBlendViewModel(
       input({ campaign: campaignFixture({ accessLevel: "public", ownSupport: undefined }) })

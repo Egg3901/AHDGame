@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { captureProductEvent } from "@/lib/analytics/capture";
+import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
 
 /**
  * Invisible page-visit tracker for the two client-recorded onboarding steps.
@@ -11,7 +13,13 @@ import { fetchJson } from "@/lib/observability/fetchJson";
  * timestamp and ignores repeats).
  */
 export function OnboardingStepTracker({ step }: { step: "scout-state" | "read-wire" }) {
+  const { variant, ready } = usePostHogVariant("onboarding-checklist");
+  const recordedStep = useRef<string | null>(null);
   useEffect(() => {
+    if (recordedStep.current === step) return;
+    if (!ready) return;
+    recordedStep.current = step;
+    void captureProductEvent("onboarding_step_viewed", { step, variant });
     // Best-effort tracking: never surface an error for this. fetchJson still
     // reports network/5xx faults to GlitchTip tagged with the feature.
     void fetchJson("/api/character/me", {
@@ -19,8 +27,10 @@ export function OnboardingStepTracker({ step }: { step: "scout-state" | "read-wi
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ onboardingStep: step }),
-    }).catch(() => undefined);
-  }, [step]);
+    })
+      .then(() => captureProductEvent("onboarding_step_completed", { step, variant }))
+      .catch(() => undefined);
+  }, [step, variant, ready]);
 
   return null;
 }

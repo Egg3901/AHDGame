@@ -12,6 +12,7 @@ import {
   PERSONAL_ORG_FLOOR_CAP,
   applyVoteReachFloor,
   VOTE_REACH_FLOOR,
+  buildCurrentRegistrationBaseline,
   regBaselineMultiplier,
   regResistanceMultiplier,
   supportMoodMultiplier,
@@ -224,10 +225,10 @@ describe("Phase 5a formula factor invariants", () => {
   });
 });
 
-describe("regBaselineMultiplier (seeded party-baseline share)", () => {
+describe("regBaselineMultiplier (current party registration)", () => {
   it("COMPATIBILITY CONTRACT: returns exactly 1.0 when the share is absent", () => {
-    // Worlds without seeded registrationShare (all pre-existing worlds, every
-    // US/DE/JP lane) must be byte-identical — exactly 1.0, not approximately.
+    // Regions where the lane is disabled must be byte-identical: exactly 1.0,
+    // not approximately.
     expect(regBaselineMultiplier(undefined)).toBe(1.0);
     expect(regBaselineMultiplier(NaN)).toBe(1.0);
   });
@@ -268,6 +269,38 @@ describe("regBaselineMultiplier (seeded party-baseline share)", () => {
       expect(m).toBeGreaterThanOrEqual(last);
       last = m;
     }
+  });
+});
+
+describe("buildCurrentRegistrationBaseline", () => {
+  const rows = [
+    { partyId: "lab", registration: 43 },
+    { partyId: "revival", registration: 11 },
+    { partyId: "new-party" },
+  ];
+
+  it("keeps the lane disabled outside opted-in regions", () => {
+    expect(buildCurrentRegistrationBaseline(rows, "US")).toBeUndefined();
+  });
+
+  it("keeps legacy opted-in regions neutral when no current Reg data exists", () => {
+    expect(
+      buildCurrentRegistrationBaseline(
+        [{ partyId: "lab" }, { partyId: "con", registration: NaN }],
+        "UK"
+      )
+    ).toBeUndefined();
+  });
+
+  it("uses current Reg and floors missing party values once the lane is active", () => {
+    const baseline = buildCurrentRegistrationBaseline(rows, "UK");
+    expect(baseline).toEqual(
+      new Map([
+        ["lab", 43],
+        ["revival", 11],
+        ["new-party", 0],
+      ])
+    );
   });
 });
 

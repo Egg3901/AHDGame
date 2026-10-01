@@ -21,11 +21,9 @@ interface ProfileHeaderProps {
   party: PoliticalParty | null;
   user: { username: string; isAdmin: boolean | undefined; isModerator: boolean | undefined };
   memberSince: string;
-  officeLabel: string;
+  officeLabels: readonly string[];
   stateLabel: string;
   campaignSongUrl?: string | null;
-  campaignSongAutoplay?: boolean;
-  viewerDisablesAutoplay?: boolean;
   countrySlug: string;
   patreonHighlightColor?: string | null;
   patreonTier?: PatreonTier;
@@ -50,11 +48,9 @@ export function ProfileHeader({
   party,
   user,
   memberSince,
-  officeLabel,
+  officeLabels,
   stateLabel,
   campaignSongUrl,
-  campaignSongAutoplay,
-  viewerDisablesAutoplay,
   countrySlug,
   patreonHighlightColor,
   patreonTier,
@@ -214,9 +210,14 @@ export function ProfileHeader({
                     title={countryCfg.name}
                   />
                 </Link>
-                <span className="inline-flex min-w-0 items-center rounded-md border border-card-border bg-card-elevated/60 px-1.5 py-0.5 font-medium leading-none text-muted">
-                  <span className="truncate">{officeLabel}</span>
-                </span>
+                {officeLabels.map((officeLabel) => (
+                  <span
+                    key={officeLabel}
+                    className="inline-flex min-w-0 items-center rounded-md border border-card-border bg-card-elevated/60 px-1.5 py-0.5 font-medium leading-none text-muted"
+                  >
+                    <span className="truncate">{officeLabel}</span>
+                  </span>
+                ))}
               </div>
 
               {/* Row 3: member date */}
@@ -315,13 +316,8 @@ export function ProfileHeader({
             )}
           </div>
           {campaignSongUrl && (
-            <div className="mt-4 rounded-lg border border-card-border bg-card-elevated/40 p-3">
-              <CampaignSongPlayer
-                videoId={campaignSongUrl}
-                ownerAutoplay={campaignSongAutoplay ?? false}
-                viewerDisablesAutoplay={viewerDisablesAutoplay ?? false}
-                characterName={character.name}
-              />
+            <div className="store-app-hidden mt-4 rounded-lg border border-card-border bg-card-elevated/40 p-3">
+              <CampaignSongPlayer videoId={campaignSongUrl} characterName={character.name} />
             </div>
           )}
         </div>

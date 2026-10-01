@@ -151,6 +151,20 @@ describe("deposit", () => {
 });
 
 describe("withdraw", () => {
+  it("never pays more than the claim when a rounded full withdrawal differs by float dust", () => {
+    const balance = 0.3 - 3e-12;
+    const d = allowed(
+      decideSavingsCommand(
+        account({ balance }),
+        { type: "withdraw", amount: 0.3, holder: CB },
+        CTX,
+        "full"
+      )
+    );
+    expect(d.next.balance).toBe(0);
+    expect(d.transition.legs.map((leg) => leg.amount)).toEqual([balance, balance]);
+  });
+
   it("pays out of the holder's cash and lowers the account", () => {
     const d = allowed(
       decideSavingsCommand(
@@ -383,5 +397,79 @@ describe("resolve_failed_holder", () => {
     ).toMatchObject({
       refusal: { code: "not_failed" },
     });
+  });
+});
+
+describe("recover_orphaned_holder", () => {
+  it("rehomes a deleted bank's account through insurance and the treasury backstop", () => {
+    const decision = allowed(
+      decideSavingsCommand(
+        account({ holder: BANK, version: 8 }),
+        {
+          type: "recover_orphaned_holder",
+          holder: bank({ active: false }),
+          fromInsuranceFund: 700,
+          fromTreasury: 300,
+        },
+        CTX,
+        "attempt-1"
+      )
+    );
+
+    expect(decision.next).toMatchObject({ balance: 1_000, holder: "centralBank", status: "open" });
+    expect(decision.transition.key).toBe(
+      `savings_orphaned_holder_recovery:${account({ holder: BANK }).id}:8`
+    );
+    expect(decision.transition.projections[1]?.update).toMatchObject({
+      $set: { lastSettlementKey: decision.transition.key },
+    });
+    expect(decision.transition.legs.map((leg) => [leg.kind, leg.amount])).toEqual([
+      ["debit", 700],
+      ["mint", 300],
+      ["credit", 1_000],
+    ]);
+    expect(decision.transition.projections.map((projection) => projection.collection)).toEqual([
+      "centralBanks",
+      "savingsAccounts",
+      "characters",
+    ]);
+    expect(decision.transition.projections[0]?.update).toEqual({
+      $inc: { householdSavingsLiability: 1_000 },
+    });
+
+    const retry = decideSavingsCommand(
+      account({ holder: BANK, version: 8 }),
+      {
+        type: "recover_orphaned_holder",
+        holder: bank({ active: false }),
+        fromInsuranceFund: 700,
+        fromTreasury: 300,
+      },
+      { ...CTX, turn: CTX.turn + 1 },
+      "attempt-2"
+    );
+    expect(retry.allowed && retry.transition.key).toBe(decision.transition.key);
+
+    const invalidFunding = decideSavingsCommand(
+      account({ holder: BANK }),
+      {
+        type: "recover_orphaned_holder",
+        holder: bank({ active: false }),
+        fromInsuranceFund: -1,
+        fromTreasury: 1_001,
+      },
+      CTX,
+      "invalid-funding"
+    );
+    expect(invalidFunding.allowed).toBe(false);
+  });
+  it("does not credit interest into an account frozen for closure", () => {
+    const d = decideSavingsCommand(
+      account({ status: "frozen", accruedInterest: 2 }),
+      { type: "credit_interest", holder: CB },
+      CTX,
+      "frozen"
+    );
+    expect(d.allowed).toBe(false);
   });
 });

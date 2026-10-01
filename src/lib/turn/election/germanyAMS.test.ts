@@ -29,6 +29,16 @@ function oid(): ObjectId {
 type Doc = Record<string, unknown>;
 
 function matchClause(doc: Doc, key: string, val: unknown): boolean {
+  if (key.includes(".")) {
+    const value = key
+      .split(".")
+      .reduce<unknown>(
+        (current, part) =>
+          current && typeof current === "object" ? (current as Doc)[part] : undefined,
+        doc
+      );
+    return matchClause({ value }, "value", val);
+  }
   if (val && typeof val === "object" && !(val instanceof ObjectId) && !Array.isArray(val)) {
     const cond = val as Record<string, unknown>;
     if ("$in" in cond) {
@@ -109,6 +119,27 @@ function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
         if (!d) return { matchedCount: 0, modifiedCount: 0 };
         Object.assign(d, update.$set ?? {});
         return { matchedCount: 1, modifiedCount: 1 };
+      },
+      updateMany: async (query: Doc, update: { $set?: Doc; $unset?: Doc }) => {
+        const matched = docs().filter((d) => matches(d, query));
+        for (const d of matched) {
+          Object.assign(d, update.$set ?? {});
+          for (const key of Object.keys(update.$unset ?? {})) delete d[key];
+        }
+        return { matchedCount: matched.length, modifiedCount: matched.length };
+      },
+      bulkWrite: async (
+        ops: Array<{
+          updateOne?: { filter: Doc; update: { $set?: Doc } };
+          updateMany?: { filter: Doc; update: { $set?: Doc; $unset?: Doc } };
+        }>
+      ) => {
+        for (const op of ops) {
+          if (op.updateOne)
+            await makeCollection(name).updateOne(op.updateOne.filter, op.updateOne.update);
+          if (op.updateMany)
+            await makeCollection(name).updateMany(op.updateMany.filter, op.updateMany.update);
+        }
       },
       deleteMany: async (query: Doc) => {
         const keep = docs().filter((d) => !matches(d, query));
@@ -321,6 +352,107 @@ describe("assignListSeats", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("maybeReconcileBundestag (aggregate)", () => {
+  it.each([
+    { cduVotes: 70_000, spdVotes: 30_000, expectedLeader: "2" },
+    { cduVotes: 60_000, spdVotes: 40_000, expectedLeader: "2" },
+    { cduVotes: 30_000, spdVotes: 70_000, expectedLeader: "1" },
+  ])(
+    "persists 1991 AMS party control for $cduVotes/$spdVotes votes",
+    async ({ cduVotes, spdVotes, expectedLeader }) => {
+      const now = new Date("1993-01-01T00:00:00.000Z");
+      const electionId = oid();
+      const cduNppId = oid();
+      const spdNppId = oid();
+      const db = makeFakeDb({
+        gameState: [{ _id: "current", currentTurn: 30, preset: "1991-default" }],
+        elections: [
+          {
+            _id: electionId,
+            countryId: "DE",
+            electionType: "bundestag",
+            cycle: 1,
+            status: "resolved",
+            state: "BW",
+            totalSeats: 40,
+          },
+        ],
+        electionVoteTallies: [
+          {
+            electionId,
+            totalVotes: { cdu: cduVotes, spd: spdVotes },
+            candidateParties: { cdu: "2", spd: "1" },
+          },
+        ],
+        electedOfficials: [
+          {
+            _id: oid(),
+            countryId: "DE",
+            officeType: "bundestag",
+            state: "BW",
+            party: "2",
+            seatsHeld: 20,
+            seatSource: "direct",
+            characterId: null,
+            nppId: cduNppId,
+            characterName: "CDU Direct Representative",
+            isNPP: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+          {
+            _id: oid(),
+            countryId: "DE",
+            officeType: "bundestag",
+            state: "BW",
+            party: "1",
+            seatsHeld: 20,
+            seatSource: "direct",
+            characterId: null,
+            nppId: spdNppId,
+            characterName: "SPD Direct Representative",
+            isNPP: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        characters: [],
+        landeslisten: [],
+      });
+
+      const result = await maybeReconcileBundestag(db, 1, now);
+      expect(result).not.toBeNull();
+      const officials = (await db
+        .collection("electedOfficials")
+        .find({ countryId: "DE", officeType: "bundestag" })
+        .toArray()) as unknown as ElectedOfficial[];
+      const partySeats = officials.reduce<Record<string, number>>((seats, official) => {
+        seats[official.party!] = (seats[official.party!] ?? 0) + (official.seatsHeld ?? 0);
+        return seats;
+      }, {});
+      expect(Object.values(partySeats).reduce((sum, seats) => sum + seats, 0)).toBe(630);
+      expect(partySeats[expectedLeader]).toBeGreaterThan(630 / 2);
+      expect(partySeats[expectedLeader]).toBeGreaterThan(
+        partySeats[expectedLeader === "2" ? "1" : "2"]
+      );
+      const listOfficials = officials.filter((official) => official.seatSource === "list");
+      expect(listOfficials).toHaveLength(2);
+      for (const official of listOfficials) {
+        expect(official.seatsHeld).toBeGreaterThan(0);
+        expect(official.isNPP).toBe(true);
+        expect(official.nppId?.toString()).toBe(
+          (official.party === "2" ? cduNppId : spdNppId).toString()
+        );
+        expect(official.characterName).toBeTruthy();
+      }
+      expect(await maybeReconcileBundestag(db, 1, now)).toBeNull();
+      expect(
+        await db
+          .collection("electedOfficials")
+          .countDocuments({ countryId: "DE", officeType: "bundestag", seatSource: "list" })
+      ).toBe(2);
+    }
+  );
+
   it("fills list seats once and is guarded per cycle", async () => {
     const now = new Date();
     const elA = oid();

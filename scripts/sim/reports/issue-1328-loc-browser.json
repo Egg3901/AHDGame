@@ -1,0 +1,123 @@
+{
+  "sourceCommit": "f4857dec06a1bcd8dd48d8e44540ad6290ba5962",
+  "retainedSourceUnchanged": true,
+  "scope": "Existing LOC page against copied synthetic retained banking actors; real auth/routes/settlements and one LOC turn",
+  "before": {
+    "wallet": 114422553.37,
+    "loc": null,
+    "journals": 0,
+    "ledger": 0
+  },
+  "afterLostResponse": {
+    "wallet": 114423553.37,
+    "loc": {
+      "balances": {
+        "USD": 1000
+      },
+      "arrears": {},
+      "accountsOpened": {
+        "USD": true
+      },
+      "drawFrozen": false,
+      "fundingSource": {
+        "USD": "both"
+      }
+    },
+    "journals": 1,
+    "ledger": 2
+  },
+  "afterRetry": {
+    "wallet": 114423553.37,
+    "loc": {
+      "balances": {
+        "USD": 1000
+      },
+      "arrears": {},
+      "accountsOpened": {
+        "USD": true
+      },
+      "drawFrozen": false,
+      "fundingSource": {
+        "USD": "both"
+      }
+    },
+    "journals": 1,
+    "ledger": 2
+  },
+  "afterNewDraw": {
+    "wallet": 114424053.37,
+    "loc": {
+      "balances": {
+        "USD": 1500
+      },
+      "arrears": {},
+      "accountsOpened": {
+        "USD": true
+      },
+      "drawFrozen": false,
+      "fundingSource": {
+        "USD": "both"
+      }
+    },
+    "journals": 2,
+    "ledger": 3
+  },
+  "afterRepay": {
+    "wallet": 114423053.37,
+    "loc": {
+      "balances": {
+        "USD": 500
+      },
+      "arrears": {},
+      "accountsOpened": {
+        "USD": true
+      },
+      "drawFrozen": false,
+      "fundingSource": {
+        "USD": "both"
+      }
+    },
+    "journals": 3,
+    "ledger": 4
+  },
+  "afterTurn": {
+    "wallet": 114423051.34,
+    "loc": {
+      "balances": {
+        "USD": 498.65
+      },
+      "arrears": {},
+      "accountsOpened": {
+        "USD": true
+      },
+      "drawFrozen": false,
+      "fundingSource": {
+        "USD": "both"
+      }
+    },
+    "journals": 4,
+    "ledger": 6
+  },
+  "servicing": {
+    "charactersProcessed": 1,
+    "paymentsInternal": 1.7617925680596755
+  },
+  "treasury": {
+    "fixture": "Explicit synthetic treasury-minister assignment; retained treasury and bank cash unchanged during setup",
+    "amount": 100,
+    "treasuryBefore": -2318224476419,
+    "treasuryAfter": -2318224476519,
+    "reservesBefore": 50411504042.566765,
+    "reservesAfter": 50411504142.566765,
+    "responseLostAfterCommit": true,
+    "sameOperationRetry": true,
+    "oneHistoryEntry": true,
+    "annualSpendingUnchanged": true
+  },
+  "commandIds": {
+    "retrySame": true,
+    "nextDifferent": true
+  },
+  "errors": [],
+  "readModelPrincipal": 498.65
+}

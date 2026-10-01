@@ -4,7 +4,7 @@
  */
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import type { Bill, Character, ElectedOfficial, GameState } from "@/lib/db/types";
+import type { Bill, BillWhip, Character, ElectedOfficial, GameState } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { applyLegislationEffect } from "@/lib/legislationEffects";
 import { createNotification } from "@/lib/notifications";
@@ -13,6 +13,7 @@ import { triggerDebtCeilingCrisis } from "./budget/debt";
 import { onBillEnacted } from "@/lib/billEnactment";
 import { generateBillSignedNews, generateBillVetoedNews } from "@/lib/news";
 import { sendCountryGameEvent, buildBillVetoedDiscordEmbed } from "@/lib/discordWebhooks";
+import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
 
 const OVERRIDE_WINDOW_HOURS = 24;
@@ -148,6 +149,7 @@ export async function executePresidentialBillAction(
           status: "veto_override",
           presidentAction: "vetoed",
           vetoOverrideVotes: {},
+          vetoOverrideWhippedFromVote: {},
           vetoOverrideVotesFor: 0,
           vetoOverrideVotesAgainst: 0,
           overrideVotingStartedAt: now,
@@ -166,6 +168,24 @@ export async function executePresidentialBillAction(
         message: "",
         error: "This bill is not awaiting presidential action.",
       };
+    }
+
+    // Passage whips belong to the completed House/Senate ballots. The veto
+    // starts a distinct vote in both chambers, so every party and caucus gets
+    // a clean whip slate just as every member gets a blank override ballot.
+    try {
+      await db.collection<BillWhip>("billWhips").deleteMany({
+        targetType: "bill",
+        targetId: billId,
+        // Do not race-delete a new override whip issued immediately after the
+        // guarded status transition becomes visible to another request.
+        $or: [{ createdAt: { $lt: now } }, { createdAt: { $exists: false } }],
+      });
+    } catch (error) {
+      // The status claim cannot be rolled back safely after the new voting
+      // window becomes visible. Every reader also phase-scopes whips, so stale
+      // rows are inert even when this best-effort cleanup encounters an outage.
+      console.error("[PresidentialBillAction] Failed to delete passage whips:", error);
     }
 
     // Single choke point for a presidential veto — shared by the congress
@@ -248,6 +268,7 @@ export async function executePresidentialBillAction(
         presidentName: president?.name,
         vetoMessage: trimmedVetoMessage,
         billUrl,
+        voteSplit: billChamberVoteSplits(bill, bill.countryId ?? "US", "national"),
       })
     ).catch(() => {});
 

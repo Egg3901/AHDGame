@@ -37,8 +37,9 @@ function mockDb(): Db {
         },
       };
     }
+    const emptyCursor = { toArray: async () => [] };
     return {
-      find: () => ({ toArray: async () => [] }),
+      find: () => ({ ...emptyCursor, project: () => emptyCursor }),
       findOne: async () => null,
       bulkWrite: async () => ({ modifiedCount: 0 }),
       insertMany: async () => ({ insertedCount: 0 }),

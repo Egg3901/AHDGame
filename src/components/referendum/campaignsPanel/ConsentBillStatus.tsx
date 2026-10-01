@@ -28,9 +28,11 @@ export function ConsentBillStatus({
   if (bills.length === 0) return null;
   const turnsLeft = deadlineTurn != null ? deadlineTurn - currentTurn : null;
   const explainer =
-    kind === "reunification"
-      ? "Both consent bills must pass within the window for the union to take effect. If either fails or the window closes, the conversion is cancelled."
-      : "The Westminster consent bill must pass within the window for independence to take effect. If it fails or the window closes, the conversion is cancelled.";
+    kind === "peace_agreement"
+      ? "Westminster and the Dáil authorized this agreement. The public ballot decides whether it proceeds to implementation."
+      : kind === "reunification"
+        ? "Both consent bills must pass within the window for the union to take effect. If either fails or the window closes, the conversion is cancelled."
+        : "The Westminster consent bill must pass within the window for independence to take effect. If it fails or the window closes, the conversion is cancelled.";
 
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">

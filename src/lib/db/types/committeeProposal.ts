@@ -39,6 +39,13 @@ export interface CommitteeProposal {
   /** createdAtTurn + 24 */
   expiresAtTurn: number;
   resolvedAtTurn?: number;
+  /** Set by the atomic claim in attemptResolution so two concurrent resolvers
+   * cannot both apply a proposal's effects. Never released: a proposal left
+   * open with this set had an effect fail mid-resolution and needs an
+   * operator. */
+  resolutionInProgressAt?: Date;
+  /** Error text recorded when a claimed resolution threw partway through. */
+  resolutionError?: string;
   createdAt: Date;
   updatedAt: Date;
 

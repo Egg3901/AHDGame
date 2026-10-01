@@ -72,6 +72,33 @@ describe("shareholderVotingPower", () => {
 });
 
 describe("totalVotingPower", () => {
+  it("excludes issued IPO shares until a buyer places them", () => {
+    expect(
+      totalVotingPower({
+        totalShares: 18_000_000,
+        shareholders: [{ shares: 10_000_000 }],
+        pendingShareIssuance: {
+          remainingShares: 8_000_000,
+          requestedShares: 8_000_000,
+          source: "ipo",
+          issuedUpfront: true,
+          createdAtTurn: 1,
+          initialPriceLocal: 1,
+        },
+      })
+    ).toBe(10_000_000);
+  });
+
+  it("excludes issuer inventory in the company detail voting display", () => {
+    expect(
+      totalVotingPower({
+        totalShares: 18_000_000,
+        pendingIpoShares: 8_000_000,
+        shareholders: [{ shares: 10_000_000 }],
+      })
+    ).toBe(10_000_000);
+  });
+
   it("equals totalShares for single-class corps", () => {
     expect(
       totalVotingPower({

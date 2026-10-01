@@ -4,7 +4,11 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
-import { issueRelocationBond, previewRelocationBond } from "@/lib/corporations/issueRelocationBond";
+import {
+  issueRelocationBond,
+  previewRelocationBond,
+  type RelocationPrimeBank,
+} from "@/lib/corporations/issueRelocationBond";
 import type {
   NppMarketEntryDiagnostic,
   NppMarketEntryFunnel,
@@ -183,6 +187,7 @@ export async function resolveNppMarketEntryCredit<T extends CreditDecision>(args
   decision: T;
   turn: number;
   fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+  bankRates?: ReadonlyArray<RelocationPrimeBank>;
   corpFxRate: number;
   retry: (creditLocal: number) => T;
 }): Promise<T> {
@@ -199,7 +204,8 @@ export async function resolveNppMarketEntryCredit<T extends CreditDecision>(args
     args.corporation,
     requestedAnchor,
     args.turn,
-    args.fxByCurrency
+    args.fxByCurrency,
+    args.bankRates
   );
   if (!preflight.ok) {
     return {

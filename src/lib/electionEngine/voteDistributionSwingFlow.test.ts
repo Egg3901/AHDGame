@@ -502,6 +502,47 @@ describe("distributeVotesBySwingFlow — Step 1 reproduces the appeal kernel", (
     expect(out.sharesPct.c1).toBeCloseTo(out.sharesPct.c2, 0);
   });
 
+  it("uses current Reg for an enabled baseline and floors a missing party", () => {
+    const withCurrentRegistration = distributeVotesBySwingFlow(
+      fixtureCandidates(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        votingSystem: "fptp",
+        regBaselineByParty: new Map([
+          ["dem", 25],
+          ["rep", 100],
+        ]),
+      }
+    );
+    expect(withCurrentRegistration.sharesPct.c1).toBeLessThan(
+      withCurrentRegistration.sharesPct.c2!
+    );
+
+    const withMissingLateParty = distributeVotesBySwingFlow(
+      fixtureCandidates(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      {
+        isGeneralElection: true,
+        countryId: "UK",
+        votingSystem: "fptp",
+        regBaselineByParty: new Map([["rep", 50]]),
+      }
+    );
+    expect(withMissingLateParty.sharesPct.c1).toBeLessThan(withMissingLateParty.sharesPct.c2!);
+  });
+
   it("returns the empty-pool default when totalPool <= 0", () => {
     const out = distributeVotesBySwingFlow(
       fixtureCandidates(),

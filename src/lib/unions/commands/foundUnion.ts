@@ -26,6 +26,10 @@ import {
   unionFoundingCostLocal,
 } from "@/lib/unions/unionFounding";
 import { isUnionsBanned, UNIONS_BANNED_MESSAGE } from "@/lib/labour/unionLaws";
+import {
+  isUnionProsecutionBarred,
+  UNION_PROSECUTION_MESSAGE,
+} from "@/lib/unions/unionProsecutionBar";
 import { rejectIfTurnProcessing } from "./unionActions";
 import type { UnionActionResult } from "./unionActions";
 
@@ -53,6 +57,9 @@ export async function foundUnion(
   character: Character,
   input: FoundUnionInput
 ): Promise<UnionActionResult> {
+  if (await isUnionProsecutionBarred(db, character._id)) {
+    return { ok: false, status: 403, error: UNION_PROSECUTION_MESSAGE };
+  }
   const turnBusy = await rejectIfTurnProcessing(db);
   if (turnBusy) return turnBusy;
 

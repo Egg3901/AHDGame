@@ -1,0 +1,38 @@
+name: PostHog production deployment annotation
+
+on:
+  deployment_status:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  annotate:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'A House Divided / production'
+    runs-on: ubuntu-latest
+    steps:
+      # Railway uses the same GitHub environment label for staging and production.
+      # Only the deployed main commit is eligible for a production annotation.
+      - name: Check production commit
+        id: production
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.event.deployment.sha }}
+        run: |
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "$DEPLOY_SHA" == "$main_sha" ]]; then
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.production.outputs.eligible == 'true'
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - name: Annotate production deploy
+        if: steps.production.outputs.eligible == 'true'
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          DEPLOYED_AT: ${{ github.event.deployment_status.created_at }}
+          DEPLOY_SHA: ${{ github.event.deployment.sha }}
+        run: node scripts/analytics/annotate-deploy.mjs

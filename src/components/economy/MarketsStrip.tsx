@@ -78,7 +78,7 @@ export function MarketsStrip({ countryId, markets }: MarketsStripProps) {
           href={forexUrl(countryId)}
           label="Forex"
           stat={markets.forexRate != null ? `₳1 = ${prefix}${markets.forexRate.toFixed(2)}` : "—"}
-          sub="exchange rate · anchor convention"
+          sub="₳ is the game's shared accounting unit. Its local exchange rate can change."
         />
       </div>
       <Link

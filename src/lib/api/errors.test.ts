@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import {
   ApiError,
   badRequest,
@@ -191,6 +192,16 @@ describe("handleRouteError", () => {
     const body = (result as any).data;
     expect(body.error).toBe("Internal server error");
     expect(body.code).toBe("INTERNAL_ERROR");
+  });
+
+  it("returns the captured event ID so a player can reference a server failure", () => {
+    vi.mocked(Sentry.captureException).mockReturnValueOnce("1234567890abcdef1234567890abcdef");
+    const result = handleRouteError(new Error("private diagnostic"));
+    expect((result as any).data).toMatchObject({
+      error: "Internal server error",
+      code: "INTERNAL_ERROR",
+      eventId: "1234567890abcdef1234567890abcdef",
+    });
   });
 
   it("returns 500 response with message for Error objects in development", () => {

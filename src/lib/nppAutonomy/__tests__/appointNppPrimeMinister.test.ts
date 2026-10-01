@@ -123,7 +123,10 @@ describe("appointNppPrimeMinister", () => {
       undefined
     );
     // npps.findOne resolved the senior (400-seat) MP.
-    expect(db.collectionMocks["npps"].findOne).toHaveBeenCalledWith({ _id: nppId });
+    expect(db.collectionMocks["npps"].findOne).toHaveBeenCalledWith(
+      { _id: nppId },
+      { projection: { name: 1 } }
+    );
 
     const [, op] = (
       db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>

@@ -33,6 +33,7 @@ import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
 import { reconcileSignedEmbargoBills } from "@/lib/trade/reconcileEmbargoes";
 import { buildTradeAffinity } from "@/lib/trade/tradeAffinity";
 import { buildCountryClearingBooks } from "@/lib/market/tradePartition";
+import { sectorCountryForClearing } from "./sectorCountry";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
@@ -367,9 +368,7 @@ export async function buildCorporationLookups(
         })
       );
     }
-    if (!sector.countryId) {
-      (sector as { countryId: string }).countryId = stateCountryMap.get(sector.stateId) ?? "US";
-    }
+    (sector as { countryId: string }).countryId = sectorCountryForClearing(sector, stateCountryMap);
   }
 
   // Issuer-side map: corporate bonds only. Sovereign issuers are synthetic IDs

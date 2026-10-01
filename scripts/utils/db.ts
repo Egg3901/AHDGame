@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 let client: MongoClient | null = null;
 
-export async function connectDb(): Promise<Db> {
+export async function connectDb(databaseName?: string): Promise<Db> {
   if (!client) {
     // Resolved lazily (not at module load) so importing this module — e.g. the
     // migration registry pulling in a script-wrapped migration under vitest —
@@ -20,7 +20,7 @@ export async function connectDb(): Promise<Db> {
     await client.connect();
     console.log("Connected to MongoDB");
   }
-  return client.db();
+  return client.db(databaseName);
 }
 
 export async function closeDb(): Promise<void> {

@@ -46,6 +46,7 @@ function feedUnit(
     independent: number;
     lean: number;
     campaign: number;
+    tactical?: number;
     finalVotes: number;
   }
 ) {
@@ -66,6 +67,7 @@ function feedUnit(
   sink.recordIndependentPenalty(unitId, candidateId, stages.independent);
   sink.recordLean(unitId, candidateId, stages.lean);
   sink.recordCampaign(unitId, candidateId, stages.campaign);
+  sink.recordTactical(unitId, candidateId, stages.tactical ?? 0);
   sink.recordFinalVotes(unitId, candidateId, stages.finalVotes);
 }
 
@@ -104,7 +106,8 @@ describe("factorLedger waterfall reconstruction", () => {
         independent: 0,
         lean: 25,
         campaign: 40,
-        finalVotes: 1893,
+        tactical: -10,
+        finalVotes: 1883,
       }
     );
 
@@ -113,10 +116,10 @@ describe("factorLedger waterfall reconstruction", () => {
     let sum = cand.nominalWeight;
     for (const f of cand.factors) sum += f.voteDelta;
     expect(sum).toBeCloseTo(cand.finalVotes, 6);
-    expect(cand.finalVotes).toBe(1893);
+    expect(cand.finalVotes).toBe(1883);
 
     // The assertion helper must accept it against the engine total.
-    expect(() => assertLedgerReconstructs(ledger, { c1: 1893 })).not.toThrow();
+    expect(() => assertLedgerReconstructs(ledger, { c1: 1883 })).not.toThrow();
   });
 
   it("assertLedgerReconstructs throws when the engine total disagrees", () => {
@@ -140,7 +143,7 @@ describe("factorLedger waterfall reconstruction", () => {
     expect(() => assertLedgerReconstructs(ledger, { c1: 999 })).toThrow(/drift/);
   });
 
-  it("exposes exactly the nine ordered factor keys", () => {
+  it("exposes exactly the ten ordered factor keys", () => {
     const sink = createLedgerSink();
     feedUnit(
       sink,
@@ -169,6 +172,7 @@ describe("factorLedger waterfall reconstruction", () => {
       "spoiler",
       "nationalEnvironment",
       "campaign",
+      "tactical",
       "uncertainty",
     ];
     expect(new Set(keys)).toEqual(new Set(expected));

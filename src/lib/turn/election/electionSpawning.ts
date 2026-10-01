@@ -12,7 +12,7 @@ import {
 } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { generateLandeslistenForCycle } from "@/lib/elections/germanyLandesliste";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 
 /**
  * Convert a prior endTime to a LARP turn number, anchored on `nowRef`'s
@@ -156,12 +156,12 @@ export async function spawnHouseElection(db: Db, fromElection: Election, now: Da
  * Spawn the next Commons election on the canonical LARP schedule. Called
  * from `generalResolution` when a regular or snap Commons cycle resolves.
  *
- * When the resolving election is a snap (`snap_commons`), its endTurn
- * becomes the anchor for the next regular cycle via
- * `pickNextCanonicalCycle(..., priorEndTurn)` — matching the snap-shift
- * rule in docs/design/snap-elections.md. Regular-to-regular transitions
- * use pure canonical LARP, so admin-accelerated prior cycles do NOT drag
- * the calendar forward.
+ * A snap resets the term clock: a resolving `snap_commons` anchors the next
+ * regular at its endTurn + one term, and a regular spawned on that shifted
+ * clock carries `shiftedScheduleEndTurn` so its own successor keeps counting
+ * from it. Regular-to-regular transitions on the canonical calendar stay
+ * canonical, so admin-accelerated prior cycles do NOT drag the calendar
+ * forward. See `planNextLowerChamberCycle`.
  */
 export async function spawnCommonsElection(
   db: Db,
@@ -178,24 +178,23 @@ export async function spawnCommonsElection(
   const { currentTurn, ctx } = await getCurrentTurnAndCtx(db);
   // See foundingPhaseActive: the founding cycle re-spawn loop lives here.
   if (foundingPhaseActive(ctx)) return;
-  // See `snapAnchorEndTime`: a regular prior race and an IMPOSED snap both
-  // yield null, so neither drags the LARP calendar.
-  const snapAnchor = snapAnchorEndTime(fromElection, "snap_commons");
-  const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-  const spawn = pickNextCanonicalCycle({
+  // A called snap, and every regular spawned on its shifted term clock,
+  // anchors the next regular. See `planNextLowerChamberCycle`.
+  const plan = planNextLowerChamberCycle({
     electionType: "commons",
-    prevCycle: fromElection.cycle ?? 0,
+    snapType: "snap_commons",
+    prev: fromElection,
     currentTurn,
-    priorEndTurn,
     ctx,
+    endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
   });
-  if (!spawn) {
+  if (!plan) {
     console.warn(
       `[spawnCommonsElection] no canonical cycle within gate for ${fromElection.state} after cycle ${fromElection.cycle}`
     );
     return;
   }
+  const { spawn } = plan;
 
   const canonical = DEFAULT_DURATIONS.commons;
   // Open the primary immediately: Commons' 5-year cycle (240 turns) far exceeds
@@ -212,7 +211,10 @@ export async function spawnCommonsElection(
     state: fromElection.state,
     electionType: "commons",
     cycle: spawn.cycle,
-    electionYear: electionToLarpYear("commons", spawn.cycle, undefined, undefined, ctx),
+    electionYear: plan.electionYear,
+    ...(plan.shiftedScheduleEndTurn != null && {
+      shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+    }),
     seatId: getSeatIdFromElection({
       countryId: "UK",
       electionType: "commons",

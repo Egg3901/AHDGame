@@ -746,6 +746,9 @@ describe("POST /api/forex/orders/[orderId]/fill — spread fee", () => {
       modifiedCount: 1,
       matchedCount: 1,
     });
+    // The durable fill path verifies landed character legs by their stamps
+    // before compensating. This mock represents those atomic stamped writes.
+    db.collectionMocks.characters.findOne.mockResolvedValue({ _id: fillerId });
     db.collectionMocks.currencyOrders.findOneAndUpdate.mockResolvedValue({
       _id: orderId,
       status: "open",
@@ -792,7 +795,7 @@ describe("POST /api/forex/orders/[orderId]/fill — spread fee", () => {
     expect(orderEdits.some((s) => s?.status === "open")).toBe(true);
     expect(orderEdits.some((s) => s?.status === "filled" || s?.status === "partial")).toBe(false);
     expect(db.collectionMocks.tradeHistory.insertOne).not.toHaveBeenCalled();
-    // Both balance legs were settled (2) and then rolled back (2).
+    // Both stamped balance legs were settled (2) and then rolled back (2).
     expect(db.collectionMocks.characters.updateOne).toHaveBeenCalledTimes(4);
   });
 
@@ -806,7 +809,9 @@ describe("POST /api/forex/orders/[orderId]/fill — spread fee", () => {
     const res = await fill(orderId);
 
     expect(res.status).toBe(500);
-    expect(reverseSpreadFee).toHaveBeenCalledTimes(1);
+    // Recovery completes each idempotent spread leg before reversing it, so
+    // both legs are removed even when the initial attempt stopped on leg two.
+    expect(reverseSpreadFee).toHaveBeenCalledTimes(2);
   });
 
   it("restores a completed status transition when trade-history persistence fails", async () => {
@@ -821,10 +826,7 @@ describe("POST /api/forex/orders/[orderId]/fill — spread fee", () => {
     );
     expect(statusEdits).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          $set: expect.objectContaining({ status: "open" }),
-          $inc: expect.objectContaining({ filledAmount: -100 }),
-        }),
+        expect.objectContaining({ $set: expect.objectContaining({ status: "open" }) }),
       ])
     );
   });

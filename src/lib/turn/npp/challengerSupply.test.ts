@@ -328,3 +328,60 @@ describe("processChallengerGeneration: concurrent regional chamber floor (#2098)
     );
   });
 });
+
+describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  it.each([
+    ["DE", "ministerPresident", "BY"],
+    ["ES", "congresoDiputados", "ES_MAD"],
+    ["ES", "senado", "ES_MAD"],
+    ["FI", "eduskunta", "FI_HEL"],
+    ["GR", "vouli", "GR_ATT"],
+    ["IE", "dail", "DUB"],
+    ["IE", "localCouncil", "DUB"],
+    ["JP", "sangiin", "JP_TKY"],
+    ["NG", "president", "NG"],
+    ["NG", "governor", "NORTH_WEST"],
+    ["NG", "senate", "NORTH_WEST"],
+    ["NG", "regionalCouncil", "NORTH_WEST"],
+  ])(
+    "files a candidate into an empty active %s %s contest",
+    async (countryId, electionType, state) => {
+      const election = {
+        ...cnPeoplesCongress(state),
+        countryId,
+        electionType,
+      } as Election;
+      const { insertedCandidates } = mountWorld(db, {
+        currentTurn: 3,
+        elections: [election],
+        parties: [defaultParty(countryId, 1)],
+        freeNpps: [],
+        officials: [],
+        statePartyOrgs: [spo(state, "1")],
+      });
+      db.collection("elections").find = vi
+        .fn()
+        .mockImplementation((filter: Record<string, unknown>) => {
+          const coveredTypes = (filter.electionType as { $in?: string[] } | undefined)?.$in;
+          return {
+            toArray: vi
+              .fn()
+              .mockResolvedValue(coveredTypes?.includes(electionType) ? [election] : []),
+          };
+        });
+
+      expect(await processChallengerGeneration(new Date())).toBe(1);
+      expect(insertedCandidates).toEqual([
+        expect.objectContaining({ electionId: election._id, countryId, party: "1" }),
+      ]);
+    }
+  );
+});

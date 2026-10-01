@@ -9,6 +9,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseObjectId } from "@/lib/utils/objectId";
+import { escapeRegex } from "@/lib/utils/escapeRegex";
 import { parseJsonBody } from "@/lib/api/validate";
 import { notificationsPatchSchema } from "@/lib/api/schemas/notifications";
 import type { Notification } from "@/lib/db/types";
@@ -108,9 +109,10 @@ export const GET = withNoStore(async (request: Request) => {
       query.type = { ...visibility.type, $eq: type };
     }
     if (search) {
+      const escaped = escapeRegex(search);
       query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { message: { $regex: search, $options: "i" } },
+        { title: { $regex: escaped, $options: "i" } },
+        { message: { $regex: escaped, $options: "i" } },
       ];
     }
 

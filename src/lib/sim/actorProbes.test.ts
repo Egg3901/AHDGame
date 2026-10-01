@@ -26,6 +26,7 @@ import {
   probeDdFinanceSurvey,
   probeFedChair1953,
   probeHouseholdWealth,
+  probeOppositionResearch,
   probePresidentialNomination,
   probeStatePartyLeadership,
 } from "./actorProbes";
@@ -148,7 +149,39 @@ describe("probeCampaignsAndActions", () => {
     const result = probeCampaignsAndActions("synthetic", SEED);
     expect(result.campaigns).toBe(4);
     expect(result.playerActions).toBe(4 * syntheticCampaignActionsPerActor());
-    expect(result.result).toContain("no entry/spend driver");
+    expect(result.result).toContain("opposition-research flow driver");
+  });
+});
+
+describe("probeOppositionResearch", () => {
+  it("reports zero campaigns and zero actions in pure NPP mode", () => {
+    const result = probeOppositionResearch("pure-npp", SEED);
+    expect(result.mechanicId).toBe("campaigns-player-actions");
+    expect(result.result).toBe("zero campaigns, zero player actions");
+    expect(result.drainPerTurn).toBeNull();
+    expect(result.starterFunds).toBeNull();
+    expect(result.starterActions).toBeNull();
+  });
+
+  it("prices the starter drain and cost through the real rules", () => {
+    const plan = buildSyntheticActorPlan(SEED);
+    const buyer = plan.actors.find((a) => a.role === "us-state-party-member") ?? plan.actors[0];
+    const result = probeOppositionResearch("synthetic", SEED);
+    // A starter-only tree drains the documented starter magnitude.
+    expect(result.drainPerTurn).toBe(0.5);
+    expect(result.starterFunds).toBeGreaterThan(0);
+    expect(result.starterActions).toBeGreaterThan(0);
+    expect(result.result).toContain(buyer.characterIdHex);
+    expect(result.result).toContain("opposition-research flow driver");
+  });
+
+  it("is deterministic by seed", () => {
+    expect(probeOppositionResearch("synthetic", SEED)).toEqual(
+      probeOppositionResearch("synthetic", SEED)
+    );
+    expect(probeOppositionResearch("synthetic", "other-seed").result).not.toBe(
+      probeOppositionResearch("synthetic", SEED).result
+    );
   });
 });
 

@@ -153,7 +153,7 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext): N
   if (isDuplicateKeyError(error)) tags["db.duplicateKey"] = true;
 
   console.error("[API] Unhandled error:", error);
-  Sentry.captureException(error, { tags, extra: context?.extra });
+  const eventId = Sentry.captureException(error, { tags, extra: context?.extra });
   alertOps(error, { tags, extra: context?.extra });
   const apiErr = internalError(
     process.env.NODE_ENV === "development" && error instanceof Error
@@ -161,5 +161,8 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext): N
       : "Internal server error",
     error
   );
-  return NextResponse.json(apiErr.toJson(), { status: 500 });
+  return NextResponse.json(
+    { ...apiErr.toJson(), ...(eventId ? { eventId } : {}) },
+    { status: 500 }
+  );
 }

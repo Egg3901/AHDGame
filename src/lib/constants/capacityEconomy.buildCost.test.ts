@@ -12,6 +12,7 @@ import {
   GROWTH_COST_MULTIPLIER,
   acumenRateSensitivity,
   getDominanceGrowthCostMultiplier,
+  getNationalDominanceGrowthCostMultiplier,
 } from "./corporations";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 
@@ -61,6 +62,64 @@ describe("computeBuildCost", () => {
     });
     expect(cost.dominanceMultiplier).toBeCloseTo(getDominanceGrowthCostMultiplier(share), 10);
     expect(cost.dominanceMultiplier).toBeGreaterThan(1);
+  });
+
+  it("charges national dominance when local share stays below its threshold", () => {
+    const localShare = 20;
+    const nationalShare = 60;
+    const cost = computeBuildCost({
+      eraUnitScale: 1,
+      sectorType: "manufacturing",
+      strategyId: null,
+      units: 10,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: localShare,
+      nationalMarketSharePercent: nationalShare,
+    });
+
+    expect(getDominanceGrowthCostMultiplier(localShare)).toBe(1);
+    expect(cost.dominanceMultiplier).toBeCloseTo(
+      getNationalDominanceGrowthCostMultiplier(nationalShare),
+      10
+    );
+    expect(cost.dominanceMultiplier).toBeGreaterThan(1);
+  });
+
+  it("takes the harsher local or national toll instead of stacking both", () => {
+    const localShare = 90;
+    const nationalShare = 60;
+    const cost = computeBuildCost({
+      eraUnitScale: 1,
+      sectorType: "manufacturing",
+      strategyId: null,
+      units: 10,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: localShare,
+      nationalMarketSharePercent: nationalShare,
+    });
+
+    expect(cost.dominanceMultiplier).toBeCloseTo(
+      Math.max(
+        getDominanceGrowthCostMultiplier(localShare),
+        getNationalDominanceGrowthCostMultiplier(nationalShare)
+      ),
+      10
+    );
+  });
+
+  it("treats non-finite dominance shares as zero instead of poisoning the quote", () => {
+    const cost = computeBuildCost({
+      eraUnitScale: 1,
+      sectorType: "manufacturing",
+      strategyId: null,
+      units: 10,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: Number.NaN,
+      nationalMarketSharePercent: Number.POSITIVE_INFINITY,
+    });
+
+    expect(cost.dominanceMultiplier).toBe(1);
+    expect(Number.isFinite(cost.totalAnchor)).toBe(true);
   });
 
   it("floors the rate multiplier at 0.5 and never goes negative on units", () => {

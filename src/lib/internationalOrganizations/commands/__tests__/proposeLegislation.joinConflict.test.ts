@@ -3,12 +3,15 @@ import { ObjectId, type Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 
 const insertOne = vi.fn().mockResolvedValue({ acknowledged: true });
+const findOne = vi.fn().mockResolvedValue(null);
+const findMembershipProposal = vi.fn().mockResolvedValue(null);
 const recordOrgHistoryEvent = vi.fn().mockResolvedValue(undefined);
 let orgCategory = "bloc";
 let conflict: ConflictDoc | null = null;
 
 vi.mock("@/lib/db/collections", () => ({
-  getOrganizationLegislationCollection: async () => ({ insertOne }),
+  getOrganizationLegislationCollection: async () => ({ insertOne, findOne }),
+  getOrganizationProposalsCollection: async () => ({ findOne: findMembershipProposal }),
 }));
 vi.mock("@/lib/internationalOrganizations/service", () => ({
   getMembers: async () => ["US", "UK", "FR"],
@@ -42,11 +45,11 @@ const stubDb = () =>
     collection: () => ({ findOne: async () => ({ _id: "current", conflictsEnabled }) }),
   }) as unknown as Db;
 
-const propose = (input: Record<string, unknown>) =>
+const propose = (input: Record<string, unknown>, orgId = "NATO") =>
   proposeOrganizationLegislation({
     db: stubDb(),
     countryId: "US",
-    orgId: "NATO",
+    orgId,
     actor: { characterId: new ObjectId(), characterName: "Secretary of State" },
     input: input as never,
   });
@@ -54,6 +57,10 @@ const propose = (input: Record<string, unknown>) =>
 describe("tabling a join_conflict resolution", () => {
   beforeEach(() => {
     insertOne.mockClear();
+    findOne.mockReset();
+    findOne.mockResolvedValue(null);
+    findMembershipProposal.mockReset();
+    findMembershipProposal.mockResolvedValue(null);
     recordOrgHistoryEvent.mockClear();
     orgCategory = "bloc";
     conflict = CONFLICT;
@@ -80,7 +87,7 @@ describe("tabling a join_conflict resolution", () => {
     expect(insertOne.mock.calls[0]![0]).toMatchObject({ type: "join_conflict", status: "pending" });
   });
 
-  it("activates collective defense immediately on the host side", async () => {
+  it("puts retroactive collective defense to an organization vote", async () => {
     conflict = {
       ...CONFLICT,
       hostCountry: "KP",
@@ -91,9 +98,135 @@ describe("tabling a join_conflict resolution", () => {
     expect(res.ok).toBe(true);
     expect(insertOne.mock.calls[0]![0]).toMatchObject({
       type: "join_conflict",
-      status: "active",
-      enactedOnTurn: 500,
-      closesOnTurn: 500,
+      status: "pending",
+      closesOnTurn: 524,
+    });
+    expect(insertOne.mock.calls[0]![0]).not.toHaveProperty("enactedOnTurn");
+  });
+
+  it("records the pending applicant whose existing war the pact would defend", async () => {
+    conflict = {
+      ...CONFLICT,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD"] },
+    } as ConflictDoc;
+    findMembershipProposal.mockResolvedValue({ _id: new ObjectId(), status: "pending" });
+
+    const res = await propose({
+      type: "join_conflict",
+      theaterId: "korea-1953",
+      side: "A",
+      defendingCountryId: "DE",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      status: "pending",
+      joinConflictDefendingCountryId: "DE",
+    });
+    expect(findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ joinConflictDefendingCountryId: "DE" })
+    );
+  });
+
+  it("refuses a defensive designation for a country with no membership application", async () => {
+    conflict = {
+      ...CONFLICT,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD"] },
+    } as ConflictDoc;
+
+    const res = await propose({
+      type: "join_conflict",
+      theaterId: "korea-1953",
+      side: "A",
+      defendingCountryId: "DE",
+    });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(400);
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an ordinary entry vote as the applicant's defensive vote", async () => {
+    conflict = {
+      ...CONFLICT,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD"] },
+    } as ConflictDoc;
+    findMembershipProposal.mockResolvedValue({ _id: new ObjectId(), status: "pending" });
+    findOne.mockImplementation(async (filter: Record<string, unknown>) =>
+      filter.joinConflictDefendingCountryId === "DE" ? null : { _id: new ObjectId() }
+    );
+
+    const res = await propose({
+      type: "join_conflict",
+      theaterId: "korea-1953",
+      side: "A",
+      defendingCountryId: "DE",
+    });
+
+    expect(res.ok).toBe(true);
+    expect(insertOne).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a duplicate entry vote for the same conflict side", async () => {
+    findOne.mockResolvedValue({ _id: new ObjectId(), status: "pending" });
+
+    const res = await propose({ type: "join_conflict", theaterId: "korea-1953", side: "A" });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(409);
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("puts a player-founded Bloc's collective defense to a vote", async () => {
+    conflict = { ...CONFLICT, hostCountry: "KP" } as ConflictDoc;
+
+    const res = await propose(
+      { type: "join_conflict", theaterId: "korea-1953", side: "B" },
+      "andes-pact"
+    );
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      organizationId: "andes-pact",
+      status: "pending",
+      closesOnTurn: 524,
+    });
+  });
+
+  it("allows a player-founded Bloc to defend a pending applicant", async () => {
+    conflict = {
+      ...CONFLICT,
+      hostCountry: "DD",
+      hostEntities: ["DD", "DE"],
+      sideA: { label: "West Germany", countries: ["DE"] },
+      sideB: { label: "East Germany", countries: ["DD"] },
+    } as ConflictDoc;
+    findMembershipProposal.mockResolvedValue({ _id: new ObjectId(), status: "pending" });
+
+    const res = await propose(
+      {
+        type: "join_conflict",
+        theaterId: "korea-1953",
+        side: "A",
+        defendingCountryId: "DE",
+      },
+      "andes-pact"
+    );
+
+    expect(res.ok).toBe(true);
+    expect(insertOne.mock.calls[0]![0]).toMatchObject({
+      organizationId: "andes-pact",
+      joinConflictDefendingCountryId: "DE",
+      status: "pending",
     });
   });
 
@@ -118,6 +251,14 @@ describe("tabling a join_conflict resolution", () => {
 
   it("is refused when the conflict has already resolved", async () => {
     conflict = { ...CONFLICT, status: "resolved" } as ConflictDoc;
+    const res = await propose({ type: "join_conflict", theaterId: "korea-1953", side: "A" });
+
+    expect(res.ok).toBe(false);
+    expect(insertOne).not.toHaveBeenCalled();
+  });
+
+  it("is refused when the conflict is awaiting settlement terms", async () => {
+    conflict = { ...CONFLICT, status: "terms_pending" } as ConflictDoc;
     const res = await propose({ type: "join_conflict", theaterId: "korea-1953", side: "A" });
 
     expect(res.ok).toBe(false);

@@ -322,7 +322,15 @@ describe("resolveBattleDeclarations — occupation", () => {
       (c) => c[1]?.$set && "control" in c[1].$set
     );
     return call?.[1].$set as
-      { control: number; supplyA: number; supplyB: number; status?: string } | undefined;
+      | {
+          control: number;
+          supplyA: number;
+          supplyB: number;
+          status?: string;
+          poleSide?: "A" | "B" | null;
+          poleSinceTurn?: number | null;
+        }
+      | undefined;
   }
 
   /** A one-sided matchup so the declarer reliably wins. */
@@ -394,6 +402,24 @@ describe("resolveBattleDeclarations — occupation", () => {
     expect(windowWrite![1].$set.termsWindow.closesTurn).toBeGreaterThan(41);
   });
 
+  it("records but does not finalize a pole reached before the 24-turn minimum", async () => {
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...warConflict,
+      type: "interstate",
+      startTurn: 40,
+      control: 1,
+    });
+    wireWalkover();
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    expect(controlWrite()).toMatchObject({ control: 0, poleSide: "A", poleSinceTurn: 41 });
+    const windowWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
+      (c) => c[1]?.$set?.status === "terms_pending"
+    );
+    expect(windowWrite).toBeUndefined();
+  });
+
   it("names both principals on the window, so exactly one country may impose", async () => {
     db.collectionMocks.conflicts.findOne.mockResolvedValue({ ...warConflict, control: 1 });
     wireWalkover();
@@ -418,7 +444,7 @@ describe("resolveBattleDeclarations — occupation", () => {
     await resolveBattleDeclarations(db as unknown as Db, 41);
 
     const resolvedWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
-      (c) => c[1]?.$set?.status === "resolved"
+      (c) => c[1]?.$set?.status === "resolved" && c[1]?.$set?.outcome
     );
     expect(resolvedWrite).toBeUndefined();
   });
@@ -439,7 +465,7 @@ describe("resolveBattleDeclarations — occupation", () => {
     await resolveBattleDeclarations(db as unknown as Db, 41);
 
     const resolvedWrite = db.collectionMocks.conflicts.updateOne.mock.calls.find(
-      (c) => c[1]?.$set?.status === "resolved"
+      (c) => c[1]?.$set?.status === "resolved" && c[1]?.$set?.outcome
     );
     expect(resolvedWrite).toBeDefined();
     expect(resolvedWrite![1].$set.outcome.winner).toBe("A");

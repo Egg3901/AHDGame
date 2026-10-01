@@ -42,8 +42,9 @@ const sectorWeightsBase = {
   logistics: 5,
   chemical_industries: 4,
   defense: 4,
-  media_entertainment: 6,
+  entertainment: 4,
   technology: 2,
+  media: 2,
 };
 // No REP_ECON row; the folder omits `repEcon` rather than defaulting it.
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
@@ -112,9 +113,10 @@ export const TR_ECONOMY: CountryEconomy = {
         defense: 3,
         healthcare: 1,
         telecommunications: 1,
-        media_entertainment: 2,
+        media: 1,
         automobiles: 0,
         chemical_industries: 0,
+        entertainment: 1,
         technology: 0,
       },
       "1979": {
@@ -133,7 +135,8 @@ export const TR_ECONOMY: CountryEconomy = {
         logistics: 4,
         telecommunications: 2,
         technology: 1,
-        media_entertainment: 5,
+        media: 2,
+        entertainment: 3,
       },
       "1991": {
         manufacturing: 16,
@@ -148,8 +151,9 @@ export const TR_ECONOMY: CountryEconomy = {
         logistics: 5,
         chemical_industries: 4,
         defense: 4,
-        media_entertainment: 6,
+        entertainment: 4,
         technology: 2,
+        media: 2,
       },
     },
   },

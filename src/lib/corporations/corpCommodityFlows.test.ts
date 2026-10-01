@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeCorpCommodityFlows } from "./corpCommodityFlows";
 import {
   COMMODITY_BASE_PRICES,
+  SECTOR_SUPPLY,
   commodityMixWeight,
   dollarsToUnits,
 } from "@/lib/constants/commodities";
@@ -10,7 +11,6 @@ import {
   MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR,
   PLANNED_ECONOMY_MEDIA_OUTPUT,
   PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR,
-  SECTOR_STRATEGIES,
 } from "@/lib/constants/sectorStrategies";
 import type { CommodityFlow } from "@/lib/db/types/commodityFlow";
 
@@ -209,6 +209,35 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     );
   });
 
+  it("uses the ledger's standard chemical output mix", () => {
+    const { commodities } = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "chemical_industries",
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    );
+    const rates = Object.fromEntries(
+      (SECTOR_SUPPLY.chemical_industries ?? []).map((flow) => [flow.commodity, flow.rate])
+    );
+
+    expect(commodities.find((row) => row.commodity === "chemicals")!.outputUnits).toBeCloseTo(
+      1_000 * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "chemicals"),
+      1
+    );
+    expect(commodities.find((row) => row.commodity === "plastics")!.outputUnits).toBeCloseTo(
+      1_000 * commodityMixWeight(rates, COMMODITY_BASE_PRICES, "plastics"),
+      1
+    );
+  });
+
   it("normalizes host-currency revenue to the anchor before deriving nameplate units", () => {
     // A French sector books revenue in francs. Dividing francs by an anchor
     // base price inflated its output by the FX rate.
@@ -222,6 +251,51 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     const steel = commodities.find((c) => c.commodity === "steel")!;
     expect(steel.outputUnits).toBeCloseTo(
       dollarsToUnits(100_000 * 0.4, COMMODITY_BASE_PRICES.steel),
+      1
+    );
+  });
+
+  it("preserves custom and transitioning strategy output mixes", () => {
+    const custom = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "chemical_industries",
+          strategyId: "specialty_chemicals",
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    ).commodities;
+    expect(custom.find((row) => row.commodity === "pharmaceuticals")?.outputUnits).toBeGreaterThan(
+      0
+    );
+    expect(custom.find((row) => row.commodity === "plastics")?.outputUnits ?? 0).toBe(0);
+
+    const transitioning = computeCorpCommodityFlows(
+      [
+        mkSector({
+          sectorType: "chemical_industries",
+          strategyId: "plastics",
+          transitionFromStrategyId: "standard",
+          transitionStartTurn: 10,
+          producedUnits: 1_000,
+          capacityUnits: 1_000,
+        }),
+      ],
+      10,
+      new Map(),
+      stateInfo,
+      new Map(),
+      plants
+    ).commodities;
+    const transitionRates = { chemicals: 0.5, plastics: 0.15 };
+    expect(transitioning.find((row) => row.commodity === "plastics")!.outputUnits).toBeCloseTo(
+      1_000 * commodityMixWeight(transitionRates, COMMODITY_BASE_PRICES, "plastics"),
       1
     );
   });
@@ -353,8 +427,10 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     );
 
     const iron = commodities.find((c) => c.commodity === "iron")!;
+    const ironRate = SECTOR_SUPPLY.extraction?.find((flow) => flow.commodity === "iron")?.rate;
+    expect(ironRate).toBeDefined();
     expect(iron.outputUnits).toBeCloseTo(
-      dollarsToUnits(100_000 * 0.25, COMMODITY_BASE_PRICES.iron),
+      dollarsToUnits(100_000 * ironRate!, COMMODITY_BASE_PRICES.iron),
       1
     );
   });
@@ -365,7 +441,7 @@ describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)"
 
   it("derates media supply the way the world ledger and the clearing offer do", () => {
     const { commodities } = computeCorpCommodityFlows(
-      [mkSector({ sectorType: "media_entertainment", producedUnits: 1_000, capacityUnits: 1_000 })],
+      [mkSector({ sectorType: "media", producedUnits: 1_000, capacityUnits: 1_000 })],
       10,
       new Map(),
       stateInfo,
@@ -373,23 +449,17 @@ describe("computeCorpCommodityFlows — ledger parity legs (ticket #1177 audit)"
       plants
     );
 
-    // The unified standard strategy splits measured output between advertising
-    // and entertainment using the same value-weighted mix as clearing.
+    // Media is a single-output mix, so the whole 1,000 units carry the
+    // market-economy media supply factor.
     const advertising = commodities.find((c) => c.commodity === "advertising")!;
-    const standard = SECTOR_STRATEGIES.media_entertainment.find(({ id }) => id === "standard")!;
-    expect(advertising.outputUnits).toBeCloseTo(
-      1_000 *
-        MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR *
-        commodityMixWeight(standard.supply, COMMODITY_BASE_PRICES, "advertising"),
-      1
-    );
+    expect(advertising.outputUnits).toBeCloseTo(1_000 * MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR, 1);
   });
 
   it("remaps planned-economy media output off advertising", () => {
     const { commodities } = computeCorpCommodityFlows(
       [
         mkSector({
-          sectorType: "media_entertainment",
+          sectorType: "media",
           countryId: "RU",
           producedUnits: 1_000,
           capacityUnits: 1_000,

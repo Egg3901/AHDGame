@@ -186,11 +186,11 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
 
   // ── Country-scoped windows (gate ONLY the listed countries) ────────────────
   devolutionSatisfaction: {
-    from: 1999,
+    from: 1979,
     countries: ["UK"],
     news: {
-      title: "Power Devolved",
-      body: "Power has moved north and west from Westminster. A Scottish Parliament and a Welsh Senedd now stand as more than symbols, carrying real authority and raising expectations that decisions can be made closer to the people they affect. The old union has not ended, but it has been rearranged.\n\nWith new chambers come new arguments. Citizens will ask whether devolution brings dignity, efficiency, fairness, or simply another layer of politics. Devolution satisfaction has become a measure of whether the nations feel heard inside the United Kingdom, or merely managed from a shorter distance.",
+      title: "The Devolution Debate",
+      body: "The balance of power between Westminster and the regions is on the political agenda. Proposals for devolved governments offer a choice about where domestic decisions should be made. Parliament can establish a settlement, amend existing powers or retain central control.\n\nCitizens will judge whether regional government brings representation, effective services and accountability. The passage of time does not settle the argument: the institutions that emerge depend on enacted laws and the choices made in this world.",
     },
   },
   antiSocialBehaviourRate: {
@@ -220,8 +220,8 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
   euCohesionScore: {
     from: 1993,
     news: {
-      title: "The Union Takes Shape",
-      body: "Europe has changed its name and deepened its ambition. Maastricht has turned a common market into a European Union, binding member states not only through trade, but through institutions, rules, expectations, and a widening sense of shared destiny. For Germany, the question is not whether Europe matters, but how closely Berlin will move with it.\n\nThe new union brings opportunity and constraint in equal measure. German governments will be judged by their ability to lead without dominating, compromise without drifting, and align national policy with European purpose. EU cohesion has become a running score of Germany's place inside the continent it helped rebuild.",
+      title: "Europe Weighs Closer Union",
+      body: "The Maastricht debate puts closer European integration before member governments. The Community's common market continues while each member decides whether to ratify a European Union treaty. Rejection can delay or prevent that settlement; the calendar does not decide the outcome.\n\nFor Germany, cooperation with its neighbours remains a test of political trust and economic coordination. European cohesion measures that relationship whether the Community continues or a ratified Union takes its place. The institutions in force depend on the decisions made in this world.",
     },
   },
   rentenStabilitaet: {

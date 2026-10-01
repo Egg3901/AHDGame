@@ -5,13 +5,19 @@ import { type CountryId } from "@/lib/constants/countries";
 import { resolveCountryAvailability } from "@/lib/countryAvailability";
 import { WORLD_ROADMAP_COUNTRIES } from "@/lib/worldCountryRegistry";
 import CountryCard from "./components/CountryCard";
+import {
+  TIER_ORDER,
+  TIER_LABELS,
+  TIER_COLORS,
+  TIER_STROKES,
+} from "@/components/landing/countryTiers";
 import PlannedCountryCard from "./components/PlannedCountryCard";
 import WorldMapSVG from "./components/WorldMapSVG";
 import type { NationWorldSnapshot } from "@/lib/world/nationWorldSnapshots";
 import type { CountryAccessMap } from "./page";
 import { WorldMetricFilterProvider } from "./WorldMetricFilterContext";
 import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
-import type { BlocMembership } from "@/lib/world/blocMembership";
+import type { BlocMapData } from "@/lib/world/blocMembership";
 
 interface WorldClientProps {
   countryAccess: CountryAccessMap;
@@ -20,7 +26,7 @@ interface WorldClientProps {
   conflictsEnabled: boolean;
   worldEntities: WorldEntityMapSnapshot;
   /** entityId → bloc, for the globe's Blocs mode. */
-  blocMembership: BlocMembership;
+  blocMapData: BlocMapData;
 }
 
 export default function WorldClient({
@@ -28,7 +34,7 @@ export default function WorldClient({
   nationSnapshots,
   conflictsEnabled,
   worldEntities,
-  blocMembership,
+  blocMapData,
 }: WorldClientProps) {
   // `countryAccess` is keyed by the runtime registered set (getAllCountryAccess →
   // COUNTRY_ORDER ∪ active countryGameStates), so its keys are the SSOT for which
@@ -58,33 +64,27 @@ export default function WorldClient({
             <WorldMapSVG
               countryAccess={countryAccess}
               worldEntities={worldEntities}
-              blocMembership={blocMembership}
+              blocMapData={blocMapData}
             />
-            <div className="flex justify-center gap-6 text-xs text-muted">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-success/80 border border-success/30" />
-                <span>Full Autonomous</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-warning/80 border border-warning/30" />
-                <span>Sphere Macro</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-purple-500/80 border border-purple-500/30" />
-                <span>Historical Presence</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-primary/80 border border-primary/30" />
-                <span>Unclassified</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-full border"
-                  style={{ backgroundColor: "#9333ea", borderColor: "#7e22ce" }}
-                />
-                <span>Active Crisis</span>
-              </div>
+            <div className="flex flex-wrap justify-center gap-6 text-xs text-muted">
+              {TIER_ORDER.map((tier) => (
+                <div key={tier} className="flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-full border"
+                    style={{
+                      backgroundColor: TIER_COLORS[tier],
+                      borderColor:
+                        tier === "background" ? TIER_STROKES.economic : TIER_STROKES[tier],
+                    }}
+                  />
+                  <span>{TIER_LABELS[tier]}</span>
+                </div>
+              ))}
             </div>
+            <p className="text-center text-xs text-muted-foreground">
+              Light borders identify background nations with aggregate data. Tap or click to inspect
+              them.
+            </p>
           </section>
 
           {/* Three grids: nations you can play, nations you can only browse, and

@@ -8,7 +8,7 @@
  * taken a real risk and got away with it, which is the intended shape.
  */
 
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import type { CountryId } from "@/lib/constants/countries";
@@ -77,6 +77,10 @@ export async function applyTransferPricingAudit(
     .toArray();
   const corpById = new Map(corps.map((c) => [c._id.toString(), c]));
 
+  const tracked: Array<{
+    premium: SettledPremium;
+    shift: NonNullable<ReturnType<typeof shiftDirection>>;
+  }> = [];
   for (const premium of settledPremiums) {
     const supplier = corpById.get(premium.supplierCorpId);
     const buyer = corpById.get(premium.buyerCorpId);
@@ -100,18 +104,42 @@ export async function applyTransferPricingAudit(
     const shift = shiftDirection(position);
     if (!shift) continue;
     result.positionsTracked += 1;
+    tracked.push({ premium, shift });
+  }
 
-    // Accrue first, then read back the running total, so two settlements in the
-    // same turn on the same agreement cannot both miss the threshold.
-    const accrued = await db.collection<SupplyAgreement>(AGREEMENTS).findOneAndUpdate(
-      { _id: new ObjectId(premium.agreementId) },
-      {
-        $inc: { transferPricingExposureAnchor: shift.shiftedBaseAnchor },
-        $set: { updatedAt: now },
+  // Accruals are independent additive writes. Applying them one at a time made
+  // this stage one network round trip per live intra-group agreement, which can
+  // reach thousands in mature worlds. An ordered bulk preserves input order,
+  // and the projected read supplies the same post-accrual exposure used below.
+  if (tracked.length === 0) return result;
+  const accrualOps: AnyBulkWriteOperation<SupplyAgreement>[] = tracked.map(
+    ({ premium, shift }) => ({
+      updateOne: {
+        filter: { _id: new ObjectId(premium.agreementId) },
+        update: {
+          $inc: { transferPricingExposureAnchor: shift.shiftedBaseAnchor },
+          $set: { updatedAt: now },
+        },
       },
-      { returnDocument: "after", projection: { transferPricingExposureAnchor: 1 } }
-    );
-    const exposure = accrued?.transferPricingExposureAnchor ?? 0;
+    })
+  );
+  await db.collection<SupplyAgreement>(AGREEMENTS).bulkWrite(accrualOps, { ordered: true });
+  const exposureDocs = await db
+    .collection<SupplyAgreement>(AGREEMENTS)
+    .find(
+      { _id: { $in: tracked.map(({ premium }) => new ObjectId(premium.agreementId)) } },
+      { projection: { transferPricingExposureAnchor: 1 } }
+    )
+    .toArray();
+  const exposureByAgreementId = new Map(
+    exposureDocs.map((agreement) => [
+      agreement._id.toString(),
+      agreement.transferPricingExposureAnchor ?? 0,
+    ])
+  );
+
+  for (const { premium, shift } of tracked) {
+    const exposure = exposureByAgreementId.get(premium.agreementId) ?? 0;
 
     const rate = corporateTaxRateByCountry.get(shift.claimantCountryId);
     const assessment = assessIfDue({

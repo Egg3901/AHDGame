@@ -356,6 +356,17 @@ describe("computeEconomicVitalSigns", () => {
         turn: 100,
         year: 1955,
         timestamp: new Date(),
+        health: {
+          severity: "ok",
+          warningCount: 0,
+          errorCount: 0,
+          processingWarningCount: 0,
+          processingErrorCount: 0,
+          integrityWarningCount: 0,
+          integrityErrorCount: 0,
+          integrityChecked: false,
+          qualification: "unverified",
+        },
         turnProcessing: {
           durationMs: 1,
           success: true,
@@ -482,6 +493,7 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
     expect(snapshot.securities.openOrderDepthAnchor).toBe(50);
+    expect(snapshot.securities.openBidDepthAnchor).toBe(20);
     expect(snapshot.securities.medianFilledOrderExecutionHours.value).toBe(6);
     expect(snapshot.households.topTenWealthShare.value).toBe(1);
     expect(snapshot.households.wealthGini.value).toBeCloseTo(0.72);

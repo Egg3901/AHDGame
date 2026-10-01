@@ -24,17 +24,20 @@
 export const DEFAULT_PHASE_ROUND_TRIP_BUDGET = 500;
 
 /**
- * Measured on a seeded 1953 world (turns 33-41, 2026-09-06) after the batching
- * pass, then given roughly 2x headroom because the production world carries
- * about twice the NPPs, funds and positions.
+ * Initial values were measured on a seeded 1953 world (turns 33-41,
+ * 2026-09-06), then given roughly 2x headroom for the larger production world.
+ * Six entries below were reconciled against production turnLogs for
+ * successful turns 1063-1117 (55 turns, 2026-09-25). Their budgets sit about
+ * 1.2x the observed phase p95; cadence-gated phases use executed turns only.
+ * See DEAD_WEIGHT_PLAN_AUDIT.md section 8 for counts and sample caveats.
  */
 export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
-  corporationTurn: 2000,
+  corporationTurn: 4500,
   ministerialOrders: 2000,
-  indexFunds: 3000,
+  indexFunds: 18000,
   fiscalYear: 7000,
   nppUnionBehavior: 1500,
-  nppActionProcessing: 3000,
+  nppActionProcessing: 10000,
   approvalSnapshot: 1500,
   nppGovernmentPhases: 1000,
   bondTurn: 1000,
@@ -43,7 +46,9 @@ export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   fiscalBaseGrowth: 800,
   inflationRecalc: 600,
   primaryResolution: 2000,
-  voteAccumulation: 2000,
+  voteAccumulation: 4500,
+  bankingTurn: 1000,
+  recomputeSharePrices: 1000,
   electionResolution: 2000,
   primarySnapshots: 800,
   politicalMetricsDynamics: 600,

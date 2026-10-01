@@ -9,6 +9,7 @@ import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAd
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { isLabourWagesEnabled, isLabourFullMode } from "@/lib/labour/featureFlag";
+import { undergroundUnrestVisible } from "@/lib/unions/enforcementCosts";
 import { isProspectingEnabled } from "@/lib/extraction/featureFlag";
 import {
   sectorWageLevel,
@@ -85,7 +86,10 @@ import {
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
-import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import {
+  buildNationalDominanceShareBySectorId,
+  unownedHeadroomUnitsOf,
+} from "@/lib/corporations/marketShare";
 import { getSectorTechEffects } from "@/lib/constants/techTree";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
@@ -308,6 +312,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
               debtToGdpRatio: 1,
               surplus: 1,
               gdp: 1,
+              unionsBanned: 1,
               "taxRates.domesticCorporateTax": 1,
               "taxRates.foreignCorporateTax": 1,
             },
@@ -354,7 +359,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           .collection<Union>("unions")
           .findOne(
             { countryId: sectorCountryId, sectorType: sector.sectorType },
-            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1 } }
+            { projection: { name: 1, ownerId: 1, demandedWageLevel: 1, undergroundStrength: 1 } }
           ),
       ]);
 
@@ -365,7 +370,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const representingUnionDoc = sector.representingUnionId
       ? await db
           .collection<Union>("unions")
-          .findOne({ _id: sector.representingUnionId }, { projection: { name: 1 } })
+          .findOne(
+            { _id: sector.representingUnionId },
+            { projection: { name: 1, undergroundStrength: 1 } }
+          )
       : null;
     const macroEcon: MacroEconomicValues = {
       inflationRate: federalBudget?.economicFactors?.inflationRate ?? null,
@@ -383,7 +391,18 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         loadActiveFtaPairs(db),
         db
           .collection<CorporateSector>("corporateSectors")
-          .find({}, { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } })
+          .find(
+            {},
+            {
+              projection: {
+                corporationId: 1,
+                stateId: 1,
+                countryId: 1,
+                sectorType: 1,
+                revenue: 1,
+              },
+            }
+          )
           .toArray(),
         db
           .collection<CorporateSector>("corporateSectors")
@@ -436,7 +455,6 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       }),
     ]);
     const corpByIdForLookup = new Map(corpsForLookup.map((c) => [c._id.toString(), c]));
-
     const blendPresenceKeys = tariffRulesNeedSectorPresenceKeys(allTariffs)
       ? buildSectorPresenceKeys(allSectorsRaw, corpByIdForLookup)
       : new Set<string>();
@@ -701,6 +719,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     let plants: Awaited<ReturnType<typeof buildSectorPlantsSection>> | null = null;
     if (plantsEnabled && !shouldRedact && !publicFinancialFog) {
+      const nationalMarketShare =
+        buildNationalDominanceShareBySectorId({
+          sectors: allSectorsRaw,
+          stateById: new Map(allStates.map((candidate) => [candidate._id, candidate])),
+          unownedSectors: [],
+          exchangeRatesByCurrency: siblingFxByCurrency,
+        }).get(sector._id.toString()) ?? 0;
       // Same governor bounds the turn processor resolves (turn/corporation
       // index.ts), read from gameConfig, not gameState, so the "market support"
       // pill counts down against the ramp the engine is actually applying.
@@ -775,6 +800,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         governorCap: marketCtx.governorCap,
         governorRampTurns: marketCtx.governorRampTurns,
         marketSharePercent: marketShare,
+        nationalMarketSharePercent: nationalMarketShare,
         // Distinct RIVAL corps in this (state, type) cell. `siblingsSectors` is
         // already scoped to exactly that cell, so this needs no extra read,
         // but it must be distinct CORPS, not sectors, or a rival holding two
@@ -928,6 +954,10 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // longer exists reads as unrepresented rather than as a phantom holder.
         representingUnionId: representingUnionDoc ? sector.representingUnionId?.toString() : null,
         representingUnionName: representingUnionDoc?.name ?? null,
+        undergroundUnrest: undergroundUnrestVisible(
+          federalBudget?.unionsBanned === true,
+          (representingUnionDoc ?? coveringIndustryUnionDoc)?.undergroundStrength
+        ),
         createdAt: sector.createdAt,
         // For-sale listing, null when not listed. priceAnchor / npvAnchor are
         // ₳-denominated so the UI formatter routes through the viewer's wallet

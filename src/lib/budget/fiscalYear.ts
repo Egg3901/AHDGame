@@ -1,3 +1,4 @@
+import { financialAusteritySpending } from "@/lib/livingConflict/rules/financialFiscal";
 import type { Db } from "mongodb";
 import type {
   FederalBudget,
@@ -360,7 +361,10 @@ export async function processFiscalYear(
 
     let finalSpending = federalSpending;
     let finalSurplus = surplus;
-    if (federalBudget.imfSovereignBailoutActive) {
+    if ((federalBudget.financialCrisisAusterityUntilTurn ?? -1) >= currentTurn) {
+      finalSpending = financialAusteritySpending(federalSpending, federalRevenue.total);
+      finalSurplus = federalRevenue.total - finalSpending.total;
+    } else if (federalBudget.imfSovereignBailoutActive) {
       const austerity = applyAusterityCap(
         {
           byCategory: federalSpending.byCategory ?? {},
@@ -398,6 +402,9 @@ export async function processFiscalYear(
           taxRates: normalizedTaxRates,
           revenue: federalRevenue,
           spending: finalSpending,
+          ...((federalBudget.financialCrisisAusterityUntilTurn ?? -1) >= currentTurn
+            ? { financialCrisisAusterityBaseSpending: federalSpending }
+            : {}),
           "debt.interestRate": debtResult.interestRate,
           debtToGdpRatio: debtResult.debtToGdpRatio,
           creditRating: debtResult.creditRating,

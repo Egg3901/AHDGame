@@ -46,7 +46,8 @@ const sectorWeightsBase = {
   logistics: 3,
   chemical_industries: 2,
   technology: 2,
-  media_entertainment: 2,
+  media: 1,
+  entertainment: 1,
   defense: 1,
   automobiles: 1,
 };
@@ -56,7 +57,8 @@ const repEcon = {
 };
 const costScaleAnchors = {
   gdpLow: 1800000000000,
-  popLow: 95000000,
+  // Dated national anchor under #2676; generator applies this after the historical snapshot.
+  popLow: 88992220,
   scaleLow: 0.04,
   gdpHigh: 144000000000000,
   popHigh: 200000000,
@@ -122,11 +124,12 @@ export const NG_ECONOMY: CountryEconomy = {
         financial: 3,
         real_estate: 2,
         healthcare: 2,
-        media_entertainment: 3,
+        media: 2,
         defense: 2,
         telecommunications: 1,
         automobiles: 0,
         chemical_industries: 0,
+        entertainment: 1,
         technology: 0,
       },
       "1979": {
@@ -145,7 +148,8 @@ export const NG_ECONOMY: CountryEconomy = {
         technology: 0,
         automobiles: 1,
         chemical_industries: 1,
-        media_entertainment: 3,
+        media: 1,
+        entertainment: 2,
       },
       "1991": {
         extraction: 30,
@@ -162,7 +166,8 @@ export const NG_ECONOMY: CountryEconomy = {
         chemical_industries: 2,
         automobiles: 1,
         technology: 1,
-        media_entertainment: 2,
+        media: 1,
+        entertainment: 1,
         defense: 1,
       },
     },

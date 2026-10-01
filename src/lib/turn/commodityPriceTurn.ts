@@ -1,3 +1,4 @@
+import { loadFinancialCrisisDemand } from "@/lib/livingConflict/financialDemand";
 /**
  * How commodity prices move each turn. processCommodityPriceTurn sums supply and
  * demand from owned sectors, prices each commodity as 50% global + 25% national +
@@ -191,6 +192,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             mothballed: 1,
             embargoSuspended: 1,
             embargoExportExposure: 1,
+            militaryDivertedFraction: 1,
+            militaryDivertedTurn: 1,
           },
         }
       )
@@ -220,6 +223,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           projection: {
             _id: 1,
             marketingBudget: 1,
+            "bankCharter.status": 1,
+            "bankCharter.totalLoans": 1,
+            "bankCharter.currency": 1,
             liquidCapital: 1,
             headquartersState: 1,
             countryOwnerId: 1,
@@ -253,7 +259,19 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // feature has been inert ever since. It also hid the `health` spelling
       // that UK/CN/IE use. Projecting the map means adding a leg to
       // GOVT_SPEND_DEMAND cannot silently read zero again.
-      .find({}, { projection: { countryId: 1, "spending.byCategory": 1, economicFactors: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            "spending.byCategory": 1,
+            economicFactors: 1,
+            currencyCode: 1,
+            gdp: 1,
+            gdpSmoothed: 1,
+          },
+        }
+      )
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -504,7 +522,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   // Compute raw supply/demand in units (retail demand scaled by GDP growth)
-  const { global, byState, demandTruncated } = computeRawSupplyDemand(
+  const { global, byState, supplyByCorporation, demandTruncated } = computeRawSupplyDemand(
     sectorData,
     gdpGrowthData,
     stateGdpMap,
@@ -583,6 +601,12 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         metricsByState,
         priorGlobalPrice,
         perCapita: perCapitaOverride,
+        financialDemandByCountry: await loadFinancialCrisisDemand(
+          db,
+          turn,
+          allCorporations,
+          federalBudgets
+        ),
       },
       global,
       byState,
@@ -831,6 +855,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       marketSystemMode,
       global,
       byCountry,
+      corporationIds: allCorporations.map((corporation) => corporation._id),
+      supplyByCorporation,
       demandTruncated,
       appliedGlobalPrices,
       appliedStatePrices,

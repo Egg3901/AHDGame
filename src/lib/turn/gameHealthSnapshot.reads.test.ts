@@ -189,4 +189,35 @@ describe("gameHealthSnapshot bounded reads (#2166)", () => {
       expect(categories).toContain("orphanedMember");
     }
   );
+
+  it(
+    "keeps a successful turn non-passing with one integrity error and one warning (#2292)",
+    { timeout: 60000 },
+    async () => {
+      await setupQuietWorld();
+      mockAggregate("electionCandidates", [{ count: 1 }]);
+      mockAggregate("partyMembers", [{ count: 1 }]);
+      mockAggregate("elections", []);
+
+      const { processGameHealthSnapshot } = await import("./gameHealthSnapshot");
+      const result = await processGameHealthSnapshot(db as unknown as Db, 12, 2026, 100, true, []);
+
+      expect(result.health).toEqual({
+        severity: "error",
+        warningCount: 1,
+        errorCount: 1,
+        processingWarningCount: 0,
+        processingErrorCount: 0,
+        integrityWarningCount: 1,
+        integrityErrorCount: 1,
+        integrityChecked: true,
+        qualification: "non-passing",
+      });
+      const doc = db.collectionMocks.gameHealthSnapshots.insertOne.mock.calls[0][0];
+      expect(doc.turnProcessing.success).toBe(true);
+      expect(doc.turnProcessing.warningCount).toBe(0);
+      expect(doc.turnProcessing.errorCount).toBe(0);
+      expect(doc.health).toEqual(result.health);
+    }
+  );
 });

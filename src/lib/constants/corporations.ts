@@ -30,7 +30,7 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 
 export const CORPORATION_TYPES = [
   "financial",
-  "media_entertainment",
+  "media",
   "manufacturing",
   "chemical_industries",
   "healthcare",
@@ -43,6 +43,7 @@ export const CORPORATION_TYPES = [
   "construction",
   "defense",
   "telecommunications",
+  "entertainment",
   "logistics",
   "extraction",
 ] as const;
@@ -51,7 +52,7 @@ export type CorporationType = (typeof CORPORATION_TYPES)[number];
 
 export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   financial: "Financial",
-  media_entertainment: "Media & Entertainment",
+  media: "Media",
   manufacturing: "Manufacturing",
   chemical_industries: "Chemical Industries",
   healthcare: "Healthcare",
@@ -64,6 +65,7 @@ export const CORPORATION_TYPE_LABELS: Record<CorporationType, string> = {
   construction: "Construction",
   defense: "Defense",
   telecommunications: "Telecommunications",
+  entertainment: "Entertainment",
   logistics: "Logistics",
   extraction: "Extraction & Mining",
 };
@@ -973,8 +975,7 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   // valuation revamp is meant to recognize. This only feeds share-price
   // cost of capital, never loan or coupon pricing.
   financial: 0.06,
-  // issue #2234: merged media/entertainment keeps the higher-volatility band.
-  media_entertainment: 0.06,
+  media: 0.05,
   manufacturing: 0.04,
   chemical_industries: 0.05,
   healthcare: 0.05,
@@ -987,10 +988,54 @@ export const SECTOR_RISK_PREMIUM: Record<string, number> = {
   construction: 0.04,
   defense: 0.04,
   telecommunications: 0.04,
+  entertainment: 0.06,
   logistics: 0.04,
   extraction: 0.06,
   default: 0.05,
 };
+
+// ─── Stock-market boost (phased operating + valuation lift) ─────────────────
+// Two overlapping turn-ramped multipliers that lift the equity market without
+// a one-turn step the ±35% share-price rate limiter would have to absorb:
+//
+//   Phase A (revenue first): sector operating revenue ramps 1.0 →
+//   STOCK_BOOST_REVENUE_TARGET over STOCK_BOOST_REVENUE_RAMP_TURNS turns.
+//   Financial sectors compound an extra STOCK_BOOST_FINANCIAL_REVENUE_EXTRA,
+//   so chartered-bank parents feel the operating lift, not just the valuation.
+//   Headcount is deliberately untouched: nameplate revenue (the worker basis)
+//   is not boosted, only realized operating revenue.
+//
+//   Phase B (valuation follows): sector NPV and bank NPV ramp 1.0 → target
+//   over STOCK_BOOST_NPV_RAMP_TURNS turns, starting 40 turns after
+//   revenue so cash earnings lead and capitalized values follow. The financial
+//   cost-of-capital premium eases 0.06 → STOCK_BOOST_FINANCIAL_RISK_PREMIUM
+//   over the same window.
+//
+// The pure ramp math lives in `@/lib/corporations/rules/marketBoost`; these
+// are the tuning hooks. Judgment-call magnitudes: validate with a worldsim
+// A/B before treating as final.
+//
+// Owner-approved acceleration: at turn 1253 phase A is 40/192 complete.
+// Phase B starts at turn 1253, following phase A by 40 turns.
+
+/** First turn the operating-revenue boost applies (ramps from 1.0). */
+export const STOCK_BOOST_REVENUE_START_TURN = 1213;
+/** Turns to ramp revenue 1.0 → target (192 = 4 game years = ~8 real days). */
+export const STOCK_BOOST_REVENUE_RAMP_TURNS = 192;
+/** Steady-state operating-revenue multiplier (all sectors). */
+export const STOCK_BOOST_REVENUE_TARGET = 1.2;
+/** Extra steady-state revenue multiplier compounding on financial sectors. */
+export const STOCK_BOOST_FINANCIAL_REVENUE_EXTRA = 1.1;
+/** First turn the NPV boost applies (40 turns after phase A). */
+export const STOCK_BOOST_NPV_START_TURN = 1253;
+/** Turns to ramp NPV 1.0 → target. */
+export const STOCK_BOOST_NPV_RAMP_TURNS = 192;
+/** Steady-state sector-NPV multiplier. */
+export const STOCK_BOOST_SECTOR_NPV_TARGET = 1.3;
+/** Steady-state bank-income NPV multiplier (chartered banks only). */
+export const STOCK_BOOST_BANK_NPV_TARGET = 1.5;
+/** Financial cost-of-capital risk premium once the NPV window completes. */
+export const STOCK_BOOST_FINANCIAL_RISK_PREMIUM = 0.04;
 
 /**
  * Maximum dividend rate (%). CEOs cannot set above this; turn processing clamps existing values.
@@ -1013,14 +1058,14 @@ export const WORKFORCE_SKILL_SECTORS = new Set<CorporationType>([
 export const CRIME_RATE_SECTORS = new Set<CorporationType>([
   "retail",
   "real_estate",
-  "media_entertainment",
+  "entertainment",
 ]);
 
 /** Sectors affected by broadband access (connectivity-dependent operations) */
 export const BROADBAND_SECTORS = new Set<CorporationType>([
   "technology",
   "telecommunications",
-  "media_entertainment",
+  "media",
   "financial",
 ]);
 

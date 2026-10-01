@@ -166,8 +166,8 @@ export const DEFAULT_MARGIN_SECTOR_MULTIPLIERS: Record<CorporationType, number> 
   technology: 1.0,
   telecommunications: 1.0,
   healthcare: 1.0,
-  // issue #2234: merged media/entertainment domain.
-  media_entertainment: 1.0,
+  media: 1.0,
+  entertainment: 1.0,
   logistics: 1.0,
   defense: 1.0,
   // Tier 4 (0.7x) — export-positive, partial winners

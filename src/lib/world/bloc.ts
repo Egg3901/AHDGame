@@ -1,11 +1,11 @@
 /**
- * The Cold War bloc union, in one place so both the globe and the military system read
- * the same three values.
+ * The built-in Cold War bloc union. Player-founded Bloc poles extend this in
+ * the map and military treaty rolls without changing the preset labels.
  *
  * It lives in `lib` rather than beside the globe's presentation constants because the
- * domain layer needs it: `blocMembership` produces it, and the military system consumes
- * it. `src/app/world/worldBlocs.ts` re-exports it as `WorldBloc`, which is the name the
- * map components already use.
+ * domain layer needs it: `blocMembership` produces these preset values, and the
+ * military system consumes them alongside custom pole ids. The map re-exports
+ * the preset type as `WorldBloc` for its built-in palette.
  *
  * Non-aligned is a real answer, not a gap — it is what a country the era names but no
  * accession-governing alliance has claimed actually is.
