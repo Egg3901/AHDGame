@@ -8,10 +8,13 @@
  * without a real database or game state.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
+// Collect the cold dependency graph before hooks and assertion timers start.
+// Vitest hoists the phase mocks below before evaluating this import.
+import "@/lib/turnSystem";
 
 // ── Mock all sub-processor modules ─────────────────────────────────────────
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -81,7 +84,7 @@ vi.mock("@/lib/congress/leadershipElections", () => ({
   // Runs on every turn now, not only when a general resolves.
   vacateLeadershipForLostSeats: vi.fn().mockResolvedValue(0),
 }));
-const mockUKBillLifecycle = vi.fn();
+const mockUKBillLifecycle = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/turn/countryPhases", () => ({
   COUNTRY_BILL_PHASES: {
     UK: {
@@ -135,11 +138,6 @@ vi.mock("@/lib/navair/turn", () => ({
     formationsUpdated: 0,
   }),
 }));
-
-// Load the large dependency graph outside individual assertion timeouts.
-beforeAll(async () => {
-  await import("@/lib/turnSystem");
-}, 180_000);
 
 describe("processTurn() — full turn flow", () => {
   let db: MockDb;
