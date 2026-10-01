@@ -12,6 +12,7 @@
  * component subset used for component-level fuzzy matching in detection.
  */
 import { getThumbmark } from "@thumbmarkjs/thumbmarkjs";
+import { isStoreAppUserAgent } from "@/lib/displayMode";
 
 /** Length of the legacy truncated fingerprint stored before the full-hash migration. */
 export const LEGACY_FINGERPRINT_LENGTH = 16;
@@ -148,6 +149,12 @@ export async function generateFingerprintData(): Promise<{
 }> {
   if (typeof window === "undefined") {
     return { hash: "server-side", components: {} };
+  }
+  // The App Store and Play builds of AHDClient must not fingerprint the
+  // device (Apple forbids it for any purpose). They send their persistent
+  // device key instead, so return nothing and let callers skip the beacon.
+  if (isStoreAppUserAgent(navigator.userAgent ?? "")) {
+    return { hash: "", components: {} };
   }
   const data = await getThumbmark({ exclude: EXCLUDED_COMPONENTS });
   const components = extractComponents(data.components);
