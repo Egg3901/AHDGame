@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BSON, MongoClient } from "mongodb";
+import { MongoClient } from "mongodb";
 import { expect, it, vi } from "vitest";
 import { processGameHealthSnapshot } from "./gameHealthSnapshot";
 
@@ -10,22 +10,7 @@ const enabled = process.env.AHD_NPC_PARTY_HEALTH_REAL_MONGO === "1";
 it.skipIf(!enabled)(
   "counts active NPC members without hiding retired, foreign or genuinely empty parties",
   async () => {
-    const client = await new MongoClient("mongodb://127.0.0.1:27018", {
-      monitorCommands: true,
-    }).connect();
-    let measuring = false;
-    const measured = new Set<number>();
-    const metrics = { commands: 0, replyBytes: 0 };
-    client.on("commandStarted", (event) => {
-      if (measuring) {
-        measured.add(event.requestId);
-        metrics.commands++;
-      }
-    });
-    client.on("commandSucceeded", (event) => {
-      if (measured.has(event.requestId))
-        metrics.replyBytes += BSON.calculateObjectSize(event.reply);
-    });
+    const client = await new MongoClient("mongodb://127.0.0.1:27018").connect();
     const name = `ahd_sim_issue2072_party_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const db = client.db(name);
     try {
@@ -49,10 +34,7 @@ it.skipIf(!enabled)(
           { countryId: "DE", retiredAt: null },
         ]);
       const originalParties = await db.collection("politicalParties").find({}).toArray();
-      measuring = true;
       await processGameHealthSnapshot(db, 1, 1991, 0, true, []);
-      measuring = false;
-      console.info("Party health fixture Mongo metrics", JSON.stringify(metrics));
       const snapshot = await db.collection("gameHealthSnapshots").findOne({ turn: 1 });
       expect(
         snapshot?.dataIntegrity.issues.filter(
