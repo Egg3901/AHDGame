@@ -403,18 +403,18 @@ function generatePersonality(quality: number = 0): NPPPersonality {
 // across NPP generations within a single process to avoid a full collection
 // scan per NPP during bulk seeding. Cleared on next process restart so admin
 // edits via the legislation-type CRUD UI propagate without manual reset.
-let legislationTypeCache: LegislationType[] | null = null;
-let legislationTypeCacheAt = 0;
+const legislationTypeCache = new WeakMap<Db, { rows: LegislationType[]; at: number }>();
 const LEGISLATION_TYPE_CACHE_TTL_MS = 60_000;
 
 async function getLegislationTypesCached(
   db: Awaited<ReturnType<typeof getDb>>
 ): Promise<LegislationType[]> {
   const now = Date.now();
-  if (legislationTypeCache && now - legislationTypeCacheAt < LEGISLATION_TYPE_CACHE_TTL_MS) {
-    return legislationTypeCache;
+  const cached = legislationTypeCache.get(db);
+  if (cached && now - cached.at < LEGISLATION_TYPE_CACHE_TTL_MS) {
+    return cached.rows;
   }
-  legislationTypeCache = await db
+  const rows = await db
     .collection<LegislationType>("legislationTypes")
     .find(
       {},
@@ -428,17 +428,16 @@ async function getLegislationTypesCached(
       }
     )
     .toArray();
-  legislationTypeCacheAt = now;
-  return legislationTypeCache;
+  legislationTypeCache.set(db, { rows, at: now });
+  return rows;
 }
 
 async function generatePolicyPositions(
+  db: Db,
   partyId: string,
   countryId: CountryId,
   quality: number = 0
 ): Promise<PolicyPositions> {
-  const db = await getDb();
-
   // Parties are uniquely identified by (sequentialId, countryId).
   const seqId = parseInt(partyId, 10);
   const party = Number.isFinite(seqId)
@@ -503,9 +502,10 @@ function generateFavorability(quality: number = 0): number {
  */
 export async function generateNPP(
   config: NPPGenerationConfig,
-  context?: NPPGenerationContext
+  context?: NPPGenerationContext,
+  dbArg?: Db
 ): Promise<NPP> {
-  const db = await getDb();
+  const db = dbArg ?? (await getDb());
 
   // One-off creation checks the database. Bulk callers share a set loaded once
   // for the operation, avoiding one full NPP scan for every generated row.
@@ -535,7 +535,7 @@ export async function generateNPP(
 
   // Generate components
   const personality = generatePersonality(quality);
-  const policies = await generatePolicyPositions(config.party, countryId, quality);
+  const policies = await generatePolicyPositions(db, config.party, countryId, quality);
   const politicalInfluence = generatePoliticalInfluence();
   const favorability = generateFavorability(quality);
 
@@ -582,7 +582,7 @@ export async function createNPP(
   context?: NPPGenerationContext
 ): Promise<NPP> {
   const db = await getDb();
-  const npp = await generateNPP(config, context);
+  const npp = await generateNPP(config, context, db);
 
   // Assign sequential ID
   const sequentialId = await getNextSequentialId(db, "npp");
