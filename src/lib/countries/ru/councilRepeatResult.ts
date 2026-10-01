@@ -81,6 +81,7 @@ export async function materializeRussianCouncilRepeatResult(input: {
       projection: {
         ruFirstCouncilElectionCohortId: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,

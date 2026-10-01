@@ -25,6 +25,11 @@ vi.mock("./dumaRepeatNpcAdmission", () => ({
   admitRussianDumaRepeatNpcNominees: calls.admitDumaRepeat,
 }));
 vi.mock("./councilNpcAdmission", () => ({ admitRussianCouncilNpcNominees: calls.admitCouncil }));
+vi.mock("./dumaConvocationCampaigns", () => ({
+  processRussianDumaConvocationCampaigns: vi
+    .fn()
+    .mockResolvedValue({ active: false, opened: 0, repeatsOpened: 0, npcCandidatesCreated: 0 }),
+}));
 import { processRussianAssemblyCampaigns as processCampaign } from "./assemblyCampaigns";
 beforeEach(() => {
   for (const mock of Object.values(calls)) mock.mockReset();
@@ -99,6 +104,7 @@ describe("Automatic native Assembly campaigns", () => {
   it("opens both first families then admits disjoint slates in Duma-first order", async () => {
     const fixture = scenario();
     expect(await processCampaign(fixture.input)).toEqual({
+      convocationsOpened: 0,
       firstOpened: 2,
       repeatsOpened: 0,
       npcCandidatesCreated: 1212,
@@ -128,6 +134,7 @@ describe("Automatic native Assembly campaigns", () => {
         record: { cohortId: new ObjectId(), rootCohortId: root, generation: 1, openedOnTurn: 150 },
       });
     expect(await processCampaign({ ...fixture.input, turn: 150 })).toEqual({
+      convocationsOpened: 0,
       firstOpened: 0,
       repeatsOpened: 2,
       npcCandidatesCreated: 537,
@@ -141,6 +148,7 @@ describe("Automatic native Assembly campaigns", () => {
     const fixture = scenario();
     certify(fixture, false);
     expect(await processCampaign({ ...fixture.input, turn: 150 })).toEqual({
+      convocationsOpened: 0,
       firstOpened: 0,
       repeatsOpened: 0,
       npcCandidatesCreated: 0,
@@ -170,6 +178,7 @@ describe("Automatic native Assembly campaigns", () => {
     const fixture = scenario();
     fixture.mem.collection("countryGameStates").docs[0].ruFederalAssemblySinceTurn = 145;
     expect(await processCampaign({ ...fixture.input, turn: 150 })).toEqual({
+      convocationsOpened: 0,
       firstOpened: 0,
       repeatsOpened: 0,
       npcCandidatesCreated: 0,

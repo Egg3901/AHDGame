@@ -23,6 +23,11 @@ import { freezeRussianDumaElectorate } from "./rules/assemblyElectorate";
 import { planRussianDumaDistricts } from "./rules/assemblyDistricts";
 import { planRussianDumaBallot } from "./rules/assemblySchedule";
 import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
+import {
+  russianDumaBoundRoot,
+  loadRussianDumaAuthority,
+  russianDumaRootFilter,
+} from "./dumaConvocationAuthority";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export const RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION = "russianDumaRepeatOpenings";
@@ -75,6 +80,8 @@ export async function materializeRussianDumaRepeatOpening(input: {
       session,
       projection: {
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
@@ -83,7 +90,8 @@ export async function materializeRussianDumaRepeatOpening(input: {
     }
   );
   if (
-    !country?.ruFirstDumaElectionCohortId?.equals(rootCohortId) ||
+    !country ||
+    !russianDumaBoundRoot(country)?.equals(rootCohortId) ||
     !hasAuthorizedPostSovietTransition(
       turn,
       country.ruSovietSuccessionSinceTurn,
@@ -91,6 +99,14 @@ export async function materializeRussianDumaRepeatOpening(input: {
     )
   )
     throw new Error("Duma repeat mandate changed");
+  const authority = await loadRussianDumaAuthority({
+    db,
+    session,
+    country,
+    root: rootCohortId,
+    turn,
+  });
+  if (!authority) throw new Error("Duma campaign authority changed");
   const previous = await db
     .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
     .findOne({ _id: previousResultId }, { session });
@@ -241,7 +257,7 @@ export async function materializeRussianDumaRepeatOpening(input: {
   const bound = await db.collection<CountryGameState>("countryGameStates").updateOne(
     {
       _id: "RU",
-      ruFirstDumaElectionCohortId: rootCohortId,
+      ...russianDumaRootFilter(country, rootCohortId),
       ruFederalAssemblyMandateSinceTurn: previous.mandateSinceTurn,
       ruFederalAssemblySinceTurn: country.ruFederalAssemblySinceTurn ?? { $exists: false },
     },

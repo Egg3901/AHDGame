@@ -204,6 +204,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       : null;
     if (dumaFiling && !dumaFiling.allowed) {
       const errors = {
+        "incompatible-office": "Your current office is incompatible with an ordinary Duma mandate.",
         "council-mandate":
           "You already hold a seated or certified Council mandate and cannot contest a Duma ballot.",
         "constituency-mandate":

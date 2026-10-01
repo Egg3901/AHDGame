@@ -14,6 +14,11 @@ import type {
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { resolveRussianDumaCohort, type RussianDumaCohortBallot } from "./rules/assemblyCohort";
 import { loadRussianDumaCertificationInputs } from "./dumaCertificationInputs";
+import {
+  russianDumaBoundRoot,
+  loadRussianDumaAuthority,
+  russianDumaRootFilter,
+} from "./dumaConvocationAuthority";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export const RUSSIAN_DUMA_RESULTS_COLLECTION = "russianDumaElectionResults";
@@ -80,12 +85,16 @@ export async function materializeRussianDumaElectionResult(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruFirstCouncilElectionCohortId: 1,
+        ruFederalAssemblySinceTurn: 1,
       },
     }
   );
   if (
-    !country?.ruFirstDumaElectionCohortId?.equals(cohortId) ||
+    !country ||
+    !russianDumaBoundRoot(country)?.equals(cohortId) ||
     !hasAuthorizedPostSovietTransition(
       turn,
       country.ruSovietSuccessionSinceTurn,
@@ -93,6 +102,8 @@ export async function materializeRussianDumaElectionResult(input: {
     )
   )
     throw new Error("The first-Duma constitutional mandate changed");
+  const authority = await loadRussianDumaAuthority({ db, session, country, root: cohortId, turn });
+  if (!authority) throw new Error("Duma campaign authority changed");
   const elections = db.collection<Election>("elections");
   const cohort = await elections
     .find(
@@ -131,6 +142,7 @@ export async function materializeRussianDumaElectionResult(input: {
       session,
       cohort,
       councilCohortId: country.ruFirstCouncilElectionCohortId,
+      convocationNumber: authority.number,
     });
   const electionIds = cohort.map((row) => row._id);
   const tallies = db.collection<ElectionVoteTally>("electionVoteTallies");
@@ -179,7 +191,7 @@ export async function materializeRussianDumaElectionResult(input: {
   const bound = await countries.updateOne(
     {
       _id: "RU",
-      ruFirstDumaElectionCohortId: cohortId,
+      ...russianDumaRootFilter(country, cohortId),
       ruFederalAssemblyMandateSinceTurn: country.ruFederalAssemblyMandateSinceTurn,
     },
     { $set: { updatedAt: now } },

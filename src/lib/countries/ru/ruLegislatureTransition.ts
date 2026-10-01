@@ -9,6 +9,7 @@ import { calendarTurn } from "@/lib/utils/gameDate";
 import { ru1993LegislatureStage } from "./eras/1991";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
+import { materializeRussianDumaConvocationSeating } from "./dumaConvocationSeating";
 import { materializeRussianAssemblySeating } from "./assemblySeating";
 import { materializeRussianAssemblyVacancySeating } from "./assemblyVacancySeating";
 export async function processRuLegislatureTransition(
@@ -32,6 +33,8 @@ export async function processRuLegislatureTransition(
     {
       projection: {
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruFirstCouncilElectionCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
@@ -50,10 +53,22 @@ export async function processRuLegislatureTransition(
   )
     return "none";
   const seated = await runRequiredTransaction(
-    (session) =>
-      (country.ruFederalAssemblySinceTurn == null
-        ? materializeRussianAssemblySeating
-        : materializeRussianAssemblyVacancySeating)({ db, session, turn: currentTurn, now }),
+    async (session) => {
+      const input = { db, session, turn: currentTurn, now };
+      if (!country.ruDumaConvocationCohortId)
+        return (
+          country.ruFederalAssemblySinceTurn == null
+            ? materializeRussianAssemblySeating
+            : materializeRussianAssemblyVacancySeating
+        )(input);
+      // The outgoing first Assembly can still fill its own certified vacancies
+      // during the next Duma campaign. Handover then uses the same transaction.
+      const firstDelta = !country.ruDumaCurrentConvocationCohortId
+        ? await materializeRussianAssemblyVacancySeating(input)
+        : false;
+      const handover = await materializeRussianDumaConvocationSeating(input);
+      return firstDelta || handover;
+    },
     { client: db.client }
   );
   return seated ? "federalAssembly" : "none";

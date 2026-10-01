@@ -189,7 +189,12 @@ describe.skipIf(!uri)("Native Assembly campaigns on isolated Mongo", () => {
       };
       commands = docsRead = bytesRead = 0;
       const opened = await campaign(input);
-      expect(opened).toEqual({ firstOpened: 2, repeatsOpened: 0, npcCandidatesCreated: 1212 });
+      expect(opened).toEqual({
+        convocationsOpened: 0,
+        firstOpened: 2,
+        repeatsOpened: 0,
+        npcCandidatesCreated: 1212,
+      });
       record("first opening and NPC admission");
       expect(commands).toBeLessThanOrEqual(70);
       expect(await db.collection("elections").countDocuments()).toBe(315);
@@ -211,6 +216,7 @@ describe.skipIf(!uri)("Native Assembly campaigns on isolated Mongo", () => {
       expect(await db.collection("npps").countDocuments()).toBe(6);
       commands = docsRead = bytesRead = 0;
       expect(await campaign({ ...input, turn: 130 })).toEqual({
+        convocationsOpened: 0,
         firstOpened: 0,
         repeatsOpened: 0,
         npcCandidatesCreated: 0,
@@ -243,6 +249,7 @@ describe.skipIf(!uri)("Native Assembly campaigns on isolated Mongo", () => {
       const held = await db.collection("electedOfficials").find({}).toArray();
       commands = docsRead = bytesRead = 0;
       expect(await campaign({ ...input, turn: 145, now: new Date(57601000) })).toEqual({
+        convocationsOpened: 0,
         firstOpened: 0,
         repeatsOpened: 2,
         npcCandidatesCreated: 9,
@@ -275,6 +282,7 @@ describe.skipIf(!uri)("Native Assembly campaigns on isolated Mongo", () => {
       ).toBe(true);
       commands = docsRead = bytesRead = 0;
       expect(await campaign({ ...input, turn: 158, now: new Date(104401000) })).toEqual({
+        convocationsOpened: 0,
         firstOpened: 0,
         repeatsOpened: 0,
         npcCandidatesCreated: 0,

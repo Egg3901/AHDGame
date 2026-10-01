@@ -11,6 +11,7 @@ import type {
   ElectionVoteTally,
   NPP,
 } from "@/lib/db/types";
+import { russianDumaConvocationOfficeCompatible } from "./rules/dumaConvocation";
 import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
 import type { RussianDumaResultRecord } from "./dumaElectionResult";
 import type { RussianDumaCohortBallot } from "./rules/assemblyCohort";
@@ -20,6 +21,7 @@ export async function loadRussianDumaCertificationInputs(input: {
   session: ClientSession;
   cohort: readonly Election[];
   councilCohortId?: ObjectId;
+  convocationNumber?: number;
   protectedDumaPlayerOwners?: ReadonlySet<string>;
 }) {
   const { db, session, cohort } = input;
@@ -116,13 +118,40 @@ export async function loadRussianDumaCertificationInputs(input: {
       .map((row) => `player:${row._id.toHexString()}`),
     ...pendingCouncil,
   ]);
-  const owners = new Map<string, { party: string; homeState?: string }>([
+  const owners = new Map<string, { party: string; homeState?: string; compatible: boolean }>([
     ...npcs.map(
-      (row) => [`npc:${row._id.toHexString()}`, { party: row.party, homeState: undefined }] as const
+      (row) =>
+        [
+          `npc:${row._id.toHexString()}`,
+          {
+            party: row.party,
+            homeState: undefined,
+            compatible:
+              (input.convocationNumber ?? 1) === 1 ||
+              russianDumaConvocationOfficeCompatible(
+                input.convocationNumber!,
+                typeof row.currentOffice === "string" ? row.currentOffice : row.currentOffice?.type,
+                "RU"
+              ),
+          },
+        ] as const
     ),
     ...players.map(
       (row) =>
-        [`player:${row._id.toHexString()}`, { party: row.party, homeState: row.homeState }] as const
+        [
+          `player:${row._id.toHexString()}`,
+          {
+            party: row.party,
+            homeState: row.homeState,
+            compatible:
+              (input.convocationNumber ?? 1) === 1 ||
+              russianDumaConvocationOfficeCompatible(
+                input.convocationNumber!,
+                row.currentOffice?.type,
+                "RU"
+              ),
+          },
+        ] as const
     ),
   ]);
   const rosterByElection = new Map<string, ElectionCandidate[]>();
@@ -186,7 +215,8 @@ export async function loadRussianDumaCertificationInputs(input: {
             row.status === "active" &&
             (!!row.isNPP || !input.protectedDumaPlayerOwners?.has(ownerId.toHexString())) &&
             !councilOwners.has(`${row.isNPP ? "npc" : "player"}:${ownerId.toHexString()}`) &&
-            owner?.party === row.party &&
+            owner?.compatible === true &&
+            owner.party === row.party &&
             (!!row.isNPP ||
               election.russianDumaRound!.tier === "list" ||
               owner?.homeState === election.state),

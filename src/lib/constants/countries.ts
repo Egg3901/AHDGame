@@ -1308,6 +1308,7 @@ export function getCountryConfigForRuntime(
     ruPresidencySinceTurn?: number;
     ruCongressDissolvedSinceTurn?: number;
     ruFederalAssemblySinceTurn?: number;
+    ruDumaCurrentConvocationCohortId?: unknown;
   } | null
 ): CountryConfig {
   const config = getCountryConfig(id, preset);
@@ -1349,7 +1350,18 @@ export function getCountryConfigForRuntime(
       ? ru1991PresidentialConfig(effectiveCongress)
       : effectiveCongress;
   if (countryState?.ruFederalAssemblySinceTurn != null) {
-    return ru1993FederalAssemblyConfig(presidential);
+    const assembly = ru1993FederalAssemblyConfig(presidential);
+    return countryState.ruDumaCurrentConvocationCohortId
+      ? {
+          ...assembly,
+          lowerElectionSystem: assembly.lowerElectionSystem
+            ? { ...assembly.lowerElectionSystem, termYears: 4 }
+            : undefined,
+          officeTypes: assembly.officeTypes.map((office) =>
+            office.key === "dumaDeputy" ? { ...office, termYears: 4 } : office
+          ),
+        }
+      : assembly;
   }
   if (countryState?.ruCongressDissolvedSinceTurn != null) {
     return ru1993DissolvedCongressConfig(presidential);

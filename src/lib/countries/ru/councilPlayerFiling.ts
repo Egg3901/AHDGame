@@ -32,6 +32,7 @@ type FilingCharacter = Pick<
   Character,
   "_id" | "countryId" | "homeState" | "party" | "currentOffice" | "federationPendingResidenceId"
 >;
+import { russianDumaBoundRoot } from "./dumaConvocationAuthority";
 export async function validateRussianCouncilPlayerFiling(input: {
   db: Db;
   election: Election;
@@ -59,6 +60,7 @@ export async function validateRussianCouncilPlayerFiling(input: {
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstCouncilElectionCohortId: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
         ruFederalAssemblySinceTurn: 1,
       },
     }
@@ -144,7 +146,8 @@ export async function validateRussianCouncilPlayerFiling(input: {
       })),
   });
   if (!admission.allowed) return admission;
-  const dumaResults = country.ruFirstDumaElectionCohortId
+  const dumaRoot = russianDumaBoundRoot(country);
+  const dumaResults = dumaRoot
     ? await db
         .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
         .find(
@@ -152,10 +155,7 @@ export async function validateRussianCouncilPlayerFiling(input: {
             countryId: "RU",
             preset: "1991-default",
             mandateSinceTurn: binding.mandateSinceTurn,
-            $or: [
-              { cohortId: country.ruFirstDumaElectionCohortId },
-              { rootCohortId: country.ruFirstDumaElectionCohortId },
-            ],
+            $or: [{ cohortId: dumaRoot }, { rootCohortId: dumaRoot }],
           },
           { session, projection: { result: 1, nominees: 1, seatedOnTurn: 1 } }
         )

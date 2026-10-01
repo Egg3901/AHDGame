@@ -19,8 +19,10 @@ import {
   RUSSIAN_DUMA_RESULTS_COLLECTION,
   type RussianDumaResultRecord,
 } from "./dumaElectionResult";
+import { russianDumaBoundRoot, loadRussianDumaAuthority } from "./dumaConvocationAuthority";
 import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
 import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
+import { russianDumaConvocationOfficeCompatible } from "./rules/dumaConvocation";
 import { decideRussianDumaFiling } from "./rules/assemblyFiling";
 export async function validateRussianDumaPlayerFiling(input: {
   db: Db;
@@ -43,12 +45,19 @@ export async function validateRussianDumaPlayerFiling(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruFirstCouncilElectionCohortId: 1,
         ruFederalAssemblySinceTurn: 1,
       },
     }
   );
   const binding = election.russianDumaRound;
+  const root = binding?.rootCohortId ?? binding?.cohortId;
+  const authority =
+    country && root ? await loadRussianDumaAuthority({ db, country, root, turn }) : null;
+  if (country && root && !authority)
+    return { allowed: false as const, reason: "unbound-mandate" as const };
   let validatedCohortId = binding?.cohortId.toHexString() ?? "";
   let holdsConstituencyMandate = false;
   if (binding?.rootCohortId || (binding?.generation ?? 0) !== 0) {
@@ -56,7 +65,8 @@ export async function validateRussianDumaPlayerFiling(input: {
       !binding?.rootCohortId ||
       !Number.isSafeInteger(binding.generation) ||
       binding.generation! < 1 ||
-      !country?.ruFirstDumaElectionCohortId?.equals(binding.rootCohortId)
+      !country ||
+      !russianDumaBoundRoot(country)?.equals(binding.rootCohortId)
     )
       return { allowed: false as const, reason: "unbound-mandate" as const };
     const opening = await db
@@ -148,7 +158,7 @@ export async function validateRussianDumaPlayerFiling(input: {
     registrationOrder,
     successionSinceTurn: country?.ruSovietSuccessionSinceTurn,
     mandateSinceTurn: country?.ruFederalAssemblyMandateSinceTurn,
-    boundCohortId: country?.ruFirstDumaElectionCohortId?.toHexString(),
+    boundCohortId: country ? russianDumaBoundRoot(country)?.toHexString() : undefined,
     election: {
       countryId: election.countryId ?? "",
       type: election.electionType,
@@ -166,6 +176,13 @@ export async function validateRussianDumaPlayerFiling(input: {
       party: character.party ?? "independent",
       pendingRelocation: character.federationPendingResidenceId !== undefined,
       holdsConstituencyMandate,
+      incompatibleOffice:
+        (authority?.number ?? 1) > 1 &&
+        !russianDumaConvocationOfficeCompatible(
+          authority!.number,
+          character.currentOffice?.type,
+          character.countryId
+        ),
       holdsCouncilMandate:
         character.currentOffice?.type === "federationCouncilMember" ||
         pendingCouncil.has(`player:${character._id.toHexString()}`),

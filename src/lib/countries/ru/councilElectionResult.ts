@@ -85,6 +85,7 @@ export async function materializeRussianCouncilElectionResult(input: {
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstCouncilElectionCohortId: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
       },
     }
   );

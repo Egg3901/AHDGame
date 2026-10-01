@@ -6,9 +6,11 @@
 import type { Db, ObjectId } from "mongodb";
 import type { CountryGameState } from "@/lib/db/types";
 import type { RussianConstitutionalCalendar } from "./constitutionalProposals";
+import { processRussianDumaConvocationCampaigns } from "./dumaConvocationCampaigns";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { ru1993LegislatureStage } from "./eras/1991";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
+import { planRussianDumaConvocation } from "./rules/dumaConvocation";
 import { planRussianAssemblyCampaign } from "./rules/assemblyCampaign";
 import { openRussianDumaElection } from "./dumaElectionOpening";
 import {
@@ -45,7 +47,12 @@ export async function processRussianAssemblyCampaigns(input: {
   now: Date;
 }) {
   const { db, game, turn, now } = input;
-  const result = { firstOpened: 0, repeatsOpened: 0, npcCandidatesCreated: 0 };
+  const result = {
+    firstOpened: 0,
+    convocationsOpened: 0,
+    repeatsOpened: 0,
+    npcCandidatesCreated: 0,
+  };
   if (
     game.preset !== "1991-default" ||
     ru1993LegislatureStage(
@@ -66,6 +73,7 @@ export async function processRussianAssemblyCampaigns(input: {
         ruFirstCouncilElectionCohortId: 1,
         ruFederalAssemblySinceTurn: 1,
         ruDumaNpcAdmissionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
       },
     }
   );
@@ -117,6 +125,23 @@ export async function processRussianAssemblyCampaigns(input: {
     )
       throw new Error("Active Assembly campaigns need their immutable term journal");
   }
+  const ordinaryDue =
+    !!country.ruDumaConvocationCohortId ||
+    (seating &&
+      planRussianDumaConvocation({
+        turn,
+        current: {
+          number: 1,
+          rootId: dumaRoot!.toHexString(),
+          seatedOnTurn: seating.seatedOnTurn,
+          termEndTurn: seating.dumaTermEndTurn,
+        },
+      }).kind === "open");
+  const ordinary =
+    activeAssembly && ordinaryDue ? await processRussianDumaConvocationCampaigns(input) : null;
+  result.convocationsOpened += ordinary?.opened ?? 0;
+  result.repeatsOpened += ordinary?.repeatsOpened ?? 0;
+  result.npcCandidatesCreated += ordinary?.npcCandidatesCreated ?? 0;
   // Open both first families before admission. Duma admission reserves its
   // profiles before the Council chooses from the remaining national pool.
   if (!dumaRoot) {
@@ -132,6 +157,7 @@ export async function processRussianAssemblyCampaigns(input: {
     if (opened.created) result.firstOpened++;
   }
   for (const chamber of ["duma", "council"] as const) {
+    if (chamber === "duma" && ordinary?.active) continue;
     const root: ObjectId = chamber === "duma" ? dumaRoot : councilRoot;
     const familyFilter = {
       countryId: "RU" as const,

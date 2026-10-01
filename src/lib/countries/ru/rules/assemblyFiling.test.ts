@@ -29,6 +29,11 @@ function scenario(): RussianDumaFilingInput {
   };
 }
 describe("Ratified first-Duma player filing", () => {
+  it("rejects an incompatible ordinary-convocation office", () => {
+    const input = scenario();
+    input.character.incompatibleOffice = true;
+    expect(decide(input)).toEqual({ allowed: false, reason: "incompatible-office" });
+  });
   it.each(["list", "constituency"])("rejects a Council mandate for either Duma %s tier", (tier) => {
     const input = scenario();
     input.character.holdsCouncilMandate = true;
