@@ -18,6 +18,8 @@ export type LandingCrisisSnapshot = {
 
 export type LandingDataSnapshot = {
   seedYear: number;
+  /** The world's in-game year now; equals `seedYear` until turns move it on. */
+  currentYear: number;
   crises: LandingCrisisSnapshot[];
   playerCounts: Record<string, number>;
   governmentTypes: Record<string, GovernmentType>;
@@ -42,7 +44,7 @@ async function loadLandingData(): Promise<LandingDataSnapshot> {
       .findOne({ _id: "default" }, { projection: { seedYear: 1 } }),
     db
       .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { startingYear: 1 } }),
+      .findOne({ _id: "current" }, { projection: { startingYear: 1, currentYear: 1 } }),
     listCrises(db, null, "active"),
     getEnabledCountryIdsFromDb(db),
     db
@@ -59,6 +61,8 @@ async function loadLandingData(): Promise<LandingDataSnapshot> {
   ]);
 
   const seedYear = config?.seedYear ?? gs?.startingYear ?? 1979;
+  // A world never runs backwards; anything older than its seed is a stale row.
+  const currentYear = Math.max(seedYear, gs?.currentYear ?? seedYear);
 
   // Live player counts per playable country. Default every enabled country to 0
   // so a freshly-reset world still renders a marker that reads "0 playing".
@@ -78,7 +82,7 @@ async function loadLandingData(): Promise<LandingDataSnapshot> {
     countryIds: c.countryIds,
   }));
 
-  return { seedYear, crises, playerCounts, governmentTypes };
+  return { seedYear, currentYear, crises, playerCounts, governmentTypes };
 }
 
 /**

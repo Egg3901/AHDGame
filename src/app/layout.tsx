@@ -60,6 +60,7 @@ import {
 } from "@/lib/siteMetadata";
 import { nationKeywords } from "@/lib/marketing/marketedWorld";
 import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
+import { getEraConfig } from "@/components/landing/eraThemes";
 import { verifyAuth } from "@/lib/auth";
 import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maintenanceStatus";
 import { resolveNavbarPageCountry } from "@/lib/navigation/resolveNavbarPageCountry";
@@ -194,13 +195,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [cookieStore, requestHeaders, locale, intlMessages, t] = await Promise.all([
+  const [cookieStore, requestHeaders, locale, intlMessages, t, world] = await Promise.all([
     cookies(),
     headers(),
     getLocale(),
     getMessages(),
     getTranslations("layout"),
+    getMarketedWorldSafe(),
   ]);
+  // A broadcast-era world (1991) types its name into the navbar on load.
+  const typedWordmark = Boolean(getEraConfig(world.seedYear).broadcast);
   const userAgent = requestHeaders.get("user-agent") ?? "";
   // Both the Capacitor app and the AHDClient mobile shell: no ad slots, no
   // consent prompts, no cookie banner inside an app webview.
@@ -374,6 +378,7 @@ export default async function RootLayout({
                               clientShell={isClientShell}
                               displayMode={displayMode}
                               initialPageCountry={initialPageCountry}
+                              typedWordmark={typedWordmark}
                             />
                           )}
                           {!isWikiSubdomain && <BugReportFab displayMode={displayMode} />}

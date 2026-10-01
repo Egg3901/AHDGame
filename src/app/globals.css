@@ -1207,6 +1207,157 @@ html[data-high-contrast="true"] :focus-visible {
   }
 }
 
+/* ── Broadcast lander (1991) ─────────────────────────────────────────────────
+   The dissolved state's outline starts solid and breaks into dashes, then
+   breathes. Dash lengths are in globe SVG units, so they scale with the globe. */
+@keyframes ahd-bc-ghost-break {
+  from {
+    stroke-dasharray: 48 0;
+  }
+  to {
+    stroke-dasharray: 2.4 2.8;
+  }
+}
+
+@keyframes ahd-bc-ghost-pulse {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* The global `h1` rule is unlayered, so a Tailwind font utility cannot beat it;
+   this class can. The broadcast headline is set in the sans, not the serif. */
+.ahd-bc-headline {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.ahd-bc-ghost {
+  stroke-dasharray: 2.4 2.8;
+  animation:
+    ahd-bc-ghost-break 2.4s ease-in-out 0.8s both,
+    ahd-bc-ghost-pulse 6s ease-in-out 3.2s infinite;
+}
+
+/* Headline year odometer: each digit is a 0 to 9 strip in a one-line window,
+   moved by a tenth of its height per digit. Tabular figures keep every window
+   the same width, so the year does not reflow as it rolls. */
+.ahd-bc-odometer {
+  font-variant-numeric: tabular-nums;
+}
+
+.ahd-bc-odometer-digit {
+  display: inline-block;
+  height: 1.04em;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.ahd-bc-odometer-strip {
+  display: block;
+  transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The digits live in CSS rather than the DOM, so the headline reads as one
+   year to search engines, screen readers and anyone copying it. */
+.ahd-bc-odometer-strip::before {
+  content: "0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";
+  display: block;
+  white-space: pre;
+  line-height: 1.04em;
+}
+
+/* 1991 typed wordmark: a block cursor that blinks while idle and holds steady
+   while keys arrive. It takes no width, so the name never shifts. */
+@keyframes ahd-wordmark-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.ahd-wordmark-cursor {
+  display: inline-block;
+  width: 0.6ch;
+  height: 1.05em;
+  margin-left: 1px;
+  margin-right: calc(-0.6ch - 1px);
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: ahd-wordmark-blink 1s steps(1, end) infinite;
+}
+
+.ahd-wordmark-cursor-steady {
+  animation: none;
+}
+
+/* Lower-third crawl: the track holds two identical runs and slides by one. */
+@keyframes ahd-bc-crawl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ahd-bc-crawl {
+  animation: ahd-bc-crawl var(--ahd-bc-crawl-dur, 90s) linear infinite;
+  will-change: transform;
+}
+
+.ahd-bc-crawl-window {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 1.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 1.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+}
+
+.ahd-bc-ticker:hover .ahd-bc-crawl,
+.ahd-bc-ticker:focus-within .ahd-bc-crawl {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ahd-bc-ghost,
+  .ahd-bc-crawl {
+    animation: none;
+  }
+
+  .ahd-bc-odometer-strip {
+    transition: none;
+  }
+
+  .ahd-wordmark-cursor {
+    animation: none;
+  }
+
+  /* A stopped crawl still has to be readable to the end, from its first
+     dateline: no fade on the leading edge. */
+  .ahd-bc-crawl-window {
+    overflow-x: auto;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
+  }
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(100%);

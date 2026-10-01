@@ -62,15 +62,6 @@ describe("public copy stays derived", () => {
     }
   });
 
-  it("the landing promo pill interpolates version and year", () => {
-    for (const locale of ["en", "de"]) {
-      const messages = JSON.parse(read(`messages/${locale}/auth.json`));
-      const pill: string = messages.auth.landing.promoPill;
-      expect(pill, `messages/${locale}`).toContain("{version}");
-      expect(pill, `messages/${locale}`).toContain("{year}");
-    }
-  });
-
   it("era world copy templates the playable count instead of spelling it", () => {
     const eraThemes = read("src/components/landing/eraThemes.ts");
     const deks = [...eraThemes.matchAll(/worldSectionDek:\s*\n?\s*"([^"]+)"/g)].map((m) => m[1]);

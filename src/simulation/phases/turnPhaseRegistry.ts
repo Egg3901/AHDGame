@@ -123,7 +123,6 @@ import { processByElectionWatcher } from "@/lib/turn/byElections";
 import { processCommonsByElectionWatcher } from "@/lib/turn/commonsByElections";
 import { detectPreIterationComplete } from "@/lib/turn/preIterationLifecycle";
 import { processActivityLogging } from "@/lib/turn/activityLogging";
-import { runFinancialSuspectScan } from "@/lib/financialTxLog/suspectScan";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot } from "@/lib/ledger/balanceSnapshot";
 import { snapshotMoneySupply } from "@/lib/moneySupply/snapshot";
@@ -604,10 +603,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
-        const suspectScanResult = await runtime.runPhase("financialSuspectScan", () =>
-          runFinancialSuspectScan(context.db, newTurn)
-        );
-        phaseResults.financialSuspectScan = suspectScanResult === null ? null : true;
+        // financialSuspectScan runs after the turn commits (#2694, postTurnScans.ts).
 
         if (bondTurnResult) {
           phaseResults.bondTurn = {

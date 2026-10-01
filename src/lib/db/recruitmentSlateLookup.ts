@@ -201,6 +201,164 @@ interface SlateTemplateMaterializationArgs {
   /** When provided, the caller has already verified this slate has zero candidates.
    *  Skips the findSlateForElection + countDocuments checks. */
   knownEmptySlate?: RecruitmentSlate | null;
+  /** Template, rows, and roster already loaded by `prefetchSlateTemplates`.
+   *  When set, `knownEmptySlate` is authoritative (null means no slate exists)
+   *  and no reads are issued. */
+  prefetched?: SlateTemplatePrefetch;
+}
+
+type TemplateElection = Pick<Election, "_id" | "cycle" | "senateClass" | "chamberClass">;
+type TemplateTarget = SlateTemplateMaterializationArgs["election"];
+
+export interface SlateTemplatePrefetch {
+  template: RecruitmentSlate | null;
+  rows: SlateCandidate[];
+  nppById: Map<string, NPP>;
+  characterById: Map<string, Character>;
+}
+
+/**
+ * Pick the template slate for `election` from candidate slates that already
+ * match (country, party, state, electionType) and are sorted updatedAt desc.
+ * Newest prior cycle wins, then most recently updated.
+ */
+function selectSlateTemplate(
+  candidates: RecruitmentSlate[],
+  electionById: Map<string, TemplateElection>,
+  election: TemplateTarget
+): RecruitmentSlate | null {
+  const senateClass = election.senateClass ?? null;
+  const chamberClass = election.chamberClass ?? null;
+  return (
+    candidates
+      .filter((candidate) => {
+        if (candidate.electionId.equals(election._id)) return false;
+        const templateElection = electionById.get(candidate.electionId.toString());
+        if (!templateElection) return false;
+        if (templateElection.cycle >= election.cycle) return false;
+        if ((templateElection.senateClass ?? null) !== senateClass) return false;
+        if ((templateElection.chamberClass ?? null) !== chamberClass) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const aCycle = electionById.get(a.electionId.toString())?.cycle ?? -1;
+        const bCycle = electionById.get(b.electionId.toString())?.cycle ?? -1;
+        return bCycle - aCycle || b.updatedAt.getTime() - a.updatedAt.getTime();
+      })[0] ?? null
+  );
+}
+
+async function loadTemplateElections(
+  db: Db,
+  slates: RecruitmentSlate[]
+): Promise<Map<string, TemplateElection>> {
+  if (slates.length === 0) return new Map();
+  const ids = Array.from(new Set(slates.map((slate) => slate.electionId.toString()))).map(
+    (id) => new ObjectId(id)
+  );
+  const elections = await db
+    .collection<Election>("elections")
+    .find({ _id: { $in: ids } })
+    .project<TemplateElection>({ _id: 1, cycle: 1, senateClass: 1, chamberClass: 1 })
+    .toArray();
+  return new Map(elections.map((election) => [election._id.toString(), election]));
+}
+
+/**
+ * Batch form of the per-election template lookup for the turn's slate sync.
+ * Resolves every target's template with the same selection rules as
+ * `materializeSlateAssignmentsFromTemplate`, using a fixed number of reads
+ * instead of five per target. Keyed by `${countryId}:${partyId}:${electionId}`.
+ */
+export async function prefetchSlateTemplates(
+  db: Db,
+  targets: { countryId: CountryId; partyId: string; election: TemplateTarget }[]
+): Promise<Map<string, SlateTemplatePrefetch>> {
+  const result = new Map<string, SlateTemplatePrefetch>();
+  if (targets.length === 0) return result;
+
+  const slates = await db
+    .collection<RecruitmentSlate>("recruitmentSlates")
+    .find({
+      countryId: { $in: Array.from(new Set(targets.map((t) => t.countryId))) },
+      partyId: { $in: Array.from(new Set(targets.map((t) => t.partyId))) },
+      electionType: { $in: Array.from(new Set(targets.map((t) => t.election.electionType))) },
+    })
+    .sort({ updatedAt: -1 })
+    .toArray();
+  const electionById = await loadTemplateElections(db, slates);
+
+  const groupKey = (countryId: string, partyId: string, electionType: string) =>
+    `${countryId}:${partyId}:${electionType}`;
+  const slatesByGroup = new Map<string, RecruitmentSlate[]>();
+  for (const slate of slates) {
+    const key = groupKey(slate.countryId, slate.partyId, slate.electionType);
+    const group = slatesByGroup.get(key);
+    if (group) group.push(slate);
+    else slatesByGroup.set(key, [slate]);
+  }
+
+  const templateByTarget = new Map<string, RecruitmentSlate>();
+  for (const { countryId, partyId, election } of targets) {
+    const state = election.state ?? null;
+    const candidates = (
+      slatesByGroup.get(groupKey(countryId, partyId, election.electionType)) ?? []
+    ).filter((slate) => (slate.state ?? null) === state);
+    const template = selectSlateTemplate(candidates, electionById, election);
+    if (template) templateByTarget.set(`${countryId}:${partyId}:${election._id}`, template);
+  }
+
+  const templateIds = Array.from(
+    new Set(Array.from(templateByTarget.values(), (t) => t._id.toString()))
+  ).map((id) => new ObjectId(id));
+  const rows =
+    templateIds.length === 0
+      ? []
+      : await db
+          .collection<SlateCandidate>("slateCandidates")
+          .find({ slateId: { $in: templateIds } })
+          .sort({ invitedAt: 1 })
+          .toArray();
+  const rowsBySlateId = new Map<string, SlateCandidate[]>();
+  for (const row of rows) {
+    const key = row.slateId.toString();
+    const list = rowsBySlateId.get(key);
+    if (list) list.push(row);
+    else rowsBySlateId.set(key, [row]);
+  }
+
+  const idsOfType = (type: SlateCandidate["candidateType"]) =>
+    rows.filter((row) => row.candidateType === type).map((row) => row.candidateId);
+  const nppIds = idsOfType("npp");
+  const characterIds = idsOfType("character");
+  const [npps, characters] = await Promise.all([
+    nppIds.length === 0
+      ? Promise.resolve([] as NPP[])
+      : db
+          .collection<NPP>("npps")
+          .find({ _id: { $in: nppIds } })
+          .toArray(),
+    characterIds.length === 0
+      ? Promise.resolve([] as Character[])
+      : db
+          .collection<Character>("characters")
+          .find({ _id: { $in: characterIds } })
+          .toArray(),
+  ]);
+  const nppById = new Map(npps.map((npp) => [npp._id.toString(), npp]));
+  const characterById = new Map(characters.map((c) => [c._id.toString(), c]));
+
+  for (const { countryId, partyId, election } of targets) {
+    const key = `${countryId}:${partyId}:${election._id}`;
+    const template = templateByTarget.get(key) ?? null;
+    result.set(key, {
+      template,
+      rows: template ? (rowsBySlateId.get(template._id.toString()) ?? []) : [],
+      nppById,
+      characterById,
+    });
+  }
+  return result;
 }
 
 /**
@@ -216,9 +374,11 @@ export async function materializeSlateAssignmentsFromTemplate({
   election,
   now,
   knownEmptySlate,
+  prefetched,
 }: SlateTemplateMaterializationArgs): Promise<RecruitmentSlate | null> {
-  const existing =
-    knownEmptySlate ?? (await findSlateForElection(db, countryId, partyId, election._id));
+  const existing = prefetched
+    ? (knownEmptySlate ?? null)
+    : (knownEmptySlate ?? (await findSlateForElection(db, countryId, partyId, election._id)));
   if (existing && !knownEmptySlate) {
     const rowCount = await db
       .collection<SlateCandidate>("slateCandidates")
@@ -226,24 +386,16 @@ export async function materializeSlateAssignmentsFromTemplate({
     if (rowCount > 0) return existing;
   }
 
-  const template = await findLatestSlateTemplate(
-    db,
-    countryId,
-    partyId,
-    election.state,
-    election.electionType,
-    election.senateClass ?? null,
-    election.chamberClass ?? null,
-    election._id,
-    election.cycle
-  );
+  const template = prefetched
+    ? prefetched.template
+    : await findLatestSlateTemplate(db, countryId, partyId, election);
   if (!template) return existing;
 
   // Oldest invitation first, so a board carried past the cap keeps the chair's
   // earliest decisions rather than an arbitrary slice. Rows that fail the
   // per-row checks below spend no slot, so the cap counts what actually
   // carries, not what was considered.
-  const templateRows = (await listSlateCandidates(db, template._id))
+  const templateRows = (prefetched?.rows ?? (await listSlateCandidates(db, template._id)))
     .filter((row) => row.status !== "withdrawn")
     .sort(
       (a, b) =>
@@ -252,32 +404,7 @@ export async function materializeSlateAssignmentsFromTemplate({
     );
   if (templateRows.length === 0) return existing;
 
-  const [npps, characters] = await Promise.all([
-    db
-      .collection<NPP>("npps")
-      .find({
-        _id: {
-          $in: templateRows
-            .filter((row) => row.candidateType === "npp")
-            .map((row) => row.candidateId),
-        },
-      })
-      .toArray(),
-    db
-      .collection<Character>("characters")
-      .find({
-        _id: {
-          $in: templateRows
-            .filter((row) => row.candidateType === "character")
-            .map((row) => row.candidateId),
-        },
-      })
-      .toArray(),
-  ]);
-  const nppById = new Map(npps.map((npp) => [npp._id.toString(), npp]));
-  const characterById = new Map(
-    characters.map((character) => [character._id.toString(), character])
-  );
+  const { nppById, characterById } = prefetched ?? (await loadTemplateRoster(db, templateRows));
   const slateId = existing?._id ?? new ObjectId();
 
   const carriedRows: SlateCandidate[] = [];
@@ -392,57 +519,56 @@ export async function materializeSlateAssignmentsFromTemplate({
   return slate;
 }
 
+async function loadTemplateRoster(
+  db: Db,
+  templateRows: SlateCandidate[]
+): Promise<Pick<SlateTemplatePrefetch, "nppById" | "characterById">> {
+  const [npps, characters] = await Promise.all([
+    db
+      .collection<NPP>("npps")
+      .find({
+        _id: {
+          $in: templateRows
+            .filter((row) => row.candidateType === "npp")
+            .map((row) => row.candidateId),
+        },
+      })
+      .toArray(),
+    db
+      .collection<Character>("characters")
+      .find({
+        _id: {
+          $in: templateRows
+            .filter((row) => row.candidateType === "character")
+            .map((row) => row.candidateId),
+        },
+      })
+      .toArray(),
+  ]);
+  const nppById = new Map(npps.map((npp) => [npp._id.toString(), npp]));
+  const characterById = new Map(
+    characters.map((character) => [character._id.toString(), character])
+  );
+  return { nppById, characterById };
+}
+
 async function findLatestSlateTemplate(
   db: Db,
   countryId: CountryId,
   partyId: string,
-  state: string,
-  electionType: string,
-  senateClass: number | null,
-  chamberClass: number | null,
-  currentElectionId: ObjectId,
-  currentCycle: number
+  election: TemplateTarget
 ): Promise<RecruitmentSlate | null> {
   const candidates = await db
     .collection<RecruitmentSlate>("recruitmentSlates")
     .find({
       countryId,
       partyId,
-      state,
-      electionType,
-      electionId: { $ne: currentElectionId },
+      state: election.state,
+      electionType: election.electionType,
+      electionId: { $ne: election._id },
     })
     .sort({ updatedAt: -1 })
     .toArray();
   if (candidates.length === 0) return null;
-
-  const electionIds = candidates.map((candidate) => candidate.electionId);
-  const elections = await db
-    .collection<Election>("elections")
-    .find({ _id: { $in: electionIds } })
-    .project<Pick<Election, "_id" | "cycle" | "senateClass" | "chamberClass">>({
-      _id: 1,
-      cycle: 1,
-      senateClass: 1,
-      chamberClass: 1,
-    })
-    .toArray();
-  const electionById = new Map(elections.map((election) => [election._id.toString(), election]));
-
-  return (
-    candidates
-      .filter((candidate) => {
-        const templateElection = electionById.get(candidate.electionId.toString());
-        if (!templateElection) return false;
-        if (templateElection.cycle >= currentCycle) return false;
-        if ((templateElection.senateClass ?? null) !== senateClass) return false;
-        if ((templateElection.chamberClass ?? null) !== chamberClass) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        const aCycle = electionById.get(a.electionId.toString())?.cycle ?? -1;
-        const bCycle = electionById.get(b.electionId.toString())?.cycle ?? -1;
-        return bCycle - aCycle || b.updatedAt.getTime() - a.updatedAt.getTime();
-      })[0] ?? null
-  );
+  return selectSlateTemplate(candidates, await loadTemplateElections(db, candidates), election);
 }
