@@ -68,6 +68,7 @@ export async function materializeRussianDumaElectionOpening(input: {
         { countryId: "RU", "russianDumaRound.cohortId": country.ruFirstDumaElectionCohortId },
         {
           session,
+          batchSize: 1000,
           projection: {
             _id: 1,
             electionType: 1,

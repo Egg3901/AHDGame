@@ -28,6 +28,8 @@ export interface RussianDumaResultRecord {
   createdAt: Date;
   result: ReturnType<typeof resolveRussianDumaCohort>;
   votesByElection: Record<string, { votes: Record<string, number>; againstAllVotes: number }>;
+  /** New receipts preserve original registration, nomination order and eligibility for repeats. */
+  ballots?: RussianDumaCohortBallot[];
   nominees: Array<{
     candidateId: ObjectId;
     ownerId: ObjectId;
@@ -95,6 +97,7 @@ export async function materializeRussianDumaElectionResult(input: {
       { countryId: "RU", "russianDumaRound.cohortId": cohortId },
       {
         session,
+        batchSize: 1000,
         projection: {
           electionType: 1,
           status: 1,
@@ -127,6 +130,7 @@ export async function materializeRussianDumaElectionResult(input: {
       { electionId: { $in: electionIds } },
       {
         session,
+        batchSize: 1000,
         projection: {
           electionId: 1,
           finalized: 1,
@@ -149,6 +153,7 @@ export async function materializeRussianDumaElectionResult(input: {
       { electionId: { $in: electionIds } },
       {
         session,
+        batchSize: 1000,
         projection: {
           electionId: 1,
           characterId: 1,
@@ -175,7 +180,7 @@ export async function materializeRussianDumaElectionResult(input: {
             $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
             isTechnocrat: { $ne: true },
           },
-          { session, projection: { party: 1 } }
+          { session, batchSize: 1000, projection: { party: 1 } }
         )
         .toArray()
     : [];
@@ -188,7 +193,7 @@ export async function materializeRussianDumaElectionResult(input: {
             countryId: "RU",
             federationPendingResidenceId: { $exists: false },
           },
-          { session, projection: { party: 1, homeState: 1 } }
+          { session, batchSize: 1000, projection: { party: 1, homeState: 1 } }
         )
         .toArray()
     : [];
@@ -247,7 +252,7 @@ export async function materializeRussianDumaElectionResult(input: {
       tier: election.russianDumaRound!.tier,
       registeredVoters: election.russianDumaRound!.registeredVoters,
       againstAllVotes,
-      invalidated: tally.russianDumaBallot?.invalidated,
+      invalidated: tally.russianDumaBallot?.invalidated === true,
       candidates: roster.map((row) => {
         const ownerId = row.isNPP ? row.nppId! : row.characterId;
         const owner = owners.get(`${row.isNPP ? "npc" : "player"}:${ownerId.toHexString()}`);
@@ -330,6 +335,7 @@ export async function materializeRussianDumaElectionResult(input: {
     createdAt: now,
     result,
     votesByElection,
+    ballots,
     nominees: candidates
       .filter((row) => registeredCandidateIds.has(row._id.toHexString()))
       .map((row) => ({
