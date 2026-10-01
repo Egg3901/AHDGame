@@ -93,53 +93,49 @@ describe("buildEmbedsForChangelogPost", () => {
   });
 });
 
-// The consolidation rewrote every public post and created four version keys
-// changelogSentHistory has never seen. Announcing them would send four full
-// releases to Discord and an in-game notification to every player for each.
+// Historical repairs must not announce old releases as newly shipped work.
 describe("isPreConsolidationRelease", () => {
-  it("silences every release that shipped under the old numbering", () => {
-    for (const version of [
-      "0.4.0",
-      "1.0.0",
-      "1.1.0",
-      "1.2.0",
-      "1.3.0",
-      "1.4.0",
-      "1.5.0",
-      "1.6.0",
-    ]) {
+  const historical = [
+    "0.4.0",
+    "0.4.1",
+    "0.4.2",
+    "1.0.0",
+    "1.1.0",
+    "1.2.0",
+    "1.3.0",
+    "1.4.0",
+    "1.5.0",
+    "1.6.0",
+    "1.7.0",
+    "1.7.1",
+    "1.7.2",
+    "1.8.0",
+    "1.8.1",
+    "1.8.2",
+    "1.8.3",
+    "1.8.4",
+    "1.9.0",
+  ];
+
+  it("silences every release repaired by the historical audit", () => {
+    for (const version of historical) {
       expect(isPreConsolidationRelease(version)).toBe(true);
     }
   });
 
-  it("announces everything cut after it", () => {
-    for (const version of ["1.6.1", "1.7.0", "1.10.0", "2.0.0"]) {
+  it("announces new cuts after the historical audit", () => {
+    for (const version of ["1.9.1", "1.10.0", "2.0.0"]) {
       expect(isPreConsolidationRelease(version)).toBe(false);
     }
   });
 
-  it("keeps historic public posts silent and the current release eligible", () => {
+  it("keeps repaired public posts silent and 1.10 eligible", () => {
     const shipped = loadPublicPosts().map((p) => p.version);
-    expect(shipped.length).toBeGreaterThan(0);
-    expect(shipped.filter(isPreConsolidationRelease)).toEqual([
-      "1.6.0",
-      "1.5.0",
-      "1.4.0",
-      "1.3.0",
-      "1.2.0",
-      "1.1.0",
-      "1.0.0",
-      "0.4.2",
-      "0.4.1",
-      "0.4.0",
-    ]);
-    expect(shipped.filter((version) => !isPreConsolidationRelease(version))).toEqual([
-      "1.9.0",
-      "1.8.3",
-      "1.8.0",
-      "1.7.2",
-      "1.7.1",
-      "1.7.0",
-    ]);
+    for (const version of historical) {
+      expect(shipped).toContain(version);
+      expect(isPreConsolidationRelease(version)).toBe(true);
+    }
+    expect(shipped).toContain("1.10.0");
+    expect(isPreConsolidationRelease("1.10.0")).toBe(false);
   });
 });
