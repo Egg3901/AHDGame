@@ -87,6 +87,7 @@ describe("Russian 1991 transitional institutions", () => {
     expect(dissolved.legislature.lowerChamber.seats).toBe(0);
     expect(dissolved.officeTypes.some((office) => office.key === "congressDeputy")).toBe(false);
     const assembly = getCountryConfigForRuntime("RU", "1991-default", {
+      ruPresidencySinceTurn: 25,
       ruCongressDissolvedSinceTurn: 129,
       ruFederalAssemblySinceTurn: 141,
     });

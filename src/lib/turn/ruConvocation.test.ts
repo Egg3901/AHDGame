@@ -111,6 +111,7 @@ describe("handleRuConvocationReset", () => {
         getCountryConfigForRuntime("RU", "1991-default", {
           ruSovietSuccessionSinceTurn: 2,
           ruFederalAssemblySinceTurn: 3,
+          ruPresidencySinceTurn: 2,
         })
       )
     );

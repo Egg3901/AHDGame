@@ -46,6 +46,28 @@
       "approved": "approved",
       "rejected": "rejected",
       "freshVote": "Revised terms require a new legislative vote and fresh consent from every successor. Previous approvals do not carry over."
+    },
+    "russianConstitution": {
+      "title": "Russian constitutional decisions",
+      "separateDecisions": "The presidency and Federal Assembly require separate parliamentary decisions and certified elections. Existing offices remain until their replacements are certified.",
+      "presidency": "Presidency",
+      "federalAssembly": "Federal Assembly",
+      "presidencyHelp": "Authorize a direct presidential election without replacing the current legislature.",
+      "assemblyHelp": "Authorize elections for a 450-seat State Duma and 178-seat Federation Council without establishing a presidency.",
+      "threshold": "Approval requires two-thirds of the full chamber capacity of {seats} seats. Vacancies and abstentions do not reduce the threshold.",
+      "loadError": "Constitutional decisions could not be loaded.",
+      "openError": "The constitutional bill could not be opened.",
+      "billStatus": "The constitutional bill is {status}.",
+      "viewBill": "View bill",
+      "revise": "Open a revised decision",
+      "open": "Open parliamentary decision",
+      "reasons": {
+        "before-date": "The historical decision date has not arrived.",
+        "awaiting-succession": "A ratified Soviet succession settlement is required first.",
+        "already-authorized": "This constitutional decision has already been authorized.",
+        "no-legislature": "No active legislature can authorize this decision.",
+        "other-era": "This decision is unavailable in this era."
+      }
     }
   }
 }

@@ -53,6 +53,14 @@ export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) 
 
   await ensureIndex(
     db,
+    "russianConstitutionalProposals",
+    { preset: 1, status: 1 },
+    { name: "russianConstitutionalProposals_preset_status" },
+    log
+  );
+
+  await ensureIndex(
+    db,
     "federationContinuingServiceTurns",
     { applicationId: 1, turn: -1 },
     { name: "federationContinuingServiceTurns_application_turn" },

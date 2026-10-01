@@ -47,7 +47,11 @@ describe("buildConfiguredCountryBillLifecycle", () => {
       true,
     ],
     [
-      { ruSovietSuccessionSinceTurn: 24, ruFederalAssemblySinceTurn: 40 },
+      {
+        ruSovietSuccessionSinceTurn: 24,
+        ruPresidencySinceTurn: 25,
+        ruFederalAssemblySinceTurn: 40,
+      },
       "stateDuma",
       "dumaDeputy",
       "federationCouncilMember",

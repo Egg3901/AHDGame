@@ -183,3 +183,42 @@ describe("ordinary Russian runtime bill resolution", () => {
     expect(mem.collection("bills").docs[0].status).toBe("active");
   });
 });
+
+describe("Russian constitutional bill resolution", () => {
+  it("rejects an ordinary majority when constitutional votes fall below full capacity", async () => {
+    const { mem, db } = scenario(
+      { ruSovietSuccessionSinceTurn: 24, ruProvisionalCongressSeats: 10 },
+      "congressOfPeoplesDeputies",
+      "congressDeputy"
+    );
+    mem.collection("bills").docs[0].russianConstitutionalMandate = {
+      proposalId: "1991-default:ru-constitution:presidency",
+      revision: 1,
+      kind: "presidency",
+    };
+    expect(await processRussian1991Bills(db, new Date(100000000), 50)).toEqual({
+      enacted: 0,
+      failed: 1,
+    });
+    expect(mem.collection("bills").docs[0].status).toBe("failed");
+  });
+  it("enacts a constitutional decision with two-thirds of the full chamber", async () => {
+    const { mem, db } = scenario(
+      { ruSovietSuccessionSinceTurn: 24, ruProvisionalCongressSeats: 6 },
+      "congressOfPeoplesDeputies",
+      "congressDeputy"
+    );
+    mem.collection("bills").docs[0].russianConstitutionalMandate = {
+      proposalId: "1991-default:ru-constitution:presidency",
+      revision: 1,
+      kind: "presidency",
+    };
+    mem.collection("electedOfficials").docs[0].seatsHeld = 4;
+    expect(await processRussian1991Bills(db, new Date(100000000), 50)).toEqual({
+      enacted: 1,
+      failed: 0,
+    });
+    expect(mem.collection("bills").docs[0].status).toBe("signed");
+    expect(mem.collection("countryGameStates").docs[0]).not.toHaveProperty("ruPresidencySinceTurn");
+  });
+});

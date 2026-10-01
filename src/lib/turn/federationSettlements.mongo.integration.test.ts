@@ -9,6 +9,10 @@ import { materializeContinuingFederationServiceTurn } from "@/lib/world/successi
 import { processRatifiedFederationSettlements } from "./federationSettlements";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import {
+  openRussianConstitutionalProposal,
+  authorizeRussianConstitutionalMandate,
+} from "@/lib/countries/ru/constitutionalProposals";
+import {
   materializeFacilityPaymentTurn,
   processFederationFacilityPaymentTurn,
 } from "@/lib/world/succession/facilityPaymentTurn";
@@ -103,6 +107,105 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
   });
   afterAll(async () => {
     await client?.close();
+  });
+
+  it("rolls back Russian constitutional proposal creation when its bound bill cannot be written", async () => {
+    const db = client.db(databaseName);
+    await db
+      .collection<Fixture>("countryGameStates")
+      .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruProvisionalCongressSeats: 1154 });
+    await db.createCollection("russianConstitutionalProposals");
+    await db.command({ collMod: "bills", validator: { countryId: { $ne: "RU" } } });
+    const input = {
+      db,
+      game: { preset: "1991-default" },
+      turn: 129,
+      now: new Date(1000),
+      kind: "presidency" as const,
+      sponsor: null,
+    };
+    await expect(openRussianConstitutionalProposal(input)).rejects.toThrow();
+    expect(await db.collection("russianConstitutionalProposals").countDocuments()).toBe(0);
+    expect(await db.collection("bills").countDocuments({ countryId: "RU" })).toBe(0);
+    await db.command({ collMod: "bills", validator: {} });
+    commands = 0;
+    const proposal = await openRussianConstitutionalProposal(input);
+    const openingCommands = commands;
+    expect(openingCommands).toBeLessThanOrEqual(8);
+    expect((await openRussianConstitutionalProposal(input)).billId.equals(proposal.billId)).toBe(
+      true
+    );
+    expect(await db.collection("bills").countDocuments({ countryId: "RU" })).toBe(1);
+    console.info("Russian constitutional proposal qualification", {
+      openingCommands,
+      revision: proposal.revision,
+    });
+  });
+
+  it("rolls back Russian constitutional authority on a late journal failure and replays safely", async () => {
+    const db = client.db(databaseName);
+    await db
+      .collection<Fixture>("countryGameStates")
+      .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruProvisionalCongressSeats: 1154 });
+    const proposal = await openRussianConstitutionalProposal({
+      db,
+      game: { preset: "1991-default" },
+      turn: 129,
+      now: new Date(1000),
+      kind: "federalAssembly",
+      sponsor: null,
+    });
+    await db
+      .collection("bills")
+      .updateOne(
+        { _id: proposal.billId },
+        { $set: { status: "signed", enactedAt: new Date(2000) } }
+      );
+    const countryBefore = await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" });
+    await db.command({
+      collMod: "russianConstitutionalProposals",
+      validator: { status: { $ne: "authorized" } },
+    });
+    const authorize = () =>
+      runRequiredTransaction(
+        (session) =>
+          authorizeRussianConstitutionalMandate({
+            db,
+            session,
+            proposalId: proposal._id,
+            game: { preset: "1991-default" },
+            turn: 130,
+            now: new Date(3000),
+          }),
+        { client }
+      );
+    await expect(authorize()).rejects.toThrow();
+    expect(await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })).toEqual(
+      countryBefore
+    );
+    expect(
+      await db.collection<Fixture>("russianConstitutionalProposals").findOne({ _id: proposal._id })
+    ).toMatchObject({ status: "open" });
+    await db.command({ collMod: "russianConstitutionalProposals", validator: {} });
+    commands = 0;
+    expect(await authorize()).toBe(true);
+    const authorizationCommands = commands;
+    expect(authorizationCommands).toBeLessThanOrEqual(8);
+    expect(await authorize()).toBe(false);
+    const country = await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" });
+    expect(country).toHaveProperty("ruFederalAssemblyMandateSinceTurn", 130);
+    for (const field of [
+      "ruPresidencyMandateSinceTurn",
+      "ruPresidencySinceTurn",
+      "ruCongressDissolvedSinceTurn",
+      "ruFederalAssemblySinceTurn",
+      "ruFederalAssemblyElectionCertifiedSinceTurn",
+    ])
+      expect(country).not.toHaveProperty(field);
+    console.info("Russian constitutional authorization qualification", {
+      authorizationCommands,
+      separateMandate: true,
+    });
   });
 
   it("pays one hundred firms through the normal compensation phase in at most twenty commands", async () => {

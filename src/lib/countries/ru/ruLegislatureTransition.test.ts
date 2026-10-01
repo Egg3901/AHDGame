@@ -24,7 +24,7 @@ describe("Russian 1993 legislature transition", () => {
     expect(db.collection).not.toHaveBeenCalled();
   });
 
-  it("retires Congress in September and opens the Assembly once in January", async () => {
+  it("keeps Congress after authorization and retires it only for a certified Assembly", async () => {
     const writes: Array<[string, unknown]> = [];
     const markers: Record<string, number> = {};
     let ratified = false;
@@ -64,7 +64,7 @@ describe("Russian 1993 legislature transition", () => {
     expect(writes).toHaveLength(0);
     ratified = true;
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 129, NOW)).toBe(
-      "dissolved"
+      "none"
     );
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 130, NOW)).toBe(
       "none"
@@ -75,6 +75,7 @@ describe("Russian 1993 legislature transition", () => {
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
       "none"
     );
+    expect(writes).toHaveLength(0);
     certified = true;
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
       "federalAssembly"
@@ -93,7 +94,7 @@ describe("Russian 1993 legislature transition", () => {
       225
     );
     expect(regions.every((row) => row.updateOne.update.$set.stateSenateSeats === 0)).toBe(true);
-    expect(markers.ruCongressDissolvedSinceTurn).toBe(129);
+    expect(markers.ruCongressDissolvedSinceTurn).toBe(145);
     expect(markers.ruFederalAssemblySinceTurn).toBe(145);
   });
 });
