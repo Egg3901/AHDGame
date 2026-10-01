@@ -1,10 +1,15 @@
+/**
+ * National bills display the active legislature and its current voting mandates.
+ * listNationalLegislatureBills and getNationalBillDetail preserve concluded snapshots and identify the active deputy or president controls.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUser } from "@/lib/auth";
 import { getPartyMap } from "@/lib/db/partyMap";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
-import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { COUNTRY_CONFIGS, type CountryId, type CountryConfig } from "@/lib/constants/countries";
 import type {
   Bill,
   BillStatus,
@@ -99,10 +104,16 @@ function formatSectorTypeLabel(sectorType?: string): string {
 function resolveVoteOfficeType(
   countryId: CountryId,
   chamberKey: string | undefined,
-  lowerKey: string
+  lowerKey: string,
+  runtimeCountry?: CountryConfig
 ): string | null {
   if (!chamberKey || chamberKey === "cabinet") return null;
-  return getOfficeTypeForChamber(countryId, chamberKey === "joint" ? lowerKey : chamberKey);
+  return getOfficeTypeForChamber(
+    countryId,
+    chamberKey === "joint" ? lowerKey : chamberKey,
+    undefined,
+    runtimeCountry
+  );
 }
 
 /**
@@ -115,17 +126,20 @@ export function nationalBillListTallies(
   officials: ScopedVoteOfficial[],
   countryId: CountryId,
   lowerKey: string,
-  upperKey: string | null | undefined
+  upperKey: string | null | undefined,
+  runtimeCountry?: CountryConfig
 ): { origin: BillCardTally; other: BillCardTally } {
   const originOfficeType = resolveVoteOfficeType(
     countryId,
     resolvePrimaryVoteChamberKey(bill, lowerKey),
-    lowerKey
+    lowerKey,
+    runtimeCountry
   );
   const otherOfficeType = resolveVoteOfficeType(
     countryId,
     resolveOtherVoteChamberKey(bill, upperKey),
-    lowerKey
+    lowerKey,
+    runtimeCountry
   );
   return {
     origin: resolveBillCardTally(
@@ -194,6 +208,13 @@ export async function listNationalLegislatureBills(
   const isAdmin = authUser?.isAdmin === true;
   const enabledCountries = isAdmin ? undefined : await getEnabledCountryIds();
 
+  const preset = await getGameStatePreset(db);
+  const { config } = await loadRuntimeCountryOffices(db, countryId, preset);
+
+  const viewedOfficeType = getOfficeTypeForChamber(countryId, chamber, preset, config);
+  const chamberFilter =
+    viewedOfficeType === chamber ? chamber : { $in: [chamber, viewedOfficeType] };
+
   const billFilter: Record<string, unknown> = {
     ...buildNationalBillCountryScopeFilter(countryId),
     // A concurrent bill sits on both floors at once and `currentChamber` names
@@ -202,7 +223,16 @@ export async function listNationalLegislatureBills(
     //
     // Nested under `$and`, not a bare `$or`: the UK country scope IS an `$or`,
     // and a second one on the same object would replace it and unscope the query.
-    $and: [{ $or: [{ currentChamber: chamber }, { status: "active_both" }] }],
+    $and: [
+      {
+        $or: [
+          {
+            currentChamber: chamberFilter,
+          },
+          { status: "active_both" },
+        ],
+      },
+    ],
   };
 
   // The bill list is already scoped to this country by
@@ -214,7 +244,7 @@ export async function listNationalLegislatureBills(
     billFilter.countryId = "__disabled__";
   }
 
-  const [bills, total, parties, legislationTypesList, preset] = await Promise.all([
+  const [bills, total, parties, legislationTypesList] = await Promise.all([
     db
       .collection<Bill>("bills")
       .find(billFilter)
@@ -226,9 +256,7 @@ export async function listNationalLegislatureBills(
     db.collection<Bill>("bills").countDocuments(billFilter),
     db.collection<PoliticalParty>("politicalParties").find({ countryId }).toArray(),
     db.collection<LegislationType>("legislationTypes").find({}).toArray(),
-    getGameStatePreset(db),
   ]);
-  const config = getCountryConfig(countryId, preset);
   const lowerKey = config.legislature.lowerChamber.key;
   const upperKeyForGet = config.legislature.upperChamber?.key;
 
@@ -241,8 +269,8 @@ export async function listNationalLegislatureBills(
   // chamber (ticket #1075: 250-215 on a 435-seat House). Detail/resolution
   // already scope; only the list card did not. Mirrors the state-list #973 fix.
   const chamberOfficeTypes = [
-    getOfficeTypeForChamber(countryId, lowerKey, preset),
-    ...(upperKeyForGet ? [getOfficeTypeForChamber(countryId, upperKeyForGet, preset)] : []),
+    getOfficeTypeForChamber(countryId, lowerKey, preset, config),
+    ...(upperKeyForGet ? [getOfficeTypeForChamber(countryId, upperKeyForGet, preset, config)] : []),
   ];
   const chamberOfficials: ScopedVoteOfficial[] = await db
     .collection<ElectedOfficial>("electedOfficials")
@@ -283,8 +311,10 @@ export async function listNationalLegislatureBills(
       // Era-aware: TR 1953 is unicameral (no Senato).
       const memberOfficeTypes =
         config.legislature.bicameral && upperKeyForGet
-          ? [lowerKey, upperKeyForGet].map((k) => getOfficeTypeForChamber(countryId, k, preset))
-          : [getOfficeTypeForChamber(countryId, lowerKey, preset)];
+          ? [lowerKey, upperKeyForGet].map((k) =>
+              getOfficeTypeForChamber(countryId, k, preset, config)
+            )
+          : [getOfficeTypeForChamber(countryId, lowerKey, preset, config)];
 
       const [officials, activeBill] = await Promise.all([
         db
@@ -302,7 +332,7 @@ export async function listNationalLegislatureBills(
       ]);
       isMember = officials.length > 0;
       isMemberOfViewedChamber = officials.some(
-        (o) => o.officeType === getOfficeTypeForChamber(countryId, chamber, preset)
+        (o) => o.officeType === getOfficeTypeForChamber(countryId, chamber, preset, config)
       );
       hasActiveBill = !!activeBill;
       canPropose = isMember && !hasActiveBill;
@@ -317,6 +347,16 @@ export async function listNationalLegislatureBills(
       canPropose = true;
       adminOverride = !isMember;
     }
+  }
+
+  if (
+    config.legislature.lowerChamber.elected === false ||
+    config.legislature.lowerChamber.seats < 1
+  ) {
+    canPropose = false;
+    isMember = false;
+    isMemberOfViewedChamber = false;
+    adminOverride = false;
   }
 
   const proposalWarningOrigins: BillProposalOriginChamber[] =
@@ -385,7 +425,8 @@ export async function listNationalLegislatureBills(
       chamberOfficials,
       countryId,
       lowerKey,
-      upperKeyForGet ?? null
+      upperKeyForGet ?? null,
+      config
     );
     // On a concurrent bill BOTH chambers are open, so a member of whichever chamber
     // this page is showing may vote — into that chamber's own map. `canVoteOther` was
@@ -637,7 +678,7 @@ export async function getNationalBillDetail(
 
   const country = await resolveBillCountryId(db, bill);
   const preset = await getGameStatePreset(db);
-  const config = getCountryConfig(country, preset);
+  const { config } = await loadRuntimeCountryOffices(db, country, preset);
   const lowerKey = config.legislature.lowerChamber.key;
   const upperKey = config.upperElectionSystem
     ? (config.legislature.upperChamber?.key ?? null)
@@ -674,8 +715,8 @@ export async function getNationalBillDetail(
               characterId: viewerCharacter._id,
               officeType: {
                 $in: [
-                  getOfficeTypeForChamber(country, lowerKey, preset),
-                  ...(upperKey ? [getOfficeTypeForChamber(country, upperKey, preset)] : []),
+                  getOfficeTypeForChamber(country, lowerKey, preset, config),
+                  ...(upperKey ? [getOfficeTypeForChamber(country, upperKey, preset, config)] : []),
                 ],
               },
               countryId: country,
@@ -688,12 +729,13 @@ export async function getNationalBillDetail(
           }),
         ]);
         isHouseMember = officials.some(
-          (official) => official.officeType === getOfficeTypeForChamber(country, lowerKey, preset)
+          (official) =>
+            official.officeType === getOfficeTypeForChamber(country, lowerKey, preset, config)
         );
         isSenateMember = upperKey
           ? officials.some(
               (official) =>
-                official.officeType === getOfficeTypeForChamber(country, upperKey, preset)
+                official.officeType === getOfficeTypeForChamber(country, upperKey, preset, config)
             )
           : false;
         isPresident = Boolean(presidentOfficial);
@@ -715,21 +757,29 @@ export async function getNationalBillDetail(
           characterId: character._id,
           officeType: {
             $in: [
-              getOfficeTypeForChamber(country, lowerKey, preset),
-              ...(upperKey ? [getOfficeTypeForChamber(country, upperKey, preset)] : []),
+              getOfficeTypeForChamber(country, lowerKey, preset, config),
+              ...(upperKey ? [getOfficeTypeForChamber(country, upperKey, preset, config)] : []),
+              ...(config.officeTypes.some(
+                (office) => office.key === "president" && office.isHeadOfState
+              )
+                ? ["president"]
+                : []),
             ],
           },
           countryId: country,
         })
         .toArray();
       isHouseMember = officials.some(
-        (official) => official.officeType === getOfficeTypeForChamber(country, lowerKey, preset)
+        (official) =>
+          official.officeType === getOfficeTypeForChamber(country, lowerKey, preset, config)
       );
       isSenateMember = upperKey
         ? officials.some(
-            (official) => official.officeType === getOfficeTypeForChamber(country, upperKey, preset)
+            (official) =>
+              official.officeType === getOfficeTypeForChamber(country, upperKey, preset, config)
           )
         : false;
+      isPresident = officials.some((official) => official.officeType === "president");
       if (country === "JP" && bill.status === "cabinet_review") {
         const governmentFormation = await getGovernmentFormationsCollection(db).findOne({
           _id: country,
@@ -745,6 +795,13 @@ export async function getNationalBillDetail(
     }
   }
 
+  if (
+    config.legislature.lowerChamber.elected === false ||
+    config.legislature.lowerChamber.seats < 1
+  ) {
+    isHouseMember = false;
+    isSenateMember = false;
+  }
   const partyMap = await getPartyMap(db, country);
   const allVoteKeys = [
     ...Object.keys(bill.votes ?? {}),
@@ -860,12 +917,13 @@ export async function getNationalBillDetail(
   });
   const primaryVoteChamberKey = resolvePrimaryVoteChamberKey(bill, lowerKey);
   const originVoteOfficeType = primaryVoteChamberKey
-    ? resolveVoteOfficeType(country, primaryVoteChamberKey, lowerKey)
+    ? resolveVoteOfficeType(country, primaryVoteChamberKey, lowerKey, config)
     : null;
   const otherVoteOfficeType = resolveVoteOfficeType(
     country,
     resolveOtherVoteChamberKey(bill, upperKey),
-    lowerKey
+    lowerKey,
+    config
   );
   const originVoteInputs = buildScopedVoteInputs(
     bill.votes,
