@@ -265,7 +265,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     });
   });
 
-  it("keeps activation below 140 commands with one hundred protected residents", async () => {
+  it("keeps activation below 150 commands with one hundred protected residents", async () => {
     const db = client.db(databaseName);
     await db.collection("characters").insertMany(
       Array.from({ length: 99 }, () => ({
@@ -281,7 +281,8 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
     ).toBe(1);
     const activationCommands = commands;
-    expect(activationCommands).toBeLessThanOrEqual(140);
+    // Measured 146 commands after fixed-cost retirement of dissolved institutions.
+    expect(activationCommands).toBeLessThanOrEqual(150);
     expect(
       await db.collection("characters").countDocuments({
         cash: 50,
