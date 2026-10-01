@@ -24,7 +24,12 @@ beforeEach(() => {
 async function renderPreview() {
   const { HomepagePreviewClient } = await import("./HomepagePreviewClient");
   const live = { ...fallbackMarketedWorld(1953), version: "9.9.9" };
-  const view = render(<HomepagePreviewClient world={live} />);
+  const view = render(
+    <HomepagePreviewClient
+      world={live}
+      backgroundMacroByEra={{ "1953": ["004"], "1991": ["004", "024"] }}
+    />
+  );
   return { ...view, live };
 }
 
@@ -47,5 +52,6 @@ describe("HomepagePreviewClient era picker", () => {
     expect(world.seedYear).toBe(1991);
     expect(world.version).toBe("9.9.9");
     expect(props.playerCounts).toEqual({ US: 0, UK: 0, JP: 0 });
+    expect(props.backgroundMacroFeatureIds).toEqual(["004", "024"]);
   });
 });

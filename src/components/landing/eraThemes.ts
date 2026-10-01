@@ -5,7 +5,8 @@
 
 import { tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
 import type { CountryId } from "@/lib/constants/countries";
-import { TICKER_1991 } from "./broadcast1991";
+import { SHOWCASE_1991, TICKER_1991 } from "./broadcast1991";
+import type { HistoricalCrisisShowcaseEntry } from "./historicalCrisisShowcase";
 
 export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023" | "2027";
 
@@ -59,6 +60,10 @@ export type BroadcastLanderConfig = {
   dissolvedStateFeatureIds: readonly string[];
   /** Name riding beside the satellite on the inner orbit. */
   orbitLabel: string;
+  /** The globe's idle tour for this era, in place of the Cold War tour. */
+  showcase: readonly HistoricalCrisisShowcaseEntry[];
+  /** Badge on the tour's cards. */
+  showcaseBadge: string;
 };
 
 export type EraConfig = {
@@ -417,6 +422,8 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
       ticker: TICKER_1991,
       dissolvedStateFeatureIds: SOVIET_REPUBLIC_FEATURE_IDS,
       orbitLabel: "MIR",
+      showcase: SHOWCASE_1991,
+      showcaseBadge: "Special report",
     },
   },
 

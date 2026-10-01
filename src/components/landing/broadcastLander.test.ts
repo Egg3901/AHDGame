@@ -44,6 +44,22 @@ describe("1991 broadcast lander content", () => {
     }
   });
 
+  it("tours 1991 itself when idle, not the Cold War from 1953", () => {
+    expect(broadcast.showcase.length).toBeGreaterThan(5);
+    expect(new Set(broadcast.showcase.map((entry) => entry.id)).size).toBe(
+      broadcast.showcase.length
+    );
+    for (const entry of broadcast.showcase) {
+      expect(entry.year, entry.id).toBe(1991);
+      expect(entry.title).not.toMatch(DASHES);
+      expect(entry.description).not.toMatch(DASHES);
+      const [lon, lat] = entry.lonLat;
+      expect(Math.abs(lon)).toBeLessThanOrEqual(180);
+      expect(Math.abs(lat)).toBeLessThanOrEqual(90);
+    }
+    expect(broadcast.showcaseBadge).toBe("Special report");
+  });
+
   it("highlights the era year inside the headline", () => {
     expect(ERA_CONFIGS["1991"].heroHeadline).toContain("1991");
   });

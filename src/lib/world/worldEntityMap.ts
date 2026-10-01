@@ -94,3 +94,29 @@ export function getWorldEntityMapSnapshot(presetId: string): WorldEntityMapSnaps
 }
 
 export { backgroundMacroFeatureIds } from "./worldEntityMapInspection";
+
+const backgroundMacroByPreset = new Map<string, readonly string[]>();
+
+/**
+ * Map features a preset simulates as background macro aggregates, read from
+ * the manifest alone: no seeded summaries needed, so the landing page can ask
+ * before a world exists. These are the roughly 150 nations the 1991 preset
+ * runs as macro economies, which the landing globe paints apart from land
+ * nothing simulates. An unknown preset has none rather than borrowing another
+ * era's roster.
+ */
+export function backgroundMacroFeatureIdsForPreset(presetId: string): readonly string[] {
+  const cached = backgroundMacroByPreset.get(presetId);
+  if (cached) return cached;
+  let ids: readonly string[] = [];
+  try {
+    ids = Object.entries(getWorldEntityMapSnapshot(presetId).byFeatureId)
+      .filter(([, item]) => item.simulationTier === "background-macro")
+      .map(([featureId]) => featureId)
+      .sort();
+  } catch {
+    ids = [];
+  }
+  backgroundMacroByPreset.set(presetId, ids);
+  return ids;
+}

@@ -325,6 +325,8 @@ export function SandboxHome({
   governmentTypes = {},
   discordStats = null,
   world,
+  backgroundMacroFeatureIds,
+  currentYear,
 }: {
   isSignedIn: boolean;
   era?: string | number;
@@ -340,6 +342,14 @@ export function SandboxHome({
    * pill advertised v1.0.0 for six releases after 1.0.0 shipped.
    */
   world: MarketedWorld;
+  /**
+   * Background Nations the era's preset simulates as macro aggregates. Read
+   * from the world entity manifest on the server, so the manifest stays out of
+   * this bundle. The globe draws them apart from unsimulated grey.
+   */
+  backgroundMacroFeatureIds?: readonly string[];
+  /** The world's in-game year now. The broadcast headline rolls up to it. */
+  currentYear?: number;
 }) {
   const t = useTranslations("auth");
   const eraConfig = getEraConfig(era);
@@ -487,6 +497,7 @@ export function SandboxHome({
             broadcast={broadcast}
             hideTierLegend={Boolean(broadcast)}
             markersFromSm={Boolean(broadcast)}
+            backgroundMacroFeatureIds={backgroundMacroFeatureIds}
           />
         </div>
 
@@ -519,7 +530,11 @@ export function SandboxHome({
             {broadcast ? (
               <>
                 <BroadcastKicker kicker={broadcast.kicker} dateline={broadcast.dateline} />
-                <BroadcastHeadline text={eraConfig.heroHeadline} year={String(eraConfig.year)} />
+                <BroadcastHeadline
+                  text={eraConfig.heroHeadline}
+                  year={eraConfig.year}
+                  currentYear={currentYear}
+                />
                 <p className="mt-5 max-w-lg text-base leading-relaxed text-white/70 sm:text-[1.0625rem]">
                   {eraConfig.heroDek}
                 </p>
@@ -579,7 +594,10 @@ export function SandboxHome({
         {broadcast && (
           <div className="absolute inset-x-0 bottom-[calc(12vh+1rem)]">
             <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
-              <BroadcastTierKey hidden={showcaseActive} />
+              <BroadcastTierKey
+                hidden={showcaseActive}
+                backgroundIsSimulated={Boolean(backgroundMacroFeatureIds?.length)}
+              />
               <BroadcastTicker label={broadcast.tickerLabel} items={broadcast.ticker} />
             </div>
           </div>

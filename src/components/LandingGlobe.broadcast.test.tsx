@@ -22,6 +22,7 @@ const mapSvgProps: Record<string, unknown>[] = [];
 vi.mock("@/app/world/components/MapSVGContent", () => ({
   __esModule: true,
   BACKGROUND_LAYER_KEY: "__tier_background__",
+  BACKGROUND_MACRO_LAYER_KEY: "__tier_background_macro__",
   default: (props: Record<string, unknown>) => {
     mapSvgProps.push(props);
     return <svg data-testid="map-svg" />;
@@ -85,6 +86,17 @@ describe("LandingGlobe broadcast wiring", () => {
     expect(React.isValidElement(props.underlay)).toBe(true);
     expect(React.isValidElement(props.overlay)).toBe(true);
     expect(document.body.textContent).not.toContain("Player Nations");
+  });
+
+  it("hands the renderer the era's macro-simulated background as a set", async () => {
+    const { props } = await renderEra("1991", { backgroundMacroFeatureIds: ["004", "024"] });
+    const set = props.backgroundMacroFeatureIds as ReadonlySet<string>;
+    expect([...set]).toEqual(["004", "024"]);
+  });
+
+  it("passes no macro layer when the page has no roster", async () => {
+    const { props } = await renderEra("1953");
+    expect(props.backgroundMacroFeatureIds).toBeUndefined();
   });
 
   it("leaves the 1953 globe exactly as it was", async () => {

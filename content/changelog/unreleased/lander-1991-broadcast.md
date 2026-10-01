@@ -16,6 +16,10 @@ areas: [frontend]
 - Mir and three communications satellites orbit the globe. Every few seconds one of them beams down to a place from the year's news and labels it with the date.
 - A crawl along the foot of the first screen runs fourteen headlines from 1991, from the first night of Desert Storm to the Soviet flag coming down over the Kremlin.
 - Japan gets a player-count chip on the landing globe.
+- The landing globe colours the nations the world simulates as background economies (153 of them in 1991) instead of leaving them grey with land nothing simulates.
+- When the globe sits idle, a 1991 world tours that year's events instead of the Cold War tour that opens on 1953.
+- The headline opens on the year the world started and rolls its digits up to the year it has reached.
+- The landing globe colours the nations the world simulates as background economies (153 of them in 1991) instead of leaving them grey with land nothing simulates.
 - The version pill under the hero buttons is gone. Its link pointed at a world report that is no longer published.
 - Admins can preview any seed's landing page from the homepage preview before a reset puts it live.
 - The login page quotes and two historical crisis descriptions no longer use dashes.

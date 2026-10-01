@@ -41,9 +41,12 @@ const THEME_PICKER: { value: Theme; label: string }[] = [
 export function HomepagePreviewClient({
   governmentTypes = {},
   world,
+  backgroundMacroByEra = {},
 }: {
   governmentTypes?: Record<string, GovernmentType>;
   world: MarketedWorld;
+  /** Macro-simulated Background Nations per era id, read on the server. */
+  backgroundMacroByEra?: Partial<Record<string, readonly string[]>>;
 }) {
   const { theme, setTheme } = useTheme();
   const [view, setView] = useState<"signed-out" | "signed-in">("signed-out");
@@ -143,6 +146,7 @@ export function HomepagePreviewClient({
         playerCounts={previewCounts}
         governmentTypes={governmentTypes}
         world={previewWorld}
+        backgroundMacroFeatureIds={backgroundMacroByEra[era]}
       />
     </div>
   );

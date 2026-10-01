@@ -1242,6 +1242,31 @@ html[data-high-contrast="true"] :focus-visible {
     ahd-bc-ghost-pulse 6s ease-in-out 3.2s infinite;
 }
 
+/* Headline year odometer: each digit is a 0 to 9 strip in a one-line window,
+   moved by a tenth of its height per digit. Tabular figures keep every window
+   the same width, so the year does not reflow as it rolls. */
+.ahd-bc-odometer {
+  font-variant-numeric: tabular-nums;
+}
+
+.ahd-bc-odometer-digit {
+  display: inline-block;
+  height: 1.04em;
+  overflow: hidden;
+  vertical-align: top;
+}
+
+.ahd-bc-odometer-strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ahd-bc-odometer-strip > span {
+  height: 1.04em;
+  line-height: 1.04em;
+}
+
 /* Lower-third crawl: the track holds two identical runs and slides by one. */
 @keyframes ahd-bc-crawl {
   from {
@@ -1283,6 +1308,10 @@ html[data-high-contrast="true"] :focus-visible {
   .ahd-bc-ghost,
   .ahd-bc-crawl {
     animation: none;
+  }
+
+  .ahd-bc-odometer-strip {
+    transition: none;
   }
 
   /* A stopped crawl still has to be readable to the end, from its first

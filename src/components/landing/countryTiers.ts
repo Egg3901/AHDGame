@@ -76,6 +76,21 @@ export function tierWireframeFill(tier: CountryTier, phosphorColor: string): str
   return `${phosphorColor}${TIER_PHOSPHOR_ALPHA[tier]}`;
 }
 
+/**
+ * Background Nations the world still simulates as macro aggregates (the
+ * manifest's `background-macro` tier, about 150 of them in 1991). They stay in
+ * the Background tier, inert and merged, but read as simulated land rather
+ * than the grey of land nothing simulates (owner, 2026-10-01). Only the
+ * landing globe draws the split; a caller that passes no roster sees grey.
+ */
+export const BACKGROUND_MACRO_COLOR = "rgba(139, 124, 220, 0.5)";
+export const BACKGROUND_MACRO_STROKE = "rgba(196, 181, 253, 0.32)";
+
+/** CRT wireframe intensity for macro-simulated background, between battleground and unsimulated. */
+export function backgroundMacroWireframeFill(phosphorColor: string): string {
+  return `${phosphorColor}24`;
+}
+
 /** The shape of an era/DB access record, narrowed to what tiering needs. */
 export type TierCountryAccess = {
   enabledForPlayers?: boolean;

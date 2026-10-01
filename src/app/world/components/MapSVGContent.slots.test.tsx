@@ -8,10 +8,20 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { render } from "@testing-library/react";
-import MapSVGContent from "./MapSVGContent";
+import MapSVGContent, { BACKGROUND_LAYER_KEY, BACKGROUND_MACRO_LAYER_KEY } from "./MapSVGContent";
+import { BACKGROUND_MACRO_COLOR, TIER_COLORS } from "@/components/landing/countryTiers";
 
-const FEATURES = [{ type: "Feature", id: "840", properties: { name: "840" }, geometry: null }];
-const PATHS = new Map<string, string | null>([["840", "M0,0L1,1L2,0Z"]]);
+const FEATURES = ["840", "124", "076"].map((id) => ({
+  type: "Feature",
+  id,
+  properties: { name: id },
+  geometry: null,
+}));
+const PATHS = new Map<string, string | null>([
+  ["840", "M0,0L1,1L2,0Z"],
+  ["124", "M5,5L6,6L7,5Z"],
+  ["076", "M9,9L10,10L11,9Z"],
+]);
 
 function renderGlobe(overrides: Record<string, unknown> = {}) {
   const props = {
@@ -79,5 +89,40 @@ describe("MapSVGContent era slots", () => {
     const { props } = renderGlobe({ wireframeColor: "#00e676", sphereFill: "url(#era-ocean)" });
     expect(props.sphereRef.current!.getAttribute("fill")).toBe("#000800");
     expect(props.sphereRef.current!.getAttribute("stroke")).toBe("#00e676");
+  });
+});
+
+describe("MapSVGContent background macro layer", () => {
+  // The US is a player tier; Canada and Brazil are Background Nations.
+  const tierLookup = new Map([["840", "player" as const]]);
+
+  it("keeps one grey background layer when no macro roster is passed", () => {
+    const { props } = renderGlobe({ tierLookup });
+    expect(props.pathRefsMap.current.get(BACKGROUND_MACRO_LAYER_KEY)).toBeUndefined();
+    const grey = props.pathRefsMap.current.get(BACKGROUND_LAYER_KEY)!;
+    expect(grey.getAttribute("d")).toBe("M5,5L6,6L7,5ZM9,9L10,10L11,9Z");
+  });
+
+  it("draws macro-simulated background apart from unsimulated land, both inert", () => {
+    const { props } = renderGlobe({ tierLookup, backgroundMacroFeatureIds: new Set(["076"]) });
+    const grey = props.pathRefsMap.current.get(BACKGROUND_LAYER_KEY)!;
+    const macro = props.pathRefsMap.current.get(BACKGROUND_MACRO_LAYER_KEY)!;
+    expect(grey.getAttribute("d")).toBe("M5,5L6,6L7,5Z");
+    expect(grey.getAttribute("fill")).toBe(TIER_COLORS.background);
+    expect(macro.getAttribute("d")).toBe("M9,9L10,10L11,9Z");
+    expect(macro.getAttribute("fill")).toBe(BACKGROUND_MACRO_COLOR);
+    expect(macro.style.pointerEvents).toBe("none");
+  });
+
+  it("gives macro background its own phosphor level in CRT mode", () => {
+    const { props } = renderGlobe({
+      tierLookup,
+      backgroundMacroFeatureIds: new Set(["076"]),
+      wireframeColor: "#00e676",
+    });
+    const grey = props.pathRefsMap.current.get(BACKGROUND_LAYER_KEY)!;
+    const macro = props.pathRefsMap.current.get(BACKGROUND_MACRO_LAYER_KEY)!;
+    expect(macro.getAttribute("fill")).toMatch(/^#00e676/);
+    expect(macro.getAttribute("fill")).not.toBe(grey.getAttribute("fill"));
   });
 });

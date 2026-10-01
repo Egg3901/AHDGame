@@ -11,8 +11,13 @@
  * backdrop blur: it all sits over a globe that repaints every frame, and a
  * blur there is recomputed on each of them.
  */
-import type { CSSProperties } from "react";
-import { TIER_COLORS, TIER_LABELS, TIER_ORDER } from "@/components/landing/countryTiers";
+import { useEffect, useState, type CSSProperties } from "react";
+import {
+  BACKGROUND_MACRO_COLOR,
+  TIER_COLORS,
+  TIER_LABELS,
+  TIER_ORDER,
+} from "@/components/landing/countryTiers";
 import type { BroadcastTickerItem } from "@/components/landing/eraThemes";
 
 /** The kicker reads as one strip: a red block, then the dateline on smoked glass. */
@@ -31,8 +36,19 @@ export function BroadcastKicker({ kicker, dateline }: { kicker: string; dateline
 }
 
 /** Sans, tight and heavy, with the era's year picked out in signal red. */
-export function BroadcastHeadline({ text, year }: { text: string; year: string }) {
-  const at = text.lastIndexOf(year);
+export function BroadcastHeadline({
+  text,
+  year,
+  currentYear,
+}: {
+  text: string;
+  /** The era's seed year, as written in `text`. */
+  year: number;
+  /** The world's year now. The headline rolls from `year` up to it. */
+  currentYear?: number;
+}) {
+  const written = String(year);
+  const at = text.lastIndexOf(written);
   return (
     <h1 className="ahd-bc-headline text-balance text-[2.35rem] font-semibold leading-[1.04] tracking-[-0.035em] text-white sm:text-[2.75rem] lg:text-[2.95rem]">
       {at < 0 ? (
@@ -40,11 +56,60 @@ export function BroadcastHeadline({ text, year }: { text: string; year: string }
       ) : (
         <>
           {text.slice(0, at)}
-          <span className="text-[#ff4d5e]">{year}</span>
-          {text.slice(at + year.length)}
+          <YearOdometer from={year} to={Math.max(year, currentYear ?? year)} />
+          {text.slice(at + written.length)}
         </>
       )}
     </h1>
+  );
+}
+
+const DIGITS = "0123456789".split("");
+
+/** How long the page shows the seed year before rolling to the world's year. */
+const ODOMETER_HOLD_MS = 900;
+
+/**
+ * The year as an odometer: the page loads on the seed year (1991) and each
+ * digit rolls to the year the world has reached, so a world in its fourth year
+ * turns its last digit up three places to 1994. Screen readers get the settled
+ * year once; the rolling digits are hidden from them. Reduced motion settles
+ * straight away, and the CSS drops the roll.
+ */
+export function YearOdometer({ from, to }: { from: number; to: number }) {
+  const [shown, setShown] = useState(from);
+
+  useEffect(() => {
+    if (to === from) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setShown(to), reduce ? 0 : ODOMETER_HOLD_MS);
+    return () => window.clearTimeout(timer);
+  }, [from, to]);
+
+  return (
+    <span className="ahd-bc-odometer text-[#ff4d5e]">
+      <span className="sr-only">{to}</span>
+      <span aria-hidden="true" className="inline-flex">
+        {String(shown)
+          .split("")
+          .map((digit, place, all) => (
+            <span key={place} className="ahd-bc-odometer-digit">
+              <span
+                className="ahd-bc-odometer-strip"
+                style={{
+                  transform: `translateY(${-Number(digit) * 10}%)`,
+                  // Lower places start first, the way an odometer carries.
+                  transitionDelay: `${(all.length - 1 - place) * 70}ms`,
+                }}
+              >
+                {DIGITS.map((n) => (
+                  <span key={n}>{n}</span>
+                ))}
+              </span>
+            </span>
+          ))}
+      </span>
+    </span>
   );
 }
 
@@ -102,7 +167,14 @@ export function BroadcastTicker({
  * would sit on top of the ticker, so this lander draws its key here instead.
  * It fades with the hero copy while the idle showcase is running.
  */
-export function BroadcastTierKey({ hidden }: { hidden: boolean }) {
+export function BroadcastTierKey({
+  hidden,
+  backgroundIsSimulated,
+}: {
+  hidden: boolean;
+  /** Background Nations are the macro-simulated ones, drawn in their own colour. */
+  backgroundIsSimulated: boolean;
+}) {
   return (
     <ul
       aria-hidden="true"
@@ -114,7 +186,12 @@ export function BroadcastTierKey({ hidden }: { hidden: boolean }) {
         <li key={tier} className="inline-flex items-center gap-2">
           <span
             className="h-2 w-2 shrink-0 rounded-[2px]"
-            style={{ background: TIER_COLORS[tier] }}
+            style={{
+              background:
+                tier === "background" && backgroundIsSimulated
+                  ? BACKGROUND_MACRO_COLOR
+                  : TIER_COLORS[tier],
+            }}
           />
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/70">
             {TIER_LABELS[tier]}

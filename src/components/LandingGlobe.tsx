@@ -12,6 +12,7 @@ import Image from "next/image";
 import { Badge, Skeleton } from "@/components/ui";
 import MapSVGContent, {
   BACKGROUND_LAYER_KEY,
+  BACKGROUND_MACRO_LAYER_KEY,
   type GlobeLayout,
 } from "@/app/world/components/MapSVGContent";
 import MapTooltip from "@/app/world/components/MapTooltip";
@@ -48,6 +49,8 @@ import {
   type HistoricalCrisisShowcaseEntry,
 } from "@/components/landing/historicalCrisisShowcase";
 import {
+  BACKGROUND_MACRO_COLOR,
+  backgroundMacroWireframeFill,
   buildTierLookup,
   isTierInteractive,
   tierWireframeFill,
@@ -174,6 +177,7 @@ export function LandingGlobe({
   broadcast,
   hideTierLegend = false,
   markersFromSm = false,
+  backgroundMacroFeatureIds,
 }: {
   gameDate?: string;
   theme?: "default" | "broadsheet";
@@ -239,7 +243,10 @@ export function LandingGlobe({
    * crawl's datelines. Absent keeps the plain or CRT look, which
    * `wireframeColor` decides. Pass a stable reference; the era config is one.
    */
-  broadcast?: Pick<BroadcastLanderConfig, "dissolvedStateFeatureIds" | "orbitLabel" | "ticker">;
+  broadcast?: Pick<
+    BroadcastLanderConfig,
+    "dissolvedStateFeatureIds" | "orbitLabel" | "ticker" | "showcase" | "showcaseBadge"
+  >;
   /**
    * Skip the bare-mode tier key in the corner, for a hero that draws its own
    * (the broadcast lander's ticker owns that corner). Default false.
@@ -250,6 +257,12 @@ export function LandingGlobe({
    * copy fills a phone screen and would otherwise sit on top of them.
    */
   markersFromSm?: boolean;
+  /**
+   * Background Nations the preset simulates as macro aggregates, from
+   * `backgroundMacroFeatureIdsForPreset`. Drawn in their own colour instead of
+   * the grey of unsimulated land. Pass a stable reference.
+   */
+  backgroundMacroFeatureIds?: readonly string[];
 }) {
   const resolveCountryName = useCountryDisplayName();
   const isBroadsheet = theme === "broadsheet";
@@ -366,12 +379,19 @@ export function LandingGlobe({
   );
   const tierLookupRef = useRef(tierLookup);
   tierLookupRef.current = tierLookup;
+  const backgroundMacroSet = useMemo(
+    () => (backgroundMacroFeatureIds?.length ? new Set(backgroundMacroFeatureIds) : undefined),
+    [backgroundMacroFeatureIds]
+  );
 
   const haloRef = useRef<SVGCircleElement>(null);
 
   // Fixed for an era, so the callbacks and the frame loop below can close over
   // it without being rebuilt.
   const isBroadcast = broadcast !== undefined;
+  // The idle tour: an era's own events where it has them (1991), else the
+  // Cold War tour from 1953 on.
+  const showcase = broadcast?.showcase ?? HISTORICAL_CRISIS_SHOWCASE;
   const {
     bind: bindBroadcast,
     geometry: dissolvedGeometryRef,
@@ -555,7 +575,7 @@ export function LandingGlobe({
     const dot = showcaseLeaderDotRef.current;
     if (!d3 || !svg || !overlay || !motion) return;
 
-    const entry = HISTORICAL_CRISIS_SHOWCASE[motion.index];
+    const entry = showcase[motion.index];
     const rot = rotationRef.current;
     const proj = d3
       .geoOrthographic()
@@ -607,7 +627,7 @@ export function LandingGlobe({
       line.setAttribute("x2", String(px - mr.left));
       line.setAttribute("y2", String(py - mr.top));
     }
-  }, []);
+  }, [showcase]);
 
   const updateEnhancedOverlay = useCallback(() => {
     const d3 = d3Ref.current;
@@ -661,15 +681,19 @@ export function LandingGlobe({
 
     const pathGen = d3.geoPath(proj);
     const lookup = tierLookupRef.current;
-    // Background Nations are accumulated into ONE `d` string and written once,
-    // instead of ~150 individual setAttribute calls every animation frame.
+    // Background Nations are accumulated into ONE `d` string per layer (the
+    // macro-simulated ones and the rest) and written once, instead of ~150
+    // individual setAttribute calls every animation frame.
     let backgroundD = "";
+    let macroD = "";
     for (const feature of featuresRef.current) {
       const id = String(feature.id);
       const isBackground = lookup ? !isTierInteractive(lookup.get(id) ?? "background") : false;
       if (isBackground) {
         const d = pathGen(feature);
-        if (d) backgroundD += d;
+        if (!d) continue;
+        if (backgroundMacroSet?.has(id)) macroD += d;
+        else backgroundD += d;
         continue;
       }
       const el = pathRefsMap.current.get(id);
@@ -692,6 +716,8 @@ export function LandingGlobe({
     if (lookup) {
       const backgroundEl = pathRefsMap.current.get(BACKGROUND_LAYER_KEY);
       if (backgroundEl) backgroundEl.setAttribute("d", backgroundD);
+      const macroEl = pathRefsMap.current.get(BACKGROUND_MACRO_LAYER_KEY);
+      if (macroEl) macroEl.setAttribute("d", macroD);
     }
 
     if (graticuleRef.current && graticuleDataRef.current) {
@@ -726,7 +752,14 @@ export function LandingGlobe({
     if (enhancedRef.current) updateEnhancedOverlay();
     updateMarkers();
     updateShowcaseCard();
-  }, [isBroadcast, renderBroadcast, updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
+  }, [
+    backgroundMacroSet,
+    isBroadcast,
+    renderBroadcast,
+    updateEnhancedOverlay,
+    updateMarkers,
+    updateShowcaseCard,
+  ]);
 
   const syncPathsState = useCallback(() => {
     const d3 = d3Ref.current;
@@ -943,7 +976,7 @@ export function LandingGlobe({
     if (!isLoaded) return;
 
     const beginShowcaseEntry = (index: number, ts: number) => {
-      const entry = HISTORICAL_CRISIS_SHOWCASE[index];
+      const entry = showcase[index];
       const targetRotation: [number, number, number] = [-entry.lonLat[0], -entry.lonLat[1], 0];
       targetRotation[0] = nearestLongitudeRotation(rotationRef.current[0], targetRotation[0]);
       showcaseMotionRef.current = {
@@ -983,7 +1016,7 @@ export function LandingGlobe({
       } else if (showcaseMotion && !isDraggingRef.current) {
         const elapsed = ts - showcaseMotion.transitionStartedAt;
         if (elapsed >= SHOWCASE_TRANSITION_MS + SHOWCASE_HOLD_MS) {
-          beginShowcaseEntry((showcaseMotion.index + 1) % HISTORICAL_CRISIS_SHOWCASE.length, ts);
+          beginShowcaseEntry((showcaseMotion.index + 1) % showcase.length, ts);
         } else if (!showcaseMotion.settled && (!bare || ts - lastFrameRef.current >= frameBudget)) {
           lastFrameRef.current = ts;
           const progress = Math.min(1, elapsed / SHOWCASE_TRANSITION_MS);
@@ -1051,6 +1084,7 @@ export function LandingGlobe({
     markInteraction,
     isBroadcast,
     renderBroadcast,
+    showcase,
   ]);
 
   // Position markers once the globe is ready / counts change, and on resize.
@@ -1422,6 +1456,7 @@ export function LandingGlobe({
             onHover={setHovered}
             onTooltipClear={() => setTooltipPos(null)}
             onCountryClick={handleCountryClick}
+            backgroundMacroFeatureIds={backgroundMacroSet}
             sphereFill={isBroadcast ? BROADCAST_SPHERE_FILL : undefined}
             sphereStroke={isBroadcast ? BROADCAST_SPHERE_STROKE : undefined}
             graticuleStroke={isBroadcast ? BROADCAST_GRATICULE_STROKE : undefined}
@@ -1605,9 +1640,16 @@ export function LandingGlobe({
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
                   style={{
-                    background: wireframeColor
-                      ? tierWireframeFill(tier, wireframeColor)
-                      : TIER_COLORS[tier],
+                    // With a macro roster, "Background Nations" are the
+                    // simulated ones; unsimulated grey land goes unlabelled.
+                    background:
+                      tier === "background" && backgroundMacroSet
+                        ? wireframeColor
+                          ? backgroundMacroWireframeFill(wireframeColor)
+                          : BACKGROUND_MACRO_COLOR
+                        : wireframeColor
+                          ? tierWireframeFill(tier, wireframeColor)
+                          : TIER_COLORS[tier],
                     outline: wireframeColor ? `1px solid ${wireframeColor}` : undefined,
                   }}
                 />
@@ -1654,7 +1696,7 @@ export function LandingGlobe({
               <div className="p-4 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <Badge color="warning" variant="tag">
-                    Historical crisis
+                    {broadcast?.showcaseBadge ?? "Historical crisis"}
                   </Badge>
                   <span className="font-mono text-body-xs tabular-nums text-muted">
                     {showcaseEntry.year}
