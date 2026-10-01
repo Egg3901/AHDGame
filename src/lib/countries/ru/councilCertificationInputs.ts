@@ -18,6 +18,7 @@ import {
   type RussianDumaResultRecord,
 } from "./dumaElectionResult";
 
+import { russianDumaBoundRoot } from "./dumaConvocationAuthority";
 export async function loadRussianCouncilCertificationInputs(input: {
   db: Db;
   session: ClientSession;
@@ -100,7 +101,8 @@ export async function loadRussianCouncilCertificationInputs(input: {
         .toArray()
     : [];
   const pendingDuma = new Set<string>();
-  if (country.ruFirstDumaElectionCohortId) {
+  const dumaRoot = russianDumaBoundRoot(country);
+  if (dumaRoot) {
     const receipts = await db
       .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
       .find(
@@ -109,10 +111,7 @@ export async function loadRussianCouncilCertificationInputs(input: {
           preset: "1991-default",
           mandateSinceTurn: country.ruFederalAssemblyMandateSinceTurn,
           seatedOnTurn: { $exists: false },
-          $or: [
-            { cohortId: country.ruFirstDumaElectionCohortId },
-            { rootCohortId: country.ruFirstDumaElectionCohortId },
-          ],
+          $or: [{ cohortId: dumaRoot }, { rootCohortId: dumaRoot }],
         },
         { session, projection: { result: 1, nominees: 1 } }
       )

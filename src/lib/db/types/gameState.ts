@@ -686,6 +686,10 @@ export interface CountryGameState {
   ruFederalAssemblyMandateSinceTurn?: number;
   /** Bound first-Duma election cohort; opening it does not retire Congress. */
   ruFirstDumaElectionCohortId?: ObjectId;
+  /** Latest ordinary Duma campaign; first-election roots remain immutable. */
+  ruDumaConvocationCohortId?: ObjectId;
+  /** Latest actually seated ordinary Duma, independent of an open successor campaign. */
+  ruDumaCurrentConvocationCohortId?: ObjectId;
   /** Bound first-Council subject cohort; opening it does not retire Congress. */
   ruFirstCouncilElectionCohortId?: ObjectId;
   /** Atomic first-Duma bounded NPC slate admission receipt. */

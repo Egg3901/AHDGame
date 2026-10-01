@@ -34,6 +34,7 @@ describe("seed manifest classification coverage", () => {
       "russianCouncilElectionOpenings",
       "russianCouncilElectionResults",
       "russianAssemblySeatings",
+      "russianDumaConvocations",
       "russianAssemblyOfficeArchives",
       "federationRelocations",
       "federationPublicationPreparations",

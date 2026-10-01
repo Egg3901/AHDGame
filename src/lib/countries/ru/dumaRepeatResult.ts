@@ -26,6 +26,11 @@ import {
   russianDumaProtectedConstituencyOwners,
 } from "./rules/assemblyCohort";
 import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
+import {
+  russianDumaBoundRoot,
+  loadRussianDumaAuthority,
+  russianDumaRootFilter,
+} from "./dumaConvocationAuthority";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export async function materializeRussianDumaRepeatResult(input: {
@@ -88,6 +93,8 @@ export async function materializeRussianDumaRepeatResult(input: {
       session,
       projection: {
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruFirstCouncilElectionCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
@@ -96,7 +103,8 @@ export async function materializeRussianDumaRepeatResult(input: {
     }
   );
   if (
-    !country?.ruFirstDumaElectionCohortId?.equals(rootCohortId) ||
+    !country ||
+    !russianDumaBoundRoot(country)?.equals(rootCohortId) ||
     country.ruFederalAssemblyMandateSinceTurn !== opening.mandateSinceTurn ||
     !hasAuthorizedPostSovietTransition(
       turn,
@@ -105,6 +113,14 @@ export async function materializeRussianDumaRepeatResult(input: {
     )
   )
     throw new Error("Duma repeat constitutional mandate changed");
+  const authority = await loadRussianDumaAuthority({
+    db,
+    session,
+    country,
+    root: rootCohortId,
+    turn,
+  });
+  if (!authority) throw new Error("Duma campaign authority changed");
   const previous = await results.findOne({ _id: opening.previousResultId }, { session });
   if (
     !previous?.ballots ||
@@ -165,6 +181,7 @@ export async function materializeRussianDumaRepeatResult(input: {
     session,
     cohort,
     councilCohortId: country.ruFirstCouncilElectionCohortId,
+    convocationNumber: authority.number,
     protectedDumaPlayerOwners: russianDumaProtectedConstituencyOwners(previous.ballots),
   });
   const combined = resolveRussianDumaRepeatGeneration({
@@ -217,7 +234,7 @@ export async function materializeRussianDumaRepeatResult(input: {
   const bound = await countries.updateOne(
     {
       _id: "RU",
-      ruFirstDumaElectionCohortId: rootCohortId,
+      ...russianDumaRootFilter(country, rootCohortId),
       ruFederalAssemblyMandateSinceTurn: opening.mandateSinceTurn,
       ruFederalAssemblySinceTurn: country.ruFederalAssemblySinceTurn ?? { $exists: false },
     },

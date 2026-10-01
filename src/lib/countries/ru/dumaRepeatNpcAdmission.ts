@@ -18,6 +18,11 @@ import {
 import { registerRussianDumaNpcSlates } from "./dumaNpcRegistration";
 import { resolveRussianDumaRepeatGeneration } from "./rules/assemblyCohort";
 import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
+import {
+  russianDumaBoundRoot,
+  loadRussianDumaAuthority,
+  russianDumaRootFilter,
+} from "./dumaConvocationAuthority";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export async function materializeRussianDumaRepeatNpcAdmission(input: {
@@ -50,6 +55,8 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
       session,
       projection: {
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
@@ -58,7 +65,8 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
     }
   );
   if (
-    !country?.ruFirstDumaElectionCohortId?.equals(rootCohortId) ||
+    !country ||
+    !russianDumaBoundRoot(country)?.equals(rootCohortId) ||
     !hasAuthorizedPostSovietTransition(
       turn,
       country.ruSovietSuccessionSinceTurn,
@@ -69,6 +77,14 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
   const openings = db.collection<RussianDumaRepeatOpeningRecord>(
     RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION
   );
+  const authority = await loadRussianDumaAuthority({
+    db,
+    session,
+    country,
+    root: rootCohortId,
+    turn,
+  });
+  if (!authority) throw new Error("Duma campaign authority changed");
   const opening = await openings.findOne(
     { _id: `${rootCohortId.toHexString()}:repeat:${generation}` },
     { session }
@@ -178,6 +194,7 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
     session,
     cohortId: opening.cohortId,
     elections,
+    convocationNumber: authority.number,
     councilCohortId: country.ruFirstCouncilElectionCohortId,
     mandateSinceTurn: country.ruFederalAssemblyMandateSinceTurn,
     now,
@@ -204,7 +221,7 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
   const bound = await countries.updateOne(
     {
       _id: "RU",
-      ruFirstDumaElectionCohortId: rootCohortId,
+      ...russianDumaRootFilter(country, rootCohortId),
       ruFederalAssemblyMandateSinceTurn: opening.mandateSinceTurn,
       ruFederalAssemblySinceTurn: country.ruFederalAssemblySinceTurn ?? { $exists: false },
     },
@@ -231,14 +248,20 @@ export async function admitRussianDumaRepeatNpcNominees(
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1 } });
   if (game?.preset !== "1991-default") return null;
-  const country = await input.db
-    .collection<CountryGameState>("countryGameStates")
-    .findOne(
-      { _id: "RU", ruFirstDumaElectionCohortId: input.rootCohortId },
-      { projection: { ruSovietSuccessionSinceTurn: 1, ruFederalAssemblyMandateSinceTurn: 1 } }
-    );
+  const country = await input.db.collection<CountryGameState>("countryGameStates").findOne(
+    { _id: "RU" },
+    {
+      projection: {
+        ruSovietSuccessionSinceTurn: 1,
+        ruFederalAssemblyMandateSinceTurn: 1,
+        ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+      },
+    }
+  );
   if (
     !country ||
+    !russianDumaBoundRoot(country)?.equals(input.rootCohortId) ||
     !hasAuthorizedPostSovietTransition(
       input.turn,
       country.ruSovietSuccessionSinceTurn,

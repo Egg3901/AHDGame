@@ -9,13 +9,20 @@ import {
   RUSSIAN_ASSEMBLY_SEATINGS_COLLECTION,
   type RussianAssemblySeatingRecord,
 } from "./assemblySeating";
+import { loadRussianDumaAuthority, russianDumaBoundRoot } from "./dumaConvocationAuthority";
 import { validateRussianAssemblyRepeatTerm } from "./rules/assemblyTermBinding";
 export async function loadRussianAssemblyRepeatTerm(input: {
   db: Db;
   session?: ClientSession;
   country: Pick<
     CountryGameState,
-    "ruFederalAssemblySinceTurn" | "ruFirstDumaElectionCohortId" | "ruFirstCouncilElectionCohortId"
+    | "ruFederalAssemblySinceTurn"
+    | "ruFirstDumaElectionCohortId"
+    | "ruFirstCouncilElectionCohortId"
+    | "ruFederalAssemblyMandateSinceTurn"
+    | "ruSovietSuccessionSinceTurn"
+    | "ruDumaConvocationCohortId"
+    | "ruDumaCurrentConvocationCohortId"
   >;
   chamber: "duma" | "council";
   turn: number;
@@ -23,6 +30,45 @@ export async function loadRussianAssemblyRepeatTerm(input: {
   previous?: { _id: string; seatedOnTurn?: number };
 }) {
   const { db, session, country, previous } = input;
+  if (input.chamber === "duma" && country.ruDumaConvocationCohortId) {
+    const authority = await loadRussianDumaAuthority({
+      db,
+      session,
+      country,
+      root: russianDumaBoundRoot(country)!,
+      turn: input.turn,
+    });
+    if (!authority?.record) throw new Error("Ordinary Duma repeat lacks its convocation authority");
+    const record = authority.record;
+    if (
+      input.turn >= record.termEndTurn ||
+      (input.electionEndTurn != null &&
+        (!Number.isSafeInteger(input.electionEndTurn) ||
+          input.electionEndTurn < input.turn ||
+          input.electionEndTurn >= record.termEndTurn))
+    )
+      throw new Error("Duma repeat exceeds its original convocation term");
+    if (
+      previous?.seatedOnTurn != null &&
+      !(await db
+        .collection<RussianAssemblySeatingRecord>(RUSSIAN_ASSEMBLY_SEATINGS_COLLECTION)
+        .findOne(
+          {
+            countryId: "RU",
+            preset: "1991-default",
+            dumaRootCohortId: record.cohortId,
+            dumaResultId: previous._id,
+            seatedOnTurn: previous.seatedOnTurn,
+          },
+          { session, projection: { _id: 1 } }
+        ))
+    )
+      throw new Error("Duma predecessor seating needs its actual receipt");
+    return {
+      stage: record.seatedOnTurn == null ? ("pending" as const) : ("seated" as const),
+      termEndTurn: record.termEndTurn,
+    };
+  }
   const dumaRootId = country.ruFirstDumaElectionCohortId?.toHexString();
   const councilRootId = country.ruFirstCouncilElectionCohortId?.toHexString();
   const seated = country.ruFederalAssemblySinceTurn != null;

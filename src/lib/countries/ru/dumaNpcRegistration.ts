@@ -8,7 +8,7 @@ import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type { Election, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
-import { russianFirstAssemblyOfficeCompatible } from "./rules/assemblyOwnerEligibility";
+import { russianDumaConvocationOfficeCompatible } from "./rules/dumaConvocation";
 import { planRussianDumaNpcSlates } from "./rules/assemblyNpcSlates";
 
 export async function registerRussianDumaNpcSlates(input: {
@@ -18,6 +18,7 @@ export async function registerRussianDumaNpcSlates(input: {
   elections: readonly Election[];
   councilCohortId?: ObjectId;
   mandateSinceTurn?: number;
+  convocationNumber?: number;
   now: Date;
 }) {
   const { db, session, cohortId, elections, now } = input;
@@ -85,7 +86,7 @@ export async function registerRussianDumaNpcSlates(input: {
         eligible:
           !councilOwners.has(`npc:${row._id.toHexString()}`) &&
           (office === "dumaDeputy" ||
-            russianFirstAssemblyOfficeCompatible("dumaDeputy", office, "RU")),
+            russianDumaConvocationOfficeCompatible(input.convocationNumber ?? 1, office, "RU")),
       };
     }),
     activeCandidates: active.map((row) => ({

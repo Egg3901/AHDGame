@@ -9,6 +9,11 @@ import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { ensureBoundedNpcCandidateGuards } from "@/lib/admin/seed/indexes/boundedNpcCandidates";
 import { registerRussianDumaNpcSlates } from "./dumaNpcRegistration";
 import { resolveRussianDumaCohort } from "./rules/assemblyCohort";
+import {
+  russianDumaBoundRoot,
+  loadRussianDumaAuthority,
+  russianDumaRootFilter,
+} from "./dumaConvocationAuthority";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 export async function materializeRussianDumaNpcAdmission(input: {
   db: Db;
@@ -39,14 +44,18 @@ export async function materializeRussianDumaNpcAdmission(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaCurrentConvocationCohortId: 1,
         ruFirstCouncilElectionCohortId: 1,
+        ruFederalAssemblySinceTurn: 1,
         ruDumaNpcAdmissionCohortId: 1,
         ruDumaUnrepresentedParties: 1,
       },
     }
   );
   if (
-    !country?.ruFirstDumaElectionCohortId?.equals(cohortId) ||
+    !country ||
+    !russianDumaBoundRoot(country)?.equals(cohortId) ||
     !hasAuthorizedPostSovietTransition(
       turn,
       country.ruSovietSuccessionSinceTurn,
@@ -54,6 +63,8 @@ export async function materializeRussianDumaNpcAdmission(input: {
     )
   )
     return null;
+  const authority = await loadRussianDumaAuthority({ db, session, country, root: cohortId, turn });
+  if (!authority) throw new Error("Duma campaign authority changed");
   if (country.ruDumaNpcAdmissionCohortId?.equals(cohortId))
     return { created: 0, unrepresentedParties: country.ruDumaUnrepresentedParties ?? [] };
   const elections = await db
@@ -114,11 +125,12 @@ export async function materializeRussianDumaNpcAdmission(input: {
     councilCohortId: country.ruFirstCouncilElectionCohortId,
     mandateSinceTurn: country.ruFederalAssemblyMandateSinceTurn,
     now,
+    convocationNumber: authority.number,
   });
   const claimed = await countries.updateOne(
     {
       _id: "RU",
-      ruFirstDumaElectionCohortId: cohortId,
+      ...russianDumaRootFilter(country, cohortId),
       ruDumaNpcAdmissionCohortId: country.ruDumaNpcAdmissionCohortId ?? { $exists: false },
     },
     {
@@ -151,13 +163,18 @@ export async function admitRussianDumaNpcNominees(input: {
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1 } });
   if (game?.preset !== "1991-default") return null;
-  const country = await input.db
-    .collection<CountryGameState>("countryGameStates")
-    .findOne(
-      { _id: "RU", ruFirstDumaElectionCohortId: input.cohortId },
-      { projection: { ruDumaNpcAdmissionCohortId: 1, ruDumaUnrepresentedParties: 1 } }
-    );
-  if (!country) return null;
+  const country = await input.db.collection<CountryGameState>("countryGameStates").findOne(
+    { _id: "RU" },
+    {
+      projection: {
+        ruFirstDumaElectionCohortId: 1,
+        ruDumaConvocationCohortId: 1,
+        ruDumaNpcAdmissionCohortId: 1,
+        ruDumaUnrepresentedParties: 1,
+      },
+    }
+  );
+  if (!country || !russianDumaBoundRoot(country)?.equals(input.cohortId)) return null;
   if (country.ruDumaNpcAdmissionCohortId?.equals(input.cohortId))
     return { created: 0, unrepresentedParties: country.ruDumaUnrepresentedParties ?? [] };
   // DDL must finish outside the transaction. The source-pinned bootstrap
