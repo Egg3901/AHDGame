@@ -53,6 +53,7 @@ import {
   combinePhasePredicates,
   getSingleplayerPhasePredicate,
 } from "@/simulation/phases/singleplayerPhases";
+import { runPostTurnIntegrityScans } from "@/lib/turn/postTurnScans";
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
@@ -639,6 +640,11 @@ export async function processTurn(
     if (!localSingleplayer) {
       await db.collection<TurnLog>("turnLogs").insertOne(turnLog as TurnLog);
       turnLogWritten = true;
+      // Anti-abuse scans run after the commit, never holding up the turn
+      // (#2694). Results land on this turn log under postTurnScans.
+      void runPostTurnIntegrityScans(db, context.newTurn).catch((err) =>
+        console.warn("[post-turn] integrity scans failed to start", err)
+      );
     }
 
     emit({

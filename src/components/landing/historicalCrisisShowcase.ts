@@ -73,7 +73,7 @@ export const HISTORICAL_CRISIS_SHOWCASE: readonly HistoricalCrisisShowcaseEntry[
     lonLat: [14.42, 50.08],
     title: "Prague Spring",
     description:
-      "Czechoslovakia's reform movement sought a more open form of socialism. A Soviet-led Warsaw Pact invasion on 20–21 August ended the experiment.",
+      "Czechoslovakia's reform movement sought a more open form of socialism. A Soviet-led Warsaw Pact invasion on the night of 20 August ended the experiment.",
   },
   {
     id: "yom-kippur-war-1973",
@@ -105,7 +105,7 @@ export const HISTORICAL_CRISIS_SHOWCASE: readonly HistoricalCrisisShowcaseEntry[
     lonLat: [7.0, 50.5],
     title: "Able Archer 83",
     description:
-      "From 7–11 November, NATO rehearsed wartime command procedures, including nuclear release. Soviet fears surrounding the exercise made it an enduring symbol of Cold War miscalculation.",
+      "From 7 to 11 November, NATO rehearsed wartime command procedures, including nuclear release. Soviet fears surrounding the exercise made it an enduring symbol of Cold War miscalculation.",
   },
   {
     id: "chernobyl-1986",
