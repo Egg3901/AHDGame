@@ -1,47 +1,49 @@
-/** A ratified post-Soviet mandate opens Assembly elections from September 1993.
- * Congress remains until a certified replacement can take office from January
- * 1994. Raw turn markers keep the completed handover idempotent.
- * https://www.prlib.ru/news/2038679
- * https://www.constitution.ru/en/10003000-10.htm
+/**
+ * Russia replaces Congress only after both certified Assembly chambers can serve.
+ * processRuLegislatureTransition seats the receipt-backed replacement atomically;
+ * dates, mandates and legacy certification markers never vacate Congress alone.
  */
 import type { Db } from "mongodb";
-import type { CountryGameState, ElectedOfficial, GameState, State } from "@/lib/db/types";
-import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { GameState, CountryGameState } from "@/lib/db/types";
 import { calendarTurn } from "@/lib/utils/gameDate";
-import { ru1993LegislatureStage } from "@/lib/countries/ru/eras/1991";
-import { RU_1991_ECONOMIC_REGION_POPULATION } from "@/lib/countries/ru/data/ruPopulation1991";
-import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { ru1993LegislatureStage } from "./eras/1991";
+import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
-
+import { materializeRussianAssemblySeating } from "./assemblySeating";
 export async function processRuLegislatureTransition(
   db: Db,
   gameState: Pick<GameState, "preset" | "preIteration" | "preIterationTurns">,
   currentTurn: number,
   now: Date
 ): Promise<"none" | "dissolved" | "federalAssembly"> {
-  if (gameState.preset !== "1991-default") return "none";
-  const calendar = calendarTurn(currentTurn, {
-    preIterationActive: gameState.preIteration?.active,
-    preIterationTurns: gameState.preIterationTurns,
-  });
-  const stage = ru1993LegislatureStage(calendar);
-  if (stage === "congress") return "none";
-
-  const countries = db.collection<CountryGameState>("countryGameStates");
-  const country = await countries.findOne(
-    { _id: "RU" },
-    {
-      projection: {
-        ruSovietSuccessionSinceTurn: 1,
-        ruFederalAssemblyMandateSinceTurn: 1,
-        ruFederalAssemblyElectionCertifiedSinceTurn: 1,
-        ruCongressDissolvedSinceTurn: 1,
-        ruFederalAssemblySinceTurn: 1,
-      },
-    }
-  );
-  if (!country) return "none";
   if (
+    gameState.preset !== "1991-default" ||
+    ru1993LegislatureStage(
+      calendarTurn(currentTurn, {
+        preIterationActive: gameState.preIteration?.active,
+        preIterationTurns: gameState.preIterationTurns,
+      })
+    ) !== "federalAssembly"
+  )
+    return "none";
+  const country = await db
+    .collection<CountryGameState>("countryGameStates")
+    .findOne(
+      { _id: "RU" },
+      {
+        projection: {
+          ruFirstDumaElectionCohortId: 1,
+          ruFirstCouncilElectionCohortId: 1,
+          ruSovietSuccessionSinceTurn: 1,
+          ruFederalAssemblyMandateSinceTurn: 1,
+          ruFederalAssemblySinceTurn: 1,
+        },
+      }
+    );
+  if (
+    !country?.ruFirstDumaElectionCohortId ||
+    !country.ruFirstCouncilElectionCohortId ||
+    country.ruFederalAssemblySinceTurn != null ||
     !hasAuthorizedPostSovietTransition(
       currentTurn,
       country.ruSovietSuccessionSinceTurn,
@@ -49,62 +51,9 @@ export async function processRuLegislatureTransition(
     )
   )
     return "none";
-
-  if (stage !== "federalAssembly" || country.ruFederalAssemblySinceTurn != null) return "none";
-  if (
-    !Number.isSafeInteger(country.ruFederalAssemblyElectionCertifiedSinceTurn) ||
-    (country.ruFederalAssemblyElectionCertifiedSinceTurn ?? 0) <= 0 ||
-    (country.ruFederalAssemblyElectionCertifiedSinceTurn ?? Infinity) > currentTurn
-  )
-    return "none";
-
-  // The ten game macroregions are not the 89 federal subjects. Apportion only
-  // the Duma's 225 single-member tier by population; the other 225 are list
-  // seats and the first 178 Council seats have no subject-level model yet.
-  const allocation = apportionSeats(225, RU_1991_ECONOMIC_REGION_POPULATION);
-  const regions = await db
-    .collection<State>("states")
-    .find({ countryId: "RU" }, { projection: { _id: 1 } })
-    .toArray();
-  if (
-    regions.length !== Object.keys(allocation).length ||
-    regions.some((region) => allocation[String(region._id)] == null)
-  ) {
-    return "none";
-  }
-  // A mandate alone cannot leave the country without its seated Congress.
-  // Check the date, certification and complete replacement map before vacating it.
-  if (country.ruCongressDissolvedSinceTurn == null) {
-    await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
-      countryId: "RU",
-      officeType: "congressDeputy",
-    });
-  }
-  await db.collection<State>("states").bulkWrite(
-    regions.map((region) => ({
-      updateOne: {
-        filter: { _id: region._id, countryId: "RU" },
-        update: { $set: { houseDistricts: allocation[String(region._id)], stateSenateSeats: 0 } },
-      },
-    }))
+  const seated = await runRequiredTransaction(
+    (session) => materializeRussianAssemblySeating({ db, session, turn: currentTurn, now }),
+    { client: db.client }
   );
-  await db
-    .collection<GovernmentFormation>("governmentFormations")
-    .updateOne(
-      { _id: "RU" },
-      { $set: { totalSeats: 450, majorityThreshold: 226, updatedAt: now } }
-    );
-  await countries.updateOne(
-    { _id: "RU", ruFederalAssemblySinceTurn: { $exists: false } },
-    {
-      $set: {
-        ruFederalAssemblySinceTurn: currentTurn,
-        ...(country.ruCongressDissolvedSinceTurn == null
-          ? { ruCongressDissolvedSinceTurn: currentTurn }
-          : {}),
-        updatedAt: now,
-      },
-    }
-  );
-  return "federalAssembly";
+  return seated ? "federalAssembly" : "none";
 }

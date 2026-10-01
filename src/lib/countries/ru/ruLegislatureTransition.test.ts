@@ -1,13 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
+const mocks = vi.hoisted(() => ({ transaction: vi.fn(), seating: vi.fn() }));
+vi.mock("@/lib/db/runRequiredTransaction", () => ({ runRequiredTransaction: mocks.transaction }));
+vi.mock("./assemblySeating", () => ({ materializeRussianAssemblySeating: mocks.seating }));
 import { processRuLegislatureTransition } from "./ruLegislatureTransition";
-
 const NOW = new Date("2026-01-01T00:00:00Z");
-
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.transaction.mockImplementation((body) => body("active-session"));
+});
 describe("Russian 1993 legislature transition", () => {
-  it("does not advance the clock during the founding phase or other presets", async () => {
+  it("does not advance during founding or before January eligibility", async () => {
     const db = { collection: vi.fn() } as unknown as Db;
-    expect(await processRuLegislatureTransition(db, { preset: "1979-default" }, 141, NOW)).toBe(
+    expect(await processRuLegislatureTransition(db, { preset: "1979-default" }, 145, NOW)).toBe(
       "none"
     );
     expect(
@@ -18,83 +23,73 @@ describe("Russian 1993 legislature transition", () => {
         NOW
       )
     ).toBe("none");
-    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 128, NOW)).toBe(
-      "none"
-    );
-    expect(db.collection).not.toHaveBeenCalled();
-  });
-
-  it("keeps Congress after authorization and retires it only for a certified Assembly", async () => {
-    const writes: Array<[string, unknown]> = [];
-    const markers: Record<string, number> = {};
-    let ratified = false;
-    let certified = false;
-    const regionIds = Object.keys(
-      (await import("@/lib/countries/ru/data/ruPopulation1991")).RU_1991_ECONOMIC_REGION_POPULATION
-    );
-    const db = {
-      collection: (name: string) => ({
-        findOne: async () =>
-          name === "countryGameStates"
-            ? {
-                _id: "RU",
-                ...(ratified
-                  ? { ruSovietSuccessionSinceTurn: 48, ruFederalAssemblyMandateSinceTurn: 129 }
-                  : {}),
-                ...(certified ? { ruFederalAssemblyElectionCertifiedSinceTurn: 141 } : {}),
-                ...markers,
-              }
-            : null,
-        find: () => ({ toArray: async () => regionIds.map((_id) => ({ _id })) }),
-        deleteMany: async (filter: unknown) => {
-          writes.push([name, filter]);
-        },
-        updateOne: async (_filter: unknown, update: { $set?: Record<string, number> }) => {
-          writes.push([name, update]);
-          if (name === "countryGameStates") Object.assign(markers, update.$set);
-        },
-        bulkWrite: async (operations: unknown) => {
-          writes.push([name, operations]);
-        },
-      }),
-    } as unknown as Db;
-    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 129, NOW)).toBe(
-      "none"
-    );
-    expect(writes).toHaveLength(0);
-    ratified = true;
-    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 129, NOW)).toBe(
-      "none"
-    );
-    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 130, NOW)).toBe(
-      "none"
-    );
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 141, NOW)).toBe(
       "none"
     );
-    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
-      "none"
-    );
-    expect(writes).toHaveLength(0);
-    certified = true;
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+  it("delegates qualified handover to one required transaction using the connected client", async () => {
+    const db = {
+      client: "owned-client",
+      collection: () => ({
+        findOne: async () => ({
+          ruFirstDumaElectionCohortId: "duma",
+          ruFirstCouncilElectionCohortId: "council",
+          ruSovietSuccessionSinceTurn: 48,
+          ruFederalAssemblyMandateSinceTurn: 129,
+        }),
+      }),
+    } as unknown as Db;
+    mocks.seating.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
       "federalAssembly"
     );
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), {
+      client: "owned-client",
+    });
+    expect(mocks.seating).toHaveBeenCalledWith({
+      db,
+      session: "active-session",
+      turn: 145,
+      now: NOW,
+    });
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 146, NOW)).toBe(
       "none"
     );
-    expect(writes).toContainEqual([
-      "electedOfficials",
-      { countryId: "RU", officeType: "congressDeputy" },
-    ]);
-    const regions = writes.find(([name]) => name === "states")?.[1] as Array<{
-      updateOne: { update: { $set: { houseDistricts: number; stateSenateSeats: number } } };
-    }>;
-    expect(regions.reduce((sum, row) => sum + row.updateOne.update.$set.houseDistricts, 0)).toBe(
-      225
+  });
+  it("preserves legacy marker-only worlds without opening a transaction", async () => {
+    const db = {
+      collection: () => ({
+        findOne: async () => ({
+          ruSovietSuccessionSinceTurn: 48,
+          ruFederalAssemblyMandateSinceTurn: 129,
+          ruFederalAssemblyElectionCertifiedSinceTurn: 141,
+        }),
+      }),
+    } as unknown as Db;
+    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 145, NOW)).toBe(
+      "none"
     );
-    expect(regions.every((row) => row.updateOne.update.$set.stateSenateSeats === 0)).toBe(true);
-    expect(markers.ruCongressDissolvedSinceTurn).toBe(145);
-    expect(markers.ruFederalAssemblySinceTurn).toBe(145);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+  it("propagates failure instead of reporting an uncommitted handover", async () => {
+    mocks.seating.mockRejectedValueOnce(new Error("late receipt rejected"));
+    await expect(
+      processRuLegislatureTransition(
+        {
+          collection: () => ({
+            findOne: async () => ({
+              ruFirstDumaElectionCohortId: "duma",
+              ruFirstCouncilElectionCohortId: "council",
+              ruSovietSuccessionSinceTurn: 48,
+              ruFederalAssemblyMandateSinceTurn: 129,
+            }),
+          }),
+        } as unknown as Db,
+        { preset: "1991-default" },
+        145,
+        NOW
+      )
+    ).rejects.toThrow("late receipt rejected");
   });
 });
