@@ -58,6 +58,7 @@ import {
 } from "@/lib/sim/actorCoverage";
 import { parseSimActorMode } from "@/lib/sim/syntheticActors";
 import { completedTurnProgress } from "./simStatusMirror";
+import { preservedAutonomyLevel } from "./preparedSandbox";
 import {
   allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
@@ -488,6 +489,13 @@ async function main() {
   const { snapshotCorporationsByCountry } = await import("@/lib/turn/corporationCountrySnapshot");
 
   const db = await getDb();
+  const preservedState = preserveLiveConfig
+    ? await db.collection("gameState").findOne({ _id: "current" as never })
+    : null;
+  const requestedAutonomyLevel = AUTONOMY_LEVEL;
+  const effectiveAutonomyLevel = preserveLiveConfig
+    ? preservedAutonomyLevel(preservedState?.nppAutonomyLevel)
+    : requestedAutonomyLevel;
 
   // Executed source identity (#1966): this process's own cwd + git HEAD.
   // Best-effort SHA, but fails closed when a pin was requested and disagrees,
@@ -627,7 +635,7 @@ async function main() {
       sourceRevision: executedCommit,
       sourceWorktree: sourceWorktree ?? null,
       featureManifest: buildWorldsimFeatureManifest({
-        autonomyLevel: AUTONOMY_LEVEL,
+        autonomyLevel: effectiveAutonomyLevel,
         actorMode,
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         preIteration,
@@ -732,11 +740,11 @@ async function main() {
     }
 
     log(
-      `Forcing NPP autonomy (${AUTONOMY_LEVEL}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
+      `Forcing NPP autonomy (${effectiveAutonomyLevel}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
     );
     await forceFullAutonomy(
       db,
-      AUTONOMY_LEVEL,
+      effectiveAutonomyLevel,
       foreignPolicyMode,
       foreignPolicyStage,
       preservePlayerRail
@@ -751,7 +759,7 @@ async function main() {
             singleplayerConfig: {
               mode: "worldsim",
               difficulty,
-              nppAutonomyLevel: AUTONOMY_LEVEL,
+              nppAutonomyLevel: effectiveAutonomyLevel,
               featureFlags: {},
               permanentHeadOfState: false,
               configuredAt: new Date(),
@@ -841,7 +849,7 @@ async function main() {
           error: null,
           source,
           ...(corporationBootstrap ? { corporationBootstrap } : {}),
-          autonomyLevel: AUTONOMY_LEVEL,
+          autonomyLevel: effectiveAutonomyLevel,
           ...(difficulty ? { difficulty } : {}),
           bootstrapConformance: {
             status: bootstrapConformance.status,
@@ -871,7 +879,7 @@ async function main() {
           status: "running",
           error: null,
           source,
-          autonomyLevel: AUTONOMY_LEVEL,
+          autonomyLevel: effectiveAutonomyLevel,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
         },
@@ -1013,10 +1021,10 @@ async function main() {
     }
     const converted = await applyCloneControllerPolicy(db, log, preservePlayerRail);
     if (converted > 0) log(`[clone] autonomized ${converted} human-run corporations → ceoType=npp`);
-    log(`[clone] forcing full NPP autonomy (world/country gates → ${AUTONOMY_LEVEL})`);
+    log(`[clone] forcing full NPP autonomy (world/country gates → ${effectiveAutonomyLevel})`);
     await forceFullAutonomy(
       db,
-      AUTONOMY_LEVEL,
+      effectiveAutonomyLevel,
       foreignPolicyMode,
       foreignPolicyStage,
       preservePlayerRail
@@ -1110,8 +1118,12 @@ async function main() {
       $set: {
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         electionScope: electionScope ? [...electionScope] : null,
-        nppForeignPolicyMode: foreignPolicyMode,
-        nppForeignPolicyStage: foreignPolicyStage,
+        nppForeignPolicyMode: preserveLiveConfig
+          ? (preservedState?.nppForeignPolicyMode ?? null)
+          : foreignPolicyMode,
+        nppForeignPolicyStage: preserveLiveConfig
+          ? (preservedState?.nppForeignPolicyStage ?? null)
+          : foreignPolicyStage,
         actorMode,
         preservePlayerRail,
         preserveLiveConfig,
