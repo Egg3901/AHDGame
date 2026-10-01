@@ -166,7 +166,8 @@ export async function materializeRussianDumaNpcAdmission(input: {
       homeState: row.homeState,
       eligible:
         !row.currentOffice ||
-        ["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(row.currentOffice),
+        (typeof row.currentOffice === "string" &&
+          ["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(row.currentOffice)),
     })),
     activeCandidates: active.map((row) => ({
       electionId: row.electionId.toHexString(),
