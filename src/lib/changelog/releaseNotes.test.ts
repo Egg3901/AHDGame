@@ -20,7 +20,7 @@ describe("release balance detail", () => {
     expect(release).toContain("Commons threshold: 20% to 10%.");
     expect(release).toContain("US House uses a separate rule.");
     expect(release).toContain("Fairer seat thresholds.");
-    const html = renderToStaticMarkup(createElement(ReactMarkdown, { children: release }));
+    const html = renderToStaticMarkup(createElement(ReactMarkdown, null, release));
     for (const item of html.match(/<li>[\s\S]*?<\/li>/g) ?? []) {
       expect(item).not.toMatch(/<h[1-6][ >]/);
     }
