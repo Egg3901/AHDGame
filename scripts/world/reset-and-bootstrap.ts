@@ -1,4 +1,5 @@
-import { connectDb, closeDb } from "../utils/db";
+import { connectDb } from "../utils/db";
+import { closeResetDb } from "./closeResetDb";
 import type { BootstrapMode } from "@/lib/admin/bootstrapGameWorld";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -110,7 +111,7 @@ async function main() {
       console.log(`- electedOfficials: ${bootstrap.electedOfficials}`);
     }
   } finally {
-    await closeDb();
+    await closeResetDb();
   }
 }
 
