@@ -21,7 +21,8 @@ import { StockTicker } from "./components/StockTicker";
 import { ExchangeSelector, type ExchangeCompareRow } from "./components/ExchangeSelector";
 import { WireTicker } from "@/components/news/WireTicker";
 import { MarketOverview } from "./components/MarketOverview";
-import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
+import { yearOfTurn } from "@/lib/utils/gameDate";
 import { StockList } from "./components/StockList";
 import { WealthList } from "./components/WealthList";
 import { BondTable } from "./components/BondTable";
@@ -312,8 +313,11 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     currentTurn > 0
       ? `${
           turnStatus?.currentYear ??
-          (turnStatus?.startingYear ?? STARTING_YEAR) +
-            Math.floor((currentTurn - 1) / TURNS_PER_YEAR)
+          yearOfTurn(
+            currentTurn,
+            turnStatus?.startingYear ?? STARTING_YEAR,
+            turnStatus ?? undefined
+          )
         }`
       : "";
 
