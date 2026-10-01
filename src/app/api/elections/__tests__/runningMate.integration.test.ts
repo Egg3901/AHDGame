@@ -84,22 +84,20 @@ describe("Presidential running mate integration tests", () => {
     const updateOne = vi.fn();
     const mockDb = {
       collection: (name: string) => ({
-        findOne: vi
-          .fn()
-          .mockResolvedValue(
-            name === "elections"
-              ? { _id: electionId, countryId: "US", electionType: "president", status: "active" }
-              : name === "electionCandidates"
-                ? { _id: candidateId, characterId: candidateId, status: "active" }
-                : name === "characters"
-                  ? {
-                      _id: runningMateId,
-                      userId: new ObjectId(),
-                      countryId: "US",
-                      federationPendingResidenceId: "settlement-application",
-                    }
-                  : null
-          ),
+        findOne: vi.fn().mockResolvedValue(
+          name === "elections"
+            ? { _id: electionId, countryId: "US", electionType: "president", status: "active" }
+            : name === "electionCandidates"
+              ? { _id: candidateId, characterId: candidateId, status: "active" }
+              : name === "characters"
+                ? {
+                    _id: runningMateId,
+                    userId: new ObjectId(),
+                    countryId: "US",
+                    federationPendingResidenceId: "settlement-application",
+                  }
+                : null
+        ),
         updateOne,
       }),
     };
