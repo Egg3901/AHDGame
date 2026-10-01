@@ -25,8 +25,10 @@ import { registerRussianCouncilPlayerCandidate } from "./councilPlayerFiling";
 import {
   certifyRussianCouncilElection,
   RUSSIAN_COUNCIL_RESULTS_COLLECTION,
+  type RussianCouncilResultRecord,
 } from "./councilElectionResult";
 import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
+import { resolveRussianCouncilGenerations } from "./councilResolution";
 import { certifyRussianCouncilRepeat } from "./councilRepeatResult";
 import { openRussianCouncilRepeat } from "./councilRepeatOpening";
 import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "./data/councilSubjects1993";
@@ -660,8 +662,19 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).countDocuments()).toBe(1);
     await db.command({ collMod: RUSSIAN_COUNCIL_RESULTS_COLLECTION, validator: {} });
     commands = 0;
-    const certified = await certifyRussianCouncilRepeat(certification);
-    expect(commands).toBeLessThanOrEqual(25);
+    expect(
+      await resolveRussianCouncilGenerations(
+        db,
+        [{ ...repeatElection!, status: "completed", endTurn: 154 }],
+        154,
+        new Date(4000)
+      )
+    ).toBe(1);
+    expect(commands).toBeLessThanOrEqual(26);
+    const certified = (await db
+      .collection<RussianCouncilResultRecord>(RUSSIAN_COUNCIL_RESULTS_COLLECTION)
+      .findOne({ _id: currentOpening.cohortId.toHexString() }))!;
+    expect(certified).not.toBeNull();
     expect(certified.result.reduce((sum, row) => sum + row.winners.length, 0)).toBe(177);
     expect(certified.result[1].winners).toHaveLength(1);
     expect(

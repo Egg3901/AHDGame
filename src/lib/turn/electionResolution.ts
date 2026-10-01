@@ -9,6 +9,7 @@ import {
   readyRussianDumaCohorts,
   readyRussianDumaRepeats,
 } from "@/lib/countries/ru/rules/assemblyDispatch";
+import { resolveRussianCouncilGenerations } from "@/lib/countries/ru/councilResolution";
 import { certifyRussianDumaRepeat } from "@/lib/countries/ru/dumaRepeatResult";
 import {
   RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
@@ -114,6 +115,7 @@ export async function resolveGeneralElections(
 
   let resolved = 0;
   if (gameStateDoc?.preset === "1991-default") {
+    resolved += await resolveRussianCouncilGenerations(db, completedElections, currentTurn, now);
     const cohorts = readyRussianDumaCohorts(
       completedElections.map((row) => ({
         id: row._id.toHexString(),
@@ -244,8 +246,8 @@ export async function resolveGeneralElections(
   for (const election of completedElections) {
     if (
       election.countryId === "RU" &&
-      election.electionType === "dumaDeputy" &&
-      election.russianDumaRound
+      ((election.electionType === "dumaDeputy" && election.russianDumaRound) ||
+        (election.electionType === "federationCouncilMember" && election.russianCouncilRound))
     )
       continue;
     const order = generalElectionResolutionOrder(election);
