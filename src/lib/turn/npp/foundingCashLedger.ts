@@ -1,6 +1,10 @@
 /** Witness the exact founding expense only after its stamped cash write lands. */
 import * as Sentry from "@sentry/nextjs";
 import { type ObjectId, type AnyBulkWriteOperation, type Document, type Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
+import { buildNppFoundedSectorInserts } from "./capacityWriteback";
+import { buildNppCorpUpdateOp } from "./nppCashWrite";
+import type { NppCorpDecision } from "./corpDecisionTypes";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { isAnchorBalanced } from "@/lib/ledger/epsilon";
@@ -51,6 +55,53 @@ export function buildNppFoundingCashWitness(input: {
       ],
     },
   };
+}
+
+/** Construct the business writes and attach an observer to their shared cash operation. */
+export function buildNppDecisionCashWrites(args: {
+  decision: NppCorpDecision;
+  corporationId: ObjectId;
+  currencyCode: CurrencyCode | null | undefined;
+  rate: number;
+  shadowEnabled: boolean;
+  blocked: ReadonlySet<CountryId>;
+  turn: number;
+  now: Date;
+}) {
+  // The founded sector's existing business id doubles as the atomic audit key.
+  const founded = args.decision.newSectors
+    ? buildNppFoundedSectorInserts({
+        corporationId: args.corporationId,
+        newSectors: args.decision.newSectors,
+        blocked: args.blocked,
+        turn: args.turn,
+        now: args.now,
+      })
+    : [];
+  const update = buildNppCorpUpdateOp(args.decision);
+  const witness =
+    update &&
+    args.shadowEnabled &&
+    args.currencyCode &&
+    args.decision.foundingCashLocal &&
+    founded.length === 1
+      ? buildNppFoundingCashWitness({
+          corporationId: args.corporationId,
+          key: founded[0]._id,
+          amountLocal: args.decision.foundingCashLocal,
+          currencyCode: args.currencyCode,
+          rate: args.rate,
+          turn: args.turn,
+          now: args.now,
+        })
+      : null;
+  if (update && witness) {
+    update.update.$set = {
+      ...update.update.$set,
+      nppFoundingCashWitnessKey: witness.key.toHexString(),
+    };
+  }
+  return { founded, update, witness };
 }
 
 /** One projected cohort read and one idempotent batch, including partial failures. */

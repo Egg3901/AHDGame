@@ -1,5 +1,5 @@
 import {
-  buildNppFoundingCashWitness,
+  buildNppDecisionCashWrites,
   type NppFoundingCashWitness,
 } from "@/lib/turn/npp/foundingCashLedger";
 import type { Db, ObjectId } from "mongodb";
@@ -74,7 +74,6 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
-import { buildNppCorpUpdateOp } from "@/lib/turn/npp/nppCashWrite";
 import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
 import {
   CAPACITY_BUILD_TURNS,
@@ -122,7 +121,6 @@ import {
 import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
 import {
   appendNppReinvestCapexRows,
-  buildNppFoundedSectorInserts,
   depleteUnownedPoolsForDraws,
   drawFoundedCapacityFromPools,
   flushNppCapacityWriteback,
@@ -541,39 +539,22 @@ export async function processNppCorporationDecisions(
     // Gated inside the builder, not on `updates` alone: the cash leg no longer
     // lives in `updates`, so a decision whose only effect is a spend would be
     // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
-    // Reuse a business sector id for the audit key. Observer bookkeeping must
-    // not consume an extra id before the remaining business writes are built.
-    const founded = decision.newSectors
-      ? buildNppFoundedSectorInserts({
-          corporationId: corp._id,
-          newSectors: decision.newSectors,
-          blocked,
-          turn,
-          now,
-        })
-      : [];
-    const corpUpdateOp = buildNppCorpUpdateOp(decision);
-    if (corpUpdateOp) {
-      if (ledgerShadow && corpCurrency && decision.foundingCashLocal && founded.length === 1) {
-        const witness = buildNppFoundingCashWitness({
-          corporationId: corp._id,
-          key: founded[0]._id,
-          amountLocal: decision.foundingCashLocal,
-          currencyCode: corpCurrency,
-          rate: corpFxRate,
-          turn,
-          now,
-        });
-        if (witness) {
-          corpUpdateOp.update.$set = {
-            ...corpUpdateOp.update.$set,
-            nppFoundingCashWitnessKey: witness.key.toHexString(),
-          };
-          foundingCashWitnesses.push(witness);
-        }
-      }
-      corpUpdates.push(corpUpdateOp);
-    }
+    const {
+      founded,
+      update: corpUpdateOp,
+      witness,
+    } = buildNppDecisionCashWrites({
+      decision,
+      corporationId: corp._id,
+      currencyCode: corpCurrency,
+      rate: corpFxRate,
+      shadowEnabled: ledgerShadow,
+      blocked,
+      turn,
+      now,
+    });
+    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
+    if (witness) foundingCashWitnesses.push(witness);
 
     // Budget tech from post-decision cash and preserve the same safety floor.
     if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {

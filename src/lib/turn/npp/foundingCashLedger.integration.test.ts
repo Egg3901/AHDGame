@@ -168,6 +168,7 @@ it("rejects a stamp from a different or unmatched cash write", async () => {
   const { db, id } = fixture(cases[0]),
     pending = buildNppFoundingCashWitness({
       corporationId: id,
+      key: new ObjectId(),
       amountLocal: 100,
       currencyCode: "USD",
       rate: 1,
