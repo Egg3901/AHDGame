@@ -686,7 +686,6 @@ export interface CountryGameState {
   ruFederalAssemblyMandateSinceTurn?: number;
   /** Bound first-Duma election cohort; opening it does not retire Congress. */
   ruFirstDumaElectionCohortId?: ObjectId;
-  /** Latest ordinary Duma campaign; first-election roots remain immutable. */
   /** Optional enacted Council formation law; existing first roots remain immutable. */
   ruCouncilFormationMandate?: {
     mode: "regionalHeads" | "regionalDelegates";
@@ -702,6 +701,7 @@ export interface CountryGameState {
     sinceTurn: number;
     receiptId: string;
   };
+  /** Latest ordinary Duma campaign; first-election roots remain immutable. */
   ruDumaConvocationCohortId?: ObjectId;
   /** Latest actually seated ordinary Duma, independent of an open successor campaign. */
   ruDumaCurrentConvocationCohortId?: ObjectId;
