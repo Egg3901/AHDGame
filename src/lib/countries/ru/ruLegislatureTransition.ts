@@ -7,9 +7,9 @@ import { RU_1991_ECONOMIC_REGION_POPULATION } from "@/lib/countries/ru/data/ruPo
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
-/** A ratified post-Soviet constitutional mandate may retire Congress from
- * September 1993 and open the Federal Assembly from January 1994. Raw turn
- * markers keep each enacted step idempotent across worker retries.
+/** A ratified post-Soviet mandate opens Assembly elections from September 1993.
+ * Congress remains until a certified replacement can take office from January
+ * 1994. Raw turn markers keep the completed handover idempotent.
  * https://www.prlib.ru/news/2038679
  * https://www.constitution.ru/en/10003000-10.htm
  */
@@ -50,20 +50,6 @@ export async function processRuLegislatureTransition(
   )
     return "none";
 
-  if (country.ruCongressDissolvedSinceTurn == null) {
-    await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
-      countryId: "RU",
-      officeType: "congressDeputy",
-    });
-    await db
-      .collection<GovernmentFormation>("governmentFormations")
-      .updateOne({ _id: "RU" }, { $set: { totalSeats: 0, majorityThreshold: 1, updatedAt: now } });
-    await countries.updateOne(
-      { _id: "RU", ruCongressDissolvedSinceTurn: { $exists: false } },
-      { $set: { ruCongressDissolvedSinceTurn: currentTurn, updatedAt: now } }
-    );
-    if (stage !== "federalAssembly") return "dissolved";
-  }
   if (stage !== "federalAssembly" || country.ruFederalAssemblySinceTurn != null) return "none";
   if (
     !Number.isSafeInteger(country.ruFederalAssemblyElectionCertifiedSinceTurn) ||
@@ -86,6 +72,14 @@ export async function processRuLegislatureTransition(
   ) {
     return "none";
   }
+  // A mandate alone cannot leave the country without its seated Congress.
+  // Check the date, certification and complete replacement map before vacating it.
+  if (country.ruCongressDissolvedSinceTurn == null) {
+    await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
+      countryId: "RU",
+      officeType: "congressDeputy",
+    });
+  }
   await db.collection<State>("states").bulkWrite(
     regions.map((region) => ({
       updateOne: {
@@ -102,7 +96,15 @@ export async function processRuLegislatureTransition(
     );
   await countries.updateOne(
     { _id: "RU", ruFederalAssemblySinceTurn: { $exists: false } },
-    { $set: { ruFederalAssemblySinceTurn: currentTurn, updatedAt: now } }
+    {
+      $set: {
+        ruFederalAssemblySinceTurn: currentTurn,
+        ...(country.ruCongressDissolvedSinceTurn == null
+          ? { ruCongressDissolvedSinceTurn: currentTurn }
+          : {}),
+        updatedAt: now,
+      },
+    }
   );
   return "federalAssembly";
 }
