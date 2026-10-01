@@ -1,4 +1,5 @@
 "use client";
+import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
 
 import { use, useCallback, useEffect, useState, Suspense } from "react";
 import BackButton from "@/components/BackButton";
@@ -227,7 +228,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                         : "border-transparent text-muted hover:text-foreground"
                     }`}
                   >
-                    {tf}
+                    {MARKET_TIMEFRAMES[tf].label}
                   </button>
                 ))}
               </div>

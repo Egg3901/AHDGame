@@ -1,4 +1,5 @@
 "use client";
+import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
 
 import { useState, useEffect, use, Suspense, useCallback, useMemo } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
@@ -837,7 +838,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
             <div className="px-4 py-3">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                  {stockTimeframe.toUpperCase()}
+                  {MARKET_TIMEFRAMES[stockTimeframe].label}
                 </span>
                 <div className="flex items-center gap-0.5 bg-card-elevated rounded px-0.5 py-px border border-card-border">
                   {(["1h", "24h", "48h"] as const).map((tf) => (
@@ -850,7 +851,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
                           : "text-muted hover:text-foreground"
                       }`}
                     >
-                      {tf}
+                      {MARKET_TIMEFRAMES[tf].label}
                     </button>
                   ))}
                 </div>
@@ -878,7 +879,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
 
         {/* Market Overview Chart on equity tabs; a compact contextual strip on
             wealth/funds/auctions where a total-market index adds little. */}
-        {/* Candle chart on equity tabs. Owns its range (24H/7D/1M/1Y/ALL);
+        {/* Candle chart on equity tabs. Owns its game-calendar range;
             the strip timeframe keeps driving the tables. */}
         {activeTab === "stocks" ||
         activeTab === "stats" ||

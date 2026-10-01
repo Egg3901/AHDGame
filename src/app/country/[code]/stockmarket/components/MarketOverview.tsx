@@ -710,6 +710,9 @@ export function MarketOverview({
         {last && (
           <p className="mb-2 text-xs text-muted">
             Through {marketTurnLabel(last.endTurn ?? last.turn, meta?.calendar ?? null, true)}
+            {bucketed && (last.endTurn ?? last.turn) - last.turn + 1 < bucketTurns
+              ? " · partial bucket"
+              : ""}
             {meta?.asOf && (
               <>
                 {" "}
