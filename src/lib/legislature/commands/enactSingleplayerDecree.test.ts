@@ -6,10 +6,15 @@ vi.mock("@/lib/legislationEffects", () => ({
 }));
 vi.mock("@/lib/billEnactment", () => ({ onBillEnacted: vi.fn(async () => undefined) }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn(async () => ({ currentTurn: 42 })) }));
+vi.mock("@/lib/analytics/serverPosthog", () => ({
+  captureServerGameEvent: vi.fn(async () => undefined),
+  flushServerPosthog: vi.fn(async () => undefined),
+}));
 
 import { applyLegislationEffect } from "@/lib/legislationEffects";
 import { onBillEnacted } from "@/lib/billEnactment";
 import { enactSingleplayerDecree } from "./enactSingleplayerDecree";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 
 describe("singleplayer head-of-state decrees", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -35,6 +40,10 @@ describe("singleplayer head-of-state decrees", () => {
       expect.objectContaining({ status: "signed" }),
       42
     );
+    expect(flushServerPosthog).toHaveBeenCalledOnce();
+    expect(vi.mocked(flushServerPosthog).mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(onBillEnacted).mock.invocationCallOrder[0]
+    );
   });
 
   it("does not apply effects when another worker already changed the bill", async () => {
@@ -45,5 +54,6 @@ describe("singleplayer head-of-state decrees", () => {
       enactSingleplayerDecree(db as never, { _id: new ObjectId(), status: "active" } as never)
     ).resolves.toBe(false);
     expect(applyLegislationEffect).not.toHaveBeenCalled();
+    expect(flushServerPosthog).not.toHaveBeenCalled();
   });
 });

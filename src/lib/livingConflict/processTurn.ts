@@ -1,3 +1,4 @@
+import { loadFinancialExposure } from "./financialExposure";
 import { PANDEMIC_KEY, pandemicParticipants } from "./rules/pandemic";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -103,14 +104,14 @@ export async function materializeLivingConflictEvent(
     .collection<Crisis>("crises")
     .findOne(
       { "globalResponse.conflictKey": def.key, status: "active" },
-      { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+      { projection: { _id: 1, startTurn: 1, durationTurns: 1 }, sort: { startTurn: -1 } }
     );
   const activeNegotiationWindow = driven.fired.event.negotiation
     ? await db
         .collection<Crisis>("crises")
         .findOne(
           { livingConflictEventId: { $regex: `^${def.key}:` }, status: "active" },
-          { projection: { _id: 1, startTurn: 1, durationTurns: 1 } }
+          { projection: { _id: 1, startTurn: 1, durationTurns: 1 }, sort: { startTurn: -1 } }
         )
     : null;
   const activeWindow = activeGlobalWindow ?? activeNegotiationWindow;
@@ -251,8 +252,14 @@ export async function processLivingConflictsTurn(
     let externalPressure =
       def.key === "vietnam" && typeof currentYear === "number" ? vietnamExternalPressure : 0;
     let openingTrackDeltas: Record<string, number> = {};
+    let observedTrackValues: Record<string, number> = {};
     if (def.key === GLOBAL_FINANCIAL_CRISIS_KEY) {
-      const signal = await loadFinancialCrisisSignal(db, currentTurn);
+      const [signal, exposure] = await Promise.all([
+        loadFinancialCrisisSignal(db, currentTurn),
+        loadFinancialExposure(db, availableCountryIds),
+      ]);
+      participants = exposure.participants;
+      observedTrackValues = { euroSovereignExposure: exposure.euroExposure };
       externalPressure = signal.pressure;
       openingTrackDeltas = signal.openingTrackDeltas;
     }
@@ -263,7 +270,8 @@ export async function processLivingConflictsTurn(
       currentTurn,
       currentYear,
       externalPressure,
-      openingTrackDeltas
+      openingTrackDeltas,
+      observedTrackValues
     );
     if (def.key === "northern_ireland") {
       result.state = await reconcileNorthernIrelandRatification(

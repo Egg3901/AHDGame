@@ -50,10 +50,15 @@ const UNATTRIBUTED_REASON = "unattributed";
  * §3 (Phase 3) and docs/plans/2026-07-06-shadow-ledger-phase3-backlog.md.
  */
 const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = {
+  corp_sector_founding: "sector_founding_cash",
+  org_cash: "organization_fund_cash",
+  org_tribute_mint: "organization_tribute_unmodeled",
   gov_bond_maturity_payment: "bond_settlement",
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",
   bond_coupon: "bond_coupon_settlement",
+  bond_pool_inflow: "bond_pool_excluded_liquidity",
+  bond_pool_sweep: "bond_pool_excluded_liquidity",
   gov_defense_overdraft: "defense_appropriation_overdraft",
   // This is the issuer-side settlement row paired with dissolution payouts.
   // It records a modeled default loss, not an unexplained money-supply leak.
@@ -61,6 +66,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   corp_tax_paid: "taxation",
   gov_tax_revenue: "taxation",
   corp_revenue: "sector_revenue",
+  corp_operating_loss: "corporate_operating_loss",
   // The buyer is the defence appropriation sub-account, which the stock-check ledger does
   // not yet model as a real account. Name the contra instead of reporting an unexplained mint.
   defence_contract_payment: "defence_procurement",
@@ -168,6 +174,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   stock_order_escrow: "order_escrow",
   stock_order_refund: "order_escrow",
   corp_escrow_funding: "escrow_transfer",
+  corp_escrow_withdrawal: "escrow_transfer",
   corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",
   pension_benefit: "pension_transfer",
@@ -282,6 +289,27 @@ export function deriveLedgerEntry(
   tx: DerivableTx,
   emitSite = "financialTxLog/emit.ts:shim"
 ): LedgerEntryInput | null {
+  // These marked rows describe tax-base or holder-service statistics. Their
+  // emitters never move treasury cash; the fiscal accrual owner witnesses that.
+  if (
+    (tx.type === "gov_tax_revenue" || tx.type === "gov_coupon_payment") &&
+    tx.meta?.treasuryCashMovement === false
+  )
+    return null;
+  // Securitizing historical principal changes its instrument, never treasury cash.
+  if (tx.type === "gov_bond_issuance" && tx.meta?.reconcile === true) return null;
+  // The settlement already owns a durable multi-leg witness for this receipt.
+  if (tx.type === "gov_bond_issuance" && tx.meta?.ledgerOwnedBySettlement === true) return null;
+  // Charter vaults are separate from corporate liquid capital. These marked
+  // receipts retain the native settlement without inventing a stock witness
+  // for an account the balance snapshot does not currently include.
+  if (
+    tx.meta?.bankVaultMovement === true &&
+    (tx.type === "bank_cb_advance" ||
+      tx.type === "bank_prop_trade_buy" ||
+      tx.type === "bank_prop_trade_sell")
+  )
+    return null;
   const anchor = tx.anchorAmount;
   // No anchor value → not derivable in ₳ terms; skip rather than guess a rate
   // (deriving anchor from the live FX table causes historical drift — plan §5).

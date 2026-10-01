@@ -21,7 +21,7 @@ import type {
   StateDemographics,
   VoteTurnSnapshot,
 } from "@/lib/db/types";
-import { ObjectId } from "mongodb";
+import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import { getStateApprovalForElection } from "@/lib/utils/getStateApprovalForElection";
 import type {
   StatePartyOrg,
@@ -130,6 +130,11 @@ export async function accumulateVoteTurn(
   turnNumber: number,
   now: Date,
   options?: {
+    /**
+     * When present, the tally update is appended here instead of written, so
+     * the caller can flush every race's update in one bulk write (#2695).
+     */
+    tallyWrites?: AnyBulkWriteOperation<ElectionVoteTally>[];
     approvalMap?: Map<string, number>;
     preload?: AccumulateVoteTurnPreload;
     /** The election document, when the caller already holds it; saves a read per election. */
@@ -140,7 +145,7 @@ export async function accumulateVoteTurn(
     candidates?: ElectionCandidate[];
   }
 ): Promise<void> {
-  const db = await getDb();
+  const db = options?.preload?.db ?? (await getDb());
   const memo = options?.preload?.turnMemo;
 
   const [tally, candidates]: [ElectionVoteTally | null, ElectionCandidate[]] = await Promise.all([
@@ -325,6 +330,7 @@ export async function accumulateVoteTurn(
       countryId: electionCountryId,
       partiesCache: memo?.partiesByCountry,
       preload: memo?.candidatePreload,
+      db: options?.preload?.db,
     }),
     memoized(memo?.partyGroupFavorabilityByCountryTurn, `${electionCountryId}:${turnNumber}`, () =>
       loadPartyGroupFavorability(db, electionCountryId, turnNumber)
@@ -551,7 +557,10 @@ export async function accumulateVoteTurn(
     // below, never the raw-vote-share fallback, which would price a meaningless
     // margin for a single winner — and on a VACANT seat would hand out an
     // incumbency bonus with no incumbent behind it.
-    isGeneralElection ? getIncumbentSeatShareByParty(election, db) : undefined,
+    isGeneralElection
+      ? (options?.preload?.incumbentSeatShareByElection?.get(electionId.toString()) ??
+        getIncumbentSeatShareByParty(election, db))
+      : undefined,
     // Money driver. Aggregate per-party recent spend across all campaigns
     // in the race (carried stock plus this turn's accumulator). Reads
     // spend persistence, not treasury balance; the `campaignSpendReset`
@@ -959,30 +968,34 @@ export async function accumulateVoteTurn(
     }
   }
 
-  await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
-    { electionId },
-    {
-      $set: {
-        totalVotes: newTotals,
-        candidateNames: cleanedNames,
-        candidateParties: cleanedParties,
-        ...(councilTotals
-          ? { russianCouncilBallot: { ...tally.russianCouncilBallot, ...councilTotals.ledger } }
-          : {}),
-        ...(isBoundDuma
-          ? {
-              russianDumaBallot: {
-                ...tally.russianDumaBallot,
-                againstAllVotes: tally.russianDumaBallot?.againstAllVotes ?? 0,
-              },
-            }
-          : {}),
-        ...(seatsEstimate ? { seatsEstimate } : {}),
-        updatedAt: now,
-      },
-      $push: { turnSnapshots: snapshot } as never,
-    }
-  );
+  const tallyUpdate = {
+    $set: {
+      totalVotes: newTotals,
+      candidateNames: cleanedNames,
+      candidateParties: cleanedParties,
+      ...(councilTotals
+        ? { russianCouncilBallot: { ...tally.russianCouncilBallot, ...councilTotals.ledger } }
+        : {}),
+      ...(isBoundDuma
+        ? {
+            russianDumaBallot: {
+              ...tally.russianDumaBallot,
+              againstAllVotes: tally.russianDumaBallot?.againstAllVotes ?? 0,
+            },
+          }
+        : {}),
+      ...(seatsEstimate ? { seatsEstimate } : {}),
+      updatedAt: now,
+    },
+    $push: { turnSnapshots: snapshot } as never,
+  };
+  if (options?.tallyWrites) {
+    options.tallyWrites.push({ updateOne: { filter: { electionId }, update: tallyUpdate } });
+    return;
+  }
+  await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .updateOne({ electionId }, tallyUpdate);
 }
 
 // ─── Initialize a blank tally for an election ────────────────────────────────

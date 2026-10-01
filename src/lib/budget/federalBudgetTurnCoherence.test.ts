@@ -89,6 +89,14 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + bond-ledg
 
   async function setup(): Promise<Db> {
     memory = createInMemoryDb();
+    memory.seed(
+      "exchangeRates",
+      ["USD", "RUB", "SUR", "GRD", "EUR"].map((currencyCode) => ({
+        _id: currencyCode,
+        currencyCode,
+        rate: 1,
+      }))
+    );
     const db = memory as unknown as Db;
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db);

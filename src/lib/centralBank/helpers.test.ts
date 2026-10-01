@@ -7,6 +7,7 @@ import {
   buildPrimeRateByCountry,
   getBankId,
   getCentralBankScope,
+  getMonetaryPolicyScope,
   getConfiguredSharedBankMemberCountries,
   getRepresentativeCentralBankCountry,
 } from "./helpers";
@@ -120,4 +121,22 @@ describe("getCentralBankScope", () => {
     expect(scope.intorgId).toBeUndefined();
     expect(scope.memberCountries).toEqual(["IE"]);
   });
+});
+
+it("keeps national governor offices separate from a settled euro policy authority", async () => {
+  const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+  const db = createMockDb();
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.85, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  db.collection("gameState").findOne.mockResolvedValue({ euroMonetaryUnion: union });
+  for (const countryId of ["IE", "UK"] as const) {
+    expect((await getCentralBankScope(db as unknown as Db, countryId)).bankId).toBe(countryId);
+    expect((await getMonetaryPolicyScope(db as unknown as Db, countryId)).bankId).toBe("ECB");
+  }
 });

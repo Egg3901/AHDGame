@@ -1,6 +1,7 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { StateMetricMarginContribution } from "@/lib/corporations/stateMetricMarginTypes";
 import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
+import type { RetoolHint } from "@/lib/corporations/retoolHint";
 
 export interface SectorData {
   _id: string;
@@ -590,6 +591,12 @@ export interface PlantsData {
    * share, NOT demand, optional because payloads predating the split omit it.
    */
   demandGapUnits?: number;
+  /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
+  roomHeldByOwnIdle?: boolean;
+  /** Unowned pool over owned capacity plus that pool, percent. */
+  unclaimedSharePct?: number;
+  /** Strategy suggestion when the valuable output is oversupplied. Absent on older payloads. */
+  retoolHint?: RetoolHint | null;
   currentTurn: number;
   activeCapacityPercent?: number;
   capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };

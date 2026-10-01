@@ -41,14 +41,17 @@ import type {
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { type CommodityType } from "@/lib/constants/commodities";
+import { eraScaledBasePrices, type CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityPrice, GameConfig, GameState } from "@/lib/db/types";
-import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { getEffectiveStrategyRates, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import { computeRetoolHint } from "@/lib/corporations/retoolHint";
+import { applyExtractionResourceCapacityToSupply } from "@/lib/corporations/extractionResourceSupply";
+import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getCorpFxRate,
@@ -86,8 +89,11 @@ import {
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
-import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
-import { getSectorTechEffects } from "@/lib/constants/techTree";
+import {
+  buildNationalDominanceShareBySectorId,
+  unownedHeadroomUnitsOf,
+} from "@/lib/corporations/marketShare";
+import { getSectorTechEffects, getStrategyAvailability } from "@/lib/constants/techTree";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { corpToSectorCountrySpread } from "@/lib/currency/sectorFxSpread";
@@ -388,7 +394,18 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         loadActiveFtaPairs(db),
         db
           .collection<CorporateSector>("corporateSectors")
-          .find({}, { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } })
+          .find(
+            {},
+            {
+              projection: {
+                corporationId: 1,
+                stateId: 1,
+                countryId: 1,
+                sectorType: 1,
+                revenue: 1,
+              },
+            }
+          )
           .toArray(),
         db
           .collection<CorporateSector>("corporateSectors")
@@ -441,7 +458,6 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       }),
     ]);
     const corpByIdForLookup = new Map(corpsForLookup.map((c) => [c._id.toString(), c]));
-
     const blendPresenceKeys = tariffRulesNeedSectorPresenceKeys(allTariffs)
       ? buildSectorPresenceKeys(allSectorsRaw, corpByIdForLookup)
       : new Set<string>();
@@ -706,6 +722,13 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     let plants: Awaited<ReturnType<typeof buildSectorPlantsSection>> | null = null;
     if (plantsEnabled && !shouldRedact && !publicFinancialFog) {
+      const nationalMarketShare =
+        buildNationalDominanceShareBySectorId({
+          sectors: allSectorsRaw,
+          stateById: new Map(allStates.map((candidate) => [candidate._id, candidate])),
+          unownedSectors: [],
+          exchangeRatesByCurrency: siblingFxByCurrency,
+        }).get(sector._id.toString()) ?? 0;
       // Same governor bounds the turn processor resolves (turn/corporation
       // index.ts), read from gameConfig, not gameState, so the "market support"
       // pill counts down against the ramp the engine is actually applying.
@@ -772,6 +795,60 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         });
       });
 
+      // Ticket 1370 follow-up: when the plant is held back because the
+      // valuable part of its output is oversupplied, name the strategy whose
+      // output this market is short of. Advisory only. Prices and books are the
+      // sector's own market, the same ones the throttle and clearing read.
+      const marketRatioFor = (commodity: CommodityType): number | null => {
+        const doc = priceDocByCommodity.get(commodity);
+        if (!doc || !(doc.basePrice > 0)) return null;
+        const price = isStateScopedCommodity(commodity)
+          ? doc.statePrices?.[sector.stateId]
+          : (doc.reachablePrices?.[sectorCountryId] ?? doc.nationalPrices?.[sectorCountryId]);
+        const value = typeof price === "number" && price > 0 ? price : doc.globalPrice;
+        return typeof value === "number" && value > 0 ? value / doc.basePrice : null;
+      };
+      const marketBookFor = (commodity: CommodityType) => {
+        const doc = priceDocByCommodity.get(commodity);
+        if (!doc) return null;
+        if (isStateScopedCommodity(commodity)) {
+          return {
+            supply: doc.stateSupply?.[sector.stateId] ?? 0,
+            demand: doc.stateDemand?.[sector.stateId] ?? 0,
+          };
+        }
+        const supply = doc.nationalSupply?.[sectorCountryId];
+        const demand = doc.nationalDemand?.[sectorCountryId];
+        return typeof supply === "number" && typeof demand === "number"
+          ? { supply, demand }
+          : { supply: doc.globalSupply, demand: doc.globalDemand };
+      };
+      const retoolHint = computeRetoolHint({
+        currentStrategyId: sector.strategyId ?? "standard",
+        currentSupply: effectiveSupply,
+        soldByCommodity: sector.soldByCommodity,
+        demandThrottleFactor: sector.demandThrottleFactor,
+        mothballed: sector.mothballed === true,
+        isTransitioning: effectiveRates.isTransitioning,
+        producedUnits: sector.producedUnits,
+        capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
+        strategies: SECTOR_STRATEGIES[sectorType] ?? [],
+        isAvailable: (candidate) =>
+          !getStrategyAvailability(techCorpView, candidate, techCurrentYear, techTreesEnabled)
+            .locked,
+        supplyFor: (candidate) =>
+          applyExtractionResourceCapacityToSupply(
+            sectorType,
+            candidate.supply,
+            stateResources === undefined ? undefined : (stateResources ?? {})
+          ),
+        rescaleRatio: (toStrategyId) =>
+          capacityRescaleRatio(sectorType, sector.strategyId, toStrategyId),
+        priceRatioFor: marketRatioFor,
+        balanceFor: marketBookFor,
+        basePrices: eraScaledBasePrices(sectorDetailUnitScale),
+      });
+
       plants = buildSectorPlantsSection({
         sector,
         sectorType,
@@ -780,6 +857,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         governorCap: marketCtx.governorCap,
         governorRampTurns: marketCtx.governorRampTurns,
         marketSharePercent: marketShare,
+        nationalMarketSharePercent: nationalMarketShare,
         // Distinct RIVAL corps in this (state, type) cell. `siblingsSectors` is
         // already scoped to exactly that cell, so this needs no extra read,
         // but it must be distinct CORPS, not sectors, or a rival holding two
@@ -807,6 +885,15 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
+        // Every producer's capacity in this cell (the focal sector included),
+        // so "Unclaimed share" reads the same pool `headroomUnits` measures.
+        retoolHint,
+        ownedCellCapacityUnits: siblingsSectors.reduce((sum, s) => {
+          const units = s.operatingCapacityUnits ?? s.capitalStock;
+          return (
+            sum + (typeof units === "number" && Number.isFinite(units) && units > 0 ? units : 0)
+          );
+        }, 0),
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         investment: {
           overheadDailyAnchor:

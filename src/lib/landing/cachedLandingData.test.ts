@@ -58,6 +58,20 @@ describe("getCachedLandingData", () => {
     vi.useRealTimers();
   });
 
+  it("reports the world's current year, never earlier than its seed", async () => {
+    findOne
+      .mockResolvedValueOnce({ seedYear: 1991 })
+      .mockResolvedValueOnce({ startingYear: 1991, currentYear: 1994 });
+    const snapshot = await getCachedLandingData();
+    expect(snapshot.seedYear).toBe(1991);
+    expect(snapshot.currentYear).toBe(1994);
+  });
+
+  it("falls back to the seed year when the world has no current year", async () => {
+    const snapshot = await getCachedLandingData();
+    expect(snapshot.currentYear).toBe(snapshot.seedYear);
+  });
+
   it("loads from Mongo once and serves the same snapshot within TTL", async () => {
     const a = await getCachedLandingData();
     const b = await getCachedLandingData();

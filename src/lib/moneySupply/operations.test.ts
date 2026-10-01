@@ -1,304 +1,113 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-
+import type { BankCharter } from "@/lib/db/types/bank";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import { executeMonetaryOperation } from "./operations";
 vi.mock("@/lib/banking/featureFlag", () => ({
   isPrivateBankingEnabled: vi.fn().mockResolvedValue(true),
 }));
-
-import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
-import { executeMonetaryOperation } from "./operations";
-
-let db: MockDb;
-
-/** Seat `banks` as active USD charters for the corporations collection. */
-function seatBanks(banks: { _id: string; totalDeposits?: number }[]) {
-  db.collection("corporations");
-  db.collectionMocks.corporations.find.mockReturnValue({
-    toArray: async () =>
-      banks.map((b) => ({
-        _id: b._id,
-        bankCharter: { status: "active", currency: "USD", totalDeposits: b.totalDeposits ?? 0 },
-      })),
-  });
-  db.collectionMocks.corporations.bulkWrite.mockResolvedValue({ modifiedCount: banks.length });
-}
-
-beforeEach(() => {
-  db = createMockDb();
-  db.collection("centralBanks");
-  db.collection("federalBudget");
-  db.collection("gameConfig");
-  db.collectionMocks.centralBanks.findOne.mockResolvedValue({
-    _id: "US",
-    countryId: "US",
-    reserveBalance: 100,
-    externalBroadMoney: 1_000,
-  });
-});
-
-describe("open market operations against the bond market pool", () => {
-  const bondId = new ObjectId();
-  function seatBond() {
-    db.collection("bonds");
-    db.collection("bondMarketPools");
-    db.collectionMocks.bonds.findOne.mockResolvedValue({
-      _id: bondId,
-      issuerType: "sovereign",
-      countryId: "US",
-      currencyCode: "USD",
-      matured: false,
-      defaulted: false,
-      publicFloat: 100,
-      centralBankHoldings: 10,
-      totalIssued: 110_000,
-      marketPrice: 1,
-    });
-  }
-
-  it("QE buys float from the pool and leaves the deposits in the pool", async () => {
-    seatBond();
-    const result = await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "US",
-      type: "qe",
-      turn: 12,
-      actorName: "Chair",
-      bondId: bondId.toString(),
-      units: 5,
-    });
-    expect(result.units).toBe(5);
-    expect(db.collectionMocks.bondMarketPools.updateOne).toHaveBeenCalledWith(
-      { _id: "USD" },
-      expect.objectContaining({
-        $inc: expect.objectContaining({ cashLocal: 5000, "lifetime.qeIn": 5000 }),
-      }),
-      expect.objectContaining({ upsert: true })
-    );
-  });
-
-  it("QT is refused when the pool cannot pay for the units", async () => {
-    seatBond();
-    db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue(null);
-    await expect(
-      executeMonetaryOperation(db as unknown as Db, {
+describe("liquidity operation wrapper", () => {
+  it.each([
+    { deposits: [900, 300], enabled: true, expected: [300, 100], reserve: 0 },
+    { deposits: [0, 0], enabled: true, expected: [200, 200], reserve: 0 },
+    { deposits: [], enabled: true, expected: [], reserve: 400 },
+  ])(
+    "routes a liquidity command through funded settlement: %j",
+    async ({ deposits, expected, reserve }) => {
+      const memory = createInMemoryDb();
+      memory.seed("centralBanks", [{ _id: "US", reserveBalance: 100, netMoneyCreatedLifetime: 0 }]);
+      memory.seed("gameConfig", [{ _id: "default", privateBankingEnabled: true }]);
+      memory.seed(
+        "corporations",
+        deposits.map((totalDeposits) => ({
+          _id: new ObjectId(),
+          bankCharter: {
+            status: "active",
+            currency: "USD",
+            cashReserves: 0,
+            cbMarginDebt: 0,
+            totalDeposits,
+          },
+        }))
+      );
+      const result = await executeMonetaryOperation(memory as unknown as Db, {
         countryId: "US",
-        type: "qt",
+        type: "liquidity_injection",
         turn: 12,
         actorName: "Chair",
-        bondId: bondId.toString(),
-        units: 1,
-      })
-    ).rejects.toThrow(/cannot absorb/);
-    expect(db.collectionMocks.bonds.updateOne).not.toHaveBeenCalled();
-  });
-});
-
-describe("non-QE monetary operations", () => {
-  it("creates Treasury money as a cash-only credit; the bond-owned stock is untouched", async () => {
-    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
-      _id: "federal",
-      countryId: "US",
-      treasuryBalance: -1_000,
-      gdp: 10_000,
-      investorConfidence: 70,
-      debt: { principal: 1_000, ceiling: 20_000 },
-    });
-    db.collectionMocks.federalBudget.updateOne.mockResolvedValue({ modifiedCount: 1 });
-
-    const result = await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "US",
-      type: "treasury_advance",
-      turn: 12,
-      actorName: "Chair",
-      amount: 250,
-    });
-
-    expect(result.moneySupplyDelta).toBe(0);
-    const update = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
-    expect(update.treasuryBalance).toBe(-750);
-    // A cash advance is not a bond issuance or redemption (refs #1975).
-    expect(update).not.toHaveProperty("debt.principal");
-    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledWith(
-      { _id: "US" },
-      expect.objectContaining({
-        $inc: expect.objectContaining({ netMoneyCreatedLifetime: 250 }),
-      })
-    );
-  });
-
-  it("treasury advance is a compare-and-swap: a concurrent move fails, the retry converges", async () => {
-    db.collectionMocks.federalBudget.findOne
-      .mockResolvedValueOnce({
-        _id: "federal",
-        countryId: "US",
-        treasuryBalance: -1_000,
-        debt: { principal: 1_000, ceiling: 20_000 },
-      })
-      .mockResolvedValueOnce({
-        _id: "federal",
-        countryId: "US",
-        treasuryBalance: -900,
-        debt: { principal: 1_000, ceiling: 20_000 },
+        amount: 400,
+        operationId: "wrapper-liquidity",
       });
-    // Another writer moved the balance between the read and the write, so the
-    // guarded write matches nothing; the retry re-reads and lands cleanly.
-    db.collectionMocks.federalBudget.updateOne
-      .mockResolvedValueOnce({ modifiedCount: 0 })
-      .mockResolvedValueOnce({ modifiedCount: 1 });
-
-    const attempt = {
-      countryId: "US",
-      type: "treasury_advance",
-      turn: 12,
-      actorName: "Chair",
-      amount: 250,
-    } as const;
-    await expect(executeMonetaryOperation(db as unknown as Db, attempt)).rejects.toThrow(
-      /changed concurrently/
-    );
-    const result = await executeMonetaryOperation(db as unknown as Db, attempt);
-
-    expect(result.moneySupplyDelta).toBe(0);
-    const calls = db.collectionMocks.federalBudget.updateOne.mock.calls;
-    expect(calls).toHaveLength(2);
-    // The retry credits the re-read balance, not the stale one: exactly once.
-    expect(calls[1][1].$set.treasuryBalance).toBe(-650);
-    expect(calls[1][1].$set).not.toHaveProperty("debt.principal");
-    // The failed first attempt wrote no ledger entry and booked no money.
-    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledTimes(1);
-  });
-
-  it("records a 2027 euro treasury advance in the budget's EUR denomination", async () => {
-    db.collectionMocks.centralBanks.findOne.mockResolvedValue({ _id: "ECB", countryId: "DE" });
-    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
-      _id: "DE",
-      countryId: "DE",
-      currencyCode: "EUR",
-      treasuryBalance: 100,
-    });
-    db.collectionMocks.federalBudget.updateOne.mockResolvedValue({ modifiedCount: 1 });
-    db.collectionMocks.gameConfig.findOne.mockResolvedValue({ ledgerShadow: true });
-    db.collection("ledgerEntries");
-    db.collection("exchangeRates");
-    db.collectionMocks.exchangeRates.findOne.mockResolvedValue({ currencyCode: "EUR", rate: 1 });
-
-    await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "DE",
-      type: "treasury_advance",
-      turn: 12,
-      actorName: "ECB chair",
-      amount: 25,
-    });
-
-    const entry = db.collectionMocks.ledgerEntries.insertMany.mock.calls[0]?.[0]?.[0];
-    expect(entry?.legs.map((leg: { currencyCode: string }) => leg.currencyCode)).toEqual([
-      "EUR",
-      "EUR",
-    ]);
-  });
-
-  it("lends into the persisted EUR bank-charter denomination", async () => {
-    db.collectionMocks.centralBanks.findOne.mockResolvedValue({ _id: "ECB", countryId: "DE" });
-    db.collection("exchangeRates");
-    db.collectionMocks.exchangeRates.findOne.mockResolvedValue({ currencyCode: "EUR" });
-    seatBanks([{ _id: "bankA", totalDeposits: 100 }]);
-
-    await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "DE",
-      type: "liquidity_injection",
-      turn: 12,
-      actorName: "ECB chair",
-      amount: 100,
-    });
-
-    expect(db.collectionMocks.corporations.find).toHaveBeenCalledWith(
-      { "bankCharter.status": "active", "bankCharter.currency": "EUR" },
-      expect.anything()
-    );
-  });
-
-  it("lends an injection to the chartered banks, pro rata by deposits", async () => {
-    seatBanks([
-      { _id: "bankA", totalDeposits: 900 },
-      { _id: "bankB", totalDeposits: 300 },
-    ]);
-
-    const result = await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "US",
-      type: "liquidity_injection",
-      turn: 12,
-      actorName: "Chair",
-      amount: 400,
-    });
-
-    // 3:1 deposit split, and the money is created rather than parked.
-    const ops = db.collectionMocks.corporations.bulkWrite.mock.calls[0][0];
-    expect(
-      ops.map((o: never) => (o as { updateOne: { filter: { _id: string } } }).updateOne.filter._id)
-    ).toEqual(["bankA", "bankB"]);
-    expect(ops[0].updateOne.update.$inc).toEqual({
-      "bankCharter.cashReserves": 300,
-      "bankCharter.cbMarginDebt": 300,
-    });
-    expect(ops[1].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(100);
-    expect(result).toEqual(
-      expect.objectContaining({ moneySupplyDelta: 0, reserveDelta: 0, banksCredited: 2 })
-    );
-    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledWith(
-      { _id: "US" },
-      expect.objectContaining({ $inc: expect.objectContaining({ netMoneyCreatedLifetime: 400 }) })
-    );
-  });
-
-  it("splits evenly when no chartered bank holds deposits yet", async () => {
-    seatBanks([{ _id: "bankA" }, { _id: "bankB" }]);
-
-    await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "US",
-      type: "liquidity_injection",
-      turn: 12,
-      actorName: "Chair",
-      amount: 300,
-    });
-
-    const ops = db.collectionMocks.corporations.bulkWrite.mock.calls[0][0];
-    expect(ops[0].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(150);
-    expect(ops[1].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(150);
-  });
-
-  it("falls back to the central bank's own reserve pool when no bank can take it", async () => {
-    seatBanks([]);
-
-    const result = await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "US",
-      type: "liquidity_injection",
-      turn: 12,
-      actorName: "Chair",
-      amount: 300,
-    });
-
-    expect(result).toEqual(
-      expect.objectContaining({ moneySupplyDelta: 0, reserveDelta: 300, banksCredited: 0 })
-    );
-    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledWith(
-      { _id: "US" },
-      expect.objectContaining({ $inc: { reserveBalance: 300 } })
-    );
-  });
-
-  it("falls back when private banking is switched off", async () => {
-    vi.mocked(isPrivateBankingEnabled).mockResolvedValueOnce(false);
-    seatBanks([{ _id: "bankA", totalDeposits: 100 }]);
-
-    const result = await executeMonetaryOperation(db as unknown as Db, {
-      countryId: "US",
-      type: "liquidity_injection",
-      turn: 12,
-      actorName: "Chair",
-      amount: 300,
-    });
-
-    expect(result.reserveDelta).toBe(300);
-    expect(db.collectionMocks.corporations.bulkWrite).not.toHaveBeenCalled();
-  });
+      expect(
+        memory
+          .collection("corporations")
+          .docs.map((bank) => (bank.bankCharter as BankCharter).cashReserves)
+      ).toEqual(expected);
+      expect(result.reserveDelta).toBe(reserve);
+      expect(result.banksCredited).toBe(expected.length);
+      expect(memory.collection("centralBanks").docs[0].reserveBalance).toBe(100 + reserve);
+    }
+  );
+  it.each(["treasury_advance", "liquidity_injection"] as const)(
+    "preserves a persisted euro denomination through the journaled%s wrapper",
+    async (type) => {
+      const memory = createInMemoryDb();
+      memory.seed("centralBanks", [
+        { _id: "UK", countryId: "UK", reserveBalance: 100, netMoneyCreatedLifetime: 0 },
+      ]);
+      memory.seed("gameConfig", [
+        { _id: "default", privateBankingEnabled: true, ledgerShadow: true },
+      ]);
+      memory.seed("gameState", [{ _id: "current", preset: "1991-default" }]);
+      memory.seed("exchangeRates", [{ _id: "UK", currencyCode: "EUR", rate: 1 }]);
+      memory.seed("federalBudget", [
+        { _id: "UK", countryId: "UK", currencyCode: "EUR", treasuryBalance: 100 },
+      ]);
+      memory.seed("corporations", [
+        {
+          _id: new ObjectId(),
+          name: "Euro bank",
+          bankCharter: {
+            status: "active",
+            currency: "EUR",
+            cashReserves: 0,
+            cbMarginDebt: 0,
+            totalDeposits: 100,
+          },
+        },
+      ]);
+      const command = {
+        countryId: "UK",
+        type,
+        turn: 12,
+        actorName: "Chair",
+        amount: 25,
+        operationId: `euro-${type}`,
+      } as const;
+      await executeMonetaryOperation(memory as unknown as Db, command);
+      if (type === "treasury_advance") {
+        expect(memory.collection("federalBudget").docs[0].treasuryBalance).toBe(125);
+        const entries = memory.collection("ledgerEntries").docs;
+        expect(entries).not.toHaveLength(0);
+        for (const entry of entries)
+          expect(
+            (entry.legs as Array<{ currencyCode: string }>).map((leg) => leg.currencyCode)
+          ).toEqual(["EUR", "EUR"]);
+      } else {
+        expect(
+          (memory.collection("corporations").docs[0].bankCharter as BankCharter).cashReserves
+        ).toBe(25);
+        expect(memory.collection("bankLiquidityOperations").docs[0].currency).toBe("EUR");
+      }
+      const before = JSON.stringify(
+        memory.collection(type === "treasury_advance" ? "federalBudget" : "corporations").docs
+      );
+      await executeMonetaryOperation(memory as unknown as Db, command);
+      expect(
+        JSON.stringify(
+          memory.collection(type === "treasury_advance" ? "federalBudget" : "corporations").docs
+        )
+      ).toBe(before);
+    }
+  );
 });

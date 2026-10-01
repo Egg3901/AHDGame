@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
 import { useState, useEffect, useMemo } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { Slider } from "@/components/ui";
@@ -26,6 +28,9 @@ import {
   CentralBankProvisionEditor,
   type CentralBankIndependenceAction,
 } from "@/components/bills/CentralBankProvisionEditor";
+import { EconomicSystemReformEditor } from "@/components/bills/EconomicSystemReformEditor";
+import { canLegislateEconomicSystem } from "@/lib/economy/economicSystemReformRules";
+import type { EconomicSystemTarget } from "@/lib/db/types/legislation";
 import {
   NationalizationProvisionEditor,
   toNatPayload,
@@ -52,7 +57,7 @@ import {
   BillFiscalImpactStrip,
   LawProvisionComparison,
 } from "@/components/bills/LawProvisionComparison";
-import type { CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
@@ -168,6 +173,11 @@ export function ProposeLegislationModal({
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [cat, setCat] = useState(BILL_CATEGORIES[0] as string);
+  const { maastrichtEligibleCountries } = useWorldFlags();
+  const [treatyAction, setTreatyAction] = useState<"" | "ratify" | "reject">("");
+  const canDecideTreaty =
+    cat === "foreign policy" && maastrichtEligibleCountries?.includes(countryId) === true;
+  const includeTreaty = canDecideTreaty && treatyAction !== "";
   const [billChamber, setBillChamber] = useState<string>(
     defaultChamber ?? chambers[0]?.value ?? ""
   );
@@ -189,6 +199,9 @@ export function ProposeLegislationModal({
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
   const isNatCat = NATIONALIZATION_BILL_CATEGORIES.has(cat as BillCategory);
   const isElectoralCat = ELECTORAL_LAW_BILL_CATEGORIES.has(cat as BillCategory);
+  const { euroAdoptionEligibleCountries = [] } = useWorldFlags();
+  const canProposeEuro = cat === "economy" && euroAdoptionEligibleCountries.includes(countryId);
+  const [includeEuroAdoption, setIncludeEuroAdoption] = useState(false);
   const isCentralBankCat = CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(cat as BillCategory);
   // Custom (flavor/roleplay) bills carry no provisions and have no in-game effect.
   const isCustomCat = cat === "custom";
@@ -211,6 +224,11 @@ export function ProposeLegislationModal({
   const [includeCbIndependence, setIncludeCbIndependence] = useState(false);
   const [cbIndependenceAction, setCbIndependenceAction] =
     useState<CentralBankIndependenceAction>("grant");
+  // Economic system reform — opt-in, economy category, planned-era countries.
+  const canReformEconomicSystem = cat === "economy" && canLegislateEconomicSystem(countryId);
+  const [includeEconomicReform, setIncludeEconomicReform] = useState(false);
+  const [economicReformTarget, setEconomicReformTarget] =
+    useState<EconomicSystemTarget>("dual_track");
   // Union ban (player suggestion #93): "bias" = the slider law; "ban"/"repeal_ban"
   // are standalone actions that leave the bias untouched at enactment.
   const [unionLawAction, setUnionLawAction] = useState<"bias" | "ban" | "repeal_ban">("bias");
@@ -224,7 +242,10 @@ export function ProposeLegislationModal({
   // One provision each: an electoral-law bill carries the franchise and the
   // registration regime on a single provision, however many axes it sets.
   const standaloneProvisionCount =
+    (canProposeEuro && includeEuroAdoption ? 1 : 0) +
+    (includeTreaty ? 1 : 0) +
     (isCentralBankCat && includeCbIndependence ? 1 : 0) +
+    (canReformEconomicSystem && includeEconomicReform ? 1 : 0) +
     (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
   const hasStandaloneProvision = standaloneProvisionCount > 0;
   // A standalone provision occupies one of the bill's MAX_PROVISIONS slots, so
@@ -422,10 +443,25 @@ export function ProposeLegislationModal({
           ...(includeRegAccess ? { registrationAccess } : {}),
         });
       }
+      if (canProposeEuro && includeEuroAdoption) {
+        provisionsPayload.push({ type: "euro_adoption" });
+      }
+      if (includeTreaty)
+        provisionsPayload.push({
+          type: "european_treaty",
+          treaty: "maastricht",
+          action: treatyAction,
+        });
       if (isCentralBankCat && includeCbIndependence) {
         provisionsPayload.push({
           type: "central_bank_independence",
           action: cbIndependenceAction,
+        });
+      }
+      if (canReformEconomicSystem && includeEconomicReform) {
+        provisionsPayload.push({
+          type: "economic_system_reform",
+          target: economicReformTarget,
         });
       }
     }
@@ -1050,7 +1086,28 @@ export function ProposeLegislationModal({
               />
             </div>
           )}
+          {canProposeEuro && (
+            <label className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={includeEuroAdoption}
+                onChange={(event) => setIncludeEuroAdoption(event.target.checked)}
+              />
+              Vote to participate in euro adoption
+            </label>
+          )}
           {/* Central bank independence — economy bills only. */}
+          {canDecideTreaty && (
+            <EuropeanTreatyProvisionEditor action={treatyAction} onChange={setTreatyAction} />
+          )}
+          {canReformEconomicSystem && (
+            <EconomicSystemReformEditor
+              include={includeEconomicReform}
+              onIncludeChange={setIncludeEconomicReform}
+              target={economicReformTarget}
+              onTargetChange={setEconomicReformTarget}
+            />
+          )}
           {isCentralBankCat && (
             <CentralBankProvisionEditor
               include={includeCbIndependence}

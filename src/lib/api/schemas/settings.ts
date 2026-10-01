@@ -54,6 +54,7 @@ export const characterDemographicsSchema = z.object({
 });
 
 export const createCharacterSchema = z.object({
+  analyticsConsent: z.boolean().optional().default(false),
   name: moderatedNameSchema("Name", 2, 50),
   homeState: z.string().min(1, "Home state required"),
   // The country picked by the user at character creation. Used to scope the
@@ -126,11 +127,6 @@ export const profileBioSchema = z.object({
 
 export const campaignSongSchema = z.object({
   campaignSongUrl: z.string().max(300, "URL too long").optional().or(z.literal("")),
-  campaignSongAutoplay: z.boolean().optional(),
-});
-
-export const autoplayPreferenceSchema = z.object({
-  disableAutoplayOnOtherProfiles: z.boolean(),
 });
 
 export const experimentalUiSchema = z.object({
@@ -245,7 +241,6 @@ export type ProfileBioBody = z.infer<typeof profileBioSchema>;
 export type TaxRateBody = z.infer<typeof taxRateSchema>;
 export type StatePartyTransferBody = z.infer<typeof statePartyTransferSchema>;
 export type CampaignSongBody = z.infer<typeof campaignSongSchema>;
-export type AutoplayPreferenceBody = z.infer<typeof autoplayPreferenceSchema>;
 export type ActionsViewModeBody = z.infer<typeof actionsViewModeSchema>;
 export type GotvBudgetBody = z.infer<typeof gotvBudgetSchema>;
 export type SuppressionBudgetBody = z.infer<typeof suppressionBudgetSchema>;

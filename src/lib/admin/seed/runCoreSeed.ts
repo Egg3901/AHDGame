@@ -8,6 +8,7 @@ import {
 import { selectStatesBundleForPreset } from "./seedStates";
 import { policies } from "@/lib/seeds/reference/policies";
 import { gameConfig } from "@/lib/seeds/reference/gameConfig";
+import { coreGameConfigUpdate } from "./coreGameConfigUpdate";
 import { demographicCategories } from "@/lib/seeds/demographicCategories";
 import { registerAndGenerate, stateCensusData } from "@/lib/seeds/stateDemographics";
 import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
@@ -198,17 +199,7 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   marketGuardTrippedAt: "",
 });
 
-/**
- * Provenance stamps for `marketSystemMode`, cleared only when a reset re-adopts
- * the reference tier. They name the human who set the *previous* world's tier,
- * so leaving them on a world whose tier the seed just chose would attribute a
- * seed default to an operator who never made that call for this world.
- */
-export const STALE_MARKET_MODE_STAMP_UNSET: Readonly<Record<string, "">> = Object.freeze({
-  marketSystemModeUpdatedBy: "",
-  marketSystemModeUpdatedAt: "",
-  marketSystemModeUpdatedTurn: "",
-});
+export { STALE_MARKET_MODE_STAMP_UNSET } from "./coreGameConfigUpdate";
 
 export type RunSeedOptions = {
   db: Db;
@@ -578,25 +569,9 @@ export async function runSeed(
   // operator intent to protect, so it takes the reference tier, and the stamps
   // naming whoever chose the old world's tier go with it.
   const seedYear = parseInt(era, 10);
-  const { marketSystemMode: referenceMarketSystemMode, ...gameConfigWithoutMarketMode } =
-    gameConfig;
-  await db.collection<GameConfig>("gameConfig").updateOne(
-    { _id: gameConfig._id },
-    reset
-      ? {
-          $set: {
-            ...gameConfigWithoutMarketMode,
-            seedYear,
-            marketSystemMode: referenceMarketSystemMode,
-          },
-          $unset: STALE_MARKET_MODE_STAMP_UNSET,
-        }
-      : {
-          $set: { ...gameConfigWithoutMarketMode, seedYear },
-          $setOnInsert: { marketSystemMode: referenceMarketSystemMode },
-        },
-    { upsert: true }
-  );
+  await db
+    .collection<GameConfig>("gameConfig")
+    .updateOne({ _id: gameConfig._id }, coreGameConfigUpdate(reset, seedYear), { upsert: true });
   log("Seeded game config");
 
   // Political parties — sort by seedOrder to guarantee deterministic sequentialId assignment

@@ -26,6 +26,7 @@ export interface SourcePasswordOwnershipUser {
   readonly password?: string | null;
   readonly googleId?: string | null;
   readonly discordId?: string | null;
+  readonly appleId?: string | null;
   readonly role?: string | null;
   readonly isAdmin?: boolean | null;
   readonly isBanned?: boolean | null;
@@ -53,6 +54,8 @@ type CapturedState = {
   googleId: unknown;
   discordPresent: boolean;
   discordId: unknown;
+  applePresent: boolean;
+  appleId: unknown;
   rolePresent: boolean;
   role: unknown;
   isAdminPresent: boolean;
@@ -110,6 +113,8 @@ function captureState(user: SourcePasswordOwnershipUser): CapturedState {
     googleId: user.googleId,
     discordPresent: hasField(user, "discordId"),
     discordId: user.discordId,
+    applePresent: hasField(user, "appleId"),
+    appleId: user.appleId,
     rolePresent: hasField(user, "role"),
     role: user.role,
     isAdminPresent: hasField(user, "isAdmin"),
@@ -132,6 +137,8 @@ function sameSecurityState(left: CapturedState, right: CapturedState): boolean {
     left.googleId === right.googleId &&
     left.discordPresent === right.discordPresent &&
     left.discordId === right.discordId &&
+    left.applePresent === right.applePresent &&
+    left.appleId === right.appleId &&
     left.rolePresent === right.rolePresent &&
     left.role === right.role &&
     left.isAdminPresent === right.isAdminPresent &&
@@ -201,6 +208,7 @@ function capturedHashOrThrow(
   if (!privileged) {
     assertNoSocialMethod(state.googlePresent, state.googleId);
     assertNoSocialMethod(state.discordPresent, state.discordId);
+    assertNoSocialMethod(state.applePresent, state.appleId);
   }
   if (
     !state.passwordPresent ||

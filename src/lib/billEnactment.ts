@@ -1,3 +1,4 @@
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 /**
  * Bill Enactment Hook
  *
@@ -20,6 +21,7 @@
  * same-currency — no FX conversion needed inside this file.
  */
 
+import { recordEuroAdoption } from "@/lib/currency/euro/adoption";
 import { reconcileEnactedUKDevolution } from "@/lib/countries/uk/devolution/service";
 import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import { ObjectId as MongoObjectId } from "mongodb";
@@ -51,8 +53,10 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { applyElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
   CentralBankIndependenceProvision,
+  EconomicSystemReformProvision,
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
+import { applyEconomicSystemReformProvision } from "@/lib/economy/economicSystemReform";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { seedFomcBoards } from "@/lib/centralBank/seedFomcBoard";
@@ -78,7 +82,7 @@ import { getCurrentTurn } from "@/lib/currentTurn";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getSelectedPolicyOption } from "@/lib/budget/costs";
 import type { CountryId } from "@/lib/constants/countries";
-import { getCountryConfig, EU_EUROZONE_MEMBERS } from "@/lib/constants/countries";
+import { getCountryConfig } from "@/lib/constants/countries";
 import {
   inferCountryIdFromStateId,
   resolveBillCountryId,
@@ -88,6 +92,7 @@ import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { applyInternationalWithdrawalMeasure } from "@/lib/internationalOrganizations/withdrawalBills";
+import { captureBillPassed } from "@/lib/analytics/billStatusAnalytics";
 import {
   applySeparationBill,
   isBankingSeparationLegislationType,
@@ -306,30 +311,14 @@ async function applyTaxRateChange(
   }
 }
 
-/**
- * Records a country's Euro adoption vote. When all EU_EUROZONE_MEMBERS have
- * voted, flips gameState.eurozoneEnabled to true.
- *
- * Idempotent: $addToSet is a no-op if the country already voted. Safe to
- * call for non-EU countries — returns early without any DB writes.
- */
-export async function applyEuroAdoptionProvision(db: Db, countryId: CountryId): Promise<void> {
-  if (!EU_EUROZONE_MEMBERS.includes(countryId)) return;
-
-  await db
-    .collection<GameState>("gameState")
-    .updateOne({ _id: "current" }, { $addToSet: { euroAdoptedCountries: countryId } });
-
-  const gs = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { euroAdoptedCountries: 1 } });
-  const adopted = gs?.euroAdoptedCountries ?? [];
-
-  if (EU_EUROZONE_MEMBERS.every((m) => adopted.includes(m as CountryId))) {
-    await db
-      .collection<GameState>("gameState")
-      .updateOne({ _id: "current" }, { $set: { eurozoneEnabled: true } });
-  }
+/** Record a signed national authorization and reconcile its monetary settlement. */
+export async function applyEuroAdoptionProvision(
+  db: Db,
+  countryId: CountryId,
+  currentTurn: number,
+  billId: string
+): Promise<void> {
+  await recordEuroAdoption(db, countryId, currentTurn, billId);
 }
 
 /**
@@ -347,6 +336,15 @@ export async function applyCentralBankIndependenceProvision(
   countryId: CountryId,
   currentTurn: number
 ): Promise<void> {
+  // A proposal may predate accession. Its later enactment cannot reclaim
+  // monetary authority or create a competing national policy committee.
+  if ((await loadEuroMonetaryUnion(db))?.members[countryId]) {
+    await createSystemNewsPost(
+      `${getCountryConfig(countryId)?.name ?? countryId} enacted a central-bank independence law, but rate-setting remains with the common euro authority.`,
+      "legislation"
+    ).catch(() => {});
+    return;
+  }
   const governmentControlled = provision.action === "revoke";
   const banks = db.collection<CentralBank>("centralBanks");
   const bankId = getBankId(countryId);
@@ -487,6 +485,16 @@ export async function onBillEnacted(
     outcome: "ok",
   });
 
+  const stateCountryPrefix = stateId.includes("_") ? stateId.split("_", 1)[0] : undefined;
+  await captureBillPassed({
+    db,
+    billId: bill._id.toString(),
+    scope: isNationalBill ? "national" : "regional",
+    nationId:
+      bill.countryId ?? (isNationalBill ? inferCountryIdFromStateId(stateId) : stateCountryPrefix),
+    turn: currentTurn,
+  });
+
   await applyInternationalWithdrawalMeasure(db, bill as Bill, currentTurn);
 
   // Electoral law: franchise + registration access. Applied before the policy
@@ -503,7 +511,12 @@ export async function onBillEnacted(
   // Euro adoption: record this country's vote; enable eurozone when all members adopt.
   if (bill.provisions?.some((p) => p.type === "euro_adoption")) {
     const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
-    await applyEuroAdoptionProvision(db, enactingCountryId as CountryId);
+    await applyEuroAdoptionProvision(
+      db,
+      enactingCountryId as CountryId,
+      currentTurn,
+      bill._id.toString()
+    );
   }
 
   // Central bank independence: grant/revoke rate-setting authority.
@@ -518,6 +531,23 @@ export async function onBillEnacted(
         p as CentralBankIndependenceProvision,
         enactingCountryId as CountryId,
         currentTurn
+      );
+    }
+  }
+
+  // Economic system reform: legislate a target for the marketization dial.
+  const economicReformProvisions = (bill.provisions ?? []).filter(
+    (p) => p.type === "economic_system_reform"
+  );
+  if (economicReformProvisions.length > 0) {
+    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    for (const p of economicReformProvisions) {
+      await applyEconomicSystemReformProvision(
+        db,
+        p as EconomicSystemReformProvision,
+        enactingCountryId as CountryId,
+        currentTurn,
+        bill._id.toString()
       );
     }
   }

@@ -14,6 +14,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 // The console route pulls in most of the banking module graph; under a loaded
 // parallel run its first import can exceed the default budget. The console
@@ -474,6 +475,18 @@ describe("POST /api/character/savings/deposit and /withdraw", () => {
 describe("POST /api/banking/loans", () => {
   it("keeps the origination shape", async () => {
     await authAs("character");
+    const memory = createInMemoryDb();
+    memory.seed("corporations", [bankCorp(), borrowerCorp()]);
+    // This API-shape test still drives real settlement; its journal and targets
+    // must persist guarded writes before the response can report success.
+    for (const name of ["corporations", "bankLoans", "bankMoneyMoves"]) {
+      db.collection(name);
+      const backing = memory.collection(name);
+      for (const method of ["findOne", "insertOne", "updateOne"] as const)
+        db.collectionMocks[name]![method].mockImplementation(
+          backing[method].bind(backing) as never
+        );
+    }
     const { POST } = await import("@/app/api/banking/loans/route");
     const res = await POST(
       jsonRequest("http://localhost/api/banking/loans", "POST", {

@@ -336,6 +336,7 @@ export async function GET() {
             toUserId: userOid,
             read: false,
             deletedByRecipient: false,
+            blockedByRecipient: { $ne: true },
           }),
           db
             .collection<ElectionCandidate>("electionCandidates")

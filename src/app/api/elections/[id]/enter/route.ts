@@ -559,6 +559,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       success: true,
       message: `${character.name} has entered the ${election.electionType} race in ${election.state}`,
       candidateId: result.insertedId.toString(),
+      electionType: election.electionType,
+      phase: "primary",
     });
   } catch (error) {
     logRequest("POST", path, 500, Date.now() - start);

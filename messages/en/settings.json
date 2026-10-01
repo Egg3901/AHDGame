@@ -80,6 +80,14 @@
         "failed": "Google linking failed. Please try again.",
         "expired": "Google linking expired. Please try again.",
         "denied": "Google authorization was denied."
+      },
+      "apple": {
+        "linked": "Apple ID linked successfully.",
+        "notConfigured": "Apple linking is not configured on this server.",
+        "alreadyLinked": "This Apple ID is already linked to another user.",
+        "failed": "Apple linking failed. Please try again.",
+        "expired": "Apple linking expired. Please try again.",
+        "denied": "Apple authorization was denied."
       }
     },
     "sections": {
@@ -268,9 +276,6 @@
         "retro": "Retro",
         "solarized": "Solarized"
       },
-      "videoPreferences": "Video Preferences",
-      "disableAutoplay": "Disable autoplay on other users' profiles",
-      "disableAutoplayHint": "When enabled, campaign songs on other users' profiles will not autoplay (only affects what you see)",
       "interfaceTitle": "Interface",
       "classicUi": "Use the classic interface",
       "classicUiHint": "The redesigned navigation bar and the CEO Command Center dashboard are now the default. Turn this on to switch back to the classic navigation bar and corporation pages.",
@@ -356,6 +361,7 @@
       "comingSoon": "Coming Soon",
       "googleDev": "Google sign-in is under development",
       "discordLinked": "Discord account linked",
+      "appleLinked": "Apple ID linked",
       "link": "Link {provider}",
       "unlink": "Unlink",
       "unlinking": "Unlinking...",
@@ -451,7 +457,6 @@
       "invalid": "Not a valid YouTube URL or video ID.",
       "thumbAlt": "Video thumbnail preview",
       "preview": "Preview",
-      "autoplay": "Enable autoplay on my profile (others can still disable this in their preferences)",
       "save": "Save Campaign Song"
     },
     "referrals": {

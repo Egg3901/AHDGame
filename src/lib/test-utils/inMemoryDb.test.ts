@@ -306,4 +306,57 @@ describe("bulkWrite update/delete many", () => {
       db.collection("things").bulkWrite([{ replaceMany: { filter: {}, replacement: {} } } as never])
     ).rejects.toThrow(/unsupported bulk op/);
   });
+
+  it("appends another collection's pipeline output with $unionWith", async () => {
+    const db = createInMemoryDb();
+    db.seed("history", [
+      { corporationId: "a", turn: 10 },
+      { corporationId: "a", turn: 2 },
+      { corporationId: "b", turn: 1 },
+    ]);
+    const rows = await db
+      .collection("history")
+      .aggregate([
+        { $match: { turn: { $gte: 5 } } },
+        {
+          $unionWith: {
+            coll: "history",
+            pipeline: [{ $match: { turn: { $lt: 5 } } }, { $sort: { turn: -1 } }, { $limit: 1 }],
+          },
+        },
+        { $sort: { turn: -1 } },
+      ])
+      .toArray();
+    expect(rows.map((r) => r.turn)).toEqual([10, 2]);
+  });
+});
+
+it("reports only newly inserted bulk ids on mixed upsert and replay", async () => {
+  const db = createInMemoryDb();
+  db.seed("history", [{ _id: "existing", amount: 10 }]);
+  const operations = [
+    {
+      updateOne: {
+        filter: { _id: "existing" },
+        update: { $setOnInsert: { amount: 999 } },
+        upsert: true,
+      },
+    },
+    {
+      updateOne: {
+        filter: { _id: "build" },
+        update: { $setOnInsert: { amount: -20 } },
+        upsert: true,
+      },
+    },
+    { replaceOne: { filter: { _id: "replacement" }, replacement: { amount: -30 }, upsert: true } },
+  ];
+  const first = await db.collection("history").bulkWrite(operations);
+  expect(first.upsertedIds).toEqual({ 1: "build", 2: "replacement" });
+  expect(first.upsertedCount).toBe(2);
+  const replay = await db.collection("history").bulkWrite(operations);
+  expect(replay.upsertedIds).toEqual({});
+  expect(replay.upsertedCount).toBe(0);
+  expect(await db.collection("history").countDocuments()).toBe(3);
+  expect(await db.collection("history").findOne({ _id: "existing" })).toMatchObject({ amount: 10 });
 });

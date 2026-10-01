@@ -2,6 +2,9 @@ import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export type FinancialTxType =
+  | "corp_sector_founding" // exact NPP founding cash, including entry fee and starter build
+  | "org_cash"
+  | "org_tribute_mint"
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat
   | "fund_debit"
@@ -15,6 +18,8 @@ export type FinancialTxType =
   // Bonds
   | "bond_purchase"
   | "bond_sell"
+  | "bond_pool_inflow"
+  | "bond_pool_sweep"
   | "bond_coupon"
   | "bond_maturity"
   | "bond_default"
@@ -23,6 +28,7 @@ export type FinancialTxType =
 
   // Corp & shares
   | "corp_revenue"
+  | "corp_operating_loss"
   | "corp_dividend"
   | "corp_salary"
   | "corp_tax_paid"
@@ -134,6 +140,7 @@ export type FinancialTxType =
   | "caucus_tax_debit"
 
   // Government & subsidies
+  | "gov_fiscal_accrual"
   | "gov_tax_revenue"
   | "gov_bond_issuance"
   | "gov_coupon_payment"

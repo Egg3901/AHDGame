@@ -47,6 +47,7 @@ const SECURITY_PROJECTION = {
   password: 1,
   googleId: 1,
   discordId: 1,
+  appleId: 1,
   role: 1,
   isAdmin: 1,
   isBanned: 1,

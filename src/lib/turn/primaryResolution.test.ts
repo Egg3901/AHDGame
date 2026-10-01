@@ -44,7 +44,8 @@ vi.mock("@/lib/primaryScore", () => ({
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
   getAllStateApprovalsForElection: vi.fn().mockResolvedValue(new Map()),
 }));
-vi.mock("@/lib/utils/electionLabels", () => ({
+vi.mock("@/lib/utils/electionLabels", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils/electionLabels")>()),
   formatElectionTypeLabel: vi.fn().mockReturnValue("Senate"),
 }));
 

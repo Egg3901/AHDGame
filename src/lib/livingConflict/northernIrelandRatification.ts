@@ -31,6 +31,10 @@ export async function reconcileNorthernIrelandRatification(
   currentTurn = state.lastProcessedTurn ?? state.totalTurns
 ): Promise<LivingConflictState> {
   if (!state.hasOpened || state.status === "closed") return state;
+  // A modern opening inherits the ratified 1998 settlement. The current-world
+  // bill collection only holds player-era bills, so its empty state alone cannot
+  // erase historical consent. A new paired proposal or recorded rejection enters
+  // the ordinary reconciliation path, including later relapse and renegotiation.
   const bills = await db
     .collection<RatificationBill>("bills")
     .find(
@@ -46,6 +50,13 @@ export async function reconcileNorthernIrelandRatification(
     { kind: "peace_agreement", "peaceAgreement.conflictKey": def.key, "result.passed": false },
     { sort: { "result.resolvedTurn": -1 } }
   );
+  if (
+    state.openingProvenance?.preset === "2027-default" &&
+    state.phaseLevel >= 6 &&
+    !(uk && ie) &&
+    !previousRejection
+  )
+    return state;
   const freshAuthorization =
     !previousRejection ||
     [uk, ie].every(

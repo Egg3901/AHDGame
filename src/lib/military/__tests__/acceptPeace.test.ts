@@ -245,7 +245,13 @@ describe("when the leaver was the last of its side", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "A",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("names side B the winner when side A is the one that empties", async () => {
@@ -253,7 +259,13 @@ describe("when the leaver was the last of its side", () => {
     duel.sideA.countries = ["UK"];
     const r = await acceptPeace(db, offer(), duel, 40, "c1");
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("removes the leaver from the roster BEFORE resolving", async () => {
@@ -322,7 +334,13 @@ describe("treaty release", () => {
 
   it("resolves the war when the principal and its allies were the whole side", async () => {
     const res = await acceptPeace(db, ddLeaves(), pactConflict(), 100, "c1");
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 100);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "A",
+      100,
+      expect.objectContaining({ endingType: "peace" })
+    );
     expect(res.resolved).toBe(true);
   });
 
@@ -467,7 +485,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("names the same victor when the offer ran the other way", async () => {
@@ -485,7 +509,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("hands the war to side A when the side B principal is the one leaving", async () => {
@@ -502,7 +532,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "A",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("ends the war with NO victor on a white peace", async () => {
@@ -521,7 +557,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "stalemate", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "stalemate",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("leaves the war running when the other party is only a guest", async () => {

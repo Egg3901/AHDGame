@@ -24,6 +24,7 @@ import { applyTariffProvision, fireTariffProvisionSentiment } from "@/lib/tariff
 import { applySubsidyProvision, applyEndSubsidyProvision } from "@/lib/subsidies/subsidyEffects";
 import { applyNationalizeProvision } from "@/lib/nationalization/legislativeNationalize";
 import { computeNationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
+import { recordEnactedMaastricht } from "@/lib/internationalOrganizations/europeanIntegration/service";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { declareWar } from "@/lib/military/declareWar";
 import { allianceBarBetween } from "@/lib/military/allianceBar";
@@ -214,6 +215,16 @@ export async function applyLegislationEffect(
             bill.stateId,
             p as EndSubsidyProvision
           );
+        } else if (p.type === "european_treaty") {
+          if (getNonPolicyProvisionScope(bill.stateId) !== "national")
+            throw new Error("European treaties require national legislation");
+          await recordEnactedMaastricht(
+            db,
+            countryId,
+            p.action === "ratify",
+            String(bill._id),
+            await getCurrentTurn(db)
+          );
         } else if (p.type === "international_organization") {
           // International-organization membership actions (Foreign Policy). Fund
           // moves treasury → org fund; leave/join effects land in later tasks.
@@ -310,7 +321,13 @@ export async function applyLegislationEffect(
           // Structural act: bring a seat into existence regardless of its era.
           // Must stay above the tariff catch-all (no tariff fields to cast).
           await applyCreateDepartmentProvision(db, p);
-        } else {
+        } else if (p.type === "tariff") {
+          // Only a real tariff reaches the tariff write. Electoral law, central
+          // bank independence, euro adoption and economic system reform are
+          // applied by `billEnactment`; an open catch-all here cast them to
+          // TariffProvision and upserted a rate-less, scope-less tariff row for
+          // every one of those bills.
+          //
           // Real enactment path — apply the data write, then fire sentiment
           // pulses only if the tariff rate actually changed. The reconcile
           // replay path (`reconcileSignedTariffBills`) calls `applyTariffProvision`

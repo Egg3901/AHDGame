@@ -8,7 +8,10 @@ import {
   CAPACITY_FOUNDING_DISCOUNT,
   capacityPricePerUnit,
 } from "@/lib/constants/capacityEconomy";
-import { DEFAULT_SECTOR_STARTING_REVENUE } from "@/lib/constants/corporations";
+import {
+  DEFAULT_SECTOR_STARTING_REVENUE,
+  getNationalDominanceGrowthCostMultiplier,
+} from "@/lib/constants/corporations";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 
 /**
@@ -58,6 +61,9 @@ vi.mock("@/lib/corporations/techTree/featureFlag", () => ({
 }));
 vi.mock("@/lib/corporations/sectorGrowthCost", () => ({
   resolveCountryPrimeRate: vi.fn().mockResolvedValue(0),
+}));
+vi.mock("@/lib/corporations/marketShare", () => ({
+  fetchCorporationNationalSectorSharePercent: vi.fn().mockResolvedValue(0),
 }));
 vi.mock("@/lib/corporations/capexTxLog", () => ({
   emitBuildCapexTx: vi.fn().mockResolvedValue(undefined),
@@ -165,6 +171,22 @@ beforeEach(() => {
 });
 
 describe("expandSector — founding build (plants)", () => {
+  it("charges national dominance on a greenfield starter plant", async () => {
+    const { fetchCorporationNationalSectorSharePercent } =
+      await import("@/lib/corporations/marketShare");
+    vi.mocked(fetchCorporationNationalSectorSharePercent).mockResolvedValueOnce(60);
+    await wireMocks(true);
+
+    const { expandSector } = await import("./expandSector");
+    const res = await expandSector(request(), { params });
+
+    expect(res.status).toBe(201);
+    expect(chargedAnchor()).toBeCloseTo(
+      ENTRY_FEE_ANCHOR + STARTER_BUILD_ANCHOR * getNationalDominanceGrowthCostMultiplier(60),
+      6
+    );
+  });
+
   it("pauses new Retail sectors during the demand unwind", async () => {
     await wireMocks(true);
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({

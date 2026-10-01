@@ -140,4 +140,11 @@ describe("adoptReferenceGameConfigGates — gates", () => {
     expect(adminLogs).toHaveLength(0);
     expect(result.notes?.join(" ")).toContain("DRY RUN");
   });
+  it.each([2, 500])("preserves legacy campaign pricing at turn %s", async (turn) => {
+    for (const value of [undefined, false, true]) {
+      const { db, updates } = fakeDb(fullyPopulated({ campaignEraPriceLevelEnabled: value }), turn);
+      await runAdoptReferenceGameConfigGates(db, {});
+      expect(updates.every((update) => !("campaignEraPriceLevelEnabled" in update))).toBe(true);
+    }
+  });
 });

@@ -1,3 +1,4 @@
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export interface CorporationTurnResult {
@@ -18,14 +19,19 @@ export interface CorporationTurnResult {
   currencyIncomeFaceByCharacterId: Map<string, Map<CurrencyCode, number>>;
 }
 
-/** Optional sub-step timer used by simulation profiling. */
+/**
+ * Sub-step timer. Always feeds the persisted phase sub-steps (#2689);
+ * `SIM_CORP_TIMING=1` additionally prints the timings for simulation profiling.
+ */
 export function createCorporationTurnTimer() {
   const enabled = process.env.SIM_CORP_TIMING === "1";
   const timings: Array<[string, number]> = [];
   let previous = enabled ? Date.now() : 0;
+  const steps = substepMarker();
 
   return {
     mark(label: string): void {
+      steps.mark(label);
       if (!enabled) return;
       const now = Date.now();
       timings.push([label, now - previous]);

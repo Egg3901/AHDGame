@@ -623,6 +623,17 @@ export async function POST(request: Request) {
       // refusal it would fall through to the policy branch and be rejected as
       // "Each provision must have a legislation type" — a message that names
       // the wrong problem entirely.
+      if ("type" in rawP && rawP.type === "economic_system_reform") {
+        logRequest("POST", path, 400, Date.now() - start);
+        return NextResponse.json(
+          {
+            error:
+              "Economic system reform is proposed through the country legislature, not this chamber.",
+          },
+          { status: 400 }
+        );
+      }
+
       if ("type" in rawP && rawP.type === "central_bank_independence") {
         logRequest("POST", path, 400, Date.now() - start);
         return NextResponse.json(

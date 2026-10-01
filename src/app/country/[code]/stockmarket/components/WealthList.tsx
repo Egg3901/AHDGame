@@ -240,7 +240,7 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
                   );
                 })}
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
-                  24h Change
+                  6M Change
                 </th>
               </tr>
             </thead>

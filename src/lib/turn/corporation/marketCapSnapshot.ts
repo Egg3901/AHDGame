@@ -80,6 +80,49 @@ export function foldDividendTaxIntoTaxMaps(
   return { mergedTaxByCountry, mergedTaxByCountryDomestic, divTaxTotalAnchor };
 }
 
+/**
+ * Most recent string credit rating per corporation. Filtering on the rating
+ * inside the grouped scan forces a FETCH of every history row (the whole
+ * table on an aged world), so read each corporation's newest row through the
+ * {corporationId, turn} DISTINCT_SCAN first and only walk history for the
+ * corporations whose newest row carries no rating.
+ */
+export async function loadPriorCreditRatings(
+  db: Db,
+  corporationIds: ObjectId[]
+): Promise<Map<string, string>> {
+  const history = db.collection<CorporationHistory>("corporationHistory");
+  const latestRows = await history
+    .aggregate<{ _id: ObjectId; lastRating?: unknown }>([
+      { $match: { corporationId: { $in: corporationIds } } },
+      { $sort: { corporationId: 1, turn: -1 } },
+      { $group: { _id: "$corporationId", lastRating: { $first: "$creditRating" } } },
+    ])
+    .toArray();
+  const ratings = new Map<string, string>();
+  const unrated: ObjectId[] = [];
+  for (const row of latestRows) {
+    if (typeof row.lastRating === "string") ratings.set(row._id.toString(), row.lastRating);
+    else unrated.push(row._id);
+  }
+  if (unrated.length === 0) return ratings;
+
+  const olderRows = await history
+    .aggregate<{ _id: ObjectId; lastRating: string }>([
+      {
+        $match: {
+          corporationId: { $in: unrated },
+          creditRating: { $exists: true, $type: "string" },
+        },
+      },
+      { $sort: { corporationId: 1, turn: -1 } },
+      { $group: { _id: "$corporationId", lastRating: { $first: "$creditRating" } } },
+    ])
+    .toArray();
+  for (const row of olderRows) ratings.set(row._id.toString(), row.lastRating);
+  return ratings;
+}
+
 export async function snapshotMarketCap(
   db: Db,
   turn: number,
@@ -203,7 +246,10 @@ export async function snapshotMarketCap(
                 turn: { $lt: turn },
               },
             },
-            { $sort: { turn: -1 } },
+            // Sort on the group key first so the {corporationId, turn} index serves
+            // match, sort and $first as a DISTINCT_SCAN (one entry per corporation)
+            // instead of walking the whole history by turn (#2693).
+            { $sort: { corporationId: 1, turn: -1 } },
             {
               $group: {
                 _id: "$corporationId",
@@ -370,20 +416,7 @@ export async function snapshotMarketCap(
   // Per-corporation history snapshots
   if (corpSnapshots.length > 0) {
     const corpIdsForPrev = corpSnapshots.map((s) => s.corpId);
-    const prevRatingRows = await db
-      .collection<CorporationHistory>("corporationHistory")
-      .aggregate<{ _id: ObjectId; lastRating: string }>([
-        {
-          $match: {
-            corporationId: { $in: corpIdsForPrev },
-            creditRating: { $exists: true, $type: "string" },
-          },
-        },
-        { $sort: { turn: -1 } },
-        { $group: { _id: "$corporationId", lastRating: { $first: "$creditRating" } } },
-      ])
-      .toArray();
-    const prevRatingByCorp = new Map(prevRatingRows.map((r) => [r._id.toString(), r.lastRating]));
+    const prevRatingByCorp = await loadPriorCreditRatings(db, corpIdsForPrev);
 
     // Per-corp history fields are denominated in the corp's home currency.
     // CorpSnapshot fields are mostly ₳-valued (revenue, income, tax, bond flows,

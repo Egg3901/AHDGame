@@ -51,6 +51,8 @@ import { isPatreonActive } from "@/lib/db/types";
 import { PolicyDemographicsCard } from "@/app/profile/components/PolicyDemographicsCard";
 import type { CompassMarker } from "@/components/PoliticalCompass";
 import { InteractCard } from "@/app/profile/components/InteractCard";
+import { PlayerSafetyActions } from "@/components/profile/PlayerSafetyActions";
+import { hasBlocked } from "@/lib/safety/playerSafety";
 import { ProfileAchievements } from "@/components/ProfileAchievements";
 import { CampaignSongPlayer } from "@/components/CampaignSongPlayer";
 import { ProfileHeader } from "@/app/profile/components/ProfileHeader";
@@ -103,6 +105,7 @@ import {
 } from "@/lib/utils/fundGeneration";
 import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
 import { countryElectionsUrl, countryUrl, politiciansUrl, regionUrl } from "@/lib/urls";
+import { resolveMemberSince } from "@/lib/character/memberSince";
 
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 
@@ -459,6 +462,11 @@ async function getCharacterById(characterId: string) {
       isModerator: user?.isAdmin || false || user?.role === "moderator" || user?.role === "admin",
       isBanned: user?.isBanned || false,
       lastActivity: user?.lastActivity || null,
+      membership: resolveMemberSince({
+        accountCreatedAt: user?.createdAt,
+        profileCreatedAt: character.createdAt,
+        historyStartedAt: gameState?.singleplayerConfig ? null : gameState?.createdAt,
+      }),
       discordId: user?.discordId ?? null,
       discordUsername: user?.discordUsername ?? null,
       discordAvatar: user?.discordAvatar ?? null,
@@ -541,26 +549,13 @@ export default async function CharacterPage({ params }: PageProps) {
 
   if (!data) redirect("/map");
 
-  const [viewerUserDoc, financialData, unionContribution] = await Promise.all([
-    userData
-      ? (async () => {
-          const db = await getDb();
-          return db
-            .collection<User>("users")
-            .findOne(
-              { _id: new ObjectId(userData.userId) },
-              { projection: { disableAutoplayOnOtherProfiles: 1 } }
-            );
-        })()
-      : Promise.resolve(null),
+  const [financialData, unionContribution] = await Promise.all([
     getFinancialData(data.character._id),
     (async () => {
       const db = await getDb();
       return unionContributionIncomePerTurn(db, data.character._id);
     })(),
   ]);
-
-  const viewerDisablesAutoplay = viewerUserDoc?.disableAutoplayOnOtherProfiles ?? false;
 
   const {
     character,
@@ -607,6 +602,11 @@ export default async function CharacterPage({ params }: PageProps) {
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const isOwnProfile = userData?.character?._id?.toString() === character._id.toString();
+  // A viewer who blocked this player sees no bio or campaign song from them.
+  const viewerHasBlocked =
+    !!userData?.userId && !isOwnProfile && character.userId
+      ? await hasBlocked(await getDb(), new ObjectId(userData.userId), character.userId)
+      : false;
   const canInfluence = userData?.hasCharacter && !isOwnProfile && !isBanned;
 
   const partyHex = getPartyHex(character.party, party?.color ?? undefined);
@@ -827,7 +827,7 @@ export default async function CharacterPage({ params }: PageProps) {
   );
   const populationTier = getPopulationTier(statePopulation);
 
-  const memberSince = new Date(character.createdAt).toLocaleDateString("en-US", {
+  const memberSince = data.membership.date.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -860,7 +860,7 @@ export default async function CharacterPage({ params }: PageProps) {
     officesHeldCount: officesHeld.size,
     activeRaceCount: candidateElections.length,
   });
-  const publicOverview = character.bio?.trim() || publicSummary;
+  const publicOverview = (!viewerHasBlocked && character.bio?.trim()) || publicSummary;
   const heroStatusLine = buildHeroStatusLine({
     officeLabel,
     partyName: publicPartyName,
@@ -1009,6 +1009,7 @@ export default async function CharacterPage({ params }: PageProps) {
           party={party}
           user={{ username, isAdmin, isModerator }}
           memberSince={memberSince}
+          memberSinceIsApproximate={data.membership.isApproximate}
           officeLabels={profileOfficeLabels}
           stateLabel={stateName}
           countrySlug={countrySlug}
@@ -1201,12 +1202,10 @@ export default async function CharacterPage({ params }: PageProps) {
                 </section>
               )}
 
-              {character.campaignSongUrl && (
-                <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+              {character.campaignSongUrl && !viewerHasBlocked && (
+                <div className="store-app-hidden rounded-xl border border-card-border bg-card p-4 shadow-card">
                   <CampaignSongPlayer
                     videoId={character.campaignSongUrl}
-                    ownerAutoplay={character.campaignSongAutoplay ?? false}
-                    viewerDisablesAutoplay={viewerDisablesAutoplay}
                     characterName={character.name}
                   />
                 </div>
@@ -1243,6 +1242,22 @@ export default async function CharacterPage({ params }: PageProps) {
                       </Link>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {userData && !isOwnProfile && (
+                <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+                  {viewerHasBlocked && (
+                    <p className="mb-3 text-xs text-muted">
+                      You blocked this player. Their bio, campaign song and mail are hidden from
+                      you.
+                    </p>
+                  )}
+                  <PlayerSafetyActions
+                    characterId={character._id.toString()}
+                    characterName={character.name}
+                    initiallyBlocked={viewerHasBlocked}
+                  />
                 </div>
               )}
 
@@ -1286,9 +1301,11 @@ export default async function CharacterPage({ params }: PageProps) {
                 Public Overview
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-foreground">{publicOverview}</p>
-              {character.bio?.trim() && character.bio.trim() !== publicSummary && (
-                <p className="mt-3 text-sm leading-relaxed text-muted">{publicSummary}</p>
-              )}
+              {!viewerHasBlocked &&
+                character.bio?.trim() &&
+                character.bio.trim() !== publicSummary && (
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{publicSummary}</p>
+                )}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {overviewStats.map((stat) => (
                   <div

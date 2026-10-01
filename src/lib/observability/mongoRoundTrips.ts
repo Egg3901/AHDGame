@@ -257,6 +257,15 @@ export function roundTripReport(topPhases = 20): RoundTripPhaseReport[] {
 }
 
 /** Round trips attributed to one phase so far this turn. */
+/**
+ * The turn phase the caller is running inside, from the audit context that
+ * `runPhase` establishes, or null outside a phase.
+ */
+export function currentTurnPhase(): string | null {
+  const traceId = getAuditRequestContext()?.traceId;
+  return (traceId && phaseFromTraceId(traceId)) || null;
+}
+
 export function phaseRoundTrips(phase: string): number {
   return state().counts.get(phase)?.total ?? 0;
 }

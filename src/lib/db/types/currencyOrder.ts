@@ -92,6 +92,8 @@ export interface CurrencyOrder {
    * final flip or by a rollback restore. */
   processingFillKey?: string;
   processingFill?: ProcessingFillIntent;
+  /** Expiry refund remains retryable until the stamped wallet write is acknowledged. */
+  expiryRefundState?: "pending" | "credited";
   filledRate?: number;
   /** Cumulative spread charged across all fill tranches */
   spreadCharged: number;

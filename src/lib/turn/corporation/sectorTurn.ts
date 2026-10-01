@@ -61,6 +61,7 @@ import {
   sectorNpvBoostMultiplier,
   sectorRevenueBoostMultiplier,
 } from "@/lib/corporations/rules/marketBoost";
+import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -463,6 +464,12 @@ export function processSector(
     privateBankingEnabled: env.privateBankingEnabled,
     marketPlantsEnabled: market.plantsEnabled,
     contractProductionTargetBySectorId: market.contractProductionTargetBySectorId,
+    // The same market each leg clears and realizes in (see clearing.ts):
+    // state book for state-scoped outputs, else the sector's reachable book.
+    throttleLegPriceRatio: (commodity) =>
+      isStateScopedCommodity(commodity)
+        ? lookups.statePriceRatioByState?.get(sector.stateId)?.get(commodity)
+        : lookups.reachablePriceRatioByCountry?.get(sectorCountryId)?.get(commodity),
   });
   if (capacityBindingEvent) {
     pendingCapacityBindingEvents.push(capacityBindingEvent);

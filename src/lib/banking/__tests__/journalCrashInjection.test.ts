@@ -194,8 +194,8 @@ describe("settleTransition under injected crashes", () => {
   it("between the debit's stamp and the credit: the queue names the missing leg exactly", async () => {
     const before = totalMoney(memory);
     // Writes: claim insert (moneyMoves #1), debit (corp #1), debit stamp
-    // (moneyMoves #2), credit (corp #2). Crash before the credit.
-    await crashAt(memory, { collection: "corporations", op: "updateOne", onCall: 2 });
+    // (moneyMoves #2), receipt release (corp #2), credit (corp #3).
+    await crashAt(memory, { collection: "corporations", op: "updateOne", onCall: 3 });
     expect(totalMoney(memory)).toBe(before - 100_000);
     const retry = await settleTransition(memory as unknown as Db, injection());
     expect(retry.status).toBe("replayed");
@@ -209,9 +209,16 @@ describe("settleTransition under injected crashes", () => {
 
   it("after the legs, before the projection: the retry finishes the projection and moves no money", async () => {
     const before = totalMoney(memory);
-    // Corporation writes: debit (#1), credit (#2), then the projection (#3).
-    // Crash before the projection lands, after it was claimed.
-    await crashAt(memory, { collection: "corporations", op: "updateOne", onCall: 3 });
+    // Select the posted-capital projection independently of cash receipt cleanup.
+    await crashAt(memory, {
+      collection: "corporations",
+      op: "updateOne",
+      onCall: 1,
+      matches: (args) => {
+        const update = args[1] as { $inc?: Record<string, unknown> };
+        return update.$inc?.["bankCharter.postedCapital"] !== undefined;
+      },
+    });
     expect(bank(memory).bankCharter.cashReserves).toBe(600_000);
     expect(bank(memory).liquidCapital).toBe(200_000);
     expect(bank(memory).bankCharter.postedCapital).toBe(100_000);

@@ -1,3 +1,4 @@
+import { planEuroSettlement } from "./euro/rules";
 /**
  * Guards the client/server boundary that keeps `mongodb` out of the browser.
  *
@@ -113,4 +114,28 @@ describe("corpWalletSpend — client/server boundary", () => {
       })
     ).toMatchObject({ canAfford: false, spendAmount: 100, remainingBalance: 0 });
   });
+});
+
+it("uses settled euro terms for corporate bond and share funding", () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  const params = {
+    availableBalance: 750,
+    fromCurrency: "GBP" as const,
+    toCurrency: "EUR" as const,
+    rates: { GBP: 99, EUR: 99 },
+    union,
+  };
+  expect(estimateCorpWalletSpend({ ...params, requiredAmount: 1000 })).toMatchObject({
+    canAfford: true,
+    deliveredAmount: 1000,
+    spreadFee: 0,
+  });
+  expect(estimateCorpMaxSpendableTargetAmount(params)).toBe(1000);
 });

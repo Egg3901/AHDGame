@@ -3,6 +3,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { StateMetrics } from "@/lib/db/types";
 import type { RegionDemographics } from "@/lib/db/types/regionDemographics";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import { cohortAgeShares1991 } from "@/lib/seeds/rules/cohortAgeShares1991";
 import { getRegionCensusData } from "@/lib/seeds/regionCensusData";
 import { synthesizeAgeSexVector } from "@/lib/demographics/seedSynthesis";
 import { sexRatioFromVector, dependencyRatio } from "@/lib/demographics/cohortVector";
@@ -94,13 +95,16 @@ export async function seedCohortVectors(
   for (const state of realStates) {
     const id = String(state._id);
     const population = state.population ?? 0;
-    const census = getRegionCensusData(state.countryId, id, preset);
-    if (!census || !(population > 0)) {
-      stats.skipped.push(`${id} (${state.countryId}): ${!census ? "no census" : "no population"}`);
+    // Age-only national proxies are sufficient for stocks. Do not invent the
+    // other census dimensions or relabel 1979 census data as 1991 observations.
+    const proxyAge = cohortAgeShares1991(state.countryId, id, preset);
+    const census = proxyAge ? null : getRegionCensusData(state.countryId, id, preset);
+    const age = proxyAge ?? (census as { age: Record<string, number> } | null)?.age;
+    if (!age || !(population > 0)) {
+      stats.skipped.push(`${id} (${state.countryId}): ${!age ? "no census" : "no population"}`);
       continue;
     }
 
-    const age = (census as { age: Record<string, number> }).age;
     const metrics = metricsById.get(id);
     const medianAge = metrics?.population?.medianAge?.value ?? DEFAULT_MEDIAN_AGE;
     const birthRate = metrics?.population?.birthRate?.value ?? DEFAULT_BIRTH_RATE;

@@ -1,3 +1,4 @@
+import { processFinancialCrisisGuarantees } from "@/lib/crises/financialCrisisGuarantees";
 /**
  * Bank runs and depositor protection. processBankSolvencyTurn evaluates bank
  * confidence, returns fleeing household deposits with their cash, and resolves
@@ -29,7 +30,7 @@ import { getReserveRequirement } from "@/lib/banking/reserves";
 import { discountWindowStigma } from "@/lib/banking/discountWindow";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
 import { charterMay } from "@/lib/banking/rules/capabilities";
-import { RUN_FAILURE_COVER_FRACTION } from "@/lib/banking/rules/balanceSheet";
+import { bankEquity, RUN_FAILURE_COVER_FRACTION } from "@/lib/banking/rules/balanceSheet";
 import {
   CONTAGION_PANIC_TURNS,
   FLIGHT_RATE_BY_BAND,
@@ -237,6 +238,8 @@ export async function processBankSolvencyTurn(
     }
   }
 
+  await processFinancialCrisisGuarantees(db, turn, policy);
+
   const unresolved = await db
     .collection<Corporation>("corporations")
     .find({
@@ -271,7 +274,10 @@ async function evaluateOneBank(
   const propEnabled = policy.propTrading;
   const live = await db
     .collection<Corporation>("corporations")
-    .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1 } });
+    .findOne(
+      { _id: corp._id },
+      { projection: { liquidCapital: 1, bankCharter: 1, bankPropBookRevision: 1 } }
+    );
   if (!live?.bankCharter || live.bankCharter.lastSolvencyTurn === turn) {
     return null;
   }
@@ -298,22 +304,43 @@ async function evaluateOneBank(
 
   // Mark prop book before confidence so leverage / equity use fresh prices.
   if (propRunning) {
+    const beforeMarkCharter = charter;
     const marked = await markBook(db, charter);
-    const liq = await forceLiquidateToLeverageCap(db, corp._id, cashReserves, charter, marked);
+    const liq = await forceLiquidateToLeverageCap(
+      db,
+      corp._id,
+      cashReserves,
+      charter,
+      marked,
+      live.bankPropBookRevision,
+      corp.name,
+      turn
+    );
+    if (liq.stale) return null;
     cashReserves = liq.cashReserves;
     charter = liq.charter;
     forcedLiquidation = liq.forced;
     if (!liq.forced) {
-      await db.collection<Corporation>("corporations").updateOne(
-        { _id: corp._id, "bankCharter.status": "active" },
+      const markedUpdate = await db.collection<Corporation>("corporations").updateOne(
+        {
+          _id: corp._id,
+          bankCharter: beforeMarkCharter,
+          "bankCharter.status": "active",
+          bankPropBookRevision:
+            live.bankPropBookRevision === undefined
+              ? { $exists: false }
+              : live.bankPropBookRevision,
+        },
         {
           $set: {
+            bankPropBookRevision: (live.bankPropBookRevision ?? 0) + 1,
             "bankCharter.propBook": marked.positions,
             "bankCharter.propBookMarkValue": marked.propBookMarkValue,
             updatedAt: new Date(),
           },
         }
       );
+      if (markedUpdate.matchedCount !== 1) return null;
       charter = {
         ...charter,
         propBook: marked.positions,
@@ -442,6 +469,16 @@ async function evaluateOneBank(
     // `+ postedCapital`: posted capital is a memo of cash already inside the
     // reserve balance, so adding it counted the same money twice.
     fails = depositTakerFails({
+      // Realized credit losses can exhaust equity before a cash run. Include
+      // marked securities here: the conservative distribution-capital measure
+      // deliberately excludes them, but purchased assets still back the estate.
+      netAssets:
+        bankEquity(
+          { ...charter, cashReserves, npcDeposits },
+          {
+            playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+          }
+        ) + Math.max(0, charter.propBookMarkValue ?? 0),
       priorBand,
       cashReserves,
       requiredLiquidity:

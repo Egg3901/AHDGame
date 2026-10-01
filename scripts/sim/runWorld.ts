@@ -44,6 +44,7 @@ import { worldsimQueryMonitoringRequested } from "./queryMonitoring";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameHealthSummary } from "@/lib/db/types/gameHealthSnapshot";
 import type { TurnLog } from "@/lib/db/types/turnLog";
+import type { WorldsimCorporationBootstrapResult } from "@/lib/sim/worldsimCorporationBootstrap";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -57,6 +58,7 @@ import {
 } from "@/lib/sim/actorCoverage";
 import { parseSimActorMode } from "@/lib/sim/syntheticActors";
 import { completedTurnProgress } from "./simStatusMirror";
+import { preservedAutonomyLevel } from "./preparedSandbox";
 import {
   allFeatureFlagsGameStateSet,
   economicExperimentConfigSet,
@@ -128,6 +130,11 @@ interface SimRunDoc {
     ok?: number | null;
     warn?: number | null;
     critical?: number | null;
+  };
+  /** Sim-only synthetic producer augmentation, not historical opening-economy fidelity. */
+  corporationBootstrap?: WorldsimCorporationBootstrapResult & {
+    mode: "sim-augmentation";
+    perSectorCount: number;
   };
 }
 
@@ -482,6 +489,13 @@ async function main() {
   const { snapshotCorporationsByCountry } = await import("@/lib/turn/corporationCountrySnapshot");
 
   const db = await getDb();
+  const preservedState = preserveLiveConfig
+    ? await db.collection("gameState").findOne({ _id: "current" as never })
+    : null;
+  const requestedAutonomyLevel = AUTONOMY_LEVEL;
+  const effectiveAutonomyLevel = preserveLiveConfig
+    ? preservedAutonomyLevel(preservedState?.nppAutonomyLevel)
+    : requestedAutonomyLevel;
 
   // Executed source identity (#1966): this process's own cwd + git HEAD.
   // Best-effort SHA, but fails closed when a pin was requested and disagrees,
@@ -621,7 +635,7 @@ async function main() {
       sourceRevision: executedCommit,
       sourceWorktree: sourceWorktree ?? null,
       featureManifest: buildWorldsimFeatureManifest({
-        autonomyLevel: AUTONOMY_LEVEL,
+        autonomyLevel: effectiveAutonomyLevel,
         actorMode,
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         preIteration,
@@ -726,11 +740,11 @@ async function main() {
     }
 
     log(
-      `Forcing NPP autonomy (${AUTONOMY_LEVEL}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
+      `Forcing NPP autonomy (${effectiveAutonomyLevel}, foreign policy ${foreignPolicyMode}/${foreignPolicyStage}, player rail ${preservePlayerRail ? "preserved" : "disabled"})`
     );
     await forceFullAutonomy(
       db,
-      AUTONOMY_LEVEL,
+      effectiveAutonomyLevel,
       foreignPolicyMode,
       foreignPolicyStage,
       preservePlayerRail
@@ -745,7 +759,7 @@ async function main() {
             singleplayerConfig: {
               mode: "worldsim",
               difficulty,
-              nppAutonomyLevel: AUTONOMY_LEVEL,
+              nppAutonomyLevel: effectiveAutonomyLevel,
               featureFlags: {},
               permanentHeadOfState: false,
               configuredAt: new Date(),
@@ -786,10 +800,9 @@ async function main() {
     }
     log(`Backfill complete: ${seatsBackfilled} seats filled across all countries`);
 
-    // Bootstrap seeds no tradeable corporations at all (only 8 non-tradeable
-    // country-owned entities, one per country) — found via this harness: 50
-    // turns of NPP bond/stock/index-fund investing produced 384 bond
-    // positions but ZERO share positions, because there was nothing to buy.
+    // Some presets seed no tradeable corporations; others seed historical
+    // producers or finance NPPs. This sim-only augmentation fills the missing
+    // three-per-type producer slots without replacing those existing actors.
     // Corporation creation has always been player-driven (found-a-corp
     // action) or admin-batch-seeded (batchSpawnNppCorporations, used by
     // /api/admin/corporations/spawn-npp-all in production) — never automatic
@@ -803,12 +816,11 @@ async function main() {
     // /reset path.
     // elections-only freezes the economy (corporationTurn is skipped), so NPP
     // corporations would just sit idle — skip the (slow) spawn to speed seeding.
+    let corporationBootstrap: SimRunDoc["corporationBootstrap"];
     if (electionsOnly) {
       log("elections-only: skipping NPP corporation spawn (economy is frozen this run)");
     } else {
-      log(
-        "Spawning NPP-owned corporations (bootstrap seeds none — needed for stock/index-fund investing)"
-      );
+      log("Augmenting NPP producers to three per sector from conserved unowned capacity");
       // Eligibility (planned economies keep their SOEs, zero private attempts)
       // is determined inside, against the marketization-dial gate, before any
       // creation attempt.
@@ -817,7 +829,14 @@ async function main() {
         perSectorCount: 3,
         log,
       });
-      log(`Corporation spawn complete: ${corpBootstrap.countriesSeeded} countries seeded`);
+      corporationBootstrap = {
+        mode: "sim-augmentation",
+        perSectorCount: 3,
+        ...corpBootstrap,
+      };
+      log(
+        `Corporation augmentation complete: ${corpBootstrap.countriesSeeded} countries augmented`
+      );
     }
 
     await simRuns.updateOne(
@@ -829,7 +848,8 @@ async function main() {
           currentTurn: 0,
           error: null,
           source,
-          autonomyLevel: AUTONOMY_LEVEL,
+          ...(corporationBootstrap ? { corporationBootstrap } : {}),
+          autonomyLevel: effectiveAutonomyLevel,
           ...(difficulty ? { difficulty } : {}),
           bootstrapConformance: {
             status: bootstrapConformance.status,
@@ -859,7 +879,7 @@ async function main() {
           status: "running",
           error: null,
           source,
-          autonomyLevel: AUTONOMY_LEVEL,
+          autonomyLevel: effectiveAutonomyLevel,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
         },
@@ -1001,10 +1021,10 @@ async function main() {
     }
     const converted = await applyCloneControllerPolicy(db, log, preservePlayerRail);
     if (converted > 0) log(`[clone] autonomized ${converted} human-run corporations → ceoType=npp`);
-    log(`[clone] forcing full NPP autonomy (world/country gates → ${AUTONOMY_LEVEL})`);
+    log(`[clone] forcing full NPP autonomy (world/country gates → ${effectiveAutonomyLevel})`);
     await forceFullAutonomy(
       db,
-      AUTONOMY_LEVEL,
+      effectiveAutonomyLevel,
       foreignPolicyMode,
       foreignPolicyStage,
       preservePlayerRail
@@ -1098,8 +1118,12 @@ async function main() {
       $set: {
         simTurnPhaseMode: simTurnPhaseMode ?? "full",
         electionScope: electionScope ? [...electionScope] : null,
-        nppForeignPolicyMode: foreignPolicyMode,
-        nppForeignPolicyStage: foreignPolicyStage,
+        nppForeignPolicyMode: preserveLiveConfig
+          ? (preservedState?.nppForeignPolicyMode ?? null)
+          : foreignPolicyMode,
+        nppForeignPolicyStage: preserveLiveConfig
+          ? (preservedState?.nppForeignPolicyStage ?? null)
+          : foreignPolicyStage,
         actorMode,
         preservePlayerRail,
         preserveLiveConfig,

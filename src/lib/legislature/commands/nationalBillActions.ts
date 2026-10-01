@@ -3,6 +3,7 @@
  * performNationalBillAction preserves voting windows and costs while refusing
  * legislative actions from a dissolved chamber.
  */
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 import type { AuthUser } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import type { LegislatureCommandResult } from "@/lib/legislature/commands/types";
@@ -545,6 +546,20 @@ export async function performNationalBillAction(
     await db
       .collection<Bill>("bills")
       .updateOne({ _id: bill._id }, { $set: { status: "withdrawn", updatedAt: now } });
+
+    await captureBillStatusChanged({
+      db,
+      billId: bill._id.toString(),
+      fromStatus: bill.status,
+      toStatus: "withdrawn",
+      scope: "national",
+      chamber: bill.currentChamber ?? bill.originChamber,
+      category: bill.category,
+      provisionFamily: bill.provisions?.[0]?.type,
+      nationId: countryId,
+      turn: currentTurn,
+      iteration: gameState?.iteration,
+    });
 
     recordAudit({
       source: "api",

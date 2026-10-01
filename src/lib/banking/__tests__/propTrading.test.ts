@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter, PropPosition } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
 import { CONFIDENCE_FORCED_LIQUIDATION_PENALTY, computeConfidence } from "../confidence";
@@ -76,7 +76,7 @@ describe("computePropEquityBase", () => {
 });
 
 describe("propTrading open/close/mark", () => {
-  let db: MockDb;
+  let db: InMemoryDb;
   let corpId: ObjectId;
   let liveCorp: Corporation;
   let fxDocs: { currencyCode: string; rate: number }[];
@@ -86,7 +86,7 @@ describe("propTrading open/close/mark", () => {
     vi.clearAllMocks();
     const { resetCorpFxRateCacheForTests } = await import("@/lib/currency/corporationCapital");
     resetCorpFxRateCacheForTests();
-    db = createMockDb();
+    db = createInMemoryDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
@@ -120,73 +120,19 @@ describe("propTrading open/close/mark", () => {
       { currencyCode: "EUR", rate: 1 },
     ];
 
-    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
-      _id: "default",
-      privateBankingEnabled: true,
-      bankPropTradingEnabled: true,
-    });
-
-    db.collectionMocks.corporations!.findOne.mockImplementation(
-      async (filter: { _id?: ObjectId; name?: unknown }) => {
-        if (filter?.name && typeof filter.name === "object" && "$regex" in filter.name) {
-          const query = filter.name as { $regex?: string; $options?: string };
-          const matches = query.$regex
-            ? new RegExp(query.$regex, query.$options).test(equityCorp.name)
-            : false;
-          return matches ? { ...equityCorp } : null;
-        }
-        if (!filter?._id) return null;
-        if (filter._id.equals(corpId)) {
-          return {
-            ...liveCorp,
-            bankCharter: liveCorp.bankCharter
-              ? { ...liveCorp.bankCharter, propBook: [...(liveCorp.bankCharter.propBook ?? [])] }
-              : undefined,
-          };
-        }
-        if (filter._id.equals(targetId)) return { ...equityCorp };
-        return null;
-      }
-    );
-
-    db.collectionMocks.corporations!.updateOne.mockImplementation(
-      async (
-        filter: { _id?: ObjectId; "bankCharter.cashReserves"?: unknown },
-        update: { $inc?: Record<string, number>; $set?: Record<string, unknown> }
-      ) => {
-        if (!filter?._id?.equals(corpId)) return { matchedCount: 0, modifiedCount: 0 };
-        const gteFilter = filter["bankCharter.cashReserves"];
-        if (gteFilter && typeof gteFilter === "object") {
-          const gte = (gteFilter as { $gte?: number }).$gte ?? 0;
-          if ((liveCorp.bankCharter?.cashReserves ?? 0) < gte) {
-            return { matchedCount: 0, modifiedCount: 0 };
-          }
-        }
-        if (liveCorp.bankCharter && update.$inc?.["bankCharter.cashReserves"]) {
-          liveCorp.bankCharter.cashReserves =
-            (liveCorp.bankCharter.cashReserves ?? 0) + update.$inc["bankCharter.cashReserves"];
-        }
-        if (liveCorp.bankCharter && update.$set?.["bankCharter.cashReserves"] !== undefined) {
-          liveCorp.bankCharter.cashReserves = update.$set["bankCharter.cashReserves"] as number;
-        }
-        if (liveCorp.bankCharter && update.$set) {
-          if (update.$set["bankCharter.propBook"] !== undefined) {
-            liveCorp.bankCharter.propBook = update.$set["bankCharter.propBook"] as PropPosition[];
-          }
-          if (update.$set["bankCharter.propBookMarkValue"] !== undefined) {
-            liveCorp.bankCharter.propBookMarkValue = update.$set[
-              "bankCharter.propBookMarkValue"
-            ] as number;
-          }
-        }
-        return { matchedCount: 1, modifiedCount: 1 };
-      }
-    );
-
-    db.collectionMocks.exchangeRates!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue(fxDocs),
-      project: vi.fn().mockReturnThis(),
-    });
+    db.seed("gameConfig", [
+      {
+        _id: "default",
+        privateBankingEnabled: true,
+        bankPropTradingEnabled: true,
+      },
+    ]);
+    db.seed("gameState", [{ _id: "current", currentTurn: 10 }]);
+    db.seed("corporations", [{ ...liveCorp }, { ...equityCorp }]);
+    // Mutations below model changes by other market participants in the persisted world.
+    liveCorp = db.collection("corporations").docs[0] as unknown as Corporation;
+    equityCorp = db.collection("corporations").docs[1] as unknown as Corporation;
+    db.seed("exchangeRates", fxDocs);
   });
 
   it("enforces leverage cap on open", async () => {

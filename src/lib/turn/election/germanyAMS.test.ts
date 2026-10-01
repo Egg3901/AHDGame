@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import {
@@ -6,6 +6,7 @@ import {
   allocateListSeatsPerLand,
   assignListSeats,
   maybeReconcileBundestag,
+  captureBundestagElectionWinners,
   persistBundestagResult,
   type BundestagElectionResult,
   type DirectMandates,
@@ -15,6 +16,11 @@ import {
   type ListOfficialDraft,
 } from "./germanyAMS";
 import type { ElectedOfficial } from "@/lib/db/types";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+
+vi.mock("@/lib/analytics/electionAnalytics", () => ({
+  captureElectionWon: vi.fn().mockResolvedValue(undefined),
+}));
 
 function oid(): ObjectId {
   return new ObjectId();
@@ -29,6 +35,16 @@ function oid(): ObjectId {
 type Doc = Record<string, unknown>;
 
 function matchClause(doc: Doc, key: string, val: unknown): boolean {
+  if (key.includes(".")) {
+    const value = key
+      .split(".")
+      .reduce<unknown>(
+        (current, part) =>
+          current && typeof current === "object" ? (current as Doc)[part] : undefined,
+        doc
+      );
+    return matchClause({ value }, "value", val);
+  }
   if (val && typeof val === "object" && !(val instanceof ObjectId) && !Array.isArray(val)) {
     const cond = val as Record<string, unknown>;
     if ("$in" in cond) {
@@ -109,6 +125,27 @@ function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
         if (!d) return { matchedCount: 0, modifiedCount: 0 };
         Object.assign(d, update.$set ?? {});
         return { matchedCount: 1, modifiedCount: 1 };
+      },
+      updateMany: async (query: Doc, update: { $set?: Doc; $unset?: Doc }) => {
+        const matched = docs().filter((d) => matches(d, query));
+        for (const d of matched) {
+          Object.assign(d, update.$set ?? {});
+          for (const key of Object.keys(update.$unset ?? {})) delete d[key];
+        }
+        return { matchedCount: matched.length, modifiedCount: matched.length };
+      },
+      bulkWrite: async (
+        ops: Array<{
+          updateOne?: { filter: Doc; update: { $set?: Doc } };
+          updateMany?: { filter: Doc; update: { $set?: Doc; $unset?: Doc } };
+        }>
+      ) => {
+        for (const op of ops) {
+          if (op.updateOne)
+            await makeCollection(name).updateOne(op.updateOne.filter, op.updateOne.update);
+          if (op.updateMany)
+            await makeCollection(name).updateMany(op.updateMany.filter, op.updateMany.update);
+        }
       },
       deleteMany: async (query: Doc) => {
         const keep = docs().filter((d) => !matches(d, query));
@@ -719,5 +756,67 @@ describe("persistBundestagResult (duplicate-key tolerance)", () => {
     const other = Object.assign(new Error("disk full"), { code: 14031 });
     const { db } = dbThrowingOnInsert(other);
     await expect(persistBundestagResult(db, resultWithOneBloc())).rejects.toThrow("disk full");
+  });
+});
+
+describe("reconciled Bundestag player outcomes", () => {
+  it("emits combined direct/list seats and list-only wins using one projected batch per input collection", async () => {
+    vi.mocked(captureElectionWon).mockClear();
+    const electionId = oid(),
+      directActor = oid(),
+      listActor = oid(),
+      candidateId = oid();
+    const db = makeFakeDb({
+      electionCandidates: [
+        { _id: candidateId, electionId, characterId: directActor, isNPP: false },
+      ],
+      electionVoteTallies: [
+        { electionId, totalVotes: { [candidateId.toString()]: 60, runner: 40 } },
+      ],
+    });
+    const collectionSpy = vi.spyOn(db, "collection");
+    const actors = new Map([
+      [directActor.toString(), { userId: oid(), currentOffice: null }],
+      [listActor.toString(), { userId: oid(), currentOffice: null }],
+    ]);
+    const holders = [
+      { state: "BW", party: "1", characterId: directActor, seatsHeld: 5, seatSource: "direct" },
+      { state: "BW", party: "1", characterId: directActor, seatsHeld: 20, seatSource: "list" },
+      { state: "BW", party: "2", characterId: listActor, seatsHeld: 10, seatSource: "list" },
+      { state: "BW", party: "3", nppId: oid(), isNPP: true, seatsHeld: 12 },
+    ] as unknown as ElectedOfficial[];
+    await captureBundestagElectionWinners(
+      db,
+      [{ _id: electionId, state: "BW", electionType: "bundestag" }],
+      holders,
+      actors,
+      { currentTurn: 42 }
+    );
+    expect(collectionSpy.mock.calls.map(([name]) => name)).toEqual([
+      "electionCandidates",
+      "electionVoteTallies",
+    ]);
+    expect(captureElectionWon).toHaveBeenCalledTimes(2);
+    expect(captureElectionWon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: actors.get(directActor.toString())!.userId.toString(),
+        electionId: electionId.toString(),
+        seatCount: 25,
+        voteSharePct: 60,
+        marginPct: 20,
+        incumbent: "unknown",
+        nationId: "DE",
+        turn: 42,
+      })
+    );
+    expect(captureElectionWon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: actors.get(listActor.toString())!.userId.toString(),
+        seatCount: 10,
+        voteSharePct: "unknown",
+        marginPct: "unknown",
+        incumbent: "unknown",
+      })
+    );
   });
 });

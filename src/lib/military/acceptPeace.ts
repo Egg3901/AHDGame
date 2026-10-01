@@ -78,6 +78,10 @@ export async function acceptPeace(
   currentTurn: number,
   acceptedBy: string
 ): Promise<AcceptPeaceResult> {
+  const analyticsParticipants = {
+    attackerNation: conflict.sideA.countries[0],
+    defenderNation: conflict.sideB.countries[0],
+  };
   const leaver = offer.leaver;
   // The party that stays. Read off the leaver rather than hardcoded, because either
   // of the two may be the one leaving.
@@ -217,7 +221,8 @@ export async function acceptPeace(
       db,
       conflict,
       offer.term.kind === "white_peace" ? "stalemate" : losingSide === "A" ? "B" : "A",
-      currentTurn
+      currentTurn,
+      { endingType: "peace", ...analyticsParticipants }
     );
     return { applied: true, resolved: true };
   }

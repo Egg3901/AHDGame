@@ -6,7 +6,7 @@ import type { ActionAuditRecord } from "../types/actionAuditLog";
  * Typed `actionAuditLog` collection. Pass `db` when already connected to
  * avoid an extra `getDb()` await (e.g. turn processing).
  *
- * Written exclusively via `recordAudit`/`recordAuditBulk`
+ * Written via `recordAudit`/`recordAuditBulk` or prepared durable command outboxes
  * (src/lib/audit/recordAudit.ts), gated by `isAuditLogEnabled`
  * (src/lib/audit/featureFlag.ts). See src/lib/db/types/actionAuditLog.ts
  * for the envelope shape and src/lib/admin/seed/indexes/actionAuditLog.ts

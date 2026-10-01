@@ -138,6 +138,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       message: `${character.name} has withdrawn from the ${election.electionType} race in ${election.state}`,
+      electionType: election.electionType,
+      phase: "unknown",
     });
   } catch (error) {
     logRequest("POST", path, 500, Date.now() - start);

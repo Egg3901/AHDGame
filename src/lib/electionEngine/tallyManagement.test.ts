@@ -733,6 +733,29 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     expect(pushed.recordedAt).toBe(now);
   });
 
+  it("appends the identical update to tallyWrites instead of writing when a collector is given (#2695)", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+
+    const electionId = new ObjectId();
+    const candidate = makeCandidate({ electionId });
+    const election = makeElection({ _id: electionId });
+
+    await setupHappyPath({ electionId, candidates: [candidate], election });
+
+    const now = new Date("2024-01-01T12:00:00Z");
+    const tallyWrites: Array<{ updateOne: { filter: unknown; update: unknown } }> = [];
+    await accumulateVoteTurn(electionId, 7, now, { tallyWrites: tallyWrites as never });
+
+    expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
+    expect(tallyWrites).toHaveLength(1);
+    expect(tallyWrites[0].updateOne.filter).toEqual({ electionId });
+    const update = tallyWrites[0].updateOne.update as {
+      $push: { turnSnapshots: { turn: number; recordedAt: Date } };
+    };
+    expect(update.$push.turnSnapshots.turn).toBe(7);
+    expect(update.$push.turnSnapshots.recordedAt).toBe(now);
+  });
+
   it("passes election.countryId into candidate enrichment so OPS banned-party weights apply", async () => {
     const { accumulateVoteTurn } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");

@@ -1,7 +1,9 @@
+import { ObjectId } from "mongodb";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { processForexTurn } from "./forexTurn";
+import * as euroService from "@/lib/currency/euro/service";
 import {
   CYCLE_PRESSURE_REGIMES,
   CYCLE_PRESSURE_TURNS,
@@ -124,26 +126,64 @@ beforeEach(() => {
 });
 
 describe("processForexTurn", () => {
-  it("mirrors the ECB euro rate into Bulgaria only in 2027", async () => {
-    const previousFindOne = db.collectionMocks.exchangeRates.findOne.getMockImplementation();
-    db.collectionMocks.exchangeRates.findOne.mockImplementation((filter: { _id: string }) =>
-      filter._id === "DE"
-        ? Promise.resolve(makeExchangeRate("DE", "EUR", 0.92, 0.92))
-        : previousFindOne?.(filter)
-    );
+  it("updates Bulgaria's quote from persisted euro membership rather than the preset alone", async () => {
+    vi.spyOn(euroService, "reconcileEuroMonetaryUnion")
+      .mockResolvedValueOnce({
+        authorityId: "ECB",
+        anchorCountryId: "DE",
+        anchorCurrency: "EUR",
+        anchorUnitsPerEuro: 1,
+        establishedTurn: 1,
+        revision: 1,
+        members: {
+          DE: {
+            countryId: "DE",
+            ledgerCurrency: "EUR",
+            ledgerUnitsPerAnchorUnit: 1,
+            joinedTurn: 1,
+            source: "legacy-settlement",
+          },
+          BG: {
+            countryId: "BG",
+            ledgerCurrency: "EUR",
+            ledgerUnitsPerAnchorUnit: 1,
+            joinedTurn: 1,
+            source: "enacted-law",
+          },
+        },
+      })
+      .mockResolvedValueOnce(undefined);
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [
+        makeExchangeRate("US", "USD", 1, 1),
+        makeExchangeRate("UK", "GBP", 0.75, 0.75),
+        makeExchangeRate("JP", "JPY", 106, 106),
+        makeExchangeRate("DE", "EUR", 0.92, 0.92),
+        makeExchangeRate("BG", "EUR", 1.1, 0.92),
+      ],
+    });
+    db.collectionMocks.centralBanks.find.mockReturnValue({
+      toArray: async () => [makeCentralBank("DE")],
+    });
+    db.collectionMocks.exchangeRates.bulkWrite.mockResolvedValueOnce({ matchedCount: 1 });
     await processForexTurn(db as unknown as Db, 50, "2027-default");
-    expect(db.collectionMocks.exchangeRates.updateOne).toHaveBeenCalledWith(
-      { _id: "BG", currencyCode: "EUR" },
-      expect.objectContaining({ $set: expect.objectContaining({ rate: 0.92 }) })
+    const anchorUpdate = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
+      ([filter]) => filter._id === "DE"
     );
-
-    db.collectionMocks.exchangeRates.updateOne.mockClear();
+    expect(anchorUpdate).toBeDefined();
+    expect(db.collectionMocks.exchangeRates.bulkWrite).toHaveBeenCalledWith([
+      expect.objectContaining({
+        updateOne: expect.objectContaining({
+          filter: { _id: "BG" },
+          update: expect.objectContaining({
+            $set: expect.objectContaining({ rate: anchorUpdate![1].$set.rate }),
+          }),
+        }),
+      }),
+    ]);
+    db.collectionMocks.exchangeRates.bulkWrite.mockClear();
     await processForexTurn(db as unknown as Db, 50, "1991-default");
-    expect(
-      db.collectionMocks.exchangeRates.updateOne.mock.calls.some(
-        (call: Array<{ _id: string }>) => call[0]._id === "BG"
-      )
-    ).toBe(false);
+    expect(db.collectionMocks.exchangeRates.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("updates all 3 forex-active countries", async () => {
@@ -947,3 +987,161 @@ describe("Bretton Woods float band (issue #7)", () => {
     expect(ukRate()).toBeCloseTo(base * 1.8, 10);
   });
 });
+
+describe("euro legacy ledger links", () => {
+  it("uses the current anchor quote for UK and Irish units without independent intervention", async () => {
+    const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+    const union = planEuroSettlement({
+      year: 1999,
+      turn: 385,
+      preset: "1991-default",
+      europeanMembers: ["DE", "IE", "UK"],
+      consentedCountries: ["DE", "IE", "UK"],
+      rates: { EUR: 0.85, IEP: 0.7, GBP: 0.6 },
+    }).union;
+    const banks = [
+      makeCentralBank("UK"),
+      makeCentralBank("IE"),
+      makeCentralBank("DE", { _id: "ECB" }),
+    ];
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      eurozoneEnabled: true,
+      euroAdoptedCountries: ["DE", "IE", "UK"],
+      euroMonetaryUnion: union,
+    });
+    db.collectionMocks.centralBanks.find.mockReturnValue({ toArray: async () => banks });
+    db.collectionMocks.centralBanks.findOne.mockResolvedValue(banks[2]);
+    db.collectionMocks.centralBanks.bulkWrite.mockResolvedValue({ matchedCount: 2 });
+    db.collectionMocks.exchangeRates.bulkWrite.mockResolvedValue({ matchedCount: 2 });
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [
+        makeExchangeRate("UK", "GBP", 0.6, 0.6),
+        makeExchangeRate("IE", "IEP", 0.7, 0.7),
+        makeExchangeRate("DE", "EUR", 0.85, 0.85),
+      ],
+    });
+    const order = {
+      _id: new ObjectId(),
+      characterId: new ObjectId(),
+      characterName: "Trader",
+      type: "limit",
+      direction: "buy",
+      status: "open",
+      fromCurrency: "GBP",
+      toCurrency: "EUR",
+      amount: 1000,
+      filledAmount: 0,
+      limitRate: 1.2,
+    };
+    db.collectionMocks.currencyOrders.find.mockImplementation((filter: { type?: string }) => ({
+      toArray: async () => (filter.type === "limit" ? [order] : []),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+    }));
+    const result = await processForexTurn(db as unknown as Db, 386, "1991-default", 1999);
+    expect(result.limitOrdersFilled).toBe(1);
+    expect(result.totalSpreadRevenue).toBe(0);
+    expect(db.collection("characters").updateOne).toHaveBeenCalledWith(
+      { _id: order.characterId },
+      { $inc: expect.objectContaining({ "currencyBalances.personal.EUR": 1416 }) }
+    );
+    expect(db.collection("tradeHistory").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ spread: 0 })
+    );
+
+    const anchor = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
+      ([filter]) => filter._id === "DE"
+    )?.[1].$set.rate as number;
+    expect(Number.isFinite(anchor)).toBe(true);
+    const writes = db.collectionMocks.exchangeRates.bulkWrite.mock.calls[0][0];
+    const british = writes.find(
+      (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "UK"
+    ).updateOne.update.$set;
+    const irish = writes.find(
+      (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "IE"
+    ).updateOne.update.$set;
+    expect(british.rate).toBeCloseTo((anchor * 0.6) / 0.85);
+    expect(irish.rate).toBeCloseTo((anchor * 0.7) / 0.85);
+    expect(british.interventionPolicy).toBeNull();
+    expect(british.rateHistory.at(-1)).toEqual({ turn: 386, rate: british.rate });
+    expect(
+      db.collectionMocks.exchangeRates.updateOne.mock.calls.some(([filter]) => filter._id === "UK")
+    ).toBe(false);
+    expect(db.collection("tradeHistory").insertOne.mock.calls[0][0].rate).toBeCloseTo(0.85 / 0.6);
+    expect(result.countriesUpdated).toBe(3);
+  });
+});
+
+it.each([1, 2])(
+  "resumes an expiry interrupted after wallet write %i without crediting twice",
+  async (crashAt) => {
+    const characterId = new ObjectId();
+    const orderId = new ObjectId();
+    let refundState: "pending" | "credited" | undefined = "pending";
+    let balance = 0;
+    let walletWrites = 0;
+    const stamps = new Set<string>();
+    db.collectionMocks.currencyOrders.updateMany.mockImplementation(async (_filter, update) => {
+      if (update.$set?.expiryRefundState === "credited") refundState = "credited";
+      if (update.$unset?.expiryRefundState !== undefined) refundState = undefined;
+      return { modifiedCount: 0 };
+    });
+    db.collectionMocks.currencyOrders.find.mockImplementation(
+      (filter: { expiryRefundState?: unknown }) => ({
+        toArray: async () =>
+          filter.expiryRefundState && refundState
+            ? [
+                {
+                  _id: orderId,
+                  characterId,
+                  fromCurrency: "USD",
+                  amount: 1000,
+                  filledAmount: 200,
+                  expiryRefundState: refundState,
+                },
+              ]
+            : [],
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      })
+    );
+    db.collection("characters").bulkWrite.mockImplementation(
+      async (
+        operations: Array<{
+          updateOne: {
+            filter: { forexExpiryRefunds: { $ne: string } };
+            update: { $pull?: { forexExpiryRefunds: string }; $inc: Record<string, number> };
+          };
+        }>
+      ) => {
+        for (const { updateOne } of operations) {
+          if (updateOne.update.$pull) {
+            stamps.delete(updateOne.update.$pull.forexExpiryRefunds);
+            continue;
+          }
+          const stamp = updateOne.filter.forexExpiryRefunds.$ne;
+          if (!stamps.has(stamp)) {
+            balance += updateOne.update.$inc["currencyBalances.personal.USD"];
+            stamps.add(stamp);
+          }
+        }
+        walletWrites++;
+        if (walletWrites === crashAt) {
+          throw new Error("Connection lost after refund write");
+        }
+        return { modifiedCount: 0 };
+      }
+    );
+    await expect(processForexTurn(db as unknown as Db, 50)).rejects.toThrow("Connection lost");
+    expect(refundState).toBe(crashAt === 1 ? "pending" : "credited");
+    expect(balance).toBe(800);
+    await processForexTurn(db as unknown as Db, 51);
+    expect(balance).toBe(800);
+    expect(refundState).toBeUndefined();
+    expect(stamps.size).toBe(0);
+    await processForexTurn(db as unknown as Db, 52);
+    expect(balance).toBe(800);
+    expect(db.collection("characters").bulkWrite).toHaveBeenCalledTimes(3);
+  }
+);

@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
+import { resolveGeneralElections } from "./electionResolution";
+import { DEFAULT_DURATIONS } from "./perpetualElections";
 
 vi.mock("@/lib/countries/ru/councilElectionResult", () => ({
   certifyRussianCouncilElection: vi.fn(),
@@ -25,6 +27,9 @@ vi.mock("@/lib/audit/recordAudit", () => ({
 vi.mock("@/lib/turn/election/generalResolution", () => ({
   resolveOneGeneralElection: vi.fn(),
 }));
+vi.mock("@/lib/analytics/electionAnalytics", () => ({
+  captureElectionResolved: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/news", () => ({
   generateElectionNews: vi.fn().mockResolvedValue(undefined),
 }));
@@ -33,6 +38,150 @@ vi.mock("@/lib/turn/election/electionNotifications", () => ({
 }));
 
 describe("electionResolution", () => {
+  describe("committed aggregate outcomes", () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it("checks statuses in one projected batch and excludes a claim skipped during resolution", async () => {
+      const committedId = new ObjectId();
+      const skippedId = new ObjectId();
+      const elections = [committedId, skippedId].map((_id) => ({
+        _id,
+        electionType: "house",
+        countryId: "US",
+        state: "CA",
+        status: "completed",
+        totalSeats: 52,
+      }));
+      const electionsFind = vi
+        .fn()
+        .mockReturnValueOnce({ toArray: async () => elections })
+        .mockReturnValueOnce({ toArray: async () => [{ _id: committedId }] });
+      const db = {
+        collection: (name: string) => {
+          if (name === "elections") return { find: electionsFind };
+          if (name === "gameState") return { findOne: async () => ({ currentTurn: 42 }) };
+          return { find: () => ({ toArray: async () => [] }) };
+        },
+      };
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      vi.mocked(resolveOneGeneralElection).mockResolvedValue({ resolved: true, newsOutcomes: [] });
+      // Keep the existing game result/count unchanged, even though one claim skipped.
+      await expect(resolveGeneralElections(new Date())).resolves.toBe(2);
+      expect(electionsFind).toHaveBeenCalledTimes(2);
+      expect(electionsFind).toHaveBeenLastCalledWith(
+        { _id: { $in: [committedId, skippedId] }, status: "resolved" },
+        { projection: { _id: 1 } }
+      );
+      const { captureElectionResolved } = await import("@/lib/analytics/electionAnalytics");
+      expect(captureElectionResolved).toHaveBeenCalledTimes(1);
+      expect(captureElectionResolved).toHaveBeenCalledWith(
+        expect.objectContaining({ electionId: committedId.toString(), phase: "general", turn: 42 })
+      );
+    });
+
+    it("reports one available seat for a regional single-seat race with multiple candidates and no tally", async () => {
+      const electionId = new ObjectId();
+      const electionsFind = vi
+        .fn()
+        .mockReturnValueOnce({
+          toArray: async () => [
+            {
+              _id: electionId,
+              electionType: "governor",
+              countryId: "US",
+              state: "CA",
+              status: "completed",
+            },
+          ],
+        })
+        .mockReturnValueOnce({ toArray: async () => [{ _id: electionId }] });
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue({
+        collection: (name: string) => {
+          if (name === "elections") return { find: electionsFind };
+          if (name === "gameState") return { findOne: async () => ({ currentTurn: 42 }) };
+          if (name === "electionCandidates")
+            return {
+              find: () => ({
+                toArray: async () => [
+                  { electionId, isNPP: false },
+                  { electionId, isNPP: true },
+                ],
+              }),
+            };
+          return { find: () => ({ toArray: async () => [] }) };
+        },
+      } as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      vi.mocked(resolveOneGeneralElection).mockResolvedValue({ resolved: true, newsOutcomes: [] });
+      await resolveGeneralElections(new Date());
+      const { captureElectionResolved } = await import("@/lib/analytics/electionAnalytics");
+      expect(captureElectionResolved).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidateCount: 2,
+          playerCandidateCount: 1,
+          seatsAvailable: 1,
+        })
+      );
+    });
+
+    it("contains a failed status confirmation without changing election resolution", async () => {
+      const elections = [{ _id: new ObjectId(), electionType: "house", status: "completed" }];
+      const electionsFind = vi
+        .fn()
+        .mockReturnValueOnce({ toArray: async () => elections })
+        .mockReturnValueOnce({
+          toArray: async () => {
+            throw new Error("database unavailable");
+          },
+        });
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue({
+        collection: (name: string) => {
+          if (name === "elections") return { find: electionsFind };
+          if (name === "gameState") return { findOne: async () => ({ currentTurn: 42 }) };
+          return { find: () => ({ toArray: async () => [] }) };
+        },
+      } as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      vi.mocked(resolveOneGeneralElection).mockResolvedValue({ resolved: true, newsOutcomes: [] });
+      await expect(resolveGeneralElections(new Date())).resolves.toBe(1);
+      const { captureElectionResolved } = await import("@/lib/analytics/electionAnalytics");
+      expect(captureElectionResolved).not.toHaveBeenCalled();
+    });
+
+    it("captures a committed empty election even when its game return counts no winner", async () => {
+      const election = {
+        _id: new ObjectId(),
+        electionType: "governor",
+        countryId: "US",
+        state: "CA",
+        status: "completed",
+      };
+      const electionsFind = vi
+        .fn()
+        .mockReturnValueOnce({ toArray: async () => [election] })
+        .mockReturnValueOnce({ toArray: async () => [{ _id: election._id }] });
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue({
+        collection: (name: string) => {
+          if (name === "elections") return { find: electionsFind };
+          if (name === "gameState") return { findOne: async () => ({ currentTurn: 42 }) };
+          return { find: () => ({ toArray: async () => [] }) };
+        },
+      } as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      vi.mocked(resolveOneGeneralElection).mockResolvedValue({ resolved: false, newsOutcomes: [] });
+      await expect(resolveGeneralElections(new Date())).resolves.toBe(0);
+      const { captureElectionResolved } = await import("@/lib/analytics/electionAnalytics");
+      expect(captureElectionResolved).toHaveBeenCalledWith(
+        expect.objectContaining({ electionId: election._id.toString(), candidateCount: 0 })
+      );
+    });
+  });
+
   describe("spawnHouseElection", () => {
     let mockFindOne: ReturnType<typeof vi.fn>;
     let mockInsertOne: ReturnType<typeof vi.fn>;
@@ -325,6 +474,9 @@ describe("electionResolution", () => {
         collection: vi.fn().mockImplementation((name: string) => {
           if (name === "elections") return { find: electionsFind };
           if (name === "electionVoteTallies") return { find: tallyFind };
+          if (name === "electionCandidates") {
+            return { find: () => ({ toArray: vi.fn().mockResolvedValue([]) }) };
+          }
           if (name === "gameState") {
             return { findOne: vi.fn().mockResolvedValue({ currentTurn: 816 }) };
           }
@@ -396,6 +548,7 @@ describe("electionResolution", () => {
             };
           if (name === "electionVoteTallies")
             return { find: () => ({ toArray: async () => tallies }) };
+          if (name === "electionCandidates") return { find: () => ({ toArray: async () => [] }) };
           if (name === "states")
             return { find: () => ({ toArray: async () => huRegions1991 }), bulkWrite: stateWrites };
           if (name === "gameState")
@@ -451,6 +604,7 @@ describe("electionResolution", () => {
           if (name === "elections") return { find: () => ({ toArray: async () => elections }) };
           if (name === "electionVoteTallies")
             return { find: () => ({ toArray: async () => tallies }) };
+          if (name === "electionCandidates") return { find: () => ({ toArray: async () => [] }) };
           if (name === "states") return { find: () => ({ toArray: async () => huRegions1991 }) };
           if (name === "gameState")
             return { findOne: async () => ({ currentTurn: 1123, preset: "1991-default" }) };
@@ -478,7 +632,6 @@ describe("electionResolution", () => {
     });
 
     it("DEFAULT_DURATIONS has npcDelegate with 48h total / 24h primary", async () => {
-      const { DEFAULT_DURATIONS } = await import("./perpetualElections");
       expect(DEFAULT_DURATIONS.npcDelegate.durationHours).toBe(48);
       expect(DEFAULT_DURATIONS.npcDelegate.primaryDurationHours).toBe(24);
       expect(DEFAULT_DURATIONS.npcDelegate.generalDurationHours).toBe(24);

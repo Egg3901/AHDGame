@@ -307,6 +307,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       runningMateTravelState: stateId,
       actionsCost: actionCost,
       ...(rmTravelClaim !== "fresh" ? { duplicate: true } : {}),
+      electionType: election.electionType,
+      phase: "general",
     });
   } catch (error) {
     return handleRouteError(error);

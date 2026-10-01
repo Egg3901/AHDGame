@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Green-phosphor CRT countdown that sits above the hero's "New in v1.0" badge.
+ * Green-phosphor CRT countdown that sits above the hero headline.
  *
  * It is a fixed-deadline promo, not a recurring feature: once the deadline
  * passes the component renders nothing and `useCrtCountdown` reports inactive,
@@ -119,8 +119,8 @@ export function CrtCountdown({ remaining }: { remaining: Remaining | null }) {
   });
 
   return (
-    // Wrapper forces its own line: the "New in v1.0" badge below is inline-flex
-    // and would otherwise sit beside the panel.
+    // Wrapper forces its own line: the panel is inline-flex and would otherwise
+    // sit beside whatever follows it in the hero.
     <div className="mb-4">
       <div
         className="ahd-crt-panel inline-flex flex-col gap-2 rounded-lg px-4 py-3"

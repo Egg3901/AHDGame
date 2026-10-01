@@ -39,6 +39,8 @@ import type {
 import type { CareerEvent } from "@/lib/db/types/character";
 import { logger } from "@/lib/observability/logger";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 const LANDTAG_THRESHOLD = 0.05;
 
@@ -498,7 +500,12 @@ export function allocateLandtagSeatsToCandidates(
   };
 }
 
-async function sweepStaleLandtagOffice(db: Db, landId: string, now: Date): Promise<void> {
+async function sweepStaleLandtagOffice(
+  db: Db,
+  landId: string,
+  now: Date,
+  currentTurn: number
+): Promise<void> {
   const current = await db
     .collection<ElectedOfficial>("electedOfficials")
     .find({ officeType: "landtag", state: landId }, { projection: { characterId: 1, nppId: 1 } })
@@ -508,12 +515,30 @@ async function sweepStaleLandtagOffice(db: Db, landId: string, now: Date): Promi
   const currentNppIds = current.filter((o) => o.nppId).map((o) => o.nppId!);
   const officeMatch = { "currentOffice.type": "landtag", "currentOffice.state": landId };
 
-  await db.collection<Character>("characters").updateMany(
-    {
-      ...officeMatch,
-      ...(currentCharIds.length > 0 ? { _id: { $nin: currentCharIds } } : {}),
-    },
-    { $set: { currentOffice: null, updatedAt: now } }
+  const departingFilter = {
+    ...officeMatch,
+    ...(currentCharIds.length > 0 ? { _id: { $nin: currentCharIds } } : {}),
+  };
+  const departingPlayers = await db
+    .collection<Character>("characters")
+    .find(departingFilter, { projection: { _id: 1, party: 1, countryId: 1 } })
+    .toArray()
+    .catch(() => []);
+  await db
+    .collection<Character>("characters")
+    .updateMany(departingFilter, { $set: { currentOffice: null, updatedAt: now } });
+  await Promise.all(
+    departingPlayers.map((character) =>
+      captureOfficeTransition({
+        db,
+        officeType: "landtag",
+        transitionType: "lost",
+        selectionMethod: "election",
+        partyId: character.party ?? undefined,
+        nationId: "DE",
+        turn: currentTurn,
+      })
+    )
   );
 
   await db.collection<NPP>("npps").updateMany(
@@ -541,7 +566,8 @@ async function sweepStaleLandtagOffice(db: Db, landId: string, now: Date): Promi
 export async function resolveDELandtagElection(
   db: Db,
   election: Election,
-  now: Date
+  now: Date,
+  currentTurn = election.endTurn ?? 0
 ): Promise<{ winnersAllocated: number; seatsAllocated: number }> {
   if (election.countryId !== "DE" || election.electionType !== "landtag") {
     throw new Error(
@@ -561,7 +587,7 @@ export async function resolveDELandtagElection(
     await db
       .collection<ElectedOfficial>("electedOfficials")
       .deleteMany({ officeType: "landtag", state: landId });
-    await sweepStaleLandtagOffice(db, landId, now);
+    await sweepStaleLandtagOffice(db, landId, now, currentTurn);
     logger.warn("Landtag", `No vote tally for ${landId} cycle ${election.cycle}`);
     return { winnersAllocated: 0, seatsAllocated: 0 };
   }
@@ -582,14 +608,24 @@ export async function resolveDELandtagElection(
   // no longer exists so their votes and seats fall to the remaining eligible
   // candidates. Mirrors the FPTP guard in generalResolution.ts.
   let liveCandidates = candidates;
+  const accountIdByCharacterId = new Map<string, string>();
+  const currentOfficeByCharacterId = new Map<string, Character["currentOffice"]>();
   const candidateCharIds = candidates
     .filter((c): c is typeof c & { characterId: ObjectId } => !c.isNPP && !!c.characterId)
     .map((c) => c.characterId);
   if (candidateCharIds.length > 0) {
     const existingChars = await db
       .collection<Character>("characters")
-      .find({ _id: { $in: candidateCharIds } }, { projection: { _id: 1 } })
+      .find(
+        { _id: { $in: candidateCharIds } },
+        { projection: { _id: 1, currentOffice: 1, userId: 1 } }
+      )
       .toArray();
+    for (const character of existingChars) {
+      if (character.userId)
+        accountIdByCharacterId.set(character._id.toString(), character.userId.toString());
+      currentOfficeByCharacterId.set(character._id.toString(), character.currentOffice);
+    }
     const existingCharIds = new Set(existingChars.map((c) => c._id.toString()));
     liveCandidates = candidates.filter(
       (c) => c.isNPP || !c.characterId || existingCharIds.has(c.characterId.toString())
@@ -677,16 +713,74 @@ export async function resolveDELandtagElection(
     await action();
   }
 
-  await sweepStaleLandtagOffice(db, landId, now);
+  await sweepStaleLandtagOffice(db, landId, now, currentTurn);
 
   await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
     { _id: tally._id },
     {
       $set: {
         seatsEstimate: seatResolution.seatsEstimate,
+        resolvedSeatHolders: seatResolution.assignments.map(({ candidate, partyId, seats }) => ({
+          identity: `${candidate.isNPP ? "npp" : "player"}:${candidate.isNPP ? candidate.nppId : candidate.characterId}`,
+          party: partyId,
+          seats,
+          seatSource: "direct" as const,
+        })),
+        resolvedTotalSeats: seatResolution.seatsAllocated,
         updatedAt: now,
       },
     }
+  );
+
+  const totalVotesCast = Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0);
+  const rankedCandidateVotes = Object.entries(tally.totalVotes).sort((a, b) => b[1] - a[1]);
+  await Promise.all(
+    seatResolution.assignments
+      .filter((assignment) => !assignment.candidate.isNPP && assignment.candidate.characterId)
+      .map(async (assignment, winnerOrdinal) => {
+        const characterId = assignment.candidate.characterId!;
+        const previousOffice = currentOfficeByCharacterId.get(characterId.toString());
+        const incumbent =
+          previousOffice?.type === "landtag" &&
+          "state" in previousOffice &&
+          previousOffice.state === landId;
+        const runnerVotes =
+          rankedCandidateVotes.find(
+            ([candidateId]) => candidateId !== assignment.candidateId
+          )?.[1] ?? 0;
+        await Promise.all([
+          captureElectionWon({
+            db,
+            accountId: accountIdByCharacterId.get(characterId.toString()),
+            electionId: election._id.toString(),
+            electionType: election.electionType,
+            partyId: assignment.partyId,
+            seatCount: assignment.seats,
+            voteSharePct: totalVotesCast > 0 ? (assignment.votes / totalVotesCast) * 100 : 0,
+            marginPct:
+              totalVotesCast > 0 ? ((assignment.votes - runnerVotes) / totalVotesCast) * 100 : 0,
+            incumbent,
+            winnerOrdinal,
+            nationId: "DE",
+            turn: currentTurn,
+          }),
+          ...(incumbent
+            ? []
+            : [
+                captureOfficeTransition({
+                  db,
+                  officeType: "landtag",
+                  transitionType: "gained",
+                  partyId: assignment.partyId,
+                  selectionMethod: "election",
+                  tenureTurns: 0,
+                  careerStage: 0,
+                  nationId: "DE",
+                  turn: currentTurn,
+                }),
+              ]),
+        ]);
+      })
   );
 
   await db

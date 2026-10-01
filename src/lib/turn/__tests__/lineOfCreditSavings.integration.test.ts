@@ -23,15 +23,6 @@ import { processLineOfCreditTurn } from "@/lib/turn/lineOfCreditTurn";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBulk: vi.fn() }));
-vi.mock("@/lib/financialTxLog/emit", () => ({
-  emitTx: vi.fn().mockResolvedValue(undefined),
-  emitTxBulk: vi.fn().mockResolvedValue(undefined),
-  loadTxThresholds: vi.fn().mockResolvedValue({}),
-}));
-vi.mock("@/lib/lineOfCredit/ledger", () => ({
-  insertLocLedgerEntry: vi.fn().mockResolvedValue(undefined),
-}));
-
 const OWNER = new ObjectId();
 const TURN = 500;
 /** Drawn principal, with no wallet cash: the whole payment must come from savings. */
@@ -145,6 +136,17 @@ describe("line-of-credit payment overflowing into savings", () => {
     expect(character(db).currencyBalances.personal.USD).toBeCloseTo(0, 6);
     // The debt actually came down.
     expect(character(db).lineOfCredit.balances.USD ?? 0).toBeLessThan(DRAWN);
+  });
+
+  it("does not cancel debt when authoritative savings backing refuses withdrawal", async () => {
+    const db = world(["USD"]);
+    Object.assign(db.collection("centralBanks").docs[0], { externalBroadMoney: 0 });
+    const savingsBefore = account(db).balance;
+    await run(db);
+    expect(character(db).lineOfCredit.balances.USD).toBe(DRAWN);
+    expect(character(db).lineOfCredit.arrears.USD).toBeGreaterThan(0);
+    expect(account(db).balance).toBe(savingsBefore);
+    expect(character(db).currencyBalances.personal.USD).toBe(0);
   });
 
   it("keeps the legacy decrement when the currency is not in the cohort", async () => {

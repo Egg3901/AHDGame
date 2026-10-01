@@ -13,6 +13,9 @@ import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
  */
 export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   // ── Character / imperial cash ──────────────────────────────────────────
+  "corp_sector_founding",
+  "org_cash",
+  "org_tribute_mint",
   "fund_credit", // legacy mixed source — still emitted by older paths
   "fund_debit",
   "office_income",
@@ -25,6 +28,8 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   // ── Bonds ──────────────────────────────────────────────────────────────
   "bond_purchase",
   "bond_sell",
+  "bond_pool_inflow",
+  "bond_pool_sweep",
   "bond_coupon",
   "bond_maturity",
   "bond_default",
@@ -33,6 +38,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
 
   // ── Corp & shares ──────────────────────────────────────────────────────
   "corp_revenue",
+  "corp_operating_loss",
   "corp_dividend",
   "corp_salary",
   "corp_tax_paid",
@@ -105,6 +111,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   // ── Government & subsidies (gov_subsidy_paid / gov_grant_paid /
   //    gov_budget_transfer remain in the union as documented future slots
   //    pending the budget-flow rework — Phase 3 commit deferred them.)
+  "gov_fiscal_accrual",
   "gov_tax_revenue",
   "gov_bond_issuance",
   "gov_coupon_payment",
@@ -138,6 +145,9 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
 ] as const;
 
 export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
+  corp_sector_founding: "Corporation Sector Founding",
+  org_cash: "Organization Cash Settlement",
+  org_tribute_mint: "Unmodeled Organization Tribute",
   fund_credit: "Fund Credit (legacy)",
   fund_debit: "Fund Debit (legacy)",
   office_income: "Office Income",
@@ -149,6 +159,8 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
 
   bond_purchase: "Bond Purchase",
   bond_sell: "Bond Sell",
+  bond_pool_inflow: "Bond Pool Liquidity Inflow",
+  bond_pool_sweep: "Bond Pool Liquidity Sweep",
   bond_coupon: "Bond Coupon",
   bond_maturity: "Bond Maturity",
   bond_default: "Bond Default",
@@ -156,6 +168,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   bond_dissolution_payout: "Bond Dissolution Payout",
 
   corp_revenue: "Corp Revenue",
+  corp_operating_loss: "Corp Operating Loss",
   corp_dividend: "Corp Dividend",
   corp_salary: "CEO Salary",
   corp_tax_paid: "Corp Tax Paid",
@@ -222,6 +235,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   party_dues_received: "Party Dues",
   caucus_tax_debit: "Caucus Tax",
 
+  gov_fiscal_accrual: "Govt Fiscal Accrual",
   gov_tax_revenue: "Govt Tax Revenue",
   gov_bond_issuance: "Govt Bond Issuance",
   gov_coupon_payment: "Govt Coupon Paid",

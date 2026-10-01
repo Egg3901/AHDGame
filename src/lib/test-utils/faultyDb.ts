@@ -18,6 +18,8 @@ export interface FaultPlan {
   op?: WriteOp;
   /** Throw on the Nth matching write (1-based). */
   onCall: number;
+  /** Select a semantic write boundary, independent of receipt housekeeping. */
+  matches?: (args: unknown[]) => boolean;
   /**
    * Throw AFTER the write has landed rather than before, to model a crash
    * between the write returning and the caller's next step.
@@ -67,7 +69,8 @@ export function withInjectedCrash(memory: InMemoryDb, plan: FaultPlan): FaultyDb
           const counts =
             armed &&
             (plan.collection === undefined || plan.collection === name) &&
-            (plan.op === undefined || plan.op === op);
+            (plan.op === undefined || plan.op === op) &&
+            (plan.matches === undefined || plan.matches(args));
           if (counts) matches += 1;
           const fire = counts && matches === plan.onCall;
           if (fire && !plan.afterWrite) {

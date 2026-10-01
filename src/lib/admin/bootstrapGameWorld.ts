@@ -1,3 +1,8 @@
+import {
+  clearStartingPolitics,
+  loadStartingPartiesMode,
+  type StartingPartiesMode,
+} from "./startingParties";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import type { Db } from "mongodb";
 import type { ResetRunRecord } from "@/lib/admin/resetRunRecord";
@@ -240,6 +245,8 @@ async function seedInitialBudgetSnapshots(db: Db, log: (msg: string) => void): P
 export type BootstrapMode = "historical" | "vacant";
 
 export interface BootstrapOptions {
+  /** 1991 only: leave political offices vacant for player-created parties. */
+  startingParties?: StartingPartiesMode;
   db: Db;
   /**
    * The reset run's failure record. When present, the RECOVERABLE blocks below
@@ -648,12 +655,20 @@ export async function seedAllCountryData(
 }
 
 export async function bootstrapGameWorld(options: BootstrapOptions) {
-  const mode = options.mode ?? "historical";
+  let mode = options.mode ?? "historical";
   const preset = options.preset ?? DEFAULT_SEED_PRESET;
   const skipRegionalCouncil = options.skipRegionalCouncil ?? false;
   const resetReference = options.resetReference ?? false;
   const seedOnly = options.seedOnly ?? false;
-  const preIteration = options.preIteration ?? false;
+  const startingParties = await loadStartingPartiesMode(
+    options.db,
+    preset,
+    options.startingParties
+  );
+  const noStartingParties = startingParties === "none";
+  const globallyVacant = preset === "2019-no-parties";
+  if (noStartingParties && !globallyVacant) mode = "historical";
+  const preIteration = !noStartingParties && (options.preIteration ?? false);
   const log = options.log ?? (() => {});
   const { db } = options;
 
@@ -888,6 +903,18 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     const { applyEraCurrencyTopology } = await import("@/lib/admin/seed/applyEraCurrencyTopology");
     await applyEraCurrencyTopology(db, preset, log);
   });
+  if (noStartingParties && seedOnly) {
+    await clearStartingPolitics(db, preset);
+    log("Cleared starting politics; economic NPP ownership retained with independent affiliation");
+  }
+
+  await db.collection<GameState>("gameState").updateOne(
+    { _id: "current" },
+    {
+      $set: { startingPartiesMode: startingParties },
+      ...(noStartingParties ? { $unset: { preIteration: "" as const } } : {}),
+    }
+  );
 
   if (seedOnly) {
     log("Seed-only complete — skipped elections, officials, and game state init");
@@ -895,11 +922,17 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   }
 
   const gameState = await initializeGameState();
+  if (gameState.startingPartiesMode !== startingParties) {
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: { startingPartiesMode: startingParties } });
+  }
   log(`Game state ready at turn ${gameState.currentTurn}`);
   const coldWarFoundation = await seedColdWarFoundations(
     db,
     gameState.currentYear ?? getStartingYearForPreset(preset),
-    gameState.currentTurn
+    gameState.currentTurn,
+    { presetId: preset }
   );
   log(
     `Cold War foundation: ${coldWarFoundation.programsInserted} programmes, ${coldWarFoundation.conflictsInserted} campaigns`
@@ -959,7 +992,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     db.collection("npps").countDocuments({ retiredAt: null }),
   ]);
 
-  if (mode === "vacant") {
+  if (mode === "vacant" || globallyVacant) {
     if (officialsCount === 0) {
       const result = await initializeOfficials(db);
       log(result.message);
@@ -1012,7 +1045,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // legislatures can't double-seat against election-seated deputies.
   // In a pre-iteration founding reset the executive is elected by the founding
   // election (a president cycle-0 race), so do NOT pre-seat it here.
-  if (mode !== "vacant" && !preIteration) {
+  if (mode !== "vacant" && !globallyVacant && !preIteration) {
     const executiveSeats = getPresetSeats(preset).filter(
       (s) => s.officeType === "president" || s.officeType === "vicePresident"
     );
@@ -1069,7 +1102,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // major-party incumbent roster. Skipped for the deliberately-empty "vacant"
   // world; priors (founding) mode seeds presence only and leaves chambers
   // vacant for the founding elections.
-  if (mode !== "vacant") {
+  if (mode !== "vacant" && !globallyVacant) {
     const { seedEconTierRosters, seedEconTierRostersForCountry } =
       await import("@/lib/admin/seed/seedEconTierRosters");
     const econRosters = await seedEconTierRosters(db, preIteration ? "priors" : "winners", log);
@@ -1127,6 +1160,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // Seed governorOfficeState rows for every regional executive seat so the
   // office AP system and Devolution Policy defaults are in place before the
   // first action. Idempotent — safe to run alongside vacant/historical seeds.
+  if (noStartingParties) await clearStartingPolitics(db, preset);
+
   const officeStateResult = await seedOfficeStates(db, gameState.currentTurn, preset);
   log(
     `Seeded office states: ${officeStateResult.inserted} inserted, ${officeStateResult.skipped} skipped`
@@ -1228,7 +1263,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // re-runs this every turn; seeding it here makes a freshly bootstrapped world
   // correct before turn 1 fires, rather than showing "Vacant" until the first tick.
   const { syncAllPartyChairHeadsOfState } = await import("@/lib/turn/partyChairHeadOfState");
-  const chairHosResults = await syncAllPartyChairHeadsOfState(db, now, preset);
+  const chairHosResults = globallyVacant
+    ? []
+    : await syncAllPartyChairHeadsOfState(db, now, preset);
   const seated = chairHosResults.filter((r) => r.action !== "noop");
   log(
     `Party-chair head-of-state sync (bootstrap): ${seated.length}/${chairHosResults.length} seated ` +
@@ -1376,6 +1413,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
         `${Object.keys(priorsPopulation.byCountry).length} countries`
     );
   }
+
+  if (noStartingParties) await clearStartingPolitics(db, preset);
 
   const [
     stateCount,

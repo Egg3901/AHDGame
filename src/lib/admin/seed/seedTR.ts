@@ -42,11 +42,11 @@ export async function seedTRRegions(
     preset,
     {
       "2019-default": trRegions2019,
-      "1991-default": trRegions1991,
       "2023-default": trRegions2019,
       "2027-default": trRegions2019,
       "1953-default": trRegions1953,
       "1979-default": trRegions,
+      "1991-default": trRegions1991,
     },
     "seedTR:trRegions"
   );

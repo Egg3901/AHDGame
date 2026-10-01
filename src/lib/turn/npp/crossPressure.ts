@@ -14,7 +14,7 @@
  * | district | Selected policy option's archetype approvals weighted by home-state |
  * | donors   | Donor base multiplied by the same policy alignment as ideology      |
  */
-
+import { europeanIntegrationSupport } from "@/lib/internationalOrganizations/europeanIntegration/rules/nationalDecisions";
 import type {
   Bill,
   LegislationPolicyOption,
@@ -25,6 +25,7 @@ import type {
   StateDemographics,
 } from "@/lib/db/types";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
+import { economicSystemReformDirection } from "@/lib/economy/economicSystemReformRules";
 import { isNewGenerationType } from "@/lib/politicalLegislation/project";
 import type { CrossPressureForces } from "@/lib/db/types/nppVotePrediction";
 
@@ -211,6 +212,26 @@ export function computeIdeologyForce(
   bill: CrossPressureBill,
   legislationType: LegislationType | null = null
 ): number {
+  const european = bill.provisions?.find(
+    (provision) => provision.type === "european_treaty" || provision.type === "euro_adoption"
+  );
+  if (european) {
+    const support = europeanIntegrationSupport({
+      economic: npp.policies?.economic ?? 0,
+      social: npp.policies?.social ?? 0,
+    });
+    return european.type === "european_treaty" && european.action === "reject" ? -support : support;
+  }
+  // Economic system reform: a market-right legislator backs liberalization and
+  // a command-left one backs the plan, in proportion to how far the law moves.
+  const economicReform = bill.provisions?.find(
+    (provision) => provision.type === "economic_system_reform"
+  );
+  if (economicReform) {
+    const economic = npp.policies?.economic ?? 0;
+    const direction = economicSystemReformDirection(economicReform.target);
+    return clamp100(Math.max(-1, Math.min(1, (economic / 5) * direction)) * 100);
+  }
   const alignment = computePolicyAlignment(npp, bill, legislationType);
   if (alignment == null) return 0;
   return clamp100(alignment * 100);

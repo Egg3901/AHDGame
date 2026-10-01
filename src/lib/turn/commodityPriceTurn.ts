@@ -1,3 +1,4 @@
+import { loadFinancialCrisisDemand } from "@/lib/livingConflict/financialDemand";
 /**
  * How commodity prices move each turn. processCommodityPriceTurn sums supply and
  * demand from owned sectors, prices each commodity as 50% global + 25% national +
@@ -102,6 +103,7 @@ import {
   aggregateByCountry,
   applyGovernmentDemand,
   applyDemandCalibration,
+  demandCalibrationFor,
   buildStatesByCountry,
   collectHouseholdSignals,
 } from "./commodity/demandLegs";
@@ -222,6 +224,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
           projection: {
             _id: 1,
             marketingBudget: 1,
+            "bankCharter.status": 1,
+            "bankCharter.totalLoans": 1,
+            "bankCharter.currency": 1,
             liquidCapital: 1,
             headquartersState: 1,
             countryOwnerId: 1,
@@ -255,7 +260,19 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // feature has been inert ever since. It also hid the `health` spelling
       // that UK/CN/IE use. Projecting the map means adding a leg to
       // GOVT_SPEND_DEMAND cannot silently read zero again.
-      .find({}, { projection: { countryId: 1, "spending.byCategory": 1, economicFactors: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            "spending.byCategory": 1,
+            economicFactors: 1,
+            currencyCode: 1,
+            gdp: 1,
+            gdpSmoothed: 1,
+          },
+        }
+      )
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -331,6 +348,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     }
   );
   const activePreset = presetState?.preset ?? "";
+  // One calibration lookup for the whole pass: the supply caps bound the
+  // calibrated demand and `applyDemandCalibration` applies it (ticket 1370).
+  const demandCalibration = demandCalibrationFor(activePreset);
   const ledgerCurrentYear = presetState?.currentYear ?? null;
   for (const code of Object.values(COUNTRY_CURRENCY_MAP) as CurrencyCode[]) {
     if (fxByCurrency.has(code)) continue;
@@ -525,7 +545,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     retailSelfLoopFactor,
     // Issue #2054: the same era table the clearing offer splits on, so the
     // measured-production mix split is weight-identical on both sides.
-    LEDGER_BASE_PRICES
+    LEDGER_BASE_PRICES,
+    // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
+    demandCalibration
   );
 
   // Plants-tier produced/sold units for the inventory advance (see module).
@@ -585,6 +607,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         metricsByState,
         priorGlobalPrice,
         perCapita: perCapitaOverride,
+        financialDemandByCountry: await loadFinancialCrisisDemand(
+          db,
+          turn,
+          allCorporations,
+          federalBudgets
+        ),
+        demandCalibration,
       },
       global,
       byState,
@@ -634,6 +663,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     byCountry,
     byState
   );
+
+  // ── Era-aware demand calibration ──────────────────────────────────────
+  // Applied once, after the last demand generator and BEFORE freight sourcing,
+  // trade clearing and the reachable books, so every downstream book (the one
+  // the clearing engine settles on, the one read surfaces quote as buyers'
+  // room, and the commodityFlows record) carries the same corrected figure.
+  // It used to run after the books were built, so the books quoted demand
+  // 1/m too high for every calibrated commodity (ticket 1370).
+  applyDemandCalibration({ activePreset }, global, byCountry, byState);
 
   // ── Inter-country trade clearing + whole-market dampened convergence ──
   // (Ordering and influence-lever notes live with the original; the WTO/FTA /
@@ -768,12 +806,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const appliedGlobalPrices = new Map<CommodityType, number>();
   const appliedStatePrices = new Map<CommodityType, Record<string, number>>();
   const appliedNationalPrices = new Map<CommodityType, Record<string, number>>();
-
-  // ── Era-aware demand calibration ──────────────────────────────────────
-  // Applied once, after every demand generator has contributed and before any
-  // price is computed, so the global, national and regional legs and the
-  // commodityFlows record all see the same corrected figure.
-  applyDemandCalibration({ activePreset }, global, byCountry, byState);
 
   // Lagged price ratios for producer cost pass-through (see module).
   const laggedRatios = buildLaggedRatios(

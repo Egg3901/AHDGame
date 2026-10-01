@@ -1264,11 +1264,72 @@ describe("perpetualElections", () => {
         {
           updateOne: {
             filter: { _id: live._id },
-            update: { $set: { electionYear: 1982, updatedAt: now } },
+            update: { $set: { electionYear: 1982, shiftedScheduleEndTurn: 1467, updatedAt: now } },
           },
         },
       ]);
       expect(mock.insertCalls.flat()).toHaveLength(0);
+    });
+
+    it("stamps the post-snap Commons race with its shifted deadline", async () => {
+      const now = new Date("2026-09-29T14:00:00Z");
+      const snapEnd = new Date(now.getTime() - MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "snap_commons",
+        state: "LON",
+        cycle: 6,
+        status: "resolved",
+        endTurn: 1228,
+        endTime: snapEnd,
+        updatedAt: snapEnd,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [], [resolved], 1229);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1229,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      expect(mock.insertCalls.flat()[0].shiftedScheduleEndTurn).toBe(1468);
+    });
+
+    it("keeps the snap-reset term clock for the Parliament after the post-snap one", async () => {
+      // The 1982 post-snap Parliament resolves. Its successor must land five
+      // years later (1987), not on the canonical 1990 cycle.
+      const now = new Date("2026-10-09T14:00:00Z");
+      const end = new Date(now.getTime() - MS);
+      const resolved = {
+        _id: new ObjectId(),
+        countryId: "UK",
+        electionType: "commons",
+        state: "LON",
+        cycle: 7,
+        status: "resolved",
+        endTurn: 1467,
+        endTime: end,
+        updatedAt: end,
+        shiftedScheduleEndTurn: 1467,
+      } as Election;
+      const mock = makeUKMockDb(["LON"], [], [resolved], 1468);
+      mock.gameStateCollection.findOne.mockResolvedValue({
+        currentTurn: 1468,
+        startingYear: 1953,
+        preset: "1953-default",
+        preIterationTurns: 48,
+      });
+      await mountUKDb(mock);
+      const { ensureUKElections } = await import("./perpetualElections");
+      await ensureUKElections(now);
+      const inserted = mock.insertCalls.flat();
+      expect(inserted[0].cycle).toBe(8);
+      expect(inserted[0].endTurn).toBe(1707);
+      expect(inserted[0].electionYear).toBe(1987);
+      expect(inserted[0].shiftedScheduleEndTurn).toBe(1707);
     });
 
     it("does NOT let an admin-accelerated regular commons drag the LARP calendar — cycle formula preserves canonical anchor", async () => {

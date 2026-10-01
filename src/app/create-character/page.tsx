@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { getStoredConsent } from "@/components/CookieConsent";
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -412,6 +413,7 @@ export default function CreateCharacterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          analyticsConsent: getStoredConsent() === "accepted",
           name: formData.characterName,
           homeState: formData.homeState,
           // Country selection happens earlier in the flow; pass it explicitly so
@@ -435,7 +437,16 @@ export default function CreateCharacterPage() {
             typeof characterData.characterId === "string" &&
             typeof characterData.createdTurn === "number"
           ) {
-            rememberNewCharacter(characterData.characterId, characterData.createdTurn);
+            rememberNewCharacter(characterData.characterId, characterData.createdTurn, {
+              startingNationId:
+                typeof characterData.countryId === "string"
+                  ? characterData.countryId
+                  : country.toUpperCase(),
+              creationPath: "character_creation_flow",
+              ...(typeof characterData.characterCount === "number"
+                ? { characterCount: characterData.characterCount }
+                : {}),
+            });
           }
         })
         .catch(() => {});
@@ -854,9 +865,9 @@ export default function CreateCharacterPage() {
       complete={partyTouched}
       disabled={!country}
     >
-      {parties.length === 0 ? (
+      {!country ? (
         <p className="rounded border border-dashed border-card-border px-3 py-6 text-center text-body-sm text-muted">
-          {country ? "Loading parties…" : "Choose a country first."}
+          Choose a country first.
         </p>
       ) : (
         <PartyPicker

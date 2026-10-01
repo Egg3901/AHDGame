@@ -39,6 +39,10 @@ export interface MigrationInput {
   reserveRatioByCurrency: Map<string, number>;
   /** Accounts that already exist (an earlier, partial run), keyed by owner:currency. */
   existingAccountKeys?: ReadonlySet<string>;
+  /** Fully delivered migration journals, not merely shadow account records. */
+  completedAccountKeys?: ReadonlySet<string>;
+  /** Original accepted transitions that apply must recover before quoting more backing. */
+  pendingMigrations?: ReadonlyArray<{ key: string; currency: string }>;
 }
 
 export interface BankMigrationPlan {
@@ -126,7 +130,10 @@ export function planSavingsMigration(input: MigrationInput): SavingsMigrationPla
     const rows = input.rows.filter((r) => r.currency === currency);
     const unmappable: UnmappableRow[] = [];
     const seen = new Set<string>();
-    const liabilityByBank = new Map<string, { balance: number; accounts: number }>();
+    const liabilityByBank = new Map<
+      string,
+      { balance: number; backing: number; accounts: number }
+    >();
     let ownerTotal = 0;
     let centralBankHeld = 0;
     let accountsToCreate = 0;
@@ -207,8 +214,13 @@ export function planSavingsMigration(input: MigrationInput): SavingsMigrationPla
       if (effectiveHolder === CENTRAL_BANK_HOLDER) {
         centralBankHeld += balance;
       } else {
-        const row2 = liabilityByBank.get(effectiveHolder) ?? { balance: 0, accounts: 0 };
+        const row2 = liabilityByBank.get(effectiveHolder) ?? {
+          balance: 0,
+          backing: 0,
+          accounts: 0,
+        };
         row2.balance += balance;
+        if (!input.completedAccountKeys?.has(key)) row2.backing += balance;
         row2.accounts += 1;
         liabilityByBank.set(effectiveHolder, row2);
       }
@@ -218,8 +230,8 @@ export function planSavingsMigration(input: MigrationInput): SavingsMigrationPla
     const banks: BankMigrationPlan[] = input.charters
       .filter((c) => c.currency === currency && c.status === "active")
       .map((c) => {
-        const held = liabilityByBank.get(c.bankId) ?? { balance: 0, accounts: 0 };
-        const cashAfter = c.cashReserves + held.balance;
+        const held = liabilityByBank.get(c.bankId) ?? { balance: 0, backing: 0, accounts: 0 };
+        const cashAfter = c.cashReserves + held.backing;
         const requiredAfter = requiredReserves(
           { npcDeposits: c.npcDeposits + held.balance },
           ratio
@@ -235,7 +247,7 @@ export function planSavingsMigration(input: MigrationInput): SavingsMigrationPla
           currency,
           accounts: held.accounts,
           liability: held.balance,
-          backingTransfer: held.balance,
+          backingTransfer: held.backing,
           charterPointerDeposits: Math.max(0, c.totalDeposits - c.npcDeposits),
           cashAfter,
           requiredReservesAfter: requiredAfter,
@@ -265,7 +277,7 @@ export function planSavingsMigration(input: MigrationInput): SavingsMigrationPla
       accountsExisting,
       ownerTotal,
       centralBankHeld,
-      bankHeld: backingRequired,
+      bankHeld: banks.reduce((sum, bank) => sum + bank.liability, 0),
       backingRequired,
       poolAvailable,
       poolShortfall,

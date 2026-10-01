@@ -1,6 +1,12 @@
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
-import type { Character, CareerEvent, ElectedOfficial, OfficeType } from "@/lib/db/types";
+import type {
+  Character,
+  CareerEvent,
+  ElectedOfficial,
+  GameState,
+  OfficeType,
+} from "@/lib/db/types";
 import { type CountryId } from "@/lib/constants/countries";
 import {
   getExecutiveOfficialFilter,
@@ -8,6 +14,7 @@ import {
 } from "@/lib/elections/executiveOfficeFilters";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { governorOfficialFilter } from "@/lib/db/electedOfficialScope";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 /** Record the "removed" career event and clear the character's office. Shared by
  *  the executive and governor removal paths. */
@@ -20,7 +27,7 @@ async function recordRemovalOnCharacter(
 ): Promise<void> {
   const character = await db
     .collection<Character>("characters")
-    .findOne({ _id: targetCharacterId }, { projection: { _id: 1, party: 1 } });
+    .findOne({ _id: targetCharacterId }, { projection: { _id: 1, party: 1, careerHistory: 1 } });
 
   const careerEvent: CareerEvent = {
     type: "removed",
@@ -37,6 +44,23 @@ async function recordRemovalOnCharacter(
       $push: { careerHistory: careerEvent },
     }
   );
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+    .catch(() => null);
+  await captureOfficeTransition({
+    db,
+    officeType: office.type,
+    transitionType: "lost",
+    partyId: character?.party,
+    selectionMethod: "removal",
+    tenureTurns: 0,
+    careerStage: character?.careerHistory?.length ?? 0,
+    nationId: countryId,
+    turn: gameState?.currentTurn ?? 0,
+    iteration: gameState?.iteration,
+    flush: true,
+  });
 }
 
 /**

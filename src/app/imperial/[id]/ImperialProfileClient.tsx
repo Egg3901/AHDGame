@@ -36,7 +36,6 @@ interface ImperialData {
   tintColor?: string;
   bio?: string;
   campaignSongUrl?: string;
-  campaignSongAutoplay?: boolean;
   corporations: ImperialCorporation[];
   createdAt: string;
 }
@@ -225,15 +224,11 @@ export default function ImperialProfileClient({ id }: { id: string }) {
 
         {/* Campaign Song */}
         {data.campaignSongUrl && (
-          <div className="rounded-2xl border border-card-border bg-card p-4 sm:p-6">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-              Royal Anthem
-            </h2>
+          <div className="store-app-hidden rounded-2xl border border-card-border bg-card p-4 sm:p-6">
             <CampaignSongPlayer
               videoId={data.campaignSongUrl}
-              ownerAutoplay={data.campaignSongAutoplay ?? false}
-              viewerDisablesAutoplay={false}
               characterName={data.fullName}
+              label="Royal Anthem"
             />
           </div>
         )}

@@ -126,6 +126,7 @@ export interface CampaignData {
   electionInfo: {
     state: string;
     electionType: string;
+    phase?: "primary" | "general" | "unknown";
     cycle: number;
     senateClass: number | null;
     /** Baked LARP year on the linked election doc (null on legacy rows). */

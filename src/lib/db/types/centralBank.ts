@@ -270,6 +270,19 @@ export interface TreasuryTransferRecord {
 }
 
 export interface CentralBank {
+  /** Version and recoverable owner shared by LOC publication and reserve transfers. */
+  locBookRevision?: number;
+  locReserveCreditRevision?: number;
+  pendingLocReserveCredit?: {
+    key: string;
+    token: string;
+    generation: number;
+    status: "claimed" | "delivered" | "rejected";
+    error?: string;
+  };
+  pendingLocBookMutationId?: string;
+  /** Common policy authority; this document retains its national financial accounts. */
+  monetaryAuthorityId?: string;
   /** Country ID (e.g. "US", "UK") — used as _id */
   _id: string;
   countryId: CountryId;

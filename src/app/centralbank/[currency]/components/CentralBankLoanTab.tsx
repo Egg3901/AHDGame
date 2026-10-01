@@ -165,22 +165,39 @@ export function CentralBankLoanTab({ countryId }: Props) {
       showToast("Enter a valid amount", "error");
       return;
     }
+    const storageKey = `loc-command:${data?.characterId ?? "unknown"}:${cbCurrency}:draw`;
+    const quote = JSON.stringify({ currency: cbCurrency, amount: n });
+    let pending: { quote: string; commandId: string } | null = null;
+    try {
+      pending = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
+    } catch {
+      /* discard corrupt local receipt */
+    }
+    if (pending?.quote !== quote) pending = { quote, commandId: crypto.randomUUID() };
+    sessionStorage.setItem(storageKey, JSON.stringify(pending));
     setBusy(true);
     try {
       const res = await fetch("/api/character/loc/draw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: cbCurrency, amount: n }),
+        body: JSON.stringify({ currency: cbCurrency, amount: n, commandId: pending.commandId }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
+        if (res.status < 500) sessionStorage.removeItem(storageKey);
         showToast(j.error ?? "Failed", "error");
         return;
       }
+      sessionStorage.removeItem(storageKey);
       showToast("Borrowed to wallet", "success");
       setDrawAmt("");
       requestCharacterStatsRefetch();
       void load();
+    } catch {
+      showToast(
+        "The result could not be confirmed. Retry the same amount to check this command.",
+        "error"
+      );
     } finally {
       setBusy(false);
     }
@@ -192,22 +209,39 @@ export function CentralBankLoanTab({ countryId }: Props) {
       showToast("Enter a valid amount", "error");
       return;
     }
+    const storageKey = `loc-command:${data?.characterId ?? "unknown"}:${cbCurrency}:repay`;
+    const quote = JSON.stringify({ currency: cbCurrency, amount: n });
+    let pending: { quote: string; commandId: string } | null = null;
+    try {
+      pending = JSON.parse(sessionStorage.getItem(storageKey) ?? "null");
+    } catch {
+      /* discard corrupt local receipt */
+    }
+    if (pending?.quote !== quote) pending = { quote, commandId: crypto.randomUUID() };
+    sessionStorage.setItem(storageKey, JSON.stringify(pending));
     setBusy(true);
     try {
       const res = await fetch("/api/character/loc/repay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: cbCurrency, amount: n }),
+        body: JSON.stringify({ currency: cbCurrency, amount: n, commandId: pending.commandId }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
+        if (res.status < 500) sessionStorage.removeItem(storageKey);
         showToast(j.error ?? "Failed", "error");
         return;
       }
+      sessionStorage.removeItem(storageKey);
       showToast("Repayment applied", "success");
       setRepayAmt("");
       requestCharacterStatsRefetch();
       void load();
+    } catch {
+      showToast(
+        "The result could not be confirmed. Retry the same amount to check this command.",
+        "error"
+      );
     } finally {
       setBusy(false);
     }

@@ -38,6 +38,8 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
 import { logger } from "../../observability/logger";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 
 function recoverUnitVotesFromSnapshots(
   unitTurnSnapshots: ElectionVoteTally["unitTurnSnapshots"],
@@ -91,7 +93,8 @@ async function vacatePresidency(
   db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
   election: Election,
   now: Date,
-  reason: string
+  reason: string,
+  currentTurn: number
 ): Promise<void> {
   await db
     .collection<ElectionVoteTally>("electionVoteTallies")
@@ -103,6 +106,14 @@ async function vacatePresidency(
       { $set: { status: "withdrawn", withdrawnAt: now } }
     );
   const vacateCountryId = election.countryId ?? "US";
+  const departingPlayers = await db
+    .collection<Character>("characters")
+    .find(
+      { countryId: vacateCountryId, "currentOffice.type": { $in: ["president", "vicePresident"] } },
+      { projection: { party: 1, currentOffice: 1, careerHistory: 1 } }
+    )
+    .toArray()
+    .catch(() => []);
   await db.collection<Character>("characters").updateMany(
     {
       countryId: vacateCountryId,
@@ -129,6 +140,20 @@ async function vacatePresidency(
         updatedAt: now,
       } as Record<string, unknown>,
     }
+  );
+  await Promise.all(
+    departingPlayers.map((player) =>
+      captureOfficeTransition({
+        db,
+        officeType: player.currentOffice?.type ?? "president",
+        transitionType: "lost",
+        partyId: player.party,
+        selectionMethod: "election",
+        careerStage: player.careerHistory?.length ?? 0,
+        nationId: vacateCountryId,
+        turn: currentTurn,
+      })
+    )
   );
   console.log(`[Turn] Vacated presidency — election ${election._id} ${reason}`);
 }
@@ -293,8 +318,10 @@ export async function resolvePresidentElection(
   db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
   election: Election,
   tally: ElectionVoteTally,
-  now: Date
+  now: Date,
+  currentTurn = election.endTurn ?? 0
 ): Promise<boolean> {
+  if (tally.finalized === true && tally.executiveSeatingPending !== true) return true;
   const seatingRetryOnly = tally.finalized === true && tally.executiveSeatingPending === true;
 
   let electoralVotesByCandidate = tally.electoralVotesByCandidate;
@@ -336,7 +363,7 @@ export async function resolvePresidentElection(
     }
 
     if (!totalVotesByUnit || Object.keys(totalVotesByUnit).length === 0) {
-      await vacatePresidency(db, election, now, "resolved with no unit vote data");
+      await vacatePresidency(db, election, now, "resolved with no unit vote data", currentTurn);
       return true;
     }
 
@@ -351,7 +378,7 @@ export async function resolvePresidentElection(
 
     const totalEV = Object.values(electoralVotesByCandidate).reduce((s, v) => s + v, 0);
     if (totalEV === 0) {
-      await vacatePresidency(db, election, now, "resolved with zero electoral votes");
+      await vacatePresidency(db, election, now, "resolved with zero electoral votes", currentTurn);
       return true;
     }
     // Every unit allocates all of its electors, so the allocated sum IS the
@@ -483,6 +510,21 @@ export async function resolvePresidentElection(
   }
 
   const { vpCharId, vpNppId } = await resolveVpIds(db, election, winnerCandidate, contingentResult);
+  const nationId = election.countryId ?? "US";
+  const previousPresident = await db
+    .collection<ElectedOfficial>("electedOfficials")
+    .findOne({
+      countryId: nationId,
+      officeType: "president",
+    })
+    .catch(() => null);
+  const winnerHolderId = winnerCandidate.isNPP
+    ? winnerCandidate.nppId?.toString()
+    : winnerCandidate.characterId?.toString();
+  const previousHolderId = previousPresident?.isNPP
+    ? previousPresident.nppId?.toString()
+    : previousPresident?.characterId?.toString();
+  const incumbent = !!winnerHolderId && winnerHolderId === previousHolderId;
 
   try {
     await seatPresidentialExecutive(db, {
@@ -491,7 +533,14 @@ export async function resolvePresidentElection(
       vpCharId,
       vpNppId,
       now,
+      turn: currentTurn,
     });
+    await recordPresidentialTenure(
+      db,
+      election.countryId ?? "US",
+      winnerCandidate.party,
+      election._id.toString()
+    );
   } catch (err) {
     console.error(
       `[Turn] President election ${election._id}: executive seating failed — will retry next turn`,
@@ -513,18 +562,47 @@ export async function resolvePresidentElection(
       { $set: { executiveSeatingPending: false, updatedAt: now } }
     );
 
-  // Advance the consecutive-tenure ledger: same party extends the streak, a
-  // flip resets it. Feeds the party-tenure voter-fatigue penalty on the next
-  // presidential race. Best-effort — a ledger write must not fail resolution.
-  try {
-    await recordPresidentialTenure(db, election.countryId ?? "US", winnerCandidate.party);
-  } catch (err) {
-    logger.error("Turn", "Failed to record presidential tenure ledger", err);
+  if (!winnerCandidate.isNPP && winnerCandidate.characterId) {
+    const popularVotes =
+      Object.keys(tally.totalVotes ?? {}).length > 0
+        ? tally.totalVotes
+        : Object.values(tally.totalVotesByUnit ?? {}).reduce<Record<string, number>>(
+            (totals, unitVotes) => {
+              for (const [candidateId, votes] of Object.entries(unitVotes ?? {})) {
+                totals[candidateId] = (totals[candidateId] ?? 0) + votes;
+              }
+              return totals;
+            },
+            {}
+          );
+    const totalPopularVotes = Object.values(popularVotes).reduce((sum, votes) => sum + votes, 0);
+    const winnerVotes = popularVotes[winnerId] ?? 0;
+    const runnerVotes = Object.entries(popularVotes)
+      .filter(([candidateId]) => candidateId !== winnerId)
+      .reduce((highest, [, votes]) => Math.max(highest, votes), 0);
+    const winnerAccount = await db
+      .collection<{ userId?: ObjectId }>("characters")
+      .findOne({ _id: winnerCandidate.characterId }, { projection: { userId: 1 } })
+      .catch(() => null);
+    await captureElectionWon({
+      db,
+      accountId: winnerAccount?.userId?.toString(),
+      electionId: election._id.toString(),
+      electionType: election.electionType,
+      partyId: winnerCandidate.party,
+      seatCount: 1,
+      voteSharePct: totalPopularVotes > 0 ? (winnerVotes / totalPopularVotes) * 100 : 0,
+      marginPct:
+        totalPopularVotes > 0 ? ((winnerVotes - runnerVotes) / totalPopularVotes) * 100 : 0,
+      incumbent,
+      nationId,
+      turn: currentTurn,
+    });
   }
 
   const candidateIds = Object.keys(electoralVotesByCandidate).map((id) => new ObjectId(id));
   const winnerCandidateIds = new Set([winnerId]);
-  const loserCandidateIds = new Set(ranked.slice(1).map(([id]) => id));
+  const loserCandidateIds = new Set(ranked.filter(([id]) => id !== winnerId).map(([id]) => id));
   updatePoliticianPagesAfterElection(
     db,
     election,

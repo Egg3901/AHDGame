@@ -34,6 +34,7 @@ import { safeDistributeConversionSpread } from "@/lib/currency/marketMaker";
 import { corpToSectorCountrySpread } from "@/lib/currency/sectorFxSpread";
 import { insufficientCapitalMessage } from "@/lib/currency/insufficientCapitalMessage";
 import {
+  fetchCorporationNationalSectorSharePercent,
   fetchSectorCompetitorCount,
   fetchSectorMarketSharePercent,
 } from "@/lib/corporations/marketShare";
@@ -59,6 +60,7 @@ import {
 import {
   dominanceDensityFactor,
   getDominanceGrowthCostMultiplier,
+  getNationalDominanceGrowthCostMultiplier,
 } from "@/lib/constants/corporations";
 import {
   retailCapacityExpansionPaused,
@@ -491,11 +493,18 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const primeRate = await resolveCountryPrimeRate(db, countryId);
     // Dominance multiplier: fetched the same way setSectorGrowth does, so a
     // dominant sector pays the same premium to build as it does to grow.
-    const marketSharePct = await fetchSectorMarketSharePercent(db, sector, corporation);
+    const [marketSharePct, nationalMarketSharePct, competitorCount] = await Promise.all([
+      fetchSectorMarketSharePercent(db, sector, corporation),
+      fetchCorporationNationalSectorSharePercent(db, {
+        corporationId: corporation._id,
+        countryId,
+        sectorType: sector.sectorType,
+      }),
+      fetchSectorCompetitorCount(db, sector, corporation._id),
+    ]);
     // How contested the cell is, which scales that dominance toll. Resolved
     // here AND in the sector-detail quote from the same helper, so the price the
     // dialog shows is the price this command charges.
-    const competitorCount = await fetchSectorCompetitorCount(db, sector, corporation._id);
     const ceoChar = corporation.ceoId
       ? await db
           .collection<Character>("characters")
@@ -533,6 +542,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       year: currentYear,
       eraUnitScale,
       marketSharePercent: marketSharePct,
+      nationalMarketSharePercent: nationalMarketSharePct,
       competitorCount: competitorCount ?? undefined,
       primeRate,
       acumen: ceoAcumen,
@@ -568,7 +578,10 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         outcome,
         marketSharePct,
         competitorCount: competitorCount ?? 0,
-        rawDominanceMultiplier: getDominanceGrowthCostMultiplier(marketSharePct),
+        rawDominanceMultiplier: Math.max(
+          getDominanceGrowthCostMultiplier(marketSharePct),
+          getNationalDominanceGrowthCostMultiplier(nationalMarketSharePct)
+        ),
         dominanceDensityFactor: dominanceDensityFactor(competitorCount),
         dominanceMultiplier: cost.dominanceMultiplier,
         unitPriceAnchor: cost.unitPriceAnchor,

@@ -19,6 +19,7 @@ import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 import { validatePeaceTerm, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { applyPeaceTerm } from "@/lib/military/applyPeaceTerm";
 import { resolveConflict } from "@/lib/military/resolveConflict";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 
 const bodySchema = z.object({
   // The same discriminated union the offer route takes, and `parliamentaryMonarchy`
@@ -193,8 +194,14 @@ export async function POST(
       db,
       conflict,
       term.kind === "white_peace" ? "stalemate" : conflict.termsWindow.victor,
-      currentTurn
+      currentTurn,
+      {
+        endingType: "peace",
+        attackerNation: conflict.sideA.countries[0],
+        defenderNation: conflict.sideB.countries[0],
+      }
     );
+    await flushServerPosthog();
 
     return NextResponse.json({ success: true, term });
   } catch (error) {

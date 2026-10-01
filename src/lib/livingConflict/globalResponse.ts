@@ -1,3 +1,8 @@
+import { ARAB_UPRISINGS_KEY } from "./rules/arabOrigins";
+import { resolveArabRegion, describeArabRegion } from "./rules/arabRegional";
+import { projectArabRegion } from "./rules/arabProjection";
+import { prepareFinancialFiscalResponse } from "@/lib/crises/financialCrisisFiscalResponse";
+import { prepareFinancialCrisisBankResponse } from "@/lib/crises/financialCrisisBankResponse";
 import { PANDEMIC_KEY, pandemicResponseOutcome } from "./rules/pandemic";
 import {
   TERRORISM_KEY,
@@ -10,6 +15,7 @@ import {
 import type { LivingConflictState } from "./types";
 import { cfx } from "./effects";
 import { applyCrisisTradeSanctions } from "./sanctions/apply";
+import { russiaUkraineOutcome } from "./rules/russiaUkraineOutcome";
 import type { Db, Filter, ObjectId } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
@@ -284,6 +290,8 @@ export async function prepareGlobalResponseOption(
     // under the option. Typed so it reaches them as a 400, not a generic 500.
     throw badRequest(`National capacity is insufficient: ${assessment.reasons.join("; ")}`);
   }
+  await prepareFinancialCrisisBankResponse(db, countryId, option);
+  await prepareFinancialFiscalResponse(db, countryId, option);
   return capability;
 }
 
@@ -425,6 +433,8 @@ export async function spendGlobalResponseCost(
   countryId: string,
   option: CrisisDecisionOption
 ): Promise<number> {
+  // The financial rescue journal owns both funding and recipient cash.
+  if (option.action?.kind === "financialCrisisResponse") return 0;
   const pct = option.treasuryCostPctGdp ?? 0;
   if (!(pct > 0)) return 0;
   const budget = await db
@@ -476,6 +486,10 @@ async function applyOutcomeTrajectory(
   if (!def) return null;
 
   let state = await loadConflictState(db, def.key);
+  if (def.key === ARAB_UPRISINGS_KEY && state.arabRegional?.resolutionIds.includes(resolutionId)) {
+    const stage = normalizeCampaignState(state.campaign).stage;
+    return { previousStage: stage, nextStage: stage, applied: false };
+  }
   const campaignResult = applyCampaignOutcome(state.campaign, {
     resolutionId,
     outcomeId: outcome.outcomeId,
@@ -494,7 +508,21 @@ async function applyOutcomeTrajectory(
         ? applyCommitment(def, state, side, amount, gameState?.currentYear)
         : relieveCommitment(def, state, side, Math.abs(amount));
   }
-  state = applyConflictOutcome(def, state, outcome);
+  if (def.key === ARAB_UPRISINGS_KEY && state.arabRegional) {
+    const interaction = await db
+      .collection<CrisisInteraction>("crisisInteractions")
+      .findOne({ crisisId: crisis._id }, { projection: { leaderResponses: 1 } });
+    state = projectArabRegion({
+      ...state,
+      arabRegional: resolveArabRegion(
+        state.arabRegional,
+        interaction?.leaderResponses ?? [],
+        resolutionId
+      ),
+    });
+  } else {
+    state = applyConflictOutcome(def, state, outcome);
+  }
   if (def.key === TERRORISM_KEY) {
     state.tracks = {
       ...state.tracks,
@@ -524,7 +552,7 @@ async function applyOutcomeTrajectory(
       { minimumValue }
     );
   }
-  return campaignResult;
+  return { ...campaignResult, nextStage: state.campaign?.stage ?? campaignResult.nextStage };
 }
 
 /**
@@ -545,7 +573,16 @@ export async function resolveGlobalResponse(
     const prior = crisis.globalResponse.outcomes.find(
       (candidate) => candidate.outcomeId === interaction.globalResponseOutcome?.outcomeId
     );
-    if (prior) await applyCrisisTradeSanctions(db, crisis, interaction, prior);
+    if (prior) {
+      await applyCrisisTradeSanctions(db, crisis, interaction, prior);
+      if (crisis.globalResponse.conflictKey === ARAB_UPRISINGS_KEY)
+        await applyOutcomeTrajectory(
+          db,
+          crisis,
+          prior,
+          crisis.livingConflictEventId ?? crisisId.toString()
+        );
+    }
     return interaction.globalResponseOutcome;
   }
 
@@ -558,6 +595,43 @@ export async function resolveGlobalResponse(
     crisis.globalResponse.defaultOutcomeId,
     scores
   );
+  if (crisis.globalResponse.conflictKey === ARAB_UPRISINGS_KEY) {
+    const state = await loadConflictState(db, ARAB_UPRISINGS_KEY);
+    if (state.arabRegional) {
+      const predicted = resolveArabRegion(
+        state.arabRegional,
+        interaction.leaderResponses ?? [],
+        crisis.livingConflictEventId ?? crisisId.toString()
+      );
+      const trajectories = Object.values(predicted.origins).map((origin) => origin?.trajectory);
+      const outcomeId = trajectories.includes("civil_war")
+        ? "civil_war"
+        : trajectories.includes("transition")
+          ? "negotiated_transition"
+          : trajectories.includes("authoritarian")
+            ? "authoritarian_survival"
+            : trajectories.includes("reform")
+              ? "successful_reform"
+              : "fragmented_response";
+      outcome =
+        crisis.globalResponse.outcomes.find((candidate) => candidate.outcomeId === outcomeId) ??
+        outcome;
+      const regionalDescription = describeArabRegion(predicted);
+      outcome = {
+        ...outcome,
+        description: regionalDescription,
+        wireMessage: `Regional uprising outcomes: ${regionalDescription}`,
+      };
+    }
+  }
+  if (crisis.globalResponse.conflictKey === "russia_ukraine_security") {
+    outcome = russiaUkraineOutcome(
+      await loadConflictState(db, "russia_ukraine_security"),
+      outcome,
+      crisis.globalResponse.outcomes,
+      scores
+    );
+  }
   let attackTarget: string | null = null;
   if (crisis.globalResponse.conflictKey === TERRORISM_KEY) {
     const state = await loadConflictState(db, TERRORISM_KEY);

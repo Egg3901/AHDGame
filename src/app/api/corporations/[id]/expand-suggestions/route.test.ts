@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { computeBuildCost } from "@/lib/constants/capacityEconomy";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
@@ -17,6 +18,12 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
 }));
 vi.mock("@/lib/currency/corpEconomyFields", () => ({
   readCorpEconomicAnchor: vi.fn((v: number) => v),
+}));
+vi.mock("@/lib/corporations/marketShare", () => ({
+  fetchCorporationNationalSectorSharesByCountry: vi.fn(
+    async (_db: unknown, inputs: { countryIds: string[] }) =>
+      new Map(inputs.countryIds.map((countryId) => [countryId, 0]))
+  ),
 }));
 
 let db: MockDb;
@@ -193,6 +200,11 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
   });
 
   it("offers zero-revenue greenfield markets under plants", async () => {
+    const { fetchCorporationNationalSectorSharesByCountry } =
+      await import("@/lib/corporations/marketShare");
+    vi.mocked(fetchCorporationNationalSectorSharesByCountry).mockResolvedValueOnce(
+      new Map([["US", 60]])
+    );
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",
       marketSystemMode: "plants",
@@ -233,6 +245,19 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
     expect(data.suggestions).toEqual([
       expect.objectContaining({ stateId: "CA", unownedRevenue: 0, canAfford: true }),
     ]);
+    const suggestion = data.suggestions[0] as { starterBuildCostAnchor: number };
+    const expected = computeBuildCost({
+      sectorType: "real_estate",
+      units: data.starterUnits as number,
+      strategyId: null,
+      year: 1953,
+      eraUnitScale: 1,
+      marketSharePercent: 0,
+      nationalMarketSharePercent: 60,
+      primeRate: 3,
+      founding: true,
+    });
+    expect(suggestion.starterBuildCostAnchor).toBe(Math.round(expected.totalAnchor));
   });
 
   it("serves plants suggestions for an off-type sector (any type is buildable)", async () => {

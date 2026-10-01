@@ -1,5 +1,4 @@
 import type { Db } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
 import type { GameState } from "@/lib/db/types";
 import {
   seedExchangeRates,
@@ -55,28 +54,31 @@ export async function seedForex(db: Db, log: (msg: string) => void, preset: stri
   // Flip the feature flag. We only set it; we never clear it on re-run, because
   // turning forex off in a populated world would orphan currencyBalances data.
   const isPre1999Preset = ["1953-default", "1979-default", "1991-default"].includes(preset);
-  // 2027 starts with all eight euro members adopted; other modern presets keep
-  // the legacy DE/IE pair until the bill-adoption path converts them.
-  const euroAdoptedCountries: CountryId[] = isPre1999Preset
-    ? []
-    : preset === "2027-default"
-      ? [...EUROZONE_2027_MEMBERS]
-      : (["DE", "IE"] as CountryId[]);
-  const result = await db.collection<GameState>("gameState").updateOne(
-    { _id: "current" },
+  const result = await db.collection<GameState>("gameState").updateOne({ _id: "current" }, [
     {
       $set: {
         forexEnabled: true,
-        eurozoneEnabled: !isPre1999Preset,
-        euroAdoptedCountries,
+        eurozoneEnabled: { $ifNull: ["$eurozoneEnabled", !isPre1999Preset] },
+        euroAdoptedCountries: {
+          $ifNull: [
+            "$euroAdoptedCountries",
+            {
+              $cond: [
+                { $ifNull: ["$eurozoneEnabled", !isPre1999Preset] },
+                preset === "2027-default" ? [...EUROZONE_2027_MEMBERS] : ["DE", "IE"],
+                [],
+              ],
+            },
+          ],
+        },
         updatedAt: new Date(),
       },
-    }
-  );
+    },
+  ]);
   if (result.matchedCount === 0) {
     log("  ⚠ gameState document missing — bootstrap must run initializeGameState before seedForex");
   } else {
-    log(`  ✓ gameState.forexEnabled = true, eurozoneEnabled = ${String(!isPre1999Preset)}`);
+    log("  ✓ forex enabled; existing euro decisions preserved");
   }
 
   log("Forex layer seeded");

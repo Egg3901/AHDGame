@@ -1,3 +1,4 @@
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handleRouteError, badRequest } from "@/lib/api/errors";
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
+    await flushServerPosthog();
     return NextResponse.json({
       success: true,
       message: `You have resigned from ${result.label}.`,

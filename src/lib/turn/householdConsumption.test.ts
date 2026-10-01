@@ -196,6 +196,31 @@ describe("computeHouseholdConsumption — plants unit re-anchor (ticket #1027)",
     expect(explicit.global.get("food")).toBe(base.global.get("food"));
   });
 
+  it("clamps CALIBRATED demand when the caller passes its era calibration (ticket 1370)", () => {
+    // The caller multiplies household demand by the era calibration after this
+    // runs. The clamp must bound that calibrated figure, so it divides the cap
+    // by the multiplier and records the cut in calibrated units.
+    const m = 0.55;
+    const states = [mkState({ stateId: "S1", population: 10_000_000, gdp: 100_000 })];
+    const unclamped = computeHouseholdConsumption({
+      states,
+      metricsByState: new Map(),
+      plantsUnitScale: 3000,
+    });
+    const energyDemand = unclamped.global.get("energy") ?? 0;
+    expect(energyDemand).toBeGreaterThan(0);
+    const supply = energyDemand / 10;
+    const clamped = computeHouseholdConsumption({
+      states,
+      metricsByState: new Map(),
+      plantsUnitScale: 3000,
+      priorGlobalSupply: new Map([["energy", supply] as [CommodityType, number]]),
+      demandCalibration: (c) => (c === "energy" ? m : 1),
+    });
+    expect((clamped.global.get("energy") ?? 0) * m).toBeCloseTo(supply * 1.5, 6);
+    expect(clamped.truncated.get("energy")).toBeCloseTo((energyDemand - (supply * 1.5) / m) * m, 6);
+  });
+
   it("clamps scaled demand at PLANTS_HOUSEHOLD_SUPPLY_CAP x prior supply, preserving state shares", () => {
     const states = [
       // Equal GDP/capita so the Engel tilt is identical and demand is exactly

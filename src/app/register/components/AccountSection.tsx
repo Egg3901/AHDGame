@@ -11,7 +11,13 @@ export interface SocialAvailability {
   reason: "not_configured" | "test_mode" | null;
 }
 
-type SocialProvider = "discord" | "google";
+type SocialProvider = "discord" | "google" | "apple";
+
+const PROVIDER_LABELS: Record<SocialProvider, string> = {
+  discord: "Discord",
+  google: "Google",
+  apple: "Apple",
+};
 
 interface AccountSectionProps {
   formData: {
@@ -27,6 +33,7 @@ interface AccountSectionProps {
   /** Null until the server has answered; the buttons stay enabled meanwhile. */
   discord?: SocialAvailability | null;
   google?: SocialAvailability | null;
+  apple?: SocialAvailability | null;
   showAdminKey?: boolean;
   /**
    * Called when the player is ready to leave for OAuth. `referralCode` is either
@@ -41,6 +48,7 @@ export function AccountSection({
   testMode,
   discord,
   google,
+  apple,
   showAdminKey,
   onSocialRegister,
   onChange,
@@ -59,7 +67,8 @@ export function AccountSection({
   // for. `undefined`/`null` means the server has not answered yet.
   const discordBlocked = discord ? !discord.available : false;
   const googleBlocked = google ? !google.available : false;
-  const bothBlocked = discordBlocked && googleBlocked;
+  const appleBlocked = apple ? !apple.available : false;
+  const bothBlocked = discordBlocked && googleBlocked && appleBlocked;
   const reasonFor = (m: SocialAvailability | null | undefined, provider: string): string | null => {
     if (!m || m.available || !m.reason) return null;
     return m.reason === "test_mode"
@@ -67,7 +76,7 @@ export function AccountSection({
       : t("unavailableNotConfigured", { provider });
   };
 
-  const providerLabel = gateProvider === "google" ? "Google" : "Discord";
+  const providerLabel = PROVIDER_LABELS[gateProvider ?? "discord"];
 
   const requestSocial = (provider: SocialProvider) => {
     const normalized = normalizeReferralCode(formData.referralCode);
@@ -139,6 +148,18 @@ export function AccountSection({
 
           <button
             type="button"
+            onClick={() => requestSocial("apple")}
+            disabled={appleBlocked}
+            title={reasonFor(apple, "Apple") ?? undefined}
+            className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-black bg-black px-4 py-3 text-body font-semibold text-white shadow-card transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-black"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.744.9-1.99 1.57-2.987 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.572-2.27 1.206-2.98.804-.94 2.142-1.64 3.248-1.68.03.13.05.28.05.43zm4.565 15.71c-.03.07-.463 1.58-1.518 3.12-.945 1.34-1.94 2.71-3.43 2.71-1.517 0-1.9-.88-3.63-.88-1.698 0-2.302.91-3.67.91-1.377 0-2.332-1.26-3.428-2.8-1.287-1.82-2.323-4.63-2.323-7.28 0-4.28 2.797-6.55 5.552-6.55 1.448 0 2.675.95 3.6.95.865 0 2.222-1.01 3.902-1.01.613 0 2.886.06 4.374 2.19-.13.09-2.383 1.37-2.383 4.19 0 3.26 2.854 4.42 2.955 4.45z" />
+            </svg>
+            {t("registerWithApple")}
+          </button>
+          <button
+            type="button"
             onClick={() => requestSocial("discord")}
             disabled={discordBlocked}
             title={reasonFor(discord, "Discord") ?? undefined}
@@ -154,7 +175,7 @@ export function AccountSection({
             onClick={() => requestSocial("google")}
             disabled={googleBlocked}
             title={reasonFor(google, "Google") ?? undefined}
-            className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-card-border bg-card px-4 py-3 text-body font-medium text-foreground shadow-card transition-colors hover:bg-card/80 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card"
+            className="store-app-hidden flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-card-border bg-card px-4 py-3 text-body font-medium text-foreground shadow-card transition-colors hover:bg-card/80 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -169,6 +190,9 @@ export function AccountSection({
           )}
           {googleBlocked && (
             <p className="text-center text-body-sm text-warning">{reasonFor(google, "Google")}</p>
+          )}
+          {appleBlocked && (
+            <p className="text-center text-body-sm text-warning">{reasonFor(apple, "Apple")}</p>
           )}
           <p className="mt-2 text-center text-body-sm leading-relaxed text-muted">
             {bothBlocked ? t("socialHintBlocked") : t("socialHint")}

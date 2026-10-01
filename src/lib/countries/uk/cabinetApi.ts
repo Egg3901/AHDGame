@@ -22,7 +22,7 @@ import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
 import { getOfficeLabel } from "@/lib/utils/politics";
-import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Character, ElectedOfficial, CareerEvent, PoliticalParty } from "@/lib/db/types";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
@@ -47,6 +47,7 @@ import { applyConfidenceEventToGov } from "@/lib/countries/uk/confidence/confide
 import { GREAT_OFFICE_POSITION_IDS } from "@/lib/countries/uk/confidence/confidenceGauge";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { canReshuffle, getReshuffleIdentity } from "@/lib/countries/uk/cabinet/reshuffleLimit";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 const appointSchema = z.object({
   positionId: z.string(),
@@ -83,6 +84,20 @@ const COOLDOWN_TURNS = 24;
 const TERRITORIAL_POSITIONS_BY_COUNTRY: Partial<Record<CountryId, string[]>> = {
   UK: ["northern_ireland", "scotland", "wales"],
 };
+
+/**
+ * Player-facing message for a cabinetMembers duplicate-key insert. A clash on
+ * the seat index is a lost race for the position; a clash on a holder index
+ * means the appointee already holds a seat that cannot pair with this one
+ * (player ticket 1368: this used to read as a race and misled the PM).
+ */
+export function duplicateAppointmentMessage(error: unknown): string {
+  const keyPattern = (error as { keyPattern?: Record<string, unknown> } | null)?.keyPattern;
+  if (keyPattern && "characterId" in keyPattern) {
+    return "This minister already holds a cabinet post that cannot be combined with this one. Refresh the cabinet and try again.";
+  }
+  return "A conflicting appointment was just made. Refresh the cabinet and try again.";
+}
 
 /**
  * Restore a departing minister's character office after they leave cabinet
@@ -368,9 +383,7 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       } as never);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
-        throw conflict(
-          "A conflicting appointment was just made. Refresh the cabinet and try again."
-        );
+        throw conflict(duplicateAppointmentMessage(error));
       }
       throw error;
     }
@@ -397,6 +410,18 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
         { _id: targetChar._id },
         { $set: { currentOffice: cabinetOffice, updatedAt: now } }
       );
+    await captureOfficeTransition({
+      db,
+      officeType: cabinetType,
+      transitionType: "gained",
+      partyId: lowerOfficial?.party ?? targetChar.party,
+      selectionMethod: "appointment",
+      tenureTurns: 0,
+      careerStage: (targetChar.careerHistory?.length ?? 0) + 1,
+      nationId: countryId,
+      turn: appointTurn,
+      flush: true,
+    });
 
     // Lock the seat for COOLDOWN_TURNS turns from this appointment. Keyed to the
     // appointment, so it gates the NEXT appointment to this seat and persists
@@ -529,6 +554,21 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
     if (!survivorKept && member.characterId) {
       await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
     }
+    if (!survivorKept && member.characterId) {
+      const { currentTurn } = await getGameTime().catch(() => ({ currentTurn: 0 }));
+      await captureOfficeTransition({
+        db,
+        officeType: countryId === COUNTRY_CONFIGS.UK.id ? "ukCabinet" : "parliamentaryCabinet",
+        transitionType: "lost",
+        partyId: member.party,
+        selectionMethod: "removal",
+        tenureTurns: 0,
+        careerStage: 0,
+        nationId: countryId,
+        turn: currentTurn,
+        flush: true,
+      });
+    }
     // Firing is unrestricted and imposes no cooldown of its own. Any existing
     // appointment cooldown on this seat (set when the minister was appointed) is
     // intentionally left in place so the seat stays locked for the remainder of
@@ -622,6 +662,19 @@ export async function resignCabinetMemberHandler(request: Request, countryId: Co
       throw notFound("You do not hold this cabinet seat");
     }
     await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
+    const { currentTurn } = await getGameTime().catch(() => ({ currentTurn: 0 }));
+    await captureOfficeTransition({
+      db,
+      officeType: countryId === COUNTRY_CONFIGS.UK.id ? "ukCabinet" : "parliamentaryCabinet",
+      transitionType: "left",
+      partyId: member.party,
+      selectionMethod: "resignation",
+      tenureTurns: 0,
+      careerStage: caller.careerHistory?.length ?? 0,
+      nationId: countryId,
+      turn: currentTurn,
+      flush: true,
+    });
 
     // Confidence gauge (epic #856): a resignation is a flat hit each — waves
     // sum to destabilise — heavier for a Great Office of State. Same UK-only
@@ -1161,9 +1214,13 @@ export async function reshuffleCabinetHandler(request: Request, countryId: Count
       let appointed = 0;
       for (const { positionId, targetChar, lowerOfficial } of validated) {
         try {
+          const reshuffleSlot = roleSlotForPosition(countryId, positionId);
           await getCabinetMembersCollection(db).insertOne({
             countryId,
             positionId,
+            // Stamp the UK role slot like the single-seat flow, so reshuffled
+            // rows key the dual-ministry unique index the same way.
+            ...(reshuffleSlot ? { roleSlot: reshuffleSlot } : {}),
             characterId: targetChar._id,
             characterName: targetChar.name,
             party: lowerOfficial?.party ?? targetChar.party,
@@ -1176,9 +1233,7 @@ export async function reshuffleCabinetHandler(request: Request, countryId: Count
           } as never);
         } catch (error) {
           if (isDuplicateKeyError(error)) {
-            throw conflict(
-              "A conflicting appointment was just made. Refresh the cabinet and try again."
-            );
+            throw conflict(duplicateAppointmentMessage(error));
           }
           throw error;
         }

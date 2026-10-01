@@ -1,0 +1,1465 @@
+{
+  "sourceCommit": "5f89f1bc10ef3187675b6d44181bd332ccf60f25",
+  "baseline": "dde248f1cb2b1ab8aba882b3af2c6428dc490a89",
+  "scope": "Synthetic native Mongo command/service qualification, not a full-world run or historical consent",
+  "results": [
+    {
+      "case": "wallet",
+      "before": {
+        "personal": {
+          "USD": 10000,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 9592.9,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "after": {
+        "personal": {
+          "USD": 9592.9,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 407.1
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 17,
+          "requestBytes": 4881,
+          "responseBytes": 2134
+        },
+        "fixed": {
+          "roundTrips": 49,
+          "requestBytes": 21228,
+          "responseBytes": 20331
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "io",
+      "before": {
+        "personal": {
+          "USD": 10000,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "paymentMode": {
+            "USD": "io"
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 9750,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "paymentMode": {
+            "USD": "io"
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 250,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "after": {
+        "personal": {
+          "USD": 9750,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "paymentMode": {
+            "USD": "io"
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 250,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 250
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 16,
+          "requestBytes": 4056,
+          "responseBytes": 1962
+        },
+        "fixed": {
+          "roundTrips": 49,
+          "requestBytes": 20954,
+          "responseBytes": 20186
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "cross_currency",
+      "before": {
+        "personal": {
+          "USD": 0,
+          "EUR": 10000
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 0,
+          "EUR": 9491.12
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "after": {
+        "personal": {
+          "USD": 0,
+          "EUR": 9491.12
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 407.1
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 17,
+          "requestBytes": 5051,
+          "responseBytes": 2230
+        },
+        "fixed": {
+          "roundTrips": 49,
+          "requestBytes": 22436,
+          "responseBytes": 21711
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "empty",
+      "before": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {
+            "USD": 208.33
+          },
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "after": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {
+            "USD": 208.33
+          },
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 0
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 13,
+          "requestBytes": 3280,
+          "responseBytes": 1803
+        },
+        "fixed": {
+          "roundTrips": 42,
+          "requestBytes": 16280,
+          "responseBytes": 15372
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "income_unfreeze",
+      "before": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {
+            "USD": 208.12
+          },
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "after": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {
+            "USD": 208.12
+          },
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 0
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 13,
+          "requestBytes": 3394,
+          "responseBytes": 1903
+        },
+        "fixed": {
+          "roundTrips": 42,
+          "requestBytes": 16738,
+          "responseBytes": 15728
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "savings",
+      "before": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 50000
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": [
+          {
+            "balance": 50000,
+            "status": "open"
+          }
+        ]
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 49592.9
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 999592.9,
+            "savingsLiability": 49592.9,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": [
+          {
+            "balance": 49592.9,
+            "status": "open"
+          }
+        ]
+      },
+      "after": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 49592.9
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 999592.9,
+            "savingsLiability": 49592.9,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": [
+          {
+            "balance": 49592.9,
+            "status": "open"
+          }
+        ]
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 407.1
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 33,
+          "requestBytes": 12649,
+          "responseBytes": 3233
+        },
+        "fixed": {
+          "roundTrips": 66,
+          "requestBytes": 30072,
+          "responseBytes": 22164
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "savings_refused",
+      "before": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 50000
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": [
+          {
+            "balance": 50000,
+            "status": "open"
+          }
+        ]
+      },
+      "beforeFix": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 50000
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99801.23
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 208.33,
+            "pool": 0,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": [
+          {
+            "balance": 50000,
+            "status": "open"
+          }
+        ]
+      },
+      "after": {
+        "personal": {
+          "USD": 0,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 50000
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 100000
+          },
+          "arrears": {
+            "USD": 208.33
+          },
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": [
+          {
+            "balance": 50000,
+            "status": "open"
+          }
+        ]
+      },
+      "outcome": {
+        "charactersProcessed": 1,
+        "paymentsInternal": 0
+      },
+      "performance": {
+        "baseline": {
+          "roundTrips": 24,
+          "requestBytes": 8694,
+          "responseBytes": 3152
+        },
+        "fixed": {
+          "roundTrips": 50,
+          "requestBytes": 21389,
+          "responseBytes": 16809
+        }
+      },
+      "sameTurnRetryUnchanged": true,
+      "ledgerCount": 2
+    },
+    {
+      "case": "lost_characters_ack",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": false
+    },
+    {
+      "case": "lost_centralBanks_ack",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": false
+    },
+    {
+      "case": "lost_locLedger_ack",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": false
+    },
+    {
+      "case": "lost_characters_ack_receipt_eviction",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": true
+    },
+    {
+      "case": "lost_centralBanks_ack_receipt_eviction",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": true
+    },
+    {
+      "case": "lost_locLedger_ack_receipt_eviction",
+      "final": {
+        "personal": {
+          "USD": 9900,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {
+            "USD": 99910
+          },
+          "arrears": {},
+          "accountsOpened": {
+            "USD": true
+          },
+          "drawFrozen": false
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "concurrentRecoveryOnce": true,
+      "boundedReceiptsEvicted": true
+    },
+    {
+      "case": "garnished_residual_fx",
+      "final": {
+        "personal": {
+          "USD": 149,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {},
+          "arrears": {},
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 10,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {
+              "EUR": 1
+            }
+          }
+        ],
+        "accounts": []
+      },
+      "trades": 1,
+      "repeatedAfterUnfreezeUnchanged": true,
+      "changedIncomeStopped": true
+    },
+    {
+      "case": "actual_bond_source_interruption",
+      "issuerBefore": 1000000,
+      "issuerAfterSource": 999791.6666666666,
+      "sourceAfterCommit": {
+        "personal": {
+          "USD": 0,
+          "EUR": 206.73
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {},
+          "arrears": {},
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 0,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {}
+          }
+        ],
+        "accounts": []
+      },
+      "sourceAfterRecovery": {
+        "personal": {
+          "USD": 256,
+          "EUR": 0
+        },
+        "savings": {
+          "USD": 0
+        },
+        "campaign": {
+          "USD": 12345
+        },
+        "loc": {
+          "balances": {},
+          "arrears": {},
+          "drawFrozen": true
+        },
+        "banks": [
+          {
+            "bank": "ECB",
+            "reserves": 0,
+            "pool": 0,
+            "savingsLiability": 0,
+            "forexRevenue": 1,
+            "foreignReserves": {}
+          },
+          {
+            "bank": "US",
+            "reserves": 1,
+            "pool": 1000000,
+            "savingsLiability": 50000,
+            "forexRevenue": 0,
+            "foreignReserves": {
+              "EUR": 1
+            }
+          }
+        ],
+        "accounts": []
+      },
+      "durableRecoveryDoesNotRerunSource": true,
+      "scope": "Actual processBondTurn through its issuer debit and joined LOC/residual publication, then pending journal recovery; whole bond phase replay is not claimed"
+    }
+  ]
+}

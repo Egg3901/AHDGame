@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getAuthAdmin } from "@/lib/auth";
 import { buildGovernmentTypeMap } from "@/lib/landing/governmentTypeMap";
 import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
+import { ERA_CONFIGS } from "@/components/landing/eraThemes";
+import { backgroundMacroFeatureIdsForPreset } from "@/lib/world/worldEntityMap";
 import { HomepagePreviewClient } from "./HomepagePreviewClient";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +30,19 @@ export default async function HomepagePreviewPage() {
   // The version and playable roster DO come from the live world, so the preview
   // shows the same hero copy players see.
   const world = await getMarketedWorldSafe();
+  // Every era's macro roster, so the era picker can switch without a request.
+  const backgroundMacroByEra = Object.fromEntries(
+    Object.keys(ERA_CONFIGS).map((era) => [
+      era,
+      backgroundMacroFeatureIdsForPreset(`${era}-default`),
+    ])
+  );
 
-  return <HomepagePreviewClient governmentTypes={governmentTypes} world={world} />;
+  return (
+    <HomepagePreviewClient
+      governmentTypes={governmentTypes}
+      world={world}
+      backgroundMacroByEra={backgroundMacroByEra}
+    />
+  );
 }
