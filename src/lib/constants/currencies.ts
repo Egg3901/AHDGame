@@ -441,12 +441,6 @@ export const INITIAL_RATES: Partial<Record<CountryId, number>> = {
  * meaningfully represented. BRL 5.0 (the 2019-default rate) is kept as a
  * fallback to avoid divide-by-zero in forex math.
  */
-/** January 1991 old-zloty parity, extracted from Track 1 commit 609cf2bd7d.
- * IMF WP/92/86 distinguishes this opening parity from the later annual average.
- * https://www.elibrary.imf.org/view/journals/001/1992/086/article-A001-en.xml
- */
-const PL_JANUARY_1991_PLZ_PER_USD = 9_500;
-
 export const INITIAL_RATES_1991: Partial<Record<CountryId, number>> = {
   US: 1.0,
   UK: 0.57, // GBP/USD annual average 1991

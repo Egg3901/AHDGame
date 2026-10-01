@@ -502,19 +502,17 @@ export async function processForexTurn(
       .collection<ExchangeRate>("exchangeRates")
       .findOne({ _id: "DE" }, { projection: { rate: 1, macroTarget: 1, rateHistory: 1 } });
     if (eur) {
-      await db
-        .collection<ExchangeRate>("exchangeRates")
-        .updateOne(
-          { _id: "BG", currencyCode: "EUR" },
-          {
-            $set: {
-              rate: eur.rate,
-              macroTarget: eur.macroTarget,
-              rateHistory: eur.rateHistory,
-              updatedAt: now,
-            },
-          }
-        );
+      await db.collection<ExchangeRate>("exchangeRates").updateOne(
+        { _id: "BG", currencyCode: "EUR" },
+        {
+          $set: {
+            rate: eur.rate,
+            macroTarget: eur.macroTarget,
+            rateHistory: eur.rateHistory,
+            updatedAt: now,
+          },
+        }
+      );
     }
   }
 
