@@ -23,6 +23,9 @@ describe("Native Assembly campaign planning", () => {
       plan({ ...input, latestResult: { ...input.latestResult, failedPolls: 0 } })
     ).toMatchObject({ openRepeatGeneration: null, admitRepeatGeneration: null });
   });
+  it("does not admit a first slate behind an active Assembly with missing certification", () => {
+    expect(() => plan({ ...input, latestResult: undefined })).toThrow("certified predecessor");
+  });
   it("opens the next generation and retries only its still-open admission", () => {
     expect(plan(input)).toMatchObject({ openRepeatGeneration: 1 });
     expect(

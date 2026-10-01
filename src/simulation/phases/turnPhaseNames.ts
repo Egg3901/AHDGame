@@ -71,6 +71,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "clearResolvedSupport",
   "leadershipVacate",
   "parliamentaryGovernmentFormation",
+  "russianAssemblyCampaigns",
   "parliamentaryGovernmentPhases",
   "parliamentaryVacancyWatcher",
   "perpetualElections",

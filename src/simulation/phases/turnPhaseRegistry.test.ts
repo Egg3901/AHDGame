@@ -310,6 +310,40 @@ describe("turn phase registry", () => {
     expect(indexOf("electionTimers")).toBeLessThan(indexOf("electionResolution"));
   });
 
+  it("runs native1991 Assembly campaigns after seating and before generic election scheduling", async () => {
+    const adapter = getTurnPhaseRegistry().find(
+      (entry) => entry.key === "electionResolutionAndGovernment"
+    )!;
+    const called: string[] = [];
+    const runtime = {
+      runPhase: vi.fn(async (name: string) => {
+        called.push(name);
+        return name === "electionResolution" ? 0 : undefined;
+      }),
+      markPhaseSkipped: vi.fn(),
+    };
+    await adapter.execute(
+      {
+        db: {} as never,
+        gameNow: new Date(1000),
+        newTurn: 145,
+        gameState: { preset: "1991-default" },
+        phaseResults: {},
+      } as never,
+      runtime as never
+    );
+    expect(called.indexOf("russianAssemblyCampaigns")).toBeGreaterThan(
+      called.indexOf("parliamentaryGovernmentFormation")
+    );
+    expect(called.indexOf("russianAssemblyCampaigns")).toBeLessThan(
+      called.indexOf("parliamentaryGovernmentPhases")
+    );
+    expect(TURN_PHASE_NAMES).toContain("russianAssemblyCampaigns");
+    expect(TURN_PHASE_NAMES.indexOf("russianAssemblyCampaigns")).toBeLessThan(
+      TURN_PHASE_NAMES.indexOf("perpetualElections")
+    );
+  });
+
   // Office-state docs are created only at bootstrap/reset, so a regional
   // executive seated for a region added later (e.g. the Ireland build-out)
   // never gets a `governorOfficeState` row — its office AP reads `?? 0` and

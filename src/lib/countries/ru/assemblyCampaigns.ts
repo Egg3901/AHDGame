@@ -83,8 +83,9 @@ export async function processRussianAssemblyCampaigns(input: {
   let councilRoot = country.ruFirstCouncilElectionCohortId;
   let seating: RussianAssemblySeatingRecord | null = null;
   if (activeAssembly) {
-    if (!dumaRoot || !councilRoot)
-      throw new Error("Active Assembly campaigns need both original roots");
+    // Legacy alternate settlements have no native roots. Preserve their offices
+    // rather than inventing a new first election behind the existing marker.
+    if (!dumaRoot || !councilRoot) return result;
     seating = await db
       .collection<RussianAssemblySeatingRecord>(RUSSIAN_ASSEMBLY_SEATINGS_COLLECTION)
       .findOne(
@@ -108,6 +109,7 @@ export async function processRussianAssemblyCampaigns(input: {
       !seating.dumaRootCohortId.equals(dumaRoot) ||
       !seating.councilRootCohortId.equals(councilRoot) ||
       seating.seatedOnTurn !== country.ruFederalAssemblySinceTurn ||
+      seating.seatedOnTurn > turn ||
       !Number.isSafeInteger(seating.dumaTermEndTurn) ||
       !Number.isSafeInteger(seating.councilTermEndTurn) ||
       seating.dumaTermEndTurn <= seating.seatedOnTurn ||
@@ -175,7 +177,7 @@ export async function processRussianAssemblyCampaigns(input: {
     const generation = latest ? (latest.generation ?? 0) + 1 : 0;
     const id = latest ? `${root.toHexString()}:repeat:${generation}` : root.toHexString();
     let opening: RussianDumaRepeatOpeningRecord | RussianCouncilOpeningRecord | null = null;
-    if (chamber === "council" || (latest && failedPolls))
+    if ((chamber === "council" && !latest) || (latest && failedPolls))
       opening = await db
         .collection<RussianDumaRepeatOpeningRecord | RussianCouncilOpeningRecord>(
           chamber === "duma"

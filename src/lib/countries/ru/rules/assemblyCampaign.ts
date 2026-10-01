@@ -31,7 +31,11 @@ export function planRussianAssemblyCampaign(input: {
     if (input.turn >= input.originalTermEndTurn!) return none;
   }
   const result = input.latestResult;
-  if (!result) return { ...none, admitFirst: !input.firstNpcAdmitted };
+  if (!result) {
+    if (input.activeAssembly)
+      throw new Error("A seated Assembly campaign needs its certified predecessor");
+    return { ...none, admitFirst: !input.firstNpcAdmitted };
+  }
   if (
     !Number.isSafeInteger(result.generation) ||
     result.generation < 0 ||

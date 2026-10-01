@@ -26,6 +26,7 @@
  *    (npp.countryId === election.countryId). US NPPs can't enter UK races.
  */
 
+import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import { ObjectId } from "mongodb";
 import type { Election, ElectionCandidate, NPP } from "@/lib/db/types";
 import {
@@ -114,8 +115,8 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
 
   const openPrimaries = ctx.openPrimaries.filter((p) => {
     if (isElectionTypeEntryBlocked(p.electionType)) return false;
-    // Bound Duma cohorts are filled atomically by the dedicated slate shell.
-    if (p.countryId === "RU" && p.electionType === "dumaDeputy" && p.russianDumaRound) return false;
+    // Bound Assembly families use their atomic slate shells.
+    if (isNativeRussianAssemblyElection(p)) return false;
     if (p.electionType === "president") {
       return (
         (p.countryId === "RU" && p.russianPresidentialRound?.round === 1) ||
