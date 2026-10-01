@@ -1,3 +1,8 @@
+/**
+ * Ordinary completed elections assign winners and advance their next cycle.
+ * resolveOneGeneralElection leaves frozen Duma ballots to cohort certification,
+ * which prevents a district from replacing Congress before chamber handover.
+ */
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -80,6 +85,12 @@ export async function resolveOneGeneralElection(
   bgEligibleParties: ReadonlySet<string> | null = null,
   huMixedCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
+  if (
+    election.countryId === "RU" &&
+    election.electionType === "dumaDeputy" &&
+    election.russianDumaRound
+  )
+    return { resolved: false, newsOutcomes: [] };
   if (
     election.countryId === "BG" &&
     election.electionType === "nationalAssembly" &&
