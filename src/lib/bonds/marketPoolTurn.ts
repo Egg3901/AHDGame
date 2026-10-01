@@ -24,6 +24,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { BOND_POOL_M2_SHARE, creditBondPool, debitBondPoolGated } from "@/lib/bonds/marketPool";
 import { loadCountrySovereignSnapshot } from "@/lib/sovereignDefault/snapshotLoader";
 import { computeMarketDemand } from "@/lib/sovereignDefault/marketDemand";
+import { loadBondPoolLedgerContext, type BondPoolLedgerContext } from "./marketPoolLedger";
 import { SOVEREIGN_ISSUANCE_INTERVAL_TURNS } from "@/lib/bonds/sovereign";
 
 /** Share of the shortfall against target that flows in per turn. */
@@ -91,7 +92,8 @@ export async function sovereignFaceMaturingSoon(
 export async function processBondMarketPoolTurn(
   db: Db,
   turn: number,
-  now: Date
+  now: Date,
+  ledgerContext?: BondPoolLedgerContext | null
 ): Promise<BondMarketPoolTurnResult> {
   const pools = await db
     .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
@@ -104,6 +106,8 @@ export async function processBondMarketPoolTurn(
     appetitesRefreshed: 0,
   };
   if (pools.length === 0) return result;
+  const context =
+    ledgerContext === undefined ? await loadBondPoolLedgerContext(db, turn) : ledgerContext;
 
   for (const pool of pools) {
     const currency = pool._id;
@@ -139,10 +143,12 @@ export async function processBondMarketPoolTurn(
 
     const moves = planPoolCashMoves({ cashLocal: pool.cashLocal, targetCashLocal });
     if (moves.inflow > 0) {
-      await creditBondPool(db, currency, moves.inflow, "inflowIn", now);
+      await creditBondPool(db, currency, moves.inflow, "inflowIn", now, { ledgerContext: context });
       result.inflowLocalByCurrency[currency] = moves.inflow;
     } else if (moves.sweep > 0) {
-      const debit = await debitBondPoolGated(db, currency, moves.sweep, "sweepOut", now);
+      const debit = await debitBondPoolGated(db, currency, moves.sweep, "sweepOut", now, {
+        ledgerContext: context,
+      });
       if (debit.ok) result.sweptLocalByCurrency[currency] = moves.sweep;
     }
 

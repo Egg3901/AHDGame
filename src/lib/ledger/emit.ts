@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db } from "mongodb";
 import { isAnchorBalanced } from "@/lib/ledger/epsilon";
 import type { LedgerEntry, LedgerEntryInput } from "@/lib/ledger/types";
 
@@ -19,13 +19,20 @@ export function finalizeLedgerEntry(input: LedgerEntryInput): LedgerEntry {
  * shadow ledger must never fail a game write (see plan §4). Failures go to
  * Sentry and are counted by the caller's own try/catch envelope.
  */
-export async function emitLedgerEntries(db: Db, inputs: LedgerEntryInput[]): Promise<void> {
+export async function emitLedgerEntries(
+  db: Db,
+  inputs: LedgerEntryInput[],
+  options?: { session?: ClientSession }
+): Promise<void> {
   if (inputs.length === 0) return;
   try {
     const docs = inputs.map(finalizeLedgerEntry);
     await db
       .collection<LedgerEntry>(LEDGER_ENTRIES_COLLECTION)
-      .insertMany(docs, { ordered: false });
+      .insertMany(docs, {
+        ordered: false,
+        ...(options?.session ? { session: options.session } : {}),
+      });
   } catch (err) {
     Sentry.captureException(err, {
       extra: { phase: "emitLedgerEntries", count: inputs.length },
