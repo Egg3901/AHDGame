@@ -664,13 +664,17 @@ class InMemoryCollection {
     return this.docs.filter((d) => matchesFilter(d, filter)).length;
   }
 
-  async bulkWrite(
-    ops: Doc[]
-  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+  async bulkWrite(ops: Doc[]): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedIds: Record<number, unknown>;
+  }> {
     let matched = 0;
     let modified = 0;
     let upserted = 0;
-    for (const op of ops) {
+    const upsertedIds: Record<number, unknown> = {};
+    for (const [index, op] of ops.entries()) {
       if (op.updateOne) {
         const { filter, update, upsert } = op.updateOne as {
           filter: Doc;
@@ -681,6 +685,8 @@ class InMemoryCollection {
         matched += res.matchedCount;
         modified += res.modifiedCount;
         upserted += res.upsertedCount;
+        if (res.upsertedCount)
+          upsertedIds[index] = this.docs.find((doc) => matchesFilter(doc, filter))?._id;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
       } else if (op.replaceOne) {
@@ -693,6 +699,8 @@ class InMemoryCollection {
         matched += res.matchedCount;
         modified += res.modifiedCount;
         upserted += res.upsertedCount;
+        if (res.upsertedCount)
+          upsertedIds[index] = this.docs.find((doc) => matchesFilter(doc, filter))?._id;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);
@@ -711,7 +719,7 @@ class InMemoryCollection {
         throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
-    return { matchedCount: matched, modifiedCount: modified, upsertedCount: upserted };
+    return { matchedCount: matched, modifiedCount: modified, upsertedCount: upserted, upsertedIds };
   }
 
   /**

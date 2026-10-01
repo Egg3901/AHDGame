@@ -18,6 +18,11 @@ import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { isAnchorBalanced } from "@/lib/ledger/epsilon";
 import type { LedgerEntry, LedgerEntryInput } from "@/lib/ledger/types";
 
+import {
+  flushNppReinvestmentCashWitnesses,
+  type NppReinvestmentCashWitness,
+} from "./reinvestmentCashLedger";
+
 export interface NppFoundingCashWitness {
   corporationId: ObjectId;
   key: ObjectId;
@@ -181,12 +186,14 @@ export async function flushNppFoundingCashWitnesses(
 export async function applyCorporationCashWrites(
   db: Db,
   operations: AnyBulkWriteOperation<Document>[],
-  pending: readonly NppFoundingCashWitness[]
+  pending: readonly NppFoundingCashWitness[],
+  reinvestments: readonly NppReinvestmentCashWitness[] = []
 ) {
   try {
     return await db.collection("corporations").bulkWrite(operations);
   } finally {
     // Ordered failures may have landed earlier debits. Atomic stamps prove them.
     await flushNppFoundingCashWitnesses(db, pending);
+    await flushNppReinvestmentCashWitnesses(db, reinvestments);
   }
 }

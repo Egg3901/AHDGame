@@ -234,6 +234,8 @@ export interface Corporation {
   /** Cash on hand */
   /** Atomic audit key written with an NPP founding debit; observer publication uses this stamp. */
   nppFoundingCashWitnessKey?: string;
+  /** Atomic admission key for landed NPP capacity-build cash history. */
+  nppReinvestmentCashWitnessKey?: string;
   liquidCapital: number;
   /**
    * Currency denomination of liquidCapital.

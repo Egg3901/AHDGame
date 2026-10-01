@@ -14,7 +14,7 @@ import type { CorporateSector, Corporation } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { emitBuildCapexTxBulk, type BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
+import { type BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
 import {
   unownedHeadroomBaseExpr,
   unownedHeadroomUnitsPerAnchor,
@@ -31,6 +31,12 @@ import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDec
 import type { NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
 import { recordNppOperatorObservationsBestEffort } from "@/lib/corporations/nppOperatorTelemetry/persistence";
 import type { NppCorpDecision } from "@/lib/turn/npp/corpDecisionTypes";
+
+import {
+  prepareNppReinvestmentCashWitnesses,
+  type NppReinvestmentCashWitness,
+} from "./reinvestmentCashLedger";
+import type { NppCorpUpdateOp } from "./nppCashWrite";
 
 export type NppReinvestmentList = NonNullable<NppCorpDecision["reinvestments"]>;
 export type NppUnownedDrawList = NonNullable<NppCorpDecision["unownedDraws"]>;
@@ -193,8 +199,8 @@ export async function drawFoundedCapacityFromPools(
 }
 
 /**
- * Cohort flushes: capex ledger, market-entry funnel, then the aggregated
- * capacity-decision observations. Same ops, same order as the inline shell.
+ * Prepare cash-history intents, then persist entry and capacity diagnostics.
+ * The authoritative corporation writer publishes accepted capex after cash lands.
  */
 export async function flushNppCapacityWriteback(
   db: Db,
@@ -203,14 +209,20 @@ export async function flushNppCapacityWriteback(
     now: Date;
     entryDiagnostics: NppMarketEntryDiagnostic[];
     capexRows: BuildCapexTxInput[];
+    cashOperations: NppCorpUpdateOp[];
+    shadowEnabled: boolean;
     capacityObservations: readonly CapacityDecisionObservation[];
     operatorObservations: readonly NppOperatorObservation[];
   }
-): Promise<void> {
-  if (args.capexRows.length > 0) {
-    await emitBuildCapexTxBulk(db, args.capexRows);
-  }
+): Promise<NppReinvestmentCashWitness[]> {
+  const pending = await prepareNppReinvestmentCashWitnesses(
+    db,
+    args.capexRows,
+    args.cashOperations,
+    args.shadowEnabled
+  );
   await persistNppMarketEntryFunnelBestEffort(db, args.turn, args.now, args.entryDiagnostics);
   await recordCapacityDecisionBulkBestEffort(db, args.turn, args.capacityObservations);
   await recordNppOperatorObservationsBestEffort(db, args.turn, args.now, args.operatorObservations);
+  return pending;
 }

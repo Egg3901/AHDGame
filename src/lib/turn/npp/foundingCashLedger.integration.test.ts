@@ -15,6 +15,7 @@ import {
   buildNppFoundingCashWitness,
   flushNppFoundingCashWitnesses,
 } from "./foundingCashLedger";
+import { flushNppReinvestmentCashWitnesses } from "./reinvestmentCashLedger";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -95,12 +96,15 @@ for (const mode of ["plants", "off"]) {
         opening = await collectBalances(db);
       const result = await processNppCorporationDecisions(db, TURN, new Date(), false);
       expect(result.newSectors).toHaveLength(1);
+      expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+      expect(await db.collection("financialTxLog").countDocuments()).toBe(0);
       expect(result.foundingCashWitnesses).toHaveLength(1);
       expect(result.foundingCashWitnesses![0].key.equals(result.newSectors[0]._id)).toBe(true);
       await applyCorporationCashWrites(
         db,
         result.corpUpdates.map((op) => ({ updateOne: op })),
-        result.foundingCashWitnesses ?? []
+        result.foundingCashWitnesses ?? [],
+        result.reinvestmentCashWitnesses ?? []
       );
       const entries = await db
         .collection<LedgerEntry>("ledgerEntries")
@@ -119,6 +123,7 @@ for (const mode of ["plants", "off"]) {
       const cash = (await db.collection("corporations").findOne({ _id: id }))!.liquidCapital;
       expect(cash).toBeLessThan(100000000 * row.rate);
       await flushNppFoundingCashWitnesses(db, result.foundingCashWitnesses ?? []);
+      await flushNppReinvestmentCashWitnesses(db, result.reinvestmentCashWitnesses ?? []);
       expect(await db.collection("ledgerEntries").countDocuments()).toBe(entries.length);
     }
   );
@@ -129,16 +134,20 @@ it("keeps identical cash and omits witness stamps with accounting disabled", asy
   await applyCorporationCashWrites(
     enabled.db,
     on.corpUpdates.map((op) => ({ updateOne: op })),
-    on.foundingCashWitnesses ?? []
+    on.foundingCashWitnesses ?? [],
+    on.reinvestmentCashWitnesses ?? []
   );
   const disabled = fixture(cases[0], "plants", false),
     off = await processNppCorporationDecisions(disabled.db, TURN, new Date(), false);
   await applyCorporationCashWrites(
     disabled.db,
     off.corpUpdates.map((op) => ({ updateOne: op })),
-    off.foundingCashWitnesses ?? []
+    off.foundingCashWitnesses ?? [],
+    off.reinvestmentCashWitnesses ?? []
   );
   expect(off.foundingCashWitnesses).toBeUndefined();
+  expect(await disabled.db.collection("financialTxLog").countDocuments()).toBe(1);
+  expect(await disabled.db.collection("ledgerEntries").countDocuments()).toBe(0);
   const a = await enabled.db.collection("corporations").findOne({ _id: enabled.id }),
     b = await disabled.db.collection("corporations").findOne({ _id: disabled.id });
   expect(b!.liquidCapital).toBe(a!.liquidCapital);
@@ -157,12 +166,12 @@ it("does not publish a founding debit when the authoritative write fails", async
     applyCorporationCashWrites(
       db,
       result.corpUpdates.map((op) => ({ updateOne: op })),
-      result.foundingCashWitnesses ?? []
+      result.foundingCashWitnesses ?? [],
+      result.reinvestmentCashWitnesses ?? []
     )
   ).rejects.toThrow("cash failed");
-  expect(
-    await db.collection("ledgerEntries").countDocuments({ txType: "corp_sector_founding" })
-  ).toBe(0);
+  expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+  expect(await db.collection("financialTxLog").countDocuments()).toBe(0);
 });
 it("rejects a stamp from a different or unmatched cash write", async () => {
   const { db, id } = fixture(cases[0]),
@@ -191,7 +200,8 @@ it("keeps successful cash when shadow publication fails", async () => {
     applyCorporationCashWrites(
       db,
       result.corpUpdates.map((op) => ({ updateOne: op })),
-      result.foundingCashWitnesses ?? []
+      result.foundingCashWitnesses ?? [],
+      result.reinvestmentCashWitnesses ?? []
     )
   ).resolves.toBeDefined();
 });
@@ -201,4 +211,53 @@ it("does not produce accounting intent for a rejected founding decision", async 
   const result = await processNppCorporationDecisions(db, TURN, new Date(), false);
   expect(result.newSectors).toEqual([]);
   expect(result.foundingCashWitnesses).toBeUndefined();
+});
+
+it("does not publish reinvestment history for an unmatched atomic stamp", async () => {
+  const { db, id } = fixture(cases[0]);
+  const result = await processNppCorporationDecisions(db, TURN, new Date(), false);
+  expect(result.reinvestmentCashWitnesses).toHaveLength(1);
+  await db
+    .collection("corporations")
+    .updateOne(
+      { _id: id },
+      { $set: { nppReinvestmentCashWitnessKey: new ObjectId().toHexString() } }
+    );
+  await flushNppReinvestmentCashWitnesses(db, result.reinvestmentCashWitnesses ?? []);
+  expect(await db.collection("financialTxLog").countDocuments()).toBe(0);
+  expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+});
+
+it("recovers failed reinvestment history publication without debiting cash again", async () => {
+  const { db, id } = fixture(cases[0]);
+  const opening = await collectBalances(db);
+  const result = await processNppCorporationDecisions(db, TURN, new Date(), false);
+  vi.spyOn(db.collection("financialTxLog"), "bulkWrite").mockRejectedValueOnce(
+    new Error("history failed")
+  );
+  await expect(
+    applyCorporationCashWrites(
+      db,
+      result.corpUpdates.map((op) => ({ updateOne: op })),
+      result.foundingCashWitnesses ?? [],
+      result.reinvestmentCashWitnesses ?? []
+    )
+  ).resolves.toBeDefined();
+  const cash = (await db.collection("corporations").findOne({ _id: id }))!.liquidCapital;
+  expect(await db.collection("financialTxLog").countDocuments()).toBe(0);
+  await flushNppReinvestmentCashWitnesses(db, result.reinvestmentCashWitnesses ?? []);
+  await flushNppReinvestmentCashWitnesses(db, result.reinvestmentCashWitnesses ?? []);
+  expect((await db.collection("corporations").findOne({ _id: id }))!.liquidCapital).toBe(cash);
+  expect(await db.collection("financialTxLog").countDocuments()).toBe(1);
+  const entries = await db.collection<LedgerEntry>("ledgerEntries").find({ turn: TURN }).toArray();
+  expect(entries).toHaveLength(2);
+  const report = reconcileLedger({
+    turn: TURN,
+    entries,
+    openingBalances: opening,
+    closingBalances: await collectBalances(db),
+  });
+  expect(report.stockVsFlow.findings).toEqual([]);
+  expect(report.trialBalance.unbalancedCount).toBe(0);
+  expect(report.unattributed).toEqual([]);
 });
