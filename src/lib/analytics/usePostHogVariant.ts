@@ -5,17 +5,27 @@ import { useAuthMe } from "@/contexts/AuthDataContext";
 import { CONSENT_EVENT, CONSENT_RESET_EVENT, getStoredConsent } from "@/components/CookieConsent";
 import { getPostHogClient } from "./posthogClient";
 
-type TelemetryFlag = "onboarding-checklist" | "ask-upsell-placement" | "turn-complete-celebration";
+type TelemetryFlag =
+  | "onboarding-checklist"
+  | "ask-upsell-placement"
+  | "turn-complete-celebration"
+  | "profile-redesign";
 
-/** Consent-gated assignment. Missing or unavailable flags always render control. */
+/**
+ * Consent-gated assignment. Missing or unavailable flags always render control.
+ * `assigned` is true only once PostHog has answered; a `ready` without it means
+ * the fallback fired and `variant` is the default, not a real assignment.
+ */
 export function usePostHogVariant(flag: TelemetryFlag): {
   variant: "control" | "test";
   ready: boolean;
+  assigned: boolean;
 } {
   const { user } = useAuthMe();
   const userId = typeof user?.id === "string" ? user.id : null;
   const [variant, setVariant] = useState<"control" | "test">("control");
   const [ready, setReady] = useState(false);
+  const [assigned, setAssigned] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,6 +35,7 @@ export function usePostHogVariant(flag: TelemetryFlag): {
       unsubscribe?.();
       unsubscribe = undefined;
       if (fallback) clearTimeout(fallback);
+      setAssigned(false);
       if (!userId || getStoredConsent() !== "accepted") {
         setVariant("control");
         setReady(true);
@@ -44,6 +55,7 @@ export function usePostHogVariant(flag: TelemetryFlag): {
             if (!cancelled) {
               const assignment = client.getFeatureFlag(flag);
               setVariant(assignment === "test" || assignment === "b" ? "test" : "control");
+              setAssigned(true);
               setReady(true);
             }
           });
@@ -70,5 +82,5 @@ export function usePostHogVariant(flag: TelemetryFlag): {
     };
   }, [flag, userId]);
 
-  return { variant, ready };
+  return { variant, ready, assigned };
 }

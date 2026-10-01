@@ -82,7 +82,7 @@ export function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between mb-4 pb-2 border-b border-card-border">
+    <div className="ahd-section-header flex items-center justify-between mb-4 pb-2 border-b border-card-border">
       <h2 className="text-sm font-bold uppercase tracking-widest text-muted">{children}</h2>
       {action}
     </div>

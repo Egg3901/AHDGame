@@ -238,6 +238,13 @@
       "title": "Profillink kopieren",
       "copied": "Kopiert!",
       "share": "Teilen"
+    },
+    "dossier": {
+      "file": "Akte",
+      "noOffice": "Privatperson",
+      "independent": "Parteilos",
+      "nationalRank": "Platz {rank} landesweit",
+      "partyInfluence": "Parteieinfluss"
     }
   }
 }
