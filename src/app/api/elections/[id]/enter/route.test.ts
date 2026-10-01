@@ -10,6 +10,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "@/lib/countries/ru/data/councilSubjects1993";
+
+vi.mock("@/lib/db/runRequiredTransaction", () => ({
+  runRequiredTransaction: vi.fn(async (body) => body({ inTransaction: () => true })),
+}));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
@@ -635,4 +640,220 @@ describe("Bound first-Duma filing", () => {
     expect((await res.json()).error).toMatch(/already running/);
     expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
+});
+
+describe("Bound first-Council player filing", () => {
+  const cohortId = new ObjectId();
+  beforeEach(() => vi.clearAllMocks());
+  async function setupCouncil() {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const ids = RUSSIAN_COUNCIL_SUBJECTS_1993.map(([number]) =>
+      number === 77 ? electionOid : new ObjectId()
+    );
+    const opening = {
+      _id: cohortId.toHexString(),
+      countryId: "RU",
+      preset: "1991-default",
+      cohortId,
+      mandateSinceTurn: 129,
+      electionIds: ids,
+      registeredBySubject: Object.fromEntries(
+        RUSSIAN_COUNCIL_SUBJECTS_1993.map(([number]) => [`RU-council-${number}`, 1000])
+      ),
+    };
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+    });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruFederalAssemblyMandateSinceTurn: 129,
+      ruFirstCouncilElectionCohortId: cohortId,
+    });
+    db.collection("countryState").findOne.mockResolvedValue({
+      _id: "RU",
+      governmentType: "parliamentaryRepublic",
+    });
+    db.collection("russianCouncilElectionOpenings").findOne.mockResolvedValue(opening);
+    db.collectionMocks.politicalParties.findOne.mockResolvedValue({
+      countryId: "RU",
+      sequentialId: 1,
+      regimeStatus: null,
+    });
+    const character = {
+      _id: characterOid,
+      countryId: "RU",
+      homeState: "CEN",
+      party: "1",
+      name: "Council player",
+      currentOffice: null,
+      careerHistory: [],
+      executiveTermsServed: 0,
+    };
+    db.collectionMocks.characters.findOne.mockResolvedValue(character);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date(1000),
+      currentTurn: 130,
+    } as never);
+    const election = {
+      _id: electionOid,
+      countryId: "RU",
+      electionType: "federationCouncilMember",
+      status: "active",
+      cycle: 1,
+      primaryEndTurn: 139,
+      primaryEndTime: new Date(10000),
+      state: "CEN",
+      seatId: "RU-council-77",
+      totalSeats: 2,
+      russianCouncilRound: {
+        cohortId,
+        mandateSinceTurn: 129,
+        districtNumber: 77,
+        registeredVoters: 1000,
+      },
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    db.collection("elections").findOne.mockResolvedValue(election);
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "council-player", character },
+    } as never);
+    return { db, election, character, opening };
+  }
+  const post = () =>
+    POST(makeReq(), { params: Promise.resolve({ id: electionOid.toHexString() }) });
+  it("files a frozen individual nomination using a transaction", async () => {
+    const { db } = await setupCouncil();
+    const res = await post();
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        characterId: characterOid,
+        russianCouncilNomination: { registrationOrder: 1000 },
+      }),
+      expect.objectContaining({ session: expect.anything() })
+    );
+    expect(db.collectionMocks.russianCouncilElectionOpenings.updateOne).toHaveBeenCalledWith(
+      expect.anything(),
+      { $inc: { playerFilings: 1 } },
+      expect.objectContaining({ session: expect.anything() })
+    );
+    expect(db.collectionMocks.campaigns.updateOne).toHaveBeenCalledWith(
+      { electionId: electionOid, candidateId: characterOid, status: { $ne: "archived" } },
+      { $set: { party: "1", updatedAt: new Date(1000) } },
+      expect.objectContaining({ session: expect.anything() })
+    );
+  });
+  it("replaces one bounded NPC without removing another player", async () => {
+    const { db } = await setupCouncil();
+    const npcId = new ObjectId();
+    const rows = [
+      {
+        _id: new ObjectId(),
+        electionId: electionOid,
+        characterId: new ObjectId(),
+        party: "1",
+        isNPP: false,
+      },
+      {
+        _id: npcId,
+        electionId: electionOid,
+        characterId: new ObjectId(),
+        nppId: new ObjectId(),
+        boundedNpcNomineeId: npcId,
+        party: "1",
+        isNPP: true,
+        russianCouncilNomination: { registrationOrder: 500 },
+      },
+    ];
+    const cursor = emptyFindCursor();
+    cursor.toArray.mockResolvedValue(rows);
+    db.collectionMocks.electionCandidates.find.mockReturnValue(cursor);
+    db.collectionMocks.electionCandidates.updateMany.mockResolvedValue({ modifiedCount: 1 });
+    const res = await post();
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(db.collectionMocks.electionCandidates.updateMany).toHaveBeenCalledWith(
+      { _id: { $in: [npcId] }, electionId: electionOid, status: "active" },
+      expect.objectContaining({ $set: { status: "withdrawn", withdrawnAt: new Date(1000) } }),
+      expect.objectContaining({ session: expect.anything() })
+    );
+  });
+  it.each([
+    "cohort",
+    "receipt",
+    "subject-id",
+    "register",
+    "residence",
+    "duma-seat",
+    "council-seat",
+    "party",
+  ])("rejects invalid %s before writing", async (reason) => {
+    const { db, election, character, opening } = await setupCouncil();
+    if (reason === "cohort") election.russianCouncilRound.cohortId = new ObjectId();
+    if (reason === "receipt")
+      db.collectionMocks.russianCouncilElectionOpenings.findOne.mockResolvedValue(null);
+    if (reason === "subject-id") opening.electionIds[76] = new ObjectId();
+    if (reason === "register") election.russianCouncilRound.registeredVoters = 999;
+    if (reason === "residence") character.homeState = "VOL";
+    if (reason === "duma-seat" || reason === "council-seat")
+      Object.assign(character, {
+        currentOffice: { type: reason === "duma-seat" ? "dumaDeputy" : "federationCouncilMember" },
+      });
+    if (reason === "party") db.collectionMocks.politicalParties.findOne.mockResolvedValue(null);
+    const res = await post();
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(403);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.updateMany).not.toHaveBeenCalled();
+  });
+  it("revalidates the character's party inside the transaction", async () => {
+    const { db, character } = await setupCouncil();
+    db.collectionMocks.characters.findOne.mockResolvedValue({ ...character, party: "2" });
+    const res = await post();
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(403);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+  it.each(["constituency", "list"])(
+    "protects a certified but unseated Duma %s mandate",
+    async (tier) => {
+      const { db } = await setupCouncil();
+      const root = new ObjectId();
+      const nomination = new ObjectId();
+      db.collectionMocks.countryGameStates.findOne.mockResolvedValue({
+        _id: "RU",
+        ruSovietSuccessionSinceTurn: 48,
+        ruFederalAssemblyMandateSinceTurn: 129,
+        ruFirstCouncilElectionCohortId: cohortId,
+        ruFirstDumaElectionCohortId: root,
+      });
+      const cursor = emptyFindCursor();
+      cursor.toArray.mockResolvedValue([
+        {
+          result: {
+            constituencyResults:
+              tier === "constituency"
+                ? [{ winner: { ownerId: characterOid.toHexString(), isNpc: false } }]
+                : [],
+            listAssignment:
+              tier === "list" ? { seatsByNominee: { [nomination.toHexString()]: 1 } } : null,
+          },
+          nominees: [{ candidateId: nomination, ownerId: characterOid, isNpc: false }],
+        },
+      ]);
+      db.collection("russianDumaElectionResults").find.mockReturnValue(cursor);
+      const res = await post();
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toMatch(/already hold a Duma mandate/);
+      expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    }
+  );
 });

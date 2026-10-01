@@ -3,7 +3,7 @@
  * _enrichElection retains Russian national list nominees together and uses the
  * same primary advance limit as the resolver.
  */
-import { russianDumaPrimaryAdvanceLimit } from "@/lib/countries/ru/rules/assemblyScope";
+import { russianAssemblyPrimaryAdvanceLimit } from "@/lib/countries/ru/assemblyPrimaryProgression";
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 /**
  * Low-level enrichment function that accepts pre-fetched dependencies.
@@ -624,22 +624,8 @@ export async function _enrichElection(
   // governor/president races are always 1. Resolved once here and returned as
   // `primaryAdvanceCount` so client surfaces read it instead of recomputing it.
   const primaryAdvanceCount =
-    russianDumaPrimaryAdvanceLimit(
-      {
-        countryId: election.countryId ?? "US",
-        electionType: election.electionType,
-        state: election.state,
-        seatId: election.seatId,
-        totalSeats: election.totalSeats,
-        russianDumaRound: election.russianDumaRound
-          ? {
-              ...election.russianDumaRound,
-              cohortId: election.russianDumaRound.cohortId.toHexString(),
-            }
-          : undefined,
-      },
-      enrichedWithYou.length
-    ) ?? getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
+    russianAssemblyPrimaryAdvanceLimit(election, enrichedWithYou.length) ??
+    getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
 
   // Display candidates: post-primary dedup, keeping up to `primaryAdvanceCount`
   // per party. Safety net for the window between primaryEndTime and the next

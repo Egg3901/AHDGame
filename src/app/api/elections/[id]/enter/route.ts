@@ -27,6 +27,24 @@ import {
 } from "@/lib/elections/nationwideExecutive";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
 import { validateRussianDumaPlayerFiling } from "@/lib/countries/ru/dumaPlayerFiling";
+import {
+  validateRussianCouncilPlayerFiling,
+  registerRussianCouncilPlayerCandidate,
+} from "@/lib/countries/ru/councilPlayerFiling";
+
+const councilFilingErrors = {
+  "already-filed": "You are already entered in this Council race.",
+  "association-full": "Your association already has two player nominees in this subject.",
+  "unbound-mandate": "This Council election no longer matches its ratified constitutional mandate.",
+  "invalid-ballot": "This Council ballot has an invalid subject or filing schedule.",
+  "filing-closed": "The Council candidate filing period has ended.",
+  "invalid-residence":
+    "You must live in this subject's Russian macroregion to contest this Council ballot.",
+  "unregistered-association": "Join an existing unbanned Russian party or file as an independent.",
+  "other-chamber-mandate": "You already hold a Duma mandate and cannot contest a Council seat.",
+  "council-mandate": "You already hold a Council mandate.",
+  "other-candidacy": "Withdraw your other active candidacy before entering this Council race.",
+};
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -159,6 +177,22 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Runtime governmentType so a post-Stage-4 conversion immediately
     // changes which gates apply to candidate entry.
     const electionRuntime = await getCountryState(db, electionCountry);
+    const councilFiling = election.russianCouncilRound
+      ? await validateRussianCouncilPlayerFiling({
+          db,
+          election,
+          character,
+          turn: currentTurn,
+          registrationOrder: now.getTime(),
+        })
+      : null;
+    if (councilFiling && !councilFiling.allowed) {
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json(
+        { error: councilFilingErrors[councilFiling.reason] },
+        { status: 403 }
+      );
+    }
     const dumaFiling = election.russianDumaRound
       ? await validateRussianDumaPlayerFiling({
           db,
@@ -310,7 +344,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (existingCandidate) {
       // If they have an active candidacy under a different party, withdraw it first
-      if (existingCandidate.party !== character.party) {
+      if (existingCandidate.party !== character.party && !councilFiling) {
         await db
           .collection("electionCandidates")
           .updateOne(
@@ -333,7 +367,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           },
           { $set: { party: character.party, updatedAt: new Date() } }
         );
-      } else {
+      } else if (existingCandidate.party === character.party) {
         logRequest("POST", path, 400, Date.now() - start);
         return NextResponse.json(
           { error: "You are already entered in this race" },
@@ -384,6 +418,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       support: DEFAULT_CANDIDATE_SUPPORT,
       enteredAt: now,
       ...(dumaFiling?.allowed ? { russianDumaNomination: dumaFiling.nomination } : {}),
+      ...(councilFiling?.allowed ? { russianCouncilNomination: councilFiling.nomination } : {}),
       ...(priorCandidacy?.lastRallyTurn !== undefined
         ? { lastRallyTurn: priorCandidacy.lastRallyTurn }
         : {}),
@@ -397,7 +432,22 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     let result: { insertedId: ObjectId };
     try {
-      result = await db.collection("electionCandidates").insertOne(candidateDoc);
+      if (councilFiling) {
+        const filed = await registerRussianCouncilPlayerCandidate({
+          db,
+          electionId: electionObjectId,
+          candidate: candidateDoc,
+          turn: currentTurn,
+          now,
+        });
+        if (!filed.allowed) {
+          logRequest("POST", path, 403, Date.now() - start);
+          return NextResponse.json({ error: councilFilingErrors[filed.reason] }, { status: 403 });
+        }
+        result = { insertedId: filed.insertedId };
+      } else {
+        result = await db.collection("electionCandidates").insertOne(candidateDoc);
+      }
     } catch (error) {
       if (isActiveElectionCandidateDuplicateKey(error)) {
         const activeCandidate = await db

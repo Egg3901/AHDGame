@@ -79,17 +79,23 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(["regional", "Russian presidency", "Duma list"])(
+  it.each(["regional", "Russian presidency", "Duma list", "Council subject"])(
     "records uncontested %s primary results without US delegates",
     async (kind) => {
       const electionId = new ObjectId();
       const election = {
         _id: electionId,
         electionType:
-          kind === "regional" ? "senate" : kind === "Duma list" ? "dumaDeputy" : "president",
+          kind === "regional"
+            ? "senate"
+            : kind === "Duma list"
+              ? "dumaDeputy"
+              : kind === "Council subject"
+                ? "federationCouncilMember"
+                : "president",
         status: "active",
         countryId: kind === "regional" ? "US" : "RU",
-        state: kind === "regional" ? "CA" : "RU",
+        state: kind === "regional" ? "CA" : kind === "Council subject" ? "CEN" : "RU",
         ...(kind === "Duma list"
           ? {
               seatId: "RU-duma-national-list",
@@ -99,6 +105,18 @@ describe("resolvePrimariesIfNeeded", () => {
                 mandateSinceTurn: 72,
                 tier: "list",
                 registeredVoters: 1000,
+              },
+            }
+          : {}),
+        ...(kind === "Council subject"
+          ? {
+              seatId: "RU-council-77",
+              totalSeats: 2,
+              russianCouncilRound: {
+                cohortId: new ObjectId(),
+                mandateSinceTurn: 72,
+                registeredVoters: 1000,
+                districtNumber: 77,
               },
             }
           : {}),
@@ -119,7 +137,7 @@ describe("resolvePrimariesIfNeeded", () => {
       const candidate2 = {
         _id: new ObjectId(),
         electionId,
-        party: kind === "Duma list" ? "DEM" : "GOP",
+        party: kind === "Duma list" || kind === "Council subject" ? "DEM" : "GOP",
         characterName: "Bob",
         characterId: secondOwner,
         isNPP: kind === "Duma list",
@@ -185,7 +203,7 @@ describe("resolvePrimariesIfNeeded", () => {
       expect(initPresidentVoteTally).not.toHaveBeenCalled();
       const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
       expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
-      if (kind === "Duma list") {
+      if (kind === "Duma list" || kind === "Council subject") {
         expect(primaryResults?.byParty?.DEM).toHaveLength(2);
         expect(primaryResults?.byParty?.DEM?.every((row) => row.won)).toBe(true);
       } else expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
