@@ -104,13 +104,18 @@ export async function fetchEnrichedCandidates(
     partiesCache?: Map<string, Promise<EnrichmentParty[]>>;
     /** Sweep-level actor and endorsement rows shared by every election. */
     preload?: CandidateEnrichmentPreload;
+    /**
+     * Caller's Db handle (#2695). Sharing one handle across a phase lets the
+     * per-Db country-state cache hit; `getDb()` returns a new handle per call.
+     */
+    db?: Db;
   }
 ): Promise<EnrichedCandidate[]> {
   if (candidates.length === 0) {
     return [];
   }
 
-  const db = await getDb();
+  const db = options?.db ?? (await getDb());
 
   const characterIds = candidates.filter((c) => !c.isNPP).map((c) => c.characterId);
   const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);

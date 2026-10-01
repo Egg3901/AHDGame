@@ -134,7 +134,7 @@ export async function accumulateVoteTurn(
     candidates?: ElectionCandidate[];
   }
 ): Promise<void> {
-  const db = await getDb();
+  const db = options?.preload?.db ?? (await getDb());
   const memo = options?.preload?.turnMemo;
 
   const [tally, candidates]: [ElectionVoteTally | null, ElectionCandidate[]] = await Promise.all([
@@ -319,6 +319,7 @@ export async function accumulateVoteTurn(
       countryId: electionCountryId,
       partiesCache: memo?.partiesByCountry,
       preload: memo?.candidatePreload,
+      db: options?.preload?.db,
     }),
     memoized(memo?.partyGroupFavorabilityByCountryTurn, `${electionCountryId}:${turnNumber}`, () =>
       loadPartyGroupFavorability(db, electionCountryId, turnNumber)
@@ -535,7 +536,10 @@ export async function accumulateVoteTurn(
     // below, never the raw-vote-share fallback, which would price a meaningless
     // margin for a single winner — and on a VACANT seat would hand out an
     // incumbency bonus with no incumbent behind it.
-    isGeneralElection ? getIncumbentSeatShareByParty(election, db) : undefined,
+    isGeneralElection
+      ? (options?.preload?.incumbentSeatShareByElection?.get(electionId.toString()) ??
+        getIncumbentSeatShareByParty(election, db))
+      : undefined,
     // Money driver. Aggregate per-party recent spend across all campaigns
     // in the race (carried stock plus this turn's accumulator). Reads
     // spend persistence, not treasury balance; the `campaignSpendReset`
