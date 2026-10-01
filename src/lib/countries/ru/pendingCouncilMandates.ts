@@ -17,14 +17,13 @@ export async function loadPendingRussianCouncilOwners(input: {
     .collection<RussianCouncilResultRecord>("russianCouncilElectionResults")
     .findOne(
       {
-        _id: input.cohortId.toHexString(),
-        cohortId: input.cohortId,
+        $or: [{ cohortId: input.cohortId }, { rootCohortId: input.cohortId }],
         countryId: "RU",
         preset: "1991-default",
         mandateSinceTurn: input.mandateSinceTurn,
         seatedOnTurn: { $exists: false },
       },
-      { session: input.session, projection: { result: 1 } }
+      { session: input.session, sort: { generation: -1 }, projection: { result: 1 } }
     );
   for (const district of receipt?.result ?? [])
     for (const winner of district.winners)

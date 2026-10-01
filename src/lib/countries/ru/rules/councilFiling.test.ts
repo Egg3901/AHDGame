@@ -42,6 +42,14 @@ describe("Council subject filing", () => {
     expect(decide(input)).toEqual({ allowed: true, nomination: { registrationOrder: 1000 } });
     expect(input).toEqual(before);
   });
+  it("binds repeat filing to the original cohort instead of treating it as a new mandate", () => {
+    const input = fixture();
+    input.election.cohortId = "repeat";
+    input.election.rootCohortId = "cohort";
+    expect(decide(input).allowed).toBe(true);
+    input.election.rootCohortId = "other";
+    expect(decide(input)).toEqual({ allowed: false, reason: "unbound-mandate" });
+  });
   it("caps associations at two nominees while independent voter groups remain separate", () => {
     const input = fixture();
     input.associationNominees = 2;

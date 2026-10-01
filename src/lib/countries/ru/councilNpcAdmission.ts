@@ -21,6 +21,8 @@ import {
   RUSSIAN_COUNCIL_OPENINGS_COLLECTION,
   type RussianCouncilOpeningRecord,
 } from "./councilElectionOpening";
+import { loadRussianCouncilOpeningBinding } from "./councilOpeningBinding";
+import { materializeRussianCouncilRepeatOpening } from "./councilRepeatOpening";
 import { planRussianCouncilNpcSlates } from "./rules/councilNpcSlates";
 
 export async function materializeRussianCouncilNpcAdmission(input: {
@@ -59,7 +61,7 @@ export async function materializeRussianCouncilNpcAdmission(input: {
       },
     }
   );
-  if (!country?.ruFirstCouncilElectionCohortId?.equals(cohortId)) return null;
+  if (!country?.ruFirstCouncilElectionCohortId) return null;
   // Duma admission precedes Council admission so profile reservations remain disjoint.
   if (
     !country.ruFirstDumaElectionCohortId ||
@@ -67,34 +69,81 @@ export async function materializeRussianCouncilNpcAdmission(input: {
   )
     return null;
   const openings = db.collection<RussianCouncilOpeningRecord>(RUSSIAN_COUNCIL_OPENINGS_COLLECTION);
-  const receipt = await openings.findOne({ _id: cohortId.toHexString() }, { session });
-  if (
-    !receipt ||
-    receipt.countryId !== "RU" ||
-    receipt.preset !== "1991-default" ||
-    !receipt.cohortId.equals(cohortId) ||
-    receipt.mandateSinceTurn !== country.ruFederalAssemblyMandateSinceTurn
-  )
-    throw new Error("Council admission lost its opening receipt");
+  const binding = await loadRussianCouncilOpeningBinding({ db, session, country, cohortId });
+  if (!binding) throw new Error("Council admission lost its opening receipt");
+  const { opening: receipt, rootCohortId } = binding;
   if (receipt.npcAdmission)
     return { created: 0, unrepresentedParties: receipt.npcAdmission.unrepresentedParties };
-  const boundOpening = await materializeRussianCouncilElectionOpening({
-    db,
-    session,
-    game,
-    turn,
-    now,
-    cohortId,
-    electionIds: [],
-  });
-  if (!boundOpening?.cohortId.equals(cohortId)) return null;
+  if (receipt.generation) {
+    const repeated = await materializeRussianCouncilRepeatOpening({
+      db,
+      session,
+      rootCohortId,
+      previousResultId: receipt.previousResultId!,
+      cohortId,
+      electionIds: [],
+      turn,
+      now,
+    });
+    if (!repeated?.record.cohortId.equals(cohortId)) return null;
+  } else {
+    const boundOpening = await materializeRussianCouncilElectionOpening({
+      db,
+      session,
+      game,
+      turn,
+      now,
+      cohortId,
+      electionIds: [],
+    });
+    if (!boundOpening?.cohortId.equals(cohortId)) return null;
+  }
   const elections = await db
     .collection<Election>("elections")
     .find(
       { countryId: "RU", "russianCouncilRound.cohortId": cohortId },
-      { session, batchSize: 1000, projection: { state: 1, status: 1, primaryEndTurn: 1 } }
+      {
+        session,
+        batchSize: 1000,
+        projection: {
+          state: 1,
+          status: 1,
+          primaryEndTurn: 1,
+          seatId: 1,
+          totalSeats: 1,
+          electionType: 1,
+          russianCouncilRound: 1,
+        },
+      }
     )
     .toArray();
+  if (
+    elections.length !== binding.ballots.length ||
+    elections.some((row) => {
+      const expected = binding.ballots.find((ballot) => ballot.id.equals(row._id));
+      return (
+        !expected ||
+        row.electionType !== "federationCouncilMember" ||
+        row.totalSeats !== 2 ||
+        row.seatId !== expected.seatId ||
+        row.state !== expected.regionId ||
+        row.russianCouncilRound?.registeredVoters !== expected.registeredVoters ||
+        row.russianCouncilRound?.districtNumber !== expected.districtNumber ||
+        row.russianCouncilRound?.mandateSinceTurn !== receipt.mandateSinceTurn ||
+        ("predecessorId" in expected &&
+          expected.predecessorId !==
+            row.russianCouncilRound?.predecessorElectionId?.toHexString()) ||
+        (!receipt.generation &&
+          (row.russianCouncilRound?.rootCohortId != null ||
+            row.russianCouncilRound?.generation != null ||
+            row.russianCouncilRound?.predecessorElectionId != null)) ||
+        (receipt.generation &&
+          (row.russianCouncilRound?.generation !== receipt.generation ||
+            !row.russianCouncilRound?.rootCohortId?.equals(rootCohortId)))
+      );
+    })
+  )
+    throw new Error("Council admission ballot bindings changed");
   if (
     elections.some(
       (row) =>
@@ -212,7 +261,7 @@ export async function materializeRussianCouncilNpcAdmission(input: {
   const bound = await countries.updateOne(
     {
       _id: "RU",
-      ruFirstCouncilElectionCohortId: cohortId,
+      ruFirstCouncilElectionCohortId: rootCohortId,
       ruFederalAssemblyMandateSinceTurn: receipt.mandateSinceTurn,
       ruDumaNpcAdmissionCohortId: country.ruFirstDumaElectionCohortId,
     },
@@ -241,24 +290,18 @@ export async function admitRussianCouncilNpcNominees(
   const country = await input.db
     .collection<CountryGameState>("countryGameStates")
     .findOne(
-      { _id: "RU", ruFirstCouncilElectionCohortId: input.cohortId },
-      { projection: { ruFederalAssemblyMandateSinceTurn: 1 } }
+      { _id: "RU" },
+      { projection: { ruFirstCouncilElectionCohortId: 1, ruFederalAssemblyMandateSinceTurn: 1 } }
     );
   if (!country) return null;
-  const receipt = await input.db
-    .collection<RussianCouncilOpeningRecord>(RUSSIAN_COUNCIL_OPENINGS_COLLECTION)
-    .findOne(
-      { _id: input.cohortId.toHexString() },
-      { projection: { cohortId: 1, countryId: 1, preset: 1, mandateSinceTurn: 1, npcAdmission: 1 } }
-    );
-  if (
-    receipt?.npcAdmission &&
-    receipt.countryId === "RU" &&
-    receipt.preset === "1991-default" &&
-    receipt.mandateSinceTurn === country.ruFederalAssemblyMandateSinceTurn &&
-    receipt.cohortId.equals(input.cohortId)
-  )
-    return { created: 0, unrepresentedParties: receipt.npcAdmission.unrepresentedParties };
+  const bound = await loadRussianCouncilOpeningBinding({
+    db: input.db,
+    cohortId: input.cohortId,
+    country,
+  });
+  if (!bound) return null;
+  if (bound.opening.npcAdmission)
+    return { created: 0, unrepresentedParties: bound.opening.npcAdmission.unrepresentedParties };
   await ensureBoundedNpcCandidateGuards(input.db);
   return runRequiredTransaction(
     (session) => materializeRussianCouncilNpcAdmission({ ...input, session }),

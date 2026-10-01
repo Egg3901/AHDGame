@@ -25,7 +25,8 @@ import {
 } from "./dumaElectionResult";
 import { decideRussianCouncilFiling } from "./rules/councilFiling";
 import { planRussianCouncilPlayerAdmission } from "./rules/councilPlayerAdmission";
-import { planRussianCouncilDistricts } from "./rules/councilDistricts";
+import { loadRussianCouncilOpeningBinding } from "./councilOpeningBinding";
+import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
 
 type FilingCharacter = Pick<
   Character,
@@ -61,41 +62,33 @@ export async function validateRussianCouncilPlayerFiling(input: {
       },
     }
   );
-  const opening = await db
-    .collection<RussianCouncilOpeningRecord>(RUSSIAN_COUNCIL_OPENINGS_COLLECTION)
-    .findOne(
-      { _id: binding.cohortId.toHexString() },
-      {
-        session,
-        projection: {
-          cohortId: 1,
-          countryId: 1,
-          preset: 1,
-          mandateSinceTurn: 1,
-          electionIds: 1,
-          registeredBySubject: 1,
-        },
-      }
-    );
+  if (!country || game?.preset !== "1991-default") return reject("unbound-mandate");
+  const bound = await loadRussianCouncilOpeningBinding({
+    db,
+    session,
+    country,
+    cohortId: binding.cohortId,
+  });
+  if (!bound) return reject("unbound-mandate");
+  const { opening, rootCohortId } = bound;
   if (
-    !country ||
-    !opening ||
-    opening.countryId !== "RU" ||
-    opening.preset !== game?.preset ||
-    !opening.cohortId.equals(binding.cohortId) ||
     opening.mandateSinceTurn !== binding.mandateSinceTurn ||
-    !country?.ruFirstCouncilElectionCohortId?.equals(binding.cohortId) ||
-    opening.electionIds.length !== 89 ||
-    new Set(opening.electionIds.map((id) => id.toHexString())).size !== 89
+    (!opening.generation &&
+      (binding.rootCohortId != null ||
+        binding.generation != null ||
+        binding.predecessorElectionId != null)) ||
+    (opening.generation &&
+      (!binding.rootCohortId?.equals(rootCohortId) || binding.generation !== opening.generation))
   )
     return reject("unbound-mandate");
-  const districts = planRussianCouncilDistricts(opening.registeredBySubject);
-  const district = districts.find((row) => row.seatId === election.seatId);
+  const district = bound.ballots.find((row) => row.seatId === election.seatId);
   if (
     !district ||
     district.districtNumber !== binding.districtNumber ||
     district.registeredVoters !== binding.registeredVoters ||
-    !opening.electionIds[district.districtNumber - 1]?.equals(election._id) ||
+    !district.id.equals(election._id) ||
+    ("predecessorId" in district &&
+      district.predecessorId !== binding.predecessorElectionId?.toHexString()) ||
     !["active", "upcoming"].includes(election.status)
   )
     return reject("invalid-ballot");
@@ -180,6 +173,12 @@ export async function validateRussianCouncilPlayerFiling(input: {
             (row.result.listAssignment?.seatsByNominee[nominee.candidateId.toHexString()] ?? 0) > 0
         ))
   );
+  const councilOwners = await loadPendingRussianCouncilOwners({
+    db,
+    session,
+    cohortId: rootCohortId,
+    mandateSinceTurn: binding.mandateSinceTurn,
+  });
   const decision = decideRussianCouncilFiling({
     preset: game?.preset ?? "",
     turn,
@@ -195,6 +194,7 @@ export async function validateRussianCouncilPlayerFiling(input: {
       totalSeats: election.totalSeats ?? 0,
       primaryEndTurn: election.primaryEndTurn,
       cohortId: binding.cohortId.toHexString(),
+      rootCohortId: binding.rootCohortId?.toHexString(),
       mandateSinceTurn: binding.mandateSinceTurn,
       districtNumber: binding.districtNumber,
     },
@@ -210,7 +210,9 @@ export async function validateRussianCouncilPlayerFiling(input: {
         party.regimeStatus !== "banned",
       holdsOtherChamberMandate:
         character.currentOffice?.type === "dumaDeputy" || pendingDumaMandate,
-      holdsCouncilMandate: character.currentOffice?.type === "federationCouncilMember",
+      holdsCouncilMandate:
+        character.currentOffice?.type === "federationCouncilMember" ||
+        councilOwners.has(`player:${owner}`),
       hasOtherActiveCandidacy: candidates.some((row) => !row.electionId.equals(election._id)),
     },
     associationNominees: admission.associationNominees,
@@ -279,10 +281,10 @@ export async function materializeRussianCouncilPlayerFiling(input: {
   const guard = await db.collection<CountryGameState>("countryGameStates").updateOne(
     {
       _id: "RU",
-      ruFirstCouncilElectionCohortId: binding.cohortId,
+      ruFirstCouncilElectionCohortId: binding.rootCohortId ?? binding.cohortId,
       ruFederalAssemblyMandateSinceTurn: binding.mandateSinceTurn,
     },
-    { $set: { ruFirstCouncilElectionCohortId: binding.cohortId } },
+    { $set: { ruFirstCouncilElectionCohortId: binding.rootCohortId ?? binding.cohortId } },
     { session }
   );
   if (guard.matchedCount !== 1) throw new Error("Council filing mandate changed during admission");
@@ -325,7 +327,7 @@ export async function materializeRussianCouncilPlayerFiling(input: {
   const receipt = await db
     .collection<RussianCouncilOpeningRecord>(RUSSIAN_COUNCIL_OPENINGS_COLLECTION)
     .updateOne(
-      { _id: binding.cohortId.toHexString(), mandateSinceTurn: binding.mandateSinceTurn },
+      { cohortId: binding.cohortId, mandateSinceTurn: binding.mandateSinceTurn },
       { $inc: { playerFilings: 1 } },
       { session }
     );
