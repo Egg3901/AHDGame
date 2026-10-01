@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "../data/councilSubjects1993";
-import { russianCouncilPrimaryAdvanceLimit as limit } from "./assemblyScope";
+import { russianCouncilPrimaryAdvanceLimit as limit } from "./councilScope";
 
 function fixture(): Parameters<typeof limit>[0] {
   return {
