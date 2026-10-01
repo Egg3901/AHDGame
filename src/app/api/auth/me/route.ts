@@ -238,6 +238,7 @@ export const GET = withNoStore(async () => {
           toUserId: new ObjectId(userId),
           read: false,
           deletedByRecipient: false,
+          blockedByRecipient: { $ne: true },
         }),
       ]);
       homeStateName = state?.name;
@@ -255,6 +256,7 @@ export const GET = withNoStore(async () => {
           toUserId: new ObjectId(userId),
           read: false,
           deletedByRecipient: false,
+          blockedByRecipient: { $ne: true },
         }),
       ]);
     }

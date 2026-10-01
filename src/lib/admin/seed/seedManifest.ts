@@ -704,6 +704,7 @@ const RUNTIME: CollectionEntry[] = [
   },
   { name: "playerMail", category: "runtime" },
   { name: "playerMailReports", category: "runtime" },
+  { name: "playerContentReports", category: "runtime" },
   { name: "posts", category: "runtime" },
   { name: "partyDiscussionPosts", category: "runtime" },
   { name: "partyHistory", category: "runtime" },

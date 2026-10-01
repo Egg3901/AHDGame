@@ -35,7 +35,9 @@ export async function getInboxMailPage(
   const [result] = await db
     .collection<PlayerMail>("playerMail")
     .aggregate<InboxFacet>([
-      { $match: { toUserId: userId, deletedByRecipient: false } },
+      {
+        $match: { toUserId: userId, deletedByRecipient: false, blockedByRecipient: { $ne: true } },
+      },
       {
         $facet: {
           mails: [{ $sort: { createdAt: -1 } }, { $skip: offset }, { $limit: limit }],

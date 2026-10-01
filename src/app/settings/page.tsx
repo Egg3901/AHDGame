@@ -34,6 +34,7 @@ import { CampaignSongSection } from "./components/CampaignSongSection";
 import { PoliticsSection } from "./components/PoliticsSection";
 import { AppearanceSection } from "./components/AppearanceSection";
 import { SecuritySection } from "./components/SecuritySection";
+import { BlockedPlayersSection } from "./components/BlockedPlayersSection";
 import { DangerZoneSection } from "./components/DangerZoneSection";
 import { ReferralsSection } from "./components/ReferralsSection";
 import { SupporterPerksSection } from "./components/SupporterPerksSection";
@@ -532,7 +533,10 @@ export function SettingsPageContent() {
         return <RetiredCharactersSection />;
       case "security":
         return (
-          <SecuritySection hasPassword={hasPassword} onPasswordSet={() => setHasPassword(true)} />
+          <>
+            <SecuritySection hasPassword={hasPassword} onPasswordSet={() => setHasPassword(true)} />
+            <BlockedPlayersSection />
+          </>
         );
       case "danger":
         return <DangerZoneSection onAccountDeleted={() => router.push("/")} />;
