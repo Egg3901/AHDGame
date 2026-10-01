@@ -1257,14 +1257,45 @@ html[data-high-contrast="true"] :focus-visible {
 }
 
 .ahd-bc-odometer-strip {
-  display: flex;
-  flex-direction: column;
+  display: block;
   transition: transform 1.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.ahd-bc-odometer-strip > span {
-  height: 1.04em;
+/* The digits live in CSS rather than the DOM, so the headline reads as one
+   year to search engines, screen readers and anyone copying it. */
+.ahd-bc-odometer-strip::before {
+  content: "0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";
+  display: block;
+  white-space: pre;
   line-height: 1.04em;
+}
+
+/* 1991 typed wordmark: a block cursor that blinks while idle and holds steady
+   while keys arrive. It takes no width, so the name never shifts. */
+@keyframes ahd-wordmark-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.ahd-wordmark-cursor {
+  display: inline-block;
+  width: 0.6ch;
+  height: 1.05em;
+  margin-left: 1px;
+  margin-right: calc(-0.6ch - 1px);
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: ahd-wordmark-blink 1s steps(1, end) infinite;
+}
+
+.ahd-wordmark-cursor-steady {
+  animation: none;
 }
 
 /* Lower-third crawl: the track holds two identical runs and slides by one. */
@@ -1312,6 +1343,10 @@ html[data-high-contrast="true"] :focus-visible {
 
   .ahd-bc-odometer-strip {
     transition: none;
+  }
+
+  .ahd-wordmark-cursor {
+    animation: none;
   }
 
   /* A stopped crawl still has to be readable to the end, from its first
