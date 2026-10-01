@@ -1,3 +1,4 @@
+import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "@/lib/countries/ru/data/councilSubjects1993";
 /**
  * Unit tests for election resolution: spawnHouseElection, House spawn after resolve.
  * Verifies House sync logic and duplicate prevention.
@@ -7,6 +8,10 @@ import { ObjectId } from "mongodb";
 import type { Election } from "@/lib/db/types";
 import { huRegions1991 } from "@/lib/countries/hu/data/huRegions1991";
 
+vi.mock("@/lib/countries/ru/councilElectionResult", () => ({
+  certifyRussianCouncilElection: vi.fn(),
+}));
+vi.mock("@/lib/countries/ru/councilRepeatResult", () => ({ certifyRussianCouncilRepeat: vi.fn() }));
 vi.mock("@/lib/countries/ru/dumaRepeatResult", () => ({ certifyRussianDumaRepeat: vi.fn() }));
 vi.mock("@/lib/countries/ru/dumaElectionResult", () => ({
   certifyRussianDumaElection: vi.fn(),
@@ -608,6 +613,118 @@ describe("Duma cohort resolution dispatch", () => {
       ).toHaveLength(1);
       const { certifyRussianDumaElection } = await import("@/lib/countries/ru/dumaElectionResult");
       expect(certifyRussianDumaElection).not.toHaveBeenCalled();
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      expect(resolveOneGeneralElection).not.toHaveBeenCalled();
+    }
+  );
+});
+
+describe("Native Council cohort dispatch", () => {
+  const cohortId = new ObjectId();
+  const now = new Date(1000);
+  function cohort(): Election[] {
+    return RUSSIAN_COUNCIL_SUBJECTS_1993.map(
+      ([number, , state]) =>
+        ({
+          _id: new ObjectId(),
+          countryId: "RU",
+          electionType: "federationCouncilMember",
+          status: "completed",
+          state,
+          seatId: `RU-council-${number}`,
+          totalSeats: 2,
+          endTurn: 141,
+          russianCouncilRound: {
+            cohortId,
+            mandateSinceTurn: 129,
+            registeredVoters: 100,
+            districtNumber: number,
+          },
+        }) as Election
+    );
+  }
+  async function mount(rows: Election[], openings: unknown[] = []) {
+    vi.clearAllMocks();
+    const db = {
+      collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "elections")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => rows }) };
+        if (name === "electionVoteTallies")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => [] }) };
+        if (name === "russianCouncilElectionOpenings")
+          return { find: vi.fn().mockReturnValue({ toArray: async () => openings }) };
+        if (name === "gameState")
+          return { findOne: async () => ({ preset: "1991-default", currentTurn: 141 }) };
+        throw new Error(`Unexpected collection ${name}`);
+      }),
+    };
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    return db;
+  }
+  it.each(["complete", "partial", "failed"])(
+    "handles a %s first cohort without generic subject seating",
+    async (state) => {
+      const db = await mount(state === "partial" ? cohort().slice(1) : cohort());
+      const { certifyRussianCouncilElection } =
+        await import("@/lib/countries/ru/councilElectionResult");
+      if (state === "failed")
+        vi.mocked(certifyRussianCouncilElection).mockRejectedValue(
+          new Error("late receipt failure")
+        );
+      else vi.mocked(certifyRussianCouncilElection).mockResolvedValue({ cohortId } as never);
+      const { resolveGeneralElections } = await import("./electionResolution");
+      expect(await resolveGeneralElections(now)).toBe(state === "complete" ? 89 : 0);
+      if (state === "partial") expect(certifyRussianCouncilElection).not.toHaveBeenCalled();
+      else
+        expect(certifyRussianCouncilElection).toHaveBeenCalledExactlyOnceWith({
+          db,
+          cohortId,
+          turn: 141,
+          now,
+        });
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      expect(resolveOneGeneralElection).not.toHaveBeenCalled();
+    }
+  );
+  it.each(["complete", "partial", "failed"])(
+    "handles a %s repeat subset with one projected opening batch",
+    async (state) => {
+      const rootCohortId = new ObjectId();
+      const rows = cohort()
+        .slice(0, 2)
+        .map((row) => ({
+          ...row,
+          russianCouncilRound: { ...row.russianCouncilRound!, rootCohortId, generation: 1 },
+        }));
+      const opening = {
+        rootCohortId,
+        cohortId,
+        generation: 1,
+        mandateSinceTurn: 129,
+        electionIds: rows.map((row) => row._id),
+        seatIds: rows.map((row) => row.seatId),
+      };
+      const db = await mount(state === "partial" ? rows.slice(1) : rows, [opening]);
+      const { certifyRussianCouncilRepeat } =
+        await import("@/lib/countries/ru/councilRepeatResult");
+      if (state === "failed")
+        vi.mocked(certifyRussianCouncilRepeat).mockRejectedValue(new Error("late receipt failure"));
+      else vi.mocked(certifyRussianCouncilRepeat).mockResolvedValue({ cohortId } as never);
+      const { resolveGeneralElections } = await import("./electionResolution");
+      expect(await resolveGeneralElections(now)).toBe(state === "complete" ? 2 : 0);
+      if (state === "partial") expect(certifyRussianCouncilRepeat).not.toHaveBeenCalled();
+      else
+        expect(certifyRussianCouncilRepeat).toHaveBeenCalledExactlyOnceWith({
+          db,
+          rootCohortId,
+          generation: 1,
+          turn: 141,
+          now,
+        });
+      expect(
+        db.collection.mock.calls.filter(([name]) => name === "russianCouncilElectionOpenings")
+      ).toHaveLength(1);
       const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
       expect(resolveOneGeneralElection).not.toHaveBeenCalled();
     }
