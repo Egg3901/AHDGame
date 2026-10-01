@@ -441,7 +441,8 @@ export async function accumulateVoteTurn(
     election.electionType === "dumaDeputy" &&
     election.russianDumaRound != null;
   const alreadyCast = isBoundDuma
-    ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0)
+    ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
+      (tally.russianDumaBallot?.againstAllVotes ?? 0)
     : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
@@ -767,6 +768,7 @@ export async function accumulateVoteTurn(
   if (isBoundDuma) {
     newTotals = russianDumaVoteTotals({
       registeredVoters: election.russianDumaRound!.registeredVoters,
+      againstAllVotes: tally.russianDumaBallot?.againstAllVotes,
       priorVotes: tally.totalVotes,
       rawVotes: Object.fromEntries(
         enriched.map((candidate) => [
@@ -854,7 +856,8 @@ export async function accumulateVoteTurn(
 
   const nativeRussianTotal =
     (election.countryId === "RU" && election.russianPresidentialRound) || isBoundDuma
-      ? Object.values(newTotals).reduce((sum, count) => sum + count, 0)
+      ? Object.values(newTotals).reduce((sum, count) => sum + count, 0) +
+        (isBoundDuma ? (tally.russianDumaBallot?.againstAllVotes ?? 0) : 0)
       : null;
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,

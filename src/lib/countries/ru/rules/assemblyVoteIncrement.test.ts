@@ -27,6 +27,22 @@ describe("Duma frozen vote accumulation", () => {
       totals({ registeredVoters: 1, priorVotes: { withdrawn: 1 }, rawVotes: { a: 5 } })
     ).toEqual({ withdrawn: 1, a: 0 });
   });
+  it("reserves counted against-all ballots within the same participation ceiling", () => {
+    expect(
+      totals({
+        registeredVoters: 100,
+        againstAllVotes: 20,
+        priorVotes: { withdrawn: 60 },
+        rawVotes: { a: 50 },
+      })
+    ).toEqual({ withdrawn: 60, a: 20 });
+    expect(() =>
+      totals({ registeredVoters: 100, againstAllVotes: 101, priorVotes: {}, rawVotes: {} })
+    ).toThrow("against-all");
+    expect(() =>
+      totals({ registeredVoters: 100, againstAllVotes: 20, priorVotes: { a: 81 }, rawVotes: {} })
+    ).toThrow("prior participation");
+  });
   it("rejects corrupt prior counts instead of recertifying a smaller participation total", () => {
     for (const priorVotes of [{ withdrawn: 101 }, { withdrawn: -1 }, { withdrawn: 0.5 }])
       expect(() => totals({ registeredVoters: 100, priorVotes, rawVotes: { a: 1 } })).toThrow();

@@ -41,6 +41,8 @@ export function bindRussianDumaElectorate(
         binding.regionalDistrictCount! > 0;
   if (
     !validTier ||
+    !Number.isSafeInteger(binding.mandateSinceTurn) ||
+    binding.mandateSinceTurn < 1 ||
     !state ||
     !Number.isSafeInteger(binding.registeredVoters) ||
     binding.registeredVoters < 0
