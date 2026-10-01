@@ -81,7 +81,7 @@ describe("Assembly vacancy seating", () => {
     });
     expect(await seat({ ...input, turn: 161 })).toBe(false);
   });
-  it.each(["clock", "unknown-office", "missing-root"])(
+  it.each(["clock", "unknown-office", "missing-root", "missing-party"])(
     "refuses %s without altering held offices",
     async (defect) => {
       const { mem, input, installRepeat } = scenario("council-repeat");
@@ -93,6 +93,10 @@ describe("Assembly vacancy seating", () => {
         mem
           .collection("electedOfficials")
           .docs.push({ _id: new ObjectId(), countryId: "RU", officeType: "dumaDeputy" });
+      if (defect === "missing-party")
+        delete mem
+          .collection("electedOfficials")
+          .docs.find((row) => row.officeType === "dumaDeputy")!.party;
       if (defect === "missing-root") mem.collection("russianAssemblySeatings").docs.splice(0);
       const before = await mem.collection("electedOfficials").find({}).toArray();
       await expect(
