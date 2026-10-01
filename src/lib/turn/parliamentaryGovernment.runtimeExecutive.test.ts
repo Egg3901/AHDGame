@@ -28,7 +28,11 @@ const phases = [
     headOfState: "chairmanOfSupremeSoviet",
   },
   {
-    markers: { ruSovietSuccessionSinceTurn: 24, ruFederalAssemblySinceTurn: 30 },
+    markers: {
+      ruSovietSuccessionSinceTurn: 24,
+      ruPresidencySinceTurn: 25,
+      ruFederalAssemblySinceTurn: 30,
+    },
     executive: "primeMinister",
     headOfState: "president",
   },

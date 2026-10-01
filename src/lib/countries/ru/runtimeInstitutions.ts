@@ -52,7 +52,9 @@ export function ru1993FederalAssemblyConfig(config: CountryConfig): CountryConfi
   return {
     ...config,
     executiveTitle: "Prime Minister",
-    governmentTypeLabel: "Presidential Federation",
+    governmentTypeLabel: config.officeTypes.some((office) => office.key === "president")
+      ? "Presidential Federation"
+      : "Parliamentary Federation",
     coalitionThreshold: 226,
     legislature: {
       name: "Federal Assembly",
