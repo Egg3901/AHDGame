@@ -467,13 +467,9 @@ async function closeChamberVoteStage(
       currentTurn
     );
     const fields = tallyFields(stage.voteField, res);
-    const passed = await evaluatePassRule(
-      db,
-      bill,
-      stage.passRule,
-      res.totals,
-      config.governmentType
-    );
+    const passed =
+      stage.passCheck?.(bill, res.totals) ??
+      (await evaluatePassRule(db, bill, stage.passRule, res.totals, config.governmentType));
 
     if (!passed) {
       // Bill-dependent reject routing (JP Sangiin: sangiin-origin fails; else the

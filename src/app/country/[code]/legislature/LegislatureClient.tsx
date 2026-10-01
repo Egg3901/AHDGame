@@ -6,6 +6,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
 import FederationDecisionPanel from "./FederationDecisionPanel";
+import RussianConstitutionalDecisionPanel from "./RussianConstitutionalDecisionPanel";
 
 const LegislatureFallback = (_props: { name?: string }) => <LegislatureSkeleton />;
 
@@ -84,7 +85,12 @@ export default function LegislatureClient({ countryId, legislatureName, generic 
   }
 
   if (countryId === "CS" || countryId === "YU" || (countryId === "RU" && generic)) {
-    return <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />;
+    return (
+      <>
+        {countryId === "RU" && <RussianConstitutionalDecisionPanel />}
+        <FederationDecisionPanel countryId={countryId} legislatureName={displayedName} />
+      </>
+    );
   }
 
   // Countries without a dedicated legislature component

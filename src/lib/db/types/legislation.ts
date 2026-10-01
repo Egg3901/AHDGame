@@ -543,6 +543,12 @@ export interface Bill {
   /** Action points spent to propose — refunded if bill passes */
   proposalActionCost?: number;
   internationalAction?: BillInternationalAction;
+  /** Optional for older saves; bound to a separately recorded Russian decision. */
+  russianConstitutionalMandate?: {
+    proposalId: string;
+    revision: number;
+    kind: "presidency" | "federalAssembly";
+  };
   /** Enacted parent mandate for one negotiated federation settlement revision. */
   federationSettlementMandate?: {
     settlementId: string;

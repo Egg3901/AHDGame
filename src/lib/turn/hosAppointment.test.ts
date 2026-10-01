@@ -152,7 +152,7 @@ describe("resolveHeadOfStateAppointmentVote", () => {
 
   it.each([
     { ruSovietSuccessionSinceTurn: 24, ruPresidencySinceTurn: 30 },
-    { ruFederalAssemblySinceTurn: 30 },
+    { ruPresidencySinceTurn: 25, ruFederalAssemblySinceTurn: 30 },
   ])(
     "cancels legislative head-of-state votes under an effective elected presidency %j",
     async (markers) => {

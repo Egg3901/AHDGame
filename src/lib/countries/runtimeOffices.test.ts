@@ -22,6 +22,16 @@ describe("world and constitution resolved parliamentary offices", () => {
       { ruSovietSuccessionSinceTurn: 24, ruFederalAssemblySinceTurn: 150 },
       "dumaDeputy",
       "primeMinister",
+      "chairmanOfSupremeSoviet",
+    ],
+    [
+      {
+        ruSovietSuccessionSinceTurn: 24,
+        ruPresidencySinceTurn: 25,
+        ruFederalAssemblySinceTurn: 150,
+      },
+      "dumaDeputy",
+      "primeMinister",
       "president",
     ],
   ])("resolves the active RU office layout from %j", async (markers, lower, pm, hos) => {

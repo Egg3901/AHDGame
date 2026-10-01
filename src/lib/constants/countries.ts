@@ -1345,9 +1345,7 @@ export function getCountryConfigForRuntime(
         }
       : russian;
   const presidential =
-    countryState?.ruPresidencySinceTurn != null ||
-    countryState?.ruCongressDissolvedSinceTurn != null ||
-    countryState?.ruFederalAssemblySinceTurn != null
+    countryState?.ruPresidencySinceTurn != null
       ? ru1991PresidentialConfig(effectiveCongress)
       : effectiveCongress;
   if (countryState?.ruFederalAssemblySinceTurn != null) {

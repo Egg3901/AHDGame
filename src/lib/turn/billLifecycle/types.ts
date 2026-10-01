@@ -37,6 +37,8 @@ export interface ChamberVoteStage {
   /** Resolves the office type to scope votes against, from the bill's chamber. */
   officeTypeFor: (bill: StageBillContext) => string;
   passRule: PassRule;
+  /** A country-specific constitutional check may supersede ordinary passage. */
+  passCheck?: (bill: Bill, totals: VoteTotals) => boolean | undefined;
   onReject: OnReject;
   /** Next status on pass (the following stage's status, or a terminal status). */
   onPassStatus: string;
