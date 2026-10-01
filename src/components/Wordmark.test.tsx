@@ -92,6 +92,21 @@ describe("Wordmark", () => {
     expect(container.querySelector(".ahd-wordmark-cursor")).toBeNull();
   });
 
+  it("commits each key in the frame that types it", async () => {
+    const Wordmark = await load();
+    const { container } = render(<Wordmark typed />);
+    const shown: number[] = [];
+    // One act for the whole run: nothing here flushes renders between frames.
+    act(() => {
+      for (let t = 0; t < 2600; t += 16) {
+        vi.advanceTimersByTime(16);
+        const keys = container.querySelector(".sr-only + span")?.textContent?.length ?? 0;
+        if (shown[shown.length - 1] !== keys) shown.push(keys);
+      }
+    });
+    expect(shown).toEqual(Array.from({ length: WORDMARK.length + 1 }, (_, i) => i));
+  });
+
   it("picks up a run already under way instead of starting from an empty field", async () => {
     const Wordmark = await load();
     const loading = render(<Wordmark typed />);
