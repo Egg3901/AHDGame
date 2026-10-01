@@ -62,6 +62,11 @@ const CONTESTABLE_QUALIFICATION_FAMILIES = [
   "sangiin",
   "president",
   "regionalCouncil",
+  // The 1991 successor parliaments have no incumbent supply at opening.
+  "nationalAssembly",
+  "sejm",
+  "senat",
+  "chamberOfDeputies",
 ] as const;
 
 /** All election types this phase files a floor candidate into. */
