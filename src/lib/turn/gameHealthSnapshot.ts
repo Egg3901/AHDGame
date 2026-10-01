@@ -11,6 +11,7 @@ import type {
   TurnPhaseTelemetryMap,
   ElectedOfficial,
   Seat,
+  GameState,
 } from "@/lib/db/types";
 import type { StateMetrics, CentralBank, SystemSettings, FederalBudget } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -365,7 +366,7 @@ async function runIntegrityChecks(
 export async function collectSeatIntegrity(
   db: Db
 ): Promise<{ orphanedOfficialCount: number; seatBackedSeatsWithoutOfficials: number }> {
-  const [seats, officials] = await Promise.all([
+  const [seats, officials, gameState] = await Promise.all([
     db
       .collection<Seat>("seats")
       .find({}, { projection: { _id: 1, countryId: 1, electionType: 1, state: 1 } })
@@ -387,6 +388,9 @@ export async function collectSeatIntegrity(
         }
       )
       .toArray(),
+    db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1 } }),
   ]);
 
   const knownSeatIds = new Set(seats.map((seat) => seat._id));
@@ -405,7 +409,11 @@ export async function collectSeatIntegrity(
       continue;
     }
 
-    const officeConfig = getOfficeTypeConfig(official.countryId, official.officeType);
+    const officeConfig = getOfficeTypeConfig(
+      official.countryId,
+      official.officeType,
+      gameState?.preset
+    );
     if (
       !officeConfig &&
       !seatBackedOfficeKeys.has(`${official.countryId}:${official.officeType}`)
