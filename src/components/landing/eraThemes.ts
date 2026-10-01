@@ -230,6 +230,8 @@ const NATIONS_1991 = [
   n("CS", "Czechoslovakia"),
   n("HU", "Hungary"),
   n("RO", "Romania"),
+  n("BG", "Bulgaria"),
+  n("YU", "Yugoslavia"),
 ] as const;
 
 /** Curated display roster for 1999: name and order only; tier is derived. */

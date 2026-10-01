@@ -52,6 +52,8 @@ import {
   BACKGROUND_MACRO_COLOR,
   backgroundMacroWireframeFill,
   buildTierLookup,
+  successorOwners,
+  type SuccessorProxies,
   isTierInteractive,
   tierWireframeFill,
   TIER_COLORS,
@@ -178,6 +180,7 @@ export function LandingGlobe({
   hideTierLegend = false,
   markersFromSm = false,
   backgroundMacroFeatureIds,
+  successorProxies,
 }: {
   gameDate?: string;
   theme?: "default" | "broadsheet";
@@ -263,6 +266,13 @@ export function LandingGlobe({
    * the grey of unsimulated land. Pass a stable reference.
    */
   backgroundMacroFeatureIds?: readonly string[];
+  /**
+   * Modern features drawn as a state the basemap has no shape for, from
+   * `successorProxiesForYear` (Czechoslovakia and Yugoslavia before their
+   * break-ups). They take the state's tier, tooltip and page. Pass a stable
+   * reference.
+   */
+  successorProxies?: SuccessorProxies;
 }) {
   const resolveCountryName = useCountryDisplayName();
   const isBroadsheet = theme === "broadsheet";
@@ -372,10 +382,16 @@ export function LandingGlobe({
             ISO_TO_COUNTRY_ID,
             countryAccess,
             battlegroundFeatureIds ?? [],
-            economicPowerFeatureIds ?? []
+            economicPowerFeatureIds ?? [],
+            successorProxies
           )
         : undefined,
-    [countryAccess, battlegroundFeatureIds, economicPowerFeatureIds]
+    [countryAccess, battlegroundFeatureIds, economicPowerFeatureIds, successorProxies]
+  );
+  // Proxy feature to the state it stands in for, for hover and click.
+  const proxyOwners = useMemo(
+    () => successorOwners(countryAccess, successorProxies ?? {}),
+    [countryAccess, successorProxies]
   );
   const tierLookupRef = useRef(tierLookup);
   tierLookupRef.current = tierLookup;
@@ -1276,8 +1292,12 @@ export function LandingGlobe({
   const handleCountryClick = (id: string) => {
     markInteraction();
     if (navigationDisabled) return;
-    if (id.startsWith("bi:")) {
-      const owner = id.slice(3).split(":")[0] as CountryId;
+    // A region-overlay blob or a successor proxy opens its owning state.
+    const overlayOwner = id.startsWith("bi:")
+      ? (id.slice(3).split(":")[0] as CountryId)
+      : (proxyOwners.get(id) as CountryId | undefined);
+    if (overlayOwner) {
+      const owner = overlayOwner;
       const access = countryAccess?.[owner];
       if (!access) return;
       const availability = resolveCountryAvailability(owner, access);
@@ -1318,7 +1338,9 @@ export function LandingGlobe({
 
   const hoveredOverlayCountryId = hovered?.startsWith("bi:")
     ? (hovered.slice(3).split(":")[0] as CountryId)
-    : undefined;
+    : hovered
+      ? (proxyOwners.get(hovered) as CountryId | undefined)
+      : undefined;
   const hoveredMapped = hoveredOverlayCountryId
     ? {
         label: resolveCountryName(hoveredOverlayCountryId),

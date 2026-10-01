@@ -29,6 +29,7 @@ import {
   battlegroundFeatureIdsForEra,
   economicPowerFeatureIdsForEra,
 } from "@/components/landing/countryTierRosters";
+import { successorProxiesForYear } from "@/components/landing/countryTiers";
 import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorld";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
@@ -408,6 +409,8 @@ export function SandboxHome({
   // entity manifest. Stable module-level array, so the globe memoises on it.
   const battlegroundFeatureIds = battlegroundFeatureIdsForEra(eraConfig.id);
   const economicPowerFeatureIds = economicPowerFeatureIdsForEra(eraConfig.id);
+  // Czechoslovakia and Yugoslavia drawn over their successors where the era names them.
+  const successorProxies = useMemo(() => successorProxiesForYear(eraConfig.year), [eraConfig.year]);
 
   return (
     <div className="relative bg-background text-foreground">
@@ -498,6 +501,7 @@ export function SandboxHome({
             hideTierLegend={Boolean(broadcast)}
             markersFromSm={Boolean(broadcast)}
             backgroundMacroFeatureIds={backgroundMacroFeatureIds}
+            successorProxies={successorProxies}
           />
         </div>
 
