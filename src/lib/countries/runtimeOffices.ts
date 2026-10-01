@@ -29,6 +29,7 @@ export async function loadRuntimeCountryOffices(
               ruCongressDissolvedSinceTurn: 1,
               ruFederalAssemblySinceTurn: 1,
               ruDumaCurrentConvocationCohortId: 1,
+              ruCouncilComposition: 1,
             },
           }
         )

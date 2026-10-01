@@ -222,3 +222,64 @@ describe("Russian constitutional bill resolution", () => {
     expect(mem.collection("countryGameStates").docs[0]).not.toHaveProperty("ruPresidencySinceTurn");
   });
 });
+
+describe("Council formation statutory voting", () => {
+  it.each([
+    [225, false],
+    [226, true],
+  ] as const)("requires the full Duma majority with %s votes", async (forVotes, pass) => {
+    const { mem, db } = scenario(
+      {
+        ruSovietSuccessionSinceTurn: 48,
+        ruPresidencySinceTurn: 60,
+        ruFederalAssemblySinceTurn: 145,
+      },
+      "stateDuma",
+      "dumaDeputy"
+    );
+    mem.collection("electedOfficials").docs[0].seatsHeld = forVotes;
+    mem.collection("bills").docs[0].russianCouncilFormationMandate = {
+      proposalId: "1991-default:ru-council:regionalHeads",
+      mode: "regionalHeads",
+      revision: 1,
+    };
+    await processRussian1991Bills(db, new Date(100000000), 237);
+    expect(mem.collection("bills").docs[0].status).toBe(pass ? "active_other" : "failed");
+  });
+  it.each([
+    [89, false],
+    [90, true],
+  ] as const)(
+    "retains the appointed Council's full-capacity majority with %s votes",
+    async (forVotes, pass) => {
+      const { mem, db } = scenario(
+        {
+          ruSovietSuccessionSinceTurn: 48,
+          ruPresidencySinceTurn: 60,
+          ruFederalAssemblySinceTurn: 145,
+        },
+        "federationCouncil",
+        "federationCouncilMember"
+      );
+      mem.collection("countryGameStates").docs[0].ruCouncilComposition = {
+        mode: "regionalHeads",
+        proposalId: "heads",
+        revision: 1,
+        sinceTurn: 241,
+        receiptId: "heads",
+      };
+      const bill = mem.collection("bills").docs[0];
+      bill.status = "active_other";
+      bill.otherChamberVotes = bill.votes;
+      bill.otherChamberVotingEndsOnTurn = 49;
+      bill.russianCouncilFormationMandate = {
+        proposalId: "1991-default:ru-council:regionalDelegates",
+        mode: "regionalDelegates",
+        revision: 1,
+      };
+      mem.collection("electedOfficials").docs[0].seatsHeld = forVotes;
+      await processRussian1991Bills(db, new Date(100000000), 461);
+      expect(bill.status).toBe(pass ? "enrolled" : "failed");
+    }
+  );
+});

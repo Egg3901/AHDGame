@@ -9,6 +9,7 @@ import { getGameState } from "@/lib/gameState";
 import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import { buildConfiguredCountryBillLifecycle } from "../../turn/billLifecycle/configs/configuredCountry";
 import { runBillLifecycle } from "../../turn/billLifecycle/engine";
+import { passesRussianCouncilFormationLaw } from "./rules/councilComposition";
 import { passesRussianConstitutionalDecision } from "./rules/constitutionalDecisions";
 
 export async function processRussian1991Bills(db: Db, now: Date, currentTurn: number) {
@@ -22,7 +23,9 @@ export async function processRussian1991Bills(db: Db, now: Date, currentTurn: nu
   for (const stage of lifecycle.stages) {
     if (stage.kind !== "chamberVote") continue;
     stage.passCheck = (bill, totals) => {
-      if (!bill.russianConstitutionalMandate) return undefined;
+      if (!bill.russianConstitutionalMandate && !bill.russianCouncilFormationMandate)
+        return undefined;
+      if (bill.russianConstitutionalMandate && bill.russianCouncilFormationMandate) return false;
       const office = stage.officeTypeFor(bill);
       const seats =
         office === offices.lowerOfficeType
@@ -30,7 +33,12 @@ export async function processRussian1991Bills(db: Db, now: Date, currentTurn: nu
           : office === offices.upperOfficeType
             ? offices.config.legislature.upperChamber?.seats
             : undefined;
-      return seats != null && passesRussianConstitutionalDecision(totals.for, seats);
+      return (
+        seats != null &&
+        (bill.russianCouncilFormationMandate
+          ? passesRussianCouncilFormationLaw(totals.for, seats)
+          : passesRussianConstitutionalDecision(totals.for, seats))
+      );
     };
   }
   const result = await runBillLifecycle(db, lifecycle, now, currentTurn);
