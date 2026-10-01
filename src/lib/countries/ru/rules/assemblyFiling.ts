@@ -36,6 +36,7 @@ export interface RussianDumaFilingInput {
     pendingRelocation: boolean;
     recognizedParty: boolean;
     holdsConstituencyMandate?: boolean;
+    holdsCouncilMandate?: boolean;
   };
 }
 export type RussianDumaFilingDecision =
@@ -53,7 +54,8 @@ export type RussianDumaFilingDecision =
         | "invalid-residence"
         | "independent-list"
         | "unregistered-list"
-        | "constituency-mandate";
+        | "constituency-mandate"
+        | "council-mandate";
     };
 export function decideRussianDumaFiling(input: RussianDumaFilingInput): RussianDumaFilingDecision {
   const { election, character } = input;
@@ -85,6 +87,7 @@ export function decideRussianDumaFiling(input: RussianDumaFilingInput): RussianD
     !Object.prototype.hasOwnProperty.call(RU_1991_ECONOMIC_REGION_POPULATION, character.homeState)
   )
     return { allowed: false, reason: "invalid-residence" };
+  if (character.holdsCouncilMandate) return { allowed: false, reason: "council-mandate" };
   const nationalList = election.tier === "list";
   if (nationalList) {
     if (

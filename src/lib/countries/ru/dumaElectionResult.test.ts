@@ -100,6 +100,25 @@ function scenario() {
   };
 }
 describe("Atomic first-Duma cohort certification", () => {
+  it("does not give an unseated Council winner a Duma constituency or list mandate", async () => {
+    const { mem, input } = scenario();
+    const councilId = new ObjectId();
+    const owner = mem.collection("npps").docs[0]._id as ObjectId;
+    mem.collection("countryGameStates").docs[0].ruFirstCouncilElectionCohortId = councilId;
+    mem.seed("russianCouncilElectionResults", [
+      {
+        _id: councilId.toHexString(),
+        cohortId: councilId,
+        countryId: "RU",
+        preset: "1991-default",
+        mandateSinceTurn: 129,
+        result: [{ winners: [{ ownerId: owner.toHexString(), isNpc: true }] }],
+      },
+    ]);
+    const receipt = await certify(input);
+    expect(receipt.result.constituencyResults.every((row) => !row.winner)).toBe(true);
+    expect(receipt.result.listAssignment!.vacanciesByParty).toEqual({ "1": 225 });
+  });
   it("ignores candidates withdrawn before the roster froze", async () => {
     const { mem, input } = scenario();
     const old: Record<string, unknown> & { _id: ObjectId } = {

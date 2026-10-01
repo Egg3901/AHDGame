@@ -29,6 +29,13 @@ function scenario(): RussianDumaFilingInput {
   };
 }
 describe("Ratified first-Duma player filing", () => {
+  it.each(["list", "constituency"])("rejects a Council mandate for either Duma %s tier", (tier) => {
+    const input = scenario();
+    input.character.holdsCouncilMandate = true;
+    if (tier === "constituency")
+      Object.assign(input.election, { tier, state: "CEN", seatId: "RU-duma-CEN-1", totalSeats: 1 });
+    expect(decide(input)).toEqual({ allowed: false, reason: "council-mandate" });
+  });
   it("rejects unknown or banned list associations while allowing independent constituencies", () => {
     const input = scenario();
     input.character.recognizedParty = false;

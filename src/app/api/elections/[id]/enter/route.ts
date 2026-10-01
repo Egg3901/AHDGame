@@ -204,6 +204,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       : null;
     if (dumaFiling && !dumaFiling.allowed) {
       const errors = {
+        "council-mandate":
+          "You already hold a seated or certified Council mandate and cannot contest a Duma ballot.",
         "constituency-mandate":
           "You already hold a certified Duma constituency mandate and cannot contest another constituency.",
         "unbound-mandate":

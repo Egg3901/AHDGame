@@ -19,13 +19,14 @@ import {
   RUSSIAN_DUMA_RESULTS_COLLECTION,
   type RussianDumaResultRecord,
 } from "./dumaElectionResult";
+import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
 import { decideRussianDumaFiling } from "./rules/assemblyFiling";
 export async function validateRussianDumaPlayerFiling(input: {
   db: Db;
   election: Election;
   character: Pick<
     Character,
-    "_id" | "countryId" | "homeState" | "party" | "federationPendingResidenceId"
+    "_id" | "countryId" | "homeState" | "party" | "federationPendingResidenceId" | "currentOffice"
   >;
   turn: number;
   registrationOrder: number;
@@ -41,6 +42,7 @@ export async function validateRussianDumaPlayerFiling(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruFirstCouncilElectionCohortId: 1,
       },
     }
   );
@@ -124,6 +126,11 @@ export async function validateRussianDumaPlayerFiling(input: {
             { projection: { countryId: 1, sequentialId: 1, regimeStatus: 1 } }
           )
       : null;
+  const pendingCouncil = await loadPendingRussianCouncilOwners({
+    db,
+    cohortId: country?.ruFirstCouncilElectionCohortId,
+    mandateSinceTurn: country?.ruFederalAssemblyMandateSinceTurn,
+  });
   return decideRussianDumaFiling({
     preset: game?.preset ?? "",
     turn,
@@ -148,6 +155,9 @@ export async function validateRussianDumaPlayerFiling(input: {
       party: character.party ?? "independent",
       pendingRelocation: character.federationPendingResidenceId !== undefined,
       holdsConstituencyMandate,
+      holdsCouncilMandate:
+        character.currentOffice?.type === "federationCouncilMember" ||
+        pendingCouncil.has(`player:${character._id.toHexString()}`),
       recognizedParty:
         !!party &&
         party.countryId === "RU" &&
