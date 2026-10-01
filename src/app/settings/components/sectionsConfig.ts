@@ -26,7 +26,6 @@ export interface CharacterData {
   appleId?: string;
   appleEmail?: string;
   campaignSongUrl?: string;
-  campaignSongAutoplay?: boolean;
   demographics?: { race: string; gender: string; education: string; wealth: string };
   autoRunForReelection?: boolean;
 }

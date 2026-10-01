@@ -541,26 +541,13 @@ export default async function CharacterPage({ params }: PageProps) {
 
   if (!data) redirect("/map");
 
-  const [viewerUserDoc, financialData, unionContribution] = await Promise.all([
-    userData
-      ? (async () => {
-          const db = await getDb();
-          return db
-            .collection<User>("users")
-            .findOne(
-              { _id: new ObjectId(userData.userId) },
-              { projection: { disableAutoplayOnOtherProfiles: 1 } }
-            );
-        })()
-      : Promise.resolve(null),
+  const [financialData, unionContribution] = await Promise.all([
     getFinancialData(data.character._id),
     (async () => {
       const db = await getDb();
       return unionContributionIncomePerTurn(db, data.character._id);
     })(),
   ]);
-
-  const viewerDisablesAutoplay = viewerUserDoc?.disableAutoplayOnOtherProfiles ?? false;
 
   const {
     character,
@@ -1201,11 +1188,9 @@ export default async function CharacterPage({ params }: PageProps) {
               )}
 
               {character.campaignSongUrl && (
-                <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+                <div className="store-app-hidden rounded-xl border border-card-border bg-card p-4 shadow-card">
                   <CampaignSongPlayer
                     videoId={character.campaignSongUrl}
-                    ownerAutoplay={character.campaignSongAutoplay ?? false}
-                    viewerDisablesAutoplay={viewerDisablesAutoplay}
                     characterName={character.name}
                   />
                 </div>

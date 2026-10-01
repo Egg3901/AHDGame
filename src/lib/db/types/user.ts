@@ -144,6 +144,7 @@ export interface User {
     | "coldwar"
     | "command-1953";
   statusBarLayout?: "standard" | "corp" | "elections" | "full" | "minimal";
+  /** @deprecated Campaign songs no longer autoplay; legacy documents may still carry it. */
   disableAutoplayOnOtherProfiles?: boolean;
   /**
    * The redesigned interface (new navigation bar + CEO Command Center) is the
