@@ -16,6 +16,7 @@ import { BlendDetailHero, BlendClock } from "@/components/elections/blend/BlendD
 import { BlendSeatAllocation } from "@/components/elections/blend/BlendSeatAllocation";
 import { BlendDetailTally } from "@/components/elections/blend/BlendDetailTally";
 import { buildBlendDetail, type BlendClockRow } from "@/lib/elections/blendDetailViewModel";
+import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import type { RegionElectorate } from "@/lib/elections/blendRegionViewModel";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CandidateDetail, GeneralVotes } from "./ElectionDetailTypes";
@@ -64,6 +65,7 @@ export function NonPresidentialResultsPanel({
   renderEndorse,
   afterTally,
 }: NonPresidentialResultsPanelProps) {
+  const activePreset = useActivePreset();
   const byId = useMemo(() => new Map(sorted.map((c) => [c.id, c])), [sorted]);
 
   const model = useMemo(
@@ -83,6 +85,7 @@ export function NonPresidentialResultsPanel({
         totalSeats,
         electionType,
         countryId,
+        preset: activePreset,
         isEnded,
         regionName,
         // Falls back to the full party name rather than printing an empty cell
@@ -100,6 +103,7 @@ export function NonPresidentialResultsPanel({
       totalSeats,
       electionType,
       countryId,
+      activePreset,
       isEnded,
       regionName,
       electorate,

@@ -46,6 +46,8 @@ import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independenceDesireHook";
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
+import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
+import { apportionSeats as apportionCandidateSeats } from "@/lib/country/seatApportionment";
 import type { ElectionNewsOutcome } from "./electionNotifications";
 import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
 import {
@@ -97,8 +99,19 @@ export async function resolveOneGeneralElection(
   election: Election,
   tally: ElectionVoteTally | null | undefined,
   currentTurn: number,
-  now: Date
+  now: Date,
+  bgEligibleParties: ReadonlySet<string> | null = null,
+  huMixedCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
+  if (
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    election.cycle === 1 &&
+    election.electionYear === 1991 &&
+    !bgEligibleParties
+  ) {
+    throw new Error("Bulgaria 1991 Assembly requires the nationwide party threshold");
+  }
   const newsOutcomes: ElectionNewsOutcome[] = [];
 
   // Atomic claim: prevent concurrent resolution from corrupting office data.
@@ -117,11 +130,30 @@ export async function resolveOneGeneralElection(
   }
 
   try {
+    // BG changes from the 1991 transitional assembly to modern party-list PR.
+    // The base config is the 1979 single-party FPTP chamber, so read the live
+    // preset before method dispatch instead of silently using that default.
+    const bgPreset =
+      election.countryId === "BG"
+        ? (await (await getGameStateCollection(db)).findOne({ _id: "current" }))?.preset
+        : undefined;
+    if (election.countryId === "BG" && !bgPreset) {
+      throw new Error("Bulgaria election resolution requires the active preset");
+    }
+    const electionMethod = getElectionMethod(election.countryId, election.electionType, bgPreset);
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      bgPreset === "2027-default" &&
+      electionMethod !== "pr_hareQuota"
+    ) {
+      throw new Error("Bulgaria 2027 Assembly requires parliamentary proportional representation");
+    }
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
     // method — `pr_sainteLague` is unique to the DE Landtag — before any other
     // logic runs.
-    if (getElectionMethod(election.countryId, election.electionType) === "pr_sainteLague") {
+    if (electionMethod === "pr_sainteLague") {
       const { resolveDELandtagElection } = await import("./germanyLandtag");
       if (!tally?.finalized) {
         await resolveDELandtagElection(db, election, now);
@@ -508,8 +540,86 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
+    const bgAllocation =
+      bgEligibleParties &&
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle === 1
+        ? (() => {
+            const seatsEstimate = bgDhondtSeats(
+              ranked.map((candidate) => {
+                const row = candidateMap.get(candidate.id);
+                if (!row?.party) throw new Error("Bulgaria list candidate has no party");
+                return {
+                  id: candidate.id,
+                  party: row.party,
+                  votes: candidate.votes,
+                  listOrder: row.enteredAt?.getTime() ?? 0,
+                };
+              }),
+              totalSeats,
+              bgEligibleParties
+            );
+            return {
+              isMultiSeat: true,
+              authoritativeSeats: totalSeats,
+              seatsEstimate,
+              winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+                string,
+                number,
+              ][],
+              losers: Object.entries(seatsEstimate)
+                .filter(([, seats]) => seats === 0)
+                .map(([id]) => id),
+            };
+          })()
+        : null;
+    const huAllocation = huMixedCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = Object.fromEntries(
+            ranked.map((candidate) => [candidate.id, 0])
+          );
+          const wantedByParty: Record<string, number> = {};
+          for (const [candidateId, seats] of Object.entries(huMixedCandidateSeats)) {
+            const rawParty =
+              candidateMap.get(candidateId)?.party ?? tally.candidateParties[candidateId];
+            if (!rawParty) throw new Error("Hungary mixed mandate has no party");
+            const party = rawParty === "independent" ? `independent@${candidateId}` : rawParty;
+            wantedByParty[party] = (wantedByParty[party] ?? 0) + seats;
+          }
+          for (const [party, seats] of Object.entries(wantedByParty)) {
+            const eligible = ranked.filter(
+              (candidate) =>
+                (candidate.party === "independent"
+                  ? `independent@${candidate.id}`
+                  : candidate.party) === party
+            );
+            if (eligible.length === 0) continue; // a vacant bloc, never seat an ineligible holder
+            const shares = apportionCandidateSeats(
+              Object.fromEntries(eligible.map((candidate) => [candidate.id, candidate.votes])),
+              seats
+            );
+            for (const [candidateId, count] of Object.entries(shares))
+              seatsEstimate[candidateId] = count;
+          }
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
     const { isMultiSeat, seatsEstimate, winners, losers } =
       districted ??
+      bgAllocation ??
+      huAllocation ??
       allocateSeats(
         election.electionType,
         election.state,
@@ -1206,7 +1316,8 @@ export async function resolveOneGeneralElection(
         election.electionType,
         election.state,
         now,
-        getChamberClass(election)
+        getChamberClass(election),
+        election.countryId
       );
     }
     // Spawn next cycle for election types with dedicated respawn functions
@@ -1256,18 +1367,31 @@ export async function resolveOneGeneralElection(
     // RU actions are DESTRUCTIVE (formation reset), so an explicit cycle guard
     // inside handleRuConvocationReset makes the trigger idempotent: only the
     // first resolver of a new cycle resets the government (spec §2.4).
-    if (election.countryId === "RU" && election.electionType === "supremeSovietDeputy") {
+    const regularRuType = election.electionType.startsWith("snap_")
+      ? election.electionType.slice(5)
+      : election.electionType;
+    if (
+      election.countryId === "RU" &&
+      [
+        "supremeSovietDeputy",
+        "unionCongressDeputy",
+        "congressDeputy",
+        "congressOfPeoplesDeputies",
+        "dumaDeputy",
+        "stateDuma",
+      ].includes(regularRuType)
+    ) {
       try {
         const remaining = await db.collection<Election>("elections").countDocuments({
           countryId: "RU",
-          electionType: "supremeSovietDeputy",
+          electionType: election.electionType,
           cycle: election.cycle,
-          status: { $ne: "resolved" satisfies ElectionStatus },
+          status: { $in: ["upcoming", "active", "completed"] satisfies ElectionStatus[] },
           _id: { $ne: election._id },
         });
         if (remaining === 0) {
           const { handleRuConvocationReset } = await import("@/lib/turn/ruConvocation");
-          await handleRuConvocationReset(db, election.cycle ?? 1, now);
+          await handleRuConvocationReset(db, election.cycle ?? 1, now, election.electionType);
         }
       } catch (err) {
         logger.error("Turn", `RU convocation trigger failed (cycle ${election.cycle})`, err);

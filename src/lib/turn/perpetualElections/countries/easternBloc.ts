@@ -1,54 +1,5 @@
 import { ensureEasternBlocAssemblyElections } from "../shared";
 
-/** Poland Sejm — unicameral one-party assembly (DD regional-delegate pattern). */
-export async function ensurePLElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections("PL", "sejm", "Sejm", now, inFlightTurn);
-}
-
-/** Czechoslovakia Chamber of the People. */
-export async function ensureCSElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "CS",
-    "chamberOfThePeople",
-    "Chamber of the People",
-    now,
-    inFlightTurn
-  );
-}
-
-/** Hungary National Assembly. */
-export async function ensureHUElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "HU",
-    "nationalAssembly",
-    "National Assembly",
-    now,
-    inFlightTurn
-  );
-}
-
-/** Romania Grand National Assembly. */
-export async function ensureROElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "RO",
-    "grandNationalAssembly",
-    "Grand National Assembly",
-    now,
-    inFlightTurn
-  );
-}
-
-/** Bulgaria National Assembly. */
-export async function ensureBGElections(now: Date, inFlightTurn?: number): Promise<void> {
-  await ensureEasternBlocAssemblyElections(
-    "BG",
-    "nationalAssembly",
-    "National Assembly",
-    now,
-    inFlightTurn
-  );
-}
-
 /** Yugoslavia Federal Assembly. */
 export async function ensureYUElections(now: Date, inFlightTurn?: number): Promise<void> {
   await ensureEasternBlocAssemblyElections(

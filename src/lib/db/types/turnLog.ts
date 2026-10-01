@@ -18,6 +18,7 @@ export interface TurnLog {
   durationMs: number;
   success: boolean;
   warnings: string[];
+  health?: GameHealthSummary | null;
   phaseStatuses?: TurnPhaseTelemetryMap;
 
   phases: {

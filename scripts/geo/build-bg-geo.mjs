@@ -1,5 +1,5 @@
-// Build public/bg-regions.json — Bulgaria's three macro-regions (Sofia basin,
-// Danubian Plain, Thrace), matching src/lib/seeds/bg/bgRegions.ts.
+// Build the historic BG shard and the 2027 six-region NUTS II shard from the
+// same 28 province boundaries. The latter matches bgRegions2027.ts.
 //
 // Single source: geoBoundaries gbOpen BGR ADM1 (28 provinces), partitioned
 // along the Balkan range — the west (Sofia basin + Pirin/Rila highlands), the
@@ -10,7 +10,7 @@
 // Output winding is normalized to the repo convention: outer rings CLOCKWISE
 // in (lon,lat), holes CCW — d3-geo interprets rings spherically and renders a
 // CCW outer ring as "the globe minus the shape".
-// Run: node scripts/maps/build-bg-geo.mjs
+// Run: node scripts/geo/build-bg-geo.mjs
 import { writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -59,6 +59,25 @@ const REGION_NAMES = {
   BG_COA: "Black Sea Coast",
   BG_THR: "Thrace",
   BG_SW: "Southwestern Bulgaria",
+};
+
+// NUTS 2021 level 2 province membership (Eurostat BGR NUTS correspondence).
+// Keep this partition separate from the five historic game regions above.
+const NUTS2_PROVINCES = {
+  BG31: ["Vidin", "Montana", "Vratsa", "Pleven", "Lovech"],
+  BG32: ["Gabrovo", "Veliko Tarnovo", "Ruse", "Razgrad", "Silistra"],
+  BG33: ["Varna", "Dobrich", "Targovishte", "Shumen"],
+  BG34: ["Burgas", "Sliven", "Yambol", "Stara Zagora"],
+  BG41: ["Sofia City", "Sofia", "Pernik", "Kyustendil", "Blagoevgrad"],
+  BG42: ["Pazardzhik", "Plovdiv", "Smolyan", "Kardzhali", "Haskovo"],
+};
+const NUTS2_NAMES = {
+  BG31: "Northwestern",
+  BG32: "North Central",
+  BG33: "Northeastern",
+  BG34: "Southeastern",
+  BG41: "Southwestern",
+  BG42: "South Central",
 };
 
 // Same simplification/rounding pipeline as build-yu-geo.mjs: arcs simplified
@@ -128,57 +147,46 @@ async function fetchGB(iso, adm) {
   return gj;
 }
 
-const provinceToRegion = new Map();
-for (const [regionId, names] of Object.entries(REGION_PROVINCES))
-  for (const n of names) provinceToRegion.set(n, regionId);
-
-const objects = {};
-const push = (regionId, feature) =>
-  (objects[regionId] ??= { type: "FeatureCollection", features: [] }).features.push(feature);
-
 const bgr = await fetchGB("BGR", "ADM1");
 if (bgr.features.length !== 28)
   throw new Error(`BGR ADM1: expected 28 provinces, got ${bgr.features.length}`);
-const counts = {};
-for (const f of bgr.features) {
-  const name = f.properties?.shapeName;
-  const regionId = provinceToRegion.get(name);
-  if (!regionId) throw new Error(`unmapped BGR province: ${JSON.stringify(name)}`);
-  push(regionId, f);
-  counts[regionId] = (counts[regionId] ?? 0) + 1;
-}
-for (const [regionId, names] of Object.entries(REGION_PROVINCES))
-  if (counts[regionId] !== names.length)
-    throw new Error(`${regionId} matched ${counts[regionId]} provinces, expected ${names.length}`);
-console.log(
-  `BGR ADM1 → ${Object.entries(counts)
-    .map(([r, c]) => `${r} (${c})`)
-    .join(", ")}`
-);
-
-// Unquantized topology: arcs keep absolute coordinates, so they can be
-// simplified in place (a quantized topology delta-encodes arcs).
-const topo = topology(objects);
-topo.arcs = topo.arcs.map(simplifyArc);
-
-const out = [];
-for (const [regionId, na] of Object.entries(REGION_NAMES)) {
-  const obj = topo.objects[regionId];
-  if (!obj) throw new Error(`no source features mapped to ${regionId}`);
-  const geometry = rewind(roundGeometry(topoMerge(topo, [obj])));
-  out.push({
-    type: "Feature",
-    id: regionId,
-    properties: { id: regionId, na, regionCode: regionId },
-    geometry,
+function writeShard(provinces, names, filename) {
+  const provinceToRegion = new Map();
+  for (const [regionId, members] of Object.entries(provinces)) {
+    for (const name of members) {
+      if (provinceToRegion.has(name)) throw new Error(`${filename}: duplicate province ${name}`);
+      provinceToRegion.set(name, regionId);
+    }
+  }
+  const objects = {};
+  const counts = {};
+  for (const feature of bgr.features) {
+    const name = feature.properties?.shapeName;
+    const regionId = provinceToRegion.get(name);
+    if (!regionId) throw new Error(`${filename}: unmapped province ${JSON.stringify(name)}`);
+    (objects[regionId] ??= { type: "FeatureCollection", features: [] }).features.push(feature);
+    counts[regionId] = (counts[regionId] ?? 0) + 1;
+  }
+  for (const [regionId, members] of Object.entries(provinces))
+    if (counts[regionId] !== members.length)
+      throw new Error(`${filename}: ${regionId} matched ${counts[regionId]} of ${members.length}`);
+  // Unquantized topology keeps absolute arc coordinates for shared-border simplification.
+  const topo = topology(objects);
+  topo.arcs = topo.arcs.map(simplifyArc);
+  const out = Object.entries(names).map(([regionId, na]) => {
+    const geometry = rewind(roundGeometry(topoMerge(topo, [topo.objects[regionId]])));
+    return {
+      type: "Feature",
+      id: regionId,
+      properties: { id: regionId, na, regionCode: regionId },
+      geometry,
+    };
   });
+  out.sort((a, b) => a.properties.regionCode.localeCompare(b.properties.regionCode));
+  const json = JSON.stringify({ type: "FeatureCollection", features: out });
+  writeFileSync(pub(filename), json + "\n");
+  console.log(`wrote ${filename}: ${out.length} features (${(json.length / 1024).toFixed(0)}KB)`);
 }
-out.sort((a, b) => a.properties.regionCode.localeCompare(b.properties.regionCode));
 
-const json = JSON.stringify({ type: "FeatureCollection", features: out });
-writeFileSync(pub("bg-regions.json"), json + "\n");
-console.log(
-  `wrote ${out.length} features (${(json.length / 1024).toFixed(0)}KB): ${out
-    .map((f) => f.properties.regionCode)
-    .join(", ")}`
-);
+writeShard(REGION_PROVINCES, REGION_NAMES, "bg-regions.json");
+writeShard(NUTS2_PROVINCES, NUTS2_NAMES, "bg-regions-2027.json");

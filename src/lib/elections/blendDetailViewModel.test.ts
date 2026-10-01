@@ -45,6 +45,15 @@ function senateInput(over: Partial<BlendDetailInput> = {}): BlendDetailInput {
 }
 
 describe("detailQuota", () => {
+  it("uses Bulgaria's active preset for the method shown in the detail", () => {
+    const election = houseInput({ countryId: "BG", electionType: "nationalAssembly" });
+    expect(detailQuota({ ...election, preset: "2027-default" })).toBe(10_000);
+    expect(detailQuota({ ...election, preset: "1991-default" })).toBeNull();
+    expect(detailQuota({ ...election, preset: "1979-default" })).toBeNull();
+    expect(buildBlendDetail({ ...election, preset: "2027-default" }).standfirst).toContain(
+      "Hare quota"
+    );
+  });
   it("is votes per seat for a Hare-quota race", () => {
     expect(detailQuota(houseInput())).toBe(10_000);
   });

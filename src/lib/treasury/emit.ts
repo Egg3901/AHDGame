@@ -7,13 +7,19 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type {
   GameState,
+  FederalBudget,
   TreasuryHolderType,
   TreasuryTransaction,
   TreasuryTransactionCategory,
   TreasuryTransactionDirection,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  CURRENCY_ANCHOR_COUNTRY,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { recordAudit, recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 
@@ -35,6 +41,11 @@ export interface EmitTreasuryTransactionArgs {
   turn?: number;
   /** Created-at stamp. Defaults to `new Date()`. Only override in tests. */
   now?: Date;
+  /**
+   * Explicit record currency. Wins over the persisted national budget currency.
+   * Historical country mapping is used only when neither is available.
+   */
+  currencyCode?: CurrencyCode;
 }
 
 export type BulkTreasuryTransactionArgs = Omit<EmitTreasuryTransactionArgs, "db">;
@@ -53,17 +64,53 @@ async function resolveFallbackTurn(
   );
 }
 
+async function resolveBudgetCurrencies(
+  db: Db,
+  entries: BulkTreasuryTransactionArgs[]
+): Promise<Map<CountryId, CurrencyCode>> {
+  const countries = [
+    ...new Set(entries.filter((entry) => !entry.currencyCode).map((entry) => entry.countryId)),
+  ];
+  if (countries.length === 0) return new Map();
+  // The money has usually moved before this audit helper runs. A failed
+  // currency read must not make the caller retry a committed transfer.
+  let budgets: FederalBudget[];
+  try {
+    budgets = await db
+      .collection<FederalBudget>("federalBudget")
+      .find(
+        { _id: { $in: countries.map(getNationalBudgetId) } },
+        { projection: { _id: 1, currencyCode: 1 } }
+      )
+      .toArray();
+  } catch {
+    return new Map();
+  }
+  const byId = new Map(budgets.map((budget) => [budget._id, budget.currencyCode]));
+  return new Map(
+    countries.flatMap((countryId) => {
+      const code = byId.get(getNationalBudgetId(countryId));
+      return code && code in CURRENCY_ANCHOR_COUNTRY
+        ? [[countryId, code as CurrencyCode] as const]
+        : [];
+    })
+  );
+}
+
 function buildTreasuryTransactionDoc(
   args: BulkTreasuryTransactionArgs,
   fallbackTurn: number,
-  fallbackNow: Date
+  fallbackNow: Date,
+  budgetCurrency?: CurrencyCode
 ): TreasuryTransaction | null {
   const amount = Math.abs(args.amount);
   if (!Number.isFinite(amount) || amount === 0) {
     return null;
   }
 
-  const currencyCode = (COUNTRY_CURRENCY_MAP[args.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
+  const currencyCode = (args.currencyCode ??
+    budgetCurrency ??
+    COUNTRY_CURRENCY_MAP[args.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ??
     "USD") as CurrencyCode;
   return {
     _id: new ObjectId(),
@@ -111,7 +158,13 @@ export async function emitTreasuryTransaction(
   args: EmitTreasuryTransactionArgs
 ): Promise<TreasuryTransaction> {
   const fallbackTurn = await resolveFallbackTurn(args.db, [args]);
-  const doc = buildTreasuryTransactionDoc(args, fallbackTurn, args.now ?? new Date());
+  const currencies = await resolveBudgetCurrencies(args.db, [args]);
+  const doc = buildTreasuryTransactionDoc(
+    args,
+    fallbackTurn,
+    args.now ?? new Date(),
+    currencies.get(args.countryId)
+  );
   if (!doc) {
     return null as unknown as TreasuryTransaction;
   }
@@ -128,9 +181,15 @@ export async function emitTreasuryTransactionsBulk(
   if (entries.length === 0) return [];
 
   const fallbackTurn = await resolveFallbackTurn(db, entries);
+  const currencies = await resolveBudgetCurrencies(db, entries);
   const fallbackNow = new Date();
   const docs = entries.flatMap((entry) => {
-    const doc = buildTreasuryTransactionDoc(entry, fallbackTurn, fallbackNow);
+    const doc = buildTreasuryTransactionDoc(
+      entry,
+      fallbackTurn,
+      fallbackNow,
+      currencies.get(entry.countryId)
+    );
     return doc ? [doc] : [];
   });
   if (docs.length === 0) return [];

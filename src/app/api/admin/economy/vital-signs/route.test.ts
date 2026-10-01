@@ -43,7 +43,10 @@ describe("GET /api/admin/economy/vital-signs", () => {
       new Request("http://localhost/api/admin/economy/vital-signs?turn=100")
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ snapshot });
+    expect(await response.json()).toMatchObject({
+      snapshot,
+      alerts: { corporateNoHolder: { status: "insufficient-data", warn: false } },
+    });
     expect(db.collectionMocks.economicVitalSigns.findOne).toHaveBeenCalledWith({ turn: 100 });
   });
 
@@ -131,6 +134,32 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(body.snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBe(2.5);
     expect(body.snapshot.securities.corporateMaturityHhi.value).toBe(5000);
     expect(body.snapshot.securities.medianTopTraderNotionalShare48.value).toBe(0.7);
+  });
+
+  it("reports the corporate no-holder target from the loaded rolling median", async () => {
+    await setupAdmin();
+    db.collectionMocks.economicVitalSigns.findOne.mockResolvedValue({
+      _id: "turn:100",
+      turn: 100,
+      securitiesRecent12: {
+        corporateNoHolderBondShareMedian: {
+          value: 0.672,
+          observations: 12,
+          basis: "unmatured_corporate_issue_count_median_12",
+        },
+      },
+    });
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/admin/economy/vital-signs"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).alerts.corporateNoHolder).toMatchObject({
+      status: "above-target",
+      warn: true,
+      threshold: 0.35,
+      median: 0.672,
+      observations: 12,
+    });
+    expect(db.collectionMocks.economicVitalSigns.findOne).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an invalid turn", async () => {

@@ -51,6 +51,30 @@ function snapshot(memory: ReturnType<typeof world>) {
 }
 beforeEach(() => vi.clearAllMocks());
 describe("durable liquidity advance commands", () => {
+  it("pins a modern EUR bank denomination through interruption and retry", async () => {
+    const memory = world();
+    memory.seed("centralBanks", [{ _id: "BG", reserveBalance: 100, netMoneyCreatedLifetime: 0 }]);
+    memory.seed("exchangeRates", [{ _id: "BG", currencyCode: "EUR", rate: 2 }]);
+    for (const row of memory.collection("corporations").docs) {
+      (row.bankCharter as BankCharter).currency = "EUR";
+    }
+    const fault = withInjectedCrash(memory, {
+      collection: "bankLiquidityOperations",
+      op: "insertOne",
+      onCall: 1,
+      afterWrite: true,
+    });
+    const euroCommand = { ...command, countryId: "BG" as const };
+    await expect(executeLiquidityAdvance(fault.db, euroCommand, 6)).rejects.toThrow();
+    fault.disarm();
+    // Recovery must retain the first admitted denomination after a quotation changes.
+    memory.collection("exchangeRates").docs[0].currencyCode = "DEM";
+    const result = await executeLiquidityAdvance(memory as unknown as Db, euroCommand, 6);
+    expect(result).toMatchObject({ banksCredited: 2, reserveDelta: 0 });
+    expect(snapshot(memory).banks.map((bank) => bank.bankCharter.cashReserves)).toEqual([400, 200]);
+    expect(snapshot(memory).logs.map((row) => row.currencyCode)).toEqual(["EUR", "EUR"]);
+    expect(memory.collection("bankLiquidityOperations").docs[0].currency).toBe("EUR");
+  });
   it("preserves pro-rata allocation, native cash, debt and one receipt on replay", async () => {
     const memory = world(),
       db = memory as unknown as Db;

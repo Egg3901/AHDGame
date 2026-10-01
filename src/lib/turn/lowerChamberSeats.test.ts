@@ -56,6 +56,18 @@ describe("getLiveLowerChamberSeats", () => {
     expect(deSeats).not.toBe(299);
   });
 
+  it("tracks the 1991 Hungarian Assembly from 386 seats to 199 after its reform", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("states").find.mockReturnValue(cursorOf([{ houseDistricts: 199 }]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "HU")).toBe(386);
+
+    db.collection("gameState").findOne.mockResolvedValue({
+      preset: "1991-default",
+      huAssemblyReformedAtYear: 2014,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "HU")).toBe(199);
+  });
+
   it("uses the 1953 Commons size (625) when the world preset is 1953-default", async () => {
     db.collection("gameState").findOne.mockResolvedValue({ preset: "1953-default" });
     db.collection("states").find.mockReturnValue(cursorOf([]));
@@ -66,6 +78,51 @@ describe("getLiveLowerChamberSeats", () => {
     db.collection("gameState").findOne.mockResolvedValue({ preset: "2019-default" });
     db.collection("states").find.mockReturnValue(cursorOf([]));
     expect(await getLiveLowerChamberSeats(db as unknown as Db, "UK")).toBe(650);
+  });
+
+  it("reads the durable Bulgarian ordinary Assembly transition", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue(null);
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "BG")).toBe(400);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      bgOrdinaryAssemblySinceTurn: 41,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "BG")).toBe(240);
+  });
+
+  it("reads both Romanian chambers from the durable 1992 transition marker", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RO" });
+    db.collection("states").find.mockReturnValue(cursorOf([]));
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(396);
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(119);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RO",
+      roParliament1992SinceTurn: 96,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(341);
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(143);
+    db.collection("states").find.mockReturnValue(
+      cursorOf([
+        { houseDistricts: 200, stateSenateSeats: 80 },
+        { houseDistricts: 150, stateSenateSeats: 70 },
+      ])
+    );
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RO")).toBe(350);
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RO")).toBe(150);
+  });
+
+  it("reads the Russian Congress dissolution and first Duma seat count", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruCongressDissolvedSinceTurn: 129,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RU")).toBe(0);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruCongressDissolvedSinceTurn: 129,
+      ruFederalAssemblySinceTurn: 145,
+    });
+    expect(await getLiveLowerChamberSeats(db as unknown as Db, "RU")).toBe(450);
   });
 });
 
@@ -125,5 +182,17 @@ describe("getLiveUpperChamberSeats", () => {
       ])
     );
     expect(await getLiveUpperChamberSeats(db as unknown as Db, "SE")).toBe(151);
+  });
+
+  it("opens the first Russian Federation Council at 178 seats", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruCongressDissolvedSinceTurn: 129,
+    });
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RU")).toBe(0);
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      ruFederalAssemblySinceTurn: 145,
+    });
+    expect(await getLiveUpperChamberSeats(db as unknown as Db, "RU")).toBe(178);
   });
 });

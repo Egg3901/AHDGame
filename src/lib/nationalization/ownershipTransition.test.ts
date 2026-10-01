@@ -64,7 +64,7 @@ vi.mock("@/lib/financialTxLog/stampDeleted", () => ({
 // Treasury debit has its own unit tests; mock so orchestration tests stay focused.
 vi.mock("./treasury", () => ({
   debitTreasuryCompensation: vi.fn().mockResolvedValue(0),
-  creditTreasuryProceeds: vi.fn().mockResolvedValue(undefined),
+  creditTreasuryProceedsFromAnchor: vi.fn().mockResolvedValue(undefined),
 }));
 // NatCorp resolution/ensure have their own tests in nationalCorporation.test.ts.
 // Mock them here so the engine tests are decoupled from corporations.findOne
@@ -415,7 +415,7 @@ describe("nationalizeWholeCorp", () => {
     vi.mocked(resolveNationalCorporationForSector).mockResolvedValue({ _id: primaryId } as never);
 
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
-    const { creditTreasuryProceeds } = await import("./treasury");
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
     await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
       corporationId: targetId,
@@ -425,7 +425,12 @@ describe("nationalizeWholeCorp", () => {
 
     // valuation = max(marketCap 2000, equity 500+4000) − 0 = 4500; payout = 4500 × 5 = 22500.
     // cash (500) ≤ payout ⇒ the state recoups all 500; CEO gets nothing.
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(db, "CN", 500, expect.any(Date));
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
+      db,
+      "CN",
+      500,
+      expect.any(Date)
+    );
     expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
 
@@ -462,7 +467,7 @@ describe("nationalizeWholeCorp", () => {
     vi.mocked(sumBondPrincipalAnchor).mockReturnValueOnce(9000);
 
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
-    const { creditTreasuryProceeds } = await import("./treasury");
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
     await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
       corporationId: targetId,
@@ -476,7 +481,7 @@ describe("nationalizeWholeCorp", () => {
       (c) => c[0]._id?.toString() === ceoId.toString()
     );
     expect(ceoPay?.[1].$inc.cashOnHand).toBe(5000);
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
       db,
       "CN",
       5000,
@@ -512,7 +517,7 @@ describe("nationalizeWholeCorp", () => {
     db.collectionMocks.characters.findOne.mockResolvedValue({ _id: ceoId });
 
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
-    const { creditTreasuryProceeds } = await import("./treasury");
+    const { creditTreasuryProceedsFromAnchor } = await import("./treasury");
     await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
       corporationId: targetId,
@@ -521,7 +526,7 @@ describe("nationalizeWholeCorp", () => {
     });
 
     // Seizure pays shareholders nothing; the state takes the full cash, CEO gets none.
-    expect(vi.mocked(creditTreasuryProceeds)).toHaveBeenCalledWith(
+    expect(vi.mocked(creditTreasuryProceedsFromAnchor)).toHaveBeenCalledWith(
       db,
       "CN",
       8000,

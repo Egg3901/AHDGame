@@ -665,7 +665,7 @@ describe("sovereign bond helpers", () => {
     // left East Germany's seeded DDM 3B of debt pointing at a corporation that
     // did not exist. DD is issuer-only (sectors: []) — it is a command economy
     // and deliberately has no producing corporations.
-    expect(entries).toHaveLength(17);
+    expect(entries).toHaveLength(22);
     const us = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.US.id);
     const uk = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.UK.id);
     const jp = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.JP.id);
@@ -996,6 +996,24 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(byMaturity[48].couponRate).toBe(5.0); // +0pp
     expect(byMaturity[96].couponRate).toBe(5.25); // +0.25pp
     expect(byMaturity[240].couponRate).toBe(5.75); // +0.75pp
+  });
+
+  it("denominates later Irish sovereign issues in the budget's EUR", async () => {
+    const budget = makeBudget({
+      _id: "IE",
+      countryId: "IE",
+      currencyCode: "EUR",
+    });
+    const { db } = setupScheduledMocks({ budget });
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+
+    const bondDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.map(
+      ([doc]) => doc as Omit<Bond, "_id">
+    );
+    expect(bondDocs.length).toBeGreaterThan(0);
+    expect(bondDocs.every((bond) => bond.countryId === "IE" && bond.currencyCode === "EUR")).toBe(
+      true
+    );
   });
 
   it("skips issuance when a non-reconcile sovereign bond already exists for this turn (dedup)", async () => {

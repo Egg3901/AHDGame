@@ -167,6 +167,31 @@ export async function seedCountryGameStates(
           nextScheduledTurn: null,
           createdAt: now,
         },
+        ...(cid === "BG" ? { $unset: { bgOrdinaryAssemblySinceTurn: "" } } : {}),
+        ...(cid === "YU"
+          ? {
+              $unset: {
+                yuSuccessionMandateSinceTurn: "",
+                yuSettlementAppliedSinceTurn: "",
+                dissolvedTurn: "",
+              },
+            }
+          : {}),
+        ...(cid === "RU"
+          ? {
+              $unset: {
+                ruSovietSuccessionSinceTurn: "",
+                ruProvisionalCongressSeats: "",
+                ruPresidencyMandateSinceTurn: "",
+                ruPresidencyElectionCertifiedSinceTurn: "",
+                ruFederalAssemblyMandateSinceTurn: "",
+                ruFederalAssemblyElectionCertifiedSinceTurn: "",
+                ruPresidencySinceTurn: "",
+                ruCongressDissolvedSinceTurn: "",
+                ruFederalAssemblySinceTurn: "",
+              },
+            }
+          : {}),
       },
       { upsert: true }
     );

@@ -103,7 +103,7 @@ describe("recordShareTrade", () => {
     expect(doc.totalAnchor).toBe(0);
   });
 
-  it("swallows insert errors and reports them to Sentry", async () => {
+  it("reports insert failures to the caller and Sentry", async () => {
     const { recordShareTrade } = await import("./shareTradeHistory");
     // Trigger lazy-creation of the collection mock, then make insertOne reject.
     db.collection("shareTradeHistory");
@@ -119,7 +119,7 @@ describe("recordShareTrade", () => {
         from: null,
         to: null,
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toBe("failed");
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
   });
 });

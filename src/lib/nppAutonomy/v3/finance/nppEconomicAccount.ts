@@ -18,16 +18,20 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 
 /** Home-currency FX rate in LOCAL units per 1 ₳. `anchor = local / rate`. */
 export async function nppHomeFxRate(
   db: Db,
   countryId: string | undefined,
-  preloaded?: ReadonlyMap<CurrencyCode, number>
+  preloaded?: ReadonlyMap<CurrencyCode, number>,
+  preset?: string
 ): Promise<number> {
-  const code = (COUNTRY_CURRENCY_MAP[(countryId ?? "US") as CountryId] ?? "USD") as CurrencyCode;
+  const id = (countryId ?? "US") as CountryId;
+  const code = preset
+    ? getSeedCurrencyCode(id, preset)
+    : ((COUNTRY_CURRENCY_MAP[id] ?? "USD") as CurrencyCode);
   const fx = preloaded ?? (await loadFxRatesByCurrency(db));
   const r = fx.get(code);
   return r && r > 0 ? r : 1;

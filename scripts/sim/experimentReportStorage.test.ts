@@ -115,4 +115,24 @@ describe("experiment report timeline storage (#2287)", () => {
       )
     ).toThrow("identity");
   });
+  it("preserves inline telemetry in reports written before telemetry chunking", () => {
+    const source = {
+      _id: "old-run",
+      longHorizonTelemetry: { approval: { points: [{ turn: 1 }] } },
+      timelineStorage: { version: 1 as const, generation: "old", chunkCount: 1 },
+    };
+    const chunks = [
+      {
+        runId: "old-run",
+        generation: "old",
+        field: "seatsTimeline" as const,
+        sequence: 0,
+        points: [],
+      },
+    ];
+
+    expect(hydrateExperimentReport(source, chunks).longHorizonTelemetry?.approval?.points).toEqual([
+      { turn: 1 },
+    ]);
+  });
 });

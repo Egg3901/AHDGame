@@ -23,7 +23,17 @@ import {
 } from "@/lib/admin/seed/reconcileStateGdp";
 import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
 import { normalizeMaintenanceMode } from "@/lib/maintenanceStatus";
-import { generateDefaultEnactedLaws } from "@/lib/seeds/reference/budgets";
+import {
+  generateDefaultEnactedLaws,
+  getNationalBudgetSeedConfigsForPreset,
+} from "@/lib/seeds/reference/budgets";
+import {
+  COMMAND_CEILING,
+  commandEconomySoeSectors,
+  scheduledMarketizationLevel,
+} from "@/lib/constants/commandEconomy";
+import { sectorRevenueDistribution } from "./rules/sectorDistribution";
+import { DEFAULT_STRATEGIC_SECTORS } from "@/lib/seeds/reference/strategicSectors";
 import { COUNTRY_ELECTION_PHASES } from "@/lib/turn/countryPhases";
 import {
   buildSeedExpectations,
@@ -46,7 +56,18 @@ import { regionalMetricCoverage, seedTurnoutScopeFilter } from "./regionalCovera
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getScotusPresetSeed } from "@/lib/scotus/presetData";
 import type { ScotusPresetSeed } from "@/lib/scotus/presetData/types";
-import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { getStartingYearForPreset, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getInitialRates,
+  getSeedCurrencyCode,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
+import {
+  currencyConversionScale,
+  currencyForCountryAtYear,
+} from "@/lib/currency/rules/eraCurrency";
+import { EUROZONE_2027_MEMBERS } from "@/lib/currency/rules/euroAdoption";
 
 /** Readiness check names that are expected-empty pre-founding / pre-seat. */
 const PRE_FOUNDING_READINESS = new Set(["NPPs", "ElectedOfficials", "GovernmentFormation"]);
@@ -164,7 +185,8 @@ function relCheck(
 
 async function checkGameStateClock(
   db: Db,
-  expect: SeedExpectations
+  expect: SeedExpectations,
+  worldsimBootstrap: boolean
 ): Promise<SeedDiagnosticCheck[]> {
   const gs = await db.collection("gameState").findOne({ _id: "current" as never });
   const checks: SeedDiagnosticCheck[] = [];
@@ -250,7 +272,9 @@ async function checkGameStateClock(
           "stamped",
           typeof gs.iteration === "object" ? JSON.stringify(gs.iteration) : String(gs.iteration)
         )
-      : warn("gameState.iteration", "global", "iteration", "stamped", null, "iteration not set")
+      : worldsimBootstrap
+        ? ok("gameState.iteration", "global", "iteration", "optional before first turn", null)
+        : warn("gameState.iteration", "global", "iteration", "stamped", null, "iteration not set")
   );
 
   return checks;
@@ -281,6 +305,44 @@ async function checkNationalBudgets(
   const checks: SeedDiagnosticCheck[] = [];
   const budgets = await db.collection("federalBudget").find({}).toArray();
   const byCountry = new Map(budgets.map((b) => [String(b.countryId), b]));
+  // Check the active 1991 manifest against authored budget configs, including
+  // the transition economies. A future roster expansion must not silently
+  // create an active country without a fiscal baseline.
+  if (expect.preset === "1991-default") {
+    const authored = new Set(expect.nationalBudgets.map((cfg) => cfg.countryId));
+    for (const countryId of expect.seededCountryIds) {
+      if (!authored.has(countryId)) {
+        checks.push(
+          critical(
+            `budget.${countryId}.authored1991`,
+            countryId,
+            "1991 national budget config",
+            "present",
+            null,
+            "active 1991 country lacks an authored fiscal baseline"
+          )
+        );
+      }
+    }
+  }
+  const rates = getInitialRates(expect.preset);
+  const euroRate = rates.DE;
+  const authoredBudgetCurrency = new Map(
+    expect.nationalBudgets.map((config) => [config.countryId, config.currencyCode])
+  );
+  const expectedMoneyScale = (countryId: string): number => {
+    // The 2027 budget configs have already been converted to EUR. Earlier
+    // presets still carry legacy-denominated configs and need this scale.
+    if (authoredBudgetCurrency.get(countryId) === "EUR") return 1;
+    const typedCountryId = countryId as CountryId;
+    const legacyCurrency = COUNTRY_CURRENCY_MAP[typedCountryId];
+    if (currencyForCountryAtYear(typedCountryId, expect.startingYear, legacyCurrency) !== "EUR")
+      return 1;
+    const legacyRate = rates[typedCountryId];
+    if (typeof legacyRate !== "number" || legacyRate <= 0) return 1;
+    if (typeof euroRate !== "number" || euroRate <= 0) return 1;
+    return currencyConversionScale(legacyRate, euroRate);
+  };
 
   const useGdpInvariant = shouldReconcileStateGdpForPreset(expect.preset);
   const regionRows = useGdpInvariant
@@ -293,7 +355,7 @@ async function checkNationalBudgets(
 
   const nationalGdpByCountry = new Map<string, number>();
   for (const cfg of expect.nationalBudgets) {
-    nationalGdpByCountry.set(cfg.countryId, cfg.gdp);
+    nationalGdpByCountry.set(cfg.countryId, cfg.gdp * expectedMoneyScale(cfg.countryId));
   }
 
   if (useGdpInvariant) {
@@ -326,6 +388,7 @@ async function checkNationalBudgets(
   }
 
   for (const cfg of expect.nationalBudgets) {
+    const moneyScale = expectedMoneyScale(cfg.countryId);
     const doc = byCountry.get(cfg.countryId);
     if (!doc) {
       checks.push(
@@ -336,7 +399,13 @@ async function checkNationalBudgets(
 
     if (!useGdpInvariant) {
       checks.push(
-        relCheck(`budget.${cfg.countryId}.gdp`, cfg.countryId, "gdp", cfg.gdp, doc.gdp as number)
+        relCheck(
+          `budget.${cfg.countryId}.gdp`,
+          cfg.countryId,
+          "gdp",
+          cfg.gdp * moneyScale,
+          doc.gdp as number
+        )
       );
     }
 
@@ -348,7 +417,7 @@ async function checkNationalBudgets(
         `budget.${cfg.countryId}.debt.principal`,
         cfg.countryId,
         "debt.principal",
-        cfg.debtPrincipal,
+        cfg.debtPrincipal * moneyScale,
         debt?.principal
       )
     );
@@ -572,14 +641,56 @@ async function checkMonetary(db: Db, expect: SeedExpectations): Promise<SeedDiag
 
 async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
   const rates = await db
-    .collection<{ _id: string; countryId?: string; rate?: number }>("exchangeRates")
+    .collection<{ _id: string; countryId?: string; currencyCode?: CurrencyCode; rate?: number }>(
+      "exchangeRates"
+    )
     .find({})
     .toArray();
   const byCountry = new Map(rates.map((r) => [String(r.countryId ?? r._id), r] as const));
   const checks: SeedDiagnosticCheck[] = [];
+  const year = getStartingYearForPreset(expect.preset);
+
+  if (expect.preset === "2027-default") {
+    const gameState = await db
+      .collection<{ _id: string; eurozoneEnabled?: boolean; euroAdoptedCountries?: string[] }>(
+        "gameState"
+      )
+      .findOne({ _id: "current" });
+    const expected = [...EUROZONE_2027_MEMBERS].sort();
+    const actual = gameState?.euroAdoptedCountries;
+    const valid =
+      gameState?.eurozoneEnabled === true &&
+      Array.isArray(actual) &&
+      actual.length === expected.length &&
+      [...actual].sort().every((countryId, index) => countryId === expected[index]);
+    checks.push(
+      valid
+        ? ok(
+            "forex.euroAdoption",
+            "global",
+            "euroAdoptedCountries",
+            expected.join(","),
+            expected.join(",")
+          )
+        : critical(
+            "forex.euroAdoption",
+            "global",
+            "euroAdoptedCountries",
+            expected.join(","),
+            `enabled=${String(gameState?.eurozoneEnabled ?? null)}; countries=${Array.isArray(actual) ? [...actual].sort().join(",") : "missing"}`,
+            "2027 adoption manifest does not match persisted game state"
+          )
+    );
+  }
 
   for (const countryId of expect.forexActiveCountries) {
-    const expectedRate = expect.forexRates[countryId];
+    const expectedCurrency = currencyForCountryAtYear(
+      countryId,
+      year,
+      getSeedCurrencyCode(countryId, expect.preset)
+    );
+    const expectedRate =
+      expectedCurrency === "EUR" ? expect.forexRates.DE : expect.forexRates[countryId];
     if (expectedRate == null) {
       checks.push(
         warn(
@@ -603,6 +714,53 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
     checks.push(
       relCheck(`forex.${countryId}.rate`, countryId, "rate", expectedRate, doc.rate, 0.01)
     );
+    checks.push(
+      doc.currencyCode === expectedCurrency
+        ? ok(
+            `forex.${countryId}.currency`,
+            countryId,
+            "exchangeRates.currencyCode",
+            expectedCurrency,
+            doc.currencyCode
+          )
+        : critical(
+            `forex.${countryId}.currency`,
+            countryId,
+            "exchangeRates.currencyCode",
+            expectedCurrency,
+            doc.currencyCode ?? null,
+            "currency topology does not match the selected era"
+          )
+    );
+
+    if (expectedCurrency === "EUR") {
+      const [budget, legacyCorps, legacyBonds] = await Promise.all([
+        db.collection("federalBudget").findOne({ countryId }, { projection: { currencyCode: 1 } }),
+        db.collection("corporations").countDocuments({
+          countryId,
+          liquidCurrencyCode: { $ne: "EUR" },
+        }),
+        db.collection("bonds").countDocuments({ countryId, currencyCode: { $ne: "EUR" } }),
+      ]);
+      checks.push(
+        budget?.currencyCode === "EUR" && legacyCorps === 0 && legacyBonds === 0
+          ? ok(
+              `forex.${countryId}.euroTopology`,
+              countryId,
+              "budget/corporation/bond currency",
+              "EUR",
+              "EUR"
+            )
+          : critical(
+              `forex.${countryId}.euroTopology`,
+              countryId,
+              "budget/corporation/bond currency",
+              "EUR",
+              `budget=${String(budget?.currencyCode ?? "missing")}, legacyCorps=${legacyCorps}, legacyBonds=${legacyBonds}`,
+              "euro member retains a legacy denomination"
+            )
+      );
+    }
   }
 
   // ⚠️ The loop above iterates `forexActiveCountries` ONLY, which is exactly why
@@ -616,10 +774,11 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
   // A missing ROW is correct for these and is not asserted. What must hold is
   // that an authored era rate EXISTS, since that is what the helpers now
   // resolve. Absent, corp valuations for that country are silently wrong.
-  const { COUNTRY_CURRENCY_MAP, eraRateForCurrency } = await import("@/lib/constants/currencies");
+  const { eraRateForCurrency } = await import("@/lib/constants/currencies");
   const forexActive = new Set<string>(expect.forexActiveCountries);
+  const seededCountries = new Set<string>(expect.seededCountryIds);
   for (const [countryId, code] of Object.entries(COUNTRY_CURRENCY_MAP)) {
-    if (forexActive.has(countryId)) continue;
+    if (forexActive.has(countryId) || !seededCountries.has(countryId)) continue;
     const era = eraRateForCurrency(code, expect.preset);
     checks.push(
       era !== undefined && era > 0
@@ -637,43 +796,81 @@ async function checkForex(db: Db, expect: SeedExpectations): Promise<SeedDiagnos
   return checks;
 }
 
-async function checkSectors(db: Db, expect: SeedExpectations): Promise<SeedDiagnosticCheck[]> {
+export async function checkSectors(
+  db: Db,
+  expect: SeedExpectations
+): Promise<SeedDiagnosticCheck[]> {
   const checks: SeedDiagnosticCheck[] = [];
   const countries = expect.seededCountryIds;
+  const config = await db
+    .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+  const budgetYears = new Map<string, number>(
+    getNationalBudgetSeedConfigsForPreset(expect.preset).map((budget) => [
+      budget.countryId,
+      budget.fiscalYear,
+    ])
+  );
 
   for (const countryId of countries) {
+    // The command-band seed moves production into country-owned SOEs. Its
+    // residual unowned pool may be empty or only extraction, and is not the
+    // country's productive-sector distribution. Match the same authored era
+    // and command flag used by the SOE seeder, then require actual SOE rows.
+    const budgetYear = budgetYears.get(countryId);
+    const commandSoeSeed =
+      config?.commandEconomyEnabled === true &&
+      budgetYear !== undefined &&
+      commandEconomySoeSectors(countryId).length > 0 &&
+      scheduledMarketizationLevel(countryId, budgetYear) < COMMAND_CEILING;
     const unownedCount = await db.collection("unownedSectors").countDocuments({ countryId });
     checks.push(
-      unownedCount > 0
-        ? ok(`sectors.${countryId}.unowned`, countryId, "unownedSectors.count", ">0", unownedCount)
-        : critical(
+      commandSoeSeed
+        ? ok(
             `sectors.${countryId}.unowned`,
             countryId,
             "unownedSectors.count",
-            ">0",
-            unownedCount
+            "optional with country-owned SOE production",
+            unownedCount,
+            "command-band production is validated in the country-owned SOE pool"
           )
+        : unownedCount > 0
+          ? ok(
+              `sectors.${countryId}.unowned`,
+              countryId,
+              "unownedSectors.count",
+              ">0",
+              unownedCount
+            )
+          : critical(
+              `sectors.${countryId}.unowned`,
+              countryId,
+              "unownedSectors.count",
+              ">0",
+              unownedCount
+            )
     );
 
     const strategicCount = await db
       .collection("strategicSectorDesignations")
       .countDocuments({ countryId });
+    const expectedStrategic = DEFAULT_STRATEGIC_SECTORS[countryId as CountryId]?.length ?? 0;
     checks.push(
-      strategicCount > 0
+      strategicCount >= expectedStrategic
         ? ok(
             `sectors.${countryId}.strategic`,
             countryId,
             "strategicSectorDesignations.count",
-            ">0",
+            `>=${expectedStrategic}`,
             strategicCount
           )
         : warn(
             `sectors.${countryId}.strategic`,
             countryId,
             "strategicSectorDesignations.count",
-            ">0",
+            `>=${expectedStrategic}`,
             strategicCount,
-            "no strategic designations"
+            "missing configured strategic designations"
           )
     );
 
@@ -684,26 +881,44 @@ async function checkSectors(db: Db, expect: SeedExpectations): Promise<SeedDiagn
       .find({ countryId })
       .project({ sectorType: 1, revenue: 1 })
       .toArray();
-    const revenueByType = new Map<string, number>();
-    let total = 0;
-    for (const row of rows) {
-      const t = row.sectorType ?? "";
-      const rev = Number(row.revenue) || 0;
-      revenueByType.set(t, (revenueByType.get(t) ?? 0) + rev);
-      total += rev;
+    let productiveRows = rows;
+    if (commandSoeSeed) {
+      const owners = await db
+        .collection<{ _id: ObjectId }>("corporations")
+        .find({ countryOwnerId: countryId }, { projection: { _id: 1 } })
+        .toArray();
+      const owned = owners.length
+        ? await db
+            .collection<{ sectorType?: string; revenue?: number }>("corporateSectors")
+            .find(
+              { countryId, corporationId: { $in: owners.map((owner) => owner._id) } },
+              { projection: { sectorType: 1, revenue: 1 } }
+            )
+            .toArray()
+        : [];
+      const producingOwned = owned.filter((row) => Number(row.revenue) > 0);
+      checks.push(
+        producingOwned.length > 0
+          ? ok(
+              `sectors.${countryId}.commandSoe`,
+              countryId,
+              "producing country-owned corporateSectors.count",
+              ">0",
+              producingOwned.length
+            )
+          : critical(
+              `sectors.${countryId}.commandSoe`,
+              countryId,
+              "producing country-owned corporateSectors.count",
+              ">0",
+              producingOwned.length
+            )
+      );
+      productiveRows = [...rows, ...owned];
     }
-    if (total > 0) {
-      let maxShare = 0;
-      let maxType = "";
-      let shareSum = 0;
-      for (const [t, rev] of revenueByType) {
-        const share = rev / total;
-        shareSum += share;
-        if (share > maxShare) {
-          maxShare = share;
-          maxType = t;
-        }
-      }
+    const distribution = sectorRevenueDistribution(productiveRows);
+    if (distribution) {
+      const { shareSum, maxShare, maxType } = distribution;
       const sumOk = Math.abs(shareSum - 1) <= 0.02;
       const maxOk = maxShare <= CONFORMANCE_SECTOR_MAX_SHARE;
       if (sumOk && maxOk) {
@@ -822,6 +1037,54 @@ async function checkPolitical(
   emptyCountries: ReadonlySet<string> | null = new Set()
 ): Promise<SeedDiagnosticCheck[]> {
   const checks: SeedDiagnosticCheck[] = [];
+  if (expect.preset === "1991-default") {
+    for (const prefix of ["pl", "cs", "hu", "ro", "bg", "yu"] as const) {
+      const stateId = `${prefix}_national`;
+      const policyCount = await db.collection("statePolicies").countDocuments({
+        stateId,
+        scope: "national",
+      });
+      checks.push(
+        policyCount === 16
+          ? ok(
+              `policies.${prefix}.national`,
+              prefix.toUpperCase(),
+              "1991 national policies",
+              16,
+              policyCount
+            )
+          : critical(
+              `policies.${prefix}.national`,
+              prefix.toUpperCase(),
+              "1991 national policies",
+              16,
+              policyCount
+            )
+      );
+      const democracy = await db.collection("statePolicies").findOne({
+        stateId,
+        legislationTypeId: `${prefix}_political_system`,
+      });
+      const optionIndex = democracy?.policyOptionIndex;
+      checks.push(
+        optionIndex === 1
+          ? ok(
+              `policies.${prefix}.politicalSystem`,
+              prefix.toUpperCase(),
+              "1991 multiparty policy",
+              1,
+              optionIndex
+            )
+          : critical(
+              `policies.${prefix}.politicalSystem`,
+              prefix.toUpperCase(),
+              "1991 multiparty policy",
+              1,
+              optionIndex ?? null
+            )
+      );
+    }
+  }
   for (const countryId of readinessCountryIds(expect.preset)) {
     const report = await buildCountryReadinessReport(db, countryId, expect.preset);
     if (!report) {
@@ -1057,7 +1320,7 @@ async function checkRuntimeCleanliness(db: Db): Promise<SeedDiagnosticCheck[]> {
   return checks;
 }
 
-async function checkConfig(db: Db): Promise<SeedDiagnosticCheck[]> {
+async function checkConfig(db: Db, worldsimBootstrap: boolean): Promise<SeedDiagnosticCheck[]> {
   const checks: SeedDiagnosticCheck[] = [];
   const config = await db.collection("gameConfig").findOne({ _id: "default" as never });
   checks.push(
@@ -1072,24 +1335,25 @@ async function checkConfig(db: Db): Promise<SeedDiagnosticCheck[]> {
   const maintMode = normalizeMaintenanceMode(
     config?.maintenanceMode as boolean | "off" | "partial" | "full" | undefined
   );
-  const maintSealed = maintMode === "full";
+  const expectedMode = worldsimBootstrap ? "off" : "full";
+  const maintSealed = maintMode === expectedMode;
   checks.push(
     maintSealed
       ? ok(
           "config.maintenanceMode",
           "global",
           "maintenanceMode",
-          "full",
-          "full",
-          "sealed post-reset"
+          expectedMode,
+          maintMode,
+          worldsimBootstrap ? "worldsim runs with maintenance off" : "sealed post-reset"
         )
       : warn(
           "config.maintenanceMode",
           "global",
           "maintenanceMode",
-          "full",
+          expectedMode,
           maintMode,
-          "expected maintenance mode 'full' after reset"
+          `expected maintenance mode '${expectedMode}'`
         )
   );
 
@@ -1267,7 +1531,7 @@ export async function checkScotusSeed(db: Db, preset: string): Promise<SeedDiagn
  */
 export async function runConformanceChecks(
   db: Db,
-  opts?: { preset?: string }
+  opts?: { preset?: string; trigger?: string }
 ): Promise<{ checks: SeedDiagnosticCheck[]; expect: SeedExpectations }> {
   const gs = await db.collection("gameState").findOne({ _id: "current" as never });
   const preset =
@@ -1279,6 +1543,7 @@ export async function runConformanceChecks(
 
   const countries = noStartingParties ? await startingPoliticalCountries(db, preset) : [];
   const emptyCountries = countries === null ? null : new Set(countries);
+  const worldsimBootstrap = opts?.trigger === "worldsim-post-bootstrap";
 
   // Every group below is READ-ONLY (no write of any kind in this module), and
   // none reads another's output, so they overlap instead of queueing 12 round
@@ -1290,7 +1555,7 @@ export async function runConformanceChecks(
   // names only the first five criticals, so a reordering would silently change
   // which failures a reader is told about.
   const groups = await Promise.all([
-    checkGameStateClock(db, expect),
+    checkGameStateClock(db, expect, worldsimBootstrap),
     Promise.resolve(checkBundleFallbacks(expect)),
     checkNationalBudgets(db, expect),
     checkStaleCostFractions(db, preset),
@@ -1303,7 +1568,7 @@ export async function runConformanceChecks(
     noStartingParties ? checkEmptyPoliticalStart(db, countries) : Promise.resolve([]),
     checkDemographics(db, expect),
     checkRuntimeCleanliness(db),
-    checkConfig(db),
+    checkConfig(db, worldsimBootstrap),
     checkRegionDerivedCoverage(db, expect),
     checkScotusSeed(db, preset),
   ]);

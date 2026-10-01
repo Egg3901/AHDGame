@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { loadRuntimeWorldEntities } from "./succession/runtimeEntities";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { getWorldEntityMapSnapshot, type WorldEntityMapSnapshot } from "./worldEntityMap";
 
@@ -7,7 +8,10 @@ export async function loadWorldEntityMapSnapshot(
   db: Db,
   presetId: string
 ): Promise<WorldEntityMapSnapshot> {
-  const snapshot = getWorldEntityMapSnapshot(presetId);
+  const snapshot = getWorldEntityMapSnapshot(
+    presetId,
+    await loadRuntimeWorldEntities(db, presetId)
+  );
   const collection = await getMacroCountriesCollection(db);
   const rows = await collection
     .find({ presetId, simulationTier: "background-macro", retiredAt: null })

@@ -79,6 +79,16 @@ export default function CeoAdminSubtab({
   );
   const canPayCash = corporation.liquidCapital >= relocationCost;
 
+  useEffect(() => {
+    if (
+      corporation.federationPendingHeadquartersId &&
+      enabledCountries.length > 0 &&
+      !enabledCountries.includes(relocateCountry)
+    ) {
+      dispatch({ type: "SET_RELOCATE_COUNTRY", value: enabledCountries[0] });
+    }
+  }, [corporation.federationPendingHeadquartersId, enabledCountries, relocateCountry, dispatch]);
+
   // Fetch states for the selected destination country (defaults to corp's
   // current country). Same-country browsing filters out the current HQ.
   useEffect(() => {
@@ -139,6 +149,27 @@ export default function CeoAdminSubtab({
     dispatch({ type: "SET_RELOCATE_ERROR", value: "" });
     dispatch({ type: "SET_RELOCATE_SUCCESS", value: "" });
     try {
+      if (corporation.federationPendingHeadquartersId) {
+        const res = await fetch("/api/federation/relocation/headquarters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicationId: corporation.federationPendingHeadquartersId,
+            corporationId: corpId,
+            targetStateId: relocateTarget,
+            targetCountryId: relocateCountry,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not choose headquarters");
+        dispatch({
+          type: "SET_RELOCATE_SUCCESS",
+          value: "Headquarters choice saved. Your firm can operate from its new location.",
+        });
+        dispatch({ type: "SET_SHOW_RELOCATE_CONFIRM", value: false });
+        onRefresh();
+        return;
+      }
       const res = await fetch(`/api/corporations/${corpId}/relocate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -167,8 +198,11 @@ export default function CeoAdminSubtab({
       } else {
         dispatch({ type: "SET_RELOCATE_ERROR", value: data.error || "Failed to relocate" });
       }
-    } catch {
-      dispatch({ type: "SET_RELOCATE_ERROR", value: "Network error" });
+    } catch (error) {
+      dispatch({
+        type: "SET_RELOCATE_ERROR",
+        value: error instanceof Error ? error.message : "Network error",
+      });
     } finally {
       dispatch({ type: "SET_RELOCATING", value: false });
     }
@@ -504,39 +538,51 @@ export default function CeoAdminSubtab({
       {/* Relocate Corporation */}
       <div className="rounded-xl border border-card-border bg-card p-6">
         <h2 className="text-lg font-bold text-foreground mb-2">Relocate Headquarters</h2>
-        <p className="text-sm text-muted mb-1">
-          Move your corporate headquarters to a new state or region. Cost:{" "}
-          <strong>{(RELOCATION_COST_FRACTION * 100).toFixed(0)}% of market capitalization</strong>{" "}
-          in-country, <strong>doubled</strong> for moves to another country.
-        </p>
-        <p className="text-sm text-muted mb-4">
-          Current HQ: <strong>{corporation.headquartersStateName}</strong> - Market cap:{" "}
-          <strong>
-            {(() => {
-              // `relocationMarketCapBasis` is sharePrice × totalShares in corp LOCAL;
-              // anchor-normalize before display so viewer wallet-pref conversion lands
-              // correctly.
-              const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
-              const anchor = code
-                ? toInternalFrom(relocationMarketCapBasis, code)
-                : relocationMarketCapBasis;
-              return formatAmount(anchor, code);
-            })()}
-          </strong>{" "}
-          — Relocation cost:{" "}
-          <strong>
-            {(() => {
-              const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
-              const anchor = code ? toInternalFrom(relocationCost, code) : relocationCost;
-              return formatAmount(anchor, code);
-            })()}
-          </strong>
-          {isCrossCountry && (
-            <span className="ml-2 inline-block rounded bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning">
-              Cross-country move — cost doubled
-            </span>
-          )}
-        </p>
+        {corporation.federationPendingHeadquartersId ? (
+          <p className="text-sm text-muted mb-4">
+            Your firm is protected after a federation split. Choose a headquarters in a playable
+            country to resume operations. This settlement choice has no relocation fee; affected
+            local facilities are handled as compensation claims.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-muted mb-1">
+              Move your corporate headquarters to a new state or region. Cost:{" "}
+              <strong>
+                {(RELOCATION_COST_FRACTION * 100).toFixed(0)}% of market capitalization
+              </strong>{" "}
+              in-country, <strong>doubled</strong> for moves to another country.
+            </p>
+            <p className="text-sm text-muted mb-4">
+              Current HQ: <strong>{corporation.headquartersStateName}</strong> - Market cap:{" "}
+              <strong>
+                {(() => {
+                  // `relocationMarketCapBasis` is sharePrice × totalShares in corp LOCAL;
+                  // anchor-normalize before display so viewer wallet-pref conversion lands
+                  // correctly.
+                  const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
+                  const anchor = code
+                    ? toInternalFrom(relocationMarketCapBasis, code)
+                    : relocationMarketCapBasis;
+                  return formatAmount(anchor, code);
+                })()}
+              </strong>{" "}
+              — Relocation cost:{" "}
+              <strong>
+                {(() => {
+                  const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
+                  const anchor = code ? toInternalFrom(relocationCost, code) : relocationCost;
+                  return formatAmount(anchor, code);
+                })()}
+              </strong>
+              {isCrossCountry && (
+                <span className="ml-2 inline-block rounded bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning">
+                  Cross-country move — cost doubled
+                </span>
+              )}
+            </p>
+          </>
+        )}
         <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">
           <p className="font-medium text-foreground">CEO residency warning</p>
           <p className="mt-1 text-muted">
@@ -598,7 +644,7 @@ export default function CeoAdminSubtab({
             </select>
           </div>
 
-          {relocateTarget && (
+          {relocateTarget && !corporation.federationPendingHeadquartersId && (
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">
                 Payment Method
@@ -665,7 +711,11 @@ export default function CeoAdminSubtab({
           {relocateTarget && !showRelocateConfirm && (
             <button
               onClick={() => dispatch({ type: "SET_SHOW_RELOCATE_CONFIRM", value: true })}
-              disabled={relocatePayment === "cash" && !canPayCash}
+              disabled={
+                !corporation.federationPendingHeadquartersId &&
+                relocatePayment === "cash" &&
+                !canPayCash
+              }
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               Relocate to{" "}
@@ -682,20 +732,26 @@ export default function CeoAdminSubtab({
                 </strong>
                 ?
               </p>
-              <p className="text-xs text-muted mb-3">
-                This will cost{" "}
-                <strong>
-                  {(() => {
-                    const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
-                    const anchor = code ? toInternalFrom(relocationCost, code) : relocationCost;
-                    return formatAmount(anchor, code);
-                  })()}
-                </strong>
-                {relocatePayment === "bond"
-                  ? " financed via a 7-year bond at the current market rate."
-                  : " deducted from Liquid Capital."}
-                {isCrossCountry && " Cross-country move — cost doubled."}
-              </p>
+              {corporation.federationPendingHeadquartersId ? (
+                <p className="text-xs text-muted mb-3">
+                  This protected choice has no relocation fee.
+                </p>
+              ) : (
+                <p className="text-xs text-muted mb-3">
+                  This will cost{" "}
+                  <strong>
+                    {(() => {
+                      const code = corporation.liquidCurrencyCode as CurrencyCode | undefined;
+                      const anchor = code ? toInternalFrom(relocationCost, code) : relocationCost;
+                      return formatAmount(anchor, code);
+                    })()}
+                  </strong>
+                  {relocatePayment === "bond"
+                    ? " financed via a 7-year bond at the current market rate."
+                    : " deducted from Liquid Capital."}
+                  {isCrossCountry && " Cross-country move — cost doubled."}
+                </p>
+              )}
               <div className="flex items-center gap-3">
                 {corporation.isPrivate ? (
                   <button

@@ -1,9 +1,8 @@
 /**
  * USSR (SU) Layer-1 demographic model — census-consuming rebuild.
  *
- * The USSR is seeded in the 1953 and 1979 presets, but this remains a
- * single-era model: `getRuModel(era)` returns the same 1979 model for any era
- * it is asked for.
+ * The USSR is seeded in the 1953 and 1979 presets. The 2027 Russian
+ * Federation resolves to the separate adult-census model in layer1Modern.
  *
  * Architecture mirrors the CN model:
  *   - dims: ["ethnicity","age","education","income","urbanization"]
@@ -25,6 +24,7 @@ import type { CountryLayer1Model, DemographicPosition } from "@/lib/seeds/intern
 import { ruRegionCensusData, type SURegionLayer1 } from "@/lib/seeds/ru/ruRegionCensusData";
 import { ruRegionCensusData1953 } from "@/lib/seeds/ru/ruRegionCensusData1953";
 import type { EraId } from "@/lib/seeds/presetSelector";
+import { getRuModernModel } from "./layer1Modern";
 
 export const SU_GROUP_IDS = [
   "party_nomenklatura",
@@ -228,6 +228,7 @@ const ERA_POSITIONS: Partial<Record<EraId, EraPositions>> = {
 };
 
 export function getRuModel(era: EraId): CountryLayer1Model {
+  if (era === "2027") return getRuModernModel();
   const census = ERA_CENSUS[era] ?? ruRegionCensusData;
   const positions = ERA_POSITIONS[era] ?? POSITIONS_1979;
   return {

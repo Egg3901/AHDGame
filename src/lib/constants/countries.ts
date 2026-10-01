@@ -36,6 +36,12 @@ import { NG_ERAS } from "@/lib/countries/ng/eras";
 import { PL_ERAS } from "@/lib/countries/pl/eras";
 import { RO_ERAS } from "@/lib/countries/ro/eras";
 import { RU_ERAS } from "@/lib/countries/ru/eras";
+import { RU_RUSSIAN_1991 } from "@/lib/countries/ru/russian1991Config";
+import {
+  ru1991PresidentialConfig,
+  ru1993DissolvedCongressConfig,
+  ru1993FederalAssemblyConfig,
+} from "@/lib/countries/ru/runtimeInstitutions";
 import { SE_ERAS } from "@/lib/countries/se/eras";
 import { TR_ERAS } from "@/lib/countries/tr/eras";
 import { UK_ERAS } from "@/lib/countries/uk/eras";
@@ -1098,12 +1104,16 @@ export function canonicalRegionId(countryId: CountryId | string, regionParam: st
 export type EraCountryConfigOverride = Partial<
   Pick<
     CountryConfig,
+    | "name"
+    | "flagEmoji"
     | "executiveTitle"
     | "headOfStateTitle"
+    | "executiveRealmPhrase"
     | "governmentType"
     | "governmentTypeLabel"
     | "coalitionThreshold"
     | "legislature"
+    | "subNationalChamber"
     | "lowerElectionSystem"
     | "upperElectionSystem"
     | "electionSystems"
@@ -1114,10 +1124,16 @@ export type EraCountryConfigOverride = Partial<
     | "regionLabel"
     | "regionLabelPlural"
     | "rulingPartyId"
+    | "headOfStateSelection"
     | "majorPartyIds"
+    | "currencyCode"
     | "usdExchangeRate"
+    | "centralGovernmentLabel"
+    | "exchangeName"
+    | "exchangeKind"
     | "onePartyRegionalBudget"
     | "federalEqualizationGrantPerCapita"
+    | "priorityProfile"
   >
 >;
 
@@ -1205,6 +1221,24 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
   // are ever consulted. DE/IE/CN each carried a `1991-default` config that
   // reached nothing until they were added below — the folder looked right and
   // the value never applied. Adding an era override means editing BOTH places.
+  // 2027 eurozone: FR/IT/ES/GR/AT/FI seed budgets in EUR (see
+  // convertEuroMemberBudgetsFor2027), so their GDP→₳ normalization must be the
+  // euro-anchored value, not the base legacy-currency rate. Each era file shows
+  // the derivation (base × R_legacy/R_EUR from the seeder's rate table). DE is
+  // already EUR and IE converts at 1.0, so neither needs an entry.
+  "2027-default": {
+    FR: FR_ERAS["2027-default"]?.config,
+    IT: IT_ERAS["2027-default"]?.config,
+    ES: ES_ERAS["2027-default"]?.config,
+    GR: GR_ERAS["2027-default"]?.config,
+    AT: AT_ERAS["2027-default"]?.config,
+    FI: FI_ERAS["2027-default"]?.config,
+    HU: HU_ERAS["2027-default"]?.config,
+    RO: RO_ERAS["2027-default"]?.config,
+    BG: BG_ERAS["2027-default"]?.config,
+    PL: PL_ERAS["2027-default"]?.config,
+    RU: RU_ERAS["2027-default"]?.config,
+  },
   "1991-default": {
     UK: UK_ERAS["1991-default"]?.config,
     JP: JP_ERAS["1991-default"]?.config,
@@ -1215,6 +1249,13 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     DE: DE_ERAS["1991-default"]?.config,
     IE: IE_ERAS["1991-default"]?.config,
     CN: CN_ERAS["1991-default"]?.config,
+    PL: PL_ERAS["1991-default"]?.config,
+    HU: HU_ERAS["1991-default"]?.config,
+    CS: CS_ERAS["1991-default"]?.config,
+    BG: BG_ERAS["1991-default"]?.config,
+    YU: YU_ERAS["1991-default"]?.config,
+    RO: RO_ERAS["1991-default"]?.config,
+    RU: RU_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: US_ERAS["1953-default"]?.config,
@@ -1256,6 +1297,68 @@ export function getCountryConfig(id: CountryId, preset?: string): CountryConfig 
   return { ...base, ...override };
 }
 
+/** Resolve the Soviet-to-Russian settlement, then the elected Russian offices.
+ * Callers without world state receive the January 1991 Soviet seed config. */
+export function getCountryConfigForRuntime(
+  id: CountryId,
+  preset: string | undefined,
+  countryState?: {
+    ruSovietSuccessionSinceTurn?: number;
+    ruProvisionalCongressSeats?: number;
+    ruPresidencySinceTurn?: number;
+    ruCongressDissolvedSinceTurn?: number;
+    ruFederalAssemblySinceTurn?: number;
+  } | null
+): CountryConfig {
+  const config = getCountryConfig(id, preset);
+  if (id !== "RU" || preset !== "1991-default") return config;
+  // Existing saves may already carry a later Russian office marker from the
+  // old scheduler. Preserve that alternate history even without the newer
+  // explicit succession marker; fresh worlds have none of these fields.
+  const russian =
+    countryState?.ruSovietSuccessionSinceTurn != null ||
+    countryState?.ruPresidencySinceTurn != null ||
+    countryState?.ruCongressDissolvedSinceTurn != null ||
+    countryState?.ruFederalAssemblySinceTurn != null
+      ? { ...config, ...RU_RUSSIAN_1991.config }
+      : config;
+  const provisionalSeats = countryState?.ruProvisionalCongressSeats;
+  if (
+    provisionalSeats != null &&
+    (!Number.isSafeInteger(provisionalSeats) || provisionalSeats < 1)
+  ) {
+    throw new Error("Provisional Russian Congress capacity must be a positive integer");
+  }
+  const effectiveCongress =
+    countryState?.ruSovietSuccessionSinceTurn != null && provisionalSeats != null
+      ? {
+          ...russian,
+          coalitionThreshold: Math.floor(provisionalSeats / 2) + 1,
+          legislature: {
+            ...russian.legislature,
+            lowerChamber: {
+              ...russian.legislature.lowerChamber,
+              seats: provisionalSeats,
+              description: `${provisionalSeats} seats retained from the negotiated Soviet territorial settlement; existing vacancies remain unfilled.`,
+            },
+          },
+        }
+      : russian;
+  const presidential =
+    countryState?.ruPresidencySinceTurn != null ||
+    countryState?.ruCongressDissolvedSinceTurn != null ||
+    countryState?.ruFederalAssemblySinceTurn != null
+      ? ru1991PresidentialConfig(effectiveCongress)
+      : effectiveCongress;
+  if (countryState?.ruFederalAssemblySinceTurn != null) {
+    return ru1993FederalAssemblyConfig(presidential);
+  }
+  if (countryState?.ruCongressDissolvedSinceTurn != null) {
+    return ru1993DissolvedCongressConfig(presidential);
+  }
+  return presidential;
+}
+
 /**
  * Per-era country display-name overrides. A country's `name` in COUNTRY_CONFIGS is
  * the era-neutral default; some countries are known by a different name in a given
@@ -1269,6 +1372,9 @@ export const ERA_COUNTRY_NAMES: Record<string, Partial<Record<CountryId, string>
   },
   "1979-default": {
     DE: "West Germany",
+    RU: "Soviet Union",
+  },
+  "1991-default": {
     RU: "Soviet Union",
   },
 };
@@ -1296,6 +1402,17 @@ export function getExecutiveOfficeKey(countryId: CountryId, preset?: string): st
   const executive = config.officeTypes.find((o) => o.isExecutive && !o.isSubNational);
   if (!executive) throw new Error(`No executive office type found for ${countryId}`);
   return executive.key;
+}
+
+/** The office filled by parliamentary government formation, which may differ
+ * from the first executive office in a semi-presidential country. */
+export function getHeadOfGovernmentOfficeKey(countryId: CountryId, preset?: string): string {
+  const config = getCountryConfig(countryId, preset);
+  const office = config.officeTypes.find(
+    (candidate) =>
+      candidate.isExecutive && !candidate.isSubNational && candidate.label === config.executiveTitle
+  );
+  return office?.key ?? getExecutiveOfficeKey(countryId, preset);
 }
 
 const COUNTRY_NAME_TO_ID: Record<string, CountryId> = Object.fromEntries(

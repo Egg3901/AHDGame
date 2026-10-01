@@ -208,8 +208,8 @@ describe("1953 era usdExchangeRate overrides", () => {
         ).toBe(COUNTRY_CONFIGS[countryId].usdExchangeRate);
       }
     }
-    // Only 1953 and 1991 carry usdExchangeRate overrides at all.
-    const ANCHORED_ERAS = new Set(["1953-default", "1991-default"]);
+    // The 2027 seed now carries its own authored currency anchors as well.
+    const ANCHORED_ERAS = new Set(["1953-default", "1991-default", "2027-default"]);
     for (const [preset, table] of Object.entries(ERA_COUNTRY_CONFIG_OVERRIDES)) {
       if (ANCHORED_ERAS.has(preset)) continue;
       for (const override of Object.values(table)) {

@@ -132,6 +132,7 @@ export function readinessCountryIds(preset: string): CountryId[] {
 export interface NationalBudgetExpectation {
   countryId: string;
   budgetId: string;
+  currencyCode: string;
   gdp: number;
   population: number;
   debtPrincipal: number;
@@ -347,6 +348,7 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
     nationalBudgets: configs.map((c) => ({
       countryId: c.countryId,
       budgetId: c.budgetId,
+      currencyCode: c.currencyCode,
       gdp: c.gdp,
       population: c.population,
       debtPrincipal: c.debt.principal,
@@ -356,8 +358,11 @@ export function buildSeedExpectations(preset: string): SeedExpectations {
       inflationRate: c.economicFactors.inflationRate,
     })),
     seededCountryIds,
-    forexRates: getInitialRates(preset),
-    forexActiveCountries: FOREX_ACTIVE_COUNTRIES,
+    forexRates:
+      preset === "2027-default"
+        ? { ...getInitialRates(preset), BG: getInitialRates(preset).DE }
+        : getInitialRates(preset),
+    forexActiveCountries: monetaryScope.forexCountries,
     monetaryCoverage: {
       centralBankCountries: monetaryScope.centralBankCountries,
       exclusions: monetaryScope.exclusions,

@@ -507,9 +507,11 @@ export default function CreateCharacterPage() {
       ? { economic: selectedParty.economicPosition, social: selectedParty.socialPosition }
       : null;
 
-  const { currencyCode } = resolveStartingCurrency(country, creationInfo?.baseRates);
-  // Same function the API route applies, so preview == grant.
+  // Same function the API route applies, so preview == grant. The preset must
+  // thread through too: a 2027 euro-member preview prices in EUR, matching
+  // the EUR grant, instead of the legacy code at the legacy rate.
   const worldPreset = creationInfo?.preset;
+  const { currencyCode } = resolveStartingCurrency(country, creationInfo?.baseRates, worldPreset);
   const wealthOptions = WEALTH_LEVELS.map(({ value, label }) => ({
     value,
     label,
@@ -517,7 +519,8 @@ export default function CreateCharacterPage() {
       convertStartingAnchorToLocal(
         getWealthBonus(value, worldPreset),
         country,
-        creationInfo?.baseRates
+        creationInfo?.baseRates,
+        worldPreset
       ),
       currencyCode
     ),
@@ -528,7 +531,8 @@ export default function CreateCharacterPage() {
         convertStartingAnchorToLocal(
           getWealthBonus(formData.demographics.wealth as WealthLevel, worldPreset),
           country,
-          creationInfo?.baseRates
+          creationInfo?.baseRates,
+          worldPreset
         ),
         currencyCode
       )

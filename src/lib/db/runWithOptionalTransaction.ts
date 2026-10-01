@@ -19,6 +19,8 @@ let warnedNonAtomicFallback = false;
  * Production topology is deployment state. Verify it with the boot probe and a
  * transaction against the target deployment instead of inferring it from this
  * helper or from the connection string.
+ * Callers moving money on standalone deployments must use keyed idempotent
+ * legs in `src/lib/db/nonAtomicMoneyFlow.ts` to reconcile partial writes.
  */
 export async function runWithOptionalTransaction<T>(
   runInTransaction: (session: ClientSession) => Promise<T>,

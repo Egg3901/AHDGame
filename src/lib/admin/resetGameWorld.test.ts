@@ -344,6 +344,7 @@ describe("resetGameWorld", () => {
       "lastExtractionAutoStrategyTurn",
       "lastBundestagReconciledCycle",
       "lastCabinetYearProcessed",
+      "huAssemblyReformedAtYear",
       "currentEraId",
       "lastEraCrossedYear",
       "lastMetricActivationYear",

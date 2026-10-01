@@ -82,7 +82,7 @@ const MAX_SIM_TURNS = 1000;
 // advertised in the tool schema nor accepted). Pure constant module: no Mongo,
 // no env, safe to import eagerly.
 const MARKET_MODES = MARKET_MODE_ORDER;
-const AUTONOMY_LEVELS = ["off", "v0", "v1", "v2", "v3", "v4"] as const;
+const AUTONOMY_LEVELS = ["v3", "v4", "v5"] as const;
 
 // ---------------------------------------------------------------------------
 // Tool definitions. Hand-written JSON Schema rather than zod-to-json-schema:

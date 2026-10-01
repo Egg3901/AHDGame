@@ -16,12 +16,17 @@ import type { ElectedOfficial, State } from "@/lib/db/types";
  * Byelorussia and the Baltics are their own countries now and took their
  * districts with them). The static config coalitionThreshold stays nominal.
  *
- * Returns null when the preset seeds no RU regions (2019/1991) — the caller
- * skips the upsert and RU stays formation-less by design.
+ * In 1991 the region bundle contains the 2,250-seat Soviet Union Congress, but the
+ * preset has no historical Soviet executive officials. Open a neutral pending
+ * formation rather than assigning the already contested government to the
+ * Cold War CPSU row. The known Pavlov cabinet needs its own authored seat
+ * roster; pending describes the game bootstrap, not a historical vacancy.
+ * Returns null when the preset seeds no RU regions.
  */
 export async function buildRuGovernmentFormation(
   db: Db,
-  now: Date
+  now: Date,
+  preset: string
 ): Promise<Omit<GovernmentFormation, "createdAt" | "updatedAt"> | null> {
   const regions = await db
     .collection<State>("states")
@@ -31,6 +36,34 @@ export async function buildRuGovernmentFormation(
 
   const totalSeats = regions.reduce((sum, r) => sum + (r.houseDistricts ?? 0), 0);
   const majorityThreshold = Math.floor(totalSeats / 2) + 1;
+
+  if (preset === "1991-default" || preset === "2027-default") {
+    return {
+      _id: "RU",
+      countryId: "RU",
+      cycle: 1,
+      status: "pending",
+      formationType: null,
+      lostMajority: false,
+      pmCharacterId: null,
+      pmNppId: null,
+      pmName: null,
+      governingPartyId: null,
+      coalitionId: null,
+      coalitionPartyIds: null,
+      totalSeatsSupporting: 0,
+      majorityThreshold,
+      seatsByParty: {},
+      totalSeats,
+      activeVoteId: null,
+      formedAt: null,
+      formedTurn: null,
+      collapsedAt: null,
+      hosCharacterId: null,
+      hosNppId: null,
+      hosName: null,
+    };
+  }
 
   const premier = await db
     .collection<ElectedOfficial>("electedOfficials")

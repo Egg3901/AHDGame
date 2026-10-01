@@ -562,6 +562,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       balances: lookups.globalCommodityBalances,
+      initializedLaggedBooks: lookups.initializedLaggedBooks,
       // Era worlds: one book per seller home country, scoped to the demand the
       // trade graph lets that country reach (embargoes/tariffs/autarky). Null
       // on modern worlds → the single worldwide book, unchanged.

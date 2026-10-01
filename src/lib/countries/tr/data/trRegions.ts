@@ -1,8 +1,8 @@
 import type { State } from "@/lib/db/types";
 
 /**
- * Turkey regions as State-compatible documents (1979; Turkey is 1979-preset-only
- * here). Eight macro-regions group the 67 provinces of the era.
+ * Turkey regions as State-compatible documents for the 1979 preset.
+ * Eight macro-regions group the 67 provinces of the era.
  * SEED INDEPENDENCE — ~1979 values (pop ≈ 43.5M; GDP ≈ ₺2,200B lira).
  *
  * houseDistricts = National Assembly seats (sum = 450). stateSenateSeats ≈ Senate

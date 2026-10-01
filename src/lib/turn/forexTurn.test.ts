@@ -125,6 +125,28 @@ beforeEach(() => {
 });
 
 describe("processForexTurn", () => {
+  it("mirrors the ECB euro rate into Bulgaria only in 2027", async () => {
+    const previousFindOne = db.collectionMocks.exchangeRates.findOne.getMockImplementation();
+    db.collectionMocks.exchangeRates.findOne.mockImplementation((filter: { _id: string }) =>
+      filter._id === "DE"
+        ? Promise.resolve(makeExchangeRate("DE", "EUR", 0.92, 0.92))
+        : previousFindOne?.(filter)
+    );
+    await processForexTurn(db as unknown as Db, 50, "2027-default");
+    expect(db.collectionMocks.exchangeRates.updateOne).toHaveBeenCalledWith(
+      { _id: "BG", currencyCode: "EUR" },
+      expect.objectContaining({ $set: expect.objectContaining({ rate: 0.92 }) })
+    );
+
+    db.collectionMocks.exchangeRates.updateOne.mockClear();
+    await processForexTurn(db as unknown as Db, 50, "1991-default");
+    expect(
+      db.collectionMocks.exchangeRates.updateOne.mock.calls.some(
+        (call: Array<{ _id: string }>) => call[0]._id === "BG"
+      )
+    ).toBe(false);
+  });
+
   it("updates all 3 forex-active countries", async () => {
     const result = await processForexTurn(db as unknown as Db, 50);
     expect(result.countriesUpdated).toBe(3);

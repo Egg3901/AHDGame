@@ -461,7 +461,27 @@ class InMemoryCollection {
     let rows = this.docs.filter((d) => matchesFilter(d, filter)).map(clone);
     const cursor = {
       project: () => cursor,
-      sort: () => cursor,
+      sort: (spec: Record<string, number>) => {
+        rows.sort((a, b) => {
+          for (const [field, direction] of Object.entries(spec)) {
+            const comparable = (value: unknown): number | string | null | undefined =>
+              value instanceof Date
+                ? value.getTime()
+                : value instanceof ObjectId
+                  ? value.toHexString()
+                  : (value as number | string | null | undefined);
+            const av = comparable(getPath(a, field));
+            const bv = comparable(getPath(b, field));
+            if (av === bv || (av == null && bv == null)) continue;
+            const order = direction < 0 ? -1 : 1;
+            if (av == null) return -order;
+            if (bv == null) return order;
+            return (av < bv ? -1 : 1) * order;
+          }
+          return 0;
+        });
+        return cursor;
+      },
       limit: (n: number) => {
         rows = rows.slice(0, n);
         return cursor;
@@ -614,7 +634,8 @@ class InMemoryCollection {
     return this.docs.filter((d) => matchesFilter(d, filter)).length;
   }
 
-  async bulkWrite(ops: Doc[]): Promise<{ modifiedCount: number }> {
+  async bulkWrite(ops: Doc[]): Promise<{ matchedCount: number; modifiedCount: number }> {
+    let matched = 0;
     let modified = 0;
     for (const op of ops) {
       if (op.updateOne) {
@@ -624,6 +645,7 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.updateOne(filter, update, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
@@ -634,10 +656,12 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.replaceOne(filter, replacement, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.deleteMany) {
         const { filter } = op.deleteMany as { filter: Doc };
@@ -652,7 +676,7 @@ class InMemoryCollection {
         throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
-    return { modifiedCount: modified };
+    return { matchedCount: matched, modifiedCount: modified };
   }
 
   /**

@@ -21,7 +21,8 @@
  *      exists yet;
  *   4. returns a summary the caller stamps on the sim run manifest.
  *
- * Findings never throw — the sim continues regardless. A diagnostic throw is
+ * Findings never throw from this helper. The worldsim runner decides whether
+ * to advance turns after inspecting the result. A diagnostic throw is
  * persisted as a `diagnostic_error` report and returned as `diagnostic-error`
  * so the failure stays visible. Resumed and live-clone runs never reach this
  * (they skip bootstrap), and a pre-existing worldsim-post-bootstrap report
@@ -185,8 +186,8 @@ export async function runWorldsimBootstrapConformance(
     };
   }
 
-  // Findings never abort the sim, but a world with criticals (or any other
-  // reason the seed is suspect) must not become the drift reference.
+  // A world with criticals (or any other reason the seed is suspect) must not
+  // become the drift reference.
   let baselineCaptured = false;
   if (report.summary.critical === 0) {
     const stored = await loadSeedBaseline(db);

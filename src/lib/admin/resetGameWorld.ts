@@ -81,6 +81,8 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   lastBundestagReconciledCycle: "",
   // Cabinet year-crossing guard (seat unlock/retire/rename vs the live year).
   lastCabinetYearProcessed: "",
+  // A new 1991 world must reach the 2014 Assembly reform on its own timeline.
+  huAssemblyReformedAtYear: "",
   // Era-crossing state. `eraCrossing.ts` self-heals `currentEraId` on the next
   // turn, but `lastEraCrossedYear` is a `currentYear > lastEraCrossedYear` guard
   // like the census one, so a 2010 value silences decade-crossing news until 2011.

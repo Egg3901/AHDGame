@@ -9,6 +9,8 @@
  */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import { BGN_PER_EUR, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
+import { isRubleAdopted, RU_2027_RUB_PER_USD } from "@/lib/currency/rules/rubleTransition";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
@@ -28,6 +30,7 @@ import { GR_ECONOMY } from "@/lib/countries/gr/economy";
 import { AT_ECONOMY } from "@/lib/countries/at/economy";
 import { FI_ECONOMY } from "@/lib/countries/fi/economy";
 import { PL_ECONOMY } from "@/lib/countries/pl/economy";
+import { PL_JANUARY_1991_PLZ_PER_USD } from "@/lib/countries/pl/data/plFiscal1991";
 import { HU_ECONOMY } from "@/lib/countries/hu/economy";
 import { RO_ECONOMY } from "@/lib/countries/ro/economy";
 import { YU_ECONOMY } from "@/lib/countries/yu/economy";
@@ -56,10 +59,14 @@ export type CurrencyCode =
   | "HUF"
   | "PLZ"
   | "ROL"
+  | "PLN"
+  | "RON"
   | "YUD"
   | "BGL"
+  | "BGN"
   | "CSK"
   | "SUR"
+  | "RUB"
   | "FRF"
   | "ITL"
   | "ESP"
@@ -84,10 +91,14 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
   "HUF",
   "PLZ",
   "ROL",
+  "PLN",
+  "RON",
   "YUD",
   "BGL",
+  "BGN",
   "CSK",
   "SUR",
+  "RUB",
   "FRF",
   "ITL",
   "ESP",
@@ -159,10 +170,14 @@ export const CURRENCY_ANCHOR_COUNTRY: Record<CurrencyCode, CountryId> = {
   HUF: "HU",
   PLZ: "PL",
   ROL: "RO",
+  PLN: "PL",
+  RON: "RO",
   YUD: "YU",
   BGL: "BG",
+  BGN: "BG",
   CSK: "CS",
   SUR: "RU", // Soviet ruble — anchor is the USSR/Russia entity (shared by RU + BY + BAL)
+  RUB: "RU", // Modern Russian ruble — same RU anchor, active only in the 2027 preset (see getSeedCurrencyCode)
   FRF: "FR",
   ITL: "IT",
   ESP: "ES",
@@ -228,6 +243,7 @@ export const FOREX_ACTIVE_CURRENCIES: CurrencyCode[] = [
   "BRL",
   "NGN",
   "SUR",
+  "RUB",
   "DDM",
   "FRF",
   "ITL",
@@ -250,6 +266,7 @@ export const ZOD_ACTIVE_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyC
   "BRL",
   "NGN",
   "SUR",
+  "RUB",
   "DDM",
   "FRF",
   "ITL",
@@ -605,10 +622,49 @@ export const INITIAL_RATES_1979: Partial<Record<CountryId, number>> = {
  * Return the initial exchange rates for the given preset.
  * Falls back to INITIAL_RATES (2019-era) for unknown presets.
  */
+export const INITIAL_RATES_2027: Partial<Record<CountryId, number>> = {
+  ...INITIAL_RATES,
+  // 2024 annual USD averages from the issuing central banks. The modern
+  // regional GDP anchors are also observed in 2024 PLN and RON, respectively.
+  // https://nbp.pl/wp-content/uploads/2025/06/Financial-Statements-of-Narodowy-Bank-Polski-as-at-31-December-2024.pdf
+  // https://muzeu.bnr.ro/uploads/2025-03-07monthlybulletinno.012025_documentpdf_545_1743160358.pdf
+  PL: 3.9812,
+  RO: 4.5984,
+  // ECB irrevocable parity: 1 EUR = 1.95583 BGN from 1 January 2026.
+  // The 2027 game EUR anchor is 0.92 EUR per internal unit, so this legacy
+  // cross-rate yields exactly 1/1.95583 when BGN figures become EUR.
+  // https://www.ecb.europa.eu/press/pr/date/2026/html/ecb.pr260101~c830245e42.en.html
+  BG: BGN_PER_EUR * 0.92,
+  // Latest completed annual NBH average, reported by KSH for 2025. This is
+  // an explicit fallback for the future preset, not a 2027 observation.
+  // https://www.ksh.hu/evkonyvek/2025/magyar-statisztikai-zsebkonyv-2025/pdf/statistical_pocketbook_of_hungary_2025.pdf
+  HU: 353.2,
+  // Explicit RUB fallback for the future preset, not a 2027 observation:
+  // 1 / 0.01081 USD-per-ruble, the usdExchangeRate authored on RU_2027
+  // (World Bank 2024 nominal GDP USD 2,173,836M over Rosstat 2024 GDP RUB
+  // 201,152,000M). See RU_2027_RUB_PER_USD.
+  RU: RU_2027_RUB_PER_USD,
+};
+
+/** World Bank WDI PA.NUS.FCRF, annual 2019 local currency per USD.
+ * https://api.worldbank.org/v2/country/RUS;POL;HUN;ROU;BGR/indicator/PA.NUS.FCRF?date=2019&format=json
+ * These override Cold War placeholders only for the five post-Soviet NPP
+ * countries added to the 2019 world. Other 2019 rates remain unchanged. */
+export const INITIAL_RATES_2019_TRANSITION: Partial<Record<CountryId, number>> = {
+  ...INITIAL_RATES,
+  RU: 64.7376583333333,
+  PL: 3.839375,
+  HU: 290.66,
+  RO: 4.237925,
+  BG: 1.74704166666667,
+};
+
 export function getInitialRates(preset: string): Partial<Record<CountryId, number>> {
   if (preset === "1953-default") return INITIAL_RATES_1953;
   if (preset === "1979-default") return INITIAL_RATES_1979;
   if (preset === "1991-default") return INITIAL_RATES_1991;
+  if (preset === "2019-default") return INITIAL_RATES_2019_TRANSITION;
+  if (preset === "2027-default") return INITIAL_RATES_2027;
   // 1999 and 2007 have no authored table and used to fall through to the 2019
   // one, so a 1999 world started with 2019 money: Nigeria at 1550 naira/USD
   // when the real 1999 rate was about 97, a 16x error on day one. Interpolate
@@ -740,10 +796,14 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   HUF: "Ft",
   PLZ: "zł",
   ROL: "lei",
+  PLN: "zł",
+  RON: "lei",
   YUD: "din",
   BGL: "лв",
+  BGN: "лв",
   CSK: "Kčs",
   SUR: "руб",
+  RUB: "₽",
   FRF: "₣",
   ITL: "₤",
   ESP: "₧",
@@ -782,6 +842,23 @@ export function getEraAwareCurrencySymbol(
   if (code === "BRL" && preset === "1953-default") return "Cr$";
   if (code === "BRL" && PRE_REAL_PRESETS.has(preset)) return "BRL eq.";
   return CURRENCY_SYMBOLS[code] ?? code;
+}
+
+/**
+ * Seed-time home currency for a country in a preset. Era-blind
+ * {@link COUNTRY_CURRENCY_MAP} stays the identity source for every other era;
+ * only a 2027-default bootstrap resolves euro members to EUR (see
+ * `isEuroAdopted`), RU to RUB, PL to PLN and RO to RON. Every other country
+ * and every other preset pass through unchanged, so 1991 behavior is
+ * byte-identical.
+ */
+export function getSeedCurrencyCode(countryId: CountryId, preset: string): CurrencyCode {
+  if (isEuroAdopted(countryId, preset)) return "EUR";
+  if (isRubleAdopted(countryId, preset)) return "RUB";
+  if ((preset === "2019-default" || preset === "2027-default") && countryId === "PL") return "PLN";
+  if ((preset === "2019-default" || preset === "2027-default") && countryId === "RO") return "RON";
+  if (preset === "2019-default" && countryId === "BG") return "BGN";
+  return COUNTRY_CURRENCY_MAP[countryId];
 }
 
 /** Baseline real-economy values per country for FX macro drift. */
@@ -896,6 +973,20 @@ export function eraRateForCurrency(
 ): number | undefined {
   if (!code) return undefined;
   const eraRates = getInitialRates(preset ?? "");
+  // Modern codes have no era-blind COUNTRY_CURRENCY_MAP entry; that map keeps
+  // each predecessor's Cold War/1991 identity. PLN/RON are valid only in 2027.
+  if (
+    (code === "PLN" || code === "RON" || code === "BGN") &&
+    preset !== "2019-default" &&
+    preset !== "2027-default"
+  )
+    return undefined;
+  if (code === "BGN" && preset !== "2019-default") return undefined;
+  if (code === "RUB" || code === "PLN" || code === "RON" || code === "BGN") {
+    const countryId = CURRENCY_ANCHOR_COUNTRY[code];
+    const rate = eraRates[countryId] ?? INITIAL_RATES[countryId];
+    return rate !== undefined && rate > 0 ? rate : undefined;
+  }
   for (const [countryId, assigned] of Object.entries(COUNTRY_CURRENCY_MAP)) {
     if (assigned !== code) continue;
     const rate = eraRates[countryId as CountryId] ?? INITIAL_RATES[countryId as CountryId];

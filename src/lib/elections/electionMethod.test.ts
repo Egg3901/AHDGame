@@ -32,7 +32,7 @@ describe("positionForElectionType", () => {
   });
 
   it("maps upper-chamber types", () => {
-    for (const t of ["senate", "sangiin", "seanad"]) {
+    for (const t of ["senate", "senat", "sangiin", "seanad"]) {
       expect(positionForElectionType(t)).toBe("upperChamber");
     }
   });

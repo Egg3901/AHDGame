@@ -41,7 +41,12 @@ export async function POST() {
       );
     }
 
-    const result = await grantOnboardingReward(db, character, gameState?.currentTurn ?? 0);
+    const result = await grantOnboardingReward(
+      db,
+      character,
+      gameState?.currentTurn ?? 0,
+      gameState?.preset
+    );
     if (!result.granted) {
       // Lost a race with a concurrent claim — the stamp already exists.
       return NextResponse.json({ success: true, alreadyClaimed: true, amount: 0 });
