@@ -707,14 +707,12 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     const oldContract = await db.collection("bonds").findOne({ _id: sovietBondId });
     expect(oldContract).not.toBeNull();
     // Borrowing after the split must not enter the approved inherited inventory.
-    await db
-      .collection("bonds")
-      .insertOne({
-        ...oldContract!,
-        _id: new ObjectId(),
-        totalIssued: 2000,
-        holders: [{ units: 2 }],
-      });
+    await db.collection("bonds").insertOne({
+      ...oldContract!,
+      _id: new ObjectId(),
+      totalIssued: 2000,
+      holders: [{ units: 2 }],
+    });
     const sourceBefore = await db.collection<Fixture>("federalBudget").findOne({ _id: "RU" });
     const macrosBefore = await db
       .collection<Fixture>("macroCountries")

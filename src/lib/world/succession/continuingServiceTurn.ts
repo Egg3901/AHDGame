@@ -9,7 +9,7 @@ import type { CountryGameState } from "@/lib/db/types";
 import type { Bond } from "@/lib/db/types/bond";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
-import { CURRENCY_ANCHOR_COUNTRY } from "@/lib/constants/currencies";
+import { CURRENCY_ANCHOR_COUNTRY, type CurrencyCode } from "@/lib/constants/currencies";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { resolveBondCurrency } from "@/lib/bonds/resolveBondCurrency";
 import { sovereignBondOutstanding } from "@/lib/bonds/sovereignPrincipal";
@@ -158,14 +158,16 @@ export async function materializeContinuingFederationServiceTurn(input: {
   );
   const currencyCodes = [
     ...new Set(
-      [...bonds.map(resolveBondCurrency), budgets[0].currencyCode].filter((code) => !!code)
+      [...bonds.map(resolveBondCurrency), budgets[0].currencyCode].filter(
+        (code): code is string => !!code
+      )
     ),
   ];
   if (currencyCodes.some((code) => !Object.hasOwn(CURRENCY_ANCHOR_COUNTRY, code!)))
     throw new Error("Continuing service has an unsupported issuer currency");
   const exchangeRows = await db
     .collection<ExchangeRate>("exchangeRates")
-    .find({ currencyCode: { $in: currencyCodes } }, { session })
+    .find({ currencyCode: { $in: currencyCodes as CurrencyCode[] } }, { session })
     .toArray();
   const rates: Record<string, number> = {};
   for (const row of exchangeRows) {
