@@ -611,7 +611,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     result[0].winners = [
       { ...result[1].winners[0], isNpc: false, ownerId: player!._id.toHexString() },
     ];
-    await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).insertOne({
+    await db.collection<Fixture>(RUSSIAN_COUNCIL_RESULTS_COLLECTION).insertOne({
       ...previous,
       _id: nextId.toHexString(),
       cohortId: nextId,
