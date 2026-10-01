@@ -113,6 +113,9 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     const { processLegacyFederationServiceTurn } =
       await import("@/lib/world/succession/legacyServiceTurn");
     await processLegacyFederationServiceTurn(db, turn, now, activeBonds);
+    const { processContinuingFederationServiceTurn } =
+      await import("@/lib/world/succession/continuingServiceTurn");
+    await processContinuingFederationServiceTurn(db, turn, now, activeBonds);
   }
 
   if (activeBonds.length === 0) {

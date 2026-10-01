@@ -6,9 +6,12 @@
 import type { Db } from "mongodb";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
 import type { FederationLegacyServiceTurn } from "./legacyServiceTurn";
+import type { FederationContinuingServiceTurn } from "./continuingServiceTurn";
 import type { FederationSettlementApplicationRecord } from "./runtimeEntities";
 
 export interface LegacyServiceSnapshot {
+  servicingKind?: "continuing-state";
+  issuerOwnShareMinor?: number;
   sourceCountryId: string;
   sourceName: string;
   turn: number;
@@ -58,8 +61,45 @@ export async function loadLegacyServiceSnapshots(
     getWorldEntityPresetManifest(preset).entries.map((entry) => [entry.entityId, entry.displayName])
   );
   const sources = new Map(applications.map((row) => [row._id, row.sourceEntityId]));
-  return latest
+  const continuing = await db
+    .collection<FederationContinuingServiceTurn>("federationContinuingServiceTurns")
+    .aggregate<{
+      _id: string;
+      turn: number;
+      creditorDueMinor: number;
+      issuerOwnShareMinor: number;
+      issuerCashAfterContributionsMinor: number;
+      contributions: Record<string, number>;
+      arrears: Record<string, number>;
+    }>([
+      { $match: { applicationId: { $in: applications.map((row) => row._id) } } },
+      { $sort: { applicationId: 1, turn: -1 } },
+      {
+        $group: {
+          _id: "$applicationId",
+          turn: { $first: "$turn" },
+          creditorDueMinor: { $first: "$creditorDueMinor" },
+          issuerOwnShareMinor: { $first: "$issuerOwnShareMinor" },
+          issuerCashAfterContributionsMinor: { $first: "$issuerCashAfterContributionsMinor" },
+          contributions: { $first: "$successorContributionsMinor" },
+          arrears: { $first: "$successorArrearsMinor" },
+        },
+      },
+    ])
+    .toArray();
+  return [
+    ...latest,
+    ...continuing.map((row) => ({
+      ...row,
+      servicingKind: "continuing-state" as const,
+      bridgeOutstandingMinor: 0,
+      administrationCashAfterMinor: row.issuerCashAfterContributionsMinor,
+    })),
+  ]
     .map((row) => ({
+      ...("servicingKind" in row
+        ? { servicingKind: row.servicingKind, issuerOwnShareMinor: row.issuerOwnShareMinor }
+        : {}),
       sourceCountryId: sources.get(row._id)!,
       sourceName: names.get(sources.get(row._id)!) ?? sources.get(row._id)!,
       turn: row.turn,

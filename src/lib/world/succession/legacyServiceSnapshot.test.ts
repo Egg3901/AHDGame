@@ -4,6 +4,37 @@ import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { loadLegacyServiceSnapshots } from "./legacyServiceSnapshot";
 
 describe("public legacy settlement finances", () => {
+  it("shows continuing issuer contributions without labeling them an administration overdraft", async () => {
+    const db = createInMemoryDb();
+    db.seed("federationSettlementApplications", [
+      { _id: "ru", presetId: "1991-default", status: "applied", sourceEntityId: "RU" },
+    ]);
+    db.seed("federationContinuingServiceTurns", [
+      {
+        _id: "ru-1",
+        applicationId: "ru",
+        turn: 1,
+        creditorDueMinor: 100,
+        issuerOwnShareMinor: 60,
+        issuerCashAfterContributionsMinor: 200,
+        successorContributionsMinor: { UKR: 30 },
+        successorArrearsMinor: { UKR: 10 },
+      },
+    ]);
+    expect(await loadLegacyServiceSnapshots(db as unknown as Db, "1991-default")).toEqual([
+      {
+        servicingKind: "continuing-state",
+        sourceCountryId: "RU",
+        sourceName: "Soviet Union",
+        turn: 1,
+        creditorDueMinor: 100,
+        issuerOwnShareMinor: 60,
+        bridgeOutstandingMinor: 0,
+        administrationCashAfterMinor: 200,
+        successors: [{ entityId: "UKR", name: "Ukraine", contributionMinor: 30, arrearsMinor: 10 }],
+      },
+    ]);
+  });
   it("shows only the latest committed application and preserves signed cash and arrears", async () => {
     const db = createInMemoryDb();
     db.seed("federationSettlementApplications", [

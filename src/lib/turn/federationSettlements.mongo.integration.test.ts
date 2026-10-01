@@ -5,6 +5,7 @@ import { csRegions1991 } from "@/lib/countries/cs/data/csRegions1991";
 import { openDefaultFederationPoliticalProposal } from "@/lib/world/succession/defaultProposal";
 import { recordFederationRatifications } from "@/lib/world/succession/recordRatifications";
 import { processLegacyFederationServiceTurn } from "@/lib/world/succession/legacyServiceTurn";
+import { materializeContinuingFederationServiceTurn } from "@/lib/world/succession/continuingServiceTurn";
 import { processRatifiedFederationSettlements } from "./federationSettlements";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import {
@@ -373,44 +374,38 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
         { _id: residentId },
         { $set: { currentOffice: { type: "parliamentaryCabinet" } } }
       );
-    await db
-      .collection<Fixture>("electedOfficials")
-      .insertOne({
-        _id: new ObjectId(),
-        countryId: "CS",
-        officeType: "federalAssemblyDeputy",
-        nppId: deputyId,
-      });
+    await db.collection<Fixture>("electedOfficials").insertOne({
+      _id: new ObjectId(),
+      countryId: "CS",
+      officeType: "federalAssemblyDeputy",
+      nppId: deputyId,
+    });
     await db.collection<Fixture>("cabinetMembers").insertMany([
       { _id: new ObjectId(), countryId: "CS", nppId: deputyId },
       { _id: new ObjectId(), countryId: "PL", nppId: foreignId },
     ]);
-    await db
-      .collection<Fixture>("governmentFormations")
-      .insertOne({
-        _id: "CS",
-        countryId: "CS",
-        status: "formed",
-        pmNppId: deputyId,
-        pmName: "Prime Minister",
-        hosNppId: deputyId,
-        hosName: "Head of State",
-        coalitionPartyIds: ["1"],
-        activeVoteId: new ObjectId(),
-        governingAgenda: { agenda: "old" },
-      });
+    await db.collection<Fixture>("governmentFormations").insertOne({
+      _id: "CS",
+      countryId: "CS",
+      status: "formed",
+      pmNppId: deputyId,
+      pmName: "Prime Minister",
+      hosNppId: deputyId,
+      hosName: "Head of State",
+      coalitionPartyIds: ["1"],
+      activeVoteId: new ObjectId(),
+      governingAgenda: { agenda: "old" },
+    });
     await db
       .collection<Fixture>("elections")
       .insertOne({ _id: electionId, countryId: "CS", status: "upcoming" });
-    await db
-      .collection<Fixture>("electionCandidates")
-      .insertOne({
-        _id: new ObjectId(),
-        electionId,
-        countryId: "CS",
-        nppId: deputyId,
-        status: "active",
-      });
+    await db.collection<Fixture>("electionCandidates").insertOne({
+      _id: new ObjectId(),
+      electionId,
+      countryId: "CS",
+      nppId: deputyId,
+      status: "active",
+    });
     for (const collectionName of ["pmAppointmentVotes", "noConfidenceVotes"])
       await db.collection<Fixture>(collectionName).insertMany([
         { _id: new ObjectId(), countryId: "CS", status: "active" },
@@ -537,7 +532,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       countryId: "RU",
       currencyCode: "RUB",
       treasuryBalance: 100,
-      debt: { principal: 200 },
+      debt: { principal: 1000 },
     });
     await db
       .collection<Fixture>("exchangeRates")
@@ -548,10 +543,10 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       issuerType: "sovereign",
       countryId: "RU",
       currencyCode: "RUB",
-      totalIssued: 200,
+      totalIssued: 1000,
       couponRate: 4.8,
       maturityTurn: 300,
-      holders: [{ units: 0.2 }],
+      holders: [{ units: 1 }],
       publicFloat: 0,
       matured: false,
       defaulted: false,
@@ -705,6 +700,86 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
         .collection("federationFacilityClaims")
         .findOne({ corporationId: retainedFirmId.toHexString() })
     ).toMatchObject({ status: "payable", creditorCountryId: "RU", debtorEntityId: "UKR" });
+    const continuingApplication = await db
+      .collection<Fixture>("federationSettlementApplications")
+      .findOne({});
+    expect(continuingApplication).not.toBeNull();
+    const oldContract = await db.collection("bonds").findOne({ _id: sovietBondId });
+    expect(oldContract).not.toBeNull();
+    // Borrowing after the split must not enter the approved inherited inventory.
+    await db
+      .collection("bonds")
+      .insertOne({
+        ...oldContract!,
+        _id: new ObjectId(),
+        totalIssued: 2000,
+        holders: [{ units: 2 }],
+      });
+    const sourceBefore = await db.collection<Fixture>("federalBudget").findOne({ _id: "RU" });
+    const macrosBefore = await db
+      .collection<Fixture>("macroCountries")
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    const accountsBefore = await db
+      .collection<Fixture>("federationFiscalAccounts")
+      .find({})
+      .sort({ _id: 1 })
+      .toArray();
+    await db.createCollection("federationContinuingServiceTurns", {
+      validator: { blocked: { $eq: true } },
+    });
+    const continuingService = () =>
+      runRequiredTransaction(
+        (session) =>
+          materializeContinuingFederationServiceTurn({
+            db,
+            session,
+            applicationId: String(continuingApplication!._id),
+            turn: 183,
+            now: new Date(4),
+          }),
+        { client }
+      );
+    await expect(continuingService()).rejects.toThrow(/validation/i);
+    expect(await db.collection<Fixture>("federalBudget").findOne({ _id: "RU" })).toEqual(
+      sourceBefore
+    );
+    expect(
+      await db.collection<Fixture>("macroCountries").find({}).sort({ _id: 1 }).toArray()
+    ).toEqual(macrosBefore);
+    expect(
+      await db.collection<Fixture>("federationFiscalAccounts").find({}).sort({ _id: 1 }).toArray()
+    ).toEqual(accountsBefore);
+    await db.command({ collMod: "federationContinuingServiceTurns", validator: {} });
+    commands = 0;
+    const serviceReceipt = await continuingService();
+    const serviceCommands = commands;
+    expect(serviceCommands).toBeLessThanOrEqual(20);
+    expect(serviceReceipt.creditorDueMinor).toBeGreaterThan(0);
+    const contributions = Object.values(serviceReceipt.successorContributionsMinor).reduce(
+      (sum, value) => sum + value,
+      0
+    );
+    expect(
+      contributions +
+        serviceReceipt.issuerOwnShareMinor +
+        Object.values(serviceReceipt.successorArrearsMinor).reduce((sum, value) => sum + value, 0)
+    ).toBe(serviceReceipt.creditorDueMinor);
+    const sourceAfter = await db.collection<Fixture>("federalBudget").findOne({ _id: "RU" });
+    const liveRate = await db.collection<Fixture>("exchangeRates").findOne({ _id: "RUB" });
+    expect(
+      Number(sourceAfter!.treasuryBalance) - Number(sourceBefore!.treasuryBalance)
+    ).toBeCloseTo((contributions / 100) * Number(liveRate!.rate));
+    expect(await db.collection("bonds").findOne({ _id: sovietBondId })).toEqual(oldContract);
+    expect(await db.collection("federationLegacyServiceTurns").countDocuments()).toBe(0);
+    expect(await continuingService()).toEqual(serviceReceipt);
+    expect(await db.collection<Fixture>("federalBudget").findOne({ _id: "RU" })).toEqual(
+      sourceAfter
+    );
+    console.info(
+      `Continuing issuer qualification: service=${serviceCommands} commands; contributions=${contributions} minor; late rollback and replay passed`
+    );
     await db
       .collection<Fixture>("macroCountries")
       .updateOne({ _id: "UKR" }, { $set: { federationTreasuryMinor: 500 } });
@@ -764,7 +839,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     expect(await db.collection("bonds").findOne({ _id: sovietBondId })).toMatchObject({
       countryId: "RU",
       currencyCode: "RUB",
-      totalIssued: 200,
+      totalIssued: 1000,
       matured: false,
       defaulted: false,
     });
