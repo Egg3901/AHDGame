@@ -54,6 +54,71 @@ function availability(
     enactedMode: country?.ruCouncilFormationMandate?.mode ?? country?.ruCouncilComposition?.mode,
   });
 }
+/** A country pointer alone cannot authorize regional appointments or physical handover. */
+export async function loadEnactedRussianCouncilFormation(input: {
+  db: Db;
+  session: ClientSession;
+  game: RussianConstitutionalCalendar;
+  country: CountryGameState;
+  turn: number;
+}) {
+  const { db, session, game, country, turn } = input;
+  const mandate = country.ruCouncilFormationMandate;
+  if (!mandate || game.preset !== "1991-default") return null;
+  if (
+    !["regionalHeads", "regionalDelegates"].includes(mandate.mode) ||
+    !Number.isSafeInteger(mandate.revision) ||
+    mandate.revision < 1 ||
+    !Number.isSafeInteger(mandate.sinceTurn) ||
+    mandate.sinceTurn < 1 ||
+    mandate.sinceTurn > turn ||
+    mandate.proposalId !== `1991-default:ru-council:${mandate.mode}` ||
+    !russianCouncilCompositionAvailable({
+      mode: mandate.mode,
+      preset: game.preset,
+      currentTurn: turn,
+      calendarTurn: clock(game, turn),
+      assemblySinceTurn: country.ruFederalAssemblySinceTurn,
+    }).available
+  )
+    throw new Error("Council formation requires valid dated authority");
+  const proposal = await db
+    .collection<RussianCouncilFormationProposal>(RUSSIAN_COUNCIL_FORMATION_PROPOSALS_COLLECTION)
+    .findOne(
+      {
+        _id: mandate.proposalId,
+        countryId: "RU",
+        preset: "1991-default",
+        status: "authorized",
+        mode: mandate.mode,
+        revision: mandate.revision,
+        authorizedOnTurn: mandate.sinceTurn,
+      },
+      { session }
+    );
+  if (
+    !proposal ||
+    !Number.isSafeInteger(proposal.openedOnTurn) ||
+    proposal.openedOnTurn < 1 ||
+    proposal.openedOnTurn > mandate.sinceTurn
+  )
+    throw new Error("Council formation lacks its actual enactment receipt");
+  const bill = await db.collection<Bill>("bills").findOne(
+    {
+      _id: proposal.billId,
+      countryId: "RU",
+      stateId: "ru_national",
+      status: "signed",
+      enactedAt: { $type: "date" },
+      "russianCouncilFormationMandate.proposalId": mandate.proposalId,
+      "russianCouncilFormationMandate.revision": mandate.revision,
+      "russianCouncilFormationMandate.mode": mandate.mode,
+    },
+    { session, projection: { _id: 1 } }
+  );
+  if (!bill) throw new Error("Council formation lacks its signed bound law");
+  return mandate;
+}
 export async function materializeRussianCouncilFormationProposal(input: {
   db: Db;
   session: ClientSession;
@@ -241,6 +306,7 @@ export async function loadRussianCouncilFormationDecisions(
   game: RussianConstitutionalCalendar,
   turn: number
 ) {
+  if (game.preset !== "1991-default" || clock(game, turn) < 237) return [];
   const country = await db
     .collection<CountryGameState>("countryGameStates")
     .findOne({ _id: "RU" }, { projection });

@@ -74,6 +74,7 @@ export async function processRussianAssemblyCampaigns(input: {
         ruFederalAssemblySinceTurn: 1,
         ruDumaNpcAdmissionCohortId: 1,
         ruDumaConvocationCohortId: 1,
+        ruCouncilComposition: 1,
       },
     }
   );
@@ -157,6 +158,7 @@ export async function processRussianAssemblyCampaigns(input: {
     if (opened.created) result.firstOpened++;
   }
   for (const chamber of ["duma", "council"] as const) {
+    if (chamber === "council" && country.ruCouncilComposition) continue;
     if (chamber === "duma" && ordinary?.active) continue;
     const root: ObjectId = chamber === "duma" ? dumaRoot : councilRoot;
     const familyFilter = {

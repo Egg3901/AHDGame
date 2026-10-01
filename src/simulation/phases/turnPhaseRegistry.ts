@@ -1244,6 +1244,20 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const govFormedMap = govResult?.governmentFormed ?? {};
 
         if (context.gameState?.preset === "1991-default") {
+          const { processRussianCouncilComposition } =
+            await import("@/lib/countries/ru/councilCompositionTurn");
+          (phaseResults as Record<string, unknown>).russianCouncilComposition =
+            await runtime.runPhase("russianCouncilComposition", () =>
+              processRussianCouncilComposition({
+                db,
+                game: context.gameState,
+                turn: newTurn,
+                now: gameNow,
+              })
+            );
+        }
+
+        if (context.gameState?.preset === "1991-default") {
           const { processRussianAssemblyCampaigns } =
             await import("@/lib/countries/ru/assemblyCampaigns");
           (phaseResults as Record<string, unknown>).russianAssemblyCampaigns =

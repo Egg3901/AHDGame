@@ -61,6 +61,7 @@ export async function materializeRussianCouncilRepeatOpening(input: {
       session,
       projection: {
         ruFirstCouncilElectionCohortId: 1,
+        ruCouncilComposition: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
@@ -69,6 +70,7 @@ export async function materializeRussianCouncilRepeatOpening(input: {
     }
   );
   if (
+    country?.ruCouncilComposition ||
     !country?.ruFirstCouncilElectionCohortId?.equals(rootCohortId) ||
     !hasAuthorizedPostSovietTransition(
       turn,

@@ -55,6 +55,7 @@ export async function materializeRussianCouncilNpcAdmission(input: {
       session,
       projection: {
         ruFirstCouncilElectionCohortId: 1,
+        ruCouncilComposition: 1,
         ruFirstDumaElectionCohortId: 1,
         ruFederalAssemblySinceTurn: 1,
         ruDumaNpcAdmissionCohortId: 1,
@@ -62,7 +63,7 @@ export async function materializeRussianCouncilNpcAdmission(input: {
       },
     }
   );
-  if (!country?.ruFirstCouncilElectionCohortId) return null;
+  if (!country?.ruFirstCouncilElectionCohortId || country.ruCouncilComposition) return null;
   // Duma admission precedes Council admission so profile reservations remain disjoint.
   if (
     !country.ruFirstDumaElectionCohortId ||
@@ -293,6 +294,7 @@ export async function admitRussianCouncilNpcNominees(
     {
       projection: {
         ruFirstCouncilElectionCohortId: 1,
+        ruCouncilComposition: 1,
         ruFirstDumaElectionCohortId: 1,
         ruFederalAssemblySinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,

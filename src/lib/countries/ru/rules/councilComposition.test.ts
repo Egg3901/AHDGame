@@ -4,8 +4,25 @@ import {
   planRussianCouncilComposition as plan,
   russianCouncilCompositionAvailable as available,
   passesRussianCouncilFormationLaw as passes,
+  russianRegionalCouncilOfficeCompatible as officeCompatible,
   type RussianCouncilRegionalAuthority,
 } from "./councilComposition";
+describe("regional Council office compatibility", () => {
+  it("allows a human regional head's ex-officio role but excludes national and foreign offices", () => {
+    expect(officeCompatible({ officeType: "governor", countryId: "RU", isNpc: false })).toBe(true);
+    expect(officeCompatible({ officeType: "governor", countryId: "RU", isNpc: true })).toBe(false);
+    expect(
+      officeCompatible({ officeType: "federationCouncilMember", countryId: "RU", isNpc: true })
+    ).toBe(true);
+    expect(officeCompatible({ officeType: "dumaDeputy", countryId: "RU", isNpc: false })).toBe(
+      false
+    );
+    expect(officeCompatible({ officeType: "primeMinister", countryId: "RU", isNpc: true })).toBe(
+      false
+    );
+    expect(officeCompatible({ officeType: "governor", countryId: "US", isNpc: false })).toBe(false);
+  });
+});
 function authorities(): RussianCouncilRegionalAuthority[] {
   return RUSSIAN_COUNCIL_SUBJECTS_1993.flatMap(([id, , regionId]) =>
     (["executive", "legislative"] as const).map((branch) => ({

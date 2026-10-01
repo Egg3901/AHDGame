@@ -32,6 +32,7 @@ export const DEFAULT_PHASE_ROUND_TRIP_BUDGET = 500;
  * See DEAD_WEIGHT_PLAN_AUDIT.md section 8 for counts and sample caveats.
  */
 export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
+  russianCouncilComposition: 100,
   corporationTurn: 4500,
   ministerialOrders: 2000,
   indexFunds: 18000,

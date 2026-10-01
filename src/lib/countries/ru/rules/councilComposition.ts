@@ -7,6 +7,18 @@ import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "../data/councilSubjects1993";
 import { turnToGameMonth } from "@/lib/utils/gameDate";
 export type RussianCouncilCompositionMode = "regionalHeads" | "regionalDelegates";
 export type RussianCouncilAuthorityBranch = "executive" | "legislative";
+export function russianRegionalCouncilOfficeCompatible(input: {
+  officeType?: string;
+  countryId?: string;
+  isNpc: boolean;
+}) {
+  if (!input.officeType) return true;
+  if (input.countryId !== "RU") return false;
+  return (
+    input.officeType === "federationCouncilMember" ||
+    (!input.isNpc && ["governor", "regionalCouncil"].includes(input.officeType))
+  );
+}
 export interface RussianCouncilRegionalPerson {
   personId: string;
   ownerId: string;
@@ -26,6 +38,7 @@ export interface RussianCouncilRegionalAuthority {
   delegate?: RussianCouncilRegionalPerson & {
     appointedByPersonId: string;
     appointedOnTurn: number;
+    appointmentRevision?: number;
   };
 }
 export function russianCouncilCompositionAvailable(input: {
@@ -153,6 +166,9 @@ export function planRussianCouncilComposition(input: {
         !Number.isSafeInteger(delegate.appointedOnTurn) ||
         delegate.appointedOnTurn < row.sinceTurn ||
         delegate.appointedOnTurn > input.turn ||
+        (delegate.appointmentRevision != null &&
+          (!Number.isSafeInteger(delegate.appointmentRevision) ||
+            delegate.appointmentRevision < 1)) ||
         people.has(delegate.personId)
       )
         throw new Error("Council delegate needs its actual appointing regional authority");

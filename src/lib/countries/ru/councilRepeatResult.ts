@@ -80,6 +80,7 @@ export async function materializeRussianCouncilRepeatResult(input: {
       session,
       projection: {
         ruFirstCouncilElectionCohortId: 1,
+        ruCouncilComposition: 1,
         ruFirstDumaElectionCohortId: 1,
         ruDumaConvocationCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
@@ -90,6 +91,7 @@ export async function materializeRussianCouncilRepeatResult(input: {
   );
   if (
     game?.preset !== "1991-default" ||
+    country?.ruCouncilComposition ||
     !country?.ruFirstCouncilElectionCohortId?.equals(rootCohortId) ||
     country.ruFederalAssemblyMandateSinceTurn !== opening.mandateSinceTurn ||
     !hasAuthorizedPostSovietTransition(

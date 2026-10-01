@@ -5,12 +5,36 @@
  */
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "../data/councilSubjects1993";
-import type { RussianCouncilRegionalAuthority } from "./councilComposition";
+import {
+  planRussianCouncilComposition,
+  type RussianCouncilRegionalAuthority,
+} from "./councilComposition";
+import {
+  resolveRussianDumaAccumulatedCohort,
+  type RussianDumaCohortBallot,
+} from "./assemblyCohort";
 export interface RussianRegionalNpcProfile {
   ownerId: string;
   party: string;
   name: string;
   eligible: boolean;
+}
+/** Certified constituency counts are a bounded political input, not regional elections. */
+export function russianRegionalSupportFromDuma(ballots: readonly RussianDumaCohortBallot[]) {
+  resolveRussianDumaAccumulatedCohort(ballots);
+  const totals: Record<string, Record<string, number>> = {};
+  for (const ballot of ballots) {
+    if (ballot.tier !== "constituency") continue;
+    const regional = (totals[ballot.regionId] ??= {});
+    if (ballot.invalidated) continue;
+    for (const candidate of ballot.candidates) {
+      const count = BigInt(regional[candidate.party] ?? 0) + BigInt(candidate.votes);
+      if (count > BigInt(Number.MAX_SAFE_INTEGER))
+        throw new Error("Certified regional support exceeds precision");
+      regional[candidate.party] = Number(count);
+    }
+  }
+  return totals;
 }
 export function planRussianRegionalCouncilAppointments(input: {
   turn: number;
@@ -95,8 +119,9 @@ export function planRussianRegionalCouncilDelegates(input: {
     throw new Error("Regional delegates need a safe current turn");
   return input.authorities.map((row) => {
     if (
-      row.delegate ||
+      (row.delegate && (row.delegate.eligible || !row.delegate.isNpc)) ||
       !row.head.isNpc ||
+      !row.head.eligible ||
       (row.termEndTurn != null && row.termEndTurn <= input.turn)
     )
       return row;
@@ -104,10 +129,13 @@ export function planRussianRegionalCouncilDelegates(input: {
       .filter((profile) => profile.eligible && profile.party === row.head.party)
       .sort((a, b) => a.ownerId.localeCompare(b.ownerId))[0];
     if (!profile) return row;
+    const appointmentRevision = (row.delegate?.appointmentRevision ?? (row.delegate ? 1 : 0)) + 1;
+    if (!Number.isSafeInteger(appointmentRevision))
+      throw new Error("Regional delegate revision exceeds precision");
     return {
       ...row,
       delegate: {
-        personId: `${row.head.personId}:delegate`,
+        personId: `${row.head.personId}:delegate:${appointmentRevision}`,
         ownerId: profile.ownerId,
         isNpc: true,
         name: `${row.head.name} representative`,
@@ -115,7 +143,52 @@ export function planRussianRegionalCouncilDelegates(input: {
         eligible: true,
         appointedByPersonId: row.head.personId,
         appointedOnTurn: input.turn,
+        appointmentRevision,
       },
     };
   });
+}
+
+/** Renew NPC authority after expiry; early replacement keeps the original deadline. */
+export function planRussianRegionalCouncilRenewals(input: {
+  turn: number;
+  termYears: number;
+  authorities: readonly RussianCouncilRegionalAuthority[];
+  votesByRegion: Readonly<Record<string, Readonly<Record<string, number>>>>;
+  profiles: readonly RussianRegionalNpcProfile[];
+}) {
+  // Validate the complete slot map even if every current mandate is still held.
+  planRussianCouncilComposition({
+    mode: "regionalHeads",
+    turn: input.turn,
+    authorities: input.authorities,
+  });
+  const result = planRussianRegionalCouncilAppointments({ ...input, revision: 1 });
+  if (result.kind !== "appoint") return result;
+  const next = new Map(result.authorities.map((row) => [`${row.subjectId}:${row.branch}`, row]));
+  const changes: RussianCouncilRegionalAuthority[] = [];
+  for (const current of input.authorities) {
+    const replacement = next.get(`${current.subjectId}:${current.branch}`);
+    if (!replacement || replacement.regionId !== current.regionId)
+      throw new Error("Regional renewal cannot change subject boundaries");
+    if (!Number.isSafeInteger(current.revision) || current.revision < 1)
+      throw new Error("Regional renewal needs a safe existing revision");
+    const expired = current.termEndTurn != null && current.termEndTurn <= input.turn;
+    if (!current.head.isNpc || (!expired && current.head.eligible)) continue;
+    const revision = current.revision + 1;
+    if (!Number.isSafeInteger(revision)) throw new Error("Regional revision exceeds precision");
+    const base = { ...current };
+    delete base.delegate;
+    changes.push({
+      ...base,
+      revision,
+      sinceTurn: input.turn,
+      ...(expired ? { termEndTurn: result.termEndTurn } : {}),
+      head: {
+        ...replacement.head,
+        personId: `regional:${current.subjectId}:${current.branch}:${revision}`,
+      },
+    });
+  }
+  return { kind: "renew" as const, changes, reason: result.reason };
 }

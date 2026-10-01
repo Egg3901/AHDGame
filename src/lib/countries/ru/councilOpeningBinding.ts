@@ -29,11 +29,12 @@ export async function loadRussianCouncilOpeningBinding(input: {
     | "ruFederalAssemblyMandateSinceTurn"
     | "ruFirstDumaElectionCohortId"
     | "ruFederalAssemblySinceTurn"
+    | "ruCouncilComposition"
   >;
 }) {
   const { db, session, cohortId, country } = input;
   const rootCohortId = country.ruFirstCouncilElectionCohortId;
-  if (!rootCohortId) return null;
+  if (!rootCohortId || country.ruCouncilComposition) return null;
   const opening = await db
     .collection<RussianCouncilOpeningRecord>(RUSSIAN_COUNCIL_OPENINGS_COLLECTION)
     .findOne(
