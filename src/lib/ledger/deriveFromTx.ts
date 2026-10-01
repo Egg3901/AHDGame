@@ -50,6 +50,7 @@ const UNATTRIBUTED_REASON = "unattributed";
  * §3 (Phase 3) and docs/plans/2026-07-06-shadow-ledger-phase3-backlog.md.
  */
 const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = {
+  corp_sector_founding: "sector_founding_cash",
   org_cash: "organization_fund_cash",
   org_tribute_mint: "organization_tribute_unmodeled",
   gov_bond_maturity_payment: "bond_settlement",

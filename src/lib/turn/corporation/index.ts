@@ -1,3 +1,4 @@
+import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 /**
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
@@ -536,6 +537,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
     techLedger: nppTechLedger,
+    foundingCashWitnesses = [],
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
@@ -624,7 +626,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   if (corpOps.length > 0) {
     // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("corporations").bulkWrite(corpOps as any[]);
+    await applyCorporationCashWrites(db, corpOps as any[], foundingCashWitnesses);
   }
   // Emit only for NPP unlocks proven applied above; the flush dedupes and
   // refunds any debit whose ledger row cannot be persisted (ticket #1998).

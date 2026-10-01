@@ -1,3 +1,7 @@
+import {
+  buildNppFoundingCashWitness,
+  type NppFoundingCashWitness,
+} from "@/lib/turn/npp/foundingCashLedger";
 import type { Db, ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -218,6 +222,7 @@ export async function processNppCorporationDecisions(
   newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
   divestedSectorIds: ObjectId[];
   techLedger: TechUnlockLedgerInput[];
+  foundingCashWitnesses?: NppFoundingCashWitness[];
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -241,6 +246,7 @@ export async function processNppCorporationDecisions(
   const newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }> = [];
   const allDivestedSectorIds: ObjectId[] = [];
   const techLedger: TechUnlockLedgerInput[] = [];
+  const foundingCashWitnesses: NppFoundingCashWitness[] = [];
   const operatorObservations: NppOperatorObservation[] = [];
 
   if (nppCorps.length === 0)
@@ -441,7 +447,7 @@ export async function processNppCorporationDecisions(
     strategyGate?.frontierEntryExperimentEnabled
   );
 
-  const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
+  const { labourMode, retailExpansionPaused, ledgerShadow } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
   for (const corp of nppCorps) {
@@ -535,8 +541,39 @@ export async function processNppCorporationDecisions(
     // Gated inside the builder, not on `updates` alone: the cash leg no longer
     // lives in `updates`, so a decision whose only effect is a spend would be
     // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
+    // Reuse a business sector id for the audit key. Observer bookkeeping must
+    // not consume an extra id before the remaining business writes are built.
+    const founded = decision.newSectors
+      ? buildNppFoundedSectorInserts({
+          corporationId: corp._id,
+          newSectors: decision.newSectors,
+          blocked,
+          turn,
+          now,
+        })
+      : [];
     const corpUpdateOp = buildNppCorpUpdateOp(decision);
-    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
+    if (corpUpdateOp) {
+      if (ledgerShadow && corpCurrency && decision.foundingCashLocal && founded.length === 1) {
+        const witness = buildNppFoundingCashWitness({
+          corporationId: corp._id,
+          key: founded[0]._id,
+          amountLocal: decision.foundingCashLocal,
+          currencyCode: corpCurrency,
+          rate: corpFxRate,
+          turn,
+          now,
+        });
+        if (witness) {
+          corpUpdateOp.update.$set = {
+            ...corpUpdateOp.update.$set,
+            nppFoundingCashWitnessKey: witness.key.toHexString(),
+          };
+          foundingCashWitnesses.push(witness);
+        }
+      }
+      corpUpdates.push(corpUpdateOp);
+    }
 
     // Budget tech from post-decision cash and preserve the same safety floor.
     if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
@@ -566,17 +603,7 @@ export async function processNppCorporationDecisions(
 
     allSectorUpdates.push(...decision.sectorUpdates);
 
-    if (decision.newSectors) {
-      newSectors.push(
-        ...buildNppFoundedSectorInserts({
-          corporationId: corp._id,
-          newSectors: decision.newSectors,
-          blocked,
-          turn,
-          now,
-        })
-      );
-    }
+    newSectors.push(...founded);
 
     if (decision.divestedSectorIds) {
       allDivestedSectorIds.push(...decision.divestedSectorIds);
@@ -602,6 +629,7 @@ export async function processNppCorporationDecisions(
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
+    ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
   };
 }
 
@@ -626,6 +654,7 @@ export function makeNppCorpDecision(
   const liquidCapital = corp.liquidCapital ?? 0;
   const passive = ctx.caretakerMandate === "passive";
   let cashLocal = liquidCapital;
+  let foundingCashLocal: number | undefined;
   const numSectors = sectors.length;
 
   const corpCurrencyCode = resolveCorpLiquidCurrencyCode(corp);
@@ -1408,6 +1437,7 @@ export function makeNppCorpDecision(
           countryId: foundingTarget.countryId,
         });
         cashLocal = entryCapital - foundingCost;
+        foundingCashLocal = foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else {
         if (foundingOutcome.creditPath) {
@@ -1456,6 +1486,7 @@ export function makeNppCorpDecision(
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
+        foundingCashLocal = foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else {
         if (foundingOutcome.creditPath) {
@@ -1969,6 +2000,7 @@ export function makeNppCorpDecision(
     // up, a founding cost or growth capex down — so this one subtraction is the
     // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
+    ...(foundingCashLocal === undefined ? {} : { foundingCashLocal }),
     cashFloorLocal: effectiveCashFloor,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,

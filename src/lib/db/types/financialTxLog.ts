@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export type FinancialTxType =
+  | "corp_sector_founding" // exact NPP founding cash, including entry fee and starter build
   | "org_cash"
   | "org_tribute_mint"
   // Character / imperial cash
