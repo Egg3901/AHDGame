@@ -43,11 +43,11 @@ describe("Duma frozen electorates", () => {
       const { preload, election } = fixture(tier);
       const bound = bind(election, preload);
       expect(bound.stateMap.get(election.state)?.votingEligiblePopulation).toBe(75);
-      expect(bound.registrationPoolByState.get(election.state)?.unregistered).toBe(0);
+      expect(bound.registrationPoolByState?.get(election.state)?.unregistered).toBe(0);
       expect(preload.stateMap.get(election.state)?.votingEligiblePopulation).toBe(
         tier === "list" ? 900 : 450
       );
-      expect(preload.registrationPoolByState.size).toBe(0);
+      expect(preload.registrationPoolByState?.size).toBe(0);
       expect(bound.stateMap.get(tier === "list" ? "CEN" : "RU")).toBe(
         preload.stateMap.get(tier === "list" ? "CEN" : "RU")
       );

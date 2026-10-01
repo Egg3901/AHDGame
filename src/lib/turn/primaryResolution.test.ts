@@ -1499,7 +1499,7 @@ describe("accumulateGeneralElectionVotes", () => {
     expect(options?.preload?.turnoutByState.get("RU")?.modifiers.ie_voterGroups.urban).toBeCloseTo(
       1
     );
-    expect(options?.preload?.registrationPoolByState.get("RU")?.unregistered).toBe(0);
+    expect(options?.preload?.registrationPoolByState?.get("RU")?.unregistered).toBe(0);
     expect(db.collectionMocks.states.find).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks.states.find.mock.calls[0][0]).toEqual({
       $or: [{ _id: { $in: ["RU"] } }, { countryId: { $in: ["RU"] } }],
