@@ -69,8 +69,33 @@ import {
   type OneElectionResult,
 } from "./generalResolutionHelpers";
 import { logger } from "../../observability/logger";
+import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 export type { OneElectionResult } from "./generalResolutionHelpers";
+
+/** A failed list/holder write must keep the finalized race eligible for retry. */
+async function reconcileGermanElection(db: Db, election: Election, now: Date): Promise<void> {
+  if (
+    getElectionMethod(election.countryId, election.electionType) !== "ams" ||
+    (election.electionType !== "bundestag" && election.electionType !== "snap_bundestag")
+  )
+    return;
+  try {
+    const reconciled = await maybeReconcileBundestag(db, election.cycle, now);
+    if (reconciled) {
+      const { triggerBundestagspraesidentElectionAfterReconcile } =
+        await import("@/lib/congress/bundestagspraesident/openElection");
+      await triggerBundestagspraesidentElectionAfterReconcile(db, now);
+    }
+  } catch (error) {
+    await db
+      .collection<Election>("elections")
+      .updateOne({ _id: election._id }, { $set: { status: "completed", updatedAt: now } });
+    throw error;
+  }
+}
 
 /**
  * Resolves a single completed election — determines winners, writes elected
@@ -140,16 +165,23 @@ export async function resolveOneGeneralElection(
     if (electionMethod === "pr_sainteLague") {
       const { resolveDELandtagElection } = await import("./germanyLandtag");
       if (!tally?.finalized) {
-        await resolveDELandtagElection(db, election, now);
+        await resolveDELandtagElection(db, election, now, currentTurn);
       }
       await db
         .collection<Election>("elections")
         .updateOne({ _id: election._id }, { $set: { status: "resolved", updatedAt: now } });
       await voidDebateSessionsForElection(db, election._id, now);
       if (tally) {
-        await db
-          .collection<ElectionVoteTally>("electionVoteTallies")
-          .updateOne({ _id: tally._id }, { $set: { finalized: true } });
+        await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+          { _id: tally._id },
+          {
+            $set: {
+              finalized: true,
+              resolutionPath: "sainte_lague",
+              resolvedAtTurn: currentTurn,
+            },
+          }
+        );
       }
       return { resolved: true, newsOutcomes };
     }
@@ -171,7 +203,8 @@ export async function resolveOneGeneralElection(
       return { resolved: true, newsOutcomes: [] };
     }
 
-    if (tally?.finalized) {
+    if (tally?.finalized && election.electionType !== "president") {
+      await finishFinalizedElectionCleanup(db, election, tally, now);
       // Tally already finalized (officials already written) but the election
       // was never marked "resolved" (e.g. spawnCommonsElection threw a
       // duplicate-key error on a previous turn). Recover by spawning the next
@@ -189,6 +222,7 @@ export async function resolveOneGeneralElection(
           { $set: { status: "resolved" satisfies ElectionStatus, updatedAt: now } }
         );
       await voidDebateSessionsForElection(db, election._id, now);
+      await reconcileGermanElection(db, election, now);
       console.log(
         `[Turn] Election ${election._id} (${election.electionType}/${election.state}) recovered — tally was already finalized`
       );
@@ -198,7 +232,7 @@ export async function resolveOneGeneralElection(
     if (!tally) {
       // No votes were recorded — clear stale officials / vacate single-seat
       // incumbents and open the next race. See resolveElectionWithNoTally.
-      return await resolveElectionWithNoTally(db, election, now);
+      return await resolveElectionWithNoTally(db, election, now, currentTurn);
     }
 
     // ── President: per-country resolution (US electoral college; NG/bespoke
@@ -212,8 +246,8 @@ export async function resolveOneGeneralElection(
         election.countryId != null &&
         COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId);
       const presidentResolved = bespoke
-        ? await resolveNGPresidentElection(db, election, tally, now)
-        : await resolvePresidentElection(db, election, tally, now);
+        ? await resolveNGPresidentElection(db, election, tally, now, currentTurn)
+        : await resolvePresidentElection(db, election, tally, now, currentTurn);
       if (presidentResolved) {
         await db
           .collection<Election>("elections")
@@ -246,7 +280,7 @@ export async function resolveOneGeneralElection(
     if (totalVotesCast === 0) {
       // Tally exists but zero votes were cast — finalize, withdraw candidates,
       // vacate stale seats and respawn. See resolveElectionWithZeroVotes.
-      return await resolveElectionWithZeroVotes(db, election, now);
+      return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
     }
 
     const candidateIds = Object.keys(effectiveVotes);
@@ -444,7 +478,7 @@ export async function resolveOneGeneralElection(
     if (ranked.length === 0) {
       // Every ranked candidate was dropped (missing docs / deleted characters)
       // — same cleanup as zero votes. See resolveElectionWithNoRankedCandidates.
-      return await resolveElectionWithNoRankedCandidates(db, election, now);
+      return await resolveElectionWithNoRankedCandidates(db, election, now, currentTurn);
     }
 
     const totalSeats = election.totalSeats ?? 1;
@@ -692,6 +726,14 @@ export async function resolveOneGeneralElection(
       }
     }
 
+    const officeAnalytics: Array<{
+      officeType: string;
+      transitionType: "gained" | "left" | "lost";
+      partyId: string;
+      careerStage: number;
+      nationId: string;
+    }> = [];
+
     // For generic single-seat elections, clear the incumbent's currentOffice if
     // they are not the winner. This includes incumbents who do not run again.
     const singleSeatTypes = ["governor", "senate", "uachtaran"];
@@ -737,6 +779,13 @@ export async function resolveOneGeneralElection(
                 { _id: incumbent.characterId, ...officeFilter },
                 { $set: { currentOffice: null, updatedAt: now } }
               );
+            officeAnalytics.push({
+              officeType: incumbent.officeType,
+              transitionType: "lost",
+              partyId: incumbent.party ?? "unknown",
+              careerStage: 0,
+              nationId: election.countryId ?? "US",
+            });
             console.log(
               `[Turn] Cleared currentOffice for character ${incumbent.characterName} ` +
                 `(${election.electionType}/${election.state}${election.senateClass ? ` Class ${election.senateClass}` : ""}) — did not win re-election`
@@ -792,8 +841,22 @@ export async function resolveOneGeneralElection(
     const nppLookup = new Map(prefetchedNpps.map((n) => [n._id.toString(), n]));
     const winnerNotifInputs: NotificationInput[] = [];
     const loserNotifInputs: NotificationInput[] = [];
+    const winnerAnalytics: Array<{
+      accountId?: string;
+      electionId: string;
+      electionType: string;
+      partyId: string;
+      seatCount: number;
+      voteSharePct: number;
+      marginPct: number;
+      incumbent: boolean;
+      nationId: string;
+      turn: number;
+      winnerOrdinal: number;
+    }> = [];
+    const rankedVotes = Object.entries(effectiveVotes).sort((a, b) => b[1] - a[1]);
 
-    for (const [candidateId, seats] of winners) {
+    for (const [winnerOrdinal, [candidateId, seats]] of winners.entries()) {
       const candidate = candidateMap.get(candidateId);
       if (!candidate) continue;
 
@@ -964,6 +1027,15 @@ export async function resolveOneGeneralElection(
             ) {
               await notifyGovernorOfSenateVacancy(db, currentState, currentSenateClass);
             }
+            if (!getExecutiveOfficeKeys().has(currentOffice.type)) {
+              officeAnalytics.push({
+                officeType: currentOffice.type,
+                transitionType: "left",
+                partyId: char.party ?? "unknown",
+                careerStage: char.careerHistory?.length ?? 0,
+                nationId: election.countryId ?? "US",
+              });
+            }
             console.log(
               `[Turn] ${candidate.characterName} vacated ${currentOffice.type}${currentSenateClass ? ` Class ${currentSenateClass}` : ""} (${currentState}) for new ${officeType.type}${election.senateClass ? ` Class ${election.senateClass}` : ""} (${newState})`
             );
@@ -1070,6 +1142,37 @@ export async function resolveOneGeneralElection(
       if (!candidate.isNPP) {
         const char = charLookup.get(candidate.characterId?.toString() ?? "");
         if (char) {
+          const winnerVotes = effectiveVotes[candidateId] ?? 0;
+          const runnerVotes = rankedVotes.find(([id]) => id !== candidateId)?.[1] ?? 0;
+          const officeKey = officeKeyForElectionType(election.electionType, election.countryId);
+          const incumbentOffice = char.currentOffice;
+          const incumbent =
+            !!incumbentOffice &&
+            incumbentOffice.type === officeKey &&
+            (!("state" in incumbentOffice) || incumbentOffice.state === election.state);
+          winnerAnalytics.push({
+            accountId: char.userId?.toString(),
+            electionId: election._id.toString(),
+            electionType: election.electionType,
+            partyId: candidate.party,
+            seatCount: seats,
+            voteSharePct: totalVotesCast > 0 ? (winnerVotes / totalVotesCast) * 100 : 0,
+            marginPct:
+              totalVotesCast > 0 ? ((winnerVotes - runnerVotes) / totalVotesCast) * 100 : 0,
+            incumbent,
+            nationId: election.countryId ?? "US",
+            turn: currentTurn,
+            winnerOrdinal,
+          });
+          if (!incumbent) {
+            officeAnalytics.push({
+              officeType: officeKey,
+              transitionType: "gained",
+              partyId: candidate.party,
+              careerStage: (char.careerHistory?.length ?? 0) + 1,
+              nationId: election.countryId ?? "US",
+            });
+          }
           const seatsLabel = isMultiSeat ? ` (${seats} seat${seats > 1 ? "s" : ""})` : "";
           const typeLabel =
             ELECTION_TYPE_SHORT_LABEL[election.electionType] ?? election.electionType;
@@ -1166,6 +1269,20 @@ export async function resolveOneGeneralElection(
         );
         const char = charLookup.get(candidate.characterId?.toString() ?? "");
         if (char) {
+          const heldOffice = char.currentOffice;
+          if (
+            heldOffice?.type ===
+              officeKeyForElectionType(election.electionType, election.countryId) &&
+            (!("state" in heldOffice) || heldOffice.state === election.state)
+          ) {
+            officeAnalytics.push({
+              officeType: heldOffice.type,
+              transitionType: "lost",
+              partyId: candidate.party,
+              careerStage: char.careerHistory?.length ?? 0,
+              nationId: election.countryId ?? "US",
+            });
+          }
           const typeLabel =
             ELECTION_TYPE_SHORT_LABEL[election.electionType] ?? election.electionType;
           loserNotifInputs.push({
@@ -1185,12 +1302,38 @@ export async function resolveOneGeneralElection(
 
     await createNotifications(loserNotifInputs);
 
-    await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .updateOne(
-        { electionId: election._id },
-        { $set: { seatsEstimate, finalized: true, updatedAt: now } }
-      );
+    await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
+      { electionId: election._id },
+      {
+        $set: {
+          seatsEstimate,
+          finalized: true,
+          updatedAt: now,
+          resolvedAtTurn: currentTurn,
+          resolvedSeatHolders: winners.map(([candidateId, seats]) => {
+            const candidate = candidateMap.get(candidateId)!;
+            return {
+              identity: `${candidate.isNPP ? "npp" : "player"}:${candidate.isNPP ? candidate.nppId : candidate.characterId}`,
+              party: candidate.party,
+              seats,
+              seatSource: "direct" as const,
+            };
+          }),
+          resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
+          resolutionPath: districted
+            ? "districted_house"
+            : runtimeBlocQuota
+              ? "bloc_list"
+              : election.countryId === "DE" &&
+                  (election.electionType === "bundestag" ||
+                    election.electionType === "snap_bundestag")
+                ? "ams_direct"
+                : isMultiSeat
+                  ? "hare_quota"
+                  : "single_winner",
+        },
+      }
+    );
 
     const winnerCandidateIds = new Set(winners.map(([id]) => id));
     const loserCandidateIds = new Set(losers);
@@ -1286,7 +1429,7 @@ export async function resolveOneGeneralElection(
         election.state,
         now,
         getChamberClass(election),
-        election.countryId
+        { turn: currentTurn, nationId: election.countryId }
       );
     }
     // Spawn next cycle for election types with dedicated respawn functions
@@ -1300,39 +1443,51 @@ export async function resolveOneGeneralElection(
         { _id: election._id },
         { $set: { status: "resolved" satisfies ElectionStatus, updatedAt: now } }
       );
+    await Promise.all(
+      winnerAnalytics
+        .filter(
+          () =>
+            !(
+              election.countryId === "DE" &&
+              getElectionMethod(election.countryId, election.electionType) === "ams" &&
+              (election.electionType === "bundestag" || election.electionType === "snap_bundestag")
+            )
+        )
+        .map((winner) =>
+          captureElectionWon({
+            db,
+            accountId: winner.accountId,
+            electionId: winner.electionId,
+            electionType: winner.electionType,
+            partyId: winner.partyId,
+            seatCount: winner.seatCount,
+            voteSharePct: winner.voteSharePct,
+            marginPct: winner.marginPct,
+            incumbent: winner.incumbent,
+            nationId: winner.nationId,
+            turn: winner.turn,
+            winnerOrdinal: winner.winnerOrdinal,
+          })
+        )
+    );
+    await Promise.all(
+      officeAnalytics.map((transition) =>
+        captureOfficeTransition({
+          db,
+          officeType: transition.officeType,
+          transitionType: transition.transitionType,
+          partyId: transition.partyId,
+          selectionMethod: "election",
+          tenureTurns: 0,
+          careerStage: transition.careerStage,
+          nationId: transition.nationId,
+          turn: currentTurn,
+        })
+      )
+    );
     await voidDebateSessionsForElection(db, election._id, now);
 
-    // ── German AMS reconciliation ─────────────────────────────────────────────
-    // After a Bundestag constituency resolves, check if all 299 constituencies
-    // for this cycle are complete. If so, compute federal Sainte-Laguë
-    // allocation, apply Zweitstimmendeckung overhang drops, and fill list seats
-    // from each party's Landesliste. No-op until the final constituency resolves.
-    // snap_bundestag elections inherit the same AMS allocation — a snap cycle is
-    // a complete Bundestag election for which list seats also need filling.
-    // AMS reconciliation is specific to the DE Bundestag's Landesliste tier.
-    // Dispatch on the configured method (`ams`), scoped to the bundestag chamber
-    // so other AMS chambers (SCO Holyrood, WAL Senedd) do NOT trigger the
-    // Bundestag-specific reconciler.
-    if (
-      electionMethod === "ams" &&
-      (election.electionType === "bundestag" || election.electionType === "snap_bundestag")
-    ) {
-      try {
-        const reconciled = await maybeReconcileBundestag(db, election.cycle, now);
-        // `maybeReconcileBundestag` returns the BundestagElectionResult only
-        // on the resolution that actually completes the cycle (all 299
-        // constituencies resolved). When that happens, open a Bundestags-
-        // präsident election for the newly-seated chamber — parity with the
-        // US Speaker auto-open after a House cycle resolves.
-        if (reconciled) {
-          const { triggerBundestagspraesidentElectionAfterReconcile } =
-            await import("@/lib/congress/bundestagspraesident/openElection");
-          await triggerBundestagspraesidentElectionAfterReconcile(db, now);
-        }
-      } catch (err) {
-        logger.error("Turn", `Bundestag AMS reconciliation failed (cycle ${election.cycle})`, err);
-      }
-    }
+    await reconcileGermanElection(db, election, now);
 
     // ── CN NPC Standing Committee Chairman auto-open ──────────────────────────
     // The NPC is filled across multiple regional `npcDelegate` elections. Once

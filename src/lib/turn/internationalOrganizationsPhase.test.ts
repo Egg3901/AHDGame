@@ -802,16 +802,20 @@ describe("internationalOrganizationsPhase", () => {
     await processInternationalOrganizationsTurn({} as Db, 10);
 
     // Dues see only the enabled member — TR and JO are never in this list.
-    expect(fund.chargeOrganizationDues).toHaveBeenCalledWith(expect.anything(), "NATO", [
-      expect.objectContaining({ countryId: "US" }),
-    ]);
+    expect(fund.chargeOrganizationDues).toHaveBeenCalledWith(
+      expect.anything(),
+      "NATO",
+      [expect.objectContaining({ countryId: "US" })],
+      { context: null }
+    );
     // Tribute is asked for the same org exactly once, and picks its own payers
     // from the access table it is handed.
     expect(tribute.chargeOrganizationTribute).toHaveBeenCalledTimes(1);
     expect(tribute.chargeOrganizationTribute).toHaveBeenCalledWith(
       expect.anything(),
       "NATO",
-      expect.anything()
+      expect.anything(),
+      { context: null }
     );
   });
 
@@ -885,7 +889,16 @@ describe("internationalOrganizationsPhase", () => {
       expect.arrayContaining([
         expect.objectContaining({ countryId: "US" }),
         expect.objectContaining({ countryId: "JO" }),
-      ])
+      ]),
+      { context: null }
     );
   });
 });
+
+// Treaty persistence has its own integration suite; these fixtures isolate bloc ballot resolution.
+vi.mock("@/lib/internationalOrganizations/europeanIntegration/service", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/internationalOrganizations/europeanIntegration/service")
+  >()),
+  reconcileEuropeanTreatyLive: vi.fn().mockResolvedValue(false),
+}));

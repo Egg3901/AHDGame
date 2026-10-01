@@ -1,3 +1,4 @@
+import { euroLedgerCrossRate, type EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 /**
  * Forex Turn Phase — updates exchange rates for all active currencies.
  *
@@ -61,6 +62,8 @@ import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { recoverStaleFillClaims } from "@/lib/forex/fillRecovery";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { reconcileEuroMonetaryUnion } from "@/lib/currency/euro/service";
+import { linkedEuroRates } from "@/lib/currency/euro/rules";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 export interface ForexTurnResult {
@@ -143,6 +146,8 @@ export async function processForexTurn(
   // — the same lookup `seedExchangeRates` used at world creation.
   const eraInitialRates = getInitialRates(preset ?? DEFAULT_SEED_PRESET);
 
+  const euroUnion = await reconcileEuroMonetaryUnion(db, currentTurn);
+
   // Load all central bank data in one query
   const banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   const bankMap = new Map(banks.map((b) => [b.countryId, b]));
@@ -155,7 +160,7 @@ export async function processForexTurn(
   const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
 
   // Compute volumes for all currencies in one pass
-  const volumes = await computeCurrencyVolumes(db, currentTurn);
+  const volumes = await computeCurrencyVolumes(db, currentTurn, euroUnion);
 
   // Pre-fetch all existing exchange rates in one query
   const existingRateDocs = await db
@@ -196,6 +201,9 @@ export async function processForexTurn(
 
   // Update rates for each active country
   for (const countryId of FOREX_ACTIVE_COUNTRIES) {
+    // Member units follow the common quote in a second pass. They cannot drift
+    // independently or spend national reserves defending an obsolete FX band.
+    if (euroUnion?.members[countryId] && countryId !== euroUnion.anchorCountryId) continue;
     const bank = bankMap.get(countryId);
     if (!bank) continue;
 
@@ -443,33 +451,50 @@ export async function processForexTurn(
       await persistInterventionSideEffects(db, countryId, bank, interventionOutcome);
     }
 
+    if (euroUnion && countryId === euroUnion.anchorCountryId)
+      ratesByCurrency[currencyCode] = update.rate;
     countriesUpdated++;
   }
 
-  // Bulgaria's 2027 EUR row is a country-addressable alias of the DE-anchored
-  // shared currency. It must follow the ECB rate after the anchor's turn update;
-  // running a second autonomous BG currency loop would create two euro prices.
-  if (preset === "2027-default") {
-    const eur = await db
-      .collection<ExchangeRate>("exchangeRates")
-      .findOne({ _id: "DE" }, { projection: { rate: 1, macroTarget: 1, rateHistory: 1 } });
-    if (eur) {
-      await db.collection<ExchangeRate>("exchangeRates").updateOne(
-        { _id: "BG", currencyCode: "EUR" },
-        {
-          $set: {
-            rate: eur.rate,
-            macroTarget: eur.macroTarget,
-            rateHistory: eur.rateHistory,
-            updatedAt: now,
+  if (euroUnion) {
+    const linked = linkedEuroRates(euroUnion, ratesByCurrency);
+    const writes: AnyBulkWriteOperation<ExchangeRate>[] = [];
+    for (const member of Object.values(euroUnion.members)) {
+      if (!member || member.countryId === euroUnion.anchorCountryId) continue;
+      const existing = rateMap.get(member.countryId);
+      const rate = linked[member.ledgerCurrency];
+      if (!existing || rate === undefined)
+        throw new Error("A euro member quotation is unavailable");
+      const volume = volumes[member.ledgerCurrency] ?? { buyVolume24: 0, sellVolume24: 0 };
+      writes.push({
+        updateOne: {
+          filter: { _id: member.countryId },
+          update: {
+            $set: {
+              rate,
+              macroTarget: rate,
+              rateHistory: [...existing.rateHistory, { turn: currentTurn, rate }].slice(
+                -FOREX_AND_MACRO_CHART_HISTORY_TURNS
+              ),
+              buyVolume24: volume.buyVolume24,
+              sellVolume24: volume.sellVolume24,
+              interventionPolicy: null,
+              updatedAt: now,
+            },
           },
-        }
-      );
+        },
+      });
+    }
+    if (writes.length) {
+      const result = await db.collection<ExchangeRate>("exchangeRates").bulkWrite(writes);
+      if (result.matchedCount !== writes.length)
+        throw new Error("A euro member quotation could not be persisted");
+      countriesUpdated += writes.length;
     }
   }
 
   // Process triggered limit orders
-  const limitResult = await processTriggeredLimitOrders(db, currentTurn, now);
+  const limitResult = await processTriggeredLimitOrders(db, currentTurn, now, euroUnion);
   totalSpreadRevenue = limitResult.totalSpreadRevenue;
   await sendFillNotifications(db, limitResult.notifications);
 
@@ -897,7 +922,8 @@ interface LimitOrderResult {
 async function processTriggeredLimitOrders(
   db: Db,
   currentTurn: number,
-  now: Date
+  now: Date,
+  union?: EuroMonetaryUnion
 ): Promise<LimitOrderResult> {
   // ── Stuck-order recovery ──────────────────────────────────────────────────
   // Orders left in "processing" from a prior crash are safe to re-attempt:
@@ -944,7 +970,8 @@ async function processTriggeredLimitOrders(
     // Cross rate: how many toCurrency units per 1 fromCurrency unit
     // Both rates are "local currency per 1 internal unit"
     // crossRate = toRate / fromRate
-    const crossRate = toRate / fromRate;
+    const fixedRate = euroLedgerCrossRate(union, order.fromCurrency, order.toCurrency);
+    const crossRate = fixedRate ?? toRate / fromRate;
 
     // If the rate document was malformed this turn (e.g. a NaN cascade like
     // the turn-269 incident upstream), skip the order rather than filling
@@ -960,7 +987,8 @@ async function processTriggeredLimitOrders(
     if (!isFillable) continue;
 
     const remainingAmount = order.amount - order.filledAmount;
-    if (remainingAmount <= 0) continue;
+    if (remainingAmount <= 0 || (fixedRate != null && Math.floor(remainingAmount * crossRate) <= 0))
+      continue;
 
     // ── Atomic claim: open/partial → processing ───────────────────────────
     // This is the idempotency guard. If the process crashes after this point
@@ -977,12 +1005,12 @@ async function processTriggeredLimitOrders(
     }
 
     // Calculate spread on the remaining fill
-    const spreadAmount = remainingAmount * LIMIT_ORDER_SPREAD;
+    const spreadAmount = fixedRate == null ? remainingAmount * LIMIT_ORDER_SPREAD : 0;
     const netAmount = remainingAmount - spreadAmount;
     const centralBankShare = spreadAmount * SPREAD_FEE_CENTRAL_BANK_RATIO;
 
     // Convert net fromCurrency to toCurrency at current cross rate
-    const toAmount = netAmount * crossRate;
+    const toAmount = fixedRate == null ? netAmount * crossRate : Math.floor(netAmount * crossRate);
 
     totalSpreadRevenue += centralBankShare;
 
@@ -993,7 +1021,7 @@ async function processTriggeredLimitOrders(
     // outflow currency — mirroring distributeSpreadFee's cross-currency routing.
     // Use getBankId so shared-bank countries route to the correct bank document.
     const fromCountryEntry = rates.find((r) => r.currencyCode === order.fromCurrency);
-    if (fromCountryEntry) {
+    if (fromCountryEntry && spreadAmount > 0) {
       const toReserveBalance = Math.floor(spreadAmount * SPREAD_FEE_RESERVE_RATIO);
       const toForexRevenue = centralBankShare - toReserveBalance;
       const fromBankId = getBankId(fromCountryEntry.countryId as Parameters<typeof getBankId>[0]);
@@ -1113,58 +1141,78 @@ async function processTriggeredLimitOrders(
 }
 
 /**
- * Expire open limit/direct orders that have passed their expiresAtTurn.
- * Refunds remaining escrowed fromCurrency back to each character.
- *
- * Crash-safety: status is transitioned (open/partial → expired) atomically
- * BEFORE any refund is issued. The filter on open/partial makes this
- * idempotent — already-expired orders are untouched. If the process crashes
- * after the updateMany but before all refunds complete, the next turn's query
- * (which filters on "open"/"partial") will NOT pick up these orders again,
- * eliminating the double-refund risk.
+ * Expiry claims retain a refund marker until the wallet write completes.
+ * Stamped credits make an interrupted batch safe to retry on the next turn.
  */
 async function expireStaleOrders(db: Db, currentTurn: number, now: Date): Promise<number> {
-  // Step 1: Atomically transition all eligible orders from open/partial → expired.
-  // The status filter makes this idempotent — already-expired orders are untouched.
-  const transitionResult = await db.collection<CurrencyOrder>("currencyOrders").updateMany(
-    {
-      status: { $in: ["open", "partial"] },
-      expiresAtTurn: { $lte: currentTurn },
-    },
-    { $set: { status: "expired" as const, updatedAt: now } }
+  const orders = db.collection<CurrencyOrder>("currencyOrders");
+  const transitionResult = await orders.updateMany(
+    { status: { $in: ["open", "partial"] }, expiresAtTurn: { $lte: currentTurn } },
+    { $set: { status: "expired" as const, expiryRefundState: "pending", updatedAt: now } }
   );
-
-  if (transitionResult.modifiedCount === 0) return 0;
-
-  // Step 2: Fetch the orders that were JUST transitioned (same `updatedAt` timestamp).
-  // Re-querying by status + updatedAt is safe because `now` is a fixed value for this turn
-  // and the transition above wrote it atomically.
-  const justExpired = await db
-    .collection<CurrencyOrder>("currencyOrders")
-    .find({
-      status: "expired",
-      updatedAt: now,
-    })
-    .toArray();
-
-  // Step 3: Issue refunds only for the just-transitioned orders.
-  const refundOps: AnyBulkWriteOperation<Character>[] = [];
-  for (const order of justExpired) {
-    const refundAmount = order.amount - order.filledAmount;
-    if (refundAmount > 0) {
-      const refundInc = buildPersonalBalanceInc(refundAmount, order.fromCurrency, true);
-      refundOps.push({
-        updateOne: {
-          filter: { _id: order.characterId },
-          update: { $inc: refundInc },
+  // Include interrupted earlier turns, even when no new order expires today.
+  // Legacy expired rows without a marker are excluded: their refund status
+  // cannot be inferred safely from the terminal status alone.
+  const pending = await orders
+    .find(
+      { status: "expired", expiryRefundState: { $in: ["pending", "credited"] } },
+      {
+        projection: {
+          characterId: 1,
+          fromCurrency: 1,
+          amount: 1,
+          filledAmount: 1,
+          expiryRefundState: 1,
         },
-      });
-    }
+      }
+    )
+    .toArray();
+  const refundOps: AnyBulkWriteOperation<Character>[] = [];
+  for (const order of pending) {
+    if (order.expiryRefundState === "credited") continue;
+    const refundAmount = order.amount - order.filledAmount;
+    if (refundAmount <= 0) continue;
+    const stamp = `forex-expiry:${String(order._id)}#refund`;
+    refundOps.push({
+      updateOne: {
+        filter: { _id: order.characterId, forexExpiryRefunds: { $ne: stamp } },
+        update: {
+          $inc: buildPersonalBalanceInc(refundAmount, order.fromCurrency, true),
+          $addToSet: { forexExpiryRefunds: stamp },
+        },
+      },
+    });
   }
-  if (refundOps.length > 0) {
-    await db.collection<Character>("characters").bulkWrite(refundOps);
+  if (refundOps.length) await db.collection<Character>("characters").bulkWrite(refundOps);
+  if (pending.length)
+    await orders.updateMany(
+      {
+        _id: { $in: pending.map((order) => order._id) },
+        status: "expired",
+        expiryRefundState: "pending",
+      },
+      { $set: { expiryRefundState: "credited" } }
+    );
+  // Keep recovery receipts outside the capped general payment history. They
+  // cannot age out while a refund is awaiting acknowledgement. The serialized
+  // turn phase releases them only after the order records the credited state.
+  const cleanupOps: AnyBulkWriteOperation<Character>[] = pending.map((order) => ({
+    updateOne: {
+      filter: { _id: order.characterId },
+      update: { $pull: { forexExpiryRefunds: `forex-expiry:${String(order._id)}#refund` } },
+    },
+  }));
+  if (cleanupOps.length) {
+    await db.collection<Character>("characters").bulkWrite(cleanupOps);
+    await orders.updateMany(
+      {
+        _id: { $in: pending.map((order) => order._id) },
+        status: "expired",
+        expiryRefundState: "credited",
+      },
+      { $unset: { expiryRefundState: "" } }
+    );
   }
-
   return transitionResult.modifiedCount;
 }
 

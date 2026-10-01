@@ -1,3 +1,4 @@
+import type { ArabRegionalState } from "./rules/arabOrigins";
 import type {
   CrisisEffect,
   CrisisDecisionNode,
@@ -274,6 +275,17 @@ export interface LivingConflictDef {
  * west/east support, so a two-sided war and a one-sided disaster share a shape.
  */
 export interface LivingConflictState {
+  /** Authored fresh-2027 disposition, distinct from the runtime lifecycle. */
+  openingDisposition?: "inherited" | "settled" | "not_applicable" | "counterfactual";
+  openingProvenance?: {
+    preset: "2027-default";
+    evidenceAsOf: string;
+    sourceUrls: string[];
+    /** Scores are authored game scales, not measurements or future outcomes. */
+    scale: "modeled_continuity";
+  };
+  /** Independent origin trajectories and conserved regional hosting exposure. */
+  arabRegional?: ArabRegionalState;
   defKey: string;
   hasOpened: boolean;
   /** Absent on legacy documents and normalized on read. */

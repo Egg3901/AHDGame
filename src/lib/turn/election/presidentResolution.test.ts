@@ -6,6 +6,11 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 
+const officeCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: officeCapture,
+}));
+
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
@@ -82,9 +87,11 @@ describe("resolvePresidentElection", () => {
       "electedOfficials",
       "campaigns",
       "politicalParties",
+      "gameState",
     ]) {
       db.collection(name);
     }
+    db.collectionMocks.gameState!.findOne.mockResolvedValue({ _id: "current" });
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
   });
@@ -92,6 +99,11 @@ describe("resolvePresidentElection", () => {
   it("handles missing totalVotesByUnit by finalizing and withdrawing", async () => {
     const election = { _id: electionId, electionType: "president" };
     const tally = { electionId, totalVotesByUnit: null };
+    db.collectionMocks.characters.find.mockReturnValue(
+      makeCursor([
+        { _id: winnerId, party: "1", currentOffice: { type: "president" }, careerHistory: [] },
+      ])
+    );
 
     const { resolvePresidentElection } = await import("./presidentResolution");
     const result = await resolvePresidentElection(
@@ -104,6 +116,14 @@ describe("resolvePresidentElection", () => {
     expect(result).toBe(true);
     expect(db.collectionMocks["electionVoteTallies"]!.updateOne).toHaveBeenCalled();
     expect(db.collectionMocks["electionCandidates"]!.updateMany).toHaveBeenCalled();
+    expect(officeCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "president",
+        transitionType: "lost",
+        selectionMethod: "election",
+        nationId: "US",
+      })
+    );
   });
 
   it("recovers totalVotesByUnit from unitTurnSnapshots when running totals are empty", async () => {
@@ -728,114 +748,130 @@ describe("resolvePresidentElection", () => {
     expect(clearCabinetOnTransition).not.toHaveBeenCalled();
   });
 
-  it("resolves a 269-269 tie through the House contingent ballot", async () => {
-    const election = { _id: electionId, electionType: "president", countryId: "US" };
-    const tally = {
-      electionId,
-      totalVotesByUnit: {
-        ST1: { [winnerId.toString()]: 500, [loserId.toString()]: 400 },
-      },
-    };
-
-    const { allocateElectoralVotes, determinePresidentialWinner } =
-      await import("@/lib/turn/electionCalculations");
-    const { loadContingentElectionData } = await import("./loadContingentElectionData");
-    const { resolveContingentElection } = await import("./contingentElection");
-
-    vi.mocked(allocateElectoralVotes).mockReturnValue({
-      [winnerId.toString()]: 269,
-      [loserId.toString()]: 269,
-    });
-    vi.mocked(determinePresidentialWinner).mockReturnValue(null);
-    vi.mocked(loadContingentElectionData).mockResolvedValue({
-      presidentCandidates: [],
-      vicePresidentCandidates: [],
-      houseDelegations: [],
-      senators: [],
-    });
-    vi.mocked(resolveContingentElection).mockReturnValue({
-      resolutionMode: "contingent",
-      eligiblePresidentCandidateIds: [winnerId.toString(), loserId.toString()],
-      eligibleVicePresidentCandidateIds: [],
-      houseDelegationVotes: { TX: winnerId.toString() },
-      houseVoteTotals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
-      houseBallots: [
-        {
-          ballot: 1,
-          activeCandidateIds: [winnerId.toString(), loserId.toString()],
-          delegationVotes: { TX: winnerId.toString() },
-          totals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
-          reason: "Initial state-delegation ballot",
+  it.each([
+    [269, 269],
+    [200, 268],
+  ])(
+    "seats the House winner with %i EV against %i EV without marking them a loser",
+    async (winnerEV, loserEV) => {
+      const election = { _id: electionId, electionType: "president", countryId: "US" };
+      const tally = {
+        electionId,
+        totalVotesByUnit: {
+          ST1: { [winnerId.toString()]: 500, [loserId.toString()]: 400 },
         },
-      ],
-      senateVotes: {},
-      senateVoteTotals: {},
-      presidentWinnerId: winnerId.toString(),
-      vicePresidentWinnerId: null,
-      houseThreshold: 26,
-      senateThreshold: 51,
-      deadlockBreakerUsed: false,
-      topElectoralVoteTotal: 269,
-    });
+      };
 
-    const winnerCandidate = {
-      _id: winnerId,
-      electionId,
-      characterId: new ObjectId(),
-      characterName: "House Pick",
-      party: "DEM",
-      isNPP: false,
-      runningMateId: null,
-    };
-    const loserCandidate = {
-      _id: loserId,
-      electionId,
-      characterId: new ObjectId(),
-      characterName: "EV Leader",
-      party: "GOP",
-      isNPP: false,
-    };
+      const { allocateElectoralVotes, determinePresidentialWinner } =
+        await import("@/lib/turn/electionCalculations");
+      const { loadContingentElectionData } = await import("./loadContingentElectionData");
+      const { resolveContingentElection } = await import("./contingentElection");
 
-    db.collectionMocks["electionCandidates"]!.find.mockReturnValue(
-      makeCursor([winnerCandidate, loserCandidate])
-    );
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
-      _id: winnerCandidate.characterId,
-      userId: new ObjectId(),
-      name: "House Pick",
-      careerHistory: [],
-      executiveTermsServed: {},
-    });
-    db.collectionMocks["politicalParties"]!.find.mockReturnValue(makeCursor([]));
+      vi.mocked(allocateElectoralVotes).mockReturnValue({
+        [winnerId.toString()]: winnerEV,
+        [loserId.toString()]: loserEV,
+      });
+      vi.mocked(determinePresidentialWinner).mockReturnValue(null);
+      vi.mocked(loadContingentElectionData).mockResolvedValue({
+        presidentCandidates: [],
+        vicePresidentCandidates: [],
+        houseDelegations: [],
+        senators: [],
+      });
+      vi.mocked(resolveContingentElection).mockReturnValue({
+        resolutionMode: "contingent",
+        eligiblePresidentCandidateIds: [winnerId.toString(), loserId.toString()],
+        eligibleVicePresidentCandidateIds: [],
+        houseDelegationVotes: { TX: winnerId.toString() },
+        houseVoteTotals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
+        houseBallots: [
+          {
+            ballot: 1,
+            activeCandidateIds: [winnerId.toString(), loserId.toString()],
+            delegationVotes: { TX: winnerId.toString() },
+            totals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
+            reason: "Initial state-delegation ballot",
+          },
+        ],
+        senateVotes: {},
+        senateVoteTotals: {},
+        presidentWinnerId: winnerId.toString(),
+        vicePresidentWinnerId: null,
+        houseThreshold: 26,
+        senateThreshold: 51,
+        deadlockBreakerUsed: false,
+        topElectoralVoteTotal: Math.max(winnerEV, loserEV),
+      });
 
-    const { resolvePresidentElection } = await import("./presidentResolution");
-    const result = await resolvePresidentElection(
-      db as unknown as Db,
-      election as never,
-      tally as never,
-      NOW
-    );
+      const winnerCandidate = {
+        _id: winnerId,
+        electionId,
+        characterId: new ObjectId(),
+        characterName: "House Pick",
+        party: "DEM",
+        isNPP: false,
+        runningMateId: null,
+      };
+      const loserCandidate = {
+        _id: loserId,
+        electionId,
+        characterId: new ObjectId(),
+        characterName: "EV Leader",
+        party: "GOP",
+        isNPP: false,
+      };
 
-    expect(result).toBe(true);
-    expect(resolveContingentElection).toHaveBeenCalled();
-    expect(db.collectionMocks["electionVoteTallies"]!.updateOne).toHaveBeenCalledWith(
-      { electionId: election._id, finalized: { $ne: true } },
-      expect.objectContaining({
-        $set: expect.objectContaining({
-          resolutionMode: "contingent",
-          contingentResult: expect.objectContaining({
-            presidentWinnerId: winnerId.toString(),
-            houseBallots: [
-              expect.objectContaining({
-                ballot: 1,
-                reason: "Initial state-delegation ballot",
-              }),
-            ],
+      db.collectionMocks["electionCandidates"]!.find.mockReturnValue(
+        makeCursor([winnerCandidate, loserCandidate])
+      );
+      db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+        _id: winnerCandidate.characterId,
+        userId: new ObjectId(),
+        name: "House Pick",
+        careerHistory: [],
+        executiveTermsServed: {},
+      });
+      db.collectionMocks["politicalParties"]!.find.mockReturnValue(makeCursor([]));
+
+      const { resolvePresidentElection } = await import("./presidentResolution");
+      const result = await resolvePresidentElection(
+        db as unknown as Db,
+        election as never,
+        tally as never,
+        NOW
+      );
+
+      expect(result).toBe(true);
+      const losses = db.collectionMocks.characters!.updateOne.mock.calls.filter(
+        ([, update]) => update.$push?.careerHistory?.type === "lost_election"
+      );
+      expect(losses).toHaveLength(1);
+      expect(losses[0][0]).toEqual({ _id: loserCandidate.characterId });
+      const { updatePoliticianPagesAfterElection } =
+        await import("@/lib/wiki/updatePoliticianPageOnElection");
+      expect(vi.mocked(updatePoliticianPagesAfterElection).mock.calls[0][5]).toEqual(
+        new Set([loserId.toString()])
+      );
+      expect(resolveContingentElection).toHaveBeenCalled();
+      expect(db.collectionMocks["electionVoteTallies"]!.updateOne).toHaveBeenCalledWith(
+        { electionId: election._id, finalized: { $ne: true } },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            resolutionMode: "contingent",
+            contingentResult: expect.objectContaining({
+              presidentWinnerId: winnerId.toString(),
+              houseBallots: [
+                expect.objectContaining({
+                  ballot: 1,
+                  reason: "Initial state-delegation ballot",
+                }),
+              ],
+            }),
           }),
-        }),
-      })
-    );
-  });
+        })
+      );
+    }
+  );
 
   it("heals legacy executive rows by writing countryId onto the president and vice president records", async () => {
     const election = { _id: electionId, electionType: "president", countryId: "US" };

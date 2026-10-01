@@ -72,6 +72,11 @@ const sentryOrg = process.env.SENTRY_ORG || "lakeside-games";
 const sentryProject = process.env.SENTRY_PROJECT || "a-house-divided";
 
 const nextConfig: NextConfig = {
+  // Browser qualification warms real routes without a production build. Keep
+  // those development entries available through the serial sandbox journey.
+  ...(process.env.NODE_ENV === "development" && process.env.AHD_BROWSER_JOURNEY === "1"
+    ? { onDemandEntries: { maxInactiveAge: 60 * 60 * 1000, pagesBufferLength: 64 } }
+    : {}),
   // Don't advertise the framework version via the x-powered-by header.
   poweredByHeader: false,
   // `output: "standalone"` was previously set for Vercel-era cold-start wins.
@@ -227,7 +232,7 @@ const nextConfig: NextConfig = {
           {
             key: "Content-Security-Policy-Report-Only",
             value:
-              "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://www.googletagmanager.com https://fundingchoicesmessages.google.com; worker-src 'self' blob:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://fundingchoicesmessages.google.com",
+              "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com https://pagead2.googlesyndication.com https://*.googlesyndication.com https://www.googletagmanager.com https://fundingchoicesmessages.google.com; worker-src 'self' blob:; connect-src 'self' https:; frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.googlesyndication.com https://googleads.g.doubleclick.net https://fundingchoicesmessages.google.com",
           },
         ],
       },

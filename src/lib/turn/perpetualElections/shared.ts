@@ -17,7 +17,7 @@ import type { CycleAnchorContext } from "@/lib/elections/cycleAnchorContext";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
 import { IE_LOCAL_COUNCIL_SEATS } from "@/lib/countries/ie/data/ieLocalCouncilSeats";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   buildCanonicalSpawn,
   endTimeToLarpTurn,
@@ -468,22 +468,20 @@ export async function ensureBetaParliamentElections(
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only a resolved snap the country called itself drags the
-    // anchor (priorEndTurn + period). Admin-accelerated regulars must NOT move
-    // the LARP calendar, and neither must an IMPOSED snap. See
-    // `snapAnchorEndTime`.
-    const snapAnchor = snapAnchorEndTime(prev, snapType);
-    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-    const spawn = pickNextCanonicalCycle({
+    // A called snap, and every regular spawned on its shifted term clock,
+    // anchors the next regular; an IMPOSED snap and admin-accelerated regulars
+    // do not move the calendar. See `planNextLowerChamberCycle`.
+    const plan = planNextLowerChamberCycle({
       electionType,
-      countryId,
-      prevCycle: prev?.cycle ?? 0,
+      snapType,
+      prev,
       currentTurn,
-      priorEndTurn,
       ctx,
+      endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
+      countryId,
     });
-    if (!spawn) continue; // era-gated (ES 1953) or gate exhausted
+    if (!plan) continue; // era-gated (ES 1953) or gate exhausted
+    const { spawn } = plan;
 
     // Open the primary immediately (mirrors IE/BR/UK): the multi-year cycle
     // far exceeds the 48h window, so the canonical startTurn would otherwise
@@ -500,7 +498,10 @@ export async function ensureBetaParliamentElections(
       state: regionId,
       seatId: getSeatIdFromElection({ countryId, electionType, state: regionId }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear(electionType, spawn.cycle, undefined, undefined, ctx),
+      electionYear: plan.electionYear,
+      ...(plan.shiftedScheduleEndTurn != null && {
+        shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+      }),
       status: "active",
       totalSeats: prev?.totalSeats ?? seatsByRegion.get(regionId) ?? 1,
       startTime,

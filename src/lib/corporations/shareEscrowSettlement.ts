@@ -50,6 +50,19 @@ type EscrowSettlementOptions = {
   pools?: Map<CurrencyCode, EquityMarketPool>;
 };
 
+/**
+ * Whether the currency has an equity pool. A preloaded `pools` map answers it
+ * without a read; pools are never deleted, so a pass-level map stays correct.
+ */
+async function equityPoolExists(
+  db: Db,
+  currency: CurrencyCode,
+  options?: EscrowSettlementOptions
+): Promise<boolean> {
+  if (options?.pools) return options.pools.get(currency) !== undefined;
+  return Boolean(await readEquityPool(db, currency, options));
+}
+
 export type FloatBuyCreditReceipt = {
   issuerShares: number;
   issuerCreditLocal: number;
@@ -199,7 +212,7 @@ export async function settleFloatSellDebit(
     countryId: corp.countryId,
     liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
   });
-  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) {
+  if (options?.counterparty !== "issuer" && (await equityPoolExists(db, currency, options))) {
     const debit = await debitEquityPoolGated(
       db,
       currency,
@@ -271,7 +284,7 @@ export async function onFloatSellCommitted(
     countryId: corp.countryId,
     liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
   });
-  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) return;
+  if (options?.counterparty !== "issuer" && (await equityPoolExists(db, currency, options))) return;
   if (getShareBuybackMode(corp) === "escrow") return;
   // Self-contained capture: this is invoked fire-and-forget (`void
   // onFloatSellCommitted(...)`) from the trade paths, so a rejection here would

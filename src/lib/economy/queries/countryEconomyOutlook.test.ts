@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
@@ -114,6 +114,11 @@ beforeEach(async () => {
   mockFind("unownedSectors", []);
   mockFind("corporations", []);
 });
+
+// Load the large dependency graph outside individual assertion timeouts.
+beforeAll(async () => {
+  await import("./countryEconomyOutlook");
+}, 180_000);
 
 describe("buildCountryEconomyOutlook", () => {
   it("assembles the pulse strip from central bank + budget + state aggregates", async () => {

@@ -12,6 +12,11 @@
  * stacking on top of it. Finally snapshot the pre-drift shares, so the Ledger's
  * Trend column measures this turn's movement.
  */
+import {
+  loadOrganizationCashContext,
+  withOrganizationCashBatch,
+  type OrganizationCashContext,
+} from "@/lib/internationalOrganizations/cashLedger";
 import { ObjectId, type Db } from "mongodb";
 import { applyEraCrossing } from "@/lib/alignment/crossing";
 import { computeDrift, membershipPullForTurn } from "@/lib/alignment/drift";
@@ -146,6 +151,18 @@ export async function processAlignmentTurn(
     };
   }
 
+  const cashContext = await loadOrganizationCashContext(db, currentTurn);
+  return withOrganizationCashBatch(db, cashContext, (batch) =>
+    processEnabledAlignmentTurn(db, currentTurn, gs, batch)
+  );
+}
+
+async function processEnabledAlignmentTurn(
+  db: Db,
+  currentTurn: number,
+  gs: GameState | null,
+  cashContext: OrganizationCashContext | null
+): Promise<AlignmentPhaseResult> {
   const year = (gs ? resolveGameYear(gs) : null) ?? new Date().getFullYear();
   const topology = await loadAlignmentTopology(db, year);
   const { poles } = topology;
@@ -298,7 +315,9 @@ export async function processAlignmentTurn(
       { $set: { resolvedTurn: currentTurn, appliedPoints, refunded } }
     );
     if (refunded) {
-      await creditOrganizationFund(db, playDoc.organizationId, playDoc.amountLocal);
+      await creditOrganizationFund(db, playDoc.organizationId, playDoc.amountLocal, {
+        context: cashContext,
+      });
       playsRefunded++;
     }
   };

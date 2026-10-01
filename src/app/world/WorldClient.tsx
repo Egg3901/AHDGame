@@ -7,6 +7,12 @@ import { type CountryId } from "@/lib/constants/countries";
 import { resolveCountryAvailability } from "@/lib/countryAvailability";
 import { WORLD_ROADMAP_COUNTRIES } from "@/lib/worldCountryRegistry";
 import CountryCard from "./components/CountryCard";
+import {
+  TIER_ORDER,
+  TIER_LABELS,
+  TIER_COLORS,
+  TIER_STROKES,
+} from "@/components/landing/countryTiers";
 import PlannedCountryCard from "./components/PlannedCountryCard";
 import WorldMapSVG from "./components/WorldMapSVG";
 import type { NationWorldSnapshot } from "@/lib/world/nationWorldSnapshots";
@@ -64,31 +70,25 @@ export default function WorldClient({
               worldEntities={worldEntities}
               blocMapData={blocMapData}
             />
-            <div className="flex justify-center gap-6 text-xs text-muted">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-success/80 border border-success/30" />
-                <span>Full Autonomous</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-warning/80 border border-warning/30" />
-                <span>Sphere Macro</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-purple-500/80 border border-purple-500/30" />
-                <span>Historical Presence</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-primary/80 border border-primary/30" />
-                <span>Unclassified</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-full border"
-                  style={{ backgroundColor: "#9333ea", borderColor: "#7e22ce" }}
-                />
-                <span>Active Crisis</span>
-              </div>
+            <div className="flex flex-wrap justify-center gap-6 text-xs text-muted">
+              {TIER_ORDER.map((tier) => (
+                <div key={tier} className="flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-full border"
+                    style={{
+                      backgroundColor: TIER_COLORS[tier],
+                      borderColor:
+                        tier === "background" ? TIER_STROKES.economic : TIER_STROKES[tier],
+                    }}
+                  />
+                  <span>{TIER_LABELS[tier]}</span>
+                </div>
+              ))}
             </div>
+            <p className="text-center text-xs text-muted-foreground">
+              Light borders identify background nations with aggregate data. Tap or click to inspect
+              them.
+            </p>
           </section>
 
           <FederationFinances snapshots={legacyFinances} />

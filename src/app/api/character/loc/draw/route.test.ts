@@ -43,12 +43,9 @@ vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn(),
 }));
 
-vi.mock("@/lib/lineOfCredit/ledger", () => ({
-  insertLocLedgerEntry: vi.fn(),
-}));
-
-vi.mock("@/lib/financialTxLog/emit", () => ({
-  emitTx: vi.fn(),
+vi.mock("@/lib/lineOfCredit/settlement", () => ({
+  loadLocSettlement: vi.fn().mockResolvedValue(null),
+  settleLocPlan: vi.fn().mockResolvedValue({ status: "rejected", error: "stale quote" }),
 }));
 
 function makeCharacter(overrides: Partial<Character> = {}): Character {
@@ -152,8 +149,7 @@ describe("POST /api/character/loc/draw", () => {
   it("rejects a stale concurrent draw when the borrower has already consumed the headroom", async () => {
     const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
     const { buildLocSnapshot } = await import("@/lib/lineOfCredit/buildSnapshot");
-    const { insertLocLedgerEntry } = await import("@/lib/lineOfCredit/ledger");
-    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    const { settleLocPlan } = await import("@/lib/lineOfCredit/settlement");
     const charactersCollection = db.collection("characters");
 
     const character = makeCharacter();
@@ -194,7 +190,11 @@ describe("POST /api/character/loc/draw", () => {
       new Request("http://localhost/api/character/loc/draw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: "EUR", amount: 250_000_000 }),
+        body: JSON.stringify({
+          currency: "EUR",
+          amount: 250_000_000,
+          commandId: "00000000-0000-4000-8000-000000000001",
+        }),
       })
     );
     const data = await response.json();
@@ -202,16 +202,16 @@ describe("POST /api/character/loc/draw", () => {
     expect(response.status).toBe(400);
     expect(data.error).toContain("Exceeds your credit limit");
 
-    const [filter] = charactersCollection.updateOne.mock.calls[0] as [Record<string, unknown>];
-    expect(filter._id).toEqual(character._id);
-    expect(filter["lineOfCredit.accountsOpened.EUR"]).toBe(true);
-    expect(filter["lineOfCredit.drawFrozen"]).toEqual({ $ne: true });
-    expect(filter["lineOfCredit.balances.EUR"]).toBe(5_000_000_000);
-    expect(filter["lineOfCredit.balances.USD"]).toEqual({ $not: { $gt: 0 } });
-    expect(filter["lineOfCredit.arrears.EUR"]).toEqual({ $not: { $gt: 0 } });
-
-    expect(charactersCollection.findOne).toHaveBeenCalledWith({ _id: character._id });
-    expect(insertLocLedgerEntry).not.toHaveBeenCalled();
-    expect(emitTx).not.toHaveBeenCalled();
+    expect(settleLocPlan).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("loc:draw:"),
+      expect.any(Number),
+      expect.objectContaining({
+        expectedLoc: character.lineOfCredit,
+        expectedRevision: null,
+        request: { operation: "draw", currency: "EUR", amount: 250_000_000 },
+      })
+    );
+    expect(charactersCollection.updateOne).not.toHaveBeenCalled();
   });
 });

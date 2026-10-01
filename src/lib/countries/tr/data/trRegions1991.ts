@@ -1,5 +1,7 @@
 import type { State } from "@/lib/db/types";
 import { trRegions } from "./trRegions";
+import { allocatePopulationTotal } from "@/lib/seeds/rules/populationAllocation";
+import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals1991";
 
 /**
  * 1990 census population in Turkey's seven geographic regions. Ankara province
@@ -8,6 +10,7 @@ import { trRegions } from "./trRegions";
  * Source: Union of Municipalities of Türkiye, 1990 General Population Census
  * definitive results, https://www.tbb.gov.tr/sites/default/files/online/dergiler/2002_ocak/files/basic-html/page7.html
  * The 1990 national total is also confirmed by TÜİK's census series.
+ * Regional census shares are normalized to the dated 1991 national total.
  * GDP weights remain from the existing bundle and are reconciled to the
  * 1991 national budget at bootstrap. The Senate was abolished in 1980.
  */
@@ -22,8 +25,11 @@ export const TR_1991_REGION_POPULATION: Readonly<Record<string, number>> = {
   TR_CEN: 6_676_928,
 };
 
-export const trRegions1991: State[] = trRegions.map((region) => ({
-  ...region,
-  population: TR_1991_REGION_POPULATION[region._id],
-  stateSenateSeats: 0,
-}));
+export const trRegions1991: State[] = allocatePopulationTotal(
+  trRegions.map((region) => ({
+    ...region,
+    population: TR_1991_REGION_POPULATION[region._id],
+    stateSenateSeats: 0,
+  })),
+  POPULATION_TOTALS_1991.TR.population
+);

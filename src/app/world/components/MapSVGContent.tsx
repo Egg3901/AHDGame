@@ -15,6 +15,9 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { ArcSpec, HotspotSpec, StarSpec } from "@/components/landing/globeEnhancements";
 import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 import {
+  BACKGROUND_MACRO_COLOR,
+  BACKGROUND_MACRO_STROKE,
+  backgroundMacroWireframeFill,
   isTierInteractive,
   tierWireframeFill,
   TIER_COLORS,
@@ -33,6 +36,9 @@ const DEFAULT_BLOC_PALETTE = buildBlocPalette([]);
  * individual background paths.
  */
 export const BACKGROUND_LAYER_KEY = "__tier_background__";
+
+/** pathRefsMap key for the merged layer of macro-simulated Background Nations. */
+export const BACKGROUND_MACRO_LAYER_KEY = "__tier_background_macro__";
 
 /** The status color a country's blob uses — so a British-Isles overlay blob
  *  matches whoever owns it (active green, etc.). */
@@ -131,10 +137,12 @@ interface MapSVGContentProps {
    * Landing-only four-tier coloring (see components/landing/countryTiers.ts).
    * Precomputed once per era by the caller: feature id → tier, missing means
    * Background. When set it REPLACES the ad-hoc access/status color branches —
-   * exactly four fills are drawn and nothing else — and Background Nations are
-   * collapsed into one inert, handler-free layer.
+   * exactly four fills are drawn and nothing else. Background land is merged,
+   * except features explicitly opted into aggregate inspection by the world page.
    */
   tierLookup?: ReadonlyMap<string, CountryTier>;
+  /** World-page aggregate inspection, independent of full-country navigation. */
+  inspectableFeatureIds?: ReadonlySet<string>;
   /**
    * East / West / Non-Aligned overlay for the tier-mode globe. Only meaningful
    * alongside `tierLookup`: it recolors the interactive tiers and leaves the
@@ -142,6 +150,24 @@ interface MapSVGContentProps {
    */
   blocLookup?: ReadonlyMap<string, MapBlocId>;
   blocPalette?: Readonly<Record<string, MapBlocStyle>>;
+  /**
+   * Era art for the landing globe. `underlay` paints after the starfield and
+   * before the sphere, so anything in it passes behind the globe; `overlay`
+   * paints last. Both must be inert (`pointer-events: none`): they sit over
+   * the countries' hit areas.
+   */
+  underlay?: React.ReactNode;
+  overlay?: React.ReactNode;
+  /**
+   * Background Nations the world simulates as macro aggregates. They stay in
+   * the merged, inert background but get their own layer and colour, so the
+   * globe shows how much of the world is simulated. Absent keeps one grey layer.
+   */
+  backgroundMacroFeatureIds?: ReadonlySet<string>;
+  /** Sphere and graticule overrides for an era style. Ignored in wireframe mode. */
+  sphereFill?: string;
+  sphereStroke?: string;
+  graticuleStroke?: string;
 }
 
 export default function MapSVGContent({
@@ -181,8 +207,15 @@ export default function MapSVGContent({
   playablePathRefs,
   crisisCountryId,
   tierLookup,
+  inspectableFeatureIds,
   blocLookup,
   blocPalette = DEFAULT_BLOC_PALETTE,
+  underlay,
+  overlay,
+  backgroundMacroFeatureIds,
+  sphereFill,
+  sphereStroke,
+  graticuleStroke,
 }: MapSVGContentProps) {
   const svgW = layout?.svgW ?? DEFAULT_SVG_W;
   const svgH = layout?.svgH ?? DEFAULT_SVG_H;
@@ -197,13 +230,15 @@ export default function MapSVGContent({
   // `d` is every background country's subpath concatenated. That drops ~150
   // interactive DOM nodes (and their handlers, hover state and per-frame
   // attribute writes) down to a single inert node.
-  const backgroundLayerD = React.useMemo(() => {
-    if (!tierLookup) return "";
-    let merged = "";
+  const backgroundLayers = React.useMemo(() => {
+    if (!tierLookup) return { plain: "", macro: "" };
+    let plain = "";
+    let macro = "";
     for (let idx = 0; idx < features.length; idx++) {
       const feature = features[idx];
       const id = feature.id != null ? String(feature.id) : `_geo_${idx}`;
-      if (isTierInteractive(tierLookup.get(id) ?? "background")) continue;
+      if (isTierInteractive(tierLookup.get(id) ?? "background") || inspectableFeatureIds?.has(id))
+        continue;
       // A Background Nation that belongs to a BLOC is drawn on its own below.
       // Eight of NATO's fourteen members are background entities — Canada, the
       // Benelux, Norway, Denmark, Portugal, Iceland — as is Albania in the
@@ -211,10 +246,12 @@ export default function MapSVGContent({
       // an alliance at two-thirds of its real size, with no way to tell.
       if (blocLookup?.get(id)) continue;
       const segment = paths.get(id);
-      if (segment) merged += segment;
+      if (!segment) continue;
+      if (backgroundMacroFeatureIds?.has(id)) macro += segment;
+      else plain += segment;
     }
-    return merged;
-  }, [features, paths, tierLookup, blocLookup]);
+    return { plain, macro };
+  }, [features, paths, tierLookup, blocLookup, inspectableFeatureIds, backgroundMacroFeatureIds]);
 
   return (
     <svg
@@ -305,6 +342,8 @@ export default function MapSVGContent({
         </>
       )}
 
+      {underlay}
+
       <circle
         ref={sphereRef}
         cx={translate[0]}
@@ -313,11 +352,9 @@ export default function MapSVGContent({
         fill={
           wireframeColor
             ? "#000800"
-            : enhanced
-              ? "url(#globe-ocean-enhanced)"
-              : "url(#globe-atmosphere)"
+            : (sphereFill ?? (enhanced ? "url(#globe-ocean-enhanced)" : "url(#globe-atmosphere)"))
         }
-        stroke={wireframeColor ?? (enhanced ? "#1a6b9f" : "#0a3d62")}
+        stroke={wireframeColor ?? sphereStroke ?? (enhanced ? "#1a6b9f" : "#0a3d62")}
         strokeWidth={1}
         style={{ opacity: 1 }}
       />
@@ -325,7 +362,7 @@ export default function MapSVGContent({
       <path
         ref={graticuleRef}
         fill="none"
-        stroke={wireframeColor ?? "#5bb8f5"}
+        stroke={wireframeColor ?? graticuleStroke ?? "#5bb8f5"}
         strokeWidth={wireframeColor ? 0.4 : 0.3}
         style={{ opacity: wireframeColor ? 0.18 : 0.3 }}
       />
@@ -336,7 +373,7 @@ export default function MapSVGContent({
             if (el) pathRefsMap.current.set(BACKGROUND_LAYER_KEY, el);
             else pathRefsMap.current.delete(BACKGROUND_LAYER_KEY);
           }}
-          d={backgroundLayerD}
+          d={backgroundLayers.plain}
           fill={
             wireframeColor
               ? tierWireframeFill("background", wireframeColor)
@@ -350,14 +387,36 @@ export default function MapSVGContent({
         />
       )}
 
+      {tierLookup && backgroundMacroFeatureIds && backgroundMacroFeatureIds.size > 0 && (
+        <path
+          ref={(el) => {
+            if (el) pathRefsMap.current.set(BACKGROUND_MACRO_LAYER_KEY, el);
+            else pathRefsMap.current.delete(BACKGROUND_MACRO_LAYER_KEY);
+          }}
+          d={backgroundLayers.macro}
+          fill={
+            wireframeColor ? backgroundMacroWireframeFill(wireframeColor) : BACKGROUND_MACRO_COLOR
+          }
+          stroke={wireframeColor ?? BACKGROUND_MACRO_STROKE}
+          strokeWidth={TIER_STROKE_WIDTHS.background}
+          strokeOpacity={wireframeColor ? 0.35 : 1}
+          style={{ pointerEvents: "none" }}
+          aria-hidden="true"
+        />
+      )}
+
       {features.map((feature, idx) => {
         const id = feature.id != null ? String(feature.id) : `_geo_${idx}`;
         const mapped = WORLD_MAPPED_COUNTRIES[id];
+        const inspectable = inspectableFeatureIds?.has(id) === true;
+        const inspectionLabel = inspectable
+          ? `Inspect ${worldEntities?.byFeatureId[id]?.displayName ?? id} background macro`
+          : undefined;
         const isHov =
           !isAnimating && hoveredOwnerKey != null && featureOwnerKey(id) === hoveredOwnerKey;
 
-        // Four-tier mode: exactly four fills, and Background Nations never reach
-        // here (they are in the merged inert layer above).
+        // Four-tier mode keeps four fills. Inspectable background aggregates
+        // receive their own path, while unsimulated land stays merged above.
         if (tierLookup) {
           const tier = tierLookup.get(id) ?? "background";
           // Bloc mode recolors the interactive countries by alignment, and adds
@@ -365,10 +424,10 @@ export default function MapSVGContent({
           // drawn at its real size. A country with no bloc entry keeps its tier
           // fill rather than dropping out, so the roster and the map agree.
           const bloc = blocLookup?.get(id);
-          if (!isTierInteractive(tier) && !bloc) return null;
+          if (!isTierInteractive(tier) && !bloc && !inspectable) return null;
           // Background members are painted but stay INERT: there is no country
           // page behind Luxembourg, so offering a click would promise one.
-          if (!isTierInteractive(tier) && bloc) {
+          if (!isTierInteractive(tier) && bloc && !inspectable) {
             return (
               <path
                 key={id}
@@ -397,7 +456,10 @@ export default function MapSVGContent({
               : TIER_COLORS[tier];
           const tierStroke = isHov
             ? (wireframeColor ?? MAP_COLORS.strokeActive)
-            : (wireframeColor ?? (bloc ? blocPalette[bloc]?.stroke : null) ?? TIER_STROKES[tier]);
+            : (wireframeColor ??
+              (inspectable ? TIER_STROKES.economic : null) ??
+              (bloc ? blocPalette[bloc]?.stroke : null) ??
+              TIER_STROKES[tier]);
           return (
             <path
               key={id}
@@ -426,6 +488,19 @@ export default function MapSVGContent({
                 onHover(null);
                 onTooltipClear();
               }}
+              role={inspectable ? "button" : undefined}
+              tabIndex={inspectable ? 0 : undefined}
+              aria-label={inspectionLabel}
+              onKeyDown={
+                inspectable
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onCountryClick(id);
+                      }
+                    }
+                  : undefined
+              }
               onClick={() => onCountryClick(id)}
             />
           );
@@ -479,6 +554,19 @@ export default function MapSVGContent({
                 onHover(null);
                 onTooltipClear();
               }}
+              role={inspectable ? "button" : undefined}
+              tabIndex={inspectable ? 0 : undefined}
+              aria-label={inspectionLabel}
+              onKeyDown={
+                inspectable
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onCountryClick(id);
+                      }
+                    }
+                  : undefined
+              }
               onClick={() => onCountryClick(id)}
             />
           );
@@ -573,7 +661,7 @@ export default function MapSVGContent({
             strokeWidth={strokeWidth}
             style={{
               outline: "none",
-              cursor: isNavigable && !isAnimating ? "pointer" : "default",
+              cursor: (isNavigable || inspectable) && !isAnimating ? "pointer" : "default",
               transition: isAnimating ? "none" : "fill 0.15s ease",
             }}
             onMouseEnter={() => {
@@ -588,6 +676,19 @@ export default function MapSVGContent({
               onHover(null);
               onTooltipClear();
             }}
+            role={inspectable ? "button" : undefined}
+            tabIndex={inspectable ? 0 : undefined}
+            aria-label={inspectionLabel}
+            onKeyDown={
+              inspectable
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onCountryClick(id);
+                    }
+                  }
+                : undefined
+            }
             onClick={() => onCountryClick(id)}
           />
         );
@@ -674,6 +775,8 @@ export default function MapSVGContent({
             </circle>
           </g>
         ))}
+
+      {overlay}
     </svg>
   );
 }

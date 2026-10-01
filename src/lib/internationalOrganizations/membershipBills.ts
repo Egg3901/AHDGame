@@ -1,3 +1,8 @@
+import {
+  organizationCashContext,
+  withOrganizationCashBatch,
+  witnessOrganizationCash,
+} from "./cashLedger";
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Bill, FederalBudget } from "@/lib/db/types";
@@ -44,16 +49,39 @@ export async function applyOrgFundProvision(
     );
     return;
   }
-  await db
-    .collection<FederalBudget>("federalBudget")
-    .updateOne(
-      { countryId },
-      { $inc: { treasuryBalance: -amountLocal }, $set: { updatedAt: new Date() } }
-    );
-  // Credit the fund in its (founding) currency, converted from the member's.
-  const fundCountry = await resolveOrgFundCurrencyCountry(db, p.organizationId);
-  const amountFund = convertLocal(countryId, fundCountry, amountLocal, await loadWorldPreset(db));
-  await creditOrganizationFund(db, p.organizationId, amountFund);
+  const context = await organizationCashContext(db, { turn });
+  const { fundCountry, amountFund } = await withOrganizationCashBatch(
+    db,
+    context,
+    async (batch) => {
+      const debit = await db
+        .collection<FederalBudget>("federalBudget")
+        .updateOne(
+          { countryId },
+          { $inc: { treasuryBalance: -amountLocal }, $set: { updatedAt: new Date() } }
+        );
+      if (debit.modifiedCount > 0) {
+        await witnessOrganizationCash(db, batch, {
+          kind: "government",
+          ref: countryId,
+          countryId,
+          amount: -amountLocal,
+          site: "capitalization_treasury",
+          now: new Date(),
+        });
+      }
+      // Credit the fund in its (founding) currency, converted from the member's.
+      const fundCountry = await resolveOrgFundCurrencyCountry(db, p.organizationId);
+      const amountFund = convertLocal(
+        countryId,
+        fundCountry,
+        amountLocal,
+        batch?.preset ?? (await loadWorldPreset(db))
+      );
+      await creditOrganizationFund(db, p.organizationId, amountFund, { context: batch });
+      return { fundCountry, amountFund };
+    }
+  );
   const fundCurrency = COUNTRY_CONFIGS[fundCountry]?.currencyCode ?? "USD";
   await recordOrgHistoryEvent(
     db,

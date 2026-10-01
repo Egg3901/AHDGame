@@ -39,6 +39,8 @@ interface StrategyPanelProps {
    * NUMBER of units. Absent below plants, where the row is meaningless.
    */
   plantsCapacityUnits?: number | null;
+  /** The strategy the retool hint points at, marked in the picker. */
+  suggestedStrategyId?: string | null;
 }
 
 /**
@@ -103,6 +105,7 @@ export default function StrategyPanel({
   financials,
   margins,
   plantsCapacityUnits,
+  suggestedStrategyId = null,
 }: StrategyPanelProps) {
   const { formatAmount } = useCurrency();
   // strategy.retoolCost / cancelCost are returned in ₳ by the API (see
@@ -312,6 +315,11 @@ export default function StrategyPanel({
                                   ? `≈ ${formatAmount(s.projectedRevenuePerTurn, liquidCode)}/turn gross`
                                   : ""}
                         </span>
+                        {s.id === suggestedStrategyId && !isCurrent && !unavailable && (
+                          <span className="block text-[10px] font-medium text-info">
+                            Buyers here are short of what this makes
+                          </span>
+                        )}
                         {plantsCapacityUnits != null &&
                           plantsCapacityUnits > 0 &&
                           !isCurrent &&

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { advanceArabRegion } from "./rules/arabRegional";
 import { advancePandemicState } from "./rules/pandemic";
 import { normalizeConflictState } from "./engine";
 import { ARAB_UPRISINGS_DEF } from "./defs/arabUprisings";
@@ -34,6 +35,20 @@ describe("modern crisis catalog contract", () => {
       expect(advancePandemicState(initial).tracks?.transmission).not.toBe(
         initial.tracks?.transmission
       );
+    } else if (def.key === "arab_uprisings") {
+      const signals = [
+        {
+          countryId: "SY",
+          population: 350_000,
+          legitimacy: 30,
+          unemployment: 18,
+          foodStress: 2,
+          basis: "background" as const,
+        },
+      ];
+      const initial = advanceArabRegion(undefined, signals, {}, 1);
+      const pressured = advanceArabRegion(initial, signals, {}, 12);
+      expect(pressured.origins.SY?.mobilization).toBeGreaterThan(initial.origins.SY!.mobilization);
     } else expect(def.scheduledPressures).not.toHaveLength(0);
     expect(def.phases.every((phase) => phase.advancePressure >= 100)).toBe(true);
     expect(

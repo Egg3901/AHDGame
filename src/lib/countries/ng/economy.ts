@@ -57,6 +57,7 @@ const repEcon = {
 };
 const costScaleAnchors = {
   gdpLow: 1800000000000,
+  // Dated national anchor under #2676; generator applies this after the historical snapshot.
   popLow: 88992220,
   scaleLow: 0.04,
   gdpHigh: 144000000000000,

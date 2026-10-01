@@ -1,6 +1,7 @@
+import { POST } from "./route";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
@@ -8,7 +9,7 @@ vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 100 }),
 }));
 
-let db: MockDb;
+let db: ReturnType<typeof createInMemoryDb>;
 const chairCharacterId = new ObjectId();
 
 function makeUser(overrides: Record<string, unknown> = {}) {
@@ -57,12 +58,15 @@ async function setup({
   user?: ReturnType<typeof makeUser>;
   outstanding?: Array<{ totalBalance: number; totalArrears: number }>;
 } = {}) {
-  db = createMockDb();
-  db.collection("centralBanks").findOne.mockResolvedValue(bank);
-  db.collection("centralBanks").updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
-  db.collection("characters").aggregate.mockReturnValue({
-    toArray: vi.fn().mockResolvedValue(outstanding),
-  });
+  db = createInMemoryDb();
+  db.seed("centralBanks", [bank]);
+  db.seed("gameConfig", [{ _id: "default", auditLog: false, privateBankingEnabled: false }]);
+  // This adapter does not evaluate expressions inside $sum. Keep only the read
+  // aggregate stub; actual command, cash, cooldown and receipts are persisted.
+  vi.spyOn(db.collection("characters"), "aggregate").mockImplementation(() => ({
+    toArray: async () => outstanding,
+    next: async () => outstanding[0] ?? null,
+  }));
 
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -77,7 +81,6 @@ describe("POST /api/country/[code]/central-bank/reserve-pool-transfer", () => {
 
   it("moves forex revenue into lending reserves", async () => {
     await setup();
-    const { POST } = await import("./route");
 
     const response = await POST(makeRequest({ direction: "toLending", amount: 400 }), ctx());
     const json = await response.json();
@@ -86,13 +89,12 @@ describe("POST /api/country/[code]/central-bank/reserve-pool-transfer", () => {
     expect(json.amount).toBe(400);
     expect(json.forexRevenueDelta).toBe(-400);
     expect(json.reserveBalanceDelta).toBe(400);
-    expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: "US", forexRevenue: { $gte: 400 } }),
-      expect.objectContaining({
-        $inc: { forexRevenue: -400, reserveBalance: 400 },
-        $set: expect.objectContaining({ lastReservePoolTransferTurn: 100 }),
-      })
-    );
+    expect(db.collection("centralBanks").docs[0]).toMatchObject({
+      forexRevenue: 600,
+      reserveBalance: 1200,
+      lastReservePoolTransferTurn: 100,
+    });
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(1);
   });
 
   it("rejects lending→forex moves that would uncover outstanding loans", async () => {
@@ -104,28 +106,26 @@ describe("POST /api/country/[code]/central-bank/reserve-pool-transfer", () => {
       }),
       outstanding: [{ totalBalance: 700, totalArrears: 0 }],
     });
-    const { POST } = await import("./route");
 
     const response = await POST(makeRequest({ direction: "toForex", amount: 100 }), ctx());
     const json = await response.json();
 
     expect(response.status).toBe(400);
     expect(json.error).toMatch(/outstanding loans/i);
-    expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
 
   it("enforces the once-per-day cooldown for chairs", async () => {
     await setup({
       bank: makeBank({ lastReservePoolTransferTurn: 90 }),
     });
-    const { POST } = await import("./route");
 
     const response = await POST(makeRequest({ direction: "toLending", amount: 100 }), ctx());
     const json = await response.json();
 
     expect(response.status).toBe(400);
     expect(json.error).toMatch(/once every 24 turns/i);
-    expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
 
   it("rejects non-chair callers", async () => {
@@ -134,22 +134,20 @@ describe("POST /api/country/[code]/central-bank/reserve-pool-transfer", () => {
         character: { _id: new ObjectId(), name: "Not Chair", countryId: "US" },
       }),
     });
-    const { POST } = await import("./route");
 
     const response = await POST(makeRequest({ direction: "toLending", amount: 100 }), ctx());
     expect(response.status).toBe(403);
-    expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
 
   it("rejects amounts above the 50% source-pool cap", async () => {
     await setup();
-    const { POST } = await import("./route");
 
     const response = await POST(makeRequest({ direction: "toLending", amount: 600 }), ctx());
     const json = await response.json();
 
     expect(response.status).toBe(400);
     expect(json.error).toMatch(/50%/i);
-    expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
 });

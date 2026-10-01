@@ -34,6 +34,7 @@ import { CampaignSongSection } from "./components/CampaignSongSection";
 import { PoliticsSection } from "./components/PoliticsSection";
 import { AppearanceSection } from "./components/AppearanceSection";
 import { SecuritySection } from "./components/SecuritySection";
+import { BlockedPlayersSection } from "./components/BlockedPlayersSection";
 import { DangerZoneSection } from "./components/DangerZoneSection";
 import { ReferralsSection } from "./components/ReferralsSection";
 import { SupporterPerksSection } from "./components/SupporterPerksSection";
@@ -48,6 +49,7 @@ import {
   CHARACTER_SECTIONS,
   DISCORD_MESSAGES,
   GOOGLE_MESSAGES,
+  APPLE_MESSAGES,
   IMPERIAL_SECTIONS,
 } from "./components/sectionsConfig";
 import { RecommendationsBlurb } from "./components/RecommendationsBlurb";
@@ -91,6 +93,8 @@ export function SettingsPageContent() {
   const reason = searchParams.get("reason");
   const hasDiscordParams = discord === "linked" || (discord === "error" && reason);
   const hasGoogleParams = google === "linked" || (google === "error" && reason);
+  const apple = searchParams.get("apple");
+  const hasAppleParams = apple === "linked" || (apple === "error" && reason);
   const oauthBanner = (() => {
     if (oauthBannerDismissed) return null;
     if (hasDiscordParams) {
@@ -102,6 +106,11 @@ export function SettingsPageContent() {
       return google === "linked"
         ? GOOGLE_MESSAGES.linked
         : (GOOGLE_MESSAGES[reason ?? ""] ?? { key: "oauth.google.failed", ok: false });
+    }
+    if (hasAppleParams) {
+      return apple === "linked"
+        ? APPLE_MESSAGES.linked
+        : (APPLE_MESSAGES[reason ?? ""] ?? { key: "oauth.apple.failed", ok: false });
     }
     return null;
   })();
@@ -119,7 +128,6 @@ export function SettingsPageContent() {
       ? (requested as SectionId)
       : null;
   });
-  const [disableAutoplayOnOtherProfiles, setDisableAutoplayOnOtherProfiles] = useState(false);
   const [enableExperimentalUI, setEnableExperimentalUI] = useState(true);
   const [referralCount, setReferralCount] = useState(0);
   const [userId, setUserId] = useState("");
@@ -205,12 +213,15 @@ export function SettingsPageContent() {
   useEffect(() => {
     const discord = searchParams.get("discord");
     const google = searchParams.get("google");
+    const apple = searchParams.get("apple");
     const reason = searchParams.get("reason");
     if (
       discord === "linked" ||
       (discord === "error" && reason) ||
       google === "linked" ||
-      (google === "error" && reason)
+      (google === "error" && reason) ||
+      apple === "linked" ||
+      (apple === "error" && reason)
     ) {
       const t = setTimeout(() => {
         setOauthBannerDismissed(true);
@@ -225,7 +236,6 @@ export function SettingsPageContent() {
   useEffect(() => {
     if (!rawUser) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initialisation from already-fetched server data
-    setDisableAutoplayOnOtherProfiles(rawUser.disableAutoplayOnOtherProfiles ?? false);
     setEnableExperimentalUI(rawUser.enableExperimentalUI !== false);
     setReferralCount(rawUser.referralCount ?? 0);
     setUserId(rawUser.id ?? "");
@@ -241,6 +251,8 @@ export function SettingsPageContent() {
       googleEmail: rawUser.googleEmail,
       googleName: rawUser.googleName,
       googleAvatar: rawUser.googleAvatar,
+      appleId: rawUser.appleId,
+      appleEmail: rawUser.appleEmail,
     });
   }, [rawUser]);
 
@@ -274,6 +286,8 @@ export function SettingsPageContent() {
             c.googleEmail = rawUser.googleEmail;
             c.googleName = rawUser.googleName;
             c.googleAvatar = rawUser.googleAvatar;
+            c.appleId = rawUser.appleId;
+            c.appleEmail = rawUser.appleEmail;
           }
           setCharacter(c);
         }
@@ -300,19 +314,6 @@ export function SettingsPageContent() {
       controller.abort();
     };
   }, [loading, isImperial, activeRegularCharacterId, rawUser]);
-
-  const handleAutoplayPreference = async (value: boolean) => {
-    setDisableAutoplayOnOtherProfiles(value);
-    try {
-      await fetch("/api/settings/autoplay-preference", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disableAutoplayOnOtherProfiles: value }),
-      });
-    } catch {
-      // Silently fail
-    }
-  };
 
   const handleExperimentalUiPreference = async (value: boolean) => {
     setEnableExperimentalUI(value);
@@ -516,8 +517,6 @@ export function SettingsPageContent() {
       case "appearance":
         return (
           <AppearanceSection
-            disableAutoplayOnOtherProfiles={disableAutoplayOnOtherProfiles}
-            onAutoplayChange={handleAutoplayPreference}
             enableExperimentalUI={enableExperimentalUI}
             onExperimentalUiChange={handleExperimentalUiPreference}
           />
@@ -534,7 +533,10 @@ export function SettingsPageContent() {
         return <RetiredCharactersSection />;
       case "security":
         return (
-          <SecuritySection hasPassword={hasPassword} onPasswordSet={() => setHasPassword(true)} />
+          <>
+            <SecuritySection hasPassword={hasPassword} onPasswordSet={() => setHasPassword(true)} />
+            <BlockedPlayersSection />
+          </>
         );
       case "danger":
         return <DangerZoneSection onAccountDeleted={() => router.push("/")} />;

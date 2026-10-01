@@ -395,5 +395,52 @@ describe("dividendPassThrough", () => {
       const byCorp = new Set(inserted.map((d) => d.corporationId?.toString()));
       expect(byCorp).toEqual(new Set([corporationId.toString(), otherCorp.toString()]));
     });
+
+    it("writes one NPP holder row per fund for the turn, keeping player rows per corporation (#2693)", async () => {
+      const otherCorp = new ObjectId();
+      const nppId = new ObjectId();
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([
+          { _id: corporationId, name: "Payer Corp" },
+          { _id: otherCorp, name: "Other Corp" },
+        ])
+      );
+      db.collectionMocks["indexFundPositions"]!.find.mockReturnValue(
+        makeCursor([
+          { _id: new ObjectId(), fundId, holderKind: "character", characterId, units: 500 },
+          { _id: new ObjectId(), fundId, holderKind: "npp", nppId, units: 500 },
+        ])
+      );
+      db.collectionMocks["npps"]!.find.mockReturnValue(
+        makeCursor([{ _id: nppId, countryId: "UK", nppInvestmentCashAnchor: 0 }])
+      );
+
+      await processIndexFundDividendsBatch(
+        db as unknown as Db,
+        [
+          { fundId, corporationId, amountAnchor: 1_000_000, shares: 500 },
+          { fundId, corporationId: otherCorp, amountAnchor: 2_000_000, shares: 900 },
+        ],
+        { turn: 42 }
+      );
+
+      const { emitTxBulk } = await import("@/lib/financialTxLog/emit");
+      const rows = vi
+        .mocked(emitTxBulk)
+        .mock.calls.flatMap(([, entries]) => entries as unknown as Array<Record<string, unknown>>)
+        .filter((d) => d.type === "index_fund_dividend");
+      const nppRows = rows.filter((d) => d.subjectType === "npp");
+      const playerRows = rows.filter((d) => d.subjectType === "character");
+      expect(playerRows).toHaveLength(2);
+      expect(nppRows).toHaveLength(1);
+      const meta = nppRows[0].meta as Record<string, unknown>;
+      expect(meta.corporationCount).toBe(2);
+      expect(meta).not.toHaveProperty("corporationId");
+      // Same total as the two per-corporation rows it replaces, and as the
+      // NPP's credited balance.
+      const perHolderTotal = (1_000_000 + 2_000_000) * 0.25 * (500 / 1000);
+      expect(nppRows[0].anchorAmount).toBeCloseTo(perHolderTotal, 2);
+      expect(totalInc("npps")).toBeCloseTo(perHolderTotal, 2);
+    });
   });
 });

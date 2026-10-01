@@ -3,6 +3,7 @@ const LAKESIDE_AHD_AUTH_ORIGIN = "https://auth.ahousedividedgame.com";
 /** OAuth login-mode cookie that may hold a Lakeside SSO continuation URL. */
 export const DISCORD_OAUTH_RETURN_URL_COOKIE = "discord_oauth_return_url";
 export const GOOGLE_OAUTH_RETURN_URL_COOKIE = "google_oauth_return_url";
+export const APPLE_OAUTH_RETURN_URL_COOKIE = "apple_oauth_return_url";
 
 export function safeLakesideLoginReturn(value: string | null | undefined): string | null {
   if (!value) return null;

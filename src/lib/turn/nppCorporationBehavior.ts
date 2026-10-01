@@ -1,3 +1,7 @@
+import {
+  buildNppDecisionCashWrites,
+  type NppFoundingCashWitness,
+} from "@/lib/turn/npp/foundingCashLedger";
 import type { Db, ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -70,7 +74,6 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
-import { buildNppCorpUpdateOp } from "@/lib/turn/npp/nppCashWrite";
 import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
 import {
   CAPACITY_BUILD_TURNS,
@@ -80,6 +83,7 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { unownedHeadroomUnitsOf } from "@/lib/corporations/marketShare";
+import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
 import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
@@ -114,11 +118,10 @@ import {
   reinvestPoolHeadroomUnits,
   type ReinvestCandidate,
 } from "@/lib/turn/npp/reinvestCandidatePool";
+import type { NppCorpUpdateOp } from "./npp/nppCashWrite";
+import type { NppReinvestmentCashWitness } from "./npp/reinvestmentCashLedger";
 import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
 import {
-  appendNppReinvestCapexRows,
-  buildNppFoundedSectorInserts,
-  depleteUnownedPoolsForDraws,
   drawFoundedCapacityFromPools,
   flushNppCapacityWriteback,
 } from "@/lib/turn/npp/capacityWriteback";
@@ -155,7 +158,6 @@ import {
   loadNppCorporationBondLookups,
   type NppCorporationDecisionPreload,
 } from "@/lib/turn/npp/nppCorporationBondLookups";
-
 export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
 
 export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
@@ -203,14 +205,7 @@ export async function processNppCorporationDecisions(
   techTreesEnabled: boolean = false,
   preloaded?: NppCorporationDecisionPreload
 ): Promise<{
-  corpUpdates: Array<{
-    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
-    update: {
-      $set?: Record<string, unknown>;
-      $inc?: Record<string, number>;
-      $addToSet?: { unlockedTechNodeIds: string };
-    };
-  }>;
+  corpUpdates: NppCorpUpdateOp[];
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -218,6 +213,8 @@ export async function processNppCorporationDecisions(
   newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
   divestedSectorIds: ObjectId[];
   techLedger: TechUnlockLedgerInput[];
+  foundingCashWitnesses?: NppFoundingCashWitness[];
+  reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -226,14 +223,7 @@ export async function processNppCorporationDecisions(
         .find({ ceoType: "npp", suspended: { $ne: true } })
         .toArray();
 
-  const corpUpdates: Array<{
-    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
-    update: {
-      $set?: Record<string, unknown>;
-      $inc?: Record<string, number>;
-      $addToSet?: { unlockedTechNodeIds: string };
-    };
-  }> = [];
+  const corpUpdates: NppCorpUpdateOp[] = [];
   const allSectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -241,6 +231,8 @@ export async function processNppCorporationDecisions(
   const newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }> = [];
   const allDivestedSectorIds: ObjectId[] = [];
   const techLedger: TechUnlockLedgerInput[] = [];
+  const foundingCashWitnesses: NppFoundingCashWitness[] = [];
+  const decisionCashOps: NppCorpUpdateOp[] = [];
   const operatorObservations: NppOperatorObservation[] = [];
 
   if (nppCorps.length === 0)
@@ -324,6 +316,7 @@ export async function processNppCorporationDecisions(
         {
           projection: {
             stateId: 1,
+            countryId: 1,
             sectorType: 1,
             revenue: 1,
             corporationId: 1,
@@ -373,6 +366,7 @@ export async function processNppCorporationDecisions(
         colByState.set(String(doc._id), value);
       }
     }
+    const nationalShareOf = buildNppNationalShareResolver(globalSectors);
     plants = {
       enabled: true,
       year: plantsYear,
@@ -380,6 +374,7 @@ export async function processNppCorporationDecisions(
       preset: resolvePresetIdFromGameState(gsPlants),
       primeRateOf: (cid) => primeByCountry.get(cid) ?? 0,
       costOfLivingOf: (sid) => colByState.get(sid) ?? null,
+      nationalShareOf,
     };
   }
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
@@ -438,7 +433,7 @@ export async function processNppCorporationDecisions(
     strategyGate?.frontierEntryExperimentEnabled
   );
 
-  const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
+  const { labourMode, retailExpansionPaused, ledgerShadow } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
   for (const corp of nppCorps) {
@@ -513,27 +508,29 @@ export async function processNppCorporationDecisions(
       decision.entryDiagnostic?.reason
     );
     if (decision.operatorObservation) operatorObservations.push(decision.operatorObservation);
-    if (decision.reinvestments && corpCurrency) {
-      appendNppReinvestCapexRows(capexRows, {
-        corp,
-        corpCurrency,
-        reinvestments: decision.reinvestments,
-        turn,
-        now,
-      });
+    const {
+      founded,
+      update: corpUpdateOp,
+      witness,
+    } = buildNppDecisionCashWrites({
+      decision,
+      corporation: corp,
+      capexRows,
+      unownedDraws,
+      unownedIndex,
+      eraUnitScale: plants?.eraUnitScale ?? 1,
+      currencyCode: corpCurrency,
+      rate: corpFxRate,
+      shadowEnabled: ledgerShadow,
+      blocked,
+      turn,
+      now,
+    });
+    if (corpUpdateOp) {
+      corpUpdates.push(corpUpdateOp);
+      decisionCashOps.push(corpUpdateOp);
     }
-
-    if (decision.unownedDraws) {
-      unownedDraws.push(...decision.unownedDraws);
-      // Deplete the shared snapshot in lockstep so later corps see what is left.
-      depleteUnownedPoolsForDraws(unownedIndex, decision.unownedDraws, plants?.eraUnitScale ?? 1);
-    }
-
-    // Gated inside the builder, not on `updates` alone: the cash leg no longer
-    // lives in `updates`, so a decision whose only effect is a spend would be
-    // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
-    const corpUpdateOp = buildNppCorpUpdateOp(decision);
-    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
+    if (witness) foundingCashWitnesses.push(witness);
 
     // Budget tech from post-decision cash and preserve the same safety floor.
     if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
@@ -563,17 +560,7 @@ export async function processNppCorporationDecisions(
 
     allSectorUpdates.push(...decision.sectorUpdates);
 
-    if (decision.newSectors) {
-      newSectors.push(
-        ...buildNppFoundedSectorInserts({
-          corporationId: corp._id,
-          newSectors: decision.newSectors,
-          blocked,
-          turn,
-          now,
-        })
-      );
-    }
+    newSectors.push(...founded);
 
     if (decision.divestedSectorIds) {
       allDivestedSectorIds.push(...decision.divestedSectorIds);
@@ -584,11 +571,13 @@ export async function processNppCorporationDecisions(
     eraUnitScale: plants?.eraUnitScale ?? 1,
     now,
   });
-  await flushNppCapacityWriteback(db, {
+  const reinvestmentCashWitnesses = await flushNppCapacityWriteback(db, {
     turn,
     now,
     entryDiagnostics,
     capexRows,
+    cashOperations: decisionCashOps,
+    shadowEnabled: ledgerShadow,
     capacityObservations,
     operatorObservations,
   });
@@ -599,6 +588,8 @@ export async function processNppCorporationDecisions(
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
+    ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
+    ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };
 }
 
@@ -623,6 +614,7 @@ export function makeNppCorpDecision(
   const liquidCapital = corp.liquidCapital ?? 0;
   const passive = ctx.caretakerMandate === "passive";
   let cashLocal = liquidCapital;
+  let foundingCashLocal: number | undefined;
   const numSectors = sectors.length;
 
   const corpCurrencyCode = resolveCorpLiquidCurrencyCode(corp);
@@ -631,6 +623,8 @@ export function makeNppCorpDecision(
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
   const cashToAnchor = makeCapacityCashToAnchor(corp, corpFxRate);
   const capacityCohort = resolveCapacityCohort(corp);
+  const nationalShare = (countryId: string, sectorType: CorporationType) =>
+    plants?.nationalShareOf?.(corp._id, countryId, sectorType) ?? 0;
   const capacityObservations: CapacityDecisionObservation[] = [];
   // Which of the four operator decision legs bound this corp this turn (#2122);
   // sections below flag the branch they take and the resolver picks the first.
@@ -1261,26 +1255,24 @@ export function makeNppCorpDecision(
         plants.eraUnitScale
       );
       const starterUnits = foundingStarterUnits(foundingTarget.sectorType as CorporationType);
-      // Per-unit founding price. computeBuildCost is linear in units and, at a
-      // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
-      // one-unit quote scales exactly to any order size. The breakdown (not
-      // just the total) is kept for the capacity observation's price vocabulary.
+      // Per-unit founding price. computeBuildCost is linear in units, so a
+      // one-unit quote scales exactly while retaining its itemized breakdown.
       const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: foundingTarget.sectorType as CorporationType,
               units: 1,
-              // Greenfield entry: the sector does not exist yet and is founded
-              // on the sector-type default strategy.
+              // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
-              // No presence in this bucket yet — dominance is 1 by construction.
               marketSharePercent: 0,
+              nationalMarketSharePercent: nationalShare(
+                foundingTarget.countryId,
+                foundingTarget.sectorType as CorporationType
+              ),
               primeRate: plants.primeRateOf(foundingTarget.countryId),
-              // An NPP CEO is an NPP, not a Character, so it has no Business
-              // Acumen to read. Neutral is the honest value and matches what
-              // `computeBuildCost` assumes for a vacant seat.
+              // NPP CEOs have no Character Business Acumen; neutral is honest.
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(foundingTarget.stateId),
               founding: true,
@@ -1405,6 +1397,7 @@ export function makeNppCorpDecision(
           countryId: foundingTarget.countryId,
         });
         cashLocal = entryCapital - foundingCost;
+        foundingCashLocal = foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else {
         if (foundingOutcome.creditPath) {
@@ -1453,6 +1446,7 @@ export function makeNppCorpDecision(
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
+        foundingCashLocal = foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else {
         if (foundingOutcome.creditPath) {
@@ -1729,9 +1723,7 @@ export function makeNppCorpDecision(
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
         utilization >= NPP_GROWTH_MIN_UTILIZATION &&
         (sector.sectorType !== "extraction" || extractionHeadroom > 0);
-      // The plant already exists, so its build is tolled at its own dominance
-      // and pays the list price, not the founding discount — the same terms a
-      // player's `buildCapacity` pays.
+      // Existing plants pay the same dominance-tolled list price as players.
       const growthShare =
         capitalStock > 0
           ? Math.min(100, (100 * capitalStock) / (capitalStock + Math.max(0, headroomUnits)))
@@ -1745,6 +1737,7 @@ export function makeNppCorpDecision(
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
+              nationalMarketSharePercent: nationalShare(sectorCountryId, sector.sectorType),
               primeRate: plants.primeRateOf(sectorCountryId),
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(sector.stateId),
@@ -1820,15 +1813,12 @@ export function makeNppCorpDecision(
       if (placed >= NPP_REINVEST_MAX_SECTORS_PER_TURN) break;
       const { sector, units } = candidate;
 
-      // Dominance is priced off the corp's own footprint in this bucket: its
-      // capacity against that plus the headroom still unowned. A dominant
-      // incumbent pays more to add capacity, exactly as a player does.
+      // Price on the harsher of local footprint and national sector share.
       const capitalStock = sector.capitalStock ?? 0;
       const bucketTotal = capitalStock + candidate.headroomUnits;
       const marketSharePercent = bucketTotal > 0 ? (100 * capitalStock) / bucketTotal : 0;
 
-      // Breakdown (not just the total) is kept for the capacity observation's
-      // price vocabulary: unit price, charged dominance multiplier, headroom.
+      // Keep the breakdown for capacity-decision telemetry.
       const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
         units,
@@ -1836,6 +1826,10 @@ export function makeNppCorpDecision(
         year: plants.year,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
+        nationalMarketSharePercent: nationalShare(
+          sector.countryId ?? corp.countryId,
+          sector.sectorType
+        ),
         primeRate: plants.primeRateOf(sector.countryId ?? corp.countryId),
         // An NPP CEO is an NPP, not a Character — no Business Acumen to read.
         acumen: NEUTRAL_STAT,
@@ -1966,6 +1960,7 @@ export function makeNppCorpDecision(
     // up, a founding cost or growth capex down — so this one subtraction is the
     // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
+    ...(foundingCashLocal === undefined ? {} : { foundingCashLocal }),
     cashFloorLocal: effectiveCashFloor,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,

@@ -1,4 +1,5 @@
-import type { Db } from "mongodb";
+import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
+import { MongoServerError, type Db } from "mongodb";
 import type { Character, GameState, User } from "@/lib/db/types";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { resolveResetStartDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
@@ -102,6 +103,8 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
 });
 
 interface ResetGameWorldOptions {
+  /** 1991 only: leave political offices vacant for player-created parties. */
+  startingParties?: StartingPartiesMode;
   deleteProfiles: boolean;
   preset?: string;
   seedHistorical?: boolean;
@@ -158,8 +161,9 @@ export async function resetGameWorld(
   options: ResetGameWorldOptions
 ): Promise<ResetGameWorldResult> {
   const preset = options.preset ?? DEFAULT_SEED_PRESET;
-  const seedHistorical = options.seedHistorical !== false;
-  const preIteration = options.preIteration === true;
+  const startingParties = resolveStartingPartiesMode(preset, options.startingParties);
+  const seedHistorical = startingParties !== "none" && options.seedHistorical !== false;
+  const preIteration = startingParties !== "none" && options.preIteration === true;
   const now = new Date();
 
   // Tagged progress sink — see ResetGameWorldOptions.log for why the prefix is
@@ -227,14 +231,28 @@ export async function resetGameWorld(
   // recreated by seedIndexes() in the bootstrap that follows every reset path
   // (bootstrapGameWorld runs it before the seedOnly short-circuit). Ignore
   // NamespaceNotFound for collections that don't exist yet.
-  await Promise.all(
-    sweepCollections.map((name) =>
-      db
-        .collection(name)
-        .drop()
-        .catch(() => {})
-    )
+  const wipeResults = await Promise.allSettled(
+    sweepCollections.map(async (name) => {
+      try {
+        await db.collection(name).drop();
+      } catch (error) {
+        if (error instanceof MongoServerError && error.code === 26) return;
+        throw error;
+      }
+    })
   );
+  const failedWipes: Array<{ collection: string; error: unknown }> = [];
+  for (const [index, result] of wipeResults.entries()) {
+    if (result.status === "rejected") {
+      failedWipes.push({ collection: sweepCollections[index], error: result.reason });
+    }
+  }
+  if (failedWipes.length > 0) {
+    throw new AggregateError(
+      failedWipes.map((failure) => failure.error),
+      `Required reset cleanup failed for: ${failedWipes.map((failure) => failure.collection).join(", ")}`
+    );
+  }
   log(
     `Wiped ${sweepCollections.length} runtime collections ` +
       `(${officialsResult.deletedCount} officials, ${electionsResult.deletedCount} elections, ` +
@@ -353,6 +371,7 @@ export async function resetGameWorld(
     // Reset preserves explicit feature-flag choices but fills in the
     // production-default posture for any flag never touched on this world.
     ...missingGameStateFlagDefaults(outgoing),
+    startingPartiesMode: startingParties,
   };
   if (options.iteration) {
     gameStateUpdate.iteration = options.iteration;

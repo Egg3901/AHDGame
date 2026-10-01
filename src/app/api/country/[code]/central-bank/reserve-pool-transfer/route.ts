@@ -14,13 +14,11 @@ import { isSameCountry } from "@/lib/api/sameCountry";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { ObjectId } from "mongodb";
 import {
-  RESERVE_POOL_TRANSFER_COOLDOWN_TURNS,
-  RESERVE_POOL_TRANSFER_MAX_FRACTION,
-  resolveReservePoolTransferAmount,
-  turnsUntilReservePoolTransferReady,
-  type ReservePoolTransferDirection,
-} from "@/lib/centralBank/reservePoolTransfer";
+  executeReservePoolTransfer,
+  ReservePoolTransferRejected,
+} from "@/lib/centralBank/reservePoolTransferCommands";
 import { getGameState } from "@/lib/gameState";
 import type { CentralBank, Character, GameState } from "@/lib/db/types";
 
@@ -29,36 +27,13 @@ interface RouteContext {
 }
 
 const schema = z.object({
+  operationId: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{8,128}$/)
+    .optional(),
   direction: z.enum(["toLending", "toForex"]),
   amount: z.number().finite().positive().max(1_000_000_000_000_000),
 });
-
-async function sumOutstandingLoansFace(
-  db: Awaited<ReturnType<typeof getDb>>,
-  homeCurrency: string
-): Promise<number> {
-  const rows = await db
-    .collection("characters")
-    .aggregate<{ totalBalance: number; totalArrears: number }>([
-      {
-        $match: {
-          $or: [
-            { [`lineOfCredit.balances.${homeCurrency}`]: { $gt: 0 } },
-            { [`lineOfCredit.arrears.${homeCurrency}`]: { $gt: 0 } },
-          ],
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalBalance: { $sum: { $ifNull: [`$lineOfCredit.balances.${homeCurrency}`, 0] } },
-          totalArrears: { $sum: { $ifNull: [`$lineOfCredit.arrears.${homeCurrency}`, 0] } },
-        },
-      },
-    ])
-    .toArray();
-  return (rows[0]?.totalBalance ?? 0) + (rows[0]?.totalArrears ?? 0);
-}
 
 export async function POST(request: Request, context: RouteContext) {
   try {
@@ -76,7 +51,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const direction = parsed.data.direction as ReservePoolTransferDirection;
+    const direction = parsed.data.direction;
     const requestedAmount = Math.floor(parsed.data.amount);
 
     const myChar = auth.user.character as Character | null;
@@ -104,87 +79,20 @@ export async function POST(request: Request, context: RouteContext) {
 
     const gs = (await getGameState()) as Pick<GameState, "currentTurn"> | null;
     const currentTurn = gs?.currentTurn ?? 0;
-    const cooldownRemaining = turnsUntilReservePoolTransferReady({
-      currentTurn,
-      lastTransferTurn: bank.lastReservePoolTransferTurn,
-      isAdmin,
-    });
-    if (cooldownRemaining > 0) {
-      throw badRequest(
-        `Reserve pool transfers are limited to once every ${RESERVE_POOL_TRANSFER_COOLDOWN_TURNS} turns (once per day). ${cooldownRemaining} turn(s) remaining.`
-      );
-    }
-
-    const forexRevenue = bank.forexRevenue ?? 0;
-    const lendingReserves = bank.reserveBalance ?? 0;
-    const totalDeposits = bank.nationalSavingsBalance ?? 0;
-    const totalLoansOutstanding = await sumOutstandingLoansFace(db, homeCurrency);
-
-    const { amount, limits } = resolveReservePoolTransferAmount({
+    const result = await executeReservePoolTransfer(db, bank, {
+      operationId: parsed.data.operationId ?? new ObjectId().toHexString(),
+      countryId,
       direction,
       amount: requestedAmount,
-      forexRevenue,
-      lendingReserves,
-      totalDeposits,
-      totalLoansOutstanding,
+      turn: currentTurn,
+      isAdmin,
+      userId: auth.user.userId,
+      characterId: myChar._id.toHexString(),
     });
-    if (amount <= 0) {
-      if (direction === "toLending") {
-        throw badRequest(
-          `Nothing available to move into lending (max ${Math.floor(RESERVE_POOL_TRANSFER_MAX_FRACTION * 100)}% of forex spread revenue).`
-        );
-      }
-      throw badRequest(
-        "Nothing available to move into forex reserves without reducing capacity below outstanding loans."
-      );
-    }
-    if (amount < requestedAmount) {
-      throw badRequest(
-        direction === "toLending"
-          ? `Amount exceeds the ${Math.floor(RESERVE_POOL_TRANSFER_MAX_FRACTION * 100)}% forex-revenue cap (max ${limits.maxToLending}).`
-          : `Amount exceeds the safe lending→forex cap (max ${limits.maxToForex}; outstanding loans must stay covered).`
-      );
-    }
-
-    const forexDelta = direction === "toLending" ? -amount : amount;
-    const lendingDelta = direction === "toLending" ? amount : -amount;
-
-    const filter: Record<string, unknown> = { _id: bankId };
-    if (direction === "toLending") {
-      filter.forexRevenue = { $gte: amount };
-    } else {
-      filter.reserveBalance = { $gte: amount };
-    }
-
-    const result = await db.collection<CentralBank>("centralBanks").updateOne(filter, {
-      $inc: {
-        forexRevenue: forexDelta,
-        reserveBalance: lendingDelta,
-      },
-      $set: {
-        lastReservePoolTransferTurn: currentTurn,
-        updatedAt: new Date(),
-      },
-    });
-    if (result.matchedCount === 0) {
-      throw badRequest(
-        direction === "toLending"
-          ? "Insufficient forex spread revenue for this transfer"
-          : "Insufficient lending reserves for this transfer"
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      direction,
-      amount,
-      forexRevenueDelta: forexDelta,
-      reserveBalanceDelta: lendingDelta,
-      maxToLending: limits.maxToLending,
-      maxToForex: limits.maxToForex,
-      nextTransferTurn: currentTurn + RESERVE_POOL_TRANSFER_COOLDOWN_TURNS,
-    });
+    return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof ReservePoolTransferRejected)
+      return handleRouteError(badRequest(error.message));
     return handleRouteError(error);
   }
 }

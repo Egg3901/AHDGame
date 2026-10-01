@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   consent: null as "accepted" | "rejected" | null,
@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   },
   amplitude: { init: vi.fn(), track: vi.fn(), setOptOut: vi.fn(), reset: vi.fn() },
 }));
+
+const envelope = { iteration_id: "alpha-1", turn_number: 8, nation_id: "US" };
 
 vi.mock("@/components/CookieConsent", () => ({
   getStoredConsent: () => state.consent,
@@ -58,13 +60,15 @@ async function identifyPlayer() {
 }
 
 describe("analytics fan-out", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
     stubWindow();
     state.consent = null;
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_test");
     vi.stubEnv("NEXT_PUBLIC_AMPLITUDE_API_KEY", "amp_test");
+    const { setProductEventContext } = await import("./capture");
+    setProductEventContext({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" });
   });
 
   it("sends one product event to both destinations", async () => {
@@ -73,8 +77,38 @@ describe("analytics fan-out", () => {
     await identifyPlayer();
     await captureProductEvent("character_created", { area: "profile" });
 
-    expect(state.posthog.capture).toHaveBeenCalledWith("character_created", { area: "profile" });
-    expect(state.amplitude.track).toHaveBeenCalledWith("character_created", { area: "profile" });
+    expect(state.posthog.capture).toHaveBeenCalledWith("character_created", {
+      area: "profile",
+      iteration_id: "alpha-1",
+      turn_number: 8,
+      nation_id: "US",
+    });
+    expect(state.amplitude.track).toHaveBeenCalledWith("character_created", {
+      area: "profile",
+      iteration_id: "alpha-1",
+      turn_number: 8,
+      nation_id: "US",
+    });
+  });
+
+  it("loads the clock for initial events when only nation context has been supplied", async () => {
+    vi.resetModules();
+    const { captureProductEvent, setProductEventContext } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ iterationId: "beta-3", currentTurn: 22 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    setProductEventContext({ nation_id: "US" });
+    await captureProductEvent("game_visit");
+    expect(fetchMock).toHaveBeenCalledWith("/api/game/turn/status", { cache: "no-store" });
+    expect(state.posthog.capture).toHaveBeenCalledWith("game_visit", {
+      iteration_id: "beta-3",
+      turn_number: 22,
+      nation_id: "US",
+    });
   });
 
   it("sends nothing to either destination before consent", async () => {
@@ -83,6 +117,38 @@ describe("analytics fan-out", () => {
 
     expect(state.posthog.capture).not.toHaveBeenCalled();
     expect(state.amplitude.track).not.toHaveBeenCalled();
+  });
+
+  it("adds nation_id only when the event has a known nation context", async () => {
+    const { captureProductEvent, setProductEventContext } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    setProductEventContext({ iteration_id: "alpha-1", turn_number: 8, nation_id: null });
+
+    await captureProductEvent("game_visit");
+
+    expect(state.posthog.capture).toHaveBeenCalledWith("game_visit", {
+      iteration_id: "alpha-1",
+      turn_number: 8,
+    });
+  });
+
+  it("keeps the shared envelope authoritative and accepts only scalar nation codes", async () => {
+    const { captureProductEvent } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+
+    await captureProductEvent("game_visit", {
+      iteration_id: "untrusted-iteration",
+      turn_number: 999,
+      nation_id: "not a nation name",
+    });
+
+    expect(state.posthog.capture).toHaveBeenCalledWith("game_visit", {
+      iteration_id: "alpha-1",
+      turn_number: 8,
+      nation_id: "US",
+    });
   });
 
   it("mirrors a widget dismissal to both destinations without survey answers", async () => {
@@ -98,22 +164,31 @@ describe("analytics fan-out", () => {
       properties: { $survey_questions: [{ response: "private" }, { response: null }] },
     });
     await vi.waitFor(() => expect(state.amplitude.track).toHaveBeenCalled());
-    expect(state.posthog.capture).toHaveBeenCalledWith("survey_dismissed", { question_index: 1 });
-    expect(state.amplitude.track).toHaveBeenCalledWith("survey_dismissed", { question_index: 1 });
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "survey_dismissed",
+      expect.objectContaining({ ...envelope, question_index: 1 })
+    );
+    expect(state.amplitude.track).toHaveBeenCalledWith(
+      "survey_dismissed",
+      expect.objectContaining({ ...envelope, question_index: 1 })
+    );
   });
 
   it("still reaches PostHog when Amplitude has no key configured", async () => {
     // Amplitude is provisioned separately; a missing key must not suppress the
     // other destination, which is the whole point of the fan-out.
-    const { captureProductEvent } = await import("./capture");
     vi.stubEnv("NEXT_PUBLIC_AMPLITUDE_API_KEY", "");
     vi.resetModules();
     const fresh = await import("./capture");
+    fresh.setProductEventContext({ iteration_id: "alpha-1", turn_number: 8, nation_id: "US" });
     state.consent = "accepted";
     await identifyPlayer();
     await fresh.captureProductEvent("message_sent");
 
-    expect(state.posthog.capture).toHaveBeenCalledWith("message_sent");
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "message_sent",
+      expect.objectContaining(envelope)
+    );
     expect(state.amplitude.track).not.toHaveBeenCalled();
   });
 
@@ -157,7 +232,176 @@ describe("analytics fan-out", () => {
     expect(state.posthog.capture).toHaveBeenCalledWith("war_declared", {
       attacker_nation: "US",
       defender_nation: "CN",
+      ...envelope,
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("captures the first successful action once with safe character creation context", async () => {
+    const { captureFirstMeaningfulAction, rememberNewCharacter } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          activation: {
+            ...envelope,
+            turns_since_character_creation: 3,
+            starting_nation_id: "US",
+            creation_path: "character_creator",
+            character_count: 1,
+          },
+        }),
+      })
+    );
+    rememberNewCharacter("opaque-character-id", 5, {
+      startingNationId: "US",
+      creationPath: "character_creation_flow",
+      characterCount: 1,
+    });
+
+    await captureFirstMeaningfulAction("opaque-character-id", {
+      action_domain: "legislation",
+      action_type: "propose",
+    });
+    await captureFirstMeaningfulAction("opaque-character-id", {
+      action_domain: "legislation",
+      action_type: "propose",
+    });
+
+    expect(state.posthog.capture).toHaveBeenCalledTimes(1);
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "first_meaningful_action",
+      expect.objectContaining({
+        ...envelope,
+        action_domain: "legislation",
+        action_type: "propose",
+        turns_since_character_creation: 3,
+        starting_nation_id: "US",
+        creation_path: "character_creator",
+        character_count: 1,
+      })
+    );
+    expect(JSON.stringify(state.posthog.capture.mock.calls)).not.toContain("opaque-character-id");
+  });
+
+  it("captures a durable claim even if optional browser storage fails", async () => {
+    const { captureFirstMeaningfulAction, rememberNewCharacter } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    rememberNewCharacter("storage-failure-character", 5);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          activation: {
+            ...envelope,
+            turn_number: 99,
+            turns_since_character_creation: 94,
+            starting_nation_id: "US",
+            creation_path: "character_creator",
+            character_count: 1,
+          },
+        }),
+      })
+    );
+    const write = vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("Storage blocked");
+    });
+    await captureFirstMeaningfulAction("storage-failure-character", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "first_meaningful_action",
+      expect.objectContaining({ turn_number: 99 })
+    );
+    write.mockRestore();
+  });
+
+  it("claims a newly created character from another browser without a local anchor", async () => {
+    const { captureFirstMeaningfulAction } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activation: {
+          ...envelope,
+          turns_since_character_creation: 2,
+          starting_nation_id: "US",
+          creation_path: "character_creator",
+          character_count: 1,
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await captureFirstMeaningfulAction("other-browser-character", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    await captureFirstMeaningfulAction("other-browser-character", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(state.posthog.capture).toHaveBeenCalledWith(
+      "first_meaningful_action",
+      expect.objectContaining({ turns_since_character_creation: 2 })
+    );
+  });
+
+  it("keeps first-action anchors for multiple new characters independently", async () => {
+    const { captureFirstMeaningfulAction, rememberNewCharacter } = await import("./capture");
+    state.consent = "accepted";
+    await identifyPlayer();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (_url, options) => ({
+        ok: true,
+        json: async () => ({
+          activation: {
+            ...envelope,
+            turns_since_character_creation: 3,
+            starting_nation_id:
+              JSON.parse(options.body).characterId === "character-one" ? "US" : "UK",
+            creation_path: "character_creator",
+            character_count: JSON.parse(options.body).characterId === "character-one" ? 1 : 2,
+          },
+        }),
+      }))
+    );
+    rememberNewCharacter("character-one", 5, { startingNationId: "US", characterCount: 1 });
+    rememberNewCharacter("character-two", 6, { startingNationId: "UK", characterCount: 2 });
+
+    await captureFirstMeaningfulAction("character-one", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+    await captureFirstMeaningfulAction("character-two", {
+      action_domain: "legislation",
+      action_type: "propose",
+    });
+    await captureFirstMeaningfulAction("character-one", {
+      action_domain: "politics",
+      action_type: "join",
+    });
+
+    expect(state.posthog.capture).toHaveBeenCalledTimes(2);
+    expect(state.posthog.capture).toHaveBeenNthCalledWith(
+      1,
+      "first_meaningful_action",
+      expect.objectContaining({ starting_nation_id: "US", character_count: 1 })
+    );
+    expect(state.posthog.capture).toHaveBeenNthCalledWith(
+      2,
+      "first_meaningful_action",
+      expect.objectContaining({ starting_nation_id: "UK", character_count: 2 })
+    );
+  });
 });
+
+afterAll(() => vi.unstubAllEnvs());

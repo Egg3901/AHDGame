@@ -34,8 +34,7 @@ export async function seedSERegions(
     await db.collection("states").deleteMany({ countryId: "SE" });
   }
   const { seRegions } = await import("@/lib/seeds/se/seRegions");
-  const { SE_1991_MACROREGION_POPULATION } =
-    await import("@/lib/countries/se/data/sePopulation1991");
+  const { seRegions1991 } = await import("@/lib/countries/se/data/seRegions1991");
   const { seRegions1953 } = await import("@/lib/seeds/se/seRegions1953");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
@@ -49,6 +48,7 @@ export async function seedSERegions(
       })),
       "1953-default": seRegions1953,
       "1979-default": seRegions,
+      "1991-default": seRegions1991,
     },
     "seedSE:seRegions"
   );

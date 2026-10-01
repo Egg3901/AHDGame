@@ -13,8 +13,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
 import { proposeBillSchema } from "@/lib/api/schemas/congress";
-import { COUNTRY_CONFIGS, EU_EUROZONE_MEMBERS, type CountryId } from "@/lib/constants/countries";
-import type { GameState } from "@/lib/db/types";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { proposeNationalBill } from "@/lib/legislature/commands/proposeNationalBill";
 import { listNationalLegislatureBills } from "@/lib/legislature/queries/nationalBillQueries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -129,37 +128,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         { error: `Invalid chamber for ${countryId} legislature.` },
         { status: 400 }
       );
-    }
-
-    // Euro adoption provision: only DE and IE can propose; only while eurozone is not yet active.
-    const hasEuroAdoptionProvision = (
-      parsed.data as { provisions?: Array<{ type: string }> }
-    ).provisions?.some((p) => p.type === "euro_adoption");
-    if (hasEuroAdoptionProvision) {
-      if (!EU_EUROZONE_MEMBERS.includes(countryId)) {
-        return NextResponse.json(
-          {
-            error:
-              "Euro adoption bill can only be proposed in EU Eurozone member countries (DE, IE)",
-          },
-          { status: 400 }
-        );
-      }
-      const gs = await db
-        .collection<GameState>("gameState")
-        .findOne(
-          { _id: "current" },
-          { projection: { eurozoneEnabled: 1, euroAdoptedCountries: 1 } }
-        );
-      if (gs?.eurozoneEnabled) {
-        return NextResponse.json({ error: "The Eurozone is already active" }, { status: 400 });
-      }
-      if (gs?.euroAdoptedCountries?.includes(countryId)) {
-        return NextResponse.json(
-          { error: "This country has already voted to adopt the Euro" },
-          { status: 400 }
-        );
-      }
     }
 
     const result = await proposeNationalBill(db, countryId, auth.user, parsed.data);

@@ -1,3 +1,4 @@
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 // POST — Retires the active character
 // Auth: requireAuthWithCharacter
 // Errors: 401 (unauthenticated or no character)
@@ -37,6 +38,7 @@ export async function POST() {
       })
     );
 
+    await flushServerPosthog();
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleRouteError(error);

@@ -34,6 +34,7 @@ export async function seedTRRegions(
     await db.collection("states").deleteMany({ countryId: "TR" });
   }
   const { trRegions } = await import("@/lib/seeds/tr/trRegions");
+  const { trRegions1991 } = await import("@/lib/countries/tr/data/trRegions1991");
   const { trRegions1953 } = await import("@/lib/seeds/tr/trRegions1953");
   const { trRegions1991 } = await import("@/lib/countries/tr/data/trRegions1991");
   const { trRegions2019 } = await import("@/lib/countries/tr/data/trRegions2019");
@@ -47,6 +48,7 @@ export async function seedTRRegions(
       "2027-default": trRegions2019,
       "1953-default": trRegions1953,
       "1979-default": trRegions,
+      "1991-default": trRegions1991,
     },
     "seedTR:trRegions"
   );

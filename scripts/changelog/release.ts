@@ -68,13 +68,14 @@ function readNotes(): ReleaseNote[] {
     .sort()
     .map((name) => {
       const raw = fs.readFileSync(path.join(UNRELEASED_DIR, name), "utf-8");
-      const { data } = parseFrontmatter(raw);
+      const { data, content } = parseFrontmatter(raw);
       const title = asString(data.title);
       if (!title) fail(`content/changelog/unreleased/${name} has no title.`);
       return {
         topic: name.slice(0, -3),
         title,
         summary: asString(data.summary).replace(/\s+/g, " ").trim(),
+        content,
         date: asString(data.date),
         tags: asStringArray(data.tags),
         badges: asStringArray(data.badges) as ChangelogBadge[],

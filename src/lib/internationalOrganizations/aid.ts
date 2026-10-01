@@ -1,3 +1,9 @@
+import {
+  organizationCashContext,
+  withOrganizationCashBatch,
+  witnessOrganizationCash,
+  type OrganizationCashOptions,
+} from "./cashLedger";
 import type { Db } from "mongodb";
 import { type CountryId } from "@/lib/constants/countries";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
@@ -70,24 +76,40 @@ export async function payOrganizationAid(
   db: Db,
   organizationId: InternationalOrganizationId,
   recipient: CountryId,
-  amountFund: number
+  amountFund: number,
+  options?: OrganizationCashOptions
 ): Promise<boolean> {
   if (!(amountFund > 0)) return false;
-  const paid = await disburseFromOrganizationFund(db, organizationId, amountFund);
-  if (!paid) return false;
-  const fundCountry = await resolveOrgFundCurrencyCountry(db, organizationId);
-  const preset = await loadWorldPreset(db);
-  const recipientLocal = convertLocal(fundCountry, recipient, amountFund, preset);
-  // Aid credits cash, not income: revenue/spending/surplus are untouched, and
-  // `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts),
-  // so a cash-only $inc correctly leaves it alone (#1975).
-  await db.collection<FederalBudget>("federalBudget").updateOne(
-    { countryId: recipient },
-    {
-      $inc: { treasuryBalance: recipientLocal },
-      $set: { updatedAt: new Date() },
+  const context = await organizationCashContext(db, options);
+  return withOrganizationCashBatch(db, context, async (batch) => {
+    const paid = await disburseFromOrganizationFund(db, organizationId, amountFund, {
+      context: batch,
+    });
+    if (!paid) return false;
+    const fundCountry = await resolveOrgFundCurrencyCountry(db, organizationId);
+    const preset = batch?.preset ?? (await loadWorldPreset(db));
+    const recipientLocal = convertLocal(fundCountry, recipient, amountFund, preset);
+    // Aid credits cash, not income: revenue/spending/surplus are untouched, and
+    // `debt.principal` belongs to the bond ledger (see bonds/sovereignPrincipal.ts),
+    // so a cash-only $inc correctly leaves it alone (#1975).
+    const credit = await db.collection<FederalBudget>("federalBudget").updateOne(
+      { countryId: recipient },
+      {
+        $inc: { treasuryBalance: recipientLocal },
+        $set: { updatedAt: new Date() },
+      }
+    );
+    if (credit.modifiedCount > 0) {
+      await witnessOrganizationCash(db, batch, {
+        kind: "government",
+        ref: recipient,
+        countryId: recipient,
+        amount: recipientLocal,
+        site: "aid_treasury",
+        now: new Date(),
+      });
     }
-  );
-  await applyOrganizationAidBoost(db, recipient, localToUsd(fundCountry, amountFund, preset));
-  return true;
+    await applyOrganizationAidBoost(db, recipient, localToUsd(fundCountry, amountFund, preset));
+    return true;
+  });
 }

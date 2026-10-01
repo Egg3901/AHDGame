@@ -12,17 +12,31 @@ it("sends a recovered lock event to both analytics destinations", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
 
-  await captureServerProductEvent("turn_lock_stuck", { lock_age_ms: 1200000, phase: "economy" });
+  await captureServerProductEvent(
+    "turn_lock_stuck",
+    { lock_age_ms: 1200000, phase: "economy" },
+    { turn: 42 }
+  );
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock.mock.calls[0][0]).toBe("https://us.i.posthog.com/i/v0/e/");
   const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
   expect(bodies[0]).toMatchObject({
     event: "turn_lock_stuck",
-    properties: { lock_age_ms: 1200000, phase: "economy" },
+    properties: {
+      lock_age_ms: 1200000,
+      phase: "economy",
+      iteration_id: "unknown",
+      turn_number: 42,
+    },
   });
   expect(bodies[1]).toMatchObject({
-    events: [{ event_type: "turn_lock_stuck", event_properties: { phase: "economy" } }],
+    events: [
+      {
+        event_type: "turn_lock_stuck",
+        event_properties: { phase: "economy", iteration_id: "unknown", turn_number: 42 },
+      },
+    ],
   });
 });
 

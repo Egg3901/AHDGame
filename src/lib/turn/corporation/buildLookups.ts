@@ -201,7 +201,8 @@ export async function buildCorporationLookups(
     db.collection<Corporation>("corporations").find({}).toArray(),
     // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
     // sectorTurn as a complete overwrite and never reads the prior value.
-    // `soldByCommodity` is likewise overwritten by sector telemetry.
+    // `soldByCommodity` IS read: the demand throttle values last turn's sales
+    // leg by leg (ticket 1370), so it must not be projected out.
     db
       .collection<CorporateSector>("corporateSectors")
       .find(
@@ -209,7 +210,6 @@ export async function buildCorporationLookups(
         {
           projection: {
             plantsPnl: 0,
-            soldByCommodity: 0,
             ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
           },
         }

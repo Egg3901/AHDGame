@@ -100,7 +100,9 @@ export async function commitInfluencePlay(params: {
 
   // Atomic: the disburse guards on balanceLocal >= amount, so two members
   // spending at once cannot both win. Never pre-read the balance.
-  const paid = await disburseFromOrganizationFund(db, params.organizationId, amountLocal);
+  const paid = await disburseFromOrganizationFund(db, params.organizationId, amountLocal, {
+    turn: params.turn,
+  });
   if (!paid) return { ok: false, reason: "insufficient-funds" };
 
   const plays = await getAlignmentPlaysCollection(db);

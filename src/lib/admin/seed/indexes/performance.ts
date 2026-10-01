@@ -264,6 +264,23 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // playerContentReports — moderator queue by status, and the one-open-report
+  // check per reporter and target
+  await ensureIndex(
+    db,
+    "playerContentReports",
+    { status: 1, createdAt: -1 },
+    { name: "playerContentReports_status_createdAt" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "playerContentReports",
+    { reportedByUserId: 1, targetUserId: 1, status: 1 },
+    { name: "playerContentReports_reporter_target_status" },
+    log
+  );
+
   // politicalParties — leadership lookups (chair, viceChair, treasurer)
   await ensureIndex(
     db,

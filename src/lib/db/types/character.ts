@@ -149,6 +149,8 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Temporary receipts retained until an expired FX order acknowledges its refund. */
+  forexExpiryRefunds?: string[];
   /** Regional ad exposure follows this character across candidacies. */
   targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
   targetedAdsRevision?: number;
@@ -300,6 +302,7 @@ export interface Character {
   lastPollLarge?: StoredPoll;
   highlightedAchievementIds?: ObjectId[];
   campaignSongUrl?: string;
+  /** @deprecated Campaign songs no longer autoplay; legacy documents may still carry it. */
   campaignSongAutoplay?: boolean;
   groupFavorability?: Record<string, number>;
   /**
@@ -404,6 +407,17 @@ export interface Character {
   /** Patreon highlight color for tintable borders */
   tintColor?: string | null;
   /** Multi-currency LOC — gated by gameConfig.lineOfCreditEnabled */
+  /** Monotonic receipt generation for atomic LOC debt and wallet settlements. */
+  lineOfCreditRevision?: number;
+  /** Protected LOC cash outcome until its original journal acknowledges delivery. */
+  locSettlementRevision?: number;
+  pendingLocSettlement?: {
+    key: string;
+    token: string;
+    generation: number;
+    status: "claimed" | "delivered" | "rejected";
+    error?: string;
+  };
   lineOfCredit?: LineOfCreditState;
   /**
    * Set when the character joins a party; unset when they leave or go

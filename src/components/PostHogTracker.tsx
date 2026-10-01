@@ -16,21 +16,16 @@ import {
   capturePendingCharacterCreated,
   capturePendingWarDeclaration,
   captureProductEvent,
+  setProductEventContext,
   stopAnalyticsCapture,
 } from "@/lib/analytics/capture";
+import {
+  installPlayerActionAnalytics,
+  setPlayerActionContext,
+} from "@/lib/analytics/playerActionAnalytics";
 import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
 
-function productArea(pathname: string): string | null {
-  if (pathname === "/") return "landing";
-  if (pathname === "/register") return "registration";
-  if (pathname === "/create-character") return "character_creation";
-  if (pathname === "/profile") return "profile";
-  if (pathname.startsWith("/corporation")) return "corporations";
-  if (pathname.startsWith("/bank")) return "banking";
-  if (pathname.startsWith("/news")) return "media";
-  if (pathname.startsWith("/elections")) return "elections";
-  return null;
-}
+import { productArea } from "@/lib/analytics/productArea";
 
 /** Captures only named areas and an opaque account id, never URLs or player text. */
 export function PostHogTracker() {
@@ -53,6 +48,7 @@ export function PostHogTracker() {
     (event) => {
       const turn = event.payload.turn;
       if (typeof turn !== "number" || !userId) return;
+      setProductEventContext({ turn_number: turn });
       try {
         const marker = `${userId}:${turn}`;
         if (window.localStorage.getItem("ahd:last-tracked-turn") === marker) return;
@@ -87,6 +83,22 @@ export function PostHogTracker() {
     window.addEventListener("ahd:game-action", onAction);
     return () => window.removeEventListener("ahd:game-action", onAction);
   }, []);
+
+  useEffect(() => {
+    setPlayerActionContext({
+      userId,
+      characterId,
+      nationId: navData?.characterCountryId ?? null,
+      partyId: navData?.currentParty?.id ?? null,
+      characterCount:
+        typeof user?.activeCharacterCount === "number" ? user.activeCharacterCount : null,
+      creationPath: "character_creation_flow",
+      isPrivileged: user?.isAdmin === true || user?.isModerator === true,
+    });
+    setProductEventContext({ nation_id: navData?.characterCountryId ?? null });
+  }, [userId, characterId, navData?.characterCountryId, navData?.currentParty?.id, user]);
+
+  useEffect(() => installPlayerActionAnalytics(), []);
 
   useEffect(() => {
     const syncConsent = () => {

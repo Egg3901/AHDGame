@@ -23,7 +23,7 @@ import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
-import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { getMonetaryPolicyScope } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import { getInflationTarget, getNeutralPrimeRate } from "@/lib/budget/inflation";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
@@ -149,7 +149,7 @@ export async function buildCountryEconomyOutlook(
   countryId: CountryId
 ): Promise<CountryEconomyOutlook> {
   const exchangeApiKey = getExchangeApiKey(countryId);
-  const { bankId } = await getCentralBankScope(db, countryId);
+  const { bankId } = await getMonetaryPolicyScope(db, countryId);
 
   const [bank, budget, states, gameState, exchangeRate, snapshot, sectorMix, gameConfig] =
     await Promise.all([

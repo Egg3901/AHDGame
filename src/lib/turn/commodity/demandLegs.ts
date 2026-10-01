@@ -180,6 +180,7 @@ export function collectHouseholdSignals(inputs: HouseholdSignalInputs): {
 }
 
 export interface HouseholdDemandInputs {
+  financialDemandByCountry?: ReadonlyMap<string, number>;
   eraUnitScale: number;
   plantsUnitScale: number;
   priorGlobalSupply?: Map<CommodityType, number>;
@@ -187,6 +188,8 @@ export interface HouseholdDemandInputs {
   metricsByState: Map<string, HouseholdStateSignals>;
   priorGlobalPrice: Map<CommodityType, number>;
   perCapita?: number;
+  /** The era calibration applied later in the turn, so the supply clamp bounds calibrated demand. */
+  demandCalibration?: (commodity: CommodityType) => number;
 }
 
 /**
@@ -213,6 +216,8 @@ export function applyHouseholdDemand(
     metricsByState: inputs.metricsByState,
     priorGlobalPrice: inputs.priorGlobalPrice,
     perCapita: inputs.perCapita,
+    financialDemandByCountry: inputs.financialDemandByCountry,
+    demandCalibration: inputs.demandCalibration,
   });
   for (const [commodity, units] of household.global) {
     const g = global.get(commodity);
@@ -508,10 +513,21 @@ export interface DemandCalibrationInputs {
 }
 
 /**
+ * The era demand calibration for one preset as a per-commodity lookup. The
+ * same lookup feeds the supply caps (which must bound calibrated demand) and
+ * `applyDemandCalibration`, so the two can never read different tables.
+ */
+export function demandCalibrationFor(activePreset: string): (commodity: CommodityType) => number {
+  const calibrationEra = eraForPreset(activePreset);
+  return (commodity) => commodityDemandCalibration(calibrationEra, commodity);
+}
+
+/**
  * Era-aware demand calibration, applied once after every demand generator
- * has contributed and before any price is computed, so the global, national
- * and regional legs and the commodityFlows record all see the same corrected
- * figure. Inert (1.0) for every era except 1953.
+ * has contributed and before trade clearing, the reachable books and any
+ * price, so the global, national and regional legs, the books read surfaces
+ * quote, and the commodityFlows record all see the same corrected figure.
+ * Inert (1.0) for every era except 1953.
  */
 export function applyDemandCalibration(
   inputs: DemandCalibrationInputs,
@@ -519,9 +535,9 @@ export function applyDemandCalibration(
   byCountry: CountryLedger,
   byState: StateLedger
 ): void {
-  const calibrationEra = eraForPreset(inputs.activePreset);
+  const calibrationFor = demandCalibrationFor(inputs.activePreset);
   for (const commodity of COMMODITY_TYPES) {
-    const mult = commodityDemandCalibration(calibrationEra, commodity);
+    const mult = calibrationFor(commodity);
     if (mult === 1) continue;
     const g = global.get(commodity);
     if (g) g.demand *= mult;

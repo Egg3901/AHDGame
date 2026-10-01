@@ -21,6 +21,8 @@ export type SovereignCrisisDecisionState =
 export interface SovereignCrisisDecision {
   _id: ObjectId;
   countryCode: string;
+  /** Idempotency key when a public financial-crisis response opened this proposal. */
+  financialCrisisActionId?: string;
   state: SovereignCrisisDecisionState;
   /** Turn the crisis fired */
   firedAtTurn: number;

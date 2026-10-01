@@ -2,6 +2,16 @@ import { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { CrisisActionContext } from "./optionActions";
+import type { Db } from "mongodb";
+import type { CrisisDecisionOption } from "@/lib/db/types/crisis";
+import { badRequest } from "@/lib/api/errors";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import {
+  financialInterventionAmount,
+  financialRescueTransition,
+} from "@/lib/livingConflict/rules/financialRescue";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
 export type FinancialCrisisBankResponse = "recapitalize" | "guarantee" | "resolve";
 
@@ -17,12 +27,6 @@ interface FinancialCrisisBankAction {
   createdAt: Date;
 }
 
-function interventionAmount(budget: FederalBudget | null, pctGdp: number): number {
-  const gdp =
-    budget?.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : (budget?.gdp ?? 0);
-  return Math.max(0, Math.round(gdp * Math.max(0, pctGdp)));
-}
-
 /** Weakest active domestic banks first; stable ordering makes retries deterministic. */
 export function rankBanksForFinancialIntervention(
   banks: Pick<Corporation, "_id" | "bankCharter">[]
@@ -36,6 +40,40 @@ export function rankBanksForFinancialIntervention(
     );
 }
 
+/** Reject unavailable interventions before the public response is claimed. */
+export async function prepareFinancialCrisisBankResponse(
+  db: Db,
+  countryId: string,
+  option: CrisisDecisionOption
+): Promise<void> {
+  if (option.action?.kind !== "financialCrisisResponse") return;
+  if (!["recapitalize", "guarantee", "resolve"].includes(option.action.response)) return;
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId: countryId as FederalBudget["countryId"] });
+  const currency = resolveCountryCurrencyCode(budget);
+  const eligible = await db.collection<Corporation>("corporations").findOne(
+    {
+      countryId: countryId as Corporation["countryId"],
+      "bankCharter.status": "active",
+      "bankCharter.currency": currency,
+    },
+    { projection: { _id: 1 } }
+  );
+  if (!currency || !eligible)
+    throw badRequest("No active domestic bank uses the treasury currency.");
+  if (option.action.response === "resolve") return;
+  const amount = financialInterventionAmount(
+    budget?.gdpSmoothed || budget?.gdp || 0,
+    option.treasuryCostPctGdp ?? 0
+  );
+  if (!(amount > 0) || (budget?.treasuryBalance ?? 0) < amount) {
+    throw badRequest(
+      "The rescue needs funded treasury cash. Raise funding through the sovereign bond market first."
+    );
+  }
+}
+
 export async function applyFinancialCrisisBankResponse(
   ctx: CrisisActionContext,
   response: FinancialCrisisBankResponse
@@ -45,7 +83,19 @@ export async function applyFinancialCrisisBankResponse(
     .collection<FinancialCrisisBankAction>("financialCrisisBankActions")
     .findOne({ _id: actionId });
   if (prior) return;
-
+  // A durable quote owns all legs and projections. Recover it before considering
+  // a new quote from balances or charter statuses the first attempt changed.
+  const pending = await ctx.db
+    .collection<{ _id: string }>("bankMoneyMoves")
+    .findOne({ _id: actionId });
+  if (pending)
+    throw new Error("Rescue settlement is pending recovery; funding will not be duplicated");
+  await prepareFinancialCrisisBankResponse(ctx.db, ctx.countryId, ctx.option);
+  const budget = await ctx.db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId: ctx.countryId as FederalBudget["countryId"] });
+  const currency = resolveCountryCurrencyCode(budget);
+  if (!budget || !currency) throw new Error("Treasury currency is unavailable");
   const banks = rankBanksForFinancialIntervention(
     await ctx.db
       .collection<Corporation>("corporations")
@@ -53,92 +103,68 @@ export async function applyFinancialCrisisBankResponse(
         {
           countryId: ctx.countryId as Corporation["countryId"],
           "bankCharter.status": "active",
+          "bankCharter.currency": currency,
         },
         { projection: { bankCharter: 1 } }
       )
       .toArray()
   ).slice(0, 3);
-  if (banks.length === 0) return;
-
-  const budget = await ctx.db
-    .collection<FederalBudget>("federalBudget")
-    .findOne({ countryId: ctx.countryId as FederalBudget["countryId"] });
-  const amount = interventionAmount(budget, ctx.option.treasuryCostPctGdp ?? 0);
-  const now = new Date();
-
-  if (response === "recapitalize" && amount > 0) {
-    const perBank = Math.floor(amount / banks.length);
-    let remainder = amount - perBank * banks.length;
-    for (const bank of banks) {
-      const allocation = perBank + (remainder > 0 ? 1 : 0);
-      if (remainder > 0) remainder--;
-      await ctx.db.collection<Corporation>("corporations").updateOne(
-        { _id: bank._id, "bankCharter.status": "active" },
-        {
-          $inc: {
-            "bankCharter.cashReserves": allocation,
-            "bankCharter.postedCapital": allocation,
-          },
-          $set: {
-            "bankCharter.confidence": Math.max(0.75, bank.bankCharter?.confidence ?? 0),
-            "bankCharter.panicTurns": 0,
-            "bankCharter.warningBand": "amber",
-            updatedAt: now,
-          },
-        }
-      );
-    }
-  } else if (response === "guarantee") {
-    await ctx.db.collection("bankGuarantees").updateOne(
-      { crisisActionId: actionId },
+  const amount =
+    response === "resolve"
+      ? 0
+      : financialInterventionAmount(
+          budget?.gdpSmoothed || budget?.gdp || 0,
+          ctx.option.treasuryCostPctGdp ?? 0
+        );
+  if (response === "guarantee") {
+    // Zero cash is safe to initialize outside settlement; activation happens
+    // only after the journal has delivered every funded leg.
+    await ctx.db.collection<{ _id: string }>("bankGuarantees").updateOne(
+      { _id: actionId },
       {
         $setOnInsert: {
           crisisActionId: actionId,
           countryId: ctx.countryId,
+          currency,
           bankIds: banks.map((bank) => bank._id),
           guaranteeLimit: amount,
-          status: "active",
+          escrowBalance: 0,
+          status: "pending",
           openedTurn: ctx.currentTurn,
-          createdAt: now,
+          expiresTurn: ctx.currentTurn + TURNS_PER_YEAR,
         },
       },
       { upsert: true }
     );
-    await ctx.db.collection<Corporation>("corporations").updateMany(
-      { _id: { $in: banks.map((bank) => bank._id) }, "bankCharter.status": "active" },
-      {
-        $set: {
-          "bankCharter.confidence": 0.7,
-          "bankCharter.warningBand": "amber",
-          updatedAt: now,
-        },
-      }
-    );
-  } else if (response === "resolve") {
-    const weakest = banks[0];
-    if ((weakest.bankCharter?.confidence ?? 0.5) <= 0.35) {
-      await ctx.db.collection<Corporation>("corporations").updateOne(
-        { _id: weakest._id, "bankCharter.status": "active" },
-        {
-          $set: {
-            "bankCharter.status": "failed",
-            "bankCharter.failedTurn": ctx.currentTurn,
-            updatedAt: now,
-          },
-        }
-      );
-    }
   }
-
-  await ctx.db.collection<FinancialCrisisBankAction>("financialCrisisBankActions").insertOne({
-    _id: actionId,
-    crisisId: ctx.crisis._id,
-    interactionId: ctx.interaction._id,
+  const transition = financialRescueTransition({
+    key: actionId,
     countryId: ctx.countryId,
-    response,
-    amount,
-    bankIds: banks.map((bank) => bank._id),
+    treasuryId: budget._id,
+    currency,
     turn: ctx.currentTurn,
-    createdAt: now,
+    amount,
+    response,
+    banks: banks.map((bank) => ({
+      id: bank._id.toHexString(),
+      confidence: bank.bankCharter?.confidence ?? 0.5,
+    })),
   });
+  transition.projections.push({
+    collection: "financialCrisisBankActions",
+    insert: {
+      _id: actionId,
+      crisisId: { $oid: ctx.crisis._id.toHexString() },
+      interactionId: { $oid: ctx.interaction._id.toHexString() },
+      countryId: ctx.countryId,
+      response,
+      amount,
+      bankIds: banks.map((bank) => ({ $oid: bank._id.toHexString() })),
+      turn: ctx.currentTurn,
+    },
+    note: "Publish the completed funded intervention",
+  });
+  const result = await settleTransition(ctx.db, transition);
+  if (result.error || result.status === "partial" || result.status === "rejected")
+    throw new Error(result.error ?? "Rescue settlement is incomplete");
 }

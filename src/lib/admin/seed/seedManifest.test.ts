@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getCollectionCategory } from "./seedManifest";
+import {
+  getCollectionCategory,
+  getRuntimeCollectionNames,
+  getReferenceCollectionNames,
+  getPreservedCollectionNames,
+} from "./seedManifest";
 
 const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
 
@@ -67,5 +72,36 @@ describe("seed manifest classification coverage", () => {
       getCollectionCategory(name),
       `collection "${name}" has no SEED_MANIFEST entry, so resetGameWorld will never wipe it — add it to SEED_MANIFEST`
     ).toBeDefined();
+  });
+});
+
+describe("runtime lifecycle category determines reset selection", () => {
+  it.each([
+    "conflicts",
+    "peaceOffers",
+    "politicalMetricsHistory",
+    "politicalMetricsRegionHistory",
+    "politicalCabinetContribution",
+    "nationalManpower",
+    "regionalBudgets",
+    "unions",
+    "unionEndorsements",
+    "unionLeaderVotes",
+    "unionOrganizers",
+    "bargainingCampaigns",
+    "collectiveAgreements",
+    "landeslisten",
+  ])("wipes %s instead of treating it as reference data", (name) => {
+    expect(getCollectionCategory(name)).toBe("runtime");
+    expect(getRuntimeCollectionNames()).toContain(name);
+    expect(getReferenceCollectionNames()).not.toContain(name);
+    expect(getPreservedCollectionNames()).not.toContain(name);
+  });
+
+  it("keeps actual world reference and account collections in their own lifecycle", () => {
+    expect(getReferenceCollectionNames()).toContain("states");
+    expect(getRuntimeCollectionNames()).not.toContain("states");
+    expect(getPreservedCollectionNames()).toContain("users");
+    expect(getRuntimeCollectionNames()).not.toContain("users");
   });
 });

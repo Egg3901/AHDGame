@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
+import { mutualDefenceBasis } from "@/lib/constants/mutualDefence";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
 import type { ConflictOption } from "@/lib/military/dto/conflictOption";
@@ -142,9 +143,13 @@ export function JoinConflictPanel({
             each country decides for itself.
           </p>
           <p className="mt-1 text-xs text-muted">
-            Defence of a member is not voted on. If a member is attacked, every player-led member of
-            this alliance enters that war at once. Leaving the alliance beforehand is the only way
-            to stay out of it, and leaving after a war has begun does not take you out of that war.
+            {mutualDefenceBasis({
+              category: org.def.category,
+              posture: org.posture,
+              standingMutualDefence: org.def.standingMutualDefence,
+            })
+              ? "Defence of a member is not voted on. If a member is declared on, every player-led member of this alliance enters that war at once. Leaving the alliance beforehand is the only way to stay out of it, and leaving after a war has begun does not take you out of that war."
+              : "Defence of a member is not automatic at this posture. Only the Article 5 posture brings every player-led member into a war when a member is declared on; until then, this vote is the way in."}
           </p>
           <p className="mt-1 text-xs text-muted">
             An attack that began before a country joined is not retroactive. Members may unanimously

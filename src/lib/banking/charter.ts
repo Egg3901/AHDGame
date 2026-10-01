@@ -1,5 +1,5 @@
-import type { Db, ObjectId } from "mongodb";
-import type { BankCharter, BankCharterType } from "@/lib/db/types/bank";
+import { ObjectId, type Db } from "mongodb";
+import type { BankCharter, BankCharterType, BankLoan } from "@/lib/db/types/bank";
 import type { Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -12,6 +12,8 @@ import {
 } from "@/lib/currency/gdpAnchorRate";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
+import { oid } from "./rules/boundary";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
@@ -224,6 +226,7 @@ export async function issueCharter(
           bankId: corporationId.toString(),
           statusAfter: "active",
           amount: result.postedCapital,
+          settlementId: result.settlementId,
           meta: { charterType: requestedType },
         }
       : {
@@ -238,7 +241,9 @@ export async function issueCharter(
         },
     db
   );
-  return result;
+  return result.ok
+    ? { ok: true, charter: result.charter, postedCapital: result.postedCapital }
+    : result;
 }
 
 async function issueCharterInner(
@@ -247,13 +252,16 @@ async function issueCharterInner(
   requestedType: BankCharterType,
   currency: CurrencyCode,
   options?: { skipFlagCheck?: boolean }
-): Promise<IssueCharterResult> {
-  const corporation = await db.collection<Corporation>("corporations").findOne({
-    _id: corporationId,
-  });
+): Promise<IssueCharterResult & { settlementId?: string }> {
+  const corporation = await db
+    .collection<Corporation & { settledKeys?: string[] }>("corporations")
+    .findOne({
+      _id: corporationId,
+    });
   if (!corporation) {
     return { ok: false, reasons: ["Corporation not found"] };
   }
+  const expectedSettledKeys = corporation.settledKeys ? [...corporation.settledKeys] : null;
 
   // skipFlagCheck is for SEED-TIME use only (NPC banks charter before the
   // world flag is on). Player routes must never pass it.
@@ -278,6 +286,23 @@ async function issueCharterInner(
   if (prior && prior.status !== "active") {
     await archiveCharter(db, corporationId, prior, charteredTurn, "recharter");
   }
+  // Servicing continues for these named loans and NPC tranches after renewal.
+  // Use the same current/arrears book as the turn, not a stale charter counter;
+  // pending requests and terminal defaults/repaid loans are not funded exposure.
+  const survivingLoans = await db
+    .collection<BankLoan>("bankLoans")
+    .find(
+      {
+        bankCorporationId: corporationId,
+        status: { $in: ["current", "arrears"] },
+      },
+      { projection: { outstanding: 1 } }
+    )
+    .toArray();
+  const totalLoans = survivingLoans.reduce(
+    (sum, loan) => sum + Math.max(0, loan.outstanding ?? 0),
+    0
+  );
 
   // Initial offsets must sit inside the era corridor; 0/0 is out of band in
   // historical worlds (deposit ceiling below prime, lending floor above it).
@@ -293,40 +318,69 @@ async function issueCharterInner(
     // Posted capital IS the bank's opening cash. It was debited from the
     // corporation a line below; this is where it lands.
     cashReserves: postedCapital,
+    totalLoans,
     depositOffset: initialOffsets.depositOffset,
     lendingOffset: initialOffsets.lendingOffset,
     blacklist: {},
   };
 
-  // Single-document atomic debit + charter write. Filter re-gates capital and
-  // rejects a race that already activated a charter.
-  const updated = await db.collection<Corporation>("corporations").findOneAndUpdate(
+  const identity = { _id: oid(corporationId.toHexString()) };
+  const settlement = await settleAtomicDocumentTransition(
+    db,
     {
-      _id: corporationId,
-      liquidCapital: { $gte: postedCapital },
-      $or: [{ bankCharter: { $exists: false } }, { "bankCharter.status": { $ne: "active" } }],
+      key: `bank_charter_capital:${corporationId}:${new ObjectId()}`,
+      kind: "bank_charter_capital",
+      turn: charteredTurn,
+      currency,
+      legs: [
+        {
+          kind: "debit",
+          amount: postedCapital,
+          collection: "corporations",
+          filter: identity,
+          path: "liquidCapital",
+          note: "Corporation posts charter capital",
+        },
+        {
+          kind: "credit",
+          amount: postedCapital,
+          collection: "corporations",
+          filter: identity,
+          path: "bankCharter.cashReserves",
+          note: "Opening charter vault",
+        },
+      ],
+      projections: [
+        {
+          collection: "corporations",
+          filter: identity,
+          update: {
+            $inc: { liquidCapital: -postedCapital },
+            $set: { bankCharter: charter, updatedAt: now },
+          },
+          note: "Publish fully funded charter",
+        },
+      ],
+      event: { kind: "charter.issued", command: "bank.charter.issue" },
     },
     {
-      $inc: { liquidCapital: -postedCapital },
-      $set: {
-        bankCharter: charter,
-        updatedAt: now,
-      },
-    },
-    { returnDocument: "after" }
+      identity,
+      guard: { bankCharter: prior === undefined ? { $exists: false } : prior },
+      expectedSettledKeys,
+    }
   );
-
-  if (!updated) {
+  if (settlement.status !== "applied" && settlement.status !== "replayed") {
     return {
       ok: false,
-      reasons: ["Failed to post capital (insufficient funds or charter already active)"],
+      reasons: ["Failed to post capital (insufficient funds or charter changed)"],
     };
   }
 
   return {
     ok: true,
-    charter: updated.bankCharter ?? charter,
+    charter,
     postedCapital,
+    settlementId: settlement.key,
   };
 }
 

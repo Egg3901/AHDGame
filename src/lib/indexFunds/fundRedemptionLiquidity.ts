@@ -22,7 +22,8 @@ import {
   reverseFloatSellDebit,
   settleFloatSellDebit,
 } from "@/lib/corporations/shareEscrowSettlement";
-import { loadEquityQuote } from "@/lib/equities/marketPool";
+import { equityPoolCurrency, loadEquityQuote, readEquityPool } from "@/lib/equities/marketPool";
+import type { EquityMarketPool } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
@@ -30,7 +31,7 @@ import {
   resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
-import { emitTx, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { emitTx, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { insertFundTransaction, updateFundHoldings } from "@/lib/indexFunds/fundQueries";
 
@@ -387,7 +388,7 @@ export async function sellFundHoldingsForRedemptionCash(
       { ...corp, sharePrice: executionPrice },
       fxRate
     );
-    if (pricePerShareAnchor <= 0) continue;
+    if (!Number.isFinite(pricePerShareAnchor) || pricePerShareAnchor <= 0) continue;
     pricedHoldings.push({
       corporationId: holding.corporationId,
       shares: holding.shares,
@@ -427,7 +428,7 @@ export async function sellFundHoldingsForRedemptionCash(
     if (cashRaisedAnchor >= cashNeededAnchor) break;
 
     const corp = corpMap.get(sale.corporationId.toString());
-    if (!corp) continue;
+    if (!corp || !Number.isFinite(sale.sharesToSell) || sale.sharesToSell <= 0) continue;
 
     let saleResult: Awaited<ReturnType<typeof executeOneHoldingSale>>;
     try {
@@ -502,6 +503,14 @@ type OneHoldingSaleOptions = {
    */
   thresholds?: TxThresholds;
   fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
+  /**
+   * The sale's equity pool, read once by the caller. Prices the quote and
+   * answers pool existence for the settle and commit legs, which would
+   * otherwise each read the same document again.
+   */
+  pools?: Map<CurrencyCode, EquityMarketPool>;
+  /** Caller flushes the ledger rows of completed sales in one write. */
+  ledgerSink?: TxInput[];
 };
 
 type OneHoldingSaleResult = {
@@ -526,7 +535,14 @@ async function executeOneHoldingSale(
   now: Date,
   options?: OneHoldingSaleOptions
 ): Promise<OneHoldingSaleResult | null> {
-  const quote = await loadEquityQuote(db, corp);
+  if (
+    !Number.isFinite(sale.sharesToSell) ||
+    sale.sharesToSell <= 0 ||
+    !Number.isFinite(sale.pricePerShareAnchor) ||
+    sale.pricePerShareAnchor <= 0
+  )
+    return null;
+  const quote = await loadEquityQuote(db, corp, { pools: options?.pools });
   const issuerFunded = options?.settlementCounterparty === "issuer";
   if (!issuerFunded && quote.active && sale.sharesToSell > quote.bidDepthShares) return null;
   const executionPrice = issuerFunded ? resolveShareExecutionPrice(corp) : quote.bidPriceLocal;
@@ -575,6 +591,7 @@ async function executeOneHoldingSale(
   const issuerDebit = await settleFloatSellDebit(db, corp, issuerBuyback, {
     session: options?.session,
     counterparty: options?.settlementCounterparty,
+    pools: options?.pools,
   });
   if (!issuerDebit.ok) {
     if (standalone) await clearLiquiditySaleJournal(db, fund._id, saleId);
@@ -731,29 +748,27 @@ async function executeOneHoldingSale(
   // holdings write and the fund transaction both landed, inside the same
   // guarded sale that returns null on any settlement failure — a skipped sale
   // emits nothing, an executed sale emits exactly one row.
-  await emitTx(
-    db,
-    {
-      type: "stock_trade_sell",
-      turn,
-      createdAt: now,
-      subjectType: "fund",
-      subjectId: fund._id,
-      subjectName: fund.name,
-      amount: proceedsAnchor,
-      anchorAmount: proceedsAnchor,
-      currencyCode: fund.anchorCurrencyCode,
-      counterpartyType: "system",
-      counterpartyName: "Public float",
-      meta: {
-        corporationId: corp._id.toString(),
-        shares: sale.sharesToSell,
-        pricePerShareAnchor: sale.pricePerShareAnchor,
-        source: options?.note ?? "redemption-liquidity",
-      },
+  const ledgerRow: TxInput = {
+    type: "stock_trade_sell",
+    turn,
+    createdAt: now,
+    subjectType: "fund",
+    subjectId: fund._id,
+    subjectName: fund.name,
+    amount: proceedsAnchor,
+    anchorAmount: proceedsAnchor,
+    currencyCode: fund.anchorCurrencyCode,
+    counterpartyType: "system",
+    counterpartyName: "Public float",
+    meta: {
+      corporationId: corp._id.toString(),
+      shares: sale.sharesToSell,
+      pricePerShareAnchor: sale.pricePerShareAnchor,
+      source: options?.note ?? "redemption-liquidity",
     },
-    options?.thresholds
-  );
+  };
+  if (options?.ledgerSink) options.ledgerSink.push(ledgerRow);
+  else await emitTx(db, ledgerRow, options?.thresholds);
 
   void recordShareTrade(db, {
     corporationId: corp._id,
@@ -770,6 +785,7 @@ async function executeOneHoldingSale(
   await onFloatSellCommitted(db, corp, issuerBuyback, {
     session: options?.session,
     counterparty: options?.settlementCounterparty,
+    pools: options?.pools,
   });
 
   const committedTransactionId = transactionId;
@@ -849,6 +865,8 @@ export async function sellFundHoldingShares(
     thresholds?: TxThresholds;
     fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
     turn?: number;
+    /** Caller flushes the ledger rows of completed sales in one write. */
+    ledgerSink?: TxInput[];
   }
 ): Promise<SellHoldingsForRedemptionResult> {
   const holding = fund.holdings.find(
@@ -879,7 +897,12 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const quote = await loadEquityQuote(db, corp);
+  // One read of the sale's pool serves both quotes and both pool-existence
+  // checks below; nothing writes the pool before the sale's own debit.
+  const currency = equityPoolCurrency(corp);
+  const pool = await readEquityPool(db, currency, { session: options?.session });
+  const pools = new Map<CurrencyCode, EquityMarketPool>(pool ? [[currency, pool]] : []);
+  const quote = await loadEquityQuote(db, corp, { pools });
   const issuerFunded = options?.settlementCounterparty === "issuer";
   const sharesToSell = Math.min(
     maxShares,
@@ -925,7 +948,12 @@ export async function sellFundHoldingShares(
       [...fund.holdings],
       turn,
       now,
-      { ...options, thresholds: options?.thresholds ?? (await loadTxThresholds(db)), fxByCurrency }
+      {
+        ...options,
+        thresholds: options?.thresholds ?? (await loadTxThresholds(db)),
+        fxByCurrency,
+        pools,
+      }
     );
   } catch (error) {
     if (!(error instanceof LiquiditySaleQuarantinedError)) throw error;

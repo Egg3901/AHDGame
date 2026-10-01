@@ -1,3 +1,7 @@
+import {
+  withServerTurnAnalytics,
+  markServerTurnAnalyticsCommitted,
+} from "@/lib/analytics/serverPosthog";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
@@ -52,6 +56,7 @@ import {
   combinePhasePredicates,
   getSingleplayerPhasePredicate,
 } from "@/simulation/phases/singleplayerPhases";
+import { runPostTurnIntegrityScans } from "@/lib/turn/postTurnScans";
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
@@ -216,7 +221,11 @@ interface CrashedTurnRecovery {
   appliedPhases: Set<string>;
 }
 
-export async function processTurn(
+export function processTurn(options: Parameters<typeof processTurnImpl>[0] = {}) {
+  return withServerTurnAnalytics(() => processTurnImpl(options));
+}
+
+async function processTurnImpl(
   options: {
     /** Sandbox tooling hook. Production callers omit it. */
     onPhaseCompleted?: (phase: CompletedTurnPhaseObservation) => Promise<void>;
@@ -618,6 +627,7 @@ export async function processTurn(
       }
     );
     localTurnLockHeld = false;
+    markServerTurnAnalyticsCommitted({ emit: !localSingleplayer && config?.simSandbox !== true });
 
     invalidateGameTimeCache();
     invalidateGameStateCache();
@@ -639,6 +649,11 @@ export async function processTurn(
     if (!localSingleplayer) {
       await db.collection<TurnLog>("turnLogs").insertOne(turnLog as TurnLog);
       turnLogWritten = true;
+      // Anti-abuse scans run after the commit, never holding up the turn
+      // (#2694). Results land on this turn log under postTurnScans.
+      void runPostTurnIntegrityScans(db, context.newTurn).catch((err) =>
+        console.warn("[post-turn] integrity scans failed to start", err)
+      );
     }
 
     emit({
@@ -710,6 +725,7 @@ export async function processTurn(
         void captureTurnPosthog({
           db,
           turn: context.newTurn,
+          iteration: activeIteration,
           durationMs,
           phaseStatuses,
           errorCount: lastHealth?.errorCount ?? 0,

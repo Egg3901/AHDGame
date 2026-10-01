@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
 import { recordRoundTrip, resetRoundTripProfiler } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
+import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
+import { getSingleplayerPhasePredicate } from "@/simulation/phases/singleplayerPhases";
 
 const recordAudit = vi.fn();
 vi.mock("@/lib/audit/recordAudit", () => ({
@@ -26,6 +28,44 @@ async function flushAsyncStatusWrites() {
 }
 
 describe("createTurnPhaseRuntime", () => {
+  it.each([
+    { name: "financialSuspectScan", predicate: getAnomalyScanCadencePredicate(1, 3) },
+    { name: "gameHealthSnapshot", predicate: getSingleplayerPhasePredicate(true) },
+  ])(
+    "does not label a filtered $name phase as an elections-only simulation",
+    async ({ name, predicate }) => {
+      const phaseStatuses: TurnPhaseTelemetryMap = {};
+      const currentPhaseRef = { current: "campaignTurn" };
+      const { db, updateOne } = createMockDb();
+      const execute = vi.fn().mockResolvedValue(42);
+      const runtime = createTurnPhaseRuntime({
+        db,
+        phaseStatuses,
+        warnings: [],
+        currentPhaseRef,
+        shouldRunPhase: predicate,
+      });
+
+      await expect(runtime.runPhase(name, execute)).resolves.toBeNull();
+
+      expect(execute).not.toHaveBeenCalled();
+      expect(currentPhaseRef.current).toBe("campaignTurn");
+      expect(phaseStatuses[name]).toMatchObject({
+        status: "skipped",
+        reason: "conditional",
+        message: "skipped: phase eligibility predicate",
+      });
+      expect(updateOne).toHaveBeenCalledWith(
+        { _id: "current", isProcessing: true },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            [`processingPhaseStatuses.${name}`]: expect.objectContaining({ reason: "conditional" }),
+          }),
+        })
+      );
+    }
+  );
+
   it("reports a completed phase to an opt-in sandbox observer without changing its result", async () => {
     const observed: Array<{ name: string; result: unknown }> = [];
     const runtime = createTurnPhaseRuntime({
@@ -233,6 +273,65 @@ describe("unmeasured query telemetry", () => {
     await flushAsyncStatusWrites();
     expect(phaseStatuses.measured.roundTrips).toBe(1);
     expect(phaseStatuses.empty.roundTrips).toBe(0);
+    resetRoundTripProfiler();
+  });
+});
+
+describe("phase sub-steps and top collections (#2689)", () => {
+  it("persists named sub-steps with their own round trips, and top collections above the threshold", async () => {
+    resetRoundTripProfiler();
+    const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
+    const { TOP_COLLECTIONS_MIN_ROUND_TRIPS } =
+      await import("@/simulation/engine/turnPhaseRuntime");
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("corporationTurn", async () => {
+      const steps = substepMarker();
+      for (let i = 0; i < TOP_COLLECTIONS_MIN_ROUND_TRIPS; i++) recordRoundTrip("corporations");
+      steps.mark("load");
+      recordRoundTrip("sectors");
+      recordRoundTrip("sectors");
+      steps.mark("write");
+      recordRoundTrip("sectors");
+      steps.mark("write");
+    });
+    await flushAsyncStatusWrites();
+    const status = phaseStatuses.corporationTurn;
+    expect(status.substeps?.load).toMatchObject({ roundTrips: 100, calls: 1 });
+    expect(status.substeps?.write).toMatchObject({ roundTrips: 3, calls: 2 });
+    expect(status.topCollections?.[0]).toEqual({ collection: "corporations", roundTrips: 100 });
+    expect(status.topCollections).toHaveLength(2);
+    resetRoundTripProfiler();
+  });
+
+  it("records nothing for small phases, outside a phase, or when a phase fails", async () => {
+    resetRoundTripProfiler();
+    const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
+    substepMarker().mark("outside");
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    await runtime.runPhase("small", async () => {
+      recordRoundTrip("npps");
+    });
+    await runtime.runPhase("broken", async () => {
+      substepMarker().mark("partial");
+      throw new Error("boom");
+    });
+    await runtime.runPhase("broken", async () => 1);
+    await flushAsyncStatusWrites();
+    expect(phaseStatuses.small).not.toHaveProperty("topCollections");
+    expect(phaseStatuses.small).not.toHaveProperty("substeps");
+    expect(phaseStatuses.broken).not.toHaveProperty("substeps");
     resetRoundTripProfiler();
   });
 });

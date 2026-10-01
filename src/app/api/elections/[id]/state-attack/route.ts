@@ -291,6 +291,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       message: `Opened on ${target.characterName ?? "your rival"} in ${stateName}. It runs for ${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns.`,
       expiresTurn: row.expiresTurn,
       shieldApplied,
+      actionsCost: terms.costActions,
+      fundsCost: costFundsLocal,
+      electionType: election.electionType,
+      phase: "primary",
     });
   } catch (error) {
     return handleRouteError(error, { request, route: "/api/elections/[id]/state-attack" });

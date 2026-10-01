@@ -80,6 +80,14 @@
         "failed": "Google-Verknüpfung fehlgeschlagen. Bitte versuche es erneut.",
         "expired": "Google-Verknüpfung abgelaufen. Bitte versuche es erneut.",
         "denied": "Google-Autorisierung wurde abgelehnt."
+      },
+      "apple": {
+        "linked": "Apple-ID erfolgreich verknüpft.",
+        "notConfigured": "Apple-Verknüpfung ist auf diesem Server nicht eingerichtet.",
+        "alreadyLinked": "Diese Apple-ID ist bereits mit einem anderen Benutzer verknüpft.",
+        "failed": "Apple-Verknüpfung fehlgeschlagen. Bitte versuche es erneut.",
+        "expired": "Apple-Verknüpfung abgelaufen. Bitte versuche es erneut.",
+        "denied": "Apple-Autorisierung wurde abgelehnt."
       }
     },
     "sections": {
@@ -224,9 +232,6 @@
         "retro": "Retro",
         "solarized": "Solarized"
       },
-      "videoPreferences": "Videoeinstellungen",
-      "disableAutoplay": "Autoplay auf Profilen anderer Spieler deaktivieren",
-      "disableAutoplayHint": "Wenn aktiviert, werden Wahlkampfsongs auf Profilen anderer Spieler nicht automatisch abgespielt (betrifft nur deine Ansicht)",
       "interfaceTitle": "Oberfläche",
       "classicUi": "Klassische Oberfläche verwenden",
       "classicUiHint": "Die neue Navigationsleiste und das CEO Command Center sind jetzt Standard. Aktiviere dies, um zur klassischen Navigationsleiste und den alten Konzernseiten zurückzukehren.",
@@ -312,6 +317,7 @@
       "comingSoon": "Bald verfügbar",
       "googleDev": "Google-Anmeldung ist in Entwicklung",
       "discordLinked": "Discord-Konto verknüpft",
+      "appleLinked": "Apple-ID verknüpft",
       "link": "{provider} verknüpfen",
       "unlink": "Trennen",
       "unlinking": "Wird getrennt...",
@@ -407,7 +413,6 @@
       "invalid": "Keine gültige YouTube-URL oder Video-ID.",
       "thumbAlt": "Vorschau des Video-Thumbnails",
       "preview": "Vorschau",
-      "autoplay": "Autoplay auf meinem Profil aktivieren (andere können dies in ihren Einstellungen weiterhin deaktivieren)",
       "save": "Wahlkampfsong speichern"
     },
     "referrals": {

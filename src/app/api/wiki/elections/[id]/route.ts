@@ -4,6 +4,8 @@ import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { resolveElectionYear } from "@/lib/utils/formatters";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
+import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorContext";
 import { getPrimaryWinnersForElection, type CountryId } from "@/lib/constants/countries";
 import type {
   Election,
@@ -12,6 +14,7 @@ import type {
   PrimarySnapshot,
   State,
   PoliticalParty,
+  GameState,
 } from "@/lib/db/types";
 
 const ELECTION_TYPE_LABELS: Record<string, string> = {
@@ -77,7 +80,22 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .find({ electionId })
       .toArray();
 
-    const [state, voteTally, parties] = await Promise.all([
+    const gameStatePromise =
+      election.electionYear == null
+        ? db.collection<GameState>("gameState").findOne(
+            { _id: "current" },
+            {
+              projection: {
+                startingYear: 1,
+                preset: 1,
+                preIterationTurns: 1,
+                "preIteration.active": 1,
+              },
+            }
+          )
+        : Promise.resolve(null);
+
+    const [state, voteTally, parties, gameState] = await Promise.all([
       db
         .collection<State>("states")
         .findOne({ _id: election.state, countryId: election.countryId }),
@@ -88,6 +106,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         .find({ countryId: election.countryId ?? "US" })
         .project({ sequentialId: 1, name: 1, color: 1, abbreviation: 1 })
         .toArray(),
+      gameStatePromise,
     ]);
 
     // Fetch primary snapshots: full history for trend chart + latest for results fallback
@@ -175,7 +194,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       ? {
           totalVotes: voteTally.totalVotes,
           candidateNames: voteTally.candidateNames,
-          candidateParties: voteTally.candidateParties,
+          // Tallies store the party's sequential id; the wiki renders names.
+          candidateParties: Object.fromEntries(
+            Object.entries(voteTally.candidateParties ?? {}).map(([candId, partyId]) => [
+              candId,
+              partyMap.get(String(partyId))?.name ?? partyId,
+            ])
+          ),
           seatsEstimate: voteTally.seatsEstimate ?? undefined,
           finalized: voteTally.finalized,
           turnSnapshots: voteTally.turnSnapshots ?? [],
@@ -226,9 +251,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const typeLabel =
       election.electionType === "senate"
         ? `Senate Class ${election.senateClass ?? "?"}`
-        : (ELECTION_TYPE_LABELS[election.electionType] ?? election.electionType);
+        : (ELECTION_TYPE_LABELS[election.electionType] ??
+          formatElectionTypeLabel(election.electionType, election.countryId));
 
-    const year = resolveElectionYear(election);
+    const year = resolveElectionYear(election, cycleAnchorContextFromGameState(gameState));
 
     // Build minimal snapshot history for trend chart (characterName + sharePct only)
     const primarySnapshotHistory =

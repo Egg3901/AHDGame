@@ -62,6 +62,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import { yearOfTurn } from "@/lib/utils/gameDate";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { blocOrgFor } from "@/lib/world/blocMembership";
 import { admitMember } from "@/lib/internationalOrganizations/joinApplication";
 import { isMember } from "@/lib/internationalOrganizations/service";
@@ -454,6 +455,8 @@ interface GovernmentFormationHead {
   _id: CountryId;
   pmCharacterId?: ObjectId | null;
   pmNppId?: ObjectId | null;
+  governingPartyId?: string | null;
+  formedTurn?: number | null;
   updatedAt?: Date;
 }
 
@@ -572,12 +575,29 @@ async function retireNationalRemnants(
   const remnants = (await db
     .collection("electedOfficials")
     .find({ countryId: absorbed })
-    .toArray()) as unknown as Array<{ _id: ObjectId; officeType: string }>;
+    .toArray()) as unknown as Array<{
+    _id: ObjectId;
+    officeType: string;
+    characterId?: ObjectId | null;
+    nppId?: ObjectId | null;
+    party?: string;
+  }>;
 
   for (const official of remnants) {
     const target = remapOffice(absorbed, survivor, official.officeType);
     if (target === null) {
       await db.collection("electedOfficials").deleteOne({ _id: official._id });
+      if (official.characterId || official.nppId) {
+        await captureOfficeTransition({
+          db,
+          officeType: official.officeType,
+          partyId: official.party,
+          transitionType: "lost",
+          selectionMethod: "removal",
+          nationId: absorbed,
+          turn: params.currentTurn,
+        });
+      }
       continue;
     }
     await db
@@ -586,6 +606,26 @@ async function retireNationalRemnants(
         { _id: official._id },
         { $set: { countryId: survivor, officeType: target, updatedAt: now } }
       );
+    if (official.characterId || official.nppId) {
+      await captureOfficeTransition({
+        db,
+        officeType: official.officeType,
+        partyId: official.party,
+        transitionType: "left",
+        selectionMethod: "succession",
+        nationId: absorbed,
+        turn: params.currentTurn,
+      });
+      await captureOfficeTransition({
+        db,
+        officeType: target,
+        partyId: official.party,
+        transitionType: "gained",
+        selectionMethod: "succession",
+        nationId: survivor,
+        turn: params.currentTurn,
+      });
+    }
   }
 
   // THE LOSING GOVERNMENT FALLS. The winner is the shell, so its council is
@@ -604,9 +644,29 @@ async function retireNationalRemnants(
   const ministers = (await db
     .collection("cabinetMembers")
     .find({ countryId: absorbed })
-    .toArray()) as unknown as Array<{ characterId?: ObjectId | null; nppId?: ObjectId | null }>;
+    .toArray()) as unknown as Array<{
+    characterId?: ObjectId | null;
+    nppId?: ObjectId | null;
+    party?: string;
+    appointedTurn?: number;
+  }>;
   await db.collection("cabinetMembers").deleteMany({ countryId: absorbed });
   await clearCabinetPointers(db, ministers, now);
+  for (const minister of ministers) {
+    if (!minister.characterId && !minister.nppId) continue;
+    await captureOfficeTransition({
+      db,
+      officeType:
+        absorbed === "US" ? "usCabinet" : absorbed === "UK" ? "ukCabinet" : "parliamentaryCabinet",
+      partyId: minister.party,
+      transitionType: "lost",
+      selectionMethod: "removal",
+      nationId: absorbed,
+      turn: params.currentTurn,
+      tenureTurns:
+        minister.appointedTurn == null ? undefined : params.currentTurn - minister.appointedTurn,
+    });
+  }
 
   // THE WINNER'S GOVERNMENT STAYS. The winner is the shell, so its head of
   // government is already seated and already holds the right office key; there is
@@ -671,6 +731,35 @@ async function retireNationalRemnants(
   await getCountryLeaderStatesCollection(db).deleteMany({ countryId: absorbed });
 
   await formations.deleteOne({ _id: absorbed });
+  if (absorbedGov?.pmCharacterId || absorbedGov?.pmNppId) {
+    // Do not count the same executive twice if a remnant official row also represented it.
+    const executive = COUNTRY_CONFIGS[absorbed].officeTypes.find(
+      (office) => office.isExecutive
+    )?.key;
+    const alreadyCounted = remnants.some(
+      (official) =>
+        official.officeType === executive &&
+        ((official.characterId != null &&
+          absorbedGov.pmCharacterId != null &&
+          String(official.characterId) === String(absorbedGov.pmCharacterId)) ||
+          (official.nppId != null &&
+            absorbedGov.pmNppId != null &&
+            String(official.nppId) === String(absorbedGov.pmNppId)))
+    );
+    if (!alreadyCounted) {
+      await captureOfficeTransition({
+        db,
+        officeType: executive ?? "primeMinister",
+        partyId: absorbedGov.governingPartyId ?? undefined,
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: absorbed,
+        turn: params.currentTurn,
+        tenureTurns:
+          absorbedGov.formedTurn == null ? undefined : params.currentTurn - absorbedGov.formedTurn,
+      });
+    }
+  }
 }
 
 /**

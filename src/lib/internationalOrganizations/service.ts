@@ -1,3 +1,6 @@
+import type { EuropeanIntegrationState } from "./europeanIntegration/rules";
+import { ensureEuropeanIntegrationState } from "./europeanIntegration/service";
+import { withEuropeanInstitution } from "./europeanIntegration/definition";
 import {
   ObjectId,
   type Collection,
@@ -41,6 +44,7 @@ import type {
 } from "@/lib/db/types/internationalOrganization";
 import type { CustomInternationalOrganization } from "@/lib/db/types/customInternationalOrganization";
 import type {
+  BuiltInInternationalOrganizationId,
   InternationalOrganizationDef,
   InternationalOrganizationId,
 } from "@/lib/constants/internationalOrganizations";
@@ -57,7 +61,12 @@ import { DEFAULT_CUSTOM_ORG_CATEGORY } from "@/lib/constants/orgCategory";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import type { Character } from "@/lib/db/types";
-import { isOrganizationFounded, loadOrgFoundingContext, resolveSeedRoster } from "./founding";
+import {
+  isOrganizationFounded,
+  loadOrgFoundingContext,
+  resolveSeedRoster,
+  type OrgFoundingContext,
+} from "./founding";
 
 /**
  * Read-side aggregates used by the world page and per-org views.
@@ -66,6 +75,7 @@ import { isOrganizationFounded, loadOrgFoundingContext, resolveSeedRoster } from
  */
 
 export interface OrganizationSummary {
+  europeanIntegration?: EuropeanIntegrationState;
   id: InternationalOrganizationId;
   def: InternationalOrganizationDef;
   members: Array<{
@@ -172,10 +182,14 @@ function withEffectiveCategory(
  */
 export async function loadOrganizationDef(
   db: Db,
-  organizationId: InternationalOrganizationId
+  organizationId: InternationalOrganizationId,
+  context?: Pick<OrgFoundingContext, "europeanIntegration">
 ): Promise<InternationalOrganizationDef | null> {
   if (isBuiltInInternationalOrganizationId(organizationId)) {
-    return getOrganizationDef(organizationId);
+    const def = getOrganizationDef(organizationId);
+    if (def?.id !== "EU") return def;
+    const { europeanIntegration } = context ?? (await loadOrgFoundingContext(db));
+    return europeanIntegration ? withEuropeanInstitution(def, europeanIntegration) : def;
   }
   const col = await getCustomInternationalOrganizationsCollection(db);
   const row = await col.findOne({ id: organizationId });
@@ -290,10 +304,14 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
   // year math (no forced history) — but a leadership row alone does not, so
   // an org emptied past its dissolution year is gone for good. Custom orgs
   // are always live.
-  const { liveYear } = await loadOrgFoundingContext(db);
+  const { liveYear, europeanIntegration } = await loadOrgFoundingContext(db);
+  const effectiveBuiltIn = (id: BuiltInInternationalOrganizationId) =>
+    europeanIntegration
+      ? withEuropeanInstitution(INTERNATIONAL_ORGANIZATIONS[id], europeanIntegration)
+      : INTERNATIONAL_ORGANIZATIONS[id];
   const visibleBuiltIns = INTERNATIONAL_ORGANIZATION_ORDER.filter((id) =>
     isOrganizationFounded({
-      def: INTERNATIONAL_ORGANIZATIONS[id],
+      def: effectiveBuiltIn(id),
       liveYear,
       hasMembers: (membersByOrg.get(id)?.length ?? 0) > 0,
     })
@@ -311,7 +329,7 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
   // map since it needs head-of-government lookups.
   const permanentLeadershipByOrg = new Map<InternationalOrganizationId, OrganizationLeadership>();
   for (const id of visibleBuiltIns) {
-    const def = INTERNATIONAL_ORGANIZATIONS[id];
+    const def = effectiveBuiltIn(id);
     if (!def.permanentLeadership) continue;
     permanentLeadershipByOrg.set(
       id,
@@ -388,7 +406,7 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
   return orderedIds.map((id) => {
     const def = withEffectiveCategory(
       isBuiltInInternationalOrganizationId(id)
-        ? getOrganizationDef(id)
+        ? effectiveBuiltIn(id)
         : (customDefsById.get(id) as InternationalOrganizationDef),
       categoryCtx
     );
@@ -421,6 +439,26 @@ export async function loadOrganizationSummaries(db: Db): Promise<OrganizationSum
     return {
       id,
       def,
+      ...(id === "EU" && europeanIntegration
+        ? {
+            europeanIntegration: {
+              ...europeanIntegration,
+              ratifications: Object.fromEntries(
+                Object.entries(europeanIntegration.ratifications).filter(
+                  ([countryId, decision]) =>
+                    europeanIntegration.stage === "union" ||
+                    (membersByOrg.get(id) ?? []).some(
+                      (member) =>
+                        member.countryId === countryId &&
+                        decision.membershipId ===
+                          (member._id?.toString() ??
+                            `legacy:${countryId}:${member.joinedTurn ?? 0}`)
+                    )
+                )
+              ),
+            },
+          }
+        : {}),
       members: orgMembers,
       pendingMembershipProposals: proposals.filter(
         (p: OrganizationMembershipProposal) => p.organizationId === id
@@ -534,11 +572,17 @@ export async function ensureFoundingMembershipsAndLeadership(db: Db): Promise<vo
     )
   );
 
+  const european = await ensureEuropeanIntegrationState(
+    db,
+    preset,
+    [...existingMemberships].some((key) => key.startsWith("EU|"))
+  );
+
   const missingMemberships: OrganizationMembership[] = [];
   const missingLeadership: OrganizationLeadership[] = [];
 
   for (const id of INTERNATIONAL_ORGANIZATION_ORDER) {
-    const def = INTERNATIONAL_ORGANIZATIONS[id];
+    const def = withEuropeanInstitution(INTERNATIONAL_ORGANIZATIONS[id], european);
     if (def.foundedYear != null && def.foundedYear > startingYear) continue;
     // Dissolution: an org whose window closed before this preset started was
     // never part of this world (e.g. Warsaw Pact at 1991+). Running games

@@ -10,7 +10,7 @@ import { DEFAULT_DURATIONS } from "@/lib/constants/electionDurations";
 import { pickNextCanonicalCycle, turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { electionToLarpYear } from "@/lib/utils/formatters";
 import { getSeatIdFromElection } from "@/lib/seats";
-import { snapAnchorEndTime } from "@/lib/elections/snapShift";
+import { planNextLowerChamberCycle } from "@/lib/elections/snapShift";
 import {
   endTimeToLarpTurn,
   getCurrentTurnAndCtx,
@@ -26,12 +26,10 @@ import { ensureRegionalGovernorElections } from "@/lib/turn/perpetualElections/s
  * Spawns anchor to the **canonical LARP schedule** via
  * {@link pickNextCanonicalCycle}. When the admin fast-forwards a regular
  * cycle via "Modify Timers", the next regular stays on calendar
- * (endTurn = anchors.jpShugiin + (N - 1) x dur.durationHours). Snap elections still shift the schedule
- * for the immediate post-snap regular — when prev is a `snap_shugiin`, the
- * shared helper receives `priorEndTurn = snap.endTurn` and the new cycle
- * anchors to `snap.endTurn + 192` per docs/design/snap-elections.md.
- * Subsequent regulars past the first post-snap cycle fall back to canonical
- * LARP, preserving the calendar against later admin acceleration.
+ * (endTurn = anchors.jpShugiin + (N - 1) x dur.durationHours). A snap election
+ * resets the term clock: the post-snap regular anchors to `snap.endTurn + 192`,
+ * and later regulars keep counting from that shifted schedule until another
+ * snap moves it. See `planNextLowerChamberCycle`.
  *
  * 24h-primary / 24h-general gate: if currentTurn has eaten too deep into the
  * next canonical window, the spawner walks forward to the following cycle
@@ -111,19 +109,18 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
     const prev = lastCompleted(regionId);
     if (justResolvedInSameTurn(prev, now, currentTurn)) continue;
 
-    // Snap shift: only when prev is a snap the country called itself does its
-    // endTurn anchor the next regular's LARP schedule. See `snapAnchorEndTime`.
-    const snapAnchor = snapAnchorEndTime(prev, "snap_shugiin");
-    const priorEndTurn = snapAnchor ? endTimeToLarpTurn(snapAnchor, now, currentTurn) : null;
-
-    const spawn = pickNextCanonicalCycle({
+    // A called snap, and every regular spawned on its shifted term clock,
+    // anchors the next regular. See `planNextLowerChamberCycle`.
+    const plan = planNextLowerChamberCycle({
       electionType: "shugiin",
-      prevCycle: prev?.cycle ?? 0,
+      snapType: "snap_shugiin",
+      prev,
       currentTurn,
-      priorEndTurn,
       ctx,
+      endTimeToTurn: (endTime) => endTimeToLarpTurn(endTime, now, currentTurn),
     });
-    if (!spawn) continue;
+    if (!plan) continue;
+    const { spawn } = plan;
 
     const startTime = turnToWallClock(spawn.startTurn, now, currentTurn);
     const primaryEndTime = turnToWallClock(spawn.primaryEndTurn, now, currentTurn);
@@ -140,7 +137,10 @@ export async function ensureJPElections(now: Date, inFlightTurn?: number): Promi
         state: regionId,
       }),
       cycle: spawn.cycle,
-      electionYear: electionToLarpYear("shugiin", spawn.cycle, undefined, undefined, ctx),
+      electionYear: plan.electionYear,
+      ...(plan.shiftedScheduleEndTurn != null && {
+        shiftedScheduleEndTurn: plan.shiftedScheduleEndTurn,
+      }),
       status,
       // The preset apportionment is authoritative. A prior cycle may have been
       // created before its era map existed (1953 carried the modern 465-seat map).

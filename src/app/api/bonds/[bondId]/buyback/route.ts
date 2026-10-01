@@ -1,3 +1,5 @@
+import { loadForexSpreadStrengths } from "@/lib/currency/euro/quotes";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -105,6 +107,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     const costAnchor = corpCapitalToAnchor(costLocal, bondCurrency, bondFxRate);
     const corpCurrency = resolveCorpLiquidCurrencyCode(issuingCorp) ?? null;
     const corpPurchaseEstimate = estimateCorpWalletSpend({
+      union: await loadEuroMonetaryUnion(db),
+      spreadStrengths: await loadForexSpreadStrengths(db),
       requiredAmount: costLocal,
       availableBalance: issuingCorp.liquidCapital ?? 0,
       fromCurrency: corpCurrency,

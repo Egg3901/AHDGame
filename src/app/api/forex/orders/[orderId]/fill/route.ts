@@ -1,3 +1,5 @@
+import { euroLedgerCrossRate } from "@/lib/currency/euro/rules";
+import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 // POST: fill (or partially fill) another player's open limit order
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 403 (own order / forex disabled), 404
@@ -105,6 +107,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
     if (blocked) {
       throw badRequest(nonConvertibleCurrencyMessage(blocked));
+    }
+
+    if (
+      euroLedgerCrossRate(await loadEuroMonetaryUnion(db), order.fromCurrency, order.toCurrency) !=
+      null
+    ) {
+      throw badRequest(
+        "These denominations now share a fixed euro rate. The owner can cancel this order and convert directly."
+      );
     }
 
     const remaining = order.amount - order.filledAmount;

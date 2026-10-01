@@ -6,6 +6,16 @@ import {
   type WorldSimulationTier,
 } from "./worldEntityManifest";
 
+export interface BackgroundMacroSummary {
+  population: number;
+  economicSystem: "market" | "planned";
+  stability: number;
+  tradeExposure: number;
+  lastMacroTickTurn: number | null;
+  contributionComputedOnTurn: number;
+  provenance: "authored-1953" | "estimated-background";
+}
+
 export interface WorldEntityMapItem {
   entityId: string;
   countryId?: string;
@@ -15,11 +25,14 @@ export interface WorldEntityMapItem {
   simulationTier: WorldSimulationTier;
   autonomousReady: boolean;
   playerReady: boolean;
+  macroSummary?: BackgroundMacroSummary;
 }
 
 export interface WorldEntityMapSnapshot {
   presetId: string;
   byFeatureId: Record<string, WorldEntityMapItem>;
+  /** Includes entities without map geometry so the inspection picker can reach them. */
+  byEntityId?: Record<string, WorldEntityMapItem>;
   unmappedEntityIds: string[];
 }
 
@@ -46,16 +59,13 @@ export function getWorldEntityMapSnapshot(
   }
 
   const byFeatureId: Record<string, WorldEntityMapItem> = {};
+  const byEntityId: Record<string, WorldEntityMapItem> = {};
   const unmappedEntityIds: string[] = [];
 
   for (const entry of entries) {
     const fromCountry = entry.countryId ? (featureIdsByCountry.get(entry.countryId) ?? []) : [];
     const featureIds =
       entry.mapFeatureIds && entry.mapFeatureIds.length > 0 ? entry.mapFeatureIds : fromCountry;
-    if (featureIds.length === 0) {
-      unmappedEntityIds.push(entry.entityId);
-      continue;
-    }
     const item: WorldEntityMapItem = {
       entityId: entry.entityId,
       countryId: entry.countryId,
@@ -66,6 +76,11 @@ export function getWorldEntityMapSnapshot(
       autonomousReady: entry.readiness.autonomous === "ready",
       playerReady: entry.readiness.player === "ready",
     };
+    byEntityId[entry.entityId] = item;
+    if (featureIds.length === 0) {
+      unmappedEntityIds.push(entry.entityId);
+      continue;
+    }
     for (const featureId of featureIds) {
       // A settled sovereign replaces a dependent or emergent grouping on its
       // modern feature. Other overlaps retain first-writer ownership.
@@ -80,6 +95,35 @@ export function getWorldEntityMapSnapshot(
   return {
     presetId,
     byFeatureId,
+    byEntityId,
     unmappedEntityIds: unmappedEntityIds.sort(),
   };
+}
+
+export { backgroundMacroFeatureIds } from "./worldEntityMapInspection";
+
+const backgroundMacroByPreset = new Map<string, readonly string[]>();
+
+/**
+ * Map features a preset simulates as background macro aggregates, read from
+ * the manifest alone: no seeded summaries needed, so the landing page can ask
+ * before a world exists. These are the roughly 150 nations the 1991 preset
+ * runs as macro economies, which the landing globe paints apart from land
+ * nothing simulates. An unknown preset has none rather than borrowing another
+ * era's roster.
+ */
+export function backgroundMacroFeatureIdsForPreset(presetId: string): readonly string[] {
+  const cached = backgroundMacroByPreset.get(presetId);
+  if (cached) return cached;
+  let ids: readonly string[] = [];
+  try {
+    ids = Object.entries(getWorldEntityMapSnapshot(presetId).byFeatureId)
+      .filter(([, item]) => item.simulationTier === "background-macro")
+      .map(([featureId]) => featureId)
+      .sort();
+  } catch {
+    ids = [];
+  }
+  backgroundMacroByPreset.set(presetId, ids);
+  return ids;
 }

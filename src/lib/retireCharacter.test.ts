@@ -3,6 +3,11 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Character } from "@/lib/db/types/character";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/savings/closeCharacterSavings", () => ({
   closeCharacterSavings: vi.fn().mockResolvedValue(undefined),
@@ -112,6 +117,84 @@ describe("retireCharacter", () => {
         toArray: vi.fn().mockResolvedValue([]),
       };
     });
+  });
+
+  it("captures actual retired office departures once for each held post", async () => {
+    const { retireCharacter } = await import("./retireCharacter");
+    db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 42 });
+    db.collection("electedOfficials").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ officeType: "senate", countryId: "US", party: "1" }]),
+    });
+    db.collection("cabinetMembers").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ countryId: "US", party: "1" }]),
+    });
+    db.collection("centralBanks").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ countryId: "US" }]),
+    });
+
+    await retireCharacter(db as unknown as Db, makeCharacter(), userId, "player_deleted");
+
+    const transitions = vi.mocked(captureOfficeTransition).mock.calls.map(([input]) => input);
+    expect(transitions.map((input) => input.officeType)).toEqual([
+      "senate",
+      "usCabinet",
+      "centralBankChair",
+      "ceo",
+      "ceo",
+    ]);
+    for (const transition of transitions) {
+      expect(transition).toEqual(
+        expect.objectContaining({
+          transitionType: "left",
+          selectionMethod: "resignation",
+          nationId: "US",
+          turn: 42,
+        })
+      );
+    }
+    expect(db.collection("characters").deleteOne.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(captureOfficeTransition).mock.invocationCallOrder[0]!
+    );
+  });
+
+  it("does not capture office departures when the character was already deleted", async () => {
+    const { retireCharacter } = await import("./retireCharacter");
+    db.collection("characters").deleteOne.mockResolvedValue({ deletedCount: 0 });
+
+    await retireCharacter(db as unknown as Db, makeCharacter(), userId, "player_deleted");
+
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
+  });
+
+  it("contains office telemetry failure after an administrative retirement", async () => {
+    const { retireCharacter } = await import("./retireCharacter");
+    vi.mocked(captureOfficeTransition).mockRejectedValue(new Error("Telemetry unavailable"));
+
+    await expect(
+      retireCharacter(db as unknown as Db, makeCharacter(), userId, "admin_action")
+    ).resolves.toBeUndefined();
+
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transitionType: "lost",
+        selectionMethod: "removal",
+      })
+    );
+    vi.mocked(captureOfficeTransition).mockResolvedValue(undefined);
+  });
+
+  it("continues retirement when projected telemetry reads fail", async () => {
+    const { retireCharacter } = await import("./retireCharacter");
+    db.collection("gameState").findOne.mockRejectedValueOnce(
+      new Error("Telemetry read unavailable")
+    );
+
+    await expect(
+      retireCharacter(db as unknown as Db, makeCharacter(), userId, "player_deleted")
+    ).resolves.toBeUndefined();
+
+    expect(db.collection("characters").deleteOne).toHaveBeenCalled();
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
   });
 
   it("preserves the character when savings closure cannot finish", async () => {

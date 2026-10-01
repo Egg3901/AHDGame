@@ -1,3 +1,4 @@
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import type { Db, ObjectId } from "mongodb";
 import {
   COUNTRY_CONFIGS,
@@ -137,7 +138,7 @@ export async function installOnePartyState(
         { $set: { regimeStatus: "banned", updatedAt: now } }
       );
       if (opts?.vacateBannedSeats) {
-        await vacateSeatsOfParties(db, countryId, parties, bannedIds, now);
+        await vacateSeatsOfParties(db, countryId, parties, bannedIds, now, currentTurn);
       }
     }
   }
@@ -178,7 +179,8 @@ async function vacateSeatsOfParties(
   countryId: CountryId,
   parties: PoliticalParty[],
   bannedIds: number[],
-  now: Date
+  now: Date,
+  currentTurn: number
 ): Promise<void> {
   const banned = new Set(bannedIds);
   const tokens = new Set<string>();
@@ -240,6 +242,27 @@ async function vacateSeatsOfParties(
       .collection("npps")
       .updateMany({ _id: { $in: clearNpps } }, { $set: { currentOffice: null, updatedAt: now } });
   }
+  await Promise.all(
+    doomed
+      .filter((official) => official.characterId != null)
+      .map((official) => {
+        const party = parties.find(
+          (row) =>
+            String(row.sequentialId) === official.party ||
+            row.name === official.party ||
+            row.abbreviation === official.party
+        );
+        return captureOfficeTransition({
+          db,
+          officeType: official.officeType,
+          transitionType: "lost",
+          partyId: party ? String(party.sequentialId) : undefined,
+          selectionMethod: "removal",
+          nationId: countryId,
+          turn: currentTurn,
+        });
+      })
+  );
 }
 
 /**

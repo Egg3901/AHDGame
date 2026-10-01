@@ -2,7 +2,11 @@
 
 import { Badge } from "@/components/ui";
 import { ORGANIZATION_CATEGORY_META } from "@/lib/constants/orgCategory";
-import { DEFENSE_PLEDGE_TARGET_PCT, POSTURE_META } from "@/lib/constants/orgPosture";
+import {
+  DEFENSE_PLEDGE_TARGET_PCT,
+  POSTURE_META,
+  postureWarEntryNote,
+} from "@/lib/constants/orgPosture";
 import { getDirectiveDef } from "@/lib/constants/orgDirectives";
 import { getAgencyDef } from "@/lib/constants/orgAgencies";
 import { type CountryId } from "@/lib/constants/countries";
@@ -190,6 +194,13 @@ function SecurityAlliance({ org }: { org: OrgSummary }) {
         sub="Alliance-wide footing, set by a member vote (Overview → Alert posture)"
       >
         <p className="text-[13px] text-foreground">{POSTURE_META[org.posture].blurb}</p>
+        <p className="mt-1 text-[12px] text-muted">
+          {postureWarEntryNote({
+            category: org.def.category,
+            posture: org.posture,
+            standingMutualDefence: org.def.standingMutualDefence,
+          })}
+        </p>
       </Section>
 
       <Section

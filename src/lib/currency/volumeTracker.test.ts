@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
+import { planEuroSettlement } from "./euro/rules";
 import { computeCurrencyVolumes } from "./volumeTracker";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -101,4 +102,32 @@ describe("computeCurrencyVolumes", () => {
     // CAD should not be in the result (only active currencies)
     expect((result as Record<string, unknown>).CAD).toBeUndefined();
   });
+});
+
+it("consolidates post-accession external trades and excludes internal euro conversions", async () => {
+  const union = planEuroSettlement({
+    year: 1999,
+    turn: 385,
+    preset: "1991-default",
+    europeanMembers: ["DE", "IE", "UK"],
+    consentedCountries: ["DE", "IE", "UK"],
+    rates: { EUR: 0.8, IEP: 0.7, GBP: 0.6 },
+  }).union;
+  db.collection("tradeHistory").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([
+      { fromCurrency: "GBP", toCurrency: "EUR", amount: 600, turn: 386 },
+      { fromCurrency: "GBP", toCurrency: "USD", amount: 600, turn: 386 },
+      { fromCurrency: "GBP", toCurrency: "USD", amount: 300, turn: 384 },
+    ]),
+  });
+  db.collection("exchangeRates").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([
+      { currencyCode: "GBP", rate: 0.6 },
+      { currencyCode: "EUR", rate: 0.8 },
+    ]),
+  });
+  const result = await computeCurrencyVolumes(db as unknown as Db, 387, union);
+  expect(result.EUR).toEqual({ buyVolume24: 0, sellVolume24: 1000 });
+  expect(result.GBP).toEqual({ buyVolume24: 0, sellVolume24: 500 });
+  expect(result.USD).toEqual({ buyVolume24: 1500, sellVolume24: 0 });
 });

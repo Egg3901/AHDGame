@@ -251,6 +251,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       primaryCampaignState: stateId,
       actionsCost: actionCost,
       ...(campaignClaim !== "fresh" ? { duplicate: true } : {}),
+      electionType: election.electionType,
+      phase: "primary",
     });
   } catch (error) {
     return handleRouteError(error);

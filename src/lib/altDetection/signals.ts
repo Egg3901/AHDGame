@@ -245,7 +245,12 @@ function splitEmail(email: string): [string, string] | [null, null] {
  * two Discord users and quietly bond the whole OAuth playerbase into one ring.
  * These carry no correlating information and must never be family-matched.
  */
-const SYSTEM_GENERATED_EMAIL_DOMAINS = new Set(["discord.local", "google.local", "oauth.local"]);
+const SYSTEM_GENERATED_EMAIL_DOMAINS = new Set([
+  "discord.local",
+  "google.local",
+  "apple.local",
+  "oauth.local",
+]);
 
 export function isSystemGeneratedEmail(email: string | null | undefined): boolean {
   if (!email) return false;

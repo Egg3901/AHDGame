@@ -211,6 +211,8 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         ? ranked.find((candidate) => (candidate.seatsProjected ?? 0) === 0)
         : ranked.find((candidate) => candidate.id !== winnerId);
       void captureProductEvent("election_won", {
+        outcome_source: "client_view",
+        election_id: results.election.id,
         office: results.election.electionType,
         nation_id: results.election.countryId,
         margin: (winner?.voteSharePct ?? 0) - (runner?.voteSharePct ?? 0),

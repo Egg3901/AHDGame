@@ -38,7 +38,7 @@ import { conflictTier, belligerentSideOf } from "@/lib/military/conflictVisibili
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { archiveOpensTurn, isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { requirePeaceNegotiator } from "@/lib/api/requirePeaceNegotiator";
-import { INTERNATIONAL_ORGANIZATIONS } from "@/lib/constants/internationalOrganizations";
+import { treatyEntryOrganizationName } from "@/lib/military/treatyEntryNotice";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { getDefenseAppropriation } from "@/lib/db/collections/defenseAppropriation";
@@ -707,9 +707,7 @@ export default async function ConflictRecordPage({
       .filter((e) => sideACountries.includes(e.countryId) || sideBCountries.includes(e.countryId))
       .map((e) => ({
         country: countryNameOf(e.countryId),
-        organization:
-          INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
-            ?.name ?? e.organizationId,
+        organization: treatyEntryOrganizationName(e),
         defending: countryNameOf(e.defending),
       })),
     control: doc.control,

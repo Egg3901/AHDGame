@@ -1,3 +1,12 @@
+/**
+ * Bond turns settle coupons and principal while preserving holder denominations.
+ * processBondTurn shares one monetary quote snapshot across payout conversions.
+ */
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
+import { euroSettlementRates } from "@/lib/currency/euro/rules";
+import { purchaseSpreadRate } from "@/lib/currency/rules/purchaseConversion";
+import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
+import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import type { Bond, Corporation, CentralBank, Character, NPP } from "@/lib/db/types";
@@ -33,7 +42,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CURRENCY_MAP, MARKET_MAKER_SPREAD } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { fireBondDefaultPulse } from "@/lib/corporations/sentimentEvents";
@@ -51,6 +60,7 @@ import {
 import { emitBondTurnLedger, snapshotBondHistory, type PartialTxEntry } from "./bondTurnLedger";
 import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
+import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "@/lib/bonds/marketPoolLedger";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
@@ -77,6 +87,7 @@ export interface BondTurnResult {
  */
 export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   const db = await getDb();
+  const steps = substepMarker();
   const now = new Date();
   const forexEnabled = await isForexEnabled();
   // #1198: gates default DETECTION only, in Phase 3. Coupon and maturity
@@ -93,16 +104,23 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     );
 
   await issueScheduledSovereignBondSeries(db, turn, now);
+  steps.mark("sovereignIssuance");
   // Size each currency's bond market pool, let savings flow toward its target,
   // and refresh its appetite for each sovereign issuer before anyone trades.
-  await processBondMarketPoolTurn(db, turn, now);
+  const poolLedgerContext = await loadBondPoolLedgerContext(db, turn);
+  await processBondMarketPoolTurn(db, turn, now, poolLedgerContext);
+  steps.mark("marketPools");
   await processSovereignImfFacilityPayments(db, turn);
+  steps.mark("imfPayments");
   await processSovereignRecoveryTurn(db, turn);
+  steps.mark("sovereignRecovery");
   // Auto-repudiate countries whose executive decision window has expired
   // (crisisAutoActionAt <= now AND sovereignCrisisState === "crisisPending").
   // Must run before legislativeTurn so countries resolved here are not double-processed.
   await processCrisisAutoActions(db, Date.now(), turn);
+  steps.mark("crisisAutoActions");
   await processSovereignLegislativeTurn(db, Date.now(), turn);
+  steps.mark("sovereignLegislative");
 
   const activeBonds = await db.collection<Bond>("bonds").find({ matured: false }).toArray();
 
@@ -159,12 +177,34 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   // FX rates for converting ₳-denominated coupon/face values into each corp's
   // liquidCapital home currency before $inc. Loaded once per turn.
-  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const quoteContext = forexEnabled
+    ? await loadConversionQuoteContext(db, gameState?.euroMonetaryUnion)
+    : undefined;
+  const fxByCurrency = quoteContext
+    ? euroSettlementRates(
+        quoteContext.union,
+        Object.fromEntries(
+          [...quoteContext.quotes].map(([currency, quote]) => [currency, quote.rate])
+        )
+      )
+    : await loadFxRatesByCurrency(db);
+  if (quoteContext?.union && !fxByCurrency.has(quoteContext.union.anchorCurrency)) {
+    throw new Error("Bond settlement requires the common monetary anchor quote.");
+  }
+  // USD remains the shared accounting anchor when no explicit quote is stored.
+  if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
+  const spreadStrengths = Object.fromEntries(
+    [...(quoteContext?.quotes ?? [])].map(([currency, quote]) => [
+      currency,
+      quote.forexSpreadStrength,
+    ])
+  );
 
   // Primary market: place unsold units from earlier issues as the pools'
   // cash allows, and fund the issuers for them. Runs after this turn's
   // active-bond snapshot, so newly placed units start earning next turn.
   const placement = await placeUnsoldBondUnits(db, turn, now);
+  steps.mark("loadAndPlacement");
   if (placement.unitsPlaced > 0) {
     await settlePlacementProceeds(db, placement, fxByCurrency, now);
   }
@@ -209,9 +249,11 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     currMap.set(bondCurrency, (currMap.get(bondCurrency) ?? 0) + localAmount);
   }
   const fundPaymentsAnchor = new Map<string, number>(); // fundId -> coupon/maturity (₳)
-  function addFundPayment(fundIdStr: string, paymentAnchor: number) {
-    if (paymentAnchor <= 0) return;
-    fundPaymentsAnchor.set(fundIdStr, (fundPaymentsAnchor.get(fundIdStr) ?? 0) + paymentAnchor);
+  function addFundPayment(fundIdStr: string, paymentAnchor: number): number {
+    if (paymentAnchor <= 0) return 0;
+    const previous = fundPaymentsAnchor.get(fundIdStr) ?? 0;
+    fundPaymentsAnchor.set(fundIdStr, previous + paymentAnchor);
+    return roundedAggregateCredit(previous, paymentAnchor);
   }
   // v3 autonomous NPP bondholders: coupon/maturity are INVESTMENT returns, so
   // they accumulate in ₳ (anchor) and credit the personal forex account
@@ -364,7 +406,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
           },
         });
       } else if (holder.fundId) {
-        addFundPayment(holder.fundId.toString(), paymentAnchor);
+        const couponAnchor = addFundPayment(holder.fundId.toString(), paymentAnchor);
         // #992 tranche 4: the fund credit lands on cashAnchor (₳), so the row
         // is fund-subject in the fund's own currency with the ₳ value stated
         // outright — never derived from the live FX table. Without a fund doc
@@ -373,7 +415,6 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         const couponFundIdStr = holder.fundId.toString();
         const couponFundCcy = fundLedgerCurrency(couponFundIdStr);
         if (couponFundCcy) {
-          const couponAnchor = Math.round(paymentAnchor * 100) / 100;
           txBondEntries.push({
             type: "bond_coupon",
             turn,
@@ -391,6 +432,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
               couponRate: bond.couponRate,
               fundId: couponFundIdStr,
               fundCurrency: couponFundCcy,
+              unroundedAnchorAmount: paymentAnchor,
+              roundingMethod: "cumulative_fund_credit",
             },
           });
         } else {
@@ -418,15 +461,22 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         const holderCurrency = (resolveCorpLiquidCurrencyCode(holderCorp) ?? "USD") as CurrencyCode;
         // Foreign coupon income converts into the corp's home currency — charge
         // the same FX spread players pay, skimmed before crediting.
-        const couponSpreadAnchor =
-          forexEnabled && bondCcy !== holderCurrency ? paymentAnchor * MARKET_MAKER_SPREAD : 0;
+        const couponSpreadRate = forexEnabled
+          ? purchaseSpreadRate(
+              bondCcy,
+              holderCurrency,
+              gameState?.euroMonetaryUnion,
+              spreadStrengths
+            )
+          : 0;
+        const couponSpreadAnchor = paymentAnchor * couponSpreadRate;
         const netCouponAnchor = paymentAnchor - couponSpreadAnchor;
         corpPayments.set(key, (corpPayments.get(key) ?? 0) + netCouponAnchor);
         if (couponSpreadAnchor > 0) {
           corpCouponSpreadFees.push({
             fromCurrency: bondCcy,
             toCurrency: holderCurrency,
-            fee: localAmountForTx * MARKET_MAKER_SPREAD,
+            fee: localAmountForTx * couponSpreadRate,
           });
         }
         const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
@@ -693,6 +743,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // Mutates `defaultedCorps` with cascade-defaulted holder corps; see
   // rollbackDefaultedIssuerMaturityFlows in ./bondTurnHelpers for the full
   // optimistic-write reversal + cascade semantics.
+  steps.mark("couponsAndMaturities");
   await rollbackDefaultedIssuerMaturityFlows({
     db,
     bondMaturityFlows,
@@ -975,12 +1026,11 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
           },
         });
       } else if (holder.fundId) {
-        addFundPayment(holder.fundId.toString(), faceValueReturnAnchor);
+        const maturityAnchor = addFundPayment(holder.fundId.toString(), faceValueReturnAnchor);
         // #992 tranche 4: same fund-subject treatment as the coupon leg above.
         const maturityFundIdStr = holder.fundId.toString();
         const maturityFundCcy = fundLedgerCurrency(maturityFundIdStr);
         if (maturityFundCcy) {
-          const maturityAnchor = Math.round(faceValueReturnAnchor * 100) / 100;
           txBondEntries.push({
             type: "bond_maturity",
             turn,
@@ -996,6 +1046,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
               couponRate: bond.couponRate,
               fundId: maturityFundIdStr,
               fundCurrency: maturityFundCcy,
+              unroundedAnchorAmount: faceValueReturnAnchor,
+              roundingMethod: "cumulative_fund_credit",
             },
           });
         } else {
@@ -1145,10 +1197,16 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     await db.collection("bonds").bulkWrite(bondOps);
   }
 
-  for (const [currency, credit] of poolCreditsLocal) {
-    await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now);
-    await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now);
-  }
+  await withBondPoolLedgerBatch(db, poolLedgerContext, async (batch) => {
+    for (const [currency, credit] of poolCreditsLocal) {
+      await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now, {
+        ledgerContext: batch,
+      });
+      await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now, {
+        ledgerContext: batch,
+      });
+    }
+  });
 
   if (fundPaymentsAnchor.size > 0) {
     const fundPaymentOps = [...fundPaymentsAnchor]
@@ -1232,6 +1290,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
             amount,
             turn,
             source: "auto_coupon",
+            quoteContext,
           });
         }
       }
@@ -1258,6 +1317,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   // Corporate holder coupon income + maturity face-value returns were already
   // applied in Phase 2 (the unified per-corp delta) so they could enter the
+  steps.mark("defaultsAndRollback");
   // Phase 3 default check. Newly-defaulted issuers' maturity flows are rolled
   // back in Phase 3.5 — by here the corp ledger is fully settled.
 
@@ -1308,6 +1368,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     ? { bondsAutoRestructured: 0, bondsAutoRefinanced: 0 }
     : await autoResolveLingeringDefaults({ db, turn, now });
 
+  steps.mark("snapshotsLedgerNotify");
   return {
     bondsProcessed: activeBonds.length,
     couponsPaid,

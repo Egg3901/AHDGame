@@ -10,7 +10,7 @@
  * Spread `lakesideAccountFields()` into any new-user insert. It is additive and
  * does not change existing game behavior.
  */
-export function lakesideAccountFields(source: "ahd" | "ahd-google" | "ahd-discord") {
+export function lakesideAccountFields(source: "ahd" | "ahd-google" | "ahd-discord" | "ahd-apple") {
   return {
     lakesideAccount: true,
     lakesideCreatedAt: new Date(),

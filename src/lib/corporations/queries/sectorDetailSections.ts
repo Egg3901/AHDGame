@@ -107,6 +107,7 @@ import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
+import type { RetoolHint } from "@/lib/corporations/retoolHint";
 import {
   CAPACITY_BUILD_TURNS,
   capacityRescaleRatio,
@@ -1164,8 +1165,32 @@ export interface SectorPlantsSection {
    * first leg saturates). 0 in a glut. `headroomUnits` above is the unowned
    * pool = claimable market SHARE, a different thing; the UI must not present
    * it as demand (ticket #1027 follow-up).
+   *
+   * 0 while `roomHeldByOwnIdle`: this sector's own idle capacity reaches the
+   * market before any new build would.
    */
   demandGapUnits: number;
+  /**
+   * True when this sector's own demand throttle bound last turn. Its idle
+   * capacity is what buyers' room fills first (output can climb by the probe
+   * margin each turn while sales keep up), so the room to BUILD reads 0 rather
+   * than quoting the market gap beside a plant that is itself held back
+   * (ticket 1370).
+   */
+  roomHeldByOwnIdle?: boolean;
+  /**
+   * Share of this market nobody has built into, in percent: the unowned pool
+   * over owned capacity plus that pool. The same pool `headroomUnits` bounds a
+   * build by, so the two numbers the panel shows side by side reconcile.
+   * Absent when owned capacity is unknown.
+   */
+  unclaimedSharePct?: number;
+  /**
+   * Set when the demand throttle holds this plant down because the valuable
+   * part of its output is oversupplied and another strategy for the same
+   * sector would sell into a shortage here (ticket 1370 follow-up). Advisory.
+   */
+  retoolHint: RetoolHint | null;
   currentTurn: number;
   /**
    * Everything the build dialog needs to price an order CLIENT-SIDE. Build cost
@@ -1349,6 +1374,8 @@ export function buildSectorPlantsSection(args: {
   governorCap: number;
   governorRampTurns: number;
   marketSharePercent: number;
+  /** Corporation's aggregate share of the host country's sector market. */
+  nationalMarketSharePercent?: number;
   /**
    * Rival corps in this (state, type) cell — scales the dominance build toll.
    * Null when the caller could not resolve it, which prices at the full toll.
@@ -1366,6 +1393,10 @@ export function buildSectorPlantsSection(args: {
   /** True buyers' room (see SectorPlantsSection.demandGapUnits). Optional so
    *  test fixtures predating the field keep compiling; defaults to 0. */
   demandGapUnits?: number;
+  /** Owned capacity in this (state, sectorType) cell, every producer, units/day. */
+  ownedCellCapacityUnits?: number;
+  /** Strategy suggestion when the plant's valuable output is oversupplied (computeRetoolHint). */
+  retoolHint?: RetoolHint | null;
   workers: number;
   /** ₳/day, all on the same basis as `sector.revenue` normalized to ₳. */
   money: {
@@ -1429,6 +1460,7 @@ export function buildSectorPlantsSection(args: {
     governorCap,
     governorRampTurns,
     marketSharePercent,
+    nationalMarketSharePercent = 0,
     competitorCount,
     primeRate,
     ceoAcumen,
@@ -1438,6 +1470,8 @@ export function buildSectorPlantsSection(args: {
     corpCapitalAnchor,
     headroomUnits,
     demandGapUnits = 0,
+    ownedCellCapacityUnits,
+    retoolHint = null,
     workers,
     money,
     regulatoryBurdenPp,
@@ -1464,6 +1498,19 @@ export function buildSectorPlantsSection(args: {
   const fillRate =
     producedUnits != null && producedUnits > 0 && soldUnits != null
       ? Math.min(1, nonNeg(soldUnits) / producedUnits)
+      : null;
+
+  // Buyers' room is reported against the plant that would receive the build.
+  // A sector its own demand throttle held back last turn already has idle
+  // capacity that reaches the market first, so its room to build is 0.
+  const ownThrottle = num(sector.demandThrottleFactor);
+  const roomHeldByOwnIdle = !mothballed && ownThrottle != null && ownThrottle < 0.999;
+  // Unclaimed share from the same unowned pool `headroomUnits` measures.
+  const ownedCell = num(ownedCellCapacityUnits);
+  const unclaimedPool = nonNeg(headroomUnits);
+  const unclaimedSharePct =
+    ownedCell != null && ownedCell + unclaimedPool > 0
+      ? Math.round((unclaimedPool / (nonNeg(ownedCell) + unclaimedPool)) * 1000) / 10
       : null;
 
   // ─── Idle attribution ──────────────────────────────────────────────────────
@@ -1556,6 +1603,7 @@ export function buildSectorPlantsSection(args: {
     year: currentYear,
     eraUnitScale,
     marketSharePercent,
+    nationalMarketSharePercent,
     competitorCount: competitorCount ?? undefined,
     primeRate,
     acumen: ceoAcumen,
@@ -1797,7 +1845,10 @@ export function buildSectorPlantsSection(args: {
       cap: governorCap,
     },
     headroomUnits: nonNeg(headroomUnits),
-    demandGapUnits: nonNeg(demandGapUnits),
+    demandGapUnits: roomHeldByOwnIdle ? 0 : nonNeg(demandGapUnits),
+    roomHeldByOwnIdle,
+    ...(unclaimedSharePct != null ? { unclaimedSharePct } : {}),
+    retoolHint,
     currentTurn,
     buildQuote: {
       unitPriceAnchor: oneUnit.unitPriceAnchor,

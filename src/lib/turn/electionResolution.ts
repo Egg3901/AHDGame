@@ -33,6 +33,8 @@ import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProje
 import { readBgOrdinaryEligibleParties } from "@/lib/turn/election/bgOrdinaryEligibility";
 import { readHuMixedElectionPlan } from "@/lib/countries/hu/readMixedElectionPlan";
 import type { HuMixedPlan } from "@/lib/countries/hu/rules/mixedElectionPlan";
+import { captureElectionResolved } from "@/lib/analytics/electionAnalytics";
+import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -72,11 +74,24 @@ export async function resolveGeneralElections(
   if (completedElections.length === 0) return 0;
 
   const electionIds = completedElections.map((e) => e._id);
-  const [tallies, gameStateDoc] = await Promise.all([
+  const genericElectionIds = completedElections
+    .filter((e) => !isNativeRussianAssemblyElection(e))
+    .map((e) => e._id);
+  const [tallies, completedCandidates, gameStateDoc] = await Promise.all([
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
       .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_LATEST_SNAPSHOT_ONLY })
       .toArray(),
+    genericElectionIds.length
+      ? db
+          .collection("electionCandidates")
+          .find(
+            { electionId: { $in: genericElectionIds }, status: "active" },
+            { projection: { electionId: 1, isNPP: 1 } }
+          )
+          .toArray()
+          .catch(() => [])
+      : Promise.resolve([]),
     db.collection<GameState>("gameState").findOne({ _id: "current" }),
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
@@ -111,6 +126,13 @@ export async function resolveGeneralElections(
   const huMixedPlans = new Map<number, HuMixedPlan | null>();
   for (const cycle of huMixedCycles) {
     huMixedPlans.set(cycle, await readHuMixedElectionPlan(db, cycle));
+  }
+  const candidatesByElection = new Map<string, typeof completedCandidates>();
+  for (const candidate of completedCandidates) {
+    const key = candidate.electionId.toString();
+    const list = candidatesByElection.get(key) ?? [];
+    list.push(candidate);
+    candidatesByElection.set(key, list);
   }
 
   let resolved = 0;
@@ -364,6 +386,57 @@ export async function resolveGeneralElections(
       : [];
   const finalPresidentTallyMap = new Map(
     finalPresidentTallies.map((tally) => [tally.electionId.toString(), tally])
+  );
+
+  // A skipped atomic claim currently returns resolved=true to the game caller.
+  // Telemetry must observe the committed status rather than that return value.
+  // Read all outcome statuses together; a failure suppresses telemetry only.
+  const committedOutcomeIds = new Set(
+    completedElections.length > 0
+      ? (
+          await db
+            .collection<Election>("elections")
+            .find(
+              {
+                _id: { $in: completedElections.map((election) => election._id) },
+                status: "resolved",
+              },
+              { projection: { _id: 1 } }
+            )
+            .toArray()
+            .catch(() => [])
+        ).map((election) => election._id.toString())
+      : []
+  );
+  await Promise.all(
+    completedElections
+      .filter((election) => committedOutcomeIds.has(election._id.toString()))
+      .map((election) => {
+        const electionCandidates = candidatesByElection.get(election._id.toString()) ?? [];
+        const tally = tallyMap.get(election._id.toString());
+        const seatEstimateCount = Object.values(tally?.seatsEstimate ?? {}).reduce(
+          (sum, seats) => sum + seats,
+          0
+        );
+        const isNational =
+          election.electionType === "president" ||
+          election.electionType === "primeMinister" ||
+          election.state === election.countryId;
+        return captureElectionResolved({
+          db,
+          electionId: election._id.toString(),
+          electionType: election.electionType,
+          phase: "general",
+          scope: isNational ? "national" : "regional",
+          candidateCount: electionCandidates.length,
+          playerCandidateCount: electionCandidates.filter((candidate) => !candidate.isNPP).length,
+          turnoutPct: "unknown",
+          seatsAvailable: election.totalSeats ?? (seatEstimateCount || 1),
+          nationId: election.countryId,
+          turn: currentTurn,
+          iteration: gameStateDoc?.iteration,
+        });
+      })
   );
 
   for (const election of resolvedElections) {

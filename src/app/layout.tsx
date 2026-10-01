@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import { isClientShellUserAgent, isInAppWebViewUserAgent } from "@/lib/displayMode";
+import {
+  isClientShellUserAgent,
+  isInAppWebViewUserAgent,
+  isStoreAppUserAgent,
+} from "@/lib/displayMode";
 import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import Script from "next/script";
@@ -56,6 +60,7 @@ import {
 } from "@/lib/siteMetadata";
 import { nationKeywords } from "@/lib/marketing/marketedWorld";
 import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
+import { getEraConfig } from "@/components/landing/eraThemes";
 import { verifyAuth } from "@/lib/auth";
 import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maintenanceStatus";
 import { resolveNavbarPageCountry } from "@/lib/navigation/resolveNavbarPageCountry";
@@ -190,18 +195,22 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [cookieStore, requestHeaders, locale, intlMessages, t] = await Promise.all([
+  const [cookieStore, requestHeaders, locale, intlMessages, t, world] = await Promise.all([
     cookies(),
     headers(),
     getLocale(),
     getMessages(),
     getTranslations("layout"),
+    getMarketedWorldSafe(),
   ]);
+  // A broadcast-era world (1991) types its name into the navbar on load.
+  const typedWordmark = Boolean(getEraConfig(world.seedYear).broadcast);
   const userAgent = requestHeaders.get("user-agent") ?? "";
   // Both the Capacitor app and the AHDClient mobile shell: no ad slots, no
   // consent prompts, no cookie banner inside an app webview.
   const isNativeApp = isInAppWebViewUserAgent(userAgent);
   const isClientShell = isClientShellUserAgent(userAgent);
+  const isStoreApp = isStoreAppUserAgent(userAgent);
   const host = requestHeaders.get("host");
   const pathname = requestHeaders.get("x-pathname") ?? "/";
   const displayMode = cookieStore.get("ahd-display-mode")?.value as
@@ -294,7 +303,7 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang={locale}>
+    <html lang={locale} data-store-app={isStoreApp ? "true" : undefined}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${lora.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}
       >
@@ -369,6 +378,7 @@ export default async function RootLayout({
                               clientShell={isClientShell}
                               displayMode={displayMode}
                               initialPageCountry={initialPageCountry}
+                              typedWordmark={typedWordmark}
                             />
                           )}
                           {!isWikiSubdomain && <BugReportFab displayMode={displayMode} />}
