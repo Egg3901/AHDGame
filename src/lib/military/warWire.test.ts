@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import type { PeaceTerm } from "./peaceTerm";
-import { buildSettledDispatch, termFieldValue } from "./warWire";
+import { buildSettledDispatch, buildTreatyEntryDispatch, termFieldValue } from "./warWire";
 
 function war(term: PeaceTerm | null, path: "dictated" | "negotiated" = "dictated"): ConflictDoc {
   return {
@@ -226,5 +226,39 @@ describe("who the reunification dispatch names", () => {
       settlement: { term: REUNIFY2, path: "negotiated", imposedBy: "TR", target: "UK", turn: 400 },
     } as unknown as ConflictDoc).body;
     expect(asCapitulation).toBe(asDemand);
+  });
+});
+
+describe("buildTreatyEntryDispatch", () => {
+  it("names the country, the war and the alliance in plain copy", () => {
+    const d = buildTreatyEntryDispatch({
+      conflictName: "Russia-East Germany War",
+      organizationName: "Northern Defence Pact",
+      defending: "DD",
+      entered: ["UK"],
+    });
+    expect(d.title).toBe(
+      "United Kingdom enters the Russia-East Germany War under the Northern Defence Pact"
+    );
+    expect(d.body).toBe(
+      "East Germany was declared on, and the Northern Defence Pact binds its members to defend it. United Kingdom has entered the Russia-East Germany War on its side."
+    );
+    expect(`${d.title} ${d.body}`).not.toMatch(/[\u2014\u2013]/);
+    expect(d.embed.fields?.map((f) => f.value)).toEqual([
+      "Northern Defence Pact",
+      "East Germany",
+      "United Kingdom",
+    ]);
+  });
+
+  it("reads as one piece of news when several members enter together", () => {
+    const d = buildTreatyEntryDispatch({
+      conflictName: "Berlin War",
+      organizationName: "Warsaw Pact",
+      defending: "DD",
+      entered: ["RU", "PL", "HU"],
+    });
+    expect(d.title).toBe("The Warsaw Pact enters the Berlin War");
+    expect(d.body).toContain("Poland and Hungary have entered the Berlin War");
   });
 });

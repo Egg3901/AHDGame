@@ -105,7 +105,13 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
             posture. {POSTURE_META[current].blurb} Changing it needs a majority of the members that
             hold a vote.
           </p>
-          <p className="mt-1 text-xs text-muted">{postureWarEntryNote(org.def.category)}</p>
+          <p className="mt-1 text-xs text-muted">
+            {postureWarEntryNote({
+              category: org.def.category,
+              posture: org.posture,
+              standingMutualDefence: org.def.standingMutualDefence,
+            })}
+          </p>
         </div>
         {viewerIsMember && viewerFmCountry && (
           <Button

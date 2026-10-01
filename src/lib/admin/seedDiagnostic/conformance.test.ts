@@ -253,6 +253,9 @@ describe("classifyPopulationSumCheck", () => {
   it("returns ok within 3%, warn for 5–16% dual-source drift, critical above 25% or empty", async () => {
     const { classifyPopulationSumCheck } = await import("./conformance");
 
+    expect(classifyPopulationSumCheck("US", 100, 50, 100).note).toBe(
+      "exact population reconciliation"
+    );
     expect(classifyPopulationSumCheck("US", 100, 50, 102).severity).toBe("ok");
     expect(classifyPopulationSumCheck("US", 100, 50, 105).severity).toBe("warn"); // 5%
     expect(classifyPopulationSumCheck("RU", 188, 20, 200.1).severity).toBe("warn"); // ~6.4%

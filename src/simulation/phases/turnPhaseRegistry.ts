@@ -51,6 +51,7 @@ import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadershi
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
 import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
+import { reconcileMutualDefence } from "@/lib/military/treatyDefence";
 import { applyDecayToAllStates, processPartyGOTV } from "@/lib/turn/demographicTurnoutTurn";
 import {
   processPartyOrgTurn,
@@ -1310,6 +1311,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         phaseResults.settlement = await runtime.runPhase("settlement", () =>
           processSettlementTurn(db, newTurn)
         );
+
+        // Sequential and AFTER alignment/settlement: alliance membership and posture
+        // (both written by the batch above and by alignment defections) decide who is
+        // bound. Brings every declared war into line with the alliances as they stand
+        // now: a posture raised to Article 5 mid-war, or a country that joined a
+        // defender's alliance mid-war. Idempotent; see `reconcileMutualDefence`.
+        await runtime.runPhase("mutualDefence", () => reconcileMutualDefence(db, newTurn));
 
         await runtime.runPhase("autoReelectionEntry", () =>
           runAutoReelectionEntry(db, gameNow, newTurn)
