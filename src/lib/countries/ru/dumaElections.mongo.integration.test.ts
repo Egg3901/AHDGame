@@ -125,17 +125,15 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       .toArray();
     const npcId = new ObjectId();
     const officialId = new ObjectId();
-    await db
-      .collection("npps")
-      .insertOne({
-        _id: npcId,
-        countryId: "RU",
-        party: "1",
-        name: "Existing profile",
-        homeState: "CEN",
-        currentOffice: { type: "congressDeputy" },
-        wealth: 12345,
-      });
+    await db.collection("npps").insertOne({
+      _id: npcId,
+      countryId: "RU",
+      party: "1",
+      name: "Existing profile",
+      homeState: "CEN",
+      currentOffice: { type: "congressDeputy" },
+      wealth: 12345,
+    });
     await db.collection("politicalParties").insertMany([
       { countryId: "RU", sequentialId: 1 },
       { countryId: "RU", sequentialId: 2 },
