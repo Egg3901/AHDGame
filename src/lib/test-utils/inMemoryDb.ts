@@ -512,9 +512,15 @@ class InMemoryCollection {
     return { insertedId: id };
   }
 
-  async insertMany(docs: Doc[]): Promise<{ insertedCount: number }> {
-    for (const doc of docs) await this.insertOne(doc);
-    return { insertedCount: docs.length };
+  async insertMany(docs: Doc[]): Promise<{
+    insertedCount: number;
+    insertedIds: Record<number, unknown>;
+  }> {
+    const insertedIds: Record<number, unknown> = {};
+    for (const [index, doc] of docs.entries()) {
+      insertedIds[index] = (await this.insertOne(doc)).insertedId;
+    }
+    return { insertedCount: docs.length, insertedIds };
   }
 
   async updateOne(

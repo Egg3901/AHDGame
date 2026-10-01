@@ -555,29 +555,9 @@ export async function processNPPFundInvestments(
         });
         planned.push(...nppPlanned);
         totalInvested += investedThisNPP;
-        ledgerEntries.push({
-          turn: currentTurn,
-          createdAt: now,
-          txType: "index_fund_subscribe",
-          legs: [
-            {
-              account: nppAccount,
-              amount: -investedThisNPP,
-              currencyCode: currency,
-              anchorAmount: -investedThisNPP,
-              role: "primary",
-            },
-            {
-              account: accountId("sink", "fund_subscription", currency),
-              amount: investedThisNPP,
-              currencyCode: currency,
-              anchorAmount: investedThisNPP,
-              role: "contra",
-            },
-          ],
-          sourceRef: { collection: "npps", id: npp._id },
-          emitSite: "indexFunds/nppInvesting.ts:subscription_debit",
-        });
+        // The financialTxLog subscription below owns the holder debit and
+        // fund receipt. Emitting another primary leg here counts the same
+        // cash movement twice in stock-versus-flow reconciliation (#992).
       }
 
       nppsProcessed++;
