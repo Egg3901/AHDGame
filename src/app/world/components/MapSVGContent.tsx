@@ -144,6 +144,18 @@ interface MapSVGContentProps {
    */
   blocLookup?: ReadonlyMap<string, MapBlocId>;
   blocPalette?: Readonly<Record<string, MapBlocStyle>>;
+  /**
+   * Era art for the landing globe. `underlay` paints after the starfield and
+   * before the sphere, so anything in it passes behind the globe; `overlay`
+   * paints last. Both must be inert (`pointer-events: none`): they sit over
+   * the countries' hit areas.
+   */
+  underlay?: React.ReactNode;
+  overlay?: React.ReactNode;
+  /** Sphere and graticule overrides for an era style. Ignored in wireframe mode. */
+  sphereFill?: string;
+  sphereStroke?: string;
+  graticuleStroke?: string;
 }
 
 export default function MapSVGContent({
@@ -186,6 +198,11 @@ export default function MapSVGContent({
   inspectableFeatureIds,
   blocLookup,
   blocPalette = DEFAULT_BLOC_PALETTE,
+  underlay,
+  overlay,
+  sphereFill,
+  sphereStroke,
+  graticuleStroke,
 }: MapSVGContentProps) {
   const svgW = layout?.svgW ?? DEFAULT_SVG_W;
   const svgH = layout?.svgH ?? DEFAULT_SVG_H;
@@ -309,6 +326,8 @@ export default function MapSVGContent({
         </>
       )}
 
+      {underlay}
+
       <circle
         ref={sphereRef}
         cx={translate[0]}
@@ -317,11 +336,9 @@ export default function MapSVGContent({
         fill={
           wireframeColor
             ? "#000800"
-            : enhanced
-              ? "url(#globe-ocean-enhanced)"
-              : "url(#globe-atmosphere)"
+            : (sphereFill ?? (enhanced ? "url(#globe-ocean-enhanced)" : "url(#globe-atmosphere)"))
         }
-        stroke={wireframeColor ?? (enhanced ? "#1a6b9f" : "#0a3d62")}
+        stroke={wireframeColor ?? sphereStroke ?? (enhanced ? "#1a6b9f" : "#0a3d62")}
         strokeWidth={1}
         style={{ opacity: 1 }}
       />
@@ -329,7 +346,7 @@ export default function MapSVGContent({
       <path
         ref={graticuleRef}
         fill="none"
-        stroke={wireframeColor ?? "#5bb8f5"}
+        stroke={wireframeColor ?? graticuleStroke ?? "#5bb8f5"}
         strokeWidth={wireframeColor ? 0.4 : 0.3}
         style={{ opacity: wireframeColor ? 0.18 : 0.3 }}
       />
@@ -724,6 +741,8 @@ export default function MapSVGContent({
             </circle>
           </g>
         ))}
+
+      {overlay}
     </svg>
   );
 }

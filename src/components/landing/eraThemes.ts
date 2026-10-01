@@ -5,6 +5,7 @@
 
 import { tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
 import type { CountryId } from "@/lib/constants/countries";
+import { TICKER_1991 } from "./broadcast1991";
 
 export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023" | "2027";
 
@@ -22,6 +23,42 @@ export type EraNation = {
   id: string;
   name: string;
   tier: "player" | "econ" | "npp";
+};
+
+/** Where a headline was filed from. */
+export type BroadcastPlace = { name: string; lonLat: readonly [number, number] };
+
+/** One crawl item on the broadcast lander's news ticker. */
+export type BroadcastTickerItem = {
+  /** Short dateline, e.g. "25 Dec". Rendered uppercase. */
+  date: string;
+  /** Sentence-case headline. Rendered uppercase, read as written. */
+  text: string;
+  /** Where it was filed from. The globe's satellites beam down to it. */
+  place?: BroadcastPlace;
+};
+
+/**
+ * The broadcast lander: the hero framed as a satellite news feed of the era's
+ * defining week, instead of the CRT console `wireframeColor` draws. An era
+ * either has this or it doesn't; the two looks never stack.
+ */
+export type BroadcastLanderConfig = {
+  /** Red block of the hero kicker. */
+  kicker: string;
+  /** Dateline beside the kicker. */
+  dateline: string;
+  /** Label block at the left edge of the ticker. */
+  tickerLabel: string;
+  /** Crawl items, oldest first. Their places are the satellites' datelines. */
+  ticker: readonly BroadcastTickerItem[];
+  /**
+   * Map feature ids of a state that has just broken up. Their merged outline is
+   * drawn as a fading dashed border, and the borders between them as new ones.
+   */
+  dissolvedStateFeatureIds: readonly string[];
+  /** Name riding beside the satellite on the inner orbit. */
+  orbitLabel: string;
 };
 
 export type EraConfig = {
@@ -61,7 +98,39 @@ export type EraConfig = {
   footerTagline: string;
   accessMap: Record<string, EraAccess>;
   nations: EraNation[];
+  /** Broadcast lander art direction. Absent means the CRT or plain globe. */
+  broadcast?: BroadcastLanderConfig;
+  /** Globe rotation at first paint, `[-lon, -lat, 0]`. Defaults to the Mediterranean. */
+  initialRotation?: [number, number, number];
+  /**
+   * Where the hero's "explore the world" pill points. An era with its own
+   * public microsite links out to it; without one the pill opens the in-game
+   * world map rather than another era's site.
+   */
+  worldReportUrl?: string;
 };
+
+/**
+ * The fifteen Soviet republics as Natural Earth feature ids. Their union is the
+ * USSR's last outline, and the arcs they share are the borders it left behind.
+ */
+export const SOVIET_REPUBLIC_FEATURE_IDS: readonly string[] = [
+  "643", // Russia
+  "804", // Ukraine
+  "112", // Belarus
+  "498", // Moldova
+  "233", // Estonia
+  "428", // Latvia
+  "440", // Lithuania
+  "268", // Georgia
+  "051", // Armenia
+  "031", // Azerbaijan
+  "398", // Kazakhstan
+  "860", // Uzbekistan
+  "795", // Turkmenistan
+  "417", // Kyrgyzstan
+  "762", // Tajikistan
+];
 
 /**
  * A curated roster entry: the display NAME and the order it appears in.
@@ -234,7 +303,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     gameDate: "July 1953",
     wireframeColor: "#00e676",
     loginTagline:
-      '"Every gun that is made, every warship launched, every rocket fired signifies, in the final sense, a theft from those who hunger and are not fed." — Dwight D. Eisenhower, "Chance for Peace" speech, April 1953',
+      '"Every gun that is made, every warship launched, every rocket fired signifies, in the final sense, a theft from those who hunger and are not fed." · Dwight D. Eisenhower, "Chance for Peace" speech, April 1953',
     heroHeadline: "A political simulation set in 1953.",
     heroDek:
       "The Korean War draws to a close. Stalin is dead and the Soviet succession is unsettled. Every real hour is a game week. Navigate the first decade of the Cold War.",
@@ -269,6 +338,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
     accessMap: accessFor("1953-default", NATIONS_1953),
     nations: nationsFor("1953-default", NATIONS_1953),
+    worldReportUrl: "https://ops.ahousedividedgame.com/p/1953",
   },
 
   "1979": {
@@ -277,7 +347,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     label: "Cold War · 1979",
     gameDate: "April 1979",
     wireframeColor: "#00e676",
-    loginTagline: '"Events, dear boy, events." — Harold Macmillan',
+    loginTagline: '"Events, dear boy, events." · Harold Macmillan',
     heroHeadline: "A political simulation set in 1979.",
     heroDek:
       "Stagflation, oil shocks, and an ideological standoff. Every real hour is a game week. Play a nation, build a coalition, and see how the decade unfolds.",
@@ -320,10 +390,10 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     gameDate: "December 1991",
     wireframeColor: null,
     loginTagline:
-      '"The end of the Cold War is a victory for mankind, not for any one country." — Mikhail Gorbachev',
-    heroHeadline: "A House Divided Beta - 1991",
+      '"The end of the Cold War is a victory for mankind, not for any one country." · Mikhail Gorbachev',
+    heroHeadline: "A political simulation set in 1991.",
     heroDek:
-      "The Soviet Union has dissolved. A unipolar moment emerges, but the new order is unsteady. Every real hour is a game week. Navigate the transition.",
+      "The Soviet Union has dissolved into fifteen states. Germany is one country again, and the European Community has just agreed to build a single currency. Every real hour is a game week. Navigate the transition.",
     primaryCta: "Start playing",
     secondaryCta: "Explore the map",
     eraChips: [
@@ -344,6 +414,17 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     footerTagline: "Persistent simulation. Multiple nations. No resets.",
     accessMap: accessFor("1991-default", NATIONS_1991),
     nations: nationsFor("1991-default", NATIONS_1991),
+    // Open over the Balkans so the old Soviet outline fills the right of the
+    // first frame and the UK's chip clears the hero copy.
+    initialRotation: [-24, -42, 0],
+    broadcast: {
+      kicker: "Special report",
+      dateline: "Moscow · 25 Dec 1991",
+      tickerLabel: "1991",
+      ticker: TICKER_1991,
+      dissolvedStateFeatureIds: SOVIET_REPUBLIC_FEATURE_IDS,
+      orbitLabel: "MIR",
+    },
   },
 
   "1999": {

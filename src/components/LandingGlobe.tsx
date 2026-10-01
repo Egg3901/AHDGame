@@ -56,6 +56,16 @@ import {
   TIER_ORDER,
 } from "@/components/landing/countryTiers";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import {
+  BROADCAST_GRATICULE_STROKE,
+  BROADCAST_SPHERE_FILL,
+  BROADCAST_SPHERE_STROKE,
+  BroadcastOverlay,
+  BroadcastUnderlay,
+  dissolvedStateGeometry,
+  useBroadcastGlobeLayers,
+} from "@/components/landing/broadcastGlobe";
+import type { BroadcastLanderConfig } from "@/components/landing/eraThemes";
 
 type LandingCountryAccess = Partial<
   Record<string, { enabledForPlayers: boolean; economyPreview: boolean; status: CountryStatus }>
@@ -80,6 +90,8 @@ const LANDING_MARKERS: Record<string, LandingMarkerGeo> = {
   UK: { label: "United Kingdom", lonLat: [-1.8, 52.6] },
   RU: { label: "USSR", lonLat: [37.6, 55.75] },
   DD: { label: "East Germany", lonLat: [12.6, 52.2] },
+  // Playable from 1991 on. Honshu, not the centroid, which sits in the sea.
+  JP: { label: "Japan", lonLat: [138.6, 36.4] },
 };
 // Marker declutter geometry (screen px): chips lift above their pin, cluster when
 // their pins fall within CLUSTER_DX, and stack ROW_H apart with leader lines.
@@ -159,6 +171,9 @@ export function LandingGlobe({
   economicPowerFeatureIds,
   onShowcaseActiveChange,
   showcasePaused = false,
+  broadcast,
+  hideTierLegend = false,
+  markersFromSm = false,
 }: {
   gameDate?: string;
   theme?: "default" | "broadsheet";
@@ -218,6 +233,23 @@ export function LandingGlobe({
    * false, so normal behaviour resumes the moment the flag clears.
    */
   showcasePaused?: boolean;
+  /**
+   * The broadcast globe (the 1991 hero, see `components/landing/broadcastGlobe`):
+   * lit ocean, a dissolved state's borders, and satellites beaming down to the
+   * crawl's datelines. Absent keeps the plain or CRT look, which
+   * `wireframeColor` decides. Pass a stable reference; the era config is one.
+   */
+  broadcast?: Pick<BroadcastLanderConfig, "dissolvedStateFeatureIds" | "orbitLabel" | "ticker">;
+  /**
+   * Skip the bare-mode tier key in the corner, for a hero that draws its own
+   * (the broadcast lander's ticker owns that corner). Default false.
+   */
+  hideTierLegend?: boolean;
+  /**
+   * Drop the player-count chips below the `sm` breakpoint, for a hero whose
+   * copy fills a phone screen and would otherwise sit on top of them.
+   */
+  markersFromSm?: boolean;
 }) {
   const resolveCountryName = useCountryDisplayName();
   const isBroadsheet = theme === "broadsheet";
@@ -336,6 +368,22 @@ export function LandingGlobe({
   tierLookupRef.current = tierLookup;
 
   const haloRef = useRef<SVGCircleElement>(null);
+
+  // Fixed for an era, so the callbacks and the frame loop below can close over
+  // it without being rebuilt.
+  const isBroadcast = broadcast !== undefined;
+  const {
+    bind: bindBroadcast,
+    geometry: dissolvedGeometryRef,
+    render: renderBroadcast,
+  } = useBroadcastGlobeLayers({
+    translate: LANDING_TRANSLATE,
+    globeRadius: LANDING_ORTHO_SCALE,
+    ticker: broadcast?.ticker,
+  });
+  // The loader keys on the roster's contents, so a fresh array of the same ids
+  // does not refetch the world.
+  const dissolvedKey = broadcast?.dissolvedStateFeatureIds.join(",") ?? "";
 
   const markInteraction = useCallback((at = performance.now()) => {
     lastInteractionRef.current = at;
@@ -665,10 +713,20 @@ export function LandingGlobe({
       }
     }
 
+    if (isBroadcast) {
+      renderBroadcast({
+        rotate: d3.geoRotation(rotationRef.current),
+        zoom: z,
+        now: performance.now(),
+        animate: !prefersReducedMotionRef.current,
+        beams: !showcaseMotionRef.current,
+        pathGen,
+      });
+    }
     if (enhancedRef.current) updateEnhancedOverlay();
     updateMarkers();
     updateShowcaseCard();
-  }, [updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
+  }, [isBroadcast, renderBroadcast, updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
 
   const syncPathsState = useCallback(() => {
     const d3 = d3Ref.current;
@@ -710,12 +768,22 @@ export function LandingGlobe({
       }
     }
 
+    if (isBroadcast) {
+      renderBroadcast({
+        rotate: d3.geoRotation(rotationRef.current),
+        zoom: z,
+        now: performance.now(),
+        animate: !prefersReducedMotionRef.current,
+        beams: !showcaseMotionRef.current,
+        pathGen,
+      });
+    }
     if (enhancedRef.current) updateEnhancedOverlay();
     updateMarkers();
     updateShowcaseCard();
 
     setPaths(newPaths);
-  }, [updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
+  }, [isBroadcast, renderBroadcast, updateEnhancedOverlay, updateMarkers, updateShowcaseCard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -742,6 +810,10 @@ export function LandingGlobe({
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const geojson = (topojson as any).feature(topo, topo.objects.countries);
+
+      dissolvedGeometryRef.current = dissolvedKey
+        ? dissolvedStateGeometry(topojson.mesh, topo, dissolvedKey.split(","))
+        : null;
 
       if (germanySplit) {
         const [pcMod, germanyGeo, eastBerlinGeo] = germanySplit;
@@ -805,7 +877,7 @@ export function LandingGlobe({
       if (autoRotateRef.current) cancelAnimationFrame(autoRotateRef.current);
       if (dragFrameRef.current) cancelAnimationFrame(dragFrameRef.current);
     };
-  }, [geoUrl, shouldSplitGermany]);
+  }, [geoUrl, shouldSplitGermany, dissolvedKey, dissolvedGeometryRef]);
 
   // Weak-device detection, once on mount. Core count and device memory are the
   // only signals a browser gives before anything is rendered; both are coarse
@@ -941,6 +1013,27 @@ export function LandingGlobe({
           imperativeUpdate();
         }
       }
+      // The broadcast globe's satellites and flourish keep moving while the
+      // globe is held still (a hover, a settled showcase card), on the same
+      // frame budget. A drag reprojects through imperativeUpdate instead.
+      if (
+        isBroadcast &&
+        isInViewRef.current &&
+        !isDraggingRef.current &&
+        ts - lastFrameRef.current >= frameBudget
+      ) {
+        lastFrameRef.current = ts;
+        const d3 = d3Ref.current;
+        if (d3) {
+          renderBroadcast({
+            rotate: d3.geoRotation(rotationRef.current),
+            zoom: zoomRef.current,
+            now: ts,
+            animate: !prefersReducedMotionRef.current,
+            beams: !showcaseMotionRef.current,
+          });
+        }
+      }
       autoRotateRef.current = requestAnimationFrame(spin);
     };
 
@@ -948,7 +1041,17 @@ export function LandingGlobe({
     return () => {
       if (autoRotateRef.current) cancelAnimationFrame(autoRotateRef.current);
     };
-  }, [isLoaded, imperativeUpdate, syncPathsState, bare, enhanced, initialZoom, markInteraction]);
+  }, [
+    isLoaded,
+    imperativeUpdate,
+    syncPathsState,
+    bare,
+    enhanced,
+    initialZoom,
+    markInteraction,
+    isBroadcast,
+    renderBroadcast,
+  ]);
 
   // Position markers once the globe is ready / counts change, and on resize.
   // While the globe rotates, the spin loop keeps them updated via imperativeUpdate.
@@ -1319,6 +1422,30 @@ export function LandingGlobe({
             onHover={setHovered}
             onTooltipClear={() => setTooltipPos(null)}
             onCountryClick={handleCountryClick}
+            sphereFill={isBroadcast ? BROADCAST_SPHERE_FILL : undefined}
+            sphereStroke={isBroadcast ? BROADCAST_SPHERE_STROKE : undefined}
+            graticuleStroke={isBroadcast ? BROADCAST_GRATICULE_STROKE : undefined}
+            underlay={
+              broadcast ? (
+                <BroadcastUnderlay
+                  translate={LANDING_TRANSLATE}
+                  globeRadius={LANDING_ORTHO_SCALE}
+                  zoom={initialZoom ?? 1}
+                  bind={bindBroadcast}
+                />
+              ) : undefined
+            }
+            overlay={
+              broadcast ? (
+                <BroadcastOverlay
+                  translate={LANDING_TRANSLATE}
+                  globeRadius={LANDING_ORTHO_SCALE}
+                  zoom={initialZoom ?? 1}
+                  bind={bindBroadcast}
+                  orbitLabel={broadcast.orbitLabel}
+                />
+              ) : undefined
+            }
           />
         )}
 
@@ -1334,7 +1461,7 @@ export function LandingGlobe({
               aria-hidden="true"
             >
               {markerList.map((m) => (
-                <g key={m.id}>
+                <g key={m.id} className={markersFromSm ? "max-sm:hidden" : undefined}>
                   <line
                     ref={(el) => {
                       if (el) leaderLineRefsMap.current.set(m.id, el);
@@ -1380,7 +1507,9 @@ export function LandingGlobe({
                 ref={(el) => {
                   if (el) markerRefsMap.current.set(m.id, el);
                 }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-center"
+                className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-center ${
+                  markersFromSm ? "max-sm:hidden" : ""
+                }`}
                 style={{ left: 0, top: 0, opacity: 0, transition: "opacity 0.25s linear" }}
               >
                 <div className="flex flex-col gap-px rounded-[11px] border border-white/25 bg-white/10 px-3 py-1.5 shadow-[0_10px_24px_-10px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-md">
@@ -1463,6 +1592,7 @@ export function LandingGlobe({
       {bare &&
         isLoaded &&
         tierLookup &&
+        !hideTierLegend &&
         typeof document !== "undefined" &&
         createPortal(
           <div
