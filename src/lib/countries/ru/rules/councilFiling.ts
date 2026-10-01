@@ -27,6 +27,7 @@ export interface RussianCouncilFilingInput {
     totalSeats: number;
     primaryEndTurn?: number;
     cohortId: string;
+    rootCohortId?: string;
     mandateSinceTurn: number;
     districtNumber: number;
   };
@@ -65,7 +66,7 @@ export function decideRussianCouncilFiling(
   if (
     input.preset !== "1991-default" ||
     !input.boundCohortId ||
-    election.cohortId !== input.boundCohortId ||
+    (election.rootCohortId ?? election.cohortId) !== input.boundCohortId ||
     election.mandateSinceTurn !== input.mandateSinceTurn ||
     !hasAuthorizedPostSovietTransition(
       input.turn,

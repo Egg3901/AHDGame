@@ -26,6 +26,7 @@ import {
   certifyRussianCouncilElection,
   RUSSIAN_COUNCIL_RESULTS_COLLECTION,
 } from "./councilElectionResult";
+import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
 import { openRussianCouncilRepeat } from "./councilRepeatOpening";
 import { RUSSIAN_COUNCIL_SUBJECTS_1993 } from "./data/councilSubjects1993";
 import {
@@ -499,6 +500,128 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(
       await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
     ).not.toHaveProperty("ruFederalAssemblySinceTurn");
+    const currentOpening = raced.find((row) => row?.created)!.record;
+    const dumaId = new ObjectId();
+    await db.collection<Fixture>("countryGameStates").updateOne(
+      { _id: "RU" },
+      {
+        $set: {
+          ruFirstDumaElectionCohortId: dumaId,
+          ruDumaNpcAdmissionCohortId: dumaId,
+        },
+      }
+    );
+    await db
+      .collection("politicalParties")
+      .insertMany(
+        [1, 2, 3].map((sequentialId) => ({ _id: new ObjectId(), countryId: "RU", sequentialId }))
+      );
+    const profileIds = [1, 2, 3, 4].map(() => new ObjectId());
+    await db.collection("npps").insertMany(
+      profileIds.map((_id, index) => ({
+        _id,
+        countryId: "RU",
+        party: String(index === 3 ? 1 : index + 1),
+        homeState: "NCA",
+        name: `Repeat profile ${index}`,
+        currentOffice: { type: "congressDeputy" },
+        personalAccount: { wealth: 34567 },
+      }))
+    );
+    await db.collection("electionCandidates").insertOne({
+      _id: new ObjectId(),
+      electionId: new ObjectId(),
+      countryId: "RU",
+      characterId: profileIds[3],
+      nppId: profileIds[3],
+      isNPP: true,
+      party: "1",
+      status: "withdrawn",
+      russianDumaNomination: { capacity: 1 },
+    });
+    const admission = { db, cohortId: currentOpening.cohortId, turn: 143, now: new Date(2000) };
+    commands = 0;
+    expect(await admitRussianCouncilNpcNominees(admission)).toEqual({
+      created: 6,
+      unrepresentedParties: [],
+    });
+    expect(commands).toBeLessThanOrEqual(35);
+    expect(
+      await db
+        .collection("electionCandidates")
+        .countDocuments({ nppId: profileIds[3], status: "active" })
+    ).toBe(0);
+    const player = await db.collection("characters").findOne({});
+    await db
+      .collection("characters")
+      .updateOne(
+        { _id: player!._id },
+        { $set: { countryId: "RU", homeState: "NCA", party: "1", currentOffice: null } }
+      );
+    const filing = {
+      db,
+      electionId: currentOpening.electionIds[0],
+      turn: 144,
+      now: new Date(3000),
+      candidate: {
+        electionId: currentOpening.electionIds[0],
+        countryId: "RU" as const,
+        characterId: player!._id,
+        characterName: "Repeat player",
+        party: "1",
+        status: "active" as const,
+        enteredAt: new Date(3000),
+      },
+    };
+    const beforeFiling = await db.collection("electionCandidates").find({}).toArray();
+    await db.command({
+      collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION,
+      validator: { playerFilings: { $exists: false } },
+    });
+    await expect(registerRussianCouncilPlayerCandidate(filing)).rejects.toMatchObject({
+      code: 121,
+    });
+    expect(await db.collection("electionCandidates").find({}).toArray()).toEqual(beforeFiling);
+    await db.command({ collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION, validator: {} });
+    expect(await registerRussianCouncilPlayerCandidate(filing)).toMatchObject({ allowed: true });
+    expect(
+      await db
+        .collection("electionCandidates")
+        .countDocuments({ electionId: filing.electionId, status: "active" })
+    ).toBe(6);
+    expect(await admitRussianCouncilNpcNominees({ ...admission, turn: 144 })).toEqual({
+      created: 0,
+      unrepresentedParties: [],
+    });
+    expect(
+      (await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" }))
+        ?.ruFirstCouncilElectionCohortId
+    ).toEqual(rootCohortId);
+    expect(
+      (await db.collection("characters").findOne({ _id: player!._id }))?.personalAccount.wealth
+    ).toBe(12345);
+    expect(
+      (await db.collection("npps").find({}).toArray()).every(
+        (row) => row.personalAccount.wealth === 34567
+      )
+    ).toBe(true);
+    // A controlled aggregate receipt qualifies latest-generation owner reservation separately from certification.
+    const nextId = new ObjectId();
+    const result = structuredClone(previous.result);
+    result[0].winners = [
+      { ...result[1].winners[0], isNpc: false, ownerId: player!._id.toHexString() },
+    ];
+    await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).insertOne({
+      ...previous,
+      _id: nextId.toHexString(),
+      cohortId: nextId,
+      rootCohortId,
+      generation: 1,
+      result,
+    });
+    expect(
+      await loadPendingRussianCouncilOwners({ db, cohortId: rootCohortId, mandateSinceTurn: 129 })
+    ).toContain(`player:${player!._id.toHexString()}`);
   });
   it("rolls back a partially inserted first Duma cohort, then retries and replays in bounded commands", async () => {
     const db = client.db(databaseName);
