@@ -203,27 +203,14 @@ export function buildEmbedsForChangelogPost(
 }
 
 /**
- * The last release that shipped before the changelog consolidation.
- *
- * On 2026-09-06 the 313 per-change entries under `content/changelog/` were
- * folded into the ten releases that actually happened. Every public post at or
- * below this version therefore has different content than when it was
- * announced, and four of them (1.3.0 through 1.6.0) are version keys that
- * `changelogSentHistory` has never seen. An unguarded run would read all of
- * that as new: four full releases blasted to Discord, an in-game notification
- * to every player for each, and a large delta re-posted for 1.1.0 and 1.2.0.
- *
- * All of it already shipped. The loop records the current hash for these and
- * posts nothing. Releases cut after the consolidation announce normally.
+ * The October 2026 audit repaired release posts through 1.9 and restored
+ * missing historical version keys. Record their current hashes silently so
+ * editorial repairs do not announce old releases or notify every player.
+ * The new 1.10 release and later cuts still announce normally.
  */
-const CONSOLIDATED_THROUGH_VERSION = "1.6.0";
+const CONSOLIDATED_THROUGH_VERSION = "1.9.0";
 
-/**
- * Whether a public post shipped before the consolidation and must not be
- * announced again. Exported because getting the comparison the wrong way round
- * silences every future release instead of the historic ones, which is a
- * failure nobody would notice until a release quietly did not announce.
- */
+/** Whether a public post belongs to the repaired historical release catalog. */
 export function isPreConsolidationRelease(version: string): boolean {
   return compareVersionsDesc(version, CONSOLIDATED_THROUGH_VERSION) >= 0;
 }
