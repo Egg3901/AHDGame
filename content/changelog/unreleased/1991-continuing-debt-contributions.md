@@ -1,4 +1,5 @@
 ---
+date: 2026-10-01
 title: Successor contributions to inherited federation debt
 badges: [patch]
 areas: [engine]
