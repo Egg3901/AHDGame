@@ -126,7 +126,14 @@ export function classifyPopulationSumCheck(
   if (drift > CONFORMANCE_POP_TOL) {
     return warn(id, countryId, metric, expectedNationalPop, summedPopulation, driftNote);
   }
-  return ok(id, countryId, metric, expectedNationalPop, summedPopulation, driftNote);
+  return ok(
+    id,
+    countryId,
+    metric,
+    expectedNationalPop,
+    summedPopulation,
+    drift === 0 ? "exact population reconciliation" : driftNote
+  );
 }
 
 function relCheck(

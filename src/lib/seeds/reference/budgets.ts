@@ -1,3 +1,4 @@
+import { POPULATION_TOTALS_1991 } from "./populationTotals1991";
 import { ObjectId } from "mongodb";
 import { calculatePolicyOptionAnnualCost } from "@/lib/budget/costs";
 import { computeTaxBaseGdpShareBaseline } from "@/lib/budget/revenue";
@@ -2377,7 +2378,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "CN",
     countryId: "CN",
     fiscalYear: 1991,
-    population: 1_158_000_000,
+    population: POPULATION_TOTALS_1991.CN.population,
     gdp: 2_178_000_000_000, // ~$378B USD / ~2.18 trillion CNY at 1991 ER
     currencyCode: "CNY",
     economicFactors: {
@@ -2442,7 +2443,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "NG",
     countryId: "NG",
     fiscalYear: 1991,
-    population: 95_000_000,
+    population: POPULATION_TOTALS_1991.NG.population,
     gdp: 1_800_000_000_000, // ₦1.8T NGN (1991 current prices, post-SAP naira)
     currencyCode: "NGN",
     economicFactors: {
@@ -2497,7 +2498,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "FR",
     countryId: "FR",
     fiscalYear: 1991,
-    population: 57_000_000,
+    population: POPULATION_TOTALS_1991.FR.population,
     gdp: 5_330_000_000_000, // ≈ FFr 5,330B (game units; see note above)
     currencyCode: "FRF",
     economicFactors: {
@@ -2603,7 +2604,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "ES",
     countryId: "ES",
     fiscalYear: 1991,
-    population: 38_900_000,
+    population: POPULATION_TOTALS_1991.ES.population,
     gdp: 38_900_000_000_000, // ≈ ₧38,900B pesetas (game units; see note above)
     currencyCode: "ESP",
     economicFactors: {
@@ -2656,7 +2657,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "SE",
     countryId: "SE",
     fiscalYear: 1991,
-    population: 8_600_000,
+    population: POPULATION_TOTALS_1991.SE.population,
     gdp: 1_160_000_000_000, // ≈ kr 1,160B (game units; see note above)
     currencyCode: "SEK",
     economicFactors: {
@@ -2710,7 +2711,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     budgetId: "TR",
     countryId: "TR",
     fiscalYear: 1991,
-    population: 57_300_000,
+    population: POPULATION_TOTALS_1991.TR.population,
     gdp: 6_900_000_000_000, // ≈ ₺6,900B lira (game units; see note above)
     currencyCode: "TRL",
     economicFactors: {

@@ -194,7 +194,13 @@ function SecurityAlliance({ org }: { org: OrgSummary }) {
         sub="Alliance-wide footing, set by a member vote (Overview → Alert posture)"
       >
         <p className="text-[13px] text-foreground">{POSTURE_META[org.posture].blurb}</p>
-        <p className="mt-1 text-[12px] text-muted">{postureWarEntryNote(org.def.category)}</p>
+        <p className="mt-1 text-[12px] text-muted">
+          {postureWarEntryNote({
+            category: org.def.category,
+            posture: org.posture,
+            standingMutualDefence: org.def.standingMutualDefence,
+          })}
+        </p>
       </Section>
 
       <Section

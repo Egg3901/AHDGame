@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui";
 import { postBillProposalWithElectionConfirmation } from "@/components/bills/BillAutoFailWarning";
 
@@ -15,6 +16,7 @@ import {
 } from "@/lib/internationalOrganizations/resolutionRules";
 import { useEntityName } from "./useEntityName";
 import type { MembershipDefenseWarning } from "@/lib/internationalOrganizations/membershipDefenseWarnings";
+import type { PactEntryWarning } from "@/lib/military/treatyDefence";
 
 interface Props {
   org: OrgSummary;
@@ -22,6 +24,47 @@ interface Props {
   currentTurn: number;
   votingWindowTurns: number;
   onChange: () => void;
+}
+
+/**
+ * The alliance is bound to defend a member in a live war, so whoever joins goes to
+ * that war on the next turn. Shown where a country applies and where members vote
+ * to admit it; the rule and the war list come from `pactEntryWarnings` on the
+ * server, the same rule the per-turn reconciliation enforces.
+ */
+function PactEntryNotice({
+  warnings,
+  subject,
+  entityName,
+}: {
+  warnings: PactEntryWarning[];
+  /** "you" for the applying country's own view, or the applicant's name. */
+  subject: { lead: string; object: string };
+  entityName: (id: string) => string;
+}) {
+  if (warnings.length === 0) return null;
+  return (
+    <div className="mb-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-left">
+      <p className="text-sm font-semibold text-warning">Mutual defence notice</p>
+      {warnings.map((w) => (
+        <p key={`${w.conflictId}:${w.defendingCountryId}`} className="mt-1 text-xs text-foreground">
+          {subject.lead} now brings {subject.object} into the{" "}
+          {w.conflictNumber != null ? (
+            <Link className="font-medium underline" href={`/world/conflicts/${w.conflictNumber}`}>
+              {w.conflictName}
+            </Link>
+          ) : (
+            <span className="font-medium">{w.conflictName}</span>
+          )}{" "}
+          on {entityName(w.defendingCountryId)}&apos;s side next turn.
+        </p>
+      ))}
+      <p className="mt-1 text-xs text-muted">
+        This does not apply to a country with no government, one already in that war, one holding a
+        truce with the attacker, or one that shares a bloc or a binding alliance with the attacker.
+      </p>
+    </div>
+  );
 }
 
 /**
@@ -181,6 +224,13 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               {viewerHasOpenProposal && (
                 <p className="text-xs text-muted">Application already pending.</p>
               )}
+              <div className="max-w-md">
+                <PactEntryNotice
+                  warnings={org.pactEntryWarnings ?? []}
+                  subject={{ lead: "Joining", object: "you" }}
+                  entityName={entityName}
+                />
+              </div>
               {error && <p className="text-xs text-error">{error}</p>}
             </>
           )}
@@ -301,6 +351,12 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                     {isFoundingApplication ? "Awaiting ratification" : "Voting"}
                   </span>
                 </div>
+
+                <PactEntryNotice
+                  warnings={org.pactEntryWarnings ?? []}
+                  subject={{ lead: `Admitting ${proposingName}`, object: "it" }}
+                  entityName={entityName}
+                />
 
                 {defenseWarnings.map((warning) => {
                   const existingEntry = [...org.pendingLegislation, ...org.activeLegislation].find(

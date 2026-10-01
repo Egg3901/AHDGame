@@ -1,7 +1,7 @@
 import type { Db, Filter } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { BLOC_DESIGNATED_ORG_IDS } from "@/lib/constants/orgCategory";
-import type { ConflictDoc } from "@/lib/db/types/conflict";
+import type { ConflictDoc, TreatyEntry } from "@/lib/db/types/conflict";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { mobilizeImmediateWarEntry } from "@/lib/nppAutonomy/autonomousWarCommands";
 import { joinSide } from "@/lib/military/joinSide";
@@ -97,7 +97,11 @@ export function warEntryIsImmediate(
  */
 export async function loadCollectiveDefenseEntryBlocks(params: {
   db: Db;
-  conflict: ConflictDoc;
+  /**
+   * The war being joined, excluded from the existing-war scan. Absent at
+   * declaration time, when the war does not exist yet and every live war counts.
+   */
+  conflict?: Pick<ConflictDoc, "_id">;
   candidates: CountryId[];
   opponents: CountryId[];
   currentTurn: number;
@@ -114,7 +118,7 @@ export async function loadCollectiveDefenseEntryBlocks(params: {
       .toArray(),
     getConflictsCollection(db)
       .find({
-        _id: { $ne: conflict._id },
+        ...(conflict ? { _id: { $ne: conflict._id } } : {}),
         status: { $ne: "resolved" },
         $and: [
           {
@@ -253,9 +257,23 @@ export async function enactImmediateWarEntry(params: {
   currentTurn: number;
   stake: Extract<WarEntryStake, "principal_belligerent" | "collective_defense">;
   defendingCountryId?: CountryId;
+  /** Recorded on the treaty entry so a custom alliance is named, not shown as its id. */
+  organizationName?: string;
+  /** Recorded on the treaty entry: why the alliance was binding. */
+  basis?: TreatyEntry["basis"];
 }): Promise<{ joined: boolean; deployedUnits: number }> {
-  const { db, conflict, countryId, side, organizationId, currentTurn, stake, defendingCountryId } =
-    params;
+  const {
+    db,
+    conflict,
+    countryId,
+    side,
+    organizationId,
+    currentTurn,
+    stake,
+    defendingCountryId,
+    organizationName,
+    basis,
+  } = params;
   const roster = side === "A" ? conflict.sideA.countries : conflict.sideB.countries;
   const joined = !roster.includes(countryId);
   await joinSide(db, conflict, countryId, side, currentTurn);
@@ -270,9 +288,11 @@ export async function enactImmediateWarEntry(params: {
   if (stake === "collective_defense") {
     const alreadyRecorded = conflict.treatyEntries?.some((entry) => entry.countryId === countryId);
     if (!alreadyRecorded) {
-      const entry = {
+      const entry: TreatyEntry = {
         countryId,
         organizationId,
+        ...(organizationName ? { organizationName } : {}),
+        ...(basis ? { basis } : {}),
         defending: defendingCountryId ?? (conflict.hostCountry as CountryId),
         joinedTurn: currentTurn,
       };
