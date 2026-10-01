@@ -1,3 +1,9 @@
+import {
+  organizationCashContext,
+  withOrganizationCashBatch,
+  witnessOrganizationCash,
+  type OrganizationCashOptions,
+} from "./cashLedger";
 import { ObjectId, type Db } from "mongodb";
 import { type CountryId } from "@/lib/constants/countries";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
@@ -115,69 +121,96 @@ export async function setOrganizationDuesRate(
 export async function chargeOrganizationDues(
   db: Db,
   organizationId: InternationalOrganizationId,
-  memberGdpUsd: { countryId: CountryId; gdpUsd: number }[]
+  memberGdpUsd: { countryId: CountryId; gdpUsd: number }[],
+  options?: OrganizationCashOptions
 ): Promise<number> {
   const { duesRateAnnual, currencyCountryId } = await getOrganizationFund(db, organizationId);
   if (!(duesRateAnnual > 0) || memberGdpUsd.length === 0) return 0;
-  const preset = await loadWorldPreset(db);
-  const now = new Date();
-  const budget = db.collection<FederalBudget>("federalBudget");
-  let totalFund = 0;
-  for (const m of memberGdpUsd) {
-    const dueUsd = memberDueUsd(m.gdpUsd, duesRateAnnual);
-    if (dueUsd <= 0) continue;
-    const rate = getGdpAnchorRate(m.countryId, preset);
-    const dueLocal = Math.round(dueUsd / rate); // member's own currency (debit)
-    if (dueLocal <= 0) continue;
-    // CREDIT ONLY WHAT WAS ACTUALLY DEBITED. A member with no `federalBudget`
-    // row matches nothing here, and crediting the fund anyway would mint money
-    // the reconciler cannot attribute to anyone. That was unreachable while
-    // dues were restricted to player-enabled countries, which all have a row —
-    // it became reachable when non-voting members started paying dues in
-    // organisations that levy no tribute (#1156).
-    //
-    // Tribute takes the other branch for the same case and counts it as an
-    // explicit `minted` figure. Dues have no such accounting, so an unmodelled
-    // member simply does not contribute rather than contributing from nowhere.
-    const debit = await budget.updateOne(
-      { countryId: m.countryId },
-      { $inc: { treasuryBalance: -dueLocal }, $set: { updatedAt: now } }
-    );
-    if (debit.matchedCount !== 1) continue;
-    // Credit the fund in its (founding) currency.
-    const fundRate = getGdpAnchorRate(currencyCountryId, preset);
-    totalFund += dueUsd / fundRate;
-  }
-  const totalFundRounded = Math.round(totalFund);
-  if (totalFundRounded > 0) {
-    const col = await getOrganizationFundsCollection(db);
-    await col.updateOne(
-      { organizationId },
-      {
-        $inc: { balanceLocal: totalFundRounded },
-        $set: { updatedAt: now },
-        $setOnInsert: { _id: new ObjectId(), organizationId, duesRateAnnual, currencyCountryId },
-      },
-      { upsert: true }
-    );
-  }
-  return totalFundRounded;
+  const context = await organizationCashContext(db, options);
+  return withOrganizationCashBatch(db, context, async (batch) => {
+    const preset = context?.preset ?? (await loadWorldPreset(db));
+    const now = new Date();
+    const budget = db.collection<FederalBudget>("federalBudget");
+    let totalFund = 0;
+    for (const m of memberGdpUsd) {
+      const dueUsd = memberDueUsd(m.gdpUsd, duesRateAnnual);
+      if (dueUsd <= 0) continue;
+      const rate = getGdpAnchorRate(m.countryId, preset);
+      const dueLocal = Math.round(dueUsd / rate); // member's own currency (debit)
+      if (dueLocal <= 0) continue;
+      // CREDIT ONLY WHAT WAS ACTUALLY DEBITED. A member with no `federalBudget`
+      // row matches nothing here, and crediting the fund anyway would mint money
+      // the reconciler cannot attribute to anyone. That was unreachable while
+      // dues were restricted to player-enabled countries, which all have a row —
+      // it became reachable when non-voting members started paying dues in
+      // organisations that levy no tribute (#1156).
+      //
+      // Tribute takes the other branch for the same case and counts it as an
+      // explicit `minted` figure. Dues have no such accounting, so an unmodelled
+      // member simply does not contribute rather than contributing from nowhere.
+      const debit = await budget.updateOne(
+        { countryId: m.countryId },
+        { $inc: { treasuryBalance: -dueLocal }, $set: { updatedAt: now } }
+      );
+      if (debit.matchedCount !== 1) continue;
+      await witnessOrganizationCash(db, batch, {
+        kind: "government",
+        ref: m.countryId,
+        countryId: m.countryId,
+        amount: -dueLocal,
+        site: "dues_treasury",
+        now,
+      });
+      // Credit the fund in its (founding) currency.
+      const fundRate = getGdpAnchorRate(currencyCountryId, preset);
+      totalFund += dueUsd / fundRate;
+    }
+    const totalFundRounded = Math.round(totalFund);
+    if (totalFundRounded > 0) {
+      const col = await getOrganizationFundsCollection(db);
+      const credit = await col.updateOne(
+        { organizationId },
+        {
+          $inc: { balanceLocal: totalFundRounded },
+          $set: { updatedAt: now },
+          $setOnInsert: { _id: new ObjectId(), organizationId, duesRateAnnual, currencyCountryId },
+        },
+        { upsert: true }
+      );
+      if (credit.modifiedCount > 0 || credit.upsertedCount > 0) {
+        await witnessOrganizationCash(db, batch, {
+          kind: "org",
+          ref: organizationId,
+          countryId: currencyCountryId,
+          amount: totalFundRounded,
+          site: "dues_fund",
+          now,
+        });
+      }
+    }
+    return totalFundRounded;
+  });
 }
 
 /** Credit `amountLocal` (already in the fund's currency) into the pooled fund. */
 export async function creditOrganizationFund(
   db: Db,
   organizationId: InternationalOrganizationId,
-  amountLocal: number
+  amountLocal: number,
+  options?: OrganizationCashOptions
 ): Promise<void> {
   if (!(amountLocal > 0)) return;
+  const context = await organizationCashContext(db, options);
+  const now = new Date();
   const col = await getOrganizationFundsCollection(db);
-  const currencyCountryId = await resolveOrgFundCurrencyCountry(db, organizationId);
-  await col.updateOne(
+  const currencyCountryId =
+    context?.fundCountries.get(organizationId) ??
+    (await resolveOrgFundCurrencyCountry(db, organizationId));
+  const credit = await col.updateOne(
     { organizationId },
     {
       $inc: { balanceLocal: Math.round(amountLocal) },
-      $set: { updatedAt: new Date() },
+      $set: { updatedAt: now },
       $setOnInsert: {
         _id: new ObjectId(),
         organizationId,
@@ -187,6 +220,16 @@ export async function creditOrganizationFund(
     },
     { upsert: true }
   );
+  if (credit.modifiedCount > 0 || credit.upsertedCount > 0) {
+    await witnessOrganizationCash(db, context, {
+      kind: "org",
+      ref: organizationId,
+      countryId: currencyCountryId,
+      amount: Math.round(amountLocal),
+      site: "fund_credit",
+      now,
+    });
+  }
 }
 
 /**
@@ -196,14 +239,30 @@ export async function creditOrganizationFund(
 export async function disburseFromOrganizationFund(
   db: Db,
   organizationId: InternationalOrganizationId,
-  amountLocal: number
+  amountLocal: number,
+  options?: OrganizationCashOptions
 ): Promise<boolean> {
   const amount = Math.round(amountLocal);
   if (!(amount > 0)) return false;
+  const context = await organizationCashContext(db, options);
+  const now = new Date();
   const col = await getOrganizationFundsCollection(db);
   const res = await col.updateOne(
     { organizationId, balanceLocal: { $gte: amount } },
-    { $inc: { balanceLocal: -amount }, $set: { updatedAt: new Date() } }
+    { $inc: { balanceLocal: -amount }, $set: { updatedAt: now } }
   );
+  if (res.modifiedCount > 0) {
+    const countryId =
+      context?.fundCountries.get(organizationId) ??
+      (context ? await resolveOrgFundCurrencyCountry(db, organizationId) : "US");
+    await witnessOrganizationCash(db, context, {
+      kind: "org",
+      ref: organizationId,
+      countryId,
+      amount: -amount,
+      site: "fund_debit",
+      now,
+    });
+  }
   return res.modifiedCount > 0;
 }
