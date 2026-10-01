@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { marketTurnLabel } from "@/lib/stockExchange/rules/calendar";
 import type { GameDateAnchor } from "@/lib/utils/gameDate";
-import { LocalTime } from "@/components/time/LocalTime";
+import { LocalTime, RelativeTime } from "@/components/time/LocalTime";
 import { Skeleton } from "@/components/ui";
 import {
   ALL_EXCHANGES,
@@ -721,9 +721,12 @@ export function MarketOverview({
             {meta?.asOf && (
               <>
                 {" "}
-                · Observed{" "}
-                <LocalTime value={meta.asOf} options={{ hour: "2-digit", minute: "2-digit" }} /> ·
-                refreshes every minute
+                · Observed <RelativeTime value={meta.asOf} /> ({" "}
+                <LocalTime
+                  value={meta.asOf}
+                  options={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }}
+                />
+                ) · refreshes every minute
               </>
             )}
           </p>

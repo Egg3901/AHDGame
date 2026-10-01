@@ -174,7 +174,7 @@ export async function GET(request: Request) {
     for (const action of actions) {
       const notes = actionsByTurn.get(action._id.turn) ?? [];
       notes.push(
-        `${action.count} ${action._id.kind === "stock_split" ? "stock split" : "reverse split"} events recorded`
+        `${action.count} ${action._id.kind === "stock_split" ? "stock split" : "reverse split"} ${action.count === 1 ? "event" : "events"} recorded`
       );
       actionsByTurn.set(action._id.turn, notes);
     }
