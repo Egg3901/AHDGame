@@ -651,3 +651,26 @@ describe("applyLegislationEffect — war declarations", () => {
     expect(declareWarSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("applyLegislationEffect — provisions billEnactment applies itself", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+  });
+
+  it.each([
+    { type: "electoral_law" as const, votingAge: 18 },
+    { type: "central_bank_independence" as const, action: "grant" as const },
+    { type: "euro_adoption" as const },
+    { type: "economic_system_reform" as const, target: "market" as const },
+  ])("$type never reaches the tariff write", async (provision) => {
+    await applyLegislationEffect(db as unknown as Db, {
+      _id: new ObjectId(),
+      countryId: "DD",
+      stateId: "dd_national",
+      provisions: [provision],
+    });
+    expect(db.collectionMocks["tariffs"]).toBeUndefined();
+  });
+});

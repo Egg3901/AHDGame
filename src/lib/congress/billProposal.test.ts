@@ -412,3 +412,57 @@ it("rejects a national rate-setting independence proposal after euro accession",
     error: expect.stringContaining("shared institution"),
   });
 });
+
+describe("economic system reform provisions", () => {
+  let reformDb: MockDb;
+  beforeEach(() => {
+    reformDb = createMockDb();
+  });
+
+  it("accepts a reform on an economy bill in a planned-era country", async () => {
+    const result = await validateBillProvisions(
+      reformDb as unknown as Db,
+      [{ type: "economic_system_reform", target: "market" }],
+      "economy",
+      "DD"
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.economicSystemReformProvisions).toEqual([
+        { type: "economic_system_reform", target: "market" },
+      ]);
+    }
+  });
+
+  it("refuses a market country", async () => {
+    const result = await validateBillProvisions(
+      reformDb as unknown as Db,
+      [{ type: "economic_system_reform", target: "command" }],
+      "economy",
+      "US"
+    );
+    expect(result).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it("refuses other bill categories, unknown targets and duplicates", async () => {
+    for (const [provisions, category] of [
+      [[{ type: "economic_system_reform", target: "market" }], "social"],
+      [[{ type: "economic_system_reform", target: "anarchy" }], "economy"],
+      [
+        [
+          { type: "economic_system_reform", target: "market" },
+          { type: "economic_system_reform", target: "dual_track" },
+        ],
+        "economy",
+      ],
+    ] as const) {
+      const result = await validateBillProvisions(
+        reformDb as unknown as Db,
+        provisions as unknown as unknown[],
+        category,
+        "DD"
+      );
+      expect(result.ok).toBe(false);
+    }
+  });
+});

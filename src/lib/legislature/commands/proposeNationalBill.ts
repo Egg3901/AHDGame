@@ -352,6 +352,7 @@ export async function proposeNationalBill(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    economicSystemReformProvisions: validatedEconomicSystemReformProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
   } = validation;
@@ -504,6 +505,7 @@ export async function proposeNationalBill(
       unionLawProvisionCount: validatedUnionLawProvisions.length,
       standaloneProvisionCount:
         validatedCentralBankProvisions.length +
+        validatedEconomicSystemReformProvisions.length +
         validatedElectoralLawProvisions.length +
         validatedEuroAdoptionProvisions.length +
         validatedEuropeanTreatyProvisions.length,
@@ -567,6 +569,7 @@ export async function proposeNationalBill(
     ...validatedUnionLawProvisions,
     ...validatedElectoralLawProvisions,
     ...validatedCentralBankProvisions,
+    ...validatedEconomicSystemReformProvisions,
     ...validatedEuroAdoptionProvisions,
     ...validatedEuropeanTreatyProvisions,
   ];
