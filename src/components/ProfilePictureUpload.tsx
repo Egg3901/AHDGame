@@ -27,6 +27,7 @@ export function ProfilePictureUpload({
   patreonExpiresAt,
   isAdmin,
   uploadUrl,
+  hideHint = false,
 }: {
   currentUrl?: string | null;
   characterName: string;
@@ -41,6 +42,8 @@ export function ProfilePictureUpload({
   isAdmin?: boolean;
   /** Override the upload endpoint (default: /api/upload/avatar) */
   uploadUrl?: string;
+  /** Keep the size hint screen-reader only, as the hero size already does. */
+  hideHint?: boolean;
 }) {
   const allowGifPfp = canUploadGifAvatar(patreonTier ?? null, patreonExpiresAt ?? null, isAdmin);
   const acceptTypes = allowGifPfp
@@ -67,7 +70,7 @@ export function ProfilePictureUpload({
 
   const initial = characterName.charAt(0).toUpperCase();
   const hintId = useId();
-  const showVisibleHint = size !== "hero";
+  const showVisibleHint = size !== "hero" && !hideHint;
 
   return (
     <div className="group relative">

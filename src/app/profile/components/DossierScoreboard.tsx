@@ -7,6 +7,7 @@ import { ACTION_HOARDING_PENALTY } from "@/lib/actions/recommendationsConstants"
 import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
 import { ActionsTooltipBody } from "./PoliticalStanding";
+import { SectionHeader } from "./ProfileMeters";
 
 interface DossierScoreboardProps {
   character: Character;
@@ -53,7 +54,8 @@ function signed(value: number, digits: number): string {
 /**
  * Record variant of Political Standing (experiment `profile-redesign`).
  * One row per measure: its value, its change per turn, and what it means.
- * Colour appears only on gains, losses and penalties.
+ * Uses the site's card, section header and semantic colour tokens so it
+ * follows the active theme; colour appears only on gains, losses and penalties.
  */
 export function DossierScoreboard({
   character,
@@ -171,49 +173,80 @@ export function DossierScoreboard({
     });
   }
 
+  const toneClass: Record<Tone, string> = {
+    neutral: "text-muted",
+    gain: "text-success",
+    loss: "text-error",
+  };
+
   return (
-    <section className="dossier-panel">
-      <header className="dossier-panel-head">
-        <h2>{t("title")}</h2>
-        <Link href="/actions" className="dossier-link">
-          {t("campaignOffice")}
-        </Link>
-      </header>
-      <table className="dossier-table">
+    <section className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
+      <div className="px-4 pt-5 pb-0 sm:px-6">
+        <SectionHeader
+          action={
+            <Link
+              href="/actions"
+              className="text-xs font-medium text-primary/80 hover:text-primary hover:underline"
+            >
+              {t("campaignOffice")}
+            </Link>
+          }
+        >
+          {t("title")}
+        </SectionHeader>
+      </div>
+      <table className="w-full border-collapse text-sm">
         <thead>
-          <tr>
-            <th scope="col">{td("colMeasure")}</th>
-            <th scope="col" className="dossier-num">
+          <tr className="border-b border-card-border whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted">
+            <th scope="col" className="px-4 pb-2 text-left font-semibold sm:px-6">
+              {td("colMeasure")}
+            </th>
+            <th scope="col" className="px-2 pb-2 text-right font-semibold sm:px-3">
               {td("colValue")}
             </th>
-            <th scope="col" className="dossier-num">
+            <th scope="col" className="pb-2 pl-2 pr-4 text-right font-semibold sm:pl-3 md:pr-3">
               {td("colPerTurn")}
             </th>
-            <th scope="col" className="dossier-col-note">
+            <th
+              scope="col"
+              className="hidden w-2/5 px-6 pb-2 text-left font-semibold md:table-cell"
+            >
               {td("colNotes")}
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.key}>
-              <th scope="row">
-                <InfoTooltip trigger={<span className="dossier-measure">{row.label}</span>}>
+            <tr
+              key={row.key}
+              className="border-b border-card-border/40 last:border-b-0 transition-colors hover:bg-card-elevated/40"
+            >
+              <th
+                scope="row"
+                className="px-4 py-3 text-left align-baseline font-semibold text-foreground sm:px-6"
+              >
+                <InfoTooltip trigger={<span className="cursor-help">{row.label}</span>}>
                   <div className="text-muted space-y-1">{row.tooltip}</div>
                 </InfoTooltip>
                 {row.note && (
-                  <span className={`dossier-note-inline dossier-tone-${row.noteTone ?? "neutral"}`}>
+                  <span
+                    className={`mt-0.5 block text-xs font-normal md:hidden ${toneClass[row.noteTone ?? "neutral"]}`}
+                  >
                     {row.note}
                   </span>
                 )}
               </th>
-              <td className="dossier-num dossier-value">{row.value}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-right align-baseline font-bold tabular-nums text-foreground">
+                {row.value}
+              </td>
               <td
-                className={`dossier-num dossier-tone-${row.perTurn ? row.perTurnTone : "neutral"}`}
+                className={`whitespace-nowrap py-3 pl-3 pr-4 text-right md:pr-3 align-baseline tabular-nums ${toneClass[row.perTurn ? row.perTurnTone : "neutral"]}`}
               >
                 {row.perTurn}
               </td>
-              <td className={`dossier-col-note dossier-tone-${row.noteTone ?? "neutral"}`}>
+              <td
+                className={`hidden px-6 py-3 align-baseline text-xs md:table-cell ${toneClass[row.noteTone ?? "neutral"]}`}
+              >
                 {row.note}
               </td>
             </tr>
