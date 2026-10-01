@@ -778,8 +778,11 @@ class InMemoryCollection {
             const entries = Object.entries(spec) as Array<[string, number]>;
             rows = [...rows].sort((a, b) => {
               for (const [field, dir] of entries) {
-                const av = getPath(a, field) as number | string;
-                const bv = getPath(b, field) as number | string;
+                // ObjectIds compare by value, so equal ids fall through to the next key.
+                const sortable = (value: unknown) =>
+                  value instanceof ObjectId ? value.toHexString() : value;
+                const av = sortable(getPath(a, field)) as number | string;
+                const bv = sortable(getPath(b, field)) as number | string;
                 if (av === bv) continue;
                 if (av === undefined) return 1;
                 if (bv === undefined) return -1;

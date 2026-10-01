@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { ObjectId, type Db } from "mongodb";
 import {
+  loadPriorCreditRatings,
   resolveSnapshotDenomination,
   foldDividendTaxIntoTaxMaps,
   isStockMarketCorporation,
 } from "./marketCapSnapshot";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 describe("isStockMarketCorporation", () => {
   it("excludes private and hidden corporations from stock-market capitalization", () => {
@@ -125,5 +128,35 @@ describe("foldDividendTaxIntoTaxMaps (#3115)", () => {
     const out = foldDividendTaxIntoTaxMaps(new Map([["US", 10]]), new Map([["US", 10]]), undefined);
     expect(out.divTaxTotalAnchor).toBe(0);
     expect(out.mergedTaxByCountry.get("US")).toBe(10);
+  });
+});
+
+describe("loadPriorCreditRatings", () => {
+  it("returns each corporation's most recent string rating, looking past unrated rows", async () => {
+    const memory = createInMemoryDb();
+    const rated = new ObjectId();
+    const unratedLatest = new ObjectId();
+    const neverRated = new ObjectId();
+    const untracked = new ObjectId();
+    memory.seed("corporationHistory", [
+      { _id: new ObjectId(), corporationId: rated, turn: 9, creditRating: "A" },
+      { _id: new ObjectId(), corporationId: rated, turn: 10, creditRating: "AA" },
+      { _id: new ObjectId(), corporationId: unratedLatest, turn: 8, creditRating: "BB" },
+      { _id: new ObjectId(), corporationId: unratedLatest, turn: 9, creditRating: "BBB" },
+      { _id: new ObjectId(), corporationId: unratedLatest, turn: 10 },
+      { _id: new ObjectId(), corporationId: neverRated, turn: 10, creditRating: null },
+      { _id: new ObjectId(), corporationId: untracked, turn: 10, creditRating: "C" },
+    ]);
+
+    const ratings = await loadPriorCreditRatings(memory as unknown as Db, [
+      rated,
+      unratedLatest,
+      neverRated,
+    ]);
+
+    expect(Object.fromEntries(ratings)).toEqual({
+      [rated.toString()]: "AA",
+      [unratedLatest.toString()]: "BBB",
+    });
   });
 });
