@@ -373,44 +373,38 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
         { _id: residentId },
         { $set: { currentOffice: { type: "parliamentaryCabinet" } } }
       );
-    await db
-      .collection<Fixture>("electedOfficials")
-      .insertOne({
-        _id: new ObjectId(),
-        countryId: "CS",
-        officeType: "federalAssemblyDeputy",
-        nppId: deputyId,
-      });
+    await db.collection<Fixture>("electedOfficials").insertOne({
+      _id: new ObjectId(),
+      countryId: "CS",
+      officeType: "federalAssemblyDeputy",
+      nppId: deputyId,
+    });
     await db.collection<Fixture>("cabinetMembers").insertMany([
       { _id: new ObjectId(), countryId: "CS", nppId: deputyId },
       { _id: new ObjectId(), countryId: "PL", nppId: foreignId },
     ]);
-    await db
-      .collection<Fixture>("governmentFormations")
-      .insertOne({
-        _id: "CS",
-        countryId: "CS",
-        status: "formed",
-        pmNppId: deputyId,
-        pmName: "Prime Minister",
-        hosNppId: deputyId,
-        hosName: "Head of State",
-        coalitionPartyIds: ["1"],
-        activeVoteId: new ObjectId(),
-        governingAgenda: { agenda: "old" },
-      });
+    await db.collection<Fixture>("governmentFormations").insertOne({
+      _id: "CS",
+      countryId: "CS",
+      status: "formed",
+      pmNppId: deputyId,
+      pmName: "Prime Minister",
+      hosNppId: deputyId,
+      hosName: "Head of State",
+      coalitionPartyIds: ["1"],
+      activeVoteId: new ObjectId(),
+      governingAgenda: { agenda: "old" },
+    });
     await db
       .collection<Fixture>("elections")
       .insertOne({ _id: electionId, countryId: "CS", status: "upcoming" });
-    await db
-      .collection<Fixture>("electionCandidates")
-      .insertOne({
-        _id: new ObjectId(),
-        electionId,
-        countryId: "CS",
-        nppId: deputyId,
-        status: "active",
-      });
+    await db.collection<Fixture>("electionCandidates").insertOne({
+      _id: new ObjectId(),
+      electionId,
+      countryId: "CS",
+      nppId: deputyId,
+      status: "active",
+    });
     for (const collectionName of ["pmAppointmentVotes", "noConfidenceVotes"])
       await db.collection<Fixture>(collectionName).insertMany([
         { _id: new ObjectId(), countryId: "CS", status: "active" },
