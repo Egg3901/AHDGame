@@ -232,9 +232,6 @@
         "retro": "Retro",
         "solarized": "Solarized"
       },
-      "videoPreferences": "Videoeinstellungen",
-      "disableAutoplay": "Autoplay auf Profilen anderer Spieler deaktivieren",
-      "disableAutoplayHint": "Wenn aktiviert, werden Wahlkampfsongs auf Profilen anderer Spieler nicht automatisch abgespielt (betrifft nur deine Ansicht)",
       "interfaceTitle": "Oberfläche",
       "classicUi": "Klassische Oberfläche verwenden",
       "classicUiHint": "Die neue Navigationsleiste und das CEO Command Center sind jetzt Standard. Aktiviere dies, um zur klassischen Navigationsleiste und den alten Konzernseiten zurückzukehren.",
@@ -416,7 +413,6 @@
       "invalid": "Keine gültige YouTube-URL oder Video-ID.",
       "thumbAlt": "Vorschau des Video-Thumbnails",
       "preview": "Vorschau",
-      "autoplay": "Autoplay auf meinem Profil aktivieren (andere können dies in ihren Einstellungen weiterhin deaktivieren)",
       "save": "Wahlkampfsong speichern"
     },
     "referrals": {

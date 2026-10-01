@@ -24,8 +24,6 @@ interface ProfileHeaderProps {
   officeLabels: readonly string[];
   stateLabel: string;
   campaignSongUrl?: string | null;
-  campaignSongAutoplay?: boolean;
-  viewerDisablesAutoplay?: boolean;
   countrySlug: string;
   patreonHighlightColor?: string | null;
   patreonTier?: PatreonTier;
@@ -53,8 +51,6 @@ export function ProfileHeader({
   officeLabels,
   stateLabel,
   campaignSongUrl,
-  campaignSongAutoplay,
-  viewerDisablesAutoplay,
   countrySlug,
   patreonHighlightColor,
   patreonTier,
@@ -320,13 +316,8 @@ export function ProfileHeader({
             )}
           </div>
           {campaignSongUrl && (
-            <div className="mt-4 rounded-lg border border-card-border bg-card-elevated/40 p-3">
-              <CampaignSongPlayer
-                videoId={campaignSongUrl}
-                ownerAutoplay={campaignSongAutoplay ?? false}
-                viewerDisablesAutoplay={viewerDisablesAutoplay ?? false}
-                characterName={character.name}
-              />
+            <div className="store-app-hidden mt-4 rounded-lg border border-card-border bg-card-elevated/40 p-3">
+              <CampaignSongPlayer videoId={campaignSongUrl} characterName={character.name} />
             </div>
           )}
         </div>

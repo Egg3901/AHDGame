@@ -127,7 +127,6 @@ export function SettingsPageContent() {
       ? (requested as SectionId)
       : null;
   });
-  const [disableAutoplayOnOtherProfiles, setDisableAutoplayOnOtherProfiles] = useState(false);
   const [enableExperimentalUI, setEnableExperimentalUI] = useState(true);
   const [referralCount, setReferralCount] = useState(0);
   const [userId, setUserId] = useState("");
@@ -236,7 +235,6 @@ export function SettingsPageContent() {
   useEffect(() => {
     if (!rawUser) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initialisation from already-fetched server data
-    setDisableAutoplayOnOtherProfiles(rawUser.disableAutoplayOnOtherProfiles ?? false);
     setEnableExperimentalUI(rawUser.enableExperimentalUI !== false);
     setReferralCount(rawUser.referralCount ?? 0);
     setUserId(rawUser.id ?? "");
@@ -315,19 +313,6 @@ export function SettingsPageContent() {
       controller.abort();
     };
   }, [loading, isImperial, activeRegularCharacterId, rawUser]);
-
-  const handleAutoplayPreference = async (value: boolean) => {
-    setDisableAutoplayOnOtherProfiles(value);
-    try {
-      await fetch("/api/settings/autoplay-preference", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disableAutoplayOnOtherProfiles: value }),
-      });
-    } catch {
-      // Silently fail
-    }
-  };
 
   const handleExperimentalUiPreference = async (value: boolean) => {
     setEnableExperimentalUI(value);
@@ -531,8 +516,6 @@ export function SettingsPageContent() {
       case "appearance":
         return (
           <AppearanceSection
-            disableAutoplayOnOtherProfiles={disableAutoplayOnOtherProfiles}
-            onAutoplayChange={handleAutoplayPreference}
             enableExperimentalUI={enableExperimentalUI}
             onExperimentalUiChange={handleExperimentalUiPreference}
           />

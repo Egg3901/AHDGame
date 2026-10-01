@@ -20,7 +20,6 @@ function extractYouTubeId(input: string): string | null {
 
 interface CharacterData {
   campaignSongUrl?: string;
-  campaignSongAutoplay?: boolean;
 }
 
 interface Props {
@@ -31,9 +30,6 @@ interface Props {
 export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
   const t = useTranslations("settings");
   const [campaignSongUrl, setCampaignSongUrl] = useState(character.campaignSongUrl ?? "");
-  const [campaignSongAutoplay, setCampaignSongAutoplay] = useState(
-    character.campaignSongAutoplay ?? false
-  );
   const [campaignSongSaving, setCampaignSongSaving] = useState(false);
   const [campaignSongMsg, setCampaignSongMsg] = useState<{ text: string; ok: boolean } | null>(
     null
@@ -54,13 +50,13 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
       const res = await fetch("/api/settings/campaign-song", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignSongUrl, campaignSongAutoplay }),
+        body: JSON.stringify({ campaignSongUrl }),
       });
       const data = await res.json();
       if (res.ok) {
         setCampaignSongSaved(true);
         setTimeout(() => setCampaignSongSaved(false), 1500);
-        onCharacterUpdate({ campaignSongUrl: data.videoId || "", campaignSongAutoplay });
+        onCharacterUpdate({ campaignSongUrl: data.videoId || "" });
         if (data.videoId) setCampaignSongUrl(data.videoId);
       } else {
         setCampaignSongMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
@@ -118,16 +114,6 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
             </div>
           )}
         </div>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={campaignSongAutoplay}
-            onChange={(e) => setCampaignSongAutoplay(e.target.checked)}
-            className="h-4 w-4 rounded border-card-border bg-background text-primary focus:ring-primary"
-            disabled={campaignSongSaving}
-          />
-          <span className="text-sm">{t("campaignSong.autoplay")}</span>
-        </label>
         {campaignSongMsg && (
           <MessageBanner
             ok={campaignSongMsg.ok}
