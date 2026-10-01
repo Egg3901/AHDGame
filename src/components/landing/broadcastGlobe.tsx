@@ -311,8 +311,16 @@ function UplinkBeam({ bind }: { bind: BindRef }) {
         <circle ref={bind("beam:ring")} fill="none" stroke={SIGNAL_RED} strokeWidth={0.6} />
         <circle ref={bind("beam:ring2")} fill="none" stroke={SIGNAL_RED} strokeWidth={0.45} />
         <circle r={1.2} fill={SIGNAL_RED} />
-        {/* Set like the crawl: place in white, date in red. */}
-        <text x={3.6} y={-3} fontSize={4.2} fontFamily={MONO} letterSpacing={0.5}>
+        {/* Set like the crawl: place in white, date in red. Phones hide it: there
+            the globe sits behind the headline and the label reads as noise. */}
+        <text
+          x={3.6}
+          y={-3}
+          fontSize={4.2}
+          fontFamily={MONO}
+          letterSpacing={0.5}
+          className="max-sm:hidden"
+        >
           <tspan ref={bind("beam:place")} fill="#ffffff" />
           <tspan ref={bind("beam:date")} dx={2.4} fill={SIGNAL_RED} />
         </text>

@@ -44,6 +44,8 @@ describe("BroadcastHeadline", () => {
       <BroadcastHeadline text="A political simulation set in 1991." year={1991} />
     );
     const h1 = container.querySelector("h1")!;
+    // The rolling digits are CSS, so the text is the sentence and nothing else.
+    expect(h1.textContent).toBe("A political simulation set in 1991.");
     expect(h1.querySelector(".sr-only")?.textContent).toBe("1991");
     expect(h1.querySelector("[aria-hidden='true']")).not.toBeNull();
     expect(shownYear(container)).toBe("1991");
