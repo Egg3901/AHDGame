@@ -265,7 +265,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     });
   });
 
-  it("keeps activation below 140 commands with one hundred protected residents", async () => {
+  it("keeps activation below 150 commands with one hundred protected residents", async () => {
     const db = client.db(databaseName);
     await db.collection("characters").insertMany(
       Array.from({ length: 99 }, () => ({
@@ -281,7 +281,8 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       await processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
     ).toBe(1);
     const activationCommands = commands;
-    expect(activationCommands).toBeLessThanOrEqual(140);
+    // Measured 146 commands after fixed-cost retirement of dissolved institutions.
+    expect(activationCommands).toBeLessThanOrEqual(150);
     expect(
       await db.collection("characters").countDocuments({
         cash: 50,
@@ -350,6 +351,137 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     );
     expect(recovery?.successorContributionsMinor.SK).toBe(2 * shortfall!.successorArrearsMinor.SK);
     expect(recovery?.bridgeOutstandingMinor).toBe(0);
+  });
+
+  it("retires dissolved institutions atomically, preserves history and retries without ghosts", async () => {
+    const db = client.db(databaseName);
+    const deputyId = new ObjectId();
+    const foreignId = new ObjectId();
+    const electionId = new ObjectId();
+    await db.collection<Fixture>("npps").insertMany([
+      {
+        _id: deputyId,
+        countryId: "CS",
+        currentOffice: { type: "federalAssemblyDeputy" },
+        liquidCapital: 50,
+      },
+      { _id: foreignId, countryId: "PL", currentOffice: { type: "sejmDeputy" } },
+    ]);
+    await db
+      .collection("characters")
+      .updateOne(
+        { _id: residentId },
+        { $set: { currentOffice: { type: "parliamentaryCabinet" } } }
+      );
+    await db.collection<Fixture>("electedOfficials").insertOne({
+      _id: new ObjectId(),
+      countryId: "CS",
+      officeType: "federalAssemblyDeputy",
+      nppId: deputyId,
+    });
+    await db.collection<Fixture>("cabinetMembers").insertMany([
+      { _id: new ObjectId(), countryId: "CS", nppId: deputyId },
+      { _id: new ObjectId(), countryId: "PL", nppId: foreignId },
+    ]);
+    await db.collection<Fixture>("governmentFormations").insertOne({
+      _id: "CS",
+      countryId: "CS",
+      status: "formed",
+      pmNppId: deputyId,
+      pmName: "Prime Minister",
+      hosNppId: deputyId,
+      hosName: "Head of State",
+      coalitionPartyIds: ["1"],
+      activeVoteId: new ObjectId(),
+      governingAgenda: { agenda: "old" },
+    });
+    await db
+      .collection<Fixture>("elections")
+      .insertOne({ _id: electionId, countryId: "CS", status: "upcoming" });
+    await db.collection<Fixture>("electionCandidates").insertOne({
+      _id: new ObjectId(),
+      electionId,
+      countryId: "CS",
+      nppId: deputyId,
+      status: "active",
+    });
+    for (const collectionName of ["pmAppointmentVotes", "noConfidenceVotes"])
+      await db.collection<Fixture>(collectionName).insertMany([
+        { _id: new ObjectId(), countryId: "CS", status: "active" },
+        { _id: new ObjectId(), countryId: "PL", status: "active" },
+        { _id: new ObjectId(), countryId: "CS", status: "passed" },
+      ]);
+    await db.createCollection("federationSettlementApplications", {
+      validator: { blocked: { $eq: true } },
+    });
+    await expect(
+      processRatifiedFederationSettlements(db, "1991-default", 181, 1992, new Date(2))
+    ).rejects.toThrow(/validation/i);
+    expect(await db.collection("federationArchivedPoliticalRows").countDocuments({})).toBe(0);
+    expect(await db.collection("cabinetMembers").countDocuments({ countryId: "CS" })).toBe(1);
+    expect(await db.collection("npps").findOne({ _id: deputyId })).toMatchObject({
+      currentOffice: { type: "federalAssemblyDeputy" },
+    });
+    expect(
+      await db.collection("electionCandidates").countDocuments({ electionId, status: "active" })
+    ).toBe(1);
+    expect(
+      await db.collection<Fixture>("governmentFormations").findOne({ _id: "CS" })
+    ).toMatchObject({ status: "formed", hosName: "Head of State" });
+    await db.command({ collMod: "federationSettlementApplications", validator: {} });
+    commands = 0;
+    expect(
+      await processRatifiedFederationSettlements(db, "1991-default", 182, 1992, new Date(3))
+    ).toBe(1);
+    const activationCommands = commands;
+    expect(activationCommands).toBeLessThanOrEqual(180);
+    expect(await db.collection("npps").findOne({ _id: deputyId })).toMatchObject({
+      currentOffice: null,
+      liquidCapital: 50,
+    });
+    expect(await db.collection("npps").findOne({ _id: foreignId })).toMatchObject({
+      currentOffice: { type: "sejmDeputy" },
+    });
+    expect(await db.collection("characters").findOne({ _id: residentId })).toMatchObject({
+      currentOffice: null,
+      cash: 50,
+      federationPendingResidenceId: "1991-default:cs-1991-default:1",
+    });
+    expect(await db.collection("cabinetMembers").countDocuments({ countryId: "CS" })).toBe(0);
+    expect(await db.collection("cabinetMembers").countDocuments({ countryId: "PL" })).toBe(1);
+    expect(
+      await db.collection("electionCandidates").countDocuments({ electionId, status: "withdrawn" })
+    ).toBe(1);
+    for (const collectionName of ["pmAppointmentVotes", "noConfidenceVotes"]) {
+      expect(
+        await db.collection(collectionName).countDocuments({ countryId: "CS", status: "active" })
+      ).toBe(0);
+      expect(
+        await db.collection(collectionName).countDocuments({ countryId: "PL", status: "active" })
+      ).toBe(1);
+      expect(
+        await db.collection(collectionName).countDocuments({ countryId: "CS", status: "passed" })
+      ).toBe(1);
+    }
+    expect(
+      await db.collection<Fixture>("governmentFormations").findOne({ _id: "CS" })
+    ).toMatchObject({
+      status: "collapsed",
+      pmNppId: null,
+      hosNppId: null,
+      coalitionPartyIds: null,
+      activeVoteId: null,
+      totalSeats: 0,
+      governingAgenda: null,
+    });
+    expect(await db.collection("federationArchivedPoliticalRows").countDocuments({})).toBe(3);
+    expect(
+      await processRatifiedFederationSettlements(db, "1991-default", 183, 1992, new Date(4))
+    ).toBe(0);
+    expect(await db.collection("federationArchivedPoliticalRows").countDocuments({})).toBe(3);
+    console.info(
+      `Federation institution qualification: activation=${activationCommands} commands; rollback, history and retry passed`
+    );
   });
 
   it("rolls back a late receipt failure and can apply on a later turn", async () => {

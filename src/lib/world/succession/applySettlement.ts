@@ -1,3 +1,6 @@
+/** Apply a prepared, ratified settlement under the caller's turn transaction.
+ * The receipt and all physical, fiscal and player effects commit together.
+ * The caller must hold the turn lock and pass its exact current turn. */
 import type { ClientSession, Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { verifyLiveFederationSettlementIntent } from "./settlementIntent";
@@ -25,9 +28,6 @@ import {
   validateAppliedEntityStates,
 } from "./runtimeEntities";
 
-/** Apply a prepared, ratified settlement under the caller's turn transaction.
- * The receipt and all physical, fiscal and player effects commit together.
- * The caller must hold the turn lock and pass its exact current turn. */
 export async function applyPreparedFederationSettlement(input: {
   db: Db;
   session: ClientSession;
@@ -134,6 +134,7 @@ export async function applyPreparedFederationSettlement(input: {
     await materializeFederationFederalRetirement({
       db,
       session,
+      applicationId,
       sourceCountryId,
       appliedOnTurn,
       now,
