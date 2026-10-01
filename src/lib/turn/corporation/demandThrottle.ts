@@ -47,6 +47,66 @@
  */
 
 /**
+ * ─── Mixed-output plants (ticket 1370) ──────────────────────────────────────
+ *
+ * `sector.soldUnits` is produced units times the sector's blended
+ * `soldFraction`, and clearing blends its output legs by SUPPLY RATE, which is
+ * the same as weighting them by value at BASE prices. That is the wrong scale
+ * exactly when the throttle matters: a hardware plant (electronics 0.55,
+ * software 0.15) sold every unit of electronics into a 36% world shortage
+ * priced at 8x base, sold a tenth of its software into a glut priced at 2x,
+ * read a blended 0.81, and was cut to the 10% floor. Every turn it sold out
+ * again and every turn the target (0.81 x 1.15 < 1) shrank it, so the plant
+ * could never climb back while its main market went unserved.
+ *
+ * `throttleSoldUnits` restates last turn's sales by the value buyers put on
+ * each leg: per-leg fill weighted by rate x (price / base), at the same lagged
+ * market prices clearing realizes against. A plant whose valuable output sells
+ * ramps; a plant whose valuable output is the glutted leg still throttles, so
+ * the guard against running flat out into a glut is unchanged. Single-output
+ * sectors return `soldUnits` untouched.
+ */
+export function throttleSoldUnits(args: {
+  /** Last turn's produced units (persisted). */
+  producedUnits: number | null | undefined;
+  /** Last turn's sold units (persisted, rate-blended). */
+  soldUnits: number | null | undefined;
+  /** Last turn's fill per output commodity (persisted with `soldUnits`). */
+  soldByCommodity?: Partial<Record<string, number>> | null;
+  /** The sector's output mix. */
+  supplyRates?: Partial<Record<string, number>> | null;
+  /** Lagged price over base for one output, in the sector's own market. */
+  priceRatioFor: (commodity: string) => number | null | undefined;
+}): number | null | undefined {
+  const { producedUnits, soldUnits, soldByCommodity, supplyRates } = args;
+  if (
+    !soldByCommodity ||
+    !supplyRates ||
+    typeof producedUnits !== "number" ||
+    !Number.isFinite(producedUnits) ||
+    producedUnits <= 0
+  ) {
+    return soldUnits;
+  }
+  let weightSum = 0;
+  let soldWeight = 0;
+  let legs = 0;
+  for (const [commodity, rate] of Object.entries(supplyRates)) {
+    if (!(typeof rate === "number" && rate > 0)) continue;
+    const fill = soldByCommodity[commodity];
+    if (!(typeof fill === "number" && Number.isFinite(fill))) continue;
+    const ratio = args.priceRatioFor(commodity);
+    const weight =
+      rate * (typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0 ? ratio : 1);
+    weightSum += weight;
+    soldWeight += weight * Math.max(0, Math.min(1, fill));
+    legs += 1;
+  }
+  if (legs < 2 || !(weightSum > 0)) return soldUnits;
+  return producedUnits * (soldWeight / weightSum);
+}
+
+/**
  * How far above last turn's sales a plant keeps producing, so it can discover
  * demand it is not currently meeting and ramp back into a recovering market.
  * Without it a sector that ever throttled could never grow again.

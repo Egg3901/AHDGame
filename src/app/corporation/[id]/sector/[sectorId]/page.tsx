@@ -786,7 +786,12 @@ export default function SectorDetailPage() {
                 clearingEnabled={!!pricing}
                 room={
                   plants
-                    ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                    ? {
+                        headroomUnits: plants.headroomUnits,
+                        demandGapUnits: plants.demandGapUnits,
+                        roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
+                        unclaimedSharePct: plants.unclaimedSharePct,
+                      }
                     : null
                 }
                 compact
@@ -942,7 +947,12 @@ export default function SectorDetailPage() {
               clearingEnabled={!!pricing}
               room={
                 plants
-                  ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                  ? {
+                      headroomUnits: plants.headroomUnits,
+                      demandGapUnits: plants.demandGapUnits,
+                      roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
+                      unclaimedSharePct: plants.unclaimedSharePct,
+                    }
                   : null
               }
             />

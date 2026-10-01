@@ -828,6 +828,14 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
+        // Every producer's capacity in this cell (the focal sector included),
+        // so "Unclaimed share" reads the same pool `headroomUnits` measures.
+        ownedCellCapacityUnits: siblingsSectors.reduce((sum, s) => {
+          const units = s.operatingCapacityUnits ?? s.capitalStock;
+          return (
+            sum + (typeof units === "number" && Number.isFinite(units) && units > 0 ? units : 0)
+          );
+        }, 0),
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         investment: {
           overheadDailyAnchor:
