@@ -3,7 +3,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { Election } from "@/lib/db/types";
 import { admitRussianDumaNpcNominees } from "./dumaNpcAdmission";
 import { openRussianDumaElection } from "./dumaElectionOpening";
-import { certifyRussianDumaElection, RUSSIAN_DUMA_RESULTS_COLLECTION } from "./dumaElectionResult";
+import {
+  certifyRussianDumaElection,
+  RUSSIAN_DUMA_RESULTS_COLLECTION,
+  type RussianDumaResultRecord,
+} from "./dumaElectionResult";
 import { RU_1991_ECONOMIC_REGION_POPULATION } from "./data/ruPopulation1991";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
@@ -199,7 +203,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     });
     expect(countedWithdrawal.candidates[0].votes).toBeGreaterThan(0);
     const snapshot = await db
-      .collection(RUSSIAN_DUMA_RESULTS_COLLECTION)
+      .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
       .findOne({ _id: opened!.cohortId.toHexString() });
     expect(snapshot?.ballots).toEqual(result.ballots);
 
