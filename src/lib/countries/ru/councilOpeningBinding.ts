@@ -93,7 +93,14 @@ export async function loadRussianCouncilOpeningBinding(input: {
       },
       {
         session,
-        projection: { cohortId: 1, rootCohortId: 1, generation: 1, ballots: 1, seatedOnTurn: 1 },
+        projection: {
+          cohortId: 1,
+          rootCohortId: 1,
+          generation: 1,
+          ballots: 1,
+          seatedOnTurn: 1,
+          resolvedOnTurn: 1,
+        },
       }
     );
   if (
@@ -130,5 +137,5 @@ export async function loadRussianCouncilOpeningBinding(input: {
     id: opening.electionIds[index],
     predecessorId: row.id,
   }));
-  return { opening, rootCohortId, ballots };
+  return { opening, rootCohortId, ballots, previous };
 }
