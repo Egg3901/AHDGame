@@ -9,6 +9,12 @@ export interface VoteTurnSnapshot {
   sharesPct: Record<string, number>;
   /** Multi-seat races only (house, stateSenate, commons, …): Hamilton seat projection at this turn. */
   seatsEstimate?: Record<string, number>;
+  /** Native Council snapshots count valid voters separately from candidate marks. */
+  russianCouncilBallot?: {
+    registeredVoters: number;
+    validBallots: number;
+    againstAllVotes: number;
+  };
 }
 
 /** Stored when primary resolves — canonical primary results for wiki/history. */
@@ -38,6 +44,16 @@ export interface ElectionVoteTally {
   /** Native first-Duma valid against-all ballots and certification outcome. */
   russianDumaBallot?: {
     againstAllVotes: number;
+    invalidated?: boolean;
+    outcome?: "elected" | "repeat";
+    certifiedCohortId?: ObjectId;
+  };
+  /** Native Council candidate marks may total up to twice valid participation. */
+  russianCouncilBallot?: {
+    registeredVoters: number;
+    validBallots: number;
+    againstAllVotes: number;
+    registrationOrderByCandidate: Record<string, number>;
     invalidated?: boolean;
     outcome?: "elected" | "repeat";
     certifiedCohortId?: ObjectId;

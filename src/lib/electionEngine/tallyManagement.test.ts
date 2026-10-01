@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ObjectId } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import type {
@@ -480,6 +480,166 @@ describe("accumulateVoteTurn — vote accumulation", () => {
         { electionId },
         { projection: { candidateId: 1, campaignStrength: 1 } }
       );
+    }
+  );
+
+  it.each(["new", "withdrawn", "against-all"])(
+    "counts native Council %s ballots separately from marks",
+    async (kind) => {
+      const { accumulateVoteTurn } = await import("./tallyManagement");
+      const electionId = new ObjectId();
+      const candidates = Array.from({ length: 3 }, (_, order) =>
+        makeCandidate({
+          electionId,
+          countryId: "RU",
+          russianCouncilNomination: { registrationOrder: order },
+        })
+      );
+      const election = makeElection({
+        _id: electionId,
+        countryId: "RU",
+        electionType: "federationCouncilMember",
+        state: "CEN",
+        seatId: "RU-council-77",
+        totalSeats: 2,
+        russianCouncilRound: {
+          cohortId: new ObjectId(),
+          mandateSinceTurn: 129,
+          registeredVoters: 100,
+          districtNumber: 77,
+        },
+      });
+      const withdrawn = new ObjectId().toHexString();
+      const priorVotes =
+        kind === "withdrawn"
+          ? {
+              [withdrawn]: 60,
+              [candidates[0]._id.toHexString()]: 40,
+              [candidates[1]._id.toHexString()]: 30,
+              [candidates[2]._id.toHexString()]: 10,
+            }
+          : {};
+      await setupHappyPath({
+        electionId,
+        election,
+        candidates,
+        existingTallyVotes: priorVotes,
+        voteResult: Object.fromEntries(
+          candidates.map((row) => [row._id.toHexString(), kind === "against-all" ? 0 : 100])
+        ),
+      });
+      const previous = await db.collectionMocks.electionVoteTallies.findOne();
+      if (kind === "withdrawn") {
+        previous.russianCouncilBallot = {
+          registeredVoters: 100,
+          validBallots: 80,
+          againstAllVotes: 0,
+          registrationOrderByCandidate: {
+            [withdrawn]: 3,
+            ...Object.fromEntries(candidates.map((row, order) => [row._id.toHexString(), order])),
+          },
+        };
+        previous.candidateNames[withdrawn] = "Withdrawn Council nominee";
+        previous.candidateParties[withdrawn] = "2";
+      }
+      await accumulateVoteTurn(electionId, 1, new Date("2024-01-01T00:00:00Z"));
+      const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
+      const ledger = update.$set.russianCouncilBallot;
+      expect(ledger.registeredVoters).toBe(100);
+      expect(ledger.validBallots).toBeGreaterThan(0);
+      expect(ledger.validBallots).toBeLessThanOrEqual(100);
+      expect(update.$push.turnSnapshots.russianCouncilBallot.validBallots).toBe(
+        ledger.validBallots
+      );
+      if (kind === "against-all") {
+        expect(ledger.againstAllVotes).toBe(ledger.validBallots);
+        expect(
+          Object.values(update.$set.totalVotes).reduce((a: number, b) => a + Number(b), 0)
+        ).toBe(0);
+      } else {
+        expect(ledger.validBallots).toBe(100);
+        expect(
+          Object.values(update.$set.totalVotes).reduce((a: number, b) => a + Number(b), 0)
+        ).toBeGreaterThan(100);
+      }
+      if (kind === "withdrawn") {
+        expect(update.$set.totalVotes[withdrawn]).toBe(60);
+        expect(update.$set.candidateNames[withdrawn]).toBe("Withdrawn Council nominee");
+        expect(update.$push.turnSnapshots.sharesPct[withdrawn]).toBe(60);
+      }
+      expect(
+        Object.values(update.$set.seatsEstimate).every((seats) => seats === 0 || seats === 1)
+      ).toBe(true);
+    }
+  );
+
+  it.skipIf(!process.env.FEDERATION_TEST_MONGO_URI)(
+    "persists Council voters and marks atomically on Mongo, retries a rejected write and replays once",
+    async () => {
+      const uri = process.env.FEDERATION_TEST_MONGO_URI!;
+      const address = new URL(uri);
+      if (address.protocol !== "mongodb:" || !["localhost", "127.0.0.1"].includes(address.hostname))
+        throw new Error("Council qualification accepts an explicit loopback test database only");
+      const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+      const databaseName = `ahd_test_council_tally_${new ObjectId().toHexString()}`;
+      try {
+        await client.connect();
+        const actual = client.db(databaseName);
+        const electionId = new ObjectId();
+        const candidates = Array.from({ length: 3 }, (_, order) =>
+          makeCandidate({ electionId, russianCouncilNomination: { registrationOrder: order } })
+        );
+        const election = makeElection({
+          _id: electionId,
+          countryId: "RU",
+          electionType: "federationCouncilMember",
+          totalSeats: 2,
+          russianCouncilRound: {
+            cohortId: new ObjectId(),
+            mandateSinceTurn: 129,
+            districtNumber: 77,
+            registeredVoters: 100,
+          },
+        });
+        await setupHappyPath({
+          electionId,
+          candidates,
+          election,
+          voteResult: Object.fromEntries(candidates.map((row) => [row._id.toHexString(), 100])),
+        });
+        await actual.createCollection("electionVoteTallies", {
+          validator: { russianCouncilBallot: { $exists: false } },
+        });
+        const tallies = actual.collection<ElectionVoteTally>("electionVoteTallies");
+        await tallies.insertOne(makeTally(electionId));
+        const { getDb } = await import("@/lib/mongodb");
+        // Only persistence uses Mongo. Existing turnout/enrichment fixtures stay controlled.
+        const persistenceDb = Object.create(db);
+        persistenceDb.collection = (name: string) =>
+          name === "electionVoteTallies" ? tallies : db.collection(name);
+        vi.mocked(getDb).mockResolvedValue(persistenceDb);
+        const { accumulateVoteTurn } = await import("./tallyManagement");
+        const now = new Date("2024-01-01T00:00:00Z");
+        await expect(accumulateVoteTurn(electionId, 1, now)).rejects.toMatchObject({ code: 121 });
+        const rejected = await tallies.findOne({ electionId });
+        expect(rejected?.totalVotes).toEqual({});
+        expect(rejected?.turnSnapshots).toEqual([]);
+        expect(rejected?.russianCouncilBallot).toBeUndefined();
+        await actual.command({ collMod: "electionVoteTallies", validator: {} });
+        await accumulateVoteTurn(electionId, 1, now);
+        const counted = await tallies.findOne({ electionId });
+        expect(counted?.russianCouncilBallot?.validBallots).toBe(100);
+        const marks = Object.values(counted!.totalVotes).reduce((sum, n) => sum + n, 0);
+        expect(marks).toBeGreaterThan(100);
+        expect(marks).toBeLessThanOrEqual(200);
+        expect(counted?.turnSnapshots).toHaveLength(1);
+        expect(counted?.turnSnapshots[0].russianCouncilBallot?.validBallots).toBe(100);
+        await accumulateVoteTurn(electionId, 1, now);
+        expect(await tallies.findOne({ electionId })).toEqual(counted);
+      } finally {
+        await client.db(databaseName).dropDatabase();
+        await client.close();
+      }
     }
   );
 
@@ -1320,27 +1480,39 @@ describe("accumulateVoteTurn — approvalMap option", () => {
 // ─── tallyCleaner: removeWithdrawnCandidateFromTally ─────────────────────────
 
 describe("removeWithdrawnCandidateFromTally", () => {
-  it("preserves native Duma cast votes and labels while clearing a withdrawn seat projection", async () => {
-    const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
-    const electionId = new ObjectId();
-    db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
-      makeTally(electionId, {
-        state: "CEN",
-        totalVotes: { cand1: 30, cand2: 50 },
-        candidateNames: { cand1: "Alice", cand2: "Bob" },
-        candidateParties: { cand1: "1", cand2: "2" },
-        seatsEstimate: { cand1: 1 },
-        russianDumaBallot: { againstAllVotes: 5 },
-      })
-    );
-    db.collection("elections");
-    await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
-    expect(db.collectionMocks.elections.findOne).not.toHaveBeenCalled();
-    expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledWith(
-      { electionId },
-      { $unset: { "seatsEstimate.cand1": "" }, $set: { updatedAt: expect.any(Date) } }
-    );
-  });
+  it.each(["Duma", "Council"])(
+    "preserves native %s cast votes and labels while clearing a withdrawn seat projection",
+    async (chamber) => {
+      const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
+      const electionId = new ObjectId();
+      db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
+        makeTally(electionId, {
+          state: "CEN",
+          totalVotes: { cand1: 30, cand2: 50 },
+          candidateNames: { cand1: "Alice", cand2: "Bob" },
+          candidateParties: { cand1: "1", cand2: "2" },
+          seatsEstimate: { cand1: 1 },
+          ...(chamber === "Duma"
+            ? { russianDumaBallot: { againstAllVotes: 5 } }
+            : {
+                russianCouncilBallot: {
+                  registeredVoters: 100,
+                  validBallots: 70,
+                  againstAllVotes: 5,
+                  registrationOrderByCandidate: { cand1: 0, cand2: 1 },
+                },
+              }),
+        })
+      );
+      db.collection("elections");
+      await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
+      expect(db.collectionMocks.elections.findOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledWith(
+        { electionId },
+        { $unset: { "seatsEstimate.cand1": "" }, $set: { updatedAt: expect.any(Date) } }
+      );
+    }
+  );
   it("leaves counted native Duma votes intact without an unnecessary write", async () => {
     const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
     const electionId = new ObjectId();
@@ -1369,7 +1541,14 @@ describe("removeWithdrawnCandidateFromTally", () => {
       await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
       expect(db.collectionMocks.elections.findOne).toHaveBeenCalledWith(
         { _id: electionId },
-        { projection: { countryId: 1, electionType: 1, russianDumaRound: 1 } }
+        {
+          projection: {
+            countryId: 1,
+            electionType: 1,
+            russianDumaRound: 1,
+            russianCouncilRound: 1,
+          },
+        }
       );
       if (kind === "native")
         expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();

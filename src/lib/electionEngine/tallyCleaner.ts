@@ -1,6 +1,6 @@
 /**
  * Withdrawal cleanup removes obsolete seat projections and endorsements.
- * removeWithdrawnCandidateFromTally preserves counted native Duma votes and
+ * removeWithdrawnCandidateFromTally preserves counted native Assembly votes and
  * nominee labels for certification; other races retain their existing cleanup.
  */
 
@@ -25,25 +25,32 @@ export async function removeWithdrawnCandidateFromTally(
 
   if (!tally) return;
 
-  // Native Duma ballots retain votes cast before a withdrawal. New accumulations
+  // Native Assembly ballots retain marks cast before a withdrawal. New accumulations
   // stamp the ledger; older native tallies are identified with one projected read.
-  let preserveCastVotes = tally.russianDumaBallot !== undefined;
+  let preserveCastVotes =
+    tally.russianDumaBallot !== undefined || tally.russianCouncilBallot !== undefined;
   if (
     !preserveCastVotes &&
     (tally.totalVotes[candidateId] ?? 0) > 0 &&
     (tally.state === "RU" ||
       Object.prototype.hasOwnProperty.call(RU_1991_ECONOMIC_REGION_POPULATION, tally.state))
   ) {
-    const election = await db
-      .collection<Election>("elections")
-      .findOne(
-        { _id: electionId },
-        { projection: { countryId: 1, electionType: 1, russianDumaRound: 1 } }
-      );
+    const election = await db.collection<Election>("elections").findOne(
+      { _id: electionId },
+      {
+        projection: {
+          countryId: 1,
+          electionType: 1,
+          russianDumaRound: 1,
+          russianCouncilRound: 1,
+        },
+      }
+    );
     preserveCastVotes =
       election?.countryId === "RU" &&
-      election.electionType === "dumaDeputy" &&
-      election.russianDumaRound !== undefined;
+      ((election.electionType === "dumaDeputy" && election.russianDumaRound !== undefined) ||
+        (election.electionType === "federationCouncilMember" &&
+          election.russianCouncilRound !== undefined));
   }
 
   const unsetPaths: Record<string, ""> = preserveCastVotes
