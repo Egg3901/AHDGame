@@ -60,6 +60,10 @@ import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import { ADDRESS_AGENDA_FORCE_BIAS } from "@/lib/constants/governorOffice";
 import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import { resolveNppBillCountryId, resolveNppBillVoterOffices } from "./rules/billVoterOffices";
+import {
+  aggregateNppMandateWeights,
+  russianAssemblyIndividualMandate,
+} from "./rules/mandateWeights";
 import { resolveBillVoteField, type BillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 
@@ -288,17 +292,41 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
       ? (legislationTypeMap.get(bill.legislationTypeId) ?? null)
       : null;
 
+    const mandateWeights = aggregateNppMandateWeights(
+      billCountry,
+      relevantOfficials.flatMap((official) =>
+        official.nppId
+          ? [
+              {
+                ownerId: official.nppId.toHexString(),
+                countryId: official.countryId ?? "US",
+                field: fieldForOfficial(official.officeType),
+                seatsHeld: official.seatsHeld ?? 1,
+                individualMandateId: russianAssemblyIndividualMandate({
+                  id: official._id.toHexString(),
+                  countryId: official.countryId ?? "US",
+                  officeType: official.officeType,
+                  seatId: official.constituencyId,
+                }),
+              },
+            ]
+          : []
+      )
+    );
     const seenNppIds = new Set<string>();
     for (const official of relevantOfficials) {
       if (!official.nppId) continue;
       const nppIdStr = official.nppId.toString();
-      if (seenNppIds.has(nppIdStr)) continue;
-      seenNppIds.add(nppIdStr);
       if ((official.countryId ?? "US") !== billCountry) continue;
+      const officialField = fieldForOfficial(official.officeType);
+      const voteIdentity = `${officialField}:${nppIdStr}`;
+      if (seenNppIds.has(voteIdentity)) continue;
+      seenNppIds.add(voteIdentity);
+      const weight = mandateWeights.get(officialField)?.get(nppIdStr) ?? 0;
+      if (!weight) continue;
       const nppKey = `npp_${nppIdStr}`;
       // The already-voted check reads THIS official's own map, not the bill's single
       // field: on a concurrent bill the two chambers have separate maps.
-      const officialField = fieldForOfficial(official.officeType);
       if (closedField(officialField)) continue; // This chamber's clock already ran out
       if (votesInField(officialField)[nppKey]) continue; // Already voted
 
@@ -404,7 +432,6 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         vote = "against";
       }
 
-      const weight = official.seatsHeld ?? 1;
       const b = bucket(officialField);
       b.updates[nppKey] = vote;
       if (vote === "for") b.forW += weight;

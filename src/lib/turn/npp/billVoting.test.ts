@@ -1198,6 +1198,58 @@ describe("processBillVoting - concurrent (active_both) bills", () => {
 });
 
 describe("Russian NPC bill votes use the active constitution", () => {
+  it("counts all individual Duma and Council mandates once per NPC profile", async () => {
+    const lower = makeNPP({ countryId: "RU" }),
+      upper = makeNPP({ countryId: "RU" });
+    const db = makeMockDb();
+    const layout = resolveCountryOfficeLayout(
+      getCountryConfigForRuntime("RU", "1991-default", { ruFederalAssemblySinceTurn: 145 })
+    );
+    const lowerBill = makeBill({ countryId: "RU", currentChamber: "stateDuma" });
+    const upperBill = makeBill({ countryId: "RU", currentChamber: "federationCouncil" });
+    const ctx = makeCtx(db, {
+      preset: "1991-default",
+      runtimeCountryOffices: new Map([["RU", layout]]),
+      activeBills: [lowerBill, upperBill],
+      nppMap: new Map([lower, upper].map((row) => [row._id.toHexString(), row])),
+      nppOfficials: [
+        ...Array.from({ length: 225 }, (_, index) =>
+          makeOfficial(lower._id, "house", {
+            countryId: "RU",
+            officeType: "dumaDeputy",
+            constituencyId: `RU-duma-region-${index}`,
+          })
+        ),
+        makeOfficial(lower._id, "house", {
+          countryId: "RU",
+          officeType: "dumaDeputy",
+          constituencyId: "RU-duma-national-list",
+          seatsHeld: 75,
+        }),
+        ...Array.from({ length: 89 }, (_, index) =>
+          makeOfficial(upper._id, "senate", {
+            countryId: "RU",
+            officeType: "federationCouncilMember",
+            constituencyId: `RU-council-${index + 1}`,
+          })
+        ),
+      ],
+    });
+    const { processBillVoting } = await import("./billVoting");
+    expect(await processBillVoting(ctx)).toBe(2);
+    const updates = db._calls.bills.map(
+      (call) => call[1] as { $inc: Record<string, number>; $set: Record<string, unknown> }
+    );
+    expect(
+      updates.map((update) => Object.values(update.$inc).reduce((sum, value) => sum + value, 0))
+    ).toEqual([300, 89]);
+    expect(
+      updates.every(
+        (update) =>
+          Object.keys(update.$set).filter((key) => key.startsWith("votes.npp_")).length === 1
+      )
+    ).toBe(true);
+  });
   it.each([
     [{}, "unionCongress", "unionCongressDeputy"],
     [{ ruSovietSuccessionSinceTurn: 24 }, "congressOfPeoplesDeputies", "congressDeputy"],

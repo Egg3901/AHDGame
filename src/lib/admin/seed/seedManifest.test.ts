@@ -28,6 +28,8 @@ describe("seed manifest classification coverage", () => {
       "russianDumaRepeatOpenings",
       "russianCouncilElectionOpenings",
       "russianCouncilElectionResults",
+      "russianAssemblySeatings",
+      "russianAssemblyOfficeArchives",
       "federationRelocations",
       "federationPublicationPreparations",
       "federationPreparedEffects",

@@ -270,6 +270,8 @@ const RUNTIME: CollectionEntry[] = [
   { name: "russianDumaRepeatOpenings", category: "runtime" },
   { name: "russianCouncilElectionOpenings", category: "runtime" },
   { name: "russianCouncilElectionResults", category: "runtime" },
+  { name: "russianAssemblySeatings", category: "runtime" },
+  { name: "russianAssemblyOfficeArchives", category: "runtime" },
   { name: "federationRatifications", category: "runtime" },
   { name: "federationSettlementIntents", category: "runtime" },
   { name: "federationFacilityClaims", category: "runtime" },
