@@ -261,8 +261,10 @@ export function MarketOverview({
           `<div class="font-mono tabular-nums text-muted">Vol ${fmt(vol)}${flatNote}${row?.invalidVolumeTrades ? " · incomplete turnover" : ""}</div>`;
         const box = container.getBoundingClientRect();
         tip.style.display = "block";
-        tip.style.left = `${Math.min(Math.max(param.point.x + 12, 8), Math.max(box.width - 170, 8))}px`;
-        tip.style.top = `${Math.min(Math.max(param.point.y - 10, 8), Math.max(box.height - 120, 8))}px`;
+        tip.style.width = "max-content";
+        tip.style.maxWidth = `${Math.max(box.width - 16, 0)}px`;
+        tip.style.left = `${Math.min(Math.max(param.point.x + 12, 8), Math.max(box.width - tip.offsetWidth - 8, 8))}px`;
+        tip.style.top = `${Math.min(Math.max(param.point.y - 10, 8), Math.max(box.height - tip.offsetHeight - 8, 8))}px`;
       });
 
       if (typeof ResizeObserver !== "undefined") {
@@ -767,7 +769,7 @@ export function MarketOverview({
           <div
             ref={tooltipRef}
             style={{ display: "none" }}
-            className="pointer-events-none absolute z-10 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
+            className="pointer-events-none absolute z-10 rounded-lg border border-card-border bg-card-elevated px-2.5 py-1.5 text-xs shadow-lg whitespace-normal"
           />
           {loading && candles.length === 0 && (
             <Skeleton className="absolute inset-0 h-full w-full" />
