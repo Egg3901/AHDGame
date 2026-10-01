@@ -97,7 +97,7 @@ it.skipIf(!enabled)(
 
       // Re-enable default player parties and exercise every named modern-era
       // reproduction, including simultaneous US presidential and Vermont races.
-      await db.collection("gameState").updateOne(
+      await db.collection<Document & { _id: string }>("gameState").updateOne(
         { _id: "current" },
         {
           $set: { startingPartiesMode: "default" },
