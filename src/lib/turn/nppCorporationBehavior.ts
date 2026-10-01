@@ -120,8 +120,6 @@ import {
 } from "@/lib/turn/npp/reinvestCandidatePool";
 import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
 import {
-  appendNppReinvestCapexRows,
-  depleteUnownedPoolsForDraws,
   drawFoundedCapacityFromPools,
   flushNppCapacityWriteback,
 } from "@/lib/turn/npp/capacityWriteback";
@@ -520,32 +518,17 @@ export async function processNppCorporationDecisions(
       decision.entryDiagnostic?.reason
     );
     if (decision.operatorObservation) operatorObservations.push(decision.operatorObservation);
-    if (decision.reinvestments && corpCurrency) {
-      appendNppReinvestCapexRows(capexRows, {
-        corp,
-        corpCurrency,
-        reinvestments: decision.reinvestments,
-        turn,
-        now,
-      });
-    }
-
-    if (decision.unownedDraws) {
-      unownedDraws.push(...decision.unownedDraws);
-      // Deplete the shared snapshot in lockstep so later corps see what is left.
-      depleteUnownedPoolsForDraws(unownedIndex, decision.unownedDraws, plants?.eraUnitScale ?? 1);
-    }
-
-    // Gated inside the builder, not on `updates` alone: the cash leg no longer
-    // lives in `updates`, so a decision whose only effect is a spend would be
-    // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
     const {
       founded,
       update: corpUpdateOp,
       witness,
     } = buildNppDecisionCashWrites({
       decision,
-      corporationId: corp._id,
+      corporation: corp,
+      capexRows,
+      unownedDraws,
+      unownedIndex,
+      eraUnitScale: plants?.eraUnitScale ?? 1,
       currencyCode: corpCurrency,
       rate: corpFxRate,
       shadowEnabled: ledgerShadow,

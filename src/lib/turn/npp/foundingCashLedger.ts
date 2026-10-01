@@ -2,7 +2,15 @@
 import * as Sentry from "@sentry/nextjs";
 import { type ObjectId, type AnyBulkWriteOperation, type Document, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { buildNppFoundedSectorInserts } from "./capacityWriteback";
+import {
+  appendNppReinvestCapexRows,
+  buildNppFoundedSectorInserts,
+  depleteUnownedPoolsForDraws,
+  type NppUnownedDrawList,
+} from "./capacityWriteback";
+import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
+import type { UnownedSector } from "@/lib/db/types/unownedSector";
+import type { Corporation } from "@/lib/db/types";
 import { buildNppCorpUpdateOp } from "./nppCashWrite";
 import type { NppCorpDecision } from "./corpDecisionTypes";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -60,7 +68,11 @@ export function buildNppFoundingCashWitness(input: {
 /** Construct the business writes and attach an observer to their shared cash operation. */
 export function buildNppDecisionCashWrites(args: {
   decision: NppCorpDecision;
-  corporationId: ObjectId;
+  corporation: Pick<Corporation, "_id" | "name" | "sequentialId">;
+  capexRows: BuildCapexTxInput[];
+  unownedDraws: NppUnownedDrawList;
+  unownedIndex: Map<string, UnownedSector>;
+  eraUnitScale: number;
   currencyCode: CurrencyCode | null | undefined;
   rate: number;
   shadowEnabled: boolean;
@@ -68,10 +80,24 @@ export function buildNppDecisionCashWrites(args: {
   turn: number;
   now: Date;
 }) {
+  if (args.decision.reinvestments && args.currencyCode) {
+    appendNppReinvestCapexRows(args.capexRows, {
+      corp: args.corporation,
+      corpCurrency: args.currencyCode,
+      reinvestments: args.decision.reinvestments,
+      turn: args.turn,
+      now: args.now,
+    });
+  }
+  if (args.decision.unownedDraws) {
+    args.unownedDraws.push(...args.decision.unownedDraws);
+    depleteUnownedPoolsForDraws(args.unownedIndex, args.decision.unownedDraws, args.eraUnitScale);
+  }
+  // Cash-only decisions are gated inside the builder, even when no field is set.
   // The founded sector's existing business id doubles as the atomic audit key.
   const founded = args.decision.newSectors
     ? buildNppFoundedSectorInserts({
-        corporationId: args.corporationId,
+        corporationId: args.corporation._id,
         newSectors: args.decision.newSectors,
         blocked: args.blocked,
         turn: args.turn,
@@ -86,7 +112,7 @@ export function buildNppDecisionCashWrites(args: {
     args.decision.foundingCashLocal &&
     founded.length === 1
       ? buildNppFoundingCashWitness({
-          corporationId: args.corporationId,
+          corporationId: args.corporation._id,
           key: founded[0]._id,
           amountLocal: args.decision.foundingCashLocal,
           currencyCode: args.currencyCode,
