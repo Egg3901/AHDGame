@@ -32,7 +32,10 @@ export async function selfHealMissingCampaigns(db: Db, now: Date = new Date()): 
   );
   const elections = await db
     .collection<Election>("elections")
-    .find({ _id: { $in: electionIds } }, { projection: { _id: 1, countryId: 1, electionType: 1 } })
+    .find(
+      { _id: { $in: electionIds } },
+      { projection: { _id: 1, countryId: 1, electionType: 1, russianPresidentialRound: 1 } }
+    )
     .toArray();
   const eligibleElectionIds = new Set(
     elections.filter((e) => isCampaignEligibleElection(e)).map((e) => e._id.toString())

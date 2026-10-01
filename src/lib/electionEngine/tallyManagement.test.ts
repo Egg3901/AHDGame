@@ -401,6 +401,41 @@ describe("accumulateVoteTurn — vote accumulation", () => {
    * Wires all the happy-path mocks required for accumulateVoteTurn to proceed
    * past guards and reach the updateOne call.
    */
+  it("prices Russian campaign strength inside the frozen direct-voter ceiling", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const electionId = new ObjectId();
+    const a = makeCandidate({ electionId, countryId: "RU" });
+    const b = makeCandidate({ electionId, countryId: "RU" });
+    const election = makeElection({
+      _id: electionId,
+      countryId: "RU",
+      electionType: "president",
+      russianPresidentialRound: { round: 1, mandateSinceTurn: 1, registeredVoters: 100 },
+    });
+    await setupHappyPath({
+      electionId,
+      candidates: [a, b],
+      election,
+      existingTallyVotes: { [a._id.toString()]: 40, [b._id.toString()]: 50 },
+      voteResult: { [a._id.toString()]: 40, [b._id.toString()]: 40 },
+    });
+    db.collection("campaigns");
+    db.collectionMocks.campaigns.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([{ candidateId: a.characterId, campaignStrength: 50000 }]),
+    });
+    await accumulateVoteTurn(electionId, 1, new Date("2024-01-01T00:00:00Z"));
+    const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
+    const totals = update.$set.totalVotes;
+    expect(totals[a._id.toString()] + totals[b._id.toString()]).toBe(100);
+    expect(totals[a._id.toString()] - 40).toBeGreaterThan(totals[b._id.toString()] - 50);
+    expect(update.$push.turnSnapshots.sharesPct[a._id.toString()]).toBe(totals[a._id.toString()]);
+    expect(db.collectionMocks.campaigns.find).toHaveBeenCalledWith(
+      { electionId },
+      { projection: { candidateId: 1, campaignStrength: 1 } }
+    );
+  });
+
   async function setupHappyPath(opts: {
     electionId: ObjectId;
     candidates: ElectionCandidate[];

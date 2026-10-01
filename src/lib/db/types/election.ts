@@ -149,6 +149,8 @@ export interface ElectionCandidate {
   runningMateId?: ObjectId;
   /** Bound Russian tickets can pair a player or NPC nominee with an NPC vice-president. */
   russianRunningMateNppId?: ObjectId;
+  /** Native Russian paired ballot is immutable once counting starts. */
+  russianTicketLocked?: boolean;
   /** 2-char US state abbreviation (e.g. "CA", "TX") — for presidential travel system */
   travelState?: string | null;
   /** When the travel was last set */

@@ -149,6 +149,8 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     const db = client.db(databaseName);
     const electionId = new ObjectId();
     const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const owners = ids.map(() => new ObjectId());
+    const campaignId = new ObjectId();
     await db
       .collection<Fixture>("countryGameStates")
       .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruPresidencyMandateSinceTurn: 72 });
@@ -167,7 +169,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
         _id,
         electionId,
         countryId: "RU",
-        characterId: new ObjectId(),
+        characterId: owners[i],
         characterName: `Candidate ${i}`,
         party: String(i),
         status: "active",
@@ -179,6 +181,14 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       finalized: false,
       totalVotes: Object.fromEntries(ids.map((id, i) => [id.toHexString(), [25, 20, 15][i]])),
       candidateParties: Object.fromEntries(ids.map((id, i) => [id.toHexString(), String(i)])),
+    });
+    await db.collection("campaigns").insertOne({
+      _id: campaignId,
+      electionId,
+      candidateId: owners[0],
+      funds: 600,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
     });
     await db.createCollection("russianPresidentialElectionResults");
     await db.command({ collMod: "elections", validator: { _id: electionId } });
@@ -192,6 +202,23 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
     });
     expect(await db.collection("russianPresidentialElectionResults").countDocuments()).toBe(0);
     await db.command({ collMod: "elections", validator: {} });
+    await db.command({
+      collMod: "russianPresidentialElectionResults",
+      validator: { nextElectionId: { $exists: false } },
+    });
+    await expect(resolveRussianPresidentialElection(input)).rejects.toThrow();
+    expect(await db.collection("campaigns").findOne({ _id: campaignId })).toMatchObject({
+      electionId,
+      funds: 600,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
+    });
+    expect(await db.collection("elections").countDocuments()).toBe(1);
+    expect(await db.collection("russianPresidentialElectionResults").countDocuments()).toBe(0);
+    expect(await db.collection("electionVoteTallies").findOne({ electionId })).toMatchObject({
+      finalized: false,
+    });
+    await db.command({ collMod: "russianPresidentialElectionResults", validator: {} });
     commands = 0;
     expect((await resolveRussianPresidentialElection(input)).decision.outcome).toBe("runoff");
     const resolutionCommands = commands;
@@ -203,6 +230,13 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       .collection("elections")
       .findOne({ "russianPresidentialRound.round": 2 });
     expect(runoff).toMatchObject({ startTurn: 84, endTurn: 86 });
+    expect(await db.collection("campaigns").findOne({ _id: campaignId })).toMatchObject({
+      electionId: runoff!._id,
+      funds: 600,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
+    });
+    expect(await db.collection("campaigns").countDocuments()).toBe(1);
     expect(
       await db.collection("electionVoteTallies").findOne({ electionId: runoff!._id })
     ).toMatchObject({ totalVotes: expect.any(Object), finalized: false });

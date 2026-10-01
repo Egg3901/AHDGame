@@ -43,6 +43,42 @@ describe("Presidential running mate integration tests", () => {
     } as never);
   });
 
+  it("freezes the registered Russian ticket before the first counted ballot", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    const updateOne = vi.fn();
+    const mockDb = {
+      collection: (name: string) => ({
+        findOne: vi.fn().mockResolvedValue(
+          name === "elections"
+            ? {
+                _id: electionId,
+                countryId: "RU",
+                electionType: "president",
+                status: "active",
+                primaryEndTurn: 10,
+                russianPresidentialRound: { round: 1 },
+              }
+            : name === "gameState"
+              ? { _id: "current", currentTurn: 10 }
+              : { _id: candidateId, characterId: candidateId, status: "active" }
+        ),
+        updateOne,
+      }),
+    };
+    vi.mocked(getDb).mockResolvedValue(mockDb as never);
+    const { POST } = await import("../[id]/running-mate/route");
+    const response = await POST(
+      new Request(`http://localhost/api/elections/${electionId}/running-mate`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runningMateId: null }),
+      }),
+      { params: Promise.resolve({ id: electionId.toString() }) }
+    );
+    expect(response.status).toBe(409);
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
   it("rejects a running mate who already served two presidential terms", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const runningMateUserId = new ObjectId();

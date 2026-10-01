@@ -13,7 +13,10 @@ export function RussianPresidentialResultPanel({
   supporting = false,
   onSupport,
 }: {
-  candidates: Pick<CandidateDetail, "id" | "characterName" | "partyName" | "campaignId">[];
+  candidates: Pick<
+    CandidateDetail,
+    "id" | "characterName" | "partyName" | "campaignId" | "runningMateName"
+  >[];
   tally: GeneralVotes;
   canEndorse?: boolean;
   endorsedCandidateId?: string | null;
@@ -56,6 +59,11 @@ export function RussianPresidentialResultPanel({
           <li key={candidate.id} className="flex justify-between gap-4">
             <span>
               {candidate.characterName} ({candidate.partyName})
+              {candidate.runningMateName && (
+                <span className="block text-sm text-muted">
+                  {t("runningMate", { name: candidate.runningMateName })}
+                </span>
+              )}
             </span>
             <span>
               {t("votes", {

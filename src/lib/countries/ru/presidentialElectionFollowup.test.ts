@@ -66,6 +66,43 @@ function scenario(kind: "runoff" | "repeat" | "won" = "runoff") {
   };
 }
 describe("Russian presidential fresh ballots", () => {
+  it("keeps a finalist's campaign id, funds and upgrades without moving eliminated campaigns", async () => {
+    const { mem, input } = scenario();
+    const campaignId = new ObjectId();
+    const outsiderId = new ObjectId();
+    const owner = mem.collection("electionCandidates").docs[0].characterId;
+    mem.seed("campaigns", [
+      {
+        _id: campaignId,
+        electionId: input.predecessorElectionId,
+        candidateId: owner,
+        funds: 12345,
+        campaignStrength: 50000,
+        groundGameLevel: 3,
+      },
+      {
+        _id: outsiderId,
+        electionId: input.predecessorElectionId,
+        candidateId: new ObjectId(),
+        funds: 678,
+      },
+    ]);
+    await followup(input);
+    expect(mem.collection("campaigns").docs[0]).toMatchObject({
+      _id: campaignId,
+      electionId: input.electionId,
+      funds: 12345,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
+    });
+    expect(mem.collection("campaigns").docs[1]).toMatchObject({
+      _id: outsiderId,
+      electionId: input.predecessorElectionId,
+      funds: 678,
+    });
+    await followup(input);
+    expect(mem.collection("campaigns").docs).toHaveLength(2);
+  });
   it("opens a fresh two-finalist ballot without carrying votes or campaign purchases", async () => {
     const { mem, input } = scenario();
     expect(await followup(input)).toEqual(input.electionId);

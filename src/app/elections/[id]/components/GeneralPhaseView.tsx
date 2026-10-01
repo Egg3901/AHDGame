@@ -174,7 +174,7 @@ export function GeneralPhaseView({
   // country (US, Brazil, Nigeria) — not just the US. Ceremonial presidencies
   // without a VP office (Ireland, China) never show it. See ticket #0957.
   const showRunningMateSelector =
-    election.countryId === "RU" || countryHasPresidentialRunningMate(election.countryId);
+    election.countryId !== "RU" && countryHasPresidentialRunningMate(election.countryId);
 
   // Persuasion-driver inputs — shared by the presidential shell and the
   // state-race card. All fields are already on the client DTO (support is

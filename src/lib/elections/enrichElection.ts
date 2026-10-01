@@ -1491,7 +1491,16 @@ export async function fetchDepsForElection(
   const allCharIds = [
     ...new Set([...characterIds, ...runningMateIds].map((id) => id.toString())),
   ].map((s) => new ObjectId(s));
-  const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
+  const nppIds = [
+    ...new Set(
+      candidates.flatMap((candidate) => [
+        ...(candidate.isNPP && candidate.nppId ? [candidate.nppId.toString()] : []),
+        ...(candidate.russianRunningMateNppId
+          ? [candidate.russianRunningMateNppId.toString()]
+          : []),
+      ])
+    ),
+  ].map((id) => new ObjectId(id));
 
   // Parallel fetches (core data always; endorsements/campaigns only for full view).
   // Summary views project the candidate-batch reads (#2168): NPPs drop the
