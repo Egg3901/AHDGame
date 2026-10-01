@@ -17,6 +17,9 @@ import {
   processFederationFacilityPaymentTurn,
 } from "@/lib/world/succession/facilityPaymentTurn";
 
+import { openRussianPresidentialElection } from "@/lib/countries/ru/presidentialElectionOpening";
+import { resolveRussianPresidentialElection } from "@/lib/countries/ru/resolvePresidentialElection";
+import { materializeRussianPresidentialSeating } from "@/lib/countries/ru/presidentialSeating";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
 
@@ -107,6 +110,224 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
   });
   afterAll(async () => {
     await client?.close();
+  });
+
+  it("rolls back Russian ballot opening on a late election insert and opens only once on replay", async () => {
+    const db = client.db(databaseName);
+    await db
+      .collection<Fixture>("countryGameStates")
+      .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruPresidencyMandateSinceTurn: 72 });
+    await db.collection<Fixture>("states").insertOne({
+      _id: "RU_CEN",
+      countryId: "RU",
+      population: 150,
+      votingEligiblePopulation: 100,
+    });
+    await db.createCollection("elections", { validator: { countryId: { $ne: "RU" } } });
+    const input = { db, game: { preset: "1991-default" }, turn: 72, now: new Date(1000) };
+    await expect(openRussianPresidentialElection(input)).rejects.toThrow();
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruPresidencyFirstElectionId");
+    expect(await db.collection("elections").countDocuments()).toBe(0);
+    await db.command({ collMod: "elections", validator: {} });
+    commands = 0;
+    const opened = await openRussianPresidentialElection(input);
+    const openingCommands = commands;
+    expect(openingCommands).toBeLessThanOrEqual(9);
+    expect(
+      (await openRussianPresidentialElection(input))?.electionId.equals(opened!.electionId)
+    ).toBe(true);
+    expect(await db.collection("elections").countDocuments()).toBe(1);
+    console.info("Russian presidential opening qualification", {
+      openingCommands,
+      registeredVoters: 100,
+    });
+  });
+
+  it("rolls back certification when a fresh runoff cannot be inserted and replays without duplicate ballots", async () => {
+    const db = client.db(databaseName);
+    const electionId = new ObjectId();
+    const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const owners = ids.map(() => new ObjectId());
+    const campaignId = new ObjectId();
+    await db
+      .collection<Fixture>("countryGameStates")
+      .insertOne({ _id: "RU", ruSovietSuccessionSinceTurn: 48, ruPresidencyMandateSinceTurn: 72 });
+    await db.collection("elections").insertOne({
+      _id: electionId,
+      countryId: "RU",
+      electionType: "president",
+      cycle: 1,
+      electionYear: 1992,
+      status: "completed",
+      endTurn: 84,
+      russianPresidentialRound: { round: 1, mandateSinceTurn: 72, registeredVoters: 100 },
+    });
+    await db.collection("electionCandidates").insertMany(
+      ids.map((_id, i) => ({
+        _id,
+        electionId,
+        countryId: "RU",
+        characterId: owners[i],
+        characterName: `Candidate ${i}`,
+        party: String(i),
+        status: "active",
+      }))
+    );
+    await db.collection("electionVoteTallies").insertOne({
+      _id: electionId,
+      electionId,
+      finalized: false,
+      totalVotes: Object.fromEntries(ids.map((id, i) => [id.toHexString(), [25, 20, 15][i]])),
+      candidateParties: Object.fromEntries(ids.map((id, i) => [id.toHexString(), String(i)])),
+    });
+    await db.collection("campaigns").insertOne({
+      _id: campaignId,
+      electionId,
+      candidateId: owners[0],
+      funds: 600,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
+    });
+    await db.createCollection("russianPresidentialElectionResults");
+    await db.command({ collMod: "elections", validator: { _id: electionId } });
+    const input = { db, electionId, turn: 84, now: new Date(1000) };
+    await expect(resolveRussianPresidentialElection(input)).rejects.toThrow();
+    expect(await db.collection("elections").findOne({ _id: electionId })).toMatchObject({
+      status: "completed",
+    });
+    expect(await db.collection("electionVoteTallies").findOne({ electionId })).toMatchObject({
+      finalized: false,
+    });
+    expect(await db.collection("russianPresidentialElectionResults").countDocuments()).toBe(0);
+    await db.command({ collMod: "elections", validator: {} });
+    await db.command({
+      collMod: "russianPresidentialElectionResults",
+      validator: { nextElectionId: { $exists: false } },
+    });
+    await expect(resolveRussianPresidentialElection(input)).rejects.toThrow();
+    expect(await db.collection("campaigns").findOne({ _id: campaignId })).toMatchObject({
+      electionId,
+      funds: 600,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
+    });
+    expect(await db.collection("elections").countDocuments()).toBe(1);
+    expect(await db.collection("russianPresidentialElectionResults").countDocuments()).toBe(0);
+    expect(await db.collection("electionVoteTallies").findOne({ electionId })).toMatchObject({
+      finalized: false,
+    });
+    await db.command({ collMod: "russianPresidentialElectionResults", validator: {} });
+    commands = 0;
+    expect((await resolveRussianPresidentialElection(input)).decision.outcome).toBe("runoff");
+    const resolutionCommands = commands;
+    expect(resolutionCommands).toBeLessThanOrEqual(24);
+    await resolveRussianPresidentialElection(input);
+    expect(await db.collection("elections").countDocuments()).toBe(2);
+    expect(await db.collection("electionCandidates").countDocuments()).toBe(5);
+    const runoff = await db
+      .collection("elections")
+      .findOne({ "russianPresidentialRound.round": 2 });
+    expect(runoff).toMatchObject({ startTurn: 84, endTurn: 86 });
+    expect(await db.collection("campaigns").findOne({ _id: campaignId })).toMatchObject({
+      electionId: runoff!._id,
+      funds: 600,
+      campaignStrength: 50000,
+      groundGameLevel: 3,
+    });
+    expect(await db.collection("campaigns").countDocuments()).toBe(1);
+    expect(
+      await db.collection("electionVoteTallies").findOne({ electionId: runoff!._id })
+    ).toMatchObject({ totalVotes: expect.any(Object), finalized: false });
+    console.info("Russian fresh runoff qualification", { resolutionCommands, finalistCount: 2 });
+  });
+
+  it("rolls back the presidential handover on a late seated-result failure and seats the ticket once", async () => {
+    const db = client.db(databaseName);
+    const electionId = new ObjectId(),
+      president = new ObjectId(),
+      vice = new ObjectId(),
+      chair = new ObjectId();
+    await db.collection<Fixture>("countryGameStates").insertOne({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruPresidencyMandateSinceTurn: 72,
+      ruPresidencyElectionCertifiedSinceTurn: 84,
+      ruPresidencyCertifiedElectionId: electionId,
+    });
+    await db.collection<Fixture>("russianPresidentialElectionResults").insertOne({
+      _id: electionId.toHexString(),
+      electionId,
+      countryId: "RU",
+      preset: "1991-default",
+      mandateSinceTurn: 72,
+      resolvedOnTurn: 84,
+      decision: { outcome: "won", winnerCandidateId: new ObjectId().toHexString() },
+      winner: { characterId: president, name: "President", party: "1" },
+      vicePresident: { nppId: vice, name: "Vice", party: "1" },
+    });
+    await db
+      .collection("characters")
+      .insertOne({ _id: president, countryId: "RU", currentOffice: null, money: 500 });
+    await db.collection("npps").insertMany([
+      { _id: vice, countryId: "RU", currentOffice: null },
+      { _id: chair, countryId: "RU", currentOffice: { type: "chairmanOfSupremeSoviet" } },
+    ]);
+    await db.collection("electedOfficials").insertOne({
+      _id: new ObjectId(),
+      countryId: "RU",
+      officeType: "chairmanOfSupremeSoviet",
+      nppId: chair,
+    });
+    await db.collection<Fixture>("governmentFormations").insertOne({
+      _id: "RU",
+      status: "formed",
+      pmName: "Continuing PM",
+      pmNppId: new ObjectId(),
+      hosNppId: chair,
+    });
+    await db.createCollection("russianPresidentialOfficeArchives");
+    await db.createCollection("electionCandidates");
+    await db.createCollection("pmAppointmentVotes");
+    await db.command({
+      collMod: "russianPresidentialElectionResults",
+      validator: { seatedOnTurn: { $exists: false } },
+    });
+    const officialIds: [ObjectId, ObjectId] = [new ObjectId(), new ObjectId()];
+    const seating = () =>
+      runRequiredTransaction(
+        (session) =>
+          materializeRussianPresidentialSeating({
+            db,
+            session,
+            turn: 85,
+            now: new Date(1000),
+            officialIds,
+          }),
+        { client }
+      );
+    await expect(seating()).rejects.toThrow();
+    expect(await db.collection("electedOfficials").countDocuments()).toBe(1);
+    expect(await db.collection("characters").findOne({ _id: president })).toMatchObject({
+      currentOffice: null,
+      money: 500,
+    });
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruPresidencySinceTurn");
+    expect(await db.collection("russianPresidentialOfficeArchives").countDocuments()).toBe(0);
+    await db.command({ collMod: "russianPresidentialElectionResults", validator: {} });
+    commands = 0;
+    expect(await seating()).toBe(true);
+    const seatingCommands = commands;
+    expect(seatingCommands).toBeLessThanOrEqual(22);
+    expect(await seating()).toBe(false);
+    expect(await db.collection("electedOfficials").countDocuments()).toBe(2);
+    expect(
+      await db.collection<Fixture>("governmentFormations").findOne({ _id: "RU" })
+    ).toMatchObject({ status: "formed", pmName: "Continuing PM", hosCharacterId: president });
+    console.info("Russian certified seating qualification", { seatingCommands, replaySeats: 2 });
   });
 
   it("rolls back Russian constitutional proposal creation when its bound bill cannot be written", async () => {

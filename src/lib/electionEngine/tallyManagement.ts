@@ -2,12 +2,15 @@
  * Election vote tally accumulation and initialization.
  */
 
+import { russianPresidentialVoteIncrement } from "@/lib/countries/ru/rules/presidentialVoteIncrement";
+import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { applyNationalAds } from "@/lib/campaignTargeting/nationalAds";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 
 import { getDb } from "@/lib/mongodb";
 import type {
   Election,
+  Campaign,
   ElectionCandidate,
   ElectionVoteTally,
   PrimaryResults,
@@ -726,6 +729,37 @@ export async function accumulateVoteTurn(
       (tally.totalVotes[ec.candidateId] ?? 0) + Math.round(raw * multiplier);
   }
 
+  if (election.countryId === "RU" && election.russianPresidentialRound) {
+    const campaigns = await db
+      .collection<Campaign>("campaigns")
+      .find({ electionId }, { projection: { candidateId: 1, campaignStrength: 1 } })
+      .toArray();
+    const strengths = new Map(
+      campaigns.map((campaign) => [campaign.candidateId.toString(), campaign.campaignStrength ?? 0])
+    );
+    const rawVotes = Object.fromEntries(
+      enriched.map((candidate) => [
+        candidate.candidateId,
+        newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+      ])
+    );
+    const campaignStrength = Object.fromEntries(
+      candidates.map((candidate) => [
+        candidate._id.toString(),
+        strengths.get(campaignStrengthLookupKey(candidate)) ?? 0,
+      ])
+    );
+    const increments = russianPresidentialVoteIncrement({
+      registeredVoters: election.russianPresidentialRound.registeredVoters,
+      priorVotes: tally.totalVotes,
+      rawVotes,
+      campaignStrength,
+    });
+    for (const candidate of enriched)
+      newTotals[candidate.candidateId] =
+        (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
+  }
+
   // For house/stateSenate races, compute per-candidate seat estimates
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
@@ -801,11 +835,23 @@ export async function accumulateVoteTurn(
     return seats;
   })();
 
+  const nativeRussianTotal =
+    election.countryId === "RU" && election.russianPresidentialRound
+      ? Object.values(newTotals).reduce((sum, count) => sum + count, 0)
+      : null;
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,
     recordedAt: now,
     cumulativeVotes: { ...newTotals },
-    sharesPct,
+    sharesPct:
+      nativeRussianTotal == null
+        ? sharesPct
+        : Object.fromEntries(
+            Object.entries(newTotals).map(([id, count]) => [
+              id,
+              nativeRussianTotal ? (count / nativeRussianTotal) * 100 : 0,
+            ])
+          ),
     ...(seatsEstimate ? { seatsEstimate } : {}),
   };
 

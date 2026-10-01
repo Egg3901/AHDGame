@@ -1,3 +1,5 @@
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
+import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type {
@@ -486,6 +488,53 @@ describe("processElectionEntry", () => {
     expect(insertedNames).toContain("Incumbent");
     expect(insertedNames).toContain("First Slate Challenger");
     expect(insertedNames).toContain("Second Slate Challenger");
+  });
+
+  it("allows NPC candidates in a playable Russian first ballot but protects the runoff roster", async () => {
+    const president = createTestElection({
+      countryId: "RU",
+      electionType: "president",
+      state: "RU",
+      russianPresidentialRound: { round: 1, mandateSinceTurn: 72, registeredVoters: 100 },
+    });
+    const npp = createTestNpp({
+      countryId: "RU",
+      homeState: "RU_CEN",
+      party: "1",
+      currentOffice: null,
+    });
+    db.collection("countryGameStates");
+    db.collectionMocks.countryGameStates.findOne.mockResolvedValue({
+      _id: "RU",
+      enabledForPlayers: true,
+      status: "active",
+    });
+    const ctx = buildContext(db, president, [npp], []);
+    ctx.preset = "1991-default";
+    ctx.runtimeCountryOffices = new Map([
+      [
+        "RU",
+        resolveCountryOfficeLayout(
+          getCountryConfigForRuntime("RU", "1991-default", { ruSovietSuccessionSinceTurn: 48 })
+        ),
+      ],
+    ]);
+    ctx.nppElectionEligiblePartyKeys = new Set(["RU:1"]);
+    expect(await processElectionEntry(ctx)).toBe(1);
+    expect(db.collectionMocks.electionCandidates.insertOne.mock.calls[0]?.[0]).toMatchObject({
+      electionId: president._id,
+      nppId: npp._id,
+      countryId: "RU",
+    });
+    db.collectionMocks.electionCandidates.insertOne.mockClear();
+    const runoff = {
+      ...president,
+      _id: new ObjectId(),
+      russianPresidentialRound: { ...president.russianPresidentialRound!, round: 2 as const },
+    };
+    const next = buildContext(db, runoff, [npp], []);
+    expect(await processElectionEntry(next)).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
 
   it("reserves an autonomous presidential candidate before regional races consume the pool", async () => {

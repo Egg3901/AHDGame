@@ -1,3 +1,4 @@
+import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 /**
  * Low-level enrichment function that accepts pre-fetched dependencies.
  * Exported with underscore prefix to signal that it is an internal helper
@@ -436,7 +437,7 @@ export async function _enrichElection(
 
   const electionOid = election._id;
   const countryId = election.countryId ?? "US";
-  const isPresident = election.electionType === "president";
+  const isPresident = usesLegacyPresidentialCampaign(election);
 
   // Live apportionment: census-updated `state.houseDistricts` (preset seed
   // fallback). Equals the seed until a decennial census reapportions (P1d-2).
@@ -1097,6 +1098,9 @@ export async function _enrichElection(
           };
         }),
         ...electoralVotesResult,
+        ...(resolvedTally.russianPresidentialResult
+          ? { russianPresidentialResult: resolvedTally.russianPresidentialResult }
+          : {}),
         // Per-state EV totals for the active preset (president display surfaces
         // read this instead of the 2020-census constant directly).
         ...(isPresident ? { evByState } : {}),
@@ -1487,7 +1491,16 @@ export async function fetchDepsForElection(
   const allCharIds = [
     ...new Set([...characterIds, ...runningMateIds].map((id) => id.toString())),
   ].map((s) => new ObjectId(s));
-  const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
+  const nppIds = [
+    ...new Set(
+      candidates.flatMap((candidate) => [
+        ...(candidate.isNPP && candidate.nppId ? [candidate.nppId.toString()] : []),
+        ...(candidate.russianRunningMateNppId
+          ? [candidate.russianRunningMateNppId.toString()]
+          : []),
+      ])
+    ),
+  ].map((id) => new ObjectId(id));
 
   // Parallel fetches (core data always; endorsements/campaigns only for full view).
   // Summary views project the candidate-batch reads (#2168): NPPs drop the
