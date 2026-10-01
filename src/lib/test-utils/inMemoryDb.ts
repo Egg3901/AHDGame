@@ -314,6 +314,56 @@ function matchesFilter(doc: Doc, filter: Doc): boolean {
   });
 }
 
+/**
+ * Resolve the positional `$` in update paths (`holders.$.units`) to the index
+ * of the first array element the filter matched, as the server does. Only the
+ * dotted form (`holders.fundId`) and `$elemMatch` on the array are supported;
+ * anything else throws rather than silently writing the wrong element.
+ */
+function resolvePositional(doc: Doc, update: Update, filter: Doc | undefined): Update {
+  if (Array.isArray(update)) return update;
+  const needs = Object.values(update).some(
+    (fields) => isPlainObject(fields) && Object.keys(fields).some((k) => /\.\$(\.|$)/.test(k))
+  );
+  if (!needs) return update;
+  const indexFor = (arrayPath: string): number => {
+    const array = getPath(doc, arrayPath);
+    if (!Array.isArray(array))
+      throw new Error(`inMemoryDb: positional "${arrayPath}" is not an array`);
+    const prefix = `${arrayPath}.`;
+    const conditions: Doc = {};
+    for (const [key, condition] of Object.entries(filter ?? {})) {
+      if (key.startsWith(prefix)) conditions[key.slice(prefix.length)] = condition;
+      else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
+        Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+      }
+    }
+    if (Object.keys(conditions).length === 0) {
+      throw new Error(`inMemoryDb: positional "${arrayPath}.$" needs a filter on that array`);
+    }
+    const index = array.findIndex(
+      (element) => isContainer(element) && matchesFilter(element as Doc, conditions)
+    );
+    if (index < 0) throw new Error(`inMemoryDb: positional "${arrayPath}.$" matched no element`);
+    return index;
+  };
+  const resolved: Doc = {};
+  for (const [op, fields] of Object.entries(update)) {
+    if (!isPlainObject(fields)) {
+      resolved[op] = fields;
+      continue;
+    }
+    const next: Doc = {};
+    for (const [path, value] of Object.entries(fields)) {
+      const match = /^(.*?)\.\$(\.|$)/.exec(path);
+      next[match ? path.replace(`${match[1]}.$`, `${match[1]}.${indexFor(match[1])}`) : path] =
+        value;
+    }
+    resolved[op] = next;
+  }
+  return resolved as Update;
+}
+
 function applyUpdate(doc: Doc, update: Update): void {
   if (Array.isArray(update)) {
     for (const stage of update) {
@@ -520,7 +570,7 @@ class InMemoryCollection {
       }
       return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
     }
-    applyUpdate(target, update);
+    applyUpdate(target, resolvePositional(target, update, filter));
     return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
   }
 
@@ -529,7 +579,7 @@ class InMemoryCollection {
     update: Update
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
     const targets = this.docs.filter((d) => matchesFilter(d, filter));
-    for (const doc of targets) applyUpdate(doc, update);
+    for (const doc of targets) applyUpdate(doc, resolvePositional(doc, update, filter));
     return { matchedCount: targets.length, modifiedCount: targets.length };
   }
 
@@ -558,7 +608,7 @@ class InMemoryCollection {
       return options.returnDocument === "before" ? null : clone(seed);
     }
     const before = clone(target);
-    applyUpdate(target, update);
+    applyUpdate(target, resolvePositional(target, update, filter));
     return options.returnDocument === "before" ? before : clone(target);
   }
 
@@ -614,8 +664,12 @@ class InMemoryCollection {
     return this.docs.filter((d) => matchesFilter(d, filter)).length;
   }
 
-  async bulkWrite(ops: Doc[]): Promise<{ modifiedCount: number }> {
+  async bulkWrite(
+    ops: Doc[]
+  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+    let matched = 0;
     let modified = 0;
+    let upserted = 0;
     for (const op of ops) {
       if (op.updateOne) {
         const { filter, update, upsert } = op.updateOne as {
@@ -624,7 +678,9 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.updateOne(filter, update, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
+        upserted += res.upsertedCount;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
       } else if (op.replaceOne) {
@@ -634,10 +690,13 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.replaceOne(filter, replacement, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
+        upserted += res.upsertedCount;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.deleteMany) {
         const { filter } = op.deleteMany as { filter: Doc };
@@ -652,7 +711,7 @@ class InMemoryCollection {
         throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
-    return { modifiedCount: modified };
+    return { matchedCount: matched, modifiedCount: modified, upsertedCount: upserted };
   }
 
   /**
