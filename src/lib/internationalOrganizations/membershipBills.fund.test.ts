@@ -51,7 +51,7 @@ describe("applyOrgFundProvision", () => {
       { countryId: "DE" },
       expect.objectContaining({ $inc: { treasuryBalance: -5_000_000 } })
     );
-    expect(creditOrganizationFund).toHaveBeenCalledWith(db, "EU", 5_000_000);
+    expect(creditOrganizationFund).toHaveBeenCalledWith(db, "EU", 5_000_000, { context: null });
   });
 
   it("voids (no spend) when the country is no longer a member at enactment", async () => {
