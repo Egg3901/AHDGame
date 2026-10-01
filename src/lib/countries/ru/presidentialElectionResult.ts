@@ -202,7 +202,10 @@ export async function materializeRussianPresidentialElectionResult(input: {
         )
       : await db
           .collection<Character>("characters")
-          .findOne({ _id: ownerId, countryId: "RU" }, { session, projection: { _id: 1 } });
+          .findOne(
+            { _id: ownerId, countryId: "RU", federationPendingResidenceId: { $exists: false } },
+            { session, projection: { _id: 1 } }
+          );
     const mateId = winner.runningMateId ?? winner.russianRunningMateNppId;
     const mateIsNpp = !winner.runningMateId;
     const samePerson = !!mateId && mateId.equals(ownerId) && mateIsNpp === !!winner.isNPP;
@@ -221,7 +224,7 @@ export async function materializeRussianPresidentialElectionResult(input: {
           : await db
               .collection<Character>("characters")
               .findOne(
-                { _id: mateId, countryId: "RU" },
+                { _id: mateId, countryId: "RU", federationPendingResidenceId: { $exists: false } },
                 { session, projection: { name: 1, party: 1 } }
               )
         : null;

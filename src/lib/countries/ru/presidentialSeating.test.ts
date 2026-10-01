@@ -91,6 +91,20 @@ function scenario() {
   };
 }
 describe("Russian certified presidential office handover", () => {
+  it("refuses a protected pending resident before vacating offices or touching wallets", async () => {
+    const { mem, input } = scenario();
+    mem.collection("characters").docs[0].federationPendingResidenceId = "settlement-application";
+    await expect(seat(input)).rejects.toThrow("no longer resident");
+    expect(mem.collection("electedOfficials").docs).toHaveLength(3);
+    expect(mem.collection("characters").docs[0]).toMatchObject({
+      money: 500,
+      currentOffice: { type: "congressDeputy" },
+      federationPendingResidenceId: "settlement-application",
+    });
+    expect(mem.collection("russianPresidentialElectionResults").docs[0]).not.toHaveProperty(
+      "seatedOnTurn"
+    );
+  });
   it("vacates and archives the ticket's cabinet posts while preserving other ministers", async () => {
     const { mem, president, input } = scenario();
     const retainedId = new ObjectId();

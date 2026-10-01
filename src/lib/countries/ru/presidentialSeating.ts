@@ -97,7 +97,14 @@ export async function materializeRussianPresidentialSeating(input: {
   const chars = charIds.length
     ? await db
         .collection<Character>("characters")
-        .find({ _id: { $in: charIds }, countryId: "RU" }, { session, projection: { _id: 1 } })
+        .find(
+          {
+            _id: { $in: charIds },
+            countryId: "RU",
+            federationPendingResidenceId: { $exists: false },
+          },
+          { session, projection: { _id: 1 } }
+        )
         .toArray()
     : [];
   const npps = nppIds.length

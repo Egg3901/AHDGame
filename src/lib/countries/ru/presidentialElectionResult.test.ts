@@ -72,6 +72,43 @@ function scenario() {
   };
 }
 describe("Russian presidential result certification", () => {
+  it.each(["president", "vicePresident"])(
+    "repeats when the %s player has a pending protected residence choice",
+    async (office) => {
+      const { mem, input } = scenario();
+      const protectedId = new ObjectId();
+      mem.seed("characters", [
+        {
+          _id: protectedId,
+          countryId: "RU",
+          name: "Protected",
+          party: "1",
+          cash: 500,
+          federationPendingResidenceId: "settlement-application",
+        },
+      ]);
+      const winner = mem.collection("electionCandidates").docs[0];
+      if (office === "president") {
+        winner.isNPP = false;
+        winner.characterId = protectedId;
+        delete winner.nppId;
+      } else {
+        winner.runningMateId = protectedId;
+        delete winner.russianRunningMateNppId;
+      }
+      expect((await resolve(input)).decision).toEqual({
+        outcome: "repeat",
+        reason: "invalid-ballot",
+      });
+      expect(mem.collection("countryGameStates").docs[0]).not.toHaveProperty(
+        "ruPresidencyCertifiedElectionId"
+      );
+      expect(mem.collection("characters").docs[0]).toMatchObject({
+        cash: 500,
+        federationPendingResidenceId: "settlement-application",
+      });
+    }
+  );
   it.each([0, 1])("repeats the ballot when ticket NPC %s has retired", async (index) => {
     const { mem, input } = scenario();
     mem.collection("npps").docs[index].retiredAt = new Date(1);

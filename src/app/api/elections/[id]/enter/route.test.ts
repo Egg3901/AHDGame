@@ -67,6 +67,7 @@ interface SetupOpts {
   characterCountry: "CN" | "US";
   characterParty: string | null;
   partyDocReturn: { regimeStatus: "ruling" | "approved" | "banned" | null } | null;
+  pendingResidenceId?: string;
 }
 
 const electionOid = new ObjectId();
@@ -115,6 +116,9 @@ function setupScenario(opts: SetupOpts): MockDb {
         politicalInfluence: 10,
         careerHistory: [],
         executiveTermsServed: 0,
+        ...(opts.pendingResidenceId
+          ? { federationPendingResidenceId: opts.pendingResidenceId }
+          : {}),
       },
     },
   } as never);
@@ -125,6 +129,24 @@ function setupScenario(opts: SetupOpts): MockDb {
 describe("POST /api/elections/[id]/enter — OPS filing gates", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+  it("blocks protected relocation filing before database work or campaign creation", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+      pendingResidenceId: "settlement-application",
+    });
+    const response = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Choose a playable residence before entering an election.",
+    });
+    expect(getDb).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
 
   it("returns 403 when a banned-party character files in CN", async () => {

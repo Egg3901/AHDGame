@@ -15,3 +15,5 @@ Russian races display popular votes and their certified outcome rather than a US
 Campaign strength changes popular-vote shares within the fixed registered electorate. NPC vice-presidential nominees are visible, and the paired ticket locks when filing closes. The winning ticket vacates its cabinet posts while other ministers remain in office.
 
 Runoff finalists retain their campaign accounts and upgrades while the new ballot starts at zero votes.
+
+Characters awaiting a protected residence choice after federation succession cannot file for office, join a presidential ticket or be seated until they choose a playable home.

@@ -46,6 +46,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { user } = auth;
     const character = user.character;
+    if (character.federationPendingResidenceId !== undefined) {
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json(
+        { error: "Choose a playable residence before entering an election." },
+        { status: 403 }
+      );
+    }
 
     const limit = checkRateLimit(
       `election:${user.userId}`,
