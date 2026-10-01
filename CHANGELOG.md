@@ -65,6 +65,12 @@ worlds, newly created worlds or a gradual ramp. The developer fold preserves
 the full note body as well as its summary, so detailed rules survive when the
 source note is removed. Rewrite the public draft before publishing it.
 
+Describe the change and its expected impact in neutral, concrete terms. Use
+mechanics, values and scope instead of claims that a system is fairer, safer,
+better or more faithful. Explain relevant previous behaviour without judging
+it or celebrating its replacement. Distinguish expected effects from measured
+results.
+
 Keep existing version URLs. A small packaging fix can remain a real patch
 release, but describe the actual fix instead of a bare version bump. Correct
 older player posts where the original developer record already described a
