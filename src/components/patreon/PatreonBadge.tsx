@@ -9,6 +9,8 @@ interface PatreonBadgeProps {
   since?: string | Date | null;
   /** Which system granted the benefits; drives provider-neutral tooltip copy. */
   provider?: SupporterProvider;
+  /** `tag` is the flat hairline treatment shared with other profile tags. */
+  appearance?: "badge" | "tag";
   className?: string;
 }
 
@@ -31,6 +33,7 @@ export function PatreonBadge({
   expiresAt,
   since,
   provider,
+  appearance = "badge",
   className = "",
 }: PatreonBadgeProps) {
   if (!tier) return null;
@@ -63,6 +66,14 @@ export function PatreonBadge({
     );
   }
   const title = titleParts.join(" ");
+
+  if (appearance === "tag") {
+    return (
+      <span title={title} className={`dossier-tag ${className}`}>
+        {label}
+      </span>
+    );
+  }
 
   return (
     <span

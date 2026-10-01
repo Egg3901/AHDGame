@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
 import { recordRoundTrip, resetRoundTripProfiler } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
+import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
+import { getSingleplayerPhasePredicate } from "@/simulation/phases/singleplayerPhases";
 
 const recordAudit = vi.fn();
 vi.mock("@/lib/audit/recordAudit", () => ({
@@ -26,6 +28,44 @@ async function flushAsyncStatusWrites() {
 }
 
 describe("createTurnPhaseRuntime", () => {
+  it.each([
+    { name: "financialSuspectScan", predicate: getAnomalyScanCadencePredicate(1, 3) },
+    { name: "gameHealthSnapshot", predicate: getSingleplayerPhasePredicate(true) },
+  ])(
+    "does not label a filtered $name phase as an elections-only simulation",
+    async ({ name, predicate }) => {
+      const phaseStatuses: TurnPhaseTelemetryMap = {};
+      const currentPhaseRef = { current: "campaignTurn" };
+      const { db, updateOne } = createMockDb();
+      const execute = vi.fn().mockResolvedValue(42);
+      const runtime = createTurnPhaseRuntime({
+        db,
+        phaseStatuses,
+        warnings: [],
+        currentPhaseRef,
+        shouldRunPhase: predicate,
+      });
+
+      await expect(runtime.runPhase(name, execute)).resolves.toBeNull();
+
+      expect(execute).not.toHaveBeenCalled();
+      expect(currentPhaseRef.current).toBe("campaignTurn");
+      expect(phaseStatuses[name]).toMatchObject({
+        status: "skipped",
+        reason: "conditional",
+        message: "skipped: phase eligibility predicate",
+      });
+      expect(updateOne).toHaveBeenCalledWith(
+        { _id: "current", isProcessing: true },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            [`processingPhaseStatuses.${name}`]: expect.objectContaining({ reason: "conditional" }),
+          }),
+        })
+      );
+    }
+  );
+
   it("reports a completed phase to an opt-in sandbox observer without changing its result", async () => {
     const observed: Array<{ name: string; result: unknown }> = [];
     const runtime = createTurnPhaseRuntime({

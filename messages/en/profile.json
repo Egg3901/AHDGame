@@ -283,6 +283,13 @@
       "empty": "No changes have been recorded yet.",
       "unknown": "No reason was recorded.",
       "turn": "Turn {turn}"
+    },
+    "dossier": {
+      "file": "Dossier",
+      "noOffice": "Private citizen",
+      "independent": "Independent",
+      "nationalRank": "#{rank} nationally",
+      "partyInfluence": "Party influence"
     }
   }
 }
