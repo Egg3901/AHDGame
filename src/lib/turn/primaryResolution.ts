@@ -4,6 +4,10 @@
  * constituency contests keep their normal party nomination limit.
  */
 import { russianDumaPrimaryAdvanceLimit } from "@/lib/countries/ru/rules/assemblyScope";
+import {
+  bindRussianDumaElectorate,
+  usesRussianDumaNationalElectorate,
+} from "@/lib/countries/ru/dumaElectoratePreload";
 import { bindRussianPresidentialElectorate } from "@/lib/countries/ru/presidentialElectoratePreload";
 
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
@@ -1782,10 +1786,12 @@ export async function accumulateGeneralElectionVotes(
         stateElections
           .filter((election) => {
             const countryId = (election.countryId ?? "US") as CountryId;
-            return isNationwideDirectExecutiveElection(
-              election.electionType,
-              election.state,
-              countryId
+            return (
+              isNationwideDirectExecutiveElection(
+                election.electionType,
+                election.state,
+                countryId
+              ) || usesRussianDumaNationalElectorate(election)
             );
           })
           .map((election) => (election.countryId ?? "US") as CountryId)
@@ -1985,7 +1991,12 @@ export async function accumulateGeneralElectionVotes(
         // A tally created just above is not in `existing`; let the turn read it.
         await accumulateVoteTurn(election._id, turn, now, {
           approvalMap,
-          preload: preload ? bindRussianPresidentialElectorate(election, preload) : preload,
+          preload: preload
+            ? bindRussianDumaElectorate(
+                election,
+                bindRussianPresidentialElectorate(election, preload)
+              )
+            : preload,
           election,
           tally: existing ?? undefined,
           candidates: activeCandidates,

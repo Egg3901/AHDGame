@@ -2,6 +2,7 @@
  * Election vote tally accumulation and initialization.
  */
 
+import { russianDumaVoteTotals } from "@/lib/countries/ru/rules/assemblyVoteIncrement";
 import { russianPresidentialVoteIncrement } from "@/lib/countries/ru/rules/presidentialVoteIncrement";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { applyNationalAds } from "@/lib/campaignTargeting/nationalAds";
@@ -433,12 +434,15 @@ export async function accumulateVoteTurn(
   // ── Cumulative ceiling ────────────────────────────────────────────────────
   // The strength multiplier above sits outside both caps, so the closing
   // surge could still carry the race past the registered electorate. Ballots
-  // already on the board (active candidates only, matching `newTotals`) plus
-  // this slice may never exceed it.
-  const alreadyCast = candidates.reduce(
-    (sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0),
-    0
-  );
+  // already on the board plus this slice may never exceed it. Bound Duma
+  // ballots also retain votes cast before a nominee withdrew.
+  const isBoundDuma =
+    election.countryId === "RU" &&
+    election.electionType === "dumaDeputy" &&
+    election.russianDumaRound != null;
+  const alreadyCast = isBoundDuma
+    ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0)
+    : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
@@ -716,10 +720,10 @@ export async function accumulateVoteTurn(
     );
   const EXECUTIVE_ENDORSEMENT_VOTE_BONUS = 1.015;
 
-  // Build new totals using ONLY active candidates — withdrawn candidates'
-  // historical votes are excluded so vote share and seat projections are correct.
+  // Start with active increments. Bound Duma ballots then restore counted
+  // withdrawals, which remain part of participation and certification.
   const activeCandidateIds = new Set(enriched.map((ec) => ec.candidateId));
-  const newTotals: Record<string, number> = {};
+  let newTotals: Record<string, number> = {};
   for (const ec of enriched) {
     const raw = votesPerCandidate[ec.candidateId] ?? 0;
     const multiplier = executiveEndorsedCandidateIds.has(ec.candidateId)
@@ -758,6 +762,19 @@ export async function accumulateVoteTurn(
     for (const candidate of enriched)
       newTotals[candidate.candidateId] =
         (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
+  }
+
+  if (isBoundDuma) {
+    newTotals = russianDumaVoteTotals({
+      registeredVoters: election.russianDumaRound!.registeredVoters,
+      priorVotes: tally.totalVotes,
+      rawVotes: Object.fromEntries(
+        enriched.map((candidate) => [
+          candidate.candidateId,
+          newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+        ])
+      ),
+    });
   }
 
   // For house/stateSenate races, compute per-candidate seat estimates
@@ -836,7 +853,7 @@ export async function accumulateVoteTurn(
   })();
 
   const nativeRussianTotal =
-    election.countryId === "RU" && election.russianPresidentialRound
+    (election.countryId === "RU" && election.russianPresidentialRound) || isBoundDuma
       ? Object.values(newTotals).reduce((sum, count) => sum + count, 0)
       : null;
   const snapshot: VoteTurnSnapshot = {
@@ -855,11 +872,11 @@ export async function accumulateVoteTurn(
     ...(seatsEstimate ? { seatsEstimate } : {}),
   };
 
-  // Sync candidateNames/candidateParties: remove withdrawn, add any who joined after tally init
+  // Sync nominee labels, retaining counted Duma withdrawals for certification.
   const cleanedNames = { ...tally.candidateNames };
   const cleanedParties = { ...tally.candidateParties };
   for (const key of Object.keys(tally.totalVotes)) {
-    if (!activeCandidateIds.has(key)) {
+    if (!activeCandidateIds.has(key) && !isBoundDuma) {
       delete cleanedNames[key];
       delete cleanedParties[key];
     }

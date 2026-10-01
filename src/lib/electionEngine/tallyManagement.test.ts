@@ -436,6 +436,52 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     );
   });
 
+  it.each(["list", "constituency"] as const)(
+    "preserves counted Duma withdrawals and caps %s participation without a presidential strength query",
+    async (tier) => {
+      const { accumulateVoteTurn } = await import("./tallyManagement");
+      const electionId = new ObjectId();
+      const active = makeCandidate({ electionId, countryId: "RU" });
+      const withdrawn = new ObjectId().toHexString();
+      const election = makeElection({
+        _id: electionId,
+        countryId: "RU",
+        electionType: "dumaDeputy",
+        state: tier === "list" ? "RU" : "CEN",
+        totalSeats: tier === "list" ? 225 : 1,
+        russianDumaRound: {
+          cohortId: new ObjectId(),
+          tier,
+          mandateSinceTurn: 72,
+          registeredVoters: 100,
+          regionalDistrictCount: 3,
+        },
+      });
+      await setupHappyPath({
+        electionId,
+        election,
+        candidates: [active],
+        existingTallyVotes: { [withdrawn]: 60, [active._id.toHexString()]: 30 },
+        voteResult: { [active._id.toHexString()]: 100 },
+      });
+      const previous = await db.collectionMocks.electionVoteTallies.findOne();
+      previous.candidateNames[withdrawn] = "Withdrawn nominee";
+      previous.candidateParties[withdrawn] = "2";
+      db.collection("campaigns");
+      await accumulateVoteTurn(electionId, 1, new Date("2024-01-01T00:00:00Z"));
+      const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
+      expect(update.$set.totalVotes).toEqual({ [withdrawn]: 60, [active._id.toHexString()]: 40 });
+      expect(update.$set.candidateNames[withdrawn]).toBe("Withdrawn nominee");
+      expect(update.$set.candidateParties[withdrawn]).toBe("2");
+      expect(update.$push.turnSnapshots.cumulativeVotes[withdrawn]).toBe(60);
+      expect(update.$push.turnSnapshots.sharesPct[withdrawn]).toBe(60);
+      expect(db.collectionMocks.campaigns.find).not.toHaveBeenCalledWith(
+        { electionId },
+        { projection: { candidateId: 1, campaignStrength: 1 } }
+      );
+    }
+  );
+
   async function setupHappyPath(opts: {
     electionId: ObjectId;
     candidates: ElectionCandidate[];
