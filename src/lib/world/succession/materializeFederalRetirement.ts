@@ -1,3 +1,8 @@
+/**
+ * Complete federation dissolution retires offices, cabinet posts and pending votes.
+ * materializeFederationFederalRetirement archives their history and clears office
+ * links in the settlement transaction, preserving residents and their accounts.
+ */
 import type { ClientSession, Db, Document } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
@@ -11,9 +16,6 @@ import type {
 import { FEDERATION_ARCHIVED_POLITICAL_ROWS_COLLECTION } from "./materializeRussianCongress";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 
-/** Retire only the active federal institutions after a complete dissolution.
- * Completed election records remain historical; player characters and their
- * protected wallets are handled by the residence materializer. */
 export async function materializeFederationFederalRetirement(input: {
   db: Db;
   session: ClientSession;
@@ -69,16 +71,14 @@ export async function materializeFederationFederalRetirement(input: {
     )
     .toArray();
   if (activeElectionIds.length)
-    await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .updateMany(
-        {
-          electionId: { $in: activeElectionIds.map((election) => election._id) },
-          status: "active",
-        },
-        { $set: { status: "withdrawn", updatedAt: now } },
-        { session }
-      );
+    await db.collection<ElectionCandidate>("electionCandidates").updateMany(
+      {
+        electionId: { $in: activeElectionIds.map((election) => election._id) },
+        status: "active",
+      },
+      { $set: { status: "withdrawn", updatedAt: now } },
+      { session }
+    );
   await db
     .collection<Character>("characters")
     .updateMany(
