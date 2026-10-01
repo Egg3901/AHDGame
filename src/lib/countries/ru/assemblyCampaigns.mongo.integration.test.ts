@@ -100,7 +100,13 @@ describe.skipIf(!uri)("Native Assembly campaigns on isolated Mongo", () => {
       commands++;
     });
     client.on("commandSucceeded", (event) => {
-      const rows = event.reply.cursor?.firstBatch ?? event.reply.cursor?.nextBatch ?? [];
+      const reply = event.reply;
+      if (!reply || typeof reply !== "object" || !("cursor" in reply)) return;
+      const cursor = reply.cursor;
+      if (!cursor || typeof cursor !== "object") return;
+      const rows =
+        "firstBatch" in cursor ? cursor.firstBatch : "nextBatch" in cursor ? cursor.nextBatch : [];
+      if (!Array.isArray(rows)) return;
       for (const row of rows) {
         docsRead++;
         bytesRead += BSON.calculateObjectSize(row);
