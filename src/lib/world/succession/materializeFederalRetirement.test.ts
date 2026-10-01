@@ -98,10 +98,13 @@ describe("dissolved federation political retirement", () => {
       activeVoteId: null,
     });
     expect(mem.collection("federationArchivedPoliticalRows").docs).toHaveLength(3);
-    expect(
-      mem.collection("federationArchivedPoliticalRows").docs.find((row) => row.value._id === "CS")
-        ?.value
-    ).toMatchObject({ pmName: "Old PM", hosName: "Old head" });
+    expect(mem.collection("federationArchivedPoliticalRows").docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          value: expect.objectContaining({ _id: "CS", pmName: "Old PM", hosName: "Old head" }),
+        }),
+      ])
+    );
     expect(
       await db.collection<Document & { _id: string }>("countryGameStates").findOne({ _id: "CS" })
     ).toMatchObject({ dissolvedTurn: 97 });

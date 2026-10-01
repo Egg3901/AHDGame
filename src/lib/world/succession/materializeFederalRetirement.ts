@@ -3,7 +3,7 @@
  * materializeFederationFederalRetirement archives their history and clears office
  * links in the settlement transaction, preserving residents and their accounts.
  */
-import type { ClientSession, Db, Document } from "mongodb";
+import type { ClientSession, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   Character,
@@ -15,6 +15,8 @@ import type {
 } from "@/lib/db/types";
 import { FEDERATION_ARCHIVED_POLITICAL_ROWS_COLLECTION } from "./materializeRussianCongress";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+
+type HistoricalPoliticalRow = { _id: ObjectId | string; [key: string]: unknown };
 
 export async function materializeFederationFederalRetirement(input: {
   db: Db;
@@ -44,14 +46,17 @@ export async function materializeFederationFederalRetirement(input: {
       collectionName === "governmentFormations"
         ? { _id: sourceCountryId }
         : { countryId: sourceCountryId };
-    const rows = await db.collection<Document>(collectionName).find(filter, { session }).toArray();
+    const rows = await db
+      .collection<HistoricalPoliticalRow>(collectionName)
+      .find(filter, { session })
+      .toArray();
     if (rows.length)
       await db
         .collection<{
           _id: string;
           applicationId: string;
           sourceCountryId: CountryId;
-          value: Document;
+          value: HistoricalPoliticalRow;
         }>(FEDERATION_ARCHIVED_POLITICAL_ROWS_COLLECTION)
         .insertMany(
           rows.map((value) => ({
