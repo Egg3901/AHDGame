@@ -251,7 +251,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
         name: "First profile",
         party: "1",
         homeState: "CEN",
-        currentOffice: "congressDeputy",
+        currentOffice: { type: "congressDeputy" },
         retiredAt: null,
         cashOnHand: 77,
       },
@@ -270,7 +270,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
         name: "Executive profile",
         party: "2",
         homeState: "CEN",
-        currentOffice: "president",
+        currentOffice: { type: "president" },
         retiredAt: null,
       },
       {
