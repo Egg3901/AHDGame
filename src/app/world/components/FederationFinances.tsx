@@ -19,7 +19,10 @@ export default function FederationFinances({ snapshots }: { snapshots: LegacySer
           className="rounded-lg border border-card-border bg-card p-5 space-y-3"
         >
           <h3 className="font-semibold">
-            {t("administration", { source: snapshot.sourceName, turn: snapshot.turn })}
+            {t(
+              snapshot.servicingKind === "continuing-state" ? "continuingIssuer" : "administration",
+              { source: snapshot.sourceName, turn: snapshot.turn }
+            )}
           </h3>
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
@@ -27,11 +30,19 @@ export default function FederationFinances({ snapshots }: { snapshots: LegacySer
               <dd>{amount(snapshot.creditorDueMinor)}</dd>
             </div>
             <div>
-              <dt>{t("overdraft")}</dt>
-              <dd>{amount(snapshot.bridgeOutstandingMinor)}</dd>
+              <dt>
+                {t(snapshot.servicingKind === "continuing-state" ? "issuerOwnShare" : "overdraft")}
+              </dt>
+              <dd>
+                {amount(
+                  snapshot.servicingKind === "continuing-state"
+                    ? (snapshot.issuerOwnShareMinor ?? 0)
+                    : snapshot.bridgeOutstandingMinor
+                )}
+              </dd>
             </div>
             <div>
-              <dt>{t("cash")}</dt>
+              <dt>{t(snapshot.servicingKind === "continuing-state" ? "issuerCash" : "cash")}</dt>
               <dd>{amount(snapshot.administrationCashAfterMinor)}</dd>
             </div>
           </dl>
@@ -55,7 +66,9 @@ export default function FederationFinances({ snapshots }: { snapshots: LegacySer
               </tbody>
             </table>
           </div>
-          <p className="text-sm text-muted">{t("risk")}</p>
+          <p className="text-sm text-muted">
+            {t(snapshot.servicingKind === "continuing-state" ? "continuingRisk" : "risk")}
+          </p>
         </article>
       ))}
     </section>

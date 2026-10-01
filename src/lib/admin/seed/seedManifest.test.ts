@@ -33,6 +33,7 @@ describe("seed manifest classification coverage", () => {
       "federationResidentHolds",
       "federationFiscalAccounts",
       "federationLegacyServiceTurns",
+      "federationContinuingServiceTurns",
       "federationFacilityClaims",
       "federationFacilityPaymentTurns",
     ]) {
