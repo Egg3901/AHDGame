@@ -102,9 +102,6 @@ export function MarketOverview({
 }) {
   const { formatAmount } = useCurrency();
   const formatAmountRef = useRef(formatAmount);
-  useEffect(() => {
-    formatAmountRef.current = formatAmount;
-  }, [formatAmount]);
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -143,6 +140,13 @@ export function MarketOverview({
 
   const fmt = (n: number | undefined): string =>
     n === undefined || !Number.isFinite(n) ? "Unavailable" : formatAmountRef.current(Math.round(n));
+
+  useEffect(() => {
+    formatAmountRef.current = formatAmount;
+    chartRef.current?.applyOptions({
+      localization: { priceFormatter: (value: number) => formatAmount(Math.round(value)) },
+    });
+  }, [formatAmount, chartReady]);
 
   /* ---------------- chart lifecycle (mount once) ---------------- */
   useEffect(() => {
@@ -358,11 +362,12 @@ export function MarketOverview({
       }))
     );
     const key = `${exchangeApi}:${turns}`;
-    if (fittedRange.current !== key && candles.length > 0) {
+    const dataKey = `${meta?.exchange ?? exchangeApi}:${meta?.turns ?? turns}`;
+    if (dataKey === key && fittedRange.current !== key && candles.length > 0) {
       chart.timeScale().fitContent();
       fittedRange.current = key;
     }
-  }, [candles, chartReady, exchangeApi, turns]);
+  }, [candles, chartReady, exchangeApi, turns, meta]);
 
   useEffect(() => {
     let cancelled = false;

@@ -91,6 +91,40 @@ describe("MarketOverview loading", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("fits a newly selected range only after its own data arrives", async () => {
+    const fit = vi.fn();
+    createChart.mockImplementation(() => ({
+      addSeries: () => ({ setData: vi.fn(), priceScale: () => ({ applyOptions: vi.fn() }) }),
+      timeScale: () => ({ fitContent: fit }),
+      subscribeCrosshairMove: vi.fn(),
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+    }));
+    let resolveAll!: (value: unknown) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url.includes("turns=0")
+          ? new Promise((resolve) => {
+              resolveAll = resolve;
+            })
+          : Promise.resolve({
+              ok: true,
+              json: async () => ({ exchange: "global", turns: 48, points: [candle] }),
+            })
+      )
+    );
+    render(<MarketOverview exchangeFilter="global" />);
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "ALL" }));
+    expect(fit).toHaveBeenCalledTimes(1);
+    resolveAll({
+      ok: true,
+      json: async () => ({ exchange: "global", turns: 0, points: [candle] }),
+    });
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(2));
+  });
+
   it("reports first open to last close for the selected range", async () => {
     vi.stubGlobal(
       "fetch",
