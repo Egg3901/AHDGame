@@ -898,6 +898,14 @@ export async function accumulateVoteTurn(
         totalVotes: newTotals,
         candidateNames: cleanedNames,
         candidateParties: cleanedParties,
+        ...(isBoundDuma
+          ? {
+              russianDumaBallot: {
+                ...tally.russianDumaBallot,
+                againstAllVotes: tally.russianDumaBallot?.againstAllVotes ?? 0,
+              },
+            }
+          : {}),
         ...(seatsEstimate ? { seatsEstimate } : {}),
         updatedAt: now,
       },
