@@ -15,6 +15,7 @@
  * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
+import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId } from "mongodb";
 import type { ClientSession, Db, UpdateFilter } from "mongodb";
@@ -1485,10 +1486,14 @@ export async function runIndexFundCron(
   const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
   // #992 tranche 6: one thresholds read for every bond-reserve purchase row
   // this turn; threaded through each deploy so N funds share it.
-  const [bondDeployThresholds, bondDeployTurnLengthMinutes] = await Promise.all([
-    loadTxThresholds(db),
-    loadTurnLengthMinutes(db),
-  ]);
+  const [bondDeployThresholds, bondDeployTurnLengthMinutes, bondSettleInTransaction] =
+    await Promise.all([
+      loadTxThresholds(db),
+      loadTurnLengthMinutes(db),
+      // A replica set settles each fund's bond pass in one transaction; a
+      // standalone server (singleplayer, sandboxes) keeps per-purchase writes.
+      assertTransactionSupportAtBoot().catch(() => false),
+    ]);
 
   // Pass 1a: mark holdings and recompute NAV. Each task only writes its own
   // fund document, so bounded concurrency is safe and removes the serial
@@ -1626,6 +1631,7 @@ export async function runIndexFundCron(
             turn: currentTurn,
             thresholds: bondDeployThresholds,
             turnLengthMinutes: bondDeployTurnLengthMinutes,
+            settleInTransaction: bondSettleInTransaction,
           }
         );
         if (bondDeploy.deployedAnchor > 0) {
