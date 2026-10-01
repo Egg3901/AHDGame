@@ -52,7 +52,8 @@ export function EconomicSystemReformEditor({
       </div>
       <p className="text-[11px] italic text-muted/60">
         {include
-          ? `${ECONOMIC_SYSTEM_TARGET_DESCRIPTION[target]} The change phases in over the turns after enactment.`          : "No economic system provision will be included in this bill."}
+          ? `${ECONOMIC_SYSTEM_TARGET_DESCRIPTION[target]} The change phases in over the turns after enactment.`
+          : "No economic system provision will be included in this bill."}
       </p>
     </div>
   );
