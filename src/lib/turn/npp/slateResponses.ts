@@ -32,7 +32,10 @@ import type {
 import type { NPPContext } from "./context";
 import { decideNPPSlateResponse } from "./slateResponse";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
-import { materializeSlateAssignmentsFromTemplate } from "@/lib/db/recruitmentSlateLookup";
+import {
+  materializeSlateAssignmentsFromTemplate,
+  prefetchSlateTemplates,
+} from "@/lib/db/recruitmentSlateLookup";
 import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive";
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
 import { isSpecialCommonsElection } from "@/lib/utils/electionLabels";
@@ -145,8 +148,14 @@ export async function syncPersistentSlateAssignments(ctx: NPPContext): Promise<n
   }
 
   // 4) Only materialize pairs that are genuinely empty or missing AND could
-  // actually source a template.
-  let materialized = 0;
+  // actually source a template. Templates, their rows, and the roster they
+  // name are loaded for all such pairs at once rather than five reads a pair.
+  const targets: {
+    election: Election;
+    countryId: CountryId;
+    partyId: string;
+    existing: RecruitmentSlate | null;
+  }[] = [];
   for (const { election, party } of pairs) {
     const electionCountry = election.countryId ?? "US";
     const partyId = String(party.sequentialId);
@@ -162,14 +171,20 @@ export async function syncPersistentSlateAssignments(ctx: NPPContext): Promise<n
     ) {
       continue; // No slate exists for this (country,party,state,type) — no template possible.
     }
+    targets.push({ election, countryId: electionCountry, partyId, existing });
+  }
+  const prefetched = await prefetchSlateTemplates(db, targets);
 
+  let materialized = 0;
+  for (const { election, countryId, partyId, existing } of targets) {
     const slate = await materializeSlateAssignmentsFromTemplate({
       db,
-      countryId: electionCountry,
+      countryId,
       partyId,
       election,
       now,
       knownEmptySlate: existing,
+      prefetched: prefetched.get(`${countryId}:${partyId}:${election._id}`),
     });
     if (slate) materialized += 1;
   }
