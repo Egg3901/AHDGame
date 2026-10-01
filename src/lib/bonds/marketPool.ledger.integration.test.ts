@@ -10,7 +10,7 @@ import type { LedgerEntry } from "@/lib/ledger/types";
 import { processBondMarketPoolTurn } from "./marketPoolTurn";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
-import { loadBondPoolLedgerContext } from "./marketPoolLedger";
+import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "./marketPoolLedger";
 import { creditBondPool, debitBondPoolGated } from "./marketPool";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
@@ -280,4 +280,48 @@ it("uses the cash writer's session for the witness", async () => {
   await creditBondPool(db, "USD", 2.35, "couponsIn", NOW, { session });
   expect(cashWrite.mock.calls[0][2]).toEqual({ upsert: true, session });
   expect(ledgerWrite.mock.calls[0][1]).toEqual({ ordered: false, session });
+});
+
+it("publishes one shadow insert for all currency pools in upkeep", async () => {
+  const { db } = fixture();
+  await db
+    .collection<{ _id: string; cashLocal: number; targetCashLocal: number }>("bondMarketPools")
+    .insertOne({ _id: "GBP", cashLocal: 100, targetCashLocal: 500 });
+  await db.collection("exchangeRates").insertOne({ currencyCode: "GBP", rate: 0.5 });
+  await db
+    .collection("moneySupplySnapshots")
+    .insertOne({ currencyCode: "GBP", m2: 10000, turn: TURN - 1 });
+  const opening = await collectBalances(db);
+  const insert = vi.spyOn(db.collection("ledgerEntries"), "insertMany");
+  await processBondMarketPoolTurn(db, TURN, NOW);
+  expect(insert).toHaveBeenCalledTimes(1);
+  const entries = await db.collection<LedgerEntry>("ledgerEntries").find({ turn: TURN }).toArray();
+  expect(entries).toHaveLength(2);
+  const closing = await collectBalances(db);
+  expect(
+    reconcileLedger({ turn: TURN, entries, openingBalances: opening, closingBalances: closing })
+      .stockVsFlow.findings
+  ).toEqual([]);
+});
+
+it("flushes landed cash witnesses when a later phase operation fails", async () => {
+  const { db } = fixture();
+  const opening = await collectBalances(db);
+  const context = await loadBondPoolLedgerContext(db, TURN);
+  const insert = vi.spyOn(db.collection("ledgerEntries"), "insertMany");
+  await expect(
+    withBondPoolLedgerBatch(db, context, async (batch) => {
+      await creditBondPool(db, "USD", 2.35, "couponsIn", NOW, { ledgerContext: batch });
+      await creditBondPool(db, "USD", 100, "maturitiesIn", NOW, { ledgerContext: batch });
+      throw new Error("later phase failure");
+    })
+  ).rejects.toThrow("later phase failure");
+  expect(insert).toHaveBeenCalledTimes(1);
+  const entries = await db.collection<LedgerEntry>("ledgerEntries").find({ turn: TURN }).toArray();
+  expect(entries).toHaveLength(2);
+  const closing = await collectBalances(db);
+  expect(
+    reconcileLedger({ turn: TURN, entries, openingBalances: opening, closingBalances: closing })
+      .stockVsFlow.findings
+  ).toEqual([]);
 });

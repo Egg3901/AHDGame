@@ -9,11 +9,14 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BondMarketPoolFlowKind } from "@/lib/db/types/bondMarketPool";
 import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
 import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
+import type { LedgerEntryInput } from "@/lib/ledger/types";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 
 export interface BondPoolLedgerContext {
   turn: number;
   rates: ReadonlyMap<string, number>;
+  /** A phase-owned batch; direct callers publish immediately. */
+  pendingEntries?: LedgerEntryInput[];
 }
 
 /** Load once for a bond turn, from the same database as the cash writer. */
@@ -84,32 +87,49 @@ export async function witnessBondPoolCash(
   const rate = context.rates.get(currency);
   // Match bond_pool valuation in collectBalances, including its missing-rate fallback.
   const anchorAmount = !rate || rate <= 0 ? amount : amount / rate;
-  await emitLedgerEntries(
-    db,
-    [
+  const entry: LedgerEntryInput = {
+    turn: context.turn,
+    createdAt: now,
+    txType: accounting.txType,
+    emitSite: `bonds/marketPool:${kind}`,
+    legs: [
       {
-        turn: context.turn,
-        createdAt: now,
-        txType: accounting.txType,
-        emitSite: `bonds/marketPool:${kind}`,
-        legs: [
-          {
-            account: accountId("bond_pool", currency, currency),
-            amount,
-            currencyCode: currency,
-            anchorAmount,
-            role: "primary",
-          },
-          {
-            account: mintSinkAccount(anchorAmount, accounting.reason, currency),
-            amount: -amount,
-            currencyCode: currency,
-            anchorAmount: -anchorAmount,
-            role: "contra",
-          },
-        ],
+        account: accountId("bond_pool", currency, currency),
+        amount,
+        currencyCode: currency,
+        anchorAmount,
+        role: "primary",
+      },
+      {
+        account: mintSinkAccount(anchorAmount, accounting.reason, currency),
+        amount: -amount,
+        currencyCode: currency,
+        anchorAmount: -anchorAmount,
+        role: "contra",
       },
     ],
-    options?.session ? { session: options.session } : undefined
-  );
+  };
+  if (context.pendingEntries && !options?.session) {
+    context.pendingEntries.push(entry);
+  } else {
+    await emitLedgerEntries(
+      db,
+      [entry],
+      options?.session ? { session: options.session } : undefined
+    );
+  }
+}
+
+/** Publish one batch even if a later phase operation fails after moving cash. */
+export async function withBondPoolLedgerBatch<T>(
+  db: Db,
+  context: BondPoolLedgerContext | null,
+  work: (context: BondPoolLedgerContext | null) => Promise<T>
+): Promise<T> {
+  const batch = context ? { ...context, pendingEntries: [] as LedgerEntryInput[] } : null;
+  try {
+    return await work(batch);
+  } finally {
+    if (batch) await emitLedgerEntries(db, batch.pendingEntries);
+  }
 }

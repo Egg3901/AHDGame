@@ -60,7 +60,7 @@ import {
 import { emitBondTurnLedger, snapshotBondHistory, type PartialTxEntry } from "./bondTurnLedger";
 import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
-import { loadBondPoolLedgerContext } from "@/lib/bonds/marketPoolLedger";
+import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "@/lib/bonds/marketPoolLedger";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
@@ -1185,14 +1185,16 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
     await db.collection("bonds").bulkWrite(bondOps);
   }
 
-  for (const [currency, credit] of poolCreditsLocal) {
-    await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now, {
-      ledgerContext: poolLedgerContext,
-    });
-    await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now, {
-      ledgerContext: poolLedgerContext,
-    });
-  }
+  await withBondPoolLedgerBatch(db, poolLedgerContext, async (batch) => {
+    for (const [currency, credit] of poolCreditsLocal) {
+      await creditBondPool(db, currency, credit.couponsIn, "couponsIn", now, {
+        ledgerContext: batch,
+      });
+      await creditBondPool(db, currency, credit.maturitiesIn, "maturitiesIn", now, {
+        ledgerContext: batch,
+      });
+    }
+  });
 
   if (fundPaymentsAnchor.size > 0) {
     const fundPaymentOps = [...fundPaymentsAnchor]
