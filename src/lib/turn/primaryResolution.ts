@@ -3,6 +3,7 @@
  * recordPrimarySnapshots includes versioned turnout and standing character ads;
  * resolvePrimariesIfNeeded preserves counted ballots when selecting nominees.
  */
+import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import {
@@ -155,11 +156,11 @@ export async function resolvePrimariesIfNeeded(
   if (pastPrimary.length === 0) return;
 
   const electionIds = pastPrimary.map((e) => e._id as ObjectId);
-  const hasPresident = pastPrimary.some((e) => e.electionType === "president");
+  const hasPresident = pastPrimary.some((e) => usesLegacyPresidentialCampaign(e));
 
   // Region IDs needed for state-level primary alignment (skip presidential — national race).
   const regionLookups = pastPrimary
-    .filter((e) => e.electionType !== "president")
+    .filter((e) => !usesLegacyPresidentialCampaign(e))
     .map((e) => ({
       regionId: e.seatId ? parseSeatId(e.seatId).localRegionId : e.state,
       countryId: (e.countryId ?? "US") as CountryId,
@@ -293,7 +294,7 @@ export async function resolvePrimariesIfNeeded(
       .filter(
         ({ election, candidates }) =>
           usesCampaignAds(election, candidates) &&
-          election.electionType !== "president" &&
+          !usesLegacyPresidentialCampaign(election) &&
           candidates.some((candidate) => candidate.targetedAds?.length)
       )
       .map(({ election }) => `${election.countryId}:${election.state}`)
@@ -360,7 +361,7 @@ export async function resolvePrimariesIfNeeded(
     // Resolve state lean for state-level alignment (skip president — national).
     let raceStateEconLean: number | null | undefined;
     let raceStateSocialLean: number | null | undefined;
-    if (election.electionType !== "president" && election.seatId) {
+    if (!usesLegacyPresidentialCampaign(election) && election.seatId) {
       const localRegionId = parseSeatId(election.seatId).localRegionId;
       if (localRegionId) {
         const stateDoc = stateMap.get(`${election.countryId ?? "US"}:${localRegionId}`);
@@ -389,13 +390,12 @@ export async function resolvePrimariesIfNeeded(
        * The presidential path falls back to score-based ranking only if no delegate
        * data is present (e.g. admin-forced resolution skipping the stagger window).
        */
-      const presidentialTally =
-        election.electionType === "president"
-          ? presidentialTallyMap.get(electionId.toString())
-          : null;
+      const presidentialTally = usesLegacyPresidentialCampaign(election)
+        ? presidentialTallyMap.get(electionId.toString())
+        : null;
       const partyDelegates = presidentialTally?.primaryDelegates?.[partyId];
       const usePresidentialDelegatePath =
-        election.electionType === "president" &&
+        usesLegacyPresidentialCampaign(election) &&
         partyDelegates &&
         Object.values(partyDelegates).some((v) => v > 0);
 
@@ -405,10 +405,9 @@ export async function resolvePrimariesIfNeeded(
       // crossed zero yet (e.g. admin-forced resolution mid-stagger). Rank by the
       // national sum of real per-state votes so the winner still matches the
       // vote engine rather than the ideology score (#3022).
-      const partyStateVotes =
-        election.electionType === "president"
-          ? presidentialTally?.primaryStateVotes?.[partyId]
-          : undefined;
+      const partyStateVotes = usesLegacyPresidentialCampaign(election)
+        ? presidentialTally?.primaryStateVotes?.[partyId]
+        : undefined;
       const partyNationalVotes: Record<string, number> = {};
       if (partyStateVotes) {
         for (const byCandidate of Object.values(partyStateVotes)) {
@@ -419,18 +418,17 @@ export async function resolvePrimariesIfNeeded(
       }
       const usePresidentialVoteFallback =
         !usePresidentialDelegatePath &&
-        election.electionType === "president" &&
+        usesLegacyPresidentialCampaign(election) &&
         Object.values(partyNationalVotes).some((v) => v > 0);
 
       // Down-ballot: cumulative primary ballots accrued turn by turn, when the
       // race has any. Null keeps the legacy score path.
-      const downBallotBallots =
-        election.electionType !== "president"
-          ? scoreByPrimaryVotes(
-              partyCandidates.map((c) => c._id.toString()),
-              tallyByElection.get(electionId.toString())?.primaryVotes
-            )
-          : null;
+      const downBallotBallots = !usesLegacyPresidentialCampaign(election)
+        ? scoreByPrimaryVotes(
+            partyCandidates.map((c) => c._id.toString()),
+            tallyByElection.get(electionId.toString())?.primaryVotes
+          )
+        : null;
 
       if (usePresidentialDelegatePath && partyDelegates) {
         scored = partyCandidates
@@ -514,7 +512,7 @@ export async function resolvePrimariesIfNeeded(
             if (!ec)
               return { candidateId: c._id.toString(), characterName: c.characterName, score: 0 };
             let score: number;
-            if (election.electionType === "president") {
+            if (usesLegacyPresidentialCampaign(election)) {
               // Party influence (candidate's own party clout), NPPs have none. See #934.
               // No chair multiplier — the chair primary boost was removed (#3019);
               // effectivePartyInfluenceForPresidentialPrimary is an inert passthrough.
@@ -695,7 +693,7 @@ export async function resolvePrimariesIfNeeded(
             party: c.party,
           },
         });
-        if (!isLoser && election.electionType === "president") {
+        if (!isLoser && usesLegacyPresidentialCampaign(election)) {
           achievementPromises.push(
             import("@/lib/achievements")
               .then(async ({ awardAchievement, resolveUserIdFromCharacter }) => {
@@ -712,7 +710,7 @@ export async function resolvePrimariesIfNeeded(
     // Clear primary-phase campaigning state for every candidate in this election —
     // the primary is over, so the badge and ticks should reset before general-phase
     // travel takes over. Only affects presidential (state primaries don't set these).
-    if (election.electionType === "president") {
+    if (usesLegacyPresidentialCampaign(election)) {
       await db.collection<ElectionCandidate>("electionCandidates").updateMany(
         { electionId },
         {
@@ -742,7 +740,7 @@ export async function resolvePrimariesIfNeeded(
       .collection<ElectionCandidate>("electionCandidates")
       .find({ electionId, status: "active" })
       .toArray();
-    if (election.electionType === "president") {
+    if (usesLegacyPresidentialCampaign(election)) {
       // Auto-pick a tentative running mate for any player nominee who hasn't
       // chosen one yet. Nominees can override via the running-mate UI at any
       // time during the general phase — this is a fallback so a player who wins
@@ -903,11 +901,11 @@ export async function recordPrimarySnapshots(
   if (activeElections.length === 0) return 0;
 
   const electionIds = activeElections.map((e) => e._id);
-  const hasPresident = activeElections.some((e) => e.electionType === "president");
+  const hasPresident = activeElections.some((e) => usesLegacyPresidentialCampaign(e));
 
   // Region IDs for state-level alignment lookups (skip presidential).
   const snapshotRegionLookups = activeElections
-    .filter((e) => e.electionType !== "president")
+    .filter((e) => !usesLegacyPresidentialCampaign(e))
     .map((e) => ({
       regionId: e.seatId ? parseSeatId(e.seatId).localRegionId : e.state,
       countryId: (e.countryId ?? "US") as CountryId,
@@ -1066,7 +1064,7 @@ export async function recordPrimarySnapshots(
   // winner instead of the old calcPresidentPrimaryScore ranking (#3022).
   const presProjections = await recordPresidentialStatePollingSnapshots(
     db,
-    activeElections.filter((e) => e.electionType === "president"),
+    activeElections.filter((e) => usesLegacyPresidentialCampaign(e)),
     candidatesByElection,
     charMap,
     nppMap,
@@ -1111,7 +1109,7 @@ export async function recordPrimarySnapshots(
   const modernRegionKeys = new Set(
     activeElections
       .filter((e) => usesCampaignAds(e, candidatesByElection.get(e._id.toString()) ?? []))
-      .filter((e) => e.electionType !== "president")
+      .filter((e) => !usesLegacyPresidentialCampaign(e))
       .map(
         (e) =>
           `${e.countryId}:${e.seatId ? parseSeatId(e.seatId).localRegionId : e.state}:${usesCampaignRules(e) ? 1 : 0}`
@@ -1159,7 +1157,7 @@ export async function recordPrimarySnapshots(
     activeElections
       .filter(
         (e) =>
-          e.electionType !== "president" &&
+          !usesLegacyPresidentialCampaign(e) &&
           e.state === e.countryId &&
           candidatesByElection
             .get(e._id.toString())
@@ -1209,7 +1207,7 @@ export async function recordPrimarySnapshots(
     if (candidates.length === 0) continue;
     if (alreadyRecorded.has(electionObjectId.toString())) continue;
 
-    const isPresident = election.electionType === "president";
+    const isPresident = usesLegacyPresidentialCampaign(election);
 
     // Resolve state lean for state-level alignment (skip president).
     let raceStateEconLean: number | null | undefined;
@@ -1732,7 +1730,7 @@ export async function accumulateGeneralElectionVotes(
     })
     .toArray();
 
-  const stateElections = generalElections.filter((e) => e.electionType !== "president");
+  const stateElections = generalElections.filter((e) => !usesLegacyPresidentialCampaign(e));
   const hasStateElections = stateElections.length > 0;
 
   let approvalMap: Map<string, number> | undefined;
@@ -1912,7 +1910,7 @@ export async function accumulateGeneralElectionVotes(
   // election path stays for callers without a preload.
   if (preload) {
     preload.fundsByPartyByElection = await loadFundsByPartyForElections(
-      generalElections.filter((e) => e.electionType !== "president").map((e) => e._id),
+      generalElections.filter((e) => !usesLegacyPresidentialCampaign(e)).map((e) => e._id),
       db
     );
   }
@@ -1938,7 +1936,7 @@ export async function accumulateGeneralElectionVotes(
       const existing = tallyByElection.get(election._id.toString());
       const activeCandidates = candidatesByElection.get(election._id.toString()) ?? [];
 
-      if (election.electionType === "president") {
+      if (usesLegacyPresidentialCampaign(election)) {
         if (!existing && activeCandidates.length > 0) {
           await initPresidentVoteTally(election._id, activeCandidates);
         }

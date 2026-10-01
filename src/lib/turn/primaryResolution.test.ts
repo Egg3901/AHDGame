@@ -79,86 +79,91 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
   });
 
-  it("records primaryResults for uncontested parties without eliminating anyone", async () => {
-    const electionId = new ObjectId();
-    const election = {
-      _id: electionId,
-      electionType: "senate",
-      status: "active",
-      countryId: "US",
-      state: "CA",
-      primaryEndTime: new Date(NOW.getTime() - 1000),
-      endTime: new Date(NOW.getTime() + 100000),
-    };
+  it.each(["regional", "Russian presidency"])(
+    "records uncontested %s primary results without US delegates",
+    async (kind) => {
+      const electionId = new ObjectId();
+      const election = {
+        _id: electionId,
+        electionType: kind === "regional" ? "senate" : "president",
+        status: "active",
+        countryId: kind === "regional" ? "US" : "RU",
+        state: kind === "regional" ? "CA" : "RU",
+        primaryEndTime: new Date(NOW.getTime() - 1000),
+        endTime: new Date(NOW.getTime() + 100000),
+      };
 
-    const candidate1 = {
-      _id: new ObjectId(),
-      electionId,
-      party: "DEM",
-      characterName: "Alice",
-      characterId: new ObjectId(),
-      isNPP: false,
-      status: "active",
-    };
-    const candidate2 = {
-      _id: new ObjectId(),
-      electionId,
-      party: "GOP",
-      characterName: "Bob",
-      characterId: new ObjectId(),
-      isNPP: false,
-      status: "active",
-    };
+      const candidate1 = {
+        _id: new ObjectId(),
+        electionId,
+        party: "DEM",
+        characterName: "Alice",
+        characterId: new ObjectId(),
+        isNPP: false,
+        status: "active",
+      };
+      const candidate2 = {
+        _id: new ObjectId(),
+        electionId,
+        party: "GOP",
+        characterName: "Bob",
+        characterId: new ObjectId(),
+        isNPP: false,
+        status: "active",
+      };
 
-    // elections.find returns our election
-    db.collectionMocks["elections"] = db.collection("elections");
-    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+      // elections.find returns our election
+      db.collectionMocks["elections"] = db.collection("elections");
+      db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
 
-    // parties
-    db.collectionMocks["politicalParties"] = db.collection("politicalParties");
-    db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
+      // parties
+      db.collectionMocks["politicalParties"] = db.collection("politicalParties");
+      db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
 
-    // candidates — one per party
-    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
-    db.collectionMocks["electionCandidates"].find.mockReturnValue(
-      makeCursor([candidate1, candidate2])
-    );
+      // candidates — one per party
+      db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+      db.collectionMocks["electionCandidates"].find.mockReturnValue(
+        makeCursor([candidate1, candidate2])
+      );
 
-    const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
-    vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
-      [candidate1, candidate2].map((c) => ({
-        candidateId: c._id.toString(),
-        charEP: 0,
-        charSP: 0,
-        favorability: 50,
-        politicalInfluence: 100,
-      })) as never
-    );
-    const { calcPrimaryScore } = await import("@/lib/primaryScore");
-    vi.mocked(calcPrimaryScore).mockReturnValue(50);
+      const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+      vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
+        [candidate1, candidate2].map((c) => ({
+          candidateId: c._id.toString(),
+          charEP: 0,
+          charSP: 0,
+          favorability: 50,
+          politicalInfluence: 100,
+        })) as never
+      );
+      const { calcPrimaryScore } = await import("@/lib/primaryScore");
+      vi.mocked(calcPrimaryScore).mockReturnValue(50);
 
-    db.collectionMocks["characters"] = db.collection("characters");
-    db.collectionMocks["characters"].find.mockReturnValue(
-      makeCursor(
-        [candidate1, candidate2].map((c) => ({ _id: c.characterId, userId: new ObjectId() }))
-      )
-    );
-    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
-    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
+      db.collectionMocks["characters"] = db.collection("characters");
+      db.collectionMocks["characters"].find.mockReturnValue(
+        makeCursor(
+          [candidate1, candidate2].map((c) => ({ _id: c.characterId, userId: new ObjectId() }))
+        )
+      );
+      db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+      db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
-    await resolvePrimariesIfNeeded(NOW, 100);
+      const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
+      await resolvePrimariesIfNeeded(NOW, 100);
 
-    // No withdrawals — each party already at/under the advance cap
-    expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
-    // But still stamp primaryResults so districted house (and similar) can split
-    // seats by primary share rather than falling back to general-vote share.
-    const { initElectionVoteTally } = await import("@/lib/electionEngine");
-    expect(initElectionVoteTally).toHaveBeenCalled();
-    const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
-    expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
-    expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
-  });
+      // No withdrawals — each party already at/under the advance cap
+      expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
+      // But still stamp primaryResults so districted house (and similar) can split
+      // seats by primary share rather than falling back to general-vote share.
+      const { initElectionVoteTally } = await import("@/lib/electionEngine");
+      expect(initElectionVoteTally).toHaveBeenCalled();
+      const { initPresidentVoteTally } = await import("@/lib/presidentialElectionEngine");
+      expect(initPresidentVoteTally).not.toHaveBeenCalled();
+      const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
+      expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
+      expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
+    }
+  );
 
   it("eliminates lowest-scoring candidates in a contested primary", async () => {
     const electionId = new ObjectId();
