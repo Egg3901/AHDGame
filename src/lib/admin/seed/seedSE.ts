@@ -41,11 +41,6 @@ export async function seedSERegions(
     preset,
     {
       "2019-default": seRegions,
-      "1991-default": seRegions.map((region) => ({
-        ...region,
-        population:
-          SE_1991_MACROREGION_POPULATION[region._id as keyof typeof SE_1991_MACROREGION_POPULATION],
-      })),
       "1953-default": seRegions1953,
       "1979-default": seRegions,
       "1991-default": seRegions1991,

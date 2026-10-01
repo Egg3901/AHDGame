@@ -57,8 +57,8 @@ describe("runtime world map loader", () => {
   it("shows enacted Czechoslovak separation and the successor's current aggregate economy together", async () => {
     const memory = splitWorld();
     const snapshot = await loadWorldEntityMapSnapshot(memory as unknown as Db, "1991-default");
-    expect(snapshot.byEntityId.CS.status).toBe("dissolved");
-    expect(snapshot.byEntityId.CZ2).toMatchObject({
+    expect(snapshot.byEntityId!.CS.status).toBe("dissolved");
+    expect(snapshot.byEntityId!.CZ2).toMatchObject({
       status: "sovereign",
       simulationTier: "background-macro",
       macroSummary: {
@@ -67,7 +67,7 @@ describe("runtime world map loader", () => {
         contributionComputedOnTurn: 101,
       },
     });
-    expect(snapshot.byEntityId.SK.status).toBe("sovereign");
+    expect(snapshot.byEntityId!.SK.status).toBe("sovereign");
     expect(getWorldEntityOrThrow("1991-default", "CS").status).toBe("sovereign");
   });
 

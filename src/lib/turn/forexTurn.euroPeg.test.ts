@@ -202,11 +202,16 @@ describe("euro follower live peg", () => {
     expect(it).not.toHaveProperty("currencyCode");
   });
 
-  it("adds zero DB round trips: no gameState read, one pre-fetch per collection", async () => {
+  it("keeps rate reads batched with one projected monetary-authority lookup", async () => {
     mockEuroBanksAndRates();
     await processForexTurn(db as unknown as Db, 50, "2027-default");
 
-    expect(db.collectionMocks.gameState).toBeUndefined();
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledWith(
+      { _id: "current" },
+      expect.objectContaining({ projection: expect.objectContaining({ euroMonetaryUnion: 1 }) })
+    );
+    expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.centralBanks.find).toHaveBeenCalledTimes(1);
     // Pre-existing reads only: the turn-open pre-fetch plus the limit-order
     // phase's rate reload. The peg adds neither.

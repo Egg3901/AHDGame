@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { processForexTurn } from "./forexTurn";
+import * as euroService from "@/lib/currency/euro/service";
 import {
   CYCLE_PRESSURE_REGIMES,
   CYCLE_PRESSURE_TURNS,
@@ -125,26 +126,64 @@ beforeEach(() => {
 });
 
 describe("processForexTurn", () => {
-  it("mirrors the ECB euro rate into Bulgaria only in 2027", async () => {
-    const previousFindOne = db.collectionMocks.exchangeRates.findOne.getMockImplementation();
-    db.collectionMocks.exchangeRates.findOne.mockImplementation((filter: { _id: string }) =>
-      filter._id === "DE"
-        ? Promise.resolve(makeExchangeRate("DE", "EUR", 0.92, 0.92))
-        : previousFindOne?.(filter)
-    );
+  it("updates Bulgaria's quote from persisted euro membership rather than the preset alone", async () => {
+    vi.spyOn(euroService, "reconcileEuroMonetaryUnion")
+      .mockResolvedValueOnce({
+        authorityId: "ECB",
+        anchorCountryId: "DE",
+        anchorCurrency: "EUR",
+        anchorUnitsPerEuro: 1,
+        establishedTurn: 1,
+        revision: 1,
+        members: {
+          DE: {
+            countryId: "DE",
+            ledgerCurrency: "EUR",
+            ledgerUnitsPerAnchorUnit: 1,
+            joinedTurn: 1,
+            source: "legacy-settlement",
+          },
+          BG: {
+            countryId: "BG",
+            ledgerCurrency: "EUR",
+            ledgerUnitsPerAnchorUnit: 1,
+            joinedTurn: 1,
+            source: "enacted-law",
+          },
+        },
+      })
+      .mockResolvedValueOnce(undefined);
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [
+        makeExchangeRate("US", "USD", 1, 1),
+        makeExchangeRate("UK", "GBP", 0.75, 0.75),
+        makeExchangeRate("JP", "JPY", 106, 106),
+        makeExchangeRate("DE", "EUR", 0.92, 0.92),
+        makeExchangeRate("BG", "EUR", 1.1, 0.92),
+      ],
+    });
+    db.collectionMocks.centralBanks.find.mockReturnValue({
+      toArray: async () => [makeCentralBank("DE")],
+    });
+    db.collectionMocks.exchangeRates.bulkWrite.mockResolvedValueOnce({ matchedCount: 1 });
     await processForexTurn(db as unknown as Db, 50, "2027-default");
-    expect(db.collectionMocks.exchangeRates.updateOne).toHaveBeenCalledWith(
-      { _id: "BG", currencyCode: "EUR" },
-      expect.objectContaining({ $set: expect.objectContaining({ rate: 0.92 }) })
+    const anchorUpdate = db.collectionMocks.exchangeRates.updateOne.mock.calls.find(
+      ([filter]) => filter._id === "DE"
     );
-
-    db.collectionMocks.exchangeRates.updateOne.mockClear();
+    expect(anchorUpdate).toBeDefined();
+    expect(db.collectionMocks.exchangeRates.bulkWrite).toHaveBeenCalledWith([
+      expect.objectContaining({
+        updateOne: expect.objectContaining({
+          filter: { _id: "BG" },
+          update: expect.objectContaining({
+            $set: expect.objectContaining({ rate: anchorUpdate![1].$set.rate }),
+          }),
+        }),
+      }),
+    ]);
+    db.collectionMocks.exchangeRates.bulkWrite.mockClear();
     await processForexTurn(db as unknown as Db, 50, "1991-default");
-    expect(
-      db.collectionMocks.exchangeRates.updateOne.mock.calls.some(
-        (call: Array<{ _id: string }>) => call[0]._id === "BG"
-      )
-    ).toBe(false);
+    expect(db.collectionMocks.exchangeRates.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("updates all 3 forex-active countries", async () => {
