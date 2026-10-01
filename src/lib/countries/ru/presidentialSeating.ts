@@ -104,7 +104,12 @@ export async function materializeRussianPresidentialSeating(input: {
     ? await db
         .collection<NPP>("npps")
         .find(
-          { _id: { $in: nppIds }, countryId: "RU", isTechnocrat: { $ne: true } },
+          {
+            _id: { $in: nppIds },
+            countryId: "RU",
+            $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
+            isTechnocrat: { $ne: true },
+          },
           { session, projection: { _id: 1 } }
         )
         .toArray()

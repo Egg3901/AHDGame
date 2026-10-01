@@ -7,7 +7,7 @@ import messages from "../../../../../messages/en/elections.json";
 import { RussianPresidentialResultPanel } from "./RussianPresidentialResultPanel";
 import type { GeneralVotes } from "./ElectionDetailTypes";
 const candidates = [
-  { id: "a", characterName: "Leader", partyName: "First" },
+  { id: "a", characterName: "Leader", partyName: "First", runningMateName: "Vice nominee" },
   { id: "b", characterName: "Other", partyName: "Second" },
 ];
 function panel(outcome: "won" | "runoff" | "repeat", actions = {}) {
@@ -43,6 +43,7 @@ describe("Russian direct ballot display", () => {
   it("reports a certified winner and participation without an electoral college", () => {
     panel("won");
     expect(screen.getByText("Leader wins the certified ballot.")).toBeTruthy();
+    expect(screen.getByText("Vice-presidential nominee: Vice nominee")).toBeTruthy();
     expect(screen.getByText("60 participants out of 100 registered voters.")).toBeTruthy();
     expect(screen.queryByText(/electoral college/i)).toBeNull();
   });

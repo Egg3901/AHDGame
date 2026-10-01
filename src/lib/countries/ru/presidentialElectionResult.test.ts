@@ -72,6 +72,14 @@ function scenario() {
   };
 }
 describe("Russian presidential result certification", () => {
+  it.each([0, 1])("repeats the ballot when ticket NPC %s has retired", async (index) => {
+    const { mem, input } = scenario();
+    mem.collection("npps").docs[index].retiredAt = new Date(1);
+    expect((await resolve(input)).decision).toEqual({
+      outcome: "repeat",
+      reason: "invalid-ballot",
+    });
+  });
   it("certifies the popular winner and leaves current office holders intact", async () => {
     const { mem, a, electionId, input } = scenario();
     const result = await resolve(input);

@@ -377,7 +377,8 @@
       "votes": "{votes, number} votes ({share}%)",
       "endorse": "Endorse",
       "withdrawEndorsement": "Withdraw endorsement",
-      "supportCampaign": "Support campaign"
+      "supportCampaign": "Support campaign",
+      "runningMate": "Vice-presidential nominee: {name}"
     }
   }
 }

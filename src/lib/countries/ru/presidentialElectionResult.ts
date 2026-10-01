@@ -192,9 +192,14 @@ export async function materializeRussianPresidentialElectionResult(input: {
     const ownerId = winner.isNPP ? winner.nppId : winner.characterId;
     if (!ownerId) throw new Error("Russian presidential winner has no owner");
     const owner = winner.isNPP
-      ? await db
-          .collection<NPP>("npps")
-          .findOne({ _id: ownerId, countryId: "RU" }, { session, projection: { _id: 1 } })
+      ? await db.collection<NPP>("npps").findOne(
+          {
+            _id: ownerId,
+            countryId: "RU",
+            $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
+          },
+          { session, projection: { _id: 1 } }
+        )
       : await db
           .collection<Character>("characters")
           .findOne({ _id: ownerId, countryId: "RU" }, { session, projection: { _id: 1 } });
@@ -204,12 +209,15 @@ export async function materializeRussianPresidentialElectionResult(input: {
     const mate =
       mateId && !samePerson
         ? mateIsNpp
-          ? await db
-              .collection<NPP>("npps")
-              .findOne(
-                { _id: mateId, countryId: "RU", isTechnocrat: { $ne: true } },
-                { session, projection: { name: 1, party: 1 } }
-              )
+          ? await db.collection<NPP>("npps").findOne(
+              {
+                _id: mateId,
+                countryId: "RU",
+                $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
+                isTechnocrat: { $ne: true },
+              },
+              { session, projection: { name: 1, party: 1 } }
+            )
           : await db
               .collection<Character>("characters")
               .findOne(

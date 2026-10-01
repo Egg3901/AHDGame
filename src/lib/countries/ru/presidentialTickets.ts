@@ -24,7 +24,7 @@ export async function materializeRussianPresidentialTickets(input: {
   const candidates = await db
     .collection<ElectionCandidate>("electionCandidates")
     .find(
-      { electionId: election._id, status: "active" },
+      { electionId: election._id, status: "active", russianTicketLocked: { $ne: true } },
       {
         session,
         projection: {
@@ -39,25 +39,43 @@ export async function materializeRussianPresidentialTickets(input: {
     )
     .toArray();
   const missing = candidates.filter((c) => !c.runningMateId && !c.russianRunningMateNppId);
-  if (!missing.length) return;
-  const pool = await db
-    .collection<NPP>("npps")
-    .find(
-      {
-        countryId: "RU",
-        party: { $in: [...new Set(missing.map((c) => c.party))] },
-        isTechnocrat: { $ne: true },
-      },
-      { session, projection: { party: 1, currentOffice: 1 } }
-    )
-    .toArray();
+  if (!candidates.length) return;
+  const pool = missing.length
+    ? await db
+        .collection<NPP>("npps")
+        .find(
+          {
+            countryId: "RU",
+            party: { $in: [...new Set(missing.map((c) => c.party))] },
+            isTechnocrat: { $ne: true },
+            $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
+          },
+          { session, projection: { party: 1, currentOffice: 1 } }
+        )
+        .toArray()
+    : [];
   const reserved = new Set(
     candidates.flatMap((c) =>
       [c.nppId, c.russianRunningMateNppId].filter(Boolean).map((id) => id!.toHexString())
     )
   );
   const writes = [];
-  for (const candidate of missing) {
+  for (const candidate of candidates) {
+    if (candidate.runningMateId || candidate.russianRunningMateNppId) {
+      writes.push({
+        updateOne: {
+          filter: {
+            _id: candidate._id,
+            status: "active" as const,
+            runningMateId: candidate.runningMateId ?? { $exists: false },
+            russianRunningMateNppId: candidate.russianRunningMateNppId ?? { $exists: false },
+            russianTicketLocked: { $ne: true },
+          },
+          update: { $set: { russianTicketLocked: true } },
+        },
+      });
+      continue;
+    }
     const selected = chooseRussianNpcRunningMate(
       candidate.party,
       pool.map((n) => ({
@@ -75,6 +93,7 @@ export async function materializeRussianPresidentialTickets(input: {
         filter: {
           _id: candidate._id,
           status: "active" as const,
+          russianTicketLocked: { $ne: true },
           runningMateId:
             candidate.runningMateId === undefined ? { $exists: false } : candidate.runningMateId,
           russianRunningMateNppId:
@@ -82,7 +101,7 @@ export async function materializeRussianPresidentialTickets(input: {
               ? { $exists: false }
               : candidate.russianRunningMateNppId,
         },
-        update: { $set: { russianRunningMateNppId: mate._id } },
+        update: { $set: { russianRunningMateNppId: mate._id, russianTicketLocked: true } },
       },
     });
   }

@@ -5,6 +5,7 @@
  */
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type {
+  Campaign,
   CountryGameState,
   Election,
   ElectionCandidate,
@@ -110,6 +111,7 @@ export async function materializeRussianPresidentialFollowup(input: {
         characterName: finalist.characterName,
         party: finalist.party,
         status: "active",
+        russianTicketLocked: true,
         enteredAt: now,
         ...(finalist.isNPP ? { isNPP: true, nppId: finalist.nppId } : {}),
         ...(finalist.runningMateId ? { runningMateId: finalist.runningMateId } : {}),
@@ -155,6 +157,19 @@ export async function materializeRussianPresidentialFollowup(input: {
     await db
       .collection<ElectionCandidate>("electionCandidates")
       .insertMany(nextCandidates, { session });
+    await db.collection<Campaign>("campaigns").updateMany(
+      {
+        electionId: predecessorElectionId,
+        candidateId: {
+          $in: nextCandidates.map((candidate) =>
+            candidate.isNPP ? candidate.nppId! : candidate.characterId
+          ),
+        },
+        status: { $ne: "archived" },
+      },
+      { $set: { electionId, updatedAt: now } },
+      { session }
+    );
     await db.collection<ElectionVoteTally>("electionVoteTallies").insertOne(
       {
         _id: electionId,

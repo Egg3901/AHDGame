@@ -34,10 +34,16 @@ function scenario() {
   };
 }
 describe("Russian paired presidential tickets", () => {
+  it("does not nominate a retired NPC as vice president", async () => {
+    const { mem, input } = scenario();
+    mem.collection("npps").docs[1].retiredAt = new Date(1);
+    await expect(prepare(input)).rejects.toThrow("eligible running mate");
+  });
   it("registers a distinct same-party NPC once", async () => {
     const { mem, mate, input } = scenario();
     await prepare(input);
     expect(mem.collection("electionCandidates").docs[0].russianRunningMateNppId).toEqual(mate);
+    expect(mem.collection("electionCandidates").docs[0].russianTicketLocked).toBe(true);
     await prepare(input);
     expect(mem.collection("electionCandidates").docs[0].russianRunningMateNppId).toEqual(mate);
   });
@@ -48,8 +54,9 @@ describe("Russian paired presidential tickets", () => {
     expect(mem.collection("electionCandidates").docs[0]).not.toHaveProperty(
       "russianRunningMateNppId"
     );
-    delete mem.collection("electionCandidates").docs[0].runningMateId;
-    mem.collection("npps").docs.splice(1);
-    await expect(prepare(input)).rejects.toThrow("eligible running mate");
+    expect(mem.collection("electionCandidates").docs[0].russianTicketLocked).toBe(true);
+    const fresh = scenario();
+    fresh.mem.collection("npps").docs.splice(1);
+    await expect(prepare(fresh.input)).rejects.toThrow("eligible running mate");
   });
 });
