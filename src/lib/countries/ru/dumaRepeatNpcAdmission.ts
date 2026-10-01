@@ -17,6 +17,7 @@ import {
 } from "./dumaElectionResult";
 import { registerRussianDumaNpcSlates } from "./dumaNpcRegistration";
 import { resolveRussianDumaRepeatGeneration } from "./rules/assemblyCohort";
+import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export async function materializeRussianDumaRepeatNpcAdmission(input: {
@@ -52,6 +53,7 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
+        ruFirstCouncilElectionCohortId: 1,
       },
     }
   );
@@ -81,7 +83,6 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
     throw new Error("Duma repeat admission has no matching opening");
   if (opening.npcAdmission)
     return { created: 0, unrepresentedParties: opening.npcAdmission.unrepresentedParties };
-  if (country.ruFederalAssemblySinceTurn != null) return null;
   const previous = await db
     .collection<RussianDumaResultRecord>(RUSSIAN_DUMA_RESULTS_COLLECTION)
     .findOne({ _id: opening.previousResultId }, { session });
@@ -94,9 +95,17 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
     previous.mandateSinceTurn !== opening.mandateSinceTurn ||
     previous._id !== previous.cohortId.toHexString() ||
     previous.resolvedOnTurn > opening.openedOnTurn ||
-    previous.seatedOnTurn != null
+    (previous.seatedOnTurn != null && country.ruFederalAssemblySinceTurn == null)
   )
     throw new Error("Duma repeat admission predecessor changed");
+  const term = await loadRussianAssemblyRepeatTerm({
+    db,
+    session,
+    country,
+    chamber: "duma",
+    turn,
+    previous,
+  });
   const elections = await db
     .collection<Election>("elections")
     .find(
@@ -111,6 +120,7 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
           status: 1,
           electionType: 1,
           primaryEndTurn: 1,
+          endTurn: 1,
           russianDumaRound: 1,
         },
       }
@@ -130,6 +140,8 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
         !row.seatId ||
         !opening.seatIds.includes(row.seatId) ||
         row.electionType !== "dumaDeputy" ||
+        (term.stage === "seated" &&
+          (!Number.isSafeInteger(row.endTurn) || row.endTurn! >= term.termEndTurn)) ||
         row.russianDumaRound?.generation !== generation ||
         !row.russianDumaRound.rootCohortId?.equals(rootCohortId) ||
         row.russianDumaRound.mandateSinceTurn !== opening.mandateSinceTurn ||
@@ -166,6 +178,8 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
     session,
     cohortId: opening.cohortId,
     elections,
+    councilCohortId: country.ruFirstCouncilElectionCohortId,
+    mandateSinceTurn: country.ruFederalAssemblyMandateSinceTurn,
     now,
   });
   const receipt = await openings.updateOne(
@@ -192,7 +206,7 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
       _id: "RU",
       ruFirstDumaElectionCohortId: rootCohortId,
       ruFederalAssemblyMandateSinceTurn: opening.mandateSinceTurn,
-      ruFederalAssemblySinceTurn: { $exists: false },
+      ruFederalAssemblySinceTurn: country.ruFederalAssemblySinceTurn ?? { $exists: false },
     },
     { $set: { updatedAt: now } },
     { session }

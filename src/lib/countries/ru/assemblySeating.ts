@@ -3,7 +3,6 @@
  * materializeRussianAssemblySeating archives Congress and commits offices,
  * owner mirrors, chamber totals and its handover receipt in one transaction.
  */
-import { createHash } from "node:crypto";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type { Character, NPP, CountryGameState, ElectedOfficial, State } from "@/lib/db/types";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
@@ -16,6 +15,7 @@ import {
   RUSSIAN_COUNCIL_RESULTS_COLLECTION,
   type RussianCouncilResultRecord,
 } from "./councilElectionResult";
+import { russianAssemblyOfficialId } from "./assemblyOfficialIdentity";
 import { loadRussianAssemblySeatingInputs } from "./assemblySeatingInputs";
 import type { RussianAssemblySeat } from "./rules/assemblySeating";
 import type { RussianAssemblyVacancyReason } from "./rules/assemblyOwnerEligibility";
@@ -23,6 +23,8 @@ export const RUSSIAN_ASSEMBLY_SEATINGS_COLLECTION = "russianAssemblySeatings";
 export const RUSSIAN_ASSEMBLY_ARCHIVES_COLLECTION = "russianAssemblyOfficeArchives";
 export interface RussianAssemblySeatingRecord {
   _id: string;
+  revision?: number;
+  deferredListIncreases?: Record<string, number>;
   countryId: "RU";
   preset: "1991-default";
   dumaRootCohortId: ObjectId;
@@ -39,9 +41,11 @@ export interface RussianAssemblySeatingRecord {
   councilSeats: number;
   dumaVacancies: number;
   councilVacancies: number;
-  unavailableWinners: Array<RussianAssemblySeat & { reason: RussianAssemblyVacancyReason }>;
+  unavailableWinners: Array<
+    RussianAssemblySeat & { reason: RussianAssemblyVacancyReason | "ended-mandate" }
+  >;
 }
-interface Archive {
+export interface RussianAssemblyOfficeArchive {
   _id: string;
   preset: "1991-default";
   seatingId: string;
@@ -87,9 +91,7 @@ export async function materializeRussianAssemblySeating(input: {
   )
     throw new Error("Assembly seating receipt exists without its activation marker");
   const rows: ElectedOfficial[] = plan.seats.map((row) => ({
-    _id: new ObjectId(
-      createHash("sha256").update(`${seatingId}:${row.candidateId}`).digest("hex").slice(0, 24)
-    ),
+    _id: russianAssemblyOfficialId(seatingId, row.candidateId),
     countryId: "RU",
     officeType: row.officeType,
     characterId: row.isNpc ? null : new ObjectId(row.ownerId),
@@ -111,16 +113,18 @@ export async function materializeRussianAssemblySeating(input: {
     ),
   }));
   if (congress.length) {
-    await db.collection<Archive>(RUSSIAN_ASSEMBLY_ARCHIVES_COLLECTION).insertMany(
-      congress.map((official) => ({
-        _id: `${seatingId}:${official._id.toHexString()}`,
-        preset: "1991-default",
-        seatingId,
-        turn,
-        official,
-      })),
-      { session }
-    );
+    await db
+      .collection<RussianAssemblyOfficeArchive>(RUSSIAN_ASSEMBLY_ARCHIVES_COLLECTION)
+      .insertMany(
+        congress.map((official) => ({
+          _id: `${seatingId}:${official._id.toHexString()}`,
+          preset: "1991-default",
+          seatingId,
+          turn,
+          official,
+        })),
+        { session }
+      );
     await db.collection<ElectedOfficial>("electedOfficials").deleteMany(
       {
         _id: { $in: congress.map((row) => row._id) },

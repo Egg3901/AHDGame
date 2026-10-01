@@ -22,6 +22,7 @@ import { pendingRussianDumaRepeatBallots } from "./rules/assemblyCohort";
 import { freezeRussianDumaElectorate } from "./rules/assemblyElectorate";
 import { planRussianDumaDistricts } from "./rules/assemblyDistricts";
 import { planRussianDumaBallot } from "./rules/assemblySchedule";
+import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export const RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION = "russianDumaRepeatOpenings";
@@ -77,6 +78,7 @@ export async function materializeRussianDumaRepeatOpening(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
+        ruFirstCouncilElectionCohortId: 1,
       },
     }
   );
@@ -102,7 +104,7 @@ export async function materializeRussianDumaRepeatOpening(input: {
     !Number.isSafeInteger(previous.resolvedOnTurn) ||
     previous.resolvedOnTurn < 1 ||
     previous.resolvedOnTurn > turn ||
-    previous.seatedOnTurn != null
+    (previous.seatedOnTurn != null && country.ruFederalAssemblySinceTurn == null)
   )
     throw new Error("Duma repeats need an unseated certified predecessor");
   if (!previous.ballots)
@@ -143,8 +145,16 @@ export async function materializeRussianDumaRepeatOpening(input: {
       throw new Error("Duma repeat opening identity changed");
     return { record: replay, created: false };
   }
-  if (country.ruFederalAssemblySinceTurn != null)
-    throw new Error("The first Duma has already handed over");
+  const timing = planRussianDumaBallot(turn);
+  await loadRussianAssemblyRepeatTerm({
+    db,
+    session,
+    country,
+    chamber: "duma",
+    turn,
+    electionEndTurn: timing.endTurn,
+    previous,
+  });
   const pending = pendingRussianDumaRepeatBallots(previous.ballots);
   if (!pending.length) return null;
   if (
@@ -178,7 +188,6 @@ export async function materializeRussianDumaRepeatOpening(input: {
     Object.fromEntries(pools.map((row) => [row.stateId, row.unregistered]))
   );
   const districts = new Map(planRussianDumaDistricts(register).map((row) => [row.seatId, row]));
-  const timing = planRussianDumaBallot(turn);
   const clock = {
     preIterationActive: game.preIteration?.active,
     preIterationTurns: game.preIterationTurns,
@@ -234,7 +243,7 @@ export async function materializeRussianDumaRepeatOpening(input: {
       _id: "RU",
       ruFirstDumaElectionCohortId: rootCohortId,
       ruFederalAssemblyMandateSinceTurn: previous.mandateSinceTurn,
-      ruFederalAssemblySinceTurn: { $exists: false },
+      ruFederalAssemblySinceTurn: country.ruFederalAssemblySinceTurn ?? { $exists: false },
     },
     { $set: { updatedAt: now } },
     { session }

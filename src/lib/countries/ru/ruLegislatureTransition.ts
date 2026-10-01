@@ -10,6 +10,7 @@ import { ru1993LegislatureStage } from "./eras/1991";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 import { materializeRussianAssemblySeating } from "./assemblySeating";
+import { materializeRussianAssemblyVacancySeating } from "./assemblyVacancySeating";
 export async function processRuLegislatureTransition(
   db: Db,
   gameState: Pick<GameState, "preset" | "preIteration" | "preIterationTurns">,
@@ -41,7 +42,6 @@ export async function processRuLegislatureTransition(
   if (
     !country?.ruFirstDumaElectionCohortId ||
     !country.ruFirstCouncilElectionCohortId ||
-    country.ruFederalAssemblySinceTurn != null ||
     !hasAuthorizedPostSovietTransition(
       currentTurn,
       country.ruSovietSuccessionSinceTurn,
@@ -50,7 +50,10 @@ export async function processRuLegislatureTransition(
   )
     return "none";
   const seated = await runRequiredTransaction(
-    (session) => materializeRussianAssemblySeating({ db, session, turn: currentTurn, now }),
+    (session) =>
+      (country.ruFederalAssemblySinceTurn == null
+        ? materializeRussianAssemblySeating
+        : materializeRussianAssemblyVacancySeating)({ db, session, turn: currentTurn, now }),
     { client: db.client }
   );
   return seated ? "federalAssembly" : "none";

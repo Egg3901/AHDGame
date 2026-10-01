@@ -119,6 +119,31 @@ describe("Council repeat atomic opening", () => {
       "ruFederalAssemblySinceTurn"
     );
   });
+  it("opens after handover using the original Council clock and immutable seating proof", async () => {
+    const { mem, input, receipt } = scenario();
+    const dumaRoot = new ObjectId();
+    const country = mem.collection("countryGameStates").docs[0];
+    country.ruFirstDumaElectionCohortId = dumaRoot;
+    country.ruFederalAssemblySinceTurn = 145;
+    mem.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).docs[0].seatedOnTurn = 145;
+    mem.seed("russianAssemblySeatings", [
+      {
+        _id: `${dumaRoot.toHexString()}:${input.rootCohortId.toHexString()}`,
+        countryId: "RU",
+        preset: "1991-default",
+        dumaRootCohortId: dumaRoot,
+        councilRootCohortId: input.rootCohortId,
+        dumaResultId: dumaRoot.toHexString(),
+        councilResultId: receipt._id,
+        seatedOnTurn: 145,
+        dumaTermEndTurn: 237,
+        councilTermEndTurn: 237,
+      },
+    ]);
+    expect((await open({ ...input, turn: 150 }))?.created).toBe(true);
+    expect(country.ruFederalAssemblySinceTurn).toBe(145);
+    expect(mem.collection("russianAssemblySeatings").docs).toHaveLength(1);
+  });
   it("replays without refreshing electorate, replacing identities or opening another generation", async () => {
     const { mem, input } = scenario();
     const first = await open(input);

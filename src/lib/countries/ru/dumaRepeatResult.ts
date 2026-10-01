@@ -21,7 +21,11 @@ import {
   RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
   type RussianDumaRepeatOpeningRecord,
 } from "./dumaRepeatOpening";
-import { resolveRussianDumaRepeatGeneration } from "./rules/assemblyCohort";
+import {
+  resolveRussianDumaRepeatGeneration,
+  russianDumaProtectedConstituencyOwners,
+} from "./rules/assemblyCohort";
+import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
 export async function materializeRussianDumaRepeatResult(input: {
@@ -93,7 +97,6 @@ export async function materializeRussianDumaRepeatResult(input: {
   );
   if (
     !country?.ruFirstDumaElectionCohortId?.equals(rootCohortId) ||
-    country.ruFederalAssemblySinceTurn != null ||
     country.ruFederalAssemblyMandateSinceTurn !== opening.mandateSinceTurn ||
     !hasAuthorizedPostSovietTransition(
       turn,
@@ -112,9 +115,10 @@ export async function materializeRussianDumaRepeatResult(input: {
     (previous.generation ?? 0) !== generation - 1 ||
     previous._id !== previous.cohortId.toHexString() ||
     previous.resolvedOnTurn > opening.openedOnTurn ||
-    previous.seatedOnTurn != null
+    (previous.seatedOnTurn != null && country.ruFederalAssemblySinceTurn == null)
   )
     throw new Error("Duma repeat predecessor changed");
+  await loadRussianAssemblyRepeatTerm({ db, session, country, chamber: "duma", turn, previous });
   const elections = db.collection<Election>("elections");
   const cohort = await elections
     .find(
@@ -161,6 +165,7 @@ export async function materializeRussianDumaRepeatResult(input: {
     session,
     cohort,
     councilCohortId: country.ruFirstCouncilElectionCohortId,
+    protectedDumaPlayerOwners: russianDumaProtectedConstituencyOwners(previous.ballots),
   });
   const combined = resolveRussianDumaRepeatGeneration({
     previousBallots: previous.ballots,
@@ -214,7 +219,7 @@ export async function materializeRussianDumaRepeatResult(input: {
       _id: "RU",
       ruFirstDumaElectionCohortId: rootCohortId,
       ruFederalAssemblyMandateSinceTurn: opening.mandateSinceTurn,
-      ruFederalAssemblySinceTurn: { $exists: false },
+      ruFederalAssemblySinceTurn: country.ruFederalAssemblySinceTurn ?? { $exists: false },
     },
     { $set: { updatedAt: now } },
     { session }

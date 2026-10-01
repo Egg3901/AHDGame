@@ -19,6 +19,7 @@ import {
   RUSSIAN_DUMA_RESULTS_COLLECTION,
   type RussianDumaResultRecord,
 } from "./dumaElectionResult";
+import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
 import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
 import { decideRussianDumaFiling } from "./rules/assemblyFiling";
 export async function validateRussianDumaPlayerFiling(input: {
@@ -43,6 +44,7 @@ export async function validateRussianDumaPlayerFiling(input: {
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
         ruFirstCouncilElectionCohortId: 1,
+        ruFederalAssemblySinceTurn: 1,
       },
     }
   );
@@ -96,6 +98,7 @@ export async function validateRussianDumaPlayerFiling(input: {
             generation: 1,
             mandateSinceTurn: 1,
             result: 1,
+            seatedOnTurn: 1,
           },
         }
       );
@@ -108,6 +111,14 @@ export async function validateRussianDumaPlayerFiling(input: {
       previous.mandateSinceTurn !== binding.mandateSinceTurn
     )
       return { allowed: false as const, reason: "unbound-mandate" as const };
+    await loadRussianAssemblyRepeatTerm({
+      db,
+      country,
+      chamber: "duma",
+      turn,
+      electionEndTurn: election.endTurn,
+      previous,
+    });
     holdsConstituencyMandate = previous.result.constituencyResults.some(
       (row) => row.winner && !row.winner.isNpc && row.winner.ownerId === character._id.toHexString()
     );

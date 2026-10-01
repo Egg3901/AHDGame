@@ -7,6 +7,8 @@ import { createHash } from "node:crypto";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type { Election, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
+import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
+import { russianFirstAssemblyOfficeCompatible } from "./rules/assemblyOwnerEligibility";
 import { planRussianDumaNpcSlates } from "./rules/assemblyNpcSlates";
 
 export async function registerRussianDumaNpcSlates(input: {
@@ -14,6 +16,8 @@ export async function registerRussianDumaNpcSlates(input: {
   session: ClientSession;
   cohortId: ObjectId;
   elections: readonly Election[];
+  councilCohortId?: ObjectId;
+  mandateSinceTurn?: number;
   now: Date;
 }) {
   const { db, session, cohortId, elections, now } = input;
@@ -58,6 +62,12 @@ export async function registerRussianDumaNpcSlates(input: {
     .toArray();
   if (active.some((row) => !row.russianDumaNomination))
     throw new Error("Duma active candidacy has no frozen nomination");
+  const councilOwners = await loadPendingRussianCouncilOwners({
+    db,
+    session,
+    cohortId: input.councilCohortId,
+    mandateSinceTurn: input.mandateSinceTurn,
+  });
   const plan = planRussianDumaNpcSlates({
     ballots: elections.map((row) => ({
       id: row._id.toHexString(),
@@ -73,9 +83,9 @@ export async function registerRussianDumaNpcSlates(input: {
         party: row.party,
         homeState: row.homeState,
         eligible:
-          !row.currentOffice ||
-          (office != null &&
-            ["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(office)),
+          !councilOwners.has(`npc:${row._id.toHexString()}`) &&
+          (office === "dumaDeputy" ||
+            russianFirstAssemblyOfficeCompatible("dumaDeputy", office, "RU")),
       };
     }),
     activeCandidates: active.map((row) => ({

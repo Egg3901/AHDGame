@@ -1,0 +1,86 @@
+/**
+ * Assembly repeats bind to their actual initial seating and original chamber term.
+ * loadRussianAssemblyRepeatTerm reads the immutable handover journal and proves
+ * an already seated predecessor without extending its constitutional election clock.
+ */
+import type { ClientSession, Db } from "mongodb";
+import type { CountryGameState } from "@/lib/db/types";
+import {
+  RUSSIAN_ASSEMBLY_SEATINGS_COLLECTION,
+  type RussianAssemblySeatingRecord,
+} from "./assemblySeating";
+import { validateRussianAssemblyRepeatTerm } from "./rules/assemblyTermBinding";
+export async function loadRussianAssemblyRepeatTerm(input: {
+  db: Db;
+  session?: ClientSession;
+  country: Pick<
+    CountryGameState,
+    "ruFederalAssemblySinceTurn" | "ruFirstDumaElectionCohortId" | "ruFirstCouncilElectionCohortId"
+  >;
+  chamber: "duma" | "council";
+  turn: number;
+  electionEndTurn?: number;
+  previous?: { _id: string; seatedOnTurn?: number };
+}) {
+  const { db, session, country, previous } = input;
+  const dumaRootId = country.ruFirstDumaElectionCohortId?.toHexString();
+  const councilRootId = country.ruFirstCouncilElectionCohortId?.toHexString();
+  const seated = country.ruFederalAssemblySinceTurn != null;
+  const journals = db.collection<RussianAssemblySeatingRecord>(
+    RUSSIAN_ASSEMBLY_SEATINGS_COLLECTION
+  );
+  const root =
+    seated && dumaRootId && councilRootId
+      ? await journals.findOne(
+          { _id: `${dumaRootId}:${councilRootId}` },
+          {
+            session,
+            projection: {
+              preset: 1,
+              countryId: 1,
+              dumaRootCohortId: 1,
+              councilRootCohortId: 1,
+              seatedOnTurn: 1,
+              dumaTermEndTurn: 1,
+              councilTermEndTurn: 1,
+            },
+          }
+        )
+      : null;
+  const previousSeating =
+    seated && previous?.seatedOnTurn != null
+      ? await journals.findOne(
+          {
+            countryId: "RU",
+            preset: "1991-default",
+            dumaRootCohortId: country.ruFirstDumaElectionCohortId,
+            councilRootCohortId: country.ruFirstCouncilElectionCohortId,
+            seatedOnTurn: previous.seatedOnTurn,
+            [input.chamber === "duma" ? "dumaResultId" : "councilResultId"]: previous._id,
+          },
+          { session, projection: { _id: 1 } }
+        )
+      : null;
+  return validateRussianAssemblyRepeatTerm({
+    turn: input.turn,
+    electionEndTurn: input.electionEndTurn,
+    chamber: input.chamber,
+    assemblySinceTurn: country.ruFederalAssemblySinceTurn,
+    dumaRootId,
+    councilRootId,
+    previousSeatedOnTurn: previous?.seatedOnTurn,
+    previousSeatingProven: !!previousSeating,
+    proof: root
+      ? {
+          id: root._id,
+          preset: root.preset,
+          countryId: root.countryId,
+          dumaRootId: root.dumaRootCohortId.toHexString(),
+          councilRootId: root.councilRootCohortId.toHexString(),
+          seatedOnTurn: root.seatedOnTurn,
+          dumaTermEndTurn: root.dumaTermEndTurn,
+          councilTermEndTurn: root.councilTermEndTurn,
+        }
+      : undefined,
+  });
+}
