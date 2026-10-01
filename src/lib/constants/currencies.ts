@@ -445,7 +445,6 @@ export const INITIAL_RATES: Partial<Record<CountryId, number>> = {
  * IMF WP/92/86 distinguishes this opening parity from the later annual average.
  * https://www.elibrary.imf.org/view/journals/001/1992/086/article-A001-en.xml
  */
-const PL_JANUARY_1991_PLZ_PER_USD = 9_500;
 
 export const INITIAL_RATES_1991: Partial<Record<CountryId, number>> = {
   US: 1.0,

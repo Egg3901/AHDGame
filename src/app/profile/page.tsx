@@ -193,8 +193,6 @@ async function getCharacterData() {
     fetchPartyHistory(db, character._id),
   ]);
 
-  const viewerDisablesAutoplay = viewerUser?.disableAutoplayOnOtherProfiles ?? false;
-
   const rpgStatsEnabled = await isRpgStatsEnabled({
     rpgStatsEnabled: gameState?.rpgStatsEnabled,
   });
@@ -380,7 +378,6 @@ async function getCharacterData() {
     nationalTaxRate,
     statePopulation,
     gameConfig,
-    viewerDisablesAutoplay,
     maxNPI,
     maxDonorLevel,
     discordId: viewerUser?.discordId ?? null,
@@ -455,7 +452,6 @@ export default async function ProfilePage() {
     fundDistribution,
     statePopulation,
     gameConfig,
-    viewerDisablesAutoplay,
     maxNPI,
     maxDonorLevel,
     discordId,
@@ -744,8 +740,6 @@ export default async function ProfilePage() {
                 officeLabels={profileOfficeLabels}
                 stateLabel={stateLabel}
                 campaignSongUrl={character.campaignSongUrl}
-                campaignSongAutoplay={character.campaignSongAutoplay}
-                viewerDisablesAutoplay={viewerDisablesAutoplay}
                 countrySlug={countrySlug}
                 patreonHighlightColor={patreonHighlightColor}
                 patreonTier={patreonTier}
