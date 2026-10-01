@@ -23,6 +23,7 @@ describe("seed manifest classification coverage", () => {
     for (const name of [
       "russianConstitutionalProposals",
       "russianPresidentialElectionResults",
+      "russianPresidentialOfficeArchives",
       "federationRelocations",
       "federationPublicationPreparations",
       "federationPreparedEffects",

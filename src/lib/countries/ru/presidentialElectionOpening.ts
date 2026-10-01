@@ -144,6 +144,14 @@ export async function openRussianPresidentialElection(
     "session" | "electionId"
   >
 ) {
+  if (
+    input.game.preset !== "1991-default" ||
+    calendarTurn(input.turn, {
+      preIterationActive: input.game.preIteration?.active,
+      preIterationTurns: input.game.preIterationTurns,
+    }) < 13
+  )
+    return null;
   const electionId = new ObjectId();
   return runRequiredTransaction(
     (session) => materializeRussianPresidentialElectionOpening({ ...input, session, electionId }),

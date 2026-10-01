@@ -413,6 +413,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // EV bar, a state tile board and persuasion drivers. Down-ballot races have
   // no college, so they keep the existing view.
   if (
+    election.countryId !== "RU" &&
     election.electionType === "president" &&
     isGeneralPhase &&
     !localIsEnded &&
@@ -494,7 +495,12 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // Proposal D covers the presidential primary specifically: a delegate race
   // across party fields. Down-ballot races have no delegate model, so they keep
   // the existing view.
-  if (election.electionType === "president" && localInPrimary && !localIsUpcoming) {
+  if (
+    election.countryId !== "RU" &&
+    election.electionType === "president" &&
+    localInPrimary &&
+    !localIsUpcoming
+  ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}

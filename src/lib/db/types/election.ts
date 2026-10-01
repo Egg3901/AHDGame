@@ -147,6 +147,8 @@ export interface ElectionCandidate {
   withdrawnAt?: Date;
   /** For president: running mate character ID. Cannot be current President. */
   runningMateId?: ObjectId;
+  /** Bound Russian tickets can pair a player or NPC nominee with an NPC vice-president. */
+  russianRunningMateNppId?: ObjectId;
   /** 2-char US state abbreviation (e.g. "CA", "TX") — for presidential travel system */
   travelState?: string | null;
   /** When the travel was last set */

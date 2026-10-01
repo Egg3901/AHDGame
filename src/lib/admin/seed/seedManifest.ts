@@ -265,6 +265,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "federationPoliticalProposals", category: "runtime" },
   { name: "russianConstitutionalProposals", category: "runtime" },
   { name: "russianPresidentialElectionResults", category: "runtime" },
+  { name: "russianPresidentialOfficeArchives", category: "runtime" },
   { name: "federationRatifications", category: "runtime" },
   { name: "federationSettlementIntents", category: "runtime" },
   { name: "federationFacilityClaims", category: "runtime" },

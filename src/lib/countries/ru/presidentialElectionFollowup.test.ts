@@ -5,6 +5,7 @@ import { materializeRussianPresidentialFollowup as followup } from "./presidenti
 const session = { inTransaction: () => true } as ClientSession;
 function scenario(kind: "runoff" | "repeat" | "won" = "runoff") {
   const mem = createInMemoryDb();
+  mem.seed("gameState", [{ _id: "current", preset: "1991-default" }]);
   const predecessorElectionId = new ObjectId();
   const electionId = new ObjectId();
   const finalists = [new ObjectId(), new ObjectId()];

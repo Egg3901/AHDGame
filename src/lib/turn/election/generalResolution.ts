@@ -147,6 +147,23 @@ export async function resolveOneGeneralElection(
       return { resolved: true, newsOutcomes };
     }
 
+    if (
+      election.countryId === "RU" &&
+      election.electionType === "president" &&
+      election.russianPresidentialRound
+    ) {
+      const { resolveRussianPresidentialElection } =
+        await import("@/lib/countries/ru/resolvePresidentialElection");
+      await resolveRussianPresidentialElection({
+        db,
+        electionId: election._id,
+        turn: currentTurn,
+        now,
+      });
+      await voidDebateSessionsForElection(db, election._id, now);
+      return { resolved: true, newsOutcomes: [] };
+    }
+
     if (tally?.finalized) {
       // Tally already finalized (officials already written) but the election
       // was never marked "resolved" (e.g. spawnCommonsElection threw a

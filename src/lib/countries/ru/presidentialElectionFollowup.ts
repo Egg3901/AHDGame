@@ -10,6 +10,7 @@ import type {
   ElectionCandidate,
   ElectionVoteTally,
 } from "@/lib/db/types";
+import { calendarTurn, turnToGameMonth } from "@/lib/utils/gameDate";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { planRussianPresidentialBallot } from "./rules/presidentialSchedule";
 import {
@@ -55,6 +56,19 @@ export async function materializeRussianPresidentialFollowup(input: {
     { session, projection: { cycle: 1, electionYear: 1 } }
   );
   if (!predecessor) throw new Error("Russian followup predecessor is unresolved");
+  const game = await db
+    .collection<{
+      _id: string;
+      preset?: string;
+      preIterationTurns?: number;
+      preIteration?: { active?: boolean };
+    }>("gameState")
+    .findOne(
+      { _id: "current" },
+      { session, projection: { preset: 1, preIteration: 1, preIterationTurns: 1 } }
+    );
+  if (game?.preset !== "1991-default")
+    throw new Error("Russian followup belongs to a different world");
   const kind = result.decision.outcome === "runoff" ? "runoff" : "repeat";
   const timing = planRussianPresidentialBallot(turn, kind);
   const nextCandidates: ElectionCandidate[] = [];
@@ -80,6 +94,7 @@ export async function materializeRussianPresidentialFollowup(input: {
             isNPP: 1,
             nppId: 1,
             runningMateId: 1,
+            russianRunningMateNppId: 1,
           },
         }
       )
@@ -98,6 +113,9 @@ export async function materializeRussianPresidentialFollowup(input: {
         enteredAt: now,
         ...(finalist.isNPP ? { isNPP: true, nppId: finalist.nppId } : {}),
         ...(finalist.runningMateId ? { runningMateId: finalist.runningMateId } : {}),
+        ...(finalist.russianRunningMateNppId
+          ? { russianRunningMateNppId: finalist.russianRunningMateNppId }
+          : {}),
       });
     }
   }
@@ -110,7 +128,13 @@ export async function materializeRussianPresidentialFollowup(input: {
       state: "RU",
       totalSeats: 1,
       cycle: predecessor.cycle,
-      electionYear: predecessor.electionYear,
+      electionYear: turnToGameMonth(
+        calendarTurn(timing.endTurn, {
+          preIterationActive: game.preIteration?.active,
+          preIterationTurns: game.preIterationTurns,
+        }),
+        1991
+      ).year,
       status: "active",
       ...timing,
       startTime: now,

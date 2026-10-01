@@ -141,7 +141,7 @@ export function PrimaryPhaseView({
           electionId={electionId}
           isEnded={localIsEnded}
           onRemoveSuccess={onRemoveSuccess}
-          isPresident={election.electionType === "president"}
+          isPresident={election.countryId !== "RU" && election.electionType === "president"}
           advancingCount={advancingCount}
         />
       )}

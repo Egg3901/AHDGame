@@ -1,3 +1,4 @@
+import type { ElectionVoteTally } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
@@ -133,6 +134,7 @@ export interface ElectoralMapState {
 }
 
 export interface GeneralVotes {
+  russianPresidentialResult?: ElectionVoteTally["russianPresidentialResult"];
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;

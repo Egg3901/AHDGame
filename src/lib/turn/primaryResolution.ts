@@ -1,3 +1,4 @@
+import { bindRussianPresidentialElectorate } from "@/lib/countries/ru/presidentialElectoratePreload";
 /**
  * Primaries count party ballots over time and advance the leading candidates.
  * recordPrimarySnapshots includes versioned turnout and standing character ads;
@@ -736,6 +737,15 @@ export async function resolvePrimariesIfNeeded(
     // general-phase window (e.g. after an admin timer reset puts the election back
     // into primary) are wiped clean. The gate above ensures this only runs once
     // per primary close (tally.primaryResults absent); subsequent turns skip.
+    if (
+      election.countryId === "RU" &&
+      election.electionType === "president" &&
+      election.russianPresidentialRound
+    ) {
+      const { prepareRussianPresidentialTickets } =
+        await import("@/lib/countries/ru/presidentialTickets");
+      await prepareRussianPresidentialTickets({ db, election, now });
+    }
     const generalCandidates = await db
       .collection<ElectionCandidate>("electionCandidates")
       .find({ electionId, status: "active" })
@@ -1956,7 +1966,7 @@ export async function accumulateGeneralElectionVotes(
         // A tally created just above is not in `existing`; let the turn read it.
         await accumulateVoteTurn(election._id, turn, now, {
           approvalMap,
-          preload,
+          preload: preload ? bindRussianPresidentialElectorate(election, preload) : preload,
           election,
           tally: existing ?? undefined,
           candidates: activeCandidates,

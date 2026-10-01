@@ -34,6 +34,8 @@ export interface RussianPresidentialResultRecord {
   resolvedOnTurn: number;
   createdAt: Date;
   nextElectionId?: ObjectId;
+  seatedOnTurn?: number;
+  vicePresident?: { characterId?: ObjectId; nppId?: ObjectId; name: string; party: string };
   winner?: {
     candidateId: ObjectId;
     characterId?: ObjectId;
@@ -96,14 +98,36 @@ export async function materializeRussianPresidentialElectionResult(input: {
   )
     throw new Error("Russian presidential constitutional mandate changed");
   const tallies = db.collection<ElectionVoteTally>("electionVoteTallies");
-  const tally = await tallies.findOne(
+  let tally = await tallies.findOne(
     { electionId, finalized: { $ne: true } },
     { session, projection: { totalVotes: 1, candidateParties: 1 } }
   );
-  if (!tally) throw new Error("Russian presidential tally is unavailable or already finalized");
+  if (!tally) {
+    if (await tallies.findOne({ electionId }, { session, projection: { _id: 1 } }))
+      throw new Error("Russian tally was finalized without a certified result");
+    const roster = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find(
+        { electionId, status: "active" },
+        { session, projection: { characterName: 1, party: 1 } }
+      )
+      .toArray();
+    tally = {
+      _id: electionId,
+      electionId,
+      state: "RU",
+      totalVotes: Object.fromEntries(roster.map((c) => [c._id.toHexString(), 0])),
+      candidateNames: Object.fromEntries(roster.map((c) => [c._id.toHexString(), c.characterName])),
+      candidateParties: Object.fromEntries(roster.map((c) => [c._id.toHexString(), c.party])),
+      turnSnapshots: [],
+      finalized: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await tallies.insertOne(tally, { session });
+  }
   const candidateIds = Object.keys(tally.candidateParties);
   if (
-    !candidateIds.length ||
     candidateIds.some((id) => !ObjectId.isValid(id) || new ObjectId(id).toHexString() !== id) ||
     Object.keys(tally.totalVotes).sort().join(",") !== [...candidateIds].sort().join(",")
   )
@@ -123,6 +147,7 @@ export async function materializeRussianPresidentialElectionResult(input: {
           isNPP: 1,
           nppId: 1,
           runningMateId: 1,
+          russianRunningMateNppId: 1,
         },
       }
     )
@@ -173,10 +198,34 @@ export async function materializeRussianPresidentialElectionResult(input: {
       : await db
           .collection<Character>("characters")
           .findOne({ _id: ownerId, countryId: "RU" }, { session, projection: { _id: 1 } });
-    if (!owner) {
+    const mateId = winner.runningMateId ?? winner.russianRunningMateNppId;
+    const mateIsNpp = !winner.runningMateId;
+    const samePerson = !!mateId && mateId.equals(ownerId) && mateIsNpp === !!winner.isNPP;
+    const mate =
+      mateId && !samePerson
+        ? mateIsNpp
+          ? await db
+              .collection<NPP>("npps")
+              .findOne(
+                { _id: mateId, countryId: "RU", isTechnocrat: { $ne: true } },
+                { session, projection: { name: 1, party: 1 } }
+              )
+          : await db
+              .collection<Character>("characters")
+              .findOne(
+                { _id: mateId, countryId: "RU" },
+                { session, projection: { name: 1, party: 1 } }
+              )
+        : null;
+    if (!owner || !mate) {
       decision = { outcome: "repeat", reason: "invalid-ballot" };
       record.decision = decision;
     } else {
+      record.vicePresident = {
+        ...(mateIsNpp ? { nppId: mateId! } : { characterId: mateId! }),
+        name: mate.name,
+        party: mate.party,
+      };
       record.winner = {
         candidateId: winner._id,
         ...(winner.isNPP ? { nppId: ownerId } : { characterId: ownerId }),

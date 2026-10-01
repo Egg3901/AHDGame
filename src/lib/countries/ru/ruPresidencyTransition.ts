@@ -1,16 +1,14 @@
-import type { Db } from "mongodb";
-import type { CountryGameState, ElectedOfficial, GameState } from "@/lib/db/types";
-import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+/**
+ * Russia's direct presidency activates after a certified ticket and July eligibility.
+ * processRuPresidencyTransition seats that ticket transactionally; a historical
+ * date or an unbound certification marker never removes the existing Chairman.
+ */
+import { ObjectId, type Db } from "mongodb";
+import type { GameState } from "@/lib/db/types";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { ru1991PresidencyStage } from "@/lib/countries/ru/eras/1991";
-import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
-
-/** The first direct Russian presidential election took place on June 12, 1991.
- * That date opens eligibility; only a ratified Soviet succession and a separate
- * constitutional mandate create this office in the alternate-history campaign.
- * https://www.prlib.ru/section/2121879
- * https://www.prlib.ru/node/405940
- */
+import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
+import { materializeRussianPresidentialSeating } from "./presidentialSeating";
 export async function processRuPresidencyTransition(
   db: Db,
   gameState: Pick<GameState, "preset" | "preIteration" | "preIterationTurns">,
@@ -23,62 +21,10 @@ export async function processRuPresidencyTransition(
     preIterationTurns: gameState.preIterationTurns,
   });
   if (ru1991PresidencyStage(calendar) !== "inaugurated") return false;
-
-  const states = db.collection<CountryGameState>("countryGameStates");
-  const ru = await states.findOne(
-    { _id: "RU" },
-    {
-      projection: {
-        ruSovietSuccessionSinceTurn: 1,
-        ruPresidencyMandateSinceTurn: 1,
-        ruPresidencyElectionCertifiedSinceTurn: 1,
-        ruPresidencySinceTurn: 1,
-      },
-    }
+  const officialIds: [ObjectId, ObjectId] = [new ObjectId(), new ObjectId()];
+  return runRequiredTransaction(
+    (session) =>
+      materializeRussianPresidentialSeating({ db, session, turn: currentTurn, now, officialIds }),
+    { client: db.client }
   );
-  if (!ru || ru.ruPresidencySinceTurn != null) return false;
-  if (
-    !hasAuthorizedPostSovietTransition(
-      currentTurn,
-      ru.ruSovietSuccessionSinceTurn,
-      ru.ruPresidencyMandateSinceTurn
-    )
-  )
-    return false;
-  if (
-    !Number.isSafeInteger(ru.ruPresidencyElectionCertifiedSinceTurn) ||
-    (ru.ruPresidencyElectionCertifiedSinceTurn ?? 0) <= 0 ||
-    (ru.ruPresidencyElectionCertifiedSinceTurn ?? Infinity) > currentTurn
-  )
-    return false;
-
-  // The Chairman's head-of-state mandate ends. Keep Congress and its prime
-  // minister intact; the 1993 dissolution is a separate transition. The
-  // presidential winner remains pending until a national vote resolver exists.
-  await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
-    countryId: "RU",
-    officeType: "chairmanOfSupremeSoviet",
-  });
-  await db.collection<GovernmentFormation>("governmentFormations").updateOne(
-    { _id: "RU" },
-    {
-      $set: {
-        hosCharacterId: null,
-        hosNppId: null,
-        hosName: null,
-        updatedAt: now,
-      },
-    }
-  );
-  await db
-    .collection("pmAppointmentVotes")
-    .updateMany(
-      { countryId: "RU", office: "headOfState", status: "active" },
-      { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
-    );
-  await states.updateOne(
-    { _id: "RU", ruPresidencySinceTurn: { $exists: false } },
-    { $set: { ruPresidencySinceTurn: currentTurn, updatedAt: now } }
-  );
-  return true;
 }

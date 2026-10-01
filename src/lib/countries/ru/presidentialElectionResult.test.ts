@@ -9,6 +9,7 @@ function scenario() {
   const a = new ObjectId();
   const b = new ObjectId();
   const actor = new ObjectId();
+  const mate = new ObjectId();
   mem.seed("gameState", [{ _id: "current", preset: "1991-default" }]);
   mem.seed("countryGameStates", [
     { _id: "RU", ruSovietSuccessionSinceTurn: 48, ruPresidencyMandateSinceTurn: 72 },
@@ -39,6 +40,7 @@ function scenario() {
       countryId: "RU",
       isNPP: true,
       nppId: actor,
+      russianRunningMateNppId: mate,
       characterName: "Winner",
       party: "1",
       status: "active",
@@ -54,7 +56,10 @@ function scenario() {
       status: "active",
     },
   ]);
-  mem.seed("npps", [{ _id: actor, countryId: "RU", currentOffice: { type: "congressDeputy" } }]);
+  mem.seed("npps", [
+    { _id: actor, countryId: "RU", currentOffice: { type: "congressDeputy" } },
+    { _id: mate, countryId: "RU", name: "Running mate", party: "1" },
+  ]);
   mem.seed("electedOfficials", [
     { _id: new ObjectId(), countryId: "RU", officeType: "chairmanOfSupremeSoviet" },
   ]);

@@ -12,6 +12,11 @@ const first: RussianPresidentialBallot = {
   participants: 60,
 };
 describe("Russian 1991 direct presidential result", () => {
+  it("reopens filing when nobody stood for election", () => {
+    expect(
+      decide({ ...first, candidateIds: [], votesFor: {}, votesAgainst: {}, participants: 0 })
+    ).toEqual({ outcome: "repeat", reason: "no-candidates" });
+  });
   it("repeats an invalidated ballot without electing its apparent winner", () => {
     expect(decide({ ...first, invalidated: true })).toEqual({
       outcome: "repeat",

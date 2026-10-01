@@ -19,7 +19,12 @@ export type RussianPresidentialResult =
   | {
       outcome: "repeat";
       reason:
-        "low-turnout" | "no-majority" | "tied-finalists" | "no-runoff-winner" | "invalid-ballot";
+        | "low-turnout"
+        | "no-majority"
+        | "tied-finalists"
+        | "no-runoff-winner"
+        | "invalid-ballot"
+        | "no-candidates";
     };
 
 /** Law 1096-1 of 24 April 1991, articles 15-17. The runoff also needs more
@@ -33,10 +38,9 @@ export function decideRussianPresidentialResult(
   const { candidateIds, votesFor, votesAgainst, registeredVoters, participants, round } = ballot;
   if (
     (round !== 1 && round !== 2) ||
-    !candidateIds.length ||
     new Set(candidateIds).size !== candidateIds.length ||
     candidateIds.some((id) => !id) ||
-    (round === 2 && candidateIds.length !== 2) ||
+    (round === 2 && candidateIds.length !== 2 && candidateIds.length !== 0) ||
     !Number.isSafeInteger(registeredVoters) ||
     registeredVoters < 1 ||
     !Number.isSafeInteger(participants) ||
@@ -60,6 +64,7 @@ export function decideRussianPresidentialResult(
     ids.some((id) => BigInt(votesFor[id]) + BigInt(votesAgainst[id]) > BigInt(participants))
   )
     throw new Error("Russian presidential counts exceed participation");
+  if (!ids.length && participants === 0) return { outcome: "repeat", reason: "no-candidates" };
   if (ballot.invalidated) return { outcome: "repeat", reason: "invalid-ballot" };
   if (BigInt(participants) * BigInt(2) < BigInt(registeredVoters))
     return { outcome: "repeat", reason: "low-turnout" };
