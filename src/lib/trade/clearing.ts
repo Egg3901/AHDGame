@@ -98,6 +98,34 @@ export function clearCommodity(input: ClearingInput): ClearingResult {
     clampCaps();
   }
 
+  // Feasibility. IPF reaches the binding side's EXACT target only when the
+  // affinity matrix lets it. With structural zeros (curtained or embargoed
+  // pairs, zero-affinity routes) an importer can be reachable from exporters
+  // that together hold less surplus than its deficit. When the deficit binds,
+  // the last column pass still scales that importer's column up to its full
+  // deficit, pushing the reachable exporters past their own surplus: prod t1278
+  // had Czechoslovakia exporting 12.8M energy units against a 1.6M surplus, and
+  // every turn since at least t1240 HU and BG exported 50x their software
+  // surplus. Convergence then floored their domestic supply at 0. A country
+  // cannot ship what it does not have, so both margins are ceilings on the
+  // way out; the unreachable remainder stays unmet.
+  for (const e of exporters) {
+    let rs = 0;
+    for (const i of importers) rs += m[e][i];
+    if (rs > rowLimit[e]) {
+      const f = rowLimit[e] / rs;
+      for (const i of importers) m[e][i] *= f;
+    }
+  }
+  for (const i of importers) {
+    let cs = 0;
+    for (const e of exporters) cs += m[e][i];
+    if (cs > colLimit[i]) {
+      const f = colLimit[i] / cs;
+      for (const e of exporters) m[e][i] *= f;
+    }
+  }
+
   for (const e of exporters) {
     for (const i of importers) {
       if (m[e][i] > 0) flow[e][i] = m[e][i];
