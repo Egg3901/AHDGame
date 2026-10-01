@@ -14,6 +14,7 @@ areas: [frontend]
 
 - On a 1991 world, the site name beside the logo is set in a mono font and typed in once per page load. Moving between pages does not retype it.
 - The loading navbar and the full navbar share one typing run, so the name does not restart when the full navbar arrives.
+- The name types one letter at a time even while the page is still loading. A busy page pauses the typing instead of skipping letters.
 - With reduced motion on, the name appears at once. Screen readers always get the whole name.
 - Other eras keep the existing wordmark.
 - The 1991 headline's year reads as one year to search engines and copy and paste; the rolling digits are drawn by CSS.
