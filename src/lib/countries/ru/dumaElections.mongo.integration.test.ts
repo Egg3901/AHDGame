@@ -420,7 +420,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       result: resolveRussianCouncilCohort(ballots),
       nominees: [],
     };
-    await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).insertOne(previous);
+    await db.collection<Fixture>(RUSSIAN_COUNCIL_RESULTS_COLLECTION).insertOne(previous);
     await db.collection<Fixture>("countryGameStates").insertOne({
       _id: "RU",
       ruSovietSuccessionSinceTurn: 48,
@@ -454,7 +454,9 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(await db.collection("elections").countDocuments()).toBe(0);
     expect(await db.collection(RUSSIAN_COUNCIL_OPENINGS_COLLECTION).countDocuments()).toBe(0);
     expect(
-      await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).findOne({ _id: previous._id })
+      await db
+        .collection<Fixture>(RUSSIAN_COUNCIL_RESULTS_COLLECTION)
+        .findOne({ _id: previous._id })
     ).toEqual(previous);
     await db.command({ collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION, validator: {} });
     commands = 0;
@@ -486,7 +488,9 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(await db.collection("elections").countDocuments()).toBe(1);
     expect(await db.collection(RUSSIAN_COUNCIL_OPENINGS_COLLECTION).countDocuments()).toBe(1);
     expect(
-      await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).findOne({ _id: previous._id })
+      await db
+        .collection<Fixture>(RUSSIAN_COUNCIL_RESULTS_COLLECTION)
+        .findOne({ _id: previous._id })
     ).toEqual(previous);
     expect(await db.collection("electedOfficials").findOne({ _id: official._id })).toEqual(
       official
