@@ -80,9 +80,9 @@ describe("First Assembly term clock", () => {
     expect(russianFirstAssemblyTermEndTurn([141, 141], 48)).toBe(237);
     expect(russianFirstAssemblyTermEndTurn([149, 151], 48)).toBe(247);
   });
-  it.each([[], [0], [Infinity], [1.5], [Number.MAX_SAFE_INTEGER]])(
+  it.each([[], [0], [Infinity], [1.5], [Number.MAX_SAFE_INTEGER]].map((turns) => ({ turns })))(
     "rejects unsafe original dates %j",
-    (turns) => {
+    ({ turns }) => {
       expect(() => russianFirstAssemblyTermEndTurn(turns, 48)).toThrow();
     }
   );

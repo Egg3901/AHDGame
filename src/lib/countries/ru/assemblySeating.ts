@@ -177,7 +177,7 @@ export async function materializeRussianAssemblySeating(input: {
     if (!selected.length) continue;
     const operations = selected.map((row) => ({
       updateOne: {
-        filter: { _id: new ObjectId(row.ownerId), countryId: "RU" },
+        filter: { _id: new ObjectId(row.ownerId), countryId: "RU" as const },
         update: {
           $set: {
             currentOffice: governmentOffices.get(`${isNpc ? "npc" : "player"}:${row.ownerId}`) ?? {

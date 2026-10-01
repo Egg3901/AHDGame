@@ -26,20 +26,18 @@ export async function processRuLegislatureTransition(
     ) !== "federalAssembly"
   )
     return "none";
-  const country = await db
-    .collection<CountryGameState>("countryGameStates")
-    .findOne(
-      { _id: "RU" },
-      {
-        projection: {
-          ruFirstDumaElectionCohortId: 1,
-          ruFirstCouncilElectionCohortId: 1,
-          ruSovietSuccessionSinceTurn: 1,
-          ruFederalAssemblyMandateSinceTurn: 1,
-          ruFederalAssemblySinceTurn: 1,
-        },
-      }
-    );
+  const country = await db.collection<CountryGameState>("countryGameStates").findOne(
+    { _id: "RU" },
+    {
+      projection: {
+        ruFirstDumaElectionCohortId: 1,
+        ruFirstCouncilElectionCohortId: 1,
+        ruSovietSuccessionSinceTurn: 1,
+        ruFederalAssemblyMandateSinceTurn: 1,
+        ruFederalAssemblySinceTurn: 1,
+      },
+    }
+  );
   if (
     !country?.ruFirstDumaElectionCohortId ||
     !country.ruFirstCouncilElectionCohortId ||

@@ -44,7 +44,7 @@ export async function loadRussianAssemblySeatingInputs(
     .collection<GameState>("gameState")
     .findOne(
       { _id: "current" },
-      { session, batchSize: 1000, projection: { preset: 1, preIteration: 1, preIterationTurns: 1 } }
+      { session, projection: { preset: 1, preIteration: 1, preIterationTurns: 1 } }
     );
   if (
     game?.preset !== "1991-default" ||
@@ -60,7 +60,6 @@ export async function loadRussianAssemblySeatingInputs(
     { _id: "RU" },
     {
       session,
-      batchSize: 1000,
       projection: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
@@ -197,6 +196,8 @@ export async function loadRussianAssemblySeatingInputs(
         poll.seatId !== ballot.seatId ||
         poll.state !== ballot.regionId ||
         round.registeredVoters !== ballot.registeredVoters ||
+        poll.endTurn == null ||
+        !Number.isSafeInteger(poll.endTurn) ||
         poll.endTurn > receipt.resolvedOnTurn
       )
         throw new Error("Assembly receipt does not match its resolved frozen elections");
@@ -209,6 +210,7 @@ export async function loadRussianAssemblySeatingInputs(
     firstPolls.some(
       (row) =>
         row.status !== "resolved" ||
+        row.endTurn == null ||
         !Number.isSafeInteger(row.endTurn) ||
         row.endTurn > turn ||
         row.endTurn < country.ruFederalAssemblyMandateSinceTurn!
@@ -218,13 +220,13 @@ export async function loadRussianAssemblySeatingInputs(
   const dumaTermEndTurn = russianFirstAssemblyTermEndTurn(
     firstPolls
       .filter((row) => row.russianDumaRound?.cohortId.equals(dumaRoot))
-      .map((row) => row.endTurn),
+      .map((row) => row.endTurn ?? NaN),
     TURNS_PER_YEAR
   );
   const councilTermEndTurn = russianFirstAssemblyTermEndTurn(
     firstPolls
       .filter((row) => row.russianCouncilRound?.cohortId.equals(councilRoot))
-      .map((row) => row.endTurn),
+      .map((row) => row.endTurn ?? NaN),
     TURNS_PER_YEAR
   );
   const termEndTurn = Math.min(dumaTermEndTurn, councilTermEndTurn);
