@@ -23,7 +23,6 @@ interface DossierHeaderProps {
   officeLabels: readonly string[];
   stateLabel: string;
   countrySlug: string;
-  viewerDisablesAutoplay?: boolean;
   patreonHighlightColor?: string | null;
   patreonTier?: PatreonTier;
   patreonExpiresAt?: Date | null;
@@ -47,7 +46,6 @@ export function DossierHeader({
   officeLabels,
   stateLabel,
   countrySlug,
-  viewerDisablesAutoplay,
   patreonHighlightColor,
   patreonTier,
   patreonExpiresAt,
@@ -189,8 +187,6 @@ export function DossierHeader({
           <div className="mt-5 border-t border-card-border pt-4">
             <CampaignSongPlayer
               videoId={character.campaignSongUrl}
-              ownerAutoplay={character.campaignSongAutoplay ?? false}
-              viewerDisablesAutoplay={viewerDisablesAutoplay ?? false}
               characterName={character.name}
             />
           </div>

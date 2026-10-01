@@ -722,8 +722,6 @@ export default async function ProfilePage() {
                 officeLabels={profileOfficeLabels}
                 stateLabel={stateLabel}
                 campaignSongUrl={character.campaignSongUrl}
-                campaignSongAutoplay={character.campaignSongAutoplay}
-                viewerDisablesAutoplay={viewerDisablesAutoplay}
                 countrySlug={countrySlug}
                 patreonHighlightColor={patreonHighlightColor}
                 patreonTier={patreonTier}
@@ -743,7 +741,6 @@ export default async function ProfilePage() {
                 officeLabels={profileOfficeLabels}
                 stateLabel={stateLabel}
                 countrySlug={countrySlug}
-                viewerDisablesAutoplay={viewerDisablesAutoplay}
                 patreonHighlightColor={patreonHighlightColor}
                 patreonTier={patreonTier}
                 patreonExpiresAt={patreonExpiresAt}
