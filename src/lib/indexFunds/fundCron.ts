@@ -107,7 +107,7 @@ import {
   remainingRedemptionUnits,
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
-import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { emitTx, emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
@@ -711,16 +711,23 @@ export async function rebalanceFundToTarget(
     plan.sells.length > 0
       ? await Promise.all([loadFxRatesByCurrency(db), getCurrentTurn(db), loadTxThresholds(db)])
       : undefined;
-  // Sells first so freed cash funds the buys.
-  for (const leg of plan.sells) {
-    const refreshed = (await getFundById(db, fund._id)) ?? fund;
-    const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
-      note: "Rebalance: trim overweight",
-      fxByCurrency: sellInputs?.[0],
-      turn: sellInputs?.[1],
-      thresholds: sellInputs?.[2],
-    });
-    if (res.sharesSold > 0) sells++;
+  // Sells first so freed cash funds the buys. Ledger rows of completed sales
+  // flush in one write, even if a later sale throws.
+  const sellLedger: TxInput[] = [];
+  try {
+    for (const leg of plan.sells) {
+      const refreshed = (await getFundById(db, fund._id)) ?? fund;
+      const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
+        note: "Rebalance: trim overweight",
+        fxByCurrency: sellInputs?.[0],
+        turn: sellInputs?.[1],
+        thresholds: sellInputs?.[2],
+        ledgerSink: sellLedger,
+      });
+      if (res.sharesSold > 0) sells++;
+    }
+  } finally {
+    if (sellInputs && sellLedger.length > 0) await emitTxBulk(db, sellLedger, sellInputs[2]);
   }
 
   let buys = 0;

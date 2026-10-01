@@ -122,6 +122,7 @@ describe("sellFundHoldingShares", () => {
       }),
     };
 
+    const poolsColl = { findOne: vi.fn().mockResolvedValue(equityPool) };
     const fundTransactionsColl = {
       insertOne: vi.fn().mockImplementation((doc: unknown) => {
         fundTransactions.push(doc);
@@ -134,14 +135,13 @@ describe("sellFundHoldingShares", () => {
         if (name === "indexFunds") return indexFundsColl;
         if (name === "corporations") return corporationsColl;
         if (name === "indexFundTransactions") return fundTransactionsColl;
-        if (name === "equityMarketPools") {
-          return { findOne: vi.fn().mockResolvedValue(equityPool) };
-        }
+        if (name === "equityMarketPools") return poolsColl;
         return { updateOne: vi.fn(), insertOne: vi.fn(), find: vi.fn() };
       }),
       _getCashAnchor: () => cashAnchor,
       _getFundTransactions: () => fundTransactions,
       _indexFundsColl: indexFundsColl,
+      _poolsColl: poolsColl,
     };
   }
 
@@ -215,6 +215,39 @@ describe("sellFundHoldingShares", () => {
     expect(loadFxRatesByCurrency).not.toHaveBeenCalled();
     expect(getCurrentTurn).not.toHaveBeenCalled();
     expect(loadTxThresholds).not.toHaveBeenCalled();
+  });
+
+  it("reads the sale's pool once and queues its ledger row for the caller", async () => {
+    const pool = { _id: "USD", cashLocal: 1_000_000, targetCashLocal: 1_000_000 };
+    const mockDb = buildMockDb(pool);
+    const { settleFloatSellDebit, onFloatSellCommitted } =
+      await import("@/lib/corporations/shareEscrowSettlement");
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    const ledgerSink: import("@/lib/financialTxLog/emit").TxInput[] = [];
+
+    const result = await sellFundHoldingShares(
+      mockDb as unknown as import("mongodb").Db,
+      baseFund,
+      corpId,
+      10,
+      { ledgerSink }
+    );
+
+    expect(result.sharesSold).toBe(10);
+    // Both quotes and both pool-existence checks share one read.
+    expect(mockDb._poolsColl.findOne).toHaveBeenCalledTimes(1);
+    for (const leg of [settleFloatSellDebit, onFloatSellCommitted]) {
+      const pools = vi.mocked(leg).mock.calls[0]![3]!.pools!;
+      expect(pools.get("USD")).toEqual(pool);
+    }
+    expect(emitTx).not.toHaveBeenCalled();
+    expect(ledgerSink).toEqual([
+      expect.objectContaining({
+        type: "stock_trade_sell",
+        subjectId: fundId,
+        amount: result.cashRaisedAnchor,
+      }),
+    ]);
   });
 
   it("returns zeros when holding is not found", async () => {
