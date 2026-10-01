@@ -45,6 +45,7 @@ import {
 import { ProfileSwitcher, ImperialMark } from "./navbar/ProfileSwitcher";
 import { viewerIsSingleplayerOwner, visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
+import { Wordmark } from "@/components/Wordmark";
 import {
   MOBILE_MENU_PANEL_CLASS,
   NOTIFICATION_LIST_CLASS,
@@ -67,6 +68,8 @@ interface ImperialCharacterNav {
 
 interface NavbarProps {
   clientShell?: boolean;
+  /** Type the site name in on load, in mono (1991 worlds). */
+  typedWordmark?: boolean;
   user?: {
     username: string;
     isAdmin?: boolean;
@@ -137,6 +140,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 export const Navbar = React.memo(function Navbar({
   clientShell = false,
+  typedWordmark = false,
   user,
   showProfile = false,
   homeState,
@@ -384,10 +388,10 @@ export const Navbar = React.memo(function Navbar({
           />
           {/* Site name fades on sub-md displays when search is open so the search field can slide over it */}
           <span
-            className={`text-base font-semibold tracking-tight hidden sm:inline transition-opacity duration-300 ${searchOpen ? "opacity-0 md:opacity-100" : "opacity-100"}`}
+            className={`text-base font-semibold tracking-tight hidden sm:inline transition-opacity duration-300 ${searchOpen ? "opacity-0 md:opacity-100" : "opacity-100"} ${typedWordmark ? "font-mono" : ""}`}
             aria-hidden={searchOpen ? "true" : undefined}
           >
-            A House Divided
+            <Wordmark typed={typedWordmark} />
           </span>
         </Link>
 

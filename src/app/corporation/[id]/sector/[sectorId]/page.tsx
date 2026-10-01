@@ -28,6 +28,7 @@ import PricingPanel from "./sections/PricingPanel";
 import CapitalPanel from "./sections/CapitalPanel";
 import MarketRewardBanner from "./sections/MarketRewardBanner";
 import StrandedPlantBanner from "./sections/StrandedPlantBanner";
+import RetoolHintBanner from "./sections/RetoolHintBanner";
 import InventoryPanel from "./sections/InventoryPanel";
 import UnionBustingPanel from "./sections/UnionBustingPanel";
 import { OrganizeSectorAction } from "@/components/unions/OrganizeSectorAction";
@@ -731,6 +732,13 @@ export default function SectorDetailPage() {
                   plants this branch never runs and the page is unchanged. */}
               {plantsEnabled && plants && (
                 <>
+                  {plants.retoolHint && (
+                    <RetoolHintBanner
+                      hint={plants.retoolHint}
+                      isCeo={isCeo}
+                      onOpenStrategy={() => setActiveTab("operations")}
+                    />
+                  )}
                   <PlantPanel
                     plants={plants}
                     marketSupplies={commodities?.supplies ?? []}
@@ -786,7 +794,12 @@ export default function SectorDetailPage() {
                 clearingEnabled={!!pricing}
                 room={
                   plants
-                    ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                    ? {
+                        headroomUnits: plants.headroomUnits,
+                        demandGapUnits: plants.demandGapUnits,
+                        roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
+                        unclaimedSharePct: plants.unclaimedSharePct,
+                      }
                     : null
                 }
                 compact
@@ -857,6 +870,7 @@ export default function SectorDetailPage() {
                 financials={financials}
                 margins={margins}
                 plantsCapacityUnits={plantsEnabled ? (plants?.capacityUnits ?? null) : null}
+                suggestedStrategyId={plants?.retoolHint?.suggestedStrategyId ?? null}
               />
             )}
 
@@ -942,7 +956,12 @@ export default function SectorDetailPage() {
               clearingEnabled={!!pricing}
               room={
                 plants
-                  ? { headroomUnits: plants.headroomUnits, demandGapUnits: plants.demandGapUnits }
+                  ? {
+                      headroomUnits: plants.headroomUnits,
+                      demandGapUnits: plants.demandGapUnits,
+                      roomHeldByOwnIdle: plants.roomHeldByOwnIdle,
+                      unclaimedSharePct: plants.unclaimedSharePct,
+                    }
                   : null
               }
             />

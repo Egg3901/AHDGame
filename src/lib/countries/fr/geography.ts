@@ -3,6 +3,7 @@ import { frMetricPresets1953 } from "./data/frMetricPresets1953";
 import { frRegionCensusData1953 } from "./data/frRegionCensusData1953";
 import { frRegionCensusData1979 } from "./data/frRegionCensusData1979";
 import { frRegions } from "./data/frRegions";
+import { frRegions1991 } from "./data/frRegions1991";
 import { frRegions1953 } from "./data/frRegions1953";
 import { frStateMetrics } from "./data/frStateMetrics";
 import {
@@ -30,7 +31,7 @@ import {
  * equality passed and Japan had two sources for every region.
  *
  * ⚠ THE PRESET KEYS COME FROM THE SNAPSHOT. France authors 2 census
- * eras, 1 metric eras, 0 anchor eras and 3 region eras. The gaps are real:
+ * eras, 1 metric eras, 0 anchor eras and 4 region eras. The gaps are real:
  * an unauthored era inherits, and inventing a key for it would turn a fallback
  * into an authored value.
  */
@@ -51,6 +52,7 @@ const metricPresetBundles = {
 const populationAnchors = {};
 
 const regionBundles = {
+  "1991-default": frRegions1991,
   "1953-default": frRegions1953,
   "1979-default": frRegions,
   "2019-default": frRegions,

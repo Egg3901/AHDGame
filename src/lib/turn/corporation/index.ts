@@ -2,6 +2,7 @@
  * Corporation turns settle operating results and distribute shareholder income.
  * processCorporationTurn shares monetary quotes across automatic dividend conversions.
  */
+import { applyCorporationCashWrites } from "@/lib/turn/npp/foundingCashLedger";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { ObjectId } from "mongodb";
 import type { AnyBulkWriteOperation } from "mongodb";
@@ -536,6 +537,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
     techLedger: nppTechLedger,
+    foundingCashWitnesses = [],
+    reinvestmentCashWitnesses = [],
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled, {
     corporations: lookups.corporations,
     issuerBondsByCorpId: lookups.bondsByCorpId,
@@ -623,8 +626,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   }
   if (corpOps.length > 0) {
     // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("corporations").bulkWrite(corpOps as any[]);
+    await applyCorporationCashWrites(
+      db,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      corpOps as any[],
+      foundingCashWitnesses,
+      reinvestmentCashWitnesses
+    );
   }
   // Emit only for NPP unlocks proven applied above; the flush dedupes and
   // refunds any debit whose ledger row cannot be persisted (ticket #1998).

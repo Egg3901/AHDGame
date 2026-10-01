@@ -276,9 +276,6 @@
         "retro": "Retro",
         "solarized": "Solarized"
       },
-      "videoPreferences": "Video Preferences",
-      "disableAutoplay": "Disable autoplay on other users' profiles",
-      "disableAutoplayHint": "When enabled, campaign songs on other users' profiles will not autoplay (only affects what you see)",
       "interfaceTitle": "Interface",
       "classicUi": "Use the classic interface",
       "classicUiHint": "The redesigned navigation bar and the CEO Command Center dashboard are now the default. Turn this on to switch back to the classic navigation bar and corporation pages.",
@@ -460,7 +457,6 @@
       "invalid": "Not a valid YouTube URL or video ID.",
       "thumbAlt": "Video thumbnail preview",
       "preview": "Preview",
-      "autoplay": "Enable autoplay on my profile (others can still disable this in their preferences)",
       "save": "Save Campaign Song"
     },
     "referrals": {

@@ -50,7 +50,7 @@ export async function PATCH(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { campaignSongUrl, campaignSongAutoplay } = parsed.data;
+    const { campaignSongUrl } = parsed.data;
 
     const db = await getDb();
 
@@ -82,9 +82,6 @@ export async function PATCH(request: Request) {
       updateData.campaignSongUrl = videoId;
     } else {
       updateData.campaignSongUrl = "";
-    }
-    if (campaignSongAutoplay !== undefined) {
-      updateData.campaignSongAutoplay = campaignSongAutoplay;
     }
 
     await db

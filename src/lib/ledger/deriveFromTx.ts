@@ -50,10 +50,15 @@ const UNATTRIBUTED_REASON = "unattributed";
  * §3 (Phase 3) and docs/plans/2026-07-06-shadow-ledger-phase3-backlog.md.
  */
 const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = {
+  corp_sector_founding: "sector_founding_cash",
+  org_cash: "organization_fund_cash",
+  org_tribute_mint: "organization_tribute_unmodeled",
   gov_bond_maturity_payment: "bond_settlement",
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",
   bond_coupon: "bond_coupon_settlement",
+  bond_pool_inflow: "bond_pool_excluded_liquidity",
+  bond_pool_sweep: "bond_pool_excluded_liquidity",
   gov_defense_overdraft: "defense_appropriation_overdraft",
   // This is the issuer-side settlement row paired with dissolution payouts.
   // It records a modeled default loss, not an unexplained money-supply leak.

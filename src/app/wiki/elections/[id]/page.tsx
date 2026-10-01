@@ -90,7 +90,7 @@ export default function WikiElectionDetailPage({ params }: { params: Promise<{ i
             {election.label}
           </h1>
           <p className="text-sm text-muted">
-            Completed {formatDate(election.endTime)} · Cycle {election.cycle}
+            {election.year} · Completed {formatDate(election.endTime)}
             {election.totalSeats && election.electionType === "house" && (
               <>
                 {" "}

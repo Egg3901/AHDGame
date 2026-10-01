@@ -32,48 +32,4 @@ export interface ExchangeTotals {
   weightedChange48h: number;
 }
 
-const finite = (value: number | undefined): number | null =>
-  typeof value === "number" && Number.isFinite(value) ? value : null;
-
-/** Anchor if present and finite, else the local figure, else 0. */
-const anchored = (anchor: number | undefined, local: number | undefined): number =>
-  finite(anchor) ?? finite(local) ?? 0;
-
-export function aggregateExchangeTotals(listings: ExchangeListingSlice[]): ExchangeTotals {
-  let marketCap = 0;
-  let revenue = 0;
-  let income = 0;
-  let weighted1h = 0;
-  let weighted24h = 0;
-  let weighted48h = 0;
-
-  for (const listing of listings) {
-    const cap = anchored(listing.marketCapAnchor, listing.marketCap);
-    marketCap += cap;
-    revenue += anchored(listing.totalRevenueAnchor, listing.totalRevenue);
-    income += anchored(listing.incomeAnchor, listing.income);
-    weighted1h += (finite(listing.priceChange1h) ?? 0) * cap;
-    weighted24h += (finite(listing.priceChange24h) ?? 0) * cap;
-    weighted48h += (finite(listing.priceChange48h) ?? 0) * cap;
-  }
-
-  if (marketCap <= 0) {
-    return {
-      marketCap,
-      revenue,
-      income,
-      weightedChange1h: 0,
-      weightedChange24h: 0,
-      weightedChange48h: 0,
-    };
-  }
-
-  return {
-    marketCap,
-    revenue,
-    income,
-    weightedChange1h: weighted1h / marketCap,
-    weightedChange24h: weighted24h / marketCap,
-    weightedChange48h: weighted48h / marketCap,
-  };
-}
+export { aggregateExchangeTotals } from "./rules/totals";

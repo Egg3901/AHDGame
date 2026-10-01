@@ -151,3 +151,69 @@ export async function getIncumbentSeatShareByParty(
 
   return computeSeatShareFromTally(tally.totalVotes, tally.candidateParties);
 }
+
+/**
+ * Incumbent seat share for every election in one pass (#2695).
+ *
+ * Same selection as `getIncumbentSeatShareByParty`: the most recent resolved
+ * election in an earlier cycle for the same country, state and canonical seat
+ * key, and its finalized tally. Resolved history cannot change while votes
+ * accumulate (resolution is a later phase), so the answer is the same as the
+ * per-election read, at two queries per turn instead of two per election.
+ * Every input election gets an entry, empty when there is no qualifying prior.
+ */
+export async function preloadIncumbentSeatShares(
+  elections: readonly Election[],
+  db: Db
+): Promise<Map<string, Map<string, number>>> {
+  const result = new Map<string, Map<string, number>>();
+  const eligible = elections.filter((election) => {
+    if (usesSeatShareIncumbency(election)) return true;
+    result.set(election._id.toString(), new Map());
+    return false;
+  });
+  if (eligible.length === 0) return result;
+
+  const states = [...new Set(eligible.map((election) => election.state))];
+  const resolved = await db
+    .collection<Election>("elections")
+    .find({ status: "resolved", state: { $in: states } })
+    .sort({ cycle: -1 })
+    .toArray();
+
+  const priorByElection = new Map<string, Election>();
+  for (const election of eligible) {
+    const countryId = election.countryId ?? "US";
+    const seatKey = getElectionSeatKey(election);
+    const prior = resolved.find(
+      (p) =>
+        p.countryId === countryId &&
+        p.state === election.state &&
+        p.cycle < election.cycle &&
+        getElectionSeatKey(p) === seatKey
+    );
+    if (prior) priorByElection.set(election._id.toString(), prior);
+    else result.set(election._id.toString(), new Map());
+  }
+  if (priorByElection.size === 0) return result;
+
+  const tallies = await db
+    .collection<ElectionVoteTally>("electionVoteTallies")
+    .find({ electionId: { $in: [...priorByElection.values()].map((p) => p._id) } })
+    .toArray();
+  const tallyByElection = new Map<string, ElectionVoteTally>();
+  for (const tally of tallies) {
+    const key = tally.electionId.toString();
+    if (!tallyByElection.has(key)) tallyByElection.set(key, tally);
+  }
+  for (const [electionId, prior] of priorByElection) {
+    const tally = tallyByElection.get(prior._id.toString());
+    result.set(
+      electionId,
+      !tally || !tally.finalized
+        ? new Map()
+        : computeSeatShareFromTally(tally.totalVotes, tally.candidateParties)
+    );
+  }
+  return result;
+}

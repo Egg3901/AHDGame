@@ -64,7 +64,7 @@ Authority is deliberately split. No single office runs a war.
 
 | Decision | Who may take it |
 | --- | --- |
-| **Declare war** | Head of government **or** the defence seat holder, then the legislature must ratify it. A country can also be brought in without declaring: a mutual-defence charter (NATO, the Warsaw Pact) pulls every member into a war declared **against** one of them, and a bloc can vote to enter a war at its own call. See [Declaring War](/wiki/declaring-war). |
+| **Declare war** | Head of government **or** the defence seat holder, then the legislature must ratify it. A country can also be brought in without declaring: a mutual-defence pact (an alliance at the Article 5 posture, or NATO and the Warsaw Pact in Cold War worlds) pulls every member into a war declared **against** one of them, and a bloc can vote to enter a war at its own call. See [Declaring War](/wiki/declaring-war). |
 | **Recruit, upgrade, set posture, assign units to generals** | The defence seat holder |
 | **Commission and dismiss generals** | The defence seat holder |
 | **Adopt national doctrine** | The defence seat holder |

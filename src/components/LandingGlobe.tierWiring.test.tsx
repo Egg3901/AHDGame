@@ -34,6 +34,7 @@ const mapSvgProps: Record<string, unknown>[] = [];
 vi.mock("@/app/world/components/MapSVGContent", () => ({
   __esModule: true,
   BACKGROUND_LAYER_KEY: "__tier_background__",
+  BACKGROUND_MACRO_LAYER_KEY: "__tier_background_macro__",
   default: (props: Record<string, unknown>) => {
     mapSvgProps.push(props);
     return <svg data-testid="map-svg" />;

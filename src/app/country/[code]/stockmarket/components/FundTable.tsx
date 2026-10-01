@@ -1,4 +1,5 @@
 "use client";
+import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
 
 import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import Link from "next/link";
@@ -267,7 +268,7 @@ export function FundTable({
                   NAV
                 </th>
                 <th className="px-2 py-2.5 sm:px-4 sm:py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  {timeframe} Change
+                  {MARKET_TIMEFRAMES[timeframe].label} Change
                 </th>
                 <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
                   Trend

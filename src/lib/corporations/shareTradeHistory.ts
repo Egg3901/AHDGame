@@ -29,6 +29,17 @@ export interface RecordShareTradeInput {
 
 function buildShareTradeDocument(input: RecordShareTradeInput): Omit<ShareTradeHistory, "_id"> {
   const isStructureChange = STRUCTURE_CHANGE_KINDS.has(input.kind);
+  const totalAnchor = isStructureChange
+    ? 0
+    : Math.round(input.shares * input.pricePerShareAnchor * 100) / 100;
+  if (
+    !isStructureChange &&
+    (![input.shares, input.pricePerShareAnchor, totalAnchor].every(Number.isFinite) ||
+      input.shares < 0 ||
+      input.pricePerShareAnchor < 0)
+  ) {
+    throw new Error("Trade audit requires finite nonnegative shares, price and total");
+  }
   return {
     corporationId: input.corporationId,
     kind: input.kind,
@@ -36,9 +47,7 @@ function buildShareTradeDocument(input: RecordShareTradeInput): Omit<ShareTradeH
     createdAt: input.createdAt ?? new Date(),
     shares: isStructureChange ? 0 : input.shares,
     pricePerShareAnchor: isStructureChange ? 0 : input.pricePerShareAnchor,
-    totalAnchor: isStructureChange
-      ? 0
-      : Math.round(input.shares * input.pricePerShareAnchor * 100) / 100,
+    totalAnchor,
     from: input.from,
     to: input.to,
     ...(input.corpCurrencyCode ? { corpCurrencyCode: input.corpCurrencyCode } : {}),
@@ -52,6 +61,7 @@ function buildShareTradeDocument(input: RecordShareTradeInput): Omit<ShareTradeH
  * than throwing so it can never roll back the share-movement it audits.
  */
 export async function recordShareTrade(db: Db, input: RecordShareTradeInput): Promise<void> {
+  if (input.shares === 0 && !STRUCTURE_CHANGE_KINDS.has(input.kind)) return;
   try {
     await db
       .collection<Omit<ShareTradeHistory, "_id">>(COLL)
@@ -64,10 +74,20 @@ export async function recordShareTrade(db: Db, input: RecordShareTradeInput): Pr
 /** Best-effort batch form for turn paths that already collect several fills. */
 export async function recordShareTrades(db: Db, inputs: RecordShareTradeInput[]): Promise<void> {
   if (inputs.length === 0) return;
+  const documents: Omit<ShareTradeHistory, "_id">[] = [];
+  for (const input of inputs) {
+    if (input.shares === 0 && !STRUCTURE_CHANGE_KINDS.has(input.kind)) continue;
+    try {
+      documents.push(buildShareTradeDocument(input));
+    } catch (err) {
+      Sentry.captureException(err, { tags: { module: "shareTradeHistory" } });
+    }
+  }
+  if (documents.length === 0) return;
   try {
     await db
       .collection<Omit<ShareTradeHistory, "_id">>(COLL)
-      .insertMany(inputs.map(buildShareTradeDocument), { ordered: false });
+      .insertMany(documents, { ordered: false });
   } catch (err) {
     Sentry.captureException(err, { tags: { module: "shareTradeHistory" } });
   }

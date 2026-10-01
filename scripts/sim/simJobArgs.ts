@@ -7,9 +7,13 @@ import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
 import type { SimActorMode } from "@/lib/sim/actorCoverage";
 import { frontierEntryExperimentCliArgs } from "@/lib/sim/economicExperiment";
+import { preparedSandboxSchema, type PreparedSandbox } from "./preparedSandbox";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {
+  preparedSandbox?: PreparedSandbox;
+  sovereignIssuanceConsolidationEnabled?: boolean;
+  domesticSovereignBondCoverageEnabled?: boolean;
   marketSystemMode?: string;
   labourSystemMode?: string;
   freightSettlementMode?: string;
@@ -157,6 +161,22 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
       .filter(Boolean);
     for (const id of ids) assertSafeToken(id, "countries[]");
     if (ids.length) args.push(`--countries=${ids.join(",")}`);
+  }
+  if (job.preparedSandbox !== undefined) {
+    preparedSandboxSchema.parse(job.preparedSandbox);
+    if (
+      job.sovereignIssuanceConsolidationEnabled !== undefined ||
+      job.domesticSovereignBondCoverageEnabled !== undefined
+    ) {
+      throw new Error("Prepared sandbox continuation cannot override sovereign demand");
+    }
+    if (args.some((value) => value !== "--mode=full" && value !== "--actors=pure-npp")) {
+      throw new Error("Prepared sandbox continuation cannot override gameplay or phase scope");
+    }
+    if (job.actors && job.actors !== "pure-npp") {
+      throw new Error("Prepared sandbox continuation preserves the existing actor population");
+    }
+    args.push("--clone-mode", "--preserve-live-config");
   }
   return args;
 }

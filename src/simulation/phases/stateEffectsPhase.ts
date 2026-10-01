@@ -71,8 +71,6 @@ import {
   generateInvestorRankingSnapshot,
   generateWealthListSnapshots,
 } from "@/lib/turn/stockExchangeSnapshot";
-import { processSuspiciousDetection } from "@/lib/turn/suspiciousDetection";
-import { runAuditAnomalyScan } from "@/lib/audit/anomalyScan";
 import { processGameHealthSnapshot } from "@/lib/turn/gameHealthSnapshot";
 import { processNppStanceDrift } from "@/lib/turn/nppStanceDrift";
 import { resetVicePresidentActions } from "@/lib/turn/vicePresidentActionReset";
@@ -686,33 +684,8 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     ]);
     phaseResults.portfolioSnapshot = { charactersSnapshotted: portfolioSnapshotResult ?? 0 };
 
-    // Anomaly scanners over the unified action-audit spine (forensics/alt-
-    // detection rework plan §3.1 T3.1). Runs after activityLogging (already
-    // completed earlier this turn) and before suspiciousDetection so a
-    // future alt-scoring pass can consume the flags it stamps. Best-effort,
-    // flag-gated (isAuditLogEnabled()) — a throw is caught by runPhase and
-    // logged to Sentry without halting the turn.
-    const anomalyScanResult = await runtime.runPhase("auditAnomalyScan", () =>
-      runAuditAnomalyScan(db, newTurn)
-    );
-    if (anomalyScanResult) {
-      phaseResults.auditAnomalyScan = {
-        scannedRows: anomalyScanResult.scannedRows,
-        flaggedRows: anomalyScanResult.flaggedRows,
-      };
-    }
-
-    const suspiciousResult = await runtime.runPhase("suspiciousDetection", () =>
-      processSuspiciousDetection(db, newTurn)
-    );
-    if (suspiciousResult) {
-      phaseResults.suspiciousDetection = {
-        flagged: suspiciousResult.flagged,
-        cleared: suspiciousResult.cleared,
-        deleted: suspiciousResult.deleted,
-      };
-    }
-
+    // auditAnomalyScan and suspiciousDetection run after the turn commits
+    // (#2694, src/lib/turn/postTurnScans.ts), in that order.
     const healthResult = await runtime.runPhase("gameHealthSnapshot", () =>
       processGameHealthSnapshot(
         db,

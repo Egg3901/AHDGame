@@ -197,18 +197,11 @@ const VISIBLE = 4;
 const PAGES = Math.ceil(THEME_OPTIONS.length / VISIBLE);
 
 interface Props {
-  disableAutoplayOnOtherProfiles: boolean;
-  onAutoplayChange: (value: boolean) => void;
   enableExperimentalUI: boolean;
   onExperimentalUiChange: (value: boolean) => void;
 }
 
-export function AppearanceSection({
-  disableAutoplayOnOtherProfiles,
-  onAutoplayChange,
-  enableExperimentalUI,
-  onExperimentalUiChange,
-}: Props) {
+export function AppearanceSection({ enableExperimentalUI, onExperimentalUiChange }: Props) {
   const t = useTranslations("settings");
   const { theme, setTheme } = useTheme();
   const [page, setPage] = useState(0);
@@ -428,25 +421,6 @@ export function AppearanceSection({
       </div>
 
       <LanguageSection />
-
-      {/* ── Video prefs ─────────────────────────────────────────────────── */}
-      <div className="border-t border-card-border pt-6">
-        <h3 className="text-sm font-medium mb-3">{t("appearance.videoPreferences")}</h3>
-        <label className="flex items-start gap-3 cursor-pointer group">
-          <input
-            type="checkbox"
-            checked={disableAutoplayOnOtherProfiles}
-            onChange={(e) => onAutoplayChange(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-card-border bg-background text-primary focus:ring-primary"
-          />
-          <div className="flex-1">
-            <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-              {t("appearance.disableAutoplay")}
-            </span>
-            <p className="mt-0.5 text-xs text-muted">{t("appearance.disableAutoplayHint")}</p>
-          </div>
-        </label>
-      </div>
 
       {/* ── Interface ───────────────────────────────────────────────────── */}
       <div className="border-t border-card-border pt-6">

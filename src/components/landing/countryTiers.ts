@@ -76,6 +76,21 @@ export function tierWireframeFill(tier: CountryTier, phosphorColor: string): str
   return `${phosphorColor}${TIER_PHOSPHOR_ALPHA[tier]}`;
 }
 
+/**
+ * Background Nations the world still simulates as macro aggregates (the
+ * manifest's `background-macro` tier, about 150 of them in 1991). They stay in
+ * the Background tier, inert and merged, but read as simulated land rather
+ * than the grey of land nothing simulates (owner, 2026-10-01). Only the
+ * landing globe draws the split; a caller that passes no roster sees grey.
+ */
+export const BACKGROUND_MACRO_COLOR = "rgba(139, 124, 220, 0.5)";
+export const BACKGROUND_MACRO_STROKE = "rgba(196, 181, 253, 0.32)";
+
+/** CRT wireframe intensity for macro-simulated background, between battleground and unsimulated. */
+export function backgroundMacroWireframeFill(phosphorColor: string): string {
+  return `${phosphorColor}24`;
+}
+
 /** The shape of an era/DB access record, narrowed to what tiering needs. */
 export type TierCountryAccess = {
   enabledForPlayers?: boolean;
@@ -125,7 +140,8 @@ export function buildTierLookup(
   isoToCountryId: Readonly<Record<string, string>>,
   access: Readonly<Record<string, TierCountryAccess | undefined>> | undefined,
   battlegroundFeatureIds: Iterable<string> = [],
-  economicPowerFeatureIds: Iterable<string> = []
+  economicPowerFeatureIds: Iterable<string> = [],
+  successorProxies: SuccessorProxies = {}
 ): Map<string, CountryTier> {
   const lookup = new Map<string, CountryTier>();
 
@@ -146,6 +162,11 @@ export function buildTierLookup(
     lookup.set(featureId, resolveCountryTier(countryAccess));
   }
 
+  // A named state the basemap has no shape for is drawn over its successors.
+  for (const [featureId, countryId] of successorOwners(access, successorProxies)) {
+    lookup.set(featureId, resolveCountryTier(access[countryId]));
+  }
+
   // Region-overlay blobs (split Germany) are keyed by owner, not by ISO feature.
   for (const [countryId, countryAccess] of Object.entries(access)) {
     if (!countryAccess) continue;
@@ -153,6 +174,47 @@ export function buildTierLookup(
   }
 
   return lookup;
+}
+
+/** Country id to the modern map features drawn as that state. */
+export type SuccessorProxies = Readonly<Record<string, readonly string[]>>;
+
+/**
+ * Modern map features standing in for a state the basemap has no shape for.
+ * Czechoslovakia and Yugoslavia are full countries in the Cold War and 1991
+ * presets, but Natural Earth only draws their successors, so without this
+ * they render as land nothing simulates. Keyed by year so a later era never
+ * paints Croatia as Yugoslavia.
+ */
+export function successorProxiesForYear(year: number): SuccessorProxies {
+  const proxies: Record<string, readonly string[]> = {};
+  // Czechoslovakia split on 1 January 1993.
+  if (year <= 1992) proxies.CS = ["203", "703"]; // Czechia, Slovakia
+  // Four republics left Yugoslavia in 1991 and 1992. Serbia and Montenegro
+  // carried on as Yugoslavia, then as one state until 2006.
+  if (year <= 1991) {
+    proxies.YU = ["191", "705", "070", "807", "688", "499"];
+  } else if (year <= 2006) {
+    proxies.YU = ["688", "499"];
+  }
+  return proxies;
+}
+
+/**
+ * Feature id to the state it stands in for, for the states this era names.
+ * The landing uses it to give a proxy feature its owner's tooltip and page.
+ */
+export function successorOwners(
+  access: Readonly<Record<string, TierCountryAccess | undefined>> | undefined,
+  successorProxies: SuccessorProxies
+): Map<string, string> {
+  const owners = new Map<string, string>();
+  if (!access) return owners;
+  for (const [countryId, featureIds] of Object.entries(successorProxies)) {
+    if (!access[countryId]) continue;
+    for (const featureId of featureIds) owners.set(featureId, countryId);
+  }
+  return owners;
 }
 
 /** Tier for a feature id, defaulting to Background. */

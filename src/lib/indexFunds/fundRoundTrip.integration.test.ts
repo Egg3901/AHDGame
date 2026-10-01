@@ -37,6 +37,9 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTxBulk: vi.fn(),
   loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn(async () => false),
+}));
 vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
   runWithOptionalTransaction: vi.fn(
     async (_withSession: unknown, withoutSession: () => Promise<boolean>) => withoutSession()

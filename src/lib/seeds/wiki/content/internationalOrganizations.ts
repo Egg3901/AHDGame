@@ -72,9 +72,26 @@ A resolution that fails, and a leadership candidate who is not elected, are writ
 
 ## Mutual defence
 
-The military alliances (NATO and the Warsaw Pact) carry collective-defence charters that the engine enforces without any vote at all. A declaration of war **against** a member pulls every other voting member of that alliance onto the defender's side automatically, the alliance is named on the war's belligerent roll, and the members are told. It is defensive only: an ally pulled in has declared on nobody, so no other alliance fires and no chain can form, and a member truced with the declarer stays out. A member dragged in this way can negotiate its own exit; it is not held in the war until the member it came to defend settles.
+An organization binds its members to defend each other in one of two ways:
 
-Admission does not apply the charter retroactively. When an applicant is already defending a live war, the membership ballot shows a warning and a member can table a unanimous defensive-entry resolution. If it passes, eligible alliance members enter the defender's side immediately without votes in their national legislatures. A declaration still before an aggressor's legislature also appears as a warning. If the applicant becomes a member before that declaration is enacted, the normal automatic charter applies when the war begins. Calling the bloc onto the attacking side remains an offensive coalition choice and requires national ratification after the organization vote.
+- **Article 5.** Any Security or Bloc organization whose members vote the Article 5 alert posture is a mutual-defence pact for as long as that posture stands. This includes organizations players found.
+- **A standing charter.** In worlds that begin in the Cold War, NATO and the Warsaw Pact are Blocs whose charters bind their members at every posture, with no vote needed.
+
+Political, Economic and Development organizations never bind their members, whatever their posture.
+
+When a binding organization's member is declared on, every other member with a government enters the war on the defender's side. The alliance is named on the war's belligerent roll, and the heads of government and defence ministers of the countries pulled in are told. Entry works like any other defensive entry: part of each ally's ready reserve moves to the front, and war weariness and approval count from the turn it joined.
+
+The rule is checked every turn, not only at the moment of the declaration. If an alliance raises its posture to Article 5 while a member is already under attack, or a country joins an alliance at Article 5 while a fellow member is at war, the allies enter that war on the next turn. Lowering the posture stops new entries but does not take anyone out of a war already joined.
+
+It is defensive only. An ally pulled in has declared on nobody, so no other alliance fires and no chain can form. An ally stays out when it:
+
+- has an active truce with the attacker, or is already fighting the attacker in another war;
+- shares a bloc with the attacker, or belongs to any binding alliance the attacker also belongs to;
+- already fought in this war and left it.
+
+When the attacker is itself a member of the alliance, the alliance takes no side and nobody is pulled in. A member dragged in can negotiate its own exit; it is not held in the war until the member it came to defend settles.
+
+Admission does not apply the pact retroactively to a war the applicant is already fighting. When an applicant is already defending a live war, the membership ballot shows a warning and a member can table a unanimous defensive-entry resolution. If it passes, eligible alliance members enter the defender's side immediately without votes in their national legislatures. A declaration still before an aggressor's legislature also appears as a warning. If the applicant becomes a member before that declaration is enacted, the normal automatic charter applies when the war begins. Calling the bloc onto the attacking side remains an offensive coalition choice and requires national ratification after the organization vote.
 
 In worlds that begin at the 1953 preset the two armed blocs also levy a fixed **tribute** on their non-voting client members instead of voted dues. See [Declaring War](/wiki/declaring-war).
 

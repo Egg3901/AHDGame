@@ -1,7 +1,12 @@
 "use client";
 
 import { getStoredConsent } from "@/components/CookieConsent";
-import { ACCOUNT_CREATED_KEY, FIRST_MEANINGFUL_ACTION_KEY, FIRST_TURN_KEY } from "./storageKeys";
+import {
+  ACCOUNT_CREATED_KEY,
+  FIRST_MEANINGFUL_ACTION_KEY,
+  FIRST_TURN_KEY,
+  PROFILE_DESIGN_KEY,
+} from "./storageKeys";
 
 type PostHogClient = typeof import("posthog-js").default;
 
@@ -156,6 +161,7 @@ export async function stopPostHogCapture(): Promise<void> {
     window.localStorage.removeItem(ACCOUNT_CREATED_KEY);
     window.localStorage.removeItem(FIRST_MEANINGFUL_ACTION_KEY);
     window.localStorage.removeItem(FIRST_TURN_KEY);
+    window.localStorage.removeItem(PROFILE_DESIGN_KEY);
     window.localStorage.removeItem("ahd:pending-war-declaration");
     window.localStorage.removeItem("ahd:last-tracked-turn");
     for (let index = window.localStorage.length - 1; index >= 0; index--) {

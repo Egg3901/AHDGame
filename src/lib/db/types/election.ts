@@ -90,6 +90,14 @@ export interface Election {
    */
   imposedSnap?: boolean;
   /**
+   * Scheduled LARP end turn of a regular lower-chamber race spawned on a
+   * snap-shifted term clock. The next regular anchors to this plus one term, so
+   * a snap resets the calendar for good rather than for a single Parliament.
+   * Absent on races that sit on the canonical calendar. See
+   * `planNextLowerChamberCycle`.
+   */
+  shiftedScheduleEndTurn?: number;
+  /**
    * Commons by-election carve (#860): fraction of the region's electorate this
    * race contests (vacatedSeats / totalRegionSeats). Stored at spawn so tally
    * invariants and the UI can prove the scaled pool. Present only on

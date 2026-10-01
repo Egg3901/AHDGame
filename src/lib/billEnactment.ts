@@ -53,8 +53,10 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { applyElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
   CentralBankIndependenceProvision,
+  EconomicSystemReformProvision,
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
+import { applyEconomicSystemReformProvision } from "@/lib/economy/economicSystemReform";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { seedFomcBoards } from "@/lib/centralBank/seedFomcBoard";
@@ -529,6 +531,23 @@ export async function onBillEnacted(
         p as CentralBankIndependenceProvision,
         enactingCountryId as CountryId,
         currentTurn
+      );
+    }
+  }
+
+  // Economic system reform: legislate a target for the marketization dial.
+  const economicReformProvisions = (bill.provisions ?? []).filter(
+    (p) => p.type === "economic_system_reform"
+  );
+  if (economicReformProvisions.length > 0) {
+    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    for (const p of economicReformProvisions) {
+      await applyEconomicSystemReformProvision(
+        db,
+        p as EconomicSystemReformProvision,
+        enactingCountryId as CountryId,
+        currentTurn,
+        bill._id.toString()
       );
     }
   }

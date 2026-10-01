@@ -54,7 +54,7 @@ export function ElectionFooter({ election }: ElectionFooterProps) {
             </Link>
             {election.electionType !== "president" && (
               <Link
-                href={`/wiki/state/${election.state}`}
+                href={`/state/${election.state}`}
                 className="rounded-lg border border-card-border bg-card/40 px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary/40 hover:text-primary hover:bg-card/60"
               >
                 {election.stateName}

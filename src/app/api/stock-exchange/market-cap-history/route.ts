@@ -17,7 +17,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const exchange = searchParams.get("exchange")?.toLowerCase() ?? "global";
     const sector = searchParams.get("sector");
-    const limit = Math.min(Number(searchParams.get("limit")) || 200, 2000);
+    const requestedLimit = Number(searchParams.get("limit") ?? 200);
+    const metric = searchParams.get("metric") ?? "raw-market-cap";
+    if (
+      !Number.isInteger(requestedLimit) ||
+      requestedLimit < 0 ||
+      requestedLimit > 10000 ||
+      !["raw-market-cap", "index"].includes(metric)
+    ) {
+      return NextResponse.json({ error: "Invalid history limit or metric." }, { status: 400 });
+    }
+    const limit = requestedLimit;
 
     if (!EXCHANGE_API_KEYS.has(exchange)) {
       return NextResponse.json(
@@ -93,10 +103,11 @@ export async function GET(request: Request) {
       return {
         turn: h.turn,
         createdAt: h.createdAt,
-        marketCap,
+        marketCap: metric === "index" ? marketCap : rawMarketCap,
+        marketIndex: marketCap,
         rawMarketCap,
-        high,
-        low,
+        high: metric === "index" ? high : undefined,
+        low: metric === "index" ? low : undefined,
         // Include sector breakdown for the chart filter
         bySector: h.bySector,
       };
@@ -104,7 +115,7 @@ export async function GET(request: Request) {
 
     // Per-user (filtered by enabled-country access) so it must not be shared-
     // cached; ETag/304 cuts egress when the history is unchanged between turns.
-    return conditionalJson(request, { exchange, sector, points, newestTurnDate });
+    return conditionalJson(request, { exchange, sector, metric, points, newestTurnDate });
   } catch (error) {
     return handleRouteError(error);
   }

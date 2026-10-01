@@ -103,4 +103,67 @@ describe("PosturePanel", () => {
     );
     expect(screen.getByText("Move to Article 5")).toBeTruthy();
   });
+
+  it("tells a security alliance at Article 5 that an attack on one brings the others in", () => {
+    const org = { ...baseOrg, posture: "article5" } as unknown as OrgSummary;
+    render(
+      <PosturePanel
+        org={org}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getAllByText(/enters the war on its side/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/At Article 5, a declaration of war on a member brings/)).toBeTruthy();
+  });
+
+  it("tells a security alliance below Article 5 that nobody is brought in", () => {
+    render(
+      <PosturePanel
+        org={baseOrg}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/Only Article 5 commits members to defend each other/)).toBeTruthy();
+  });
+
+  it("tells a chartered bloc it is bound at any posture, and points it at conflict entry", () => {
+    const org = {
+      ...baseOrg,
+      def: { ...baseOrg.def, category: "bloc", standingMutualDefence: true },
+    } as unknown as OrgSummary;
+    render(
+      <PosturePanel
+        org={org}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/charter binds its members in any posture/)).toBeTruthy();
+  });
+
+  it("points a bloc without a charter at Article 5 and its conflict-entry resolution", () => {
+    const org = {
+      ...baseOrg,
+      def: { ...baseOrg.def, category: "bloc" },
+    } as unknown as OrgSummary;
+    render(
+      <PosturePanel
+        org={org}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByText(/unanimous conflict-entry resolution/)).toBeTruthy();
+    expect(screen.queryByText(/has no mutual-defence clause/)).toBeNull();
+  });
 });

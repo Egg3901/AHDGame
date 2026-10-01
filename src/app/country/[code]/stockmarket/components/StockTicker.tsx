@@ -43,6 +43,7 @@ function TickerEntry({ item }: { item: TickerItem }) {
   return (
     <Link
       href={item.link}
+      title={`${item.type === "commodity" ? "1Y" : "6M"} game-calendar price change`}
       className="inline-flex items-center gap-1.5 hover:opacity-80 transition-opacity shrink-0"
     >
       <span className="text-foreground font-medium">{item.name}</span>

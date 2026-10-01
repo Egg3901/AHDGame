@@ -100,10 +100,10 @@ export function createTurnPhaseRuntime(input: {
    */
   alreadyApplied?: Set<string>;
   /**
-   * SIM-ONLY predicate. When provided and it returns false for a phase, the
-   * phase is marked skipped and its fn never runs (headless worldsim
-   * elections-only profile — see simTurnProfiles.ts). Omitted in prod → no
-   * filtering, zero overhead.
+   * Combined phase eligibility predicate for simulation profiles, singleplayer
+   * exclusions and shared-world scan cadence. A false result skips the phase
+   * without executing its function. The boolean does not identify which
+   * eligibility condition rejected the phase.
    */
   shouldRunPhase?: (phaseName: string) => boolean;
   /**
@@ -214,13 +214,12 @@ export function createTurnPhaseRuntime(input: {
   }
 
   async function runPhase<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
-    // SIM-ONLY phase gate (headless worldsim "elections-only" profile): skip
-    // economy/ledger phases entirely — mark skipped and return null WITHOUT
-    // running fn or arming the timeout/heartbeat timers. Callers already treat a
-    // null phase result as "did not run" (group execute() bodies null-guard every
-    // phaseResult). No predicate (prod/cron) → this branch is never taken.
+    // A combined predicate can reject an ordinary cadence or singleplayer
+    // phase as well as a simulation profile. Record the known conditional
+    // skip without claiming a profile that the predicate does not expose.
+    // Do not execute the function or arm its timeout/heartbeat timers.
     if (shouldRunPhase && !shouldRunPhase(name)) {
-      await markPhaseSkipped(name, "simElectionsOnly", "skipped: sim elections-only profile");
+      await markPhaseSkipped(name, "conditional", "skipped: phase eligibility predicate");
       return null;
     }
     // RESUME GATE. This turn is a re-entry into a turn a previous process began and

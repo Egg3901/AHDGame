@@ -314,6 +314,56 @@ function matchesFilter(doc: Doc, filter: Doc): boolean {
   });
 }
 
+/**
+ * Resolve the positional `$` in update paths (`holders.$.units`) to the index
+ * of the first array element the filter matched, as the server does. Only the
+ * dotted form (`holders.fundId`) and `$elemMatch` on the array are supported;
+ * anything else throws rather than silently writing the wrong element.
+ */
+function resolvePositional(doc: Doc, update: Update, filter: Doc | undefined): Update {
+  if (Array.isArray(update)) return update;
+  const needs = Object.values(update).some(
+    (fields) => isPlainObject(fields) && Object.keys(fields).some((k) => /\.\$(\.|$)/.test(k))
+  );
+  if (!needs) return update;
+  const indexFor = (arrayPath: string): number => {
+    const array = getPath(doc, arrayPath);
+    if (!Array.isArray(array))
+      throw new Error(`inMemoryDb: positional "${arrayPath}" is not an array`);
+    const prefix = `${arrayPath}.`;
+    const conditions: Doc = {};
+    for (const [key, condition] of Object.entries(filter ?? {})) {
+      if (key.startsWith(prefix)) conditions[key.slice(prefix.length)] = condition;
+      else if (key === arrayPath && isPlainObject(condition) && "$elemMatch" in condition) {
+        Object.assign(conditions, (condition as { $elemMatch: Doc }).$elemMatch);
+      }
+    }
+    if (Object.keys(conditions).length === 0) {
+      throw new Error(`inMemoryDb: positional "${arrayPath}.$" needs a filter on that array`);
+    }
+    const index = array.findIndex(
+      (element) => isContainer(element) && matchesFilter(element as Doc, conditions)
+    );
+    if (index < 0) throw new Error(`inMemoryDb: positional "${arrayPath}.$" matched no element`);
+    return index;
+  };
+  const resolved: Doc = {};
+  for (const [op, fields] of Object.entries(update)) {
+    if (!isPlainObject(fields)) {
+      resolved[op] = fields;
+      continue;
+    }
+    const next: Doc = {};
+    for (const [path, value] of Object.entries(fields)) {
+      const match = /^(.*?)\.\$(\.|$)/.exec(path);
+      next[match ? path.replace(`${match[1]}.$`, `${match[1]}.${indexFor(match[1])}`) : path] =
+        value;
+    }
+    resolved[op] = next;
+  }
+  return resolved as Update;
+}
+
 function applyUpdate(doc: Doc, update: Update): void {
   if (Array.isArray(update)) {
     for (const stage of update) {
@@ -446,7 +496,11 @@ class InMemoryCollection {
 
   docs: Doc[] = [];
 
-  constructor(public name: string) {}
+  constructor(
+    public name: string,
+    /** Owning database, for stages that read another collection ($unionWith). */
+    private readonly owner?: InMemoryDb
+  ) {}
 
   async findOne(filter: Doc = {}): Promise<Doc | null> {
     const found = this.docs.find((d) => matchesFilter(d, filter));
@@ -516,7 +570,7 @@ class InMemoryCollection {
       }
       return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
     }
-    applyUpdate(target, update);
+    applyUpdate(target, resolvePositional(target, update, filter));
     return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
   }
 
@@ -525,7 +579,7 @@ class InMemoryCollection {
     update: Update
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
     const targets = this.docs.filter((d) => matchesFilter(d, filter));
-    for (const doc of targets) applyUpdate(doc, update);
+    for (const doc of targets) applyUpdate(doc, resolvePositional(doc, update, filter));
     return { matchedCount: targets.length, modifiedCount: targets.length };
   }
 
@@ -554,7 +608,7 @@ class InMemoryCollection {
       return options.returnDocument === "before" ? null : clone(seed);
     }
     const before = clone(target);
-    applyUpdate(target, update);
+    applyUpdate(target, resolvePositional(target, update, filter));
     return options.returnDocument === "before" ? before : clone(target);
   }
 
@@ -610,9 +664,17 @@ class InMemoryCollection {
     return this.docs.filter((d) => matchesFilter(d, filter)).length;
   }
 
-  async bulkWrite(ops: Doc[]): Promise<{ modifiedCount: number }> {
+  async bulkWrite(ops: Doc[]): Promise<{
+    matchedCount: number;
+    modifiedCount: number;
+    upsertedCount: number;
+    upsertedIds: Record<number, unknown>;
+  }> {
+    let matched = 0;
     let modified = 0;
-    for (const op of ops) {
+    let upserted = 0;
+    const upsertedIds: Record<number, unknown> = {};
+    for (const [index, op] of ops.entries()) {
       if (op.updateOne) {
         const { filter, update, upsert } = op.updateOne as {
           filter: Doc;
@@ -620,7 +682,11 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.updateOne(filter, update, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
+        upserted += res.upsertedCount;
+        if (res.upsertedCount)
+          upsertedIds[index] = this.docs.find((doc) => matchesFilter(doc, filter))?._id;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
       } else if (op.replaceOne) {
@@ -630,10 +696,15 @@ class InMemoryCollection {
           upsert?: boolean;
         };
         const res = await this.replaceOne(filter, replacement, { upsert });
+        matched += res.matchedCount;
         modified += res.modifiedCount;
+        upserted += res.upsertedCount;
+        if (res.upsertedCount)
+          upsertedIds[index] = this.docs.find((doc) => matchesFilter(doc, filter))?._id;
       } else if (op.updateMany) {
         const { filter, update } = op.updateMany as { filter: Doc; update: Update };
         const res = await this.updateMany(filter, update);
+        matched += res.matchedCount;
         modified += res.modifiedCount;
       } else if (op.deleteMany) {
         const { filter } = op.deleteMany as { filter: Doc };
@@ -648,17 +719,25 @@ class InMemoryCollection {
         throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
-    return { modifiedCount: modified };
+    return { matchedCount: matched, modifiedCount: modified, upsertedCount: upserted, upsertedIds };
   }
 
   /**
    * The pipeline subset the banking passes use: `$match`, `$group` with
    * `$sum` / `$min` / `$max` / `$avg` / `$first` / `$last` over a field or a
    * constant, `$project` with 1/0 and `"$field"` aliases, `$sort`, `$limit`,
-   * `$count`. Anything else throws, so a test never passes on a stage the
+   * `$count`, `$unionWith`. Anything else throws, so a test never passes on a stage the
    * adapter quietly ignored.
    */
   aggregate(pipeline: Doc[] = []) {
+    return {
+      toArray: async () => this.runPipeline(pipeline),
+      next: async () => this.runPipeline(pipeline)[0] ?? null,
+    };
+  }
+
+  /** Synchronous pipeline evaluation shared by `aggregate` and `$unionWith`. */
+  runPipeline(pipeline: Doc[] = []): Doc[] {
     const run = (): Doc[] => {
       let rows: Doc[] = this.docs.map((d) => ({ ...d }));
       for (const stage of pipeline) {
@@ -766,8 +845,11 @@ class InMemoryCollection {
             const entries = Object.entries(spec) as Array<[string, number]>;
             rows = [...rows].sort((a, b) => {
               for (const [field, dir] of entries) {
-                const av = getPath(a, field) as number | string;
-                const bv = getPath(b, field) as number | string;
+                // ObjectIds compare by value, so equal ids fall through to the next key.
+                const sortable = (value: unknown) =>
+                  value instanceof ObjectId ? value.toHexString() : value;
+                const av = sortable(getPath(a, field)) as number | string;
+                const bv = sortable(getPath(b, field)) as number | string;
                 if (av === bv) continue;
                 if (av === undefined) return 1;
                 if (bv === undefined) return -1;
@@ -783,16 +865,25 @@ class InMemoryCollection {
           case "$count":
             rows = [{ [spec as unknown as string]: rows.length }];
             break;
+          case "$unionWith": {
+            // Both forms: a bare collection name, or { coll, pipeline }.
+            const collName = typeof spec === "string" ? spec : (spec.coll as string);
+            const subPipeline = typeof spec === "string" ? [] : ((spec.pipeline as Doc[]) ?? []);
+            if (!this.owner) {
+              throw new Error(
+                "inMemoryDb: $unionWith needs a collection created through InMemoryDb"
+              );
+            }
+            rows = rows.concat(this.owner.collection(collName).runPipeline(subPipeline));
+            break;
+          }
           default:
             throw new Error(`inMemoryDb: aggregate stage ${op} is not implemented`);
         }
       }
       return rows;
     };
-    return {
-      toArray: async () => run(),
-      next: async () => run()[0] ?? null,
-    };
+    return run();
   }
 
   /**
@@ -846,7 +937,7 @@ export class InMemoryDb {
   collection(name: string): InMemoryCollection {
     let existing = this.collections.get(name);
     if (!existing) {
-      existing = new InMemoryCollection(name);
+      existing = new InMemoryCollection(name, this);
       this.collections.set(name, existing);
     }
     return existing;

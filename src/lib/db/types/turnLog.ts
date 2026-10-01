@@ -19,6 +19,28 @@ export interface TurnLog {
   success: boolean;
   warnings: string[];
   phaseStatuses?: TurnPhaseTelemetryMap;
+  /**
+   * Anti-abuse scans run after the turn commits (#2694): financialSuspectScan,
+   * auditAnomalyScan, suspiciousDetection. Absent on off-cadence turns.
+   */
+  postTurnScans?: {
+    status: "running" | "completed" | "failed" | "skipped";
+    startedAt?: Date;
+    completedAt?: Date;
+    at?: Date;
+    reason?: string;
+    scans?: Record<
+      string,
+      {
+        status: "completed" | "failed";
+        startedAt: Date;
+        completedAt: Date;
+        ms: number;
+        result?: Record<string, unknown>;
+        error?: string;
+      }
+    >;
+  };
 
   phases: {
     actionRefresh: {

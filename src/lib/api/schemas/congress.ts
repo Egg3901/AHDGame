@@ -235,6 +235,11 @@ export const centralBankIndependenceProvisionSchema = z.object({
   action: z.enum(["grant", "revoke"]),
 });
 
+export const economicSystemReformProvisionSchema = z.object({
+  type: z.literal("economic_system_reform"),
+  target: z.enum(["dual_track", "market", "command"]),
+});
+
 export const euroAdoptionProvisionSchema = z.object({
   type: z.literal("euro_adoption"),
 });
@@ -294,6 +299,7 @@ export const proposeBillSchema = z
           unionLawProvisionSchema,
           electoralLawProvisionSchema,
           centralBankIndependenceProvisionSchema,
+          economicSystemReformProvisionSchema,
           euroAdoptionProvisionSchema,
           europeanTreatyProvisionSchema,
           policyProvisionSchema,

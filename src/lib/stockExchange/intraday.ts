@@ -17,22 +17,26 @@ export async function recordIntradayLevels(
   levels: { exchange: string; marketCap: number }[],
   now: Date
 ): Promise<void> {
+  levels = levels.filter((level) => Number.isFinite(level.marketCap) && level.marketCap >= 0);
   if (levels.length === 0) return;
   const col = db.collection<MarketIndexIntraday>("marketIndexIntraday");
-  await Promise.all(
+  await col.bulkWrite(
     levels.map(({ exchange, marketCap }) => {
       const cap = Math.round(marketCap);
-      return col.updateOne(
-        { _id: `${exchange}:${turn}` },
-        {
-          $setOnInsert: { exchange, turn, open: cap },
-          $max: { high: cap },
-          $min: { low: cap },
-          $set: { last: cap, updatedAt: now },
-          $inc: { prints: 1 },
+      return {
+        updateOne: {
+          filter: { _id: `${exchange}:${turn}` },
+          update: {
+            $setOnInsert: { exchange, turn, open: cap },
+            $max: { high: cap },
+            $min: { low: cap },
+            $set: { last: cap, updatedAt: now },
+            $inc: { prints: 1 },
+          },
+          upsert: true,
         },
-        { upsert: true }
-      );
-    })
+      };
+    }),
+    { ordered: false }
   );
 }

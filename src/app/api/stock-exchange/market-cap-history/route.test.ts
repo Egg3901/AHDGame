@@ -15,6 +15,7 @@ describe("GET /api/stock-exchange/market-cap-history", () => {
         turn: 10,
         createdAt: new Date("2026-09-26T10:00:00.000Z"),
         globalMarketCap: 100,
+        globalMarketIndex: 200,
         bySector: { financial: 40 },
       },
     ];
@@ -32,6 +33,8 @@ describe("GET /api/stock-exchange/market-cap-history", () => {
     const body = await res.json();
     expect(body.points[0]).toMatchObject({
       turn: 10,
+      marketCap: 100,
+      marketIndex: 200,
       createdAt: "2026-09-26T10:00:00.000Z",
       bySector: { financial: 40 },
     });

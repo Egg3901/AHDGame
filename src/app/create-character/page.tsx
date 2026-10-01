@@ -861,9 +861,9 @@ export default function CreateCharacterPage() {
       complete={partyTouched}
       disabled={!country}
     >
-      {parties.length === 0 ? (
+      {!country ? (
         <p className="rounded border border-dashed border-card-border px-3 py-6 text-center text-body-sm text-muted">
-          {country ? "Loading parties…" : "Choose a country first."}
+          Choose a country first.
         </p>
       ) : (
         <PartyPicker

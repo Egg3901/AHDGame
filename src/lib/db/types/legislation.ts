@@ -369,6 +369,22 @@ export interface CreateDepartmentProvision {
   positionId: string;
 }
 
+/**
+ * Economic system reform, enacted by law: moves the country's marketization
+ * dial toward a legislated target instead of leaving it to endogenous drift
+ * alone. `dual_track` is a reform socialism (plan and market in parallel, private
+ * enterprise legal); `market` is a full market economy; `command` is a return to
+ * central planning. Only countries that start the era planned may legislate it
+ * (see `canLegislateEconomicSystem`). Applied by
+ * `applyEconomicSystemReformProvision`; the turn engine ramps the dial.
+ */
+export interface EconomicSystemReformProvision {
+  type: "economic_system_reform";
+  target: EconomicSystemTarget;
+}
+
+export type EconomicSystemTarget = "command" | "dual_track" | "market";
+
 export type BillProvision =
   | PolicyProvision
   | TariffProvision
@@ -386,6 +402,7 @@ export type BillProvision =
   | ElectoralLawProvision
   | CentralBankIndependenceProvision
   | CreateDepartmentProvision
+  | EconomicSystemReformProvision
   | DeclareWarProvision
   | JoinConflictProvision;
 
@@ -413,7 +430,8 @@ export function isPolicyProvision(p: BillProvision): p is PolicyProvision {
     p.type !== "union_law" &&
     p.type !== "electoral_law" &&
     p.type !== "central_bank_independence" &&
-    p.type !== "create_department"
+    p.type !== "create_department" &&
+    p.type !== "economic_system_reform"
   );
 }
 

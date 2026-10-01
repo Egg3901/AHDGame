@@ -4,7 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { getAuthUser } from "@/lib/auth";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { getCachedLandingData } from "@/lib/landing/cachedLandingData";
-import { formatNationList } from "@/lib/marketing/marketedWorld";
+import { formatNationList, toEraId } from "@/lib/marketing/marketedWorld";
+import { backgroundMacroFeatureIdsForPreset } from "@/lib/world/worldEntityMap";
 import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 import { buildGovernmentTypeMap } from "@/lib/landing/governmentTypeMap";
 import { fetchDiscordInviteStats } from "@/lib/discord/inviteStats";
@@ -56,9 +57,14 @@ export default async function LandingPage() {
   ]);
 
   const seedYear = snapshot?.seedYear ?? 1979;
+  const currentYear = snapshot?.currentYear ?? seedYear;
   const crises = snapshot?.crises ?? [];
   const playerCounts = snapshot?.playerCounts ?? {};
   const governmentTypes = snapshot?.governmentTypes ?? buildGovernmentTypeMap();
+  // The landing's tier rosters key on the era's default preset; so does this.
+  const backgroundMacroFeatureIds = backgroundMacroFeatureIdsForPreset(
+    `${toEraId(seedYear)}-default`
+  );
 
   return (
     <SandboxHome
@@ -69,6 +75,8 @@ export default async function LandingPage() {
       governmentTypes={governmentTypes}
       discordStats={discordStats}
       world={world}
+      backgroundMacroFeatureIds={backgroundMacroFeatureIds}
+      currentYear={currentYear}
     />
   );
 }
