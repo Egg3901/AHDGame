@@ -31,6 +31,11 @@ export interface RussianDumaCohortBallot {
 }
 
 export function resolveRussianDumaCohort(ballots: readonly RussianDumaCohortBallot[]) {
+  return resolveRussianDumaBallots(ballots, false);
+}
+
+/** Repeat generations may have different registers from already certified ballots. */
+function resolveRussianDumaBallots(ballots: readonly RussianDumaCohortBallot[], repeat: boolean) {
   if (
     ballots.length !== 226 ||
     new Set(ballots.map((row) => row.id)).size !== 226 ||
@@ -56,15 +61,21 @@ export function resolveRussianDumaCohort(ballots: readonly RussianDumaCohortBall
       throw new Error("District registration exceeds precision");
     register[district.regionId] = Number(total);
   }
-  const expected = new Map(planRussianDumaDistricts(register).map((row) => [row.seatId, row]));
+  const boundaryRegister = repeat
+    ? Object.fromEntries(Object.keys(register).map((region) => [region, 1]))
+    : register;
+  const expected = new Map(
+    planRussianDumaDistricts(boundaryRegister).map((row) => [row.seatId, row])
+  );
   if (
     districts.some(
       (row) =>
         expected.get(row.seatId)?.regionId !== row.regionId ||
-        expected.get(row.seatId)?.registeredVoters !== row.registeredVoters
+        (!repeat && expected.get(row.seatId)?.registeredVoters !== row.registeredVoters)
     ) ||
-    Object.values(register).reduce((sum, voters) => sum + BigInt(voters), BigInt(0)) !==
-      BigInt(lists[0].registeredVoters)
+    (!repeat &&
+      Object.values(register).reduce((sum, voters) => sum + BigInt(voters), BigInt(0)) !==
+        BigInt(lists[0].registeredVoters))
   )
     throw new Error("The first-Duma cohort has inconsistent frozen registration");
   const allCandidates = ballots.flatMap((row) => [...row.candidates]);
@@ -89,7 +100,7 @@ export function resolveRussianDumaCohort(ballots: readonly RussianDumaCohortBall
   const districtPlayers = districts.flatMap((row) =>
     row.candidates.filter((candidate) => !candidate.isNpc).map((candidate) => candidate.ownerId)
   );
-  if (new Set(districtPlayers).size !== districtPlayers.length)
+  if (!repeat && new Set(districtPlayers).size !== districtPlayers.length)
     throw new Error("A player cannot contest multiple Duma constituencies");
   const list = lists[0];
   if (districts.some((ballot) => ballot.candidates.some((row) => row.capacity !== 1)))
@@ -142,6 +153,11 @@ export function resolveRussianDumaCohort(ballots: readonly RussianDumaCohortBall
         winner,
       };
     });
+  const winners = constituencyResults
+    .filter((row) => row.winner && !row.winner.isNpc)
+    .map((row) => row.winner!.ownerId);
+  if (new Set(winners).size !== winners.length)
+    throw new Error("A player cannot hold multiple Duma constituency mandates");
   const partyVotes = new Map<string, { id: string; votes: number; registrationOrder: number }>();
   for (const candidate of list.candidates) {
     if (
@@ -187,4 +203,61 @@ export function resolveRussianDumaCohort(ballots: readonly RussianDumaCohortBall
         })
       : null;
   return { constituencyResults, listElectionId: list.id, listDecision, listAssignment };
+}
+
+/**
+ * Repeat only the failed ballots, retaining each successful constituency unchanged.
+ * A new national list or district freezes its own register; list assignments are
+ * recalculated against all current constituency winners to keep each player to one seat.
+ */
+export function resolveRussianDumaRepeatGeneration(input: {
+  previousBallots: readonly RussianDumaCohortBallot[];
+  replacements: readonly RussianDumaCohortBallot[];
+}) {
+  const previous = resolveRussianDumaBallots(input.previousBallots, true);
+  const pending = new Set(
+    previous.constituencyResults.filter((row) => !row.winner).map((row) => row.seatId)
+  );
+  if (previous.listDecision.outcome === "repeat") pending.add("RU-duma-national-list");
+  if (
+    !pending.size ||
+    input.replacements.length !== pending.size ||
+    new Set(input.replacements.map((row) => row.seatId)).size !== pending.size ||
+    input.replacements.some((row) => !pending.has(row.seatId))
+  )
+    throw new Error("Duma repeats must replace exactly the failed ballot set");
+  const oldBySeat = new Map(input.previousBallots.map((row) => [row.seatId, row]));
+  const oldElectionIds = new Set(input.previousBallots.map((row) => row.id));
+  const oldCandidateIds = new Set(
+    input.previousBallots.flatMap((row) => row.candidates.map((c) => c.id))
+  );
+  if (
+    input.replacements.some((row) => {
+      const old = oldBySeat.get(row.seatId);
+      return (
+        !old ||
+        old.tier !== row.tier ||
+        old.regionId !== row.regionId ||
+        oldElectionIds.has(row.id) ||
+        row.candidates.some((c) => oldCandidateIds.has(c.id))
+      );
+    })
+  )
+    throw new Error("Duma repeats need new identities in their original ballot territories");
+  const protectedPlayers = new Set(
+    previous.constituencyResults
+      .filter((row) => row.winner && !row.winner.isNpc)
+      .map((row) => row.winner!.ownerId)
+  );
+  const playerNominees = input.replacements
+    .filter((row) => row.tier === "constituency")
+    .flatMap((row) => row.candidates.filter((c) => !c.isNpc && c.eligible).map((c) => c.ownerId));
+  if (
+    new Set(playerNominees).size !== playerNominees.length ||
+    playerNominees.some((id) => protectedPlayers.has(id))
+  )
+    throw new Error("A player cannot contest a repeat while holding another constituency mandate");
+  const replacementsBySeat = new Map(input.replacements.map((row) => [row.seatId, row]));
+  const ballots = input.previousBallots.map((row) => replacementsBySeat.get(row.seatId) ?? row);
+  return { ballots, result: resolveRussianDumaBallots(ballots, true) };
 }
