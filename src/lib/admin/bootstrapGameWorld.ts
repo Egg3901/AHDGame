@@ -1431,6 +1431,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   ) {
     const { seedModernPartyBench } = await import("@/lib/npp/seedModernPartyBench");
     await seedModernPartyBench(db, preset, log);
+    const { seedModernOpeningCandidates } = await import("@/lib/npp/seedModernOpeningCandidates");
+    await seedModernOpeningCandidates(db, preset, now, log);
   }
 
   const [
