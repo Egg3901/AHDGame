@@ -501,3 +501,51 @@ describe("partial mothball attribution", () => {
     expect(result.idleCauses.reduce((sum, cause) => sum + cause.units, 0)).toBeCloseTo(160, 8);
   });
 });
+
+describe("buildSectorPlantsSection: room to build agrees with the engine (ticket 1370)", () => {
+  it("reports no room while the sector's own demand throttle holds it back", () => {
+    const held = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      demandGapUnits: 3_000,
+      sector: sectorFixture({ demandThrottleFactor: 0.1 }),
+    });
+    expect(held.roomHeldByOwnIdle).toBe(true);
+    expect(held.demandGapUnits).toBe(0);
+    const running = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      demandGapUnits: 3_000,
+      sector: sectorFixture({ demandThrottleFactor: 1 }),
+    });
+    expect(running.roomHeldByOwnIdle).toBe(false);
+    expect(running.demandGapUnits).toBe(3_000);
+  });
+
+  it("does not hold room for a mothballed sector, whose idle capacity is the owner's choice", () => {
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      demandGapUnits: 3_000,
+      sector: sectorFixture({ demandThrottleFactor: 0.1, mothballed: true }),
+    });
+    expect(s.roomHeldByOwnIdle).toBe(false);
+  });
+
+  it("states unclaimed share from the same pool that bounds a build", () => {
+    // 500 unowned units beside 1,500 owned: a quarter of the market is unclaimed.
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      ownedCellCapacityUnits: 1_500,
+      sector: sectorFixture(),
+    });
+    expect(s.unclaimedSharePct).toBe(25);
+    const unknown = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: sectorFixture(),
+    });
+    expect(unknown.unclaimedSharePct).toBeUndefined();
+  });
+});

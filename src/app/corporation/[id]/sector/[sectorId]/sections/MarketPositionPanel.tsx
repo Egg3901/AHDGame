@@ -34,7 +34,14 @@ interface MarketPositionPanelProps {
    * (ticket #1145, #1162). Absent under non-plants tiers, where there is no
    * unit-denominated capacity model to report.
    */
-  room?: { headroomUnits: number; demandGapUnits?: number } | null;
+  room?: {
+    headroomUnits: number;
+    demandGapUnits?: number;
+    /** This sector's own demand throttle bound last turn; its idle capacity fills buyers first. */
+    roomHeldByOwnIdle?: boolean;
+    /** Unowned pool over owned capacity plus that pool, percent. */
+    unclaimedSharePct?: number;
+  } | null;
 }
 
 /**
@@ -247,17 +254,19 @@ export default function MarketPositionPanel({
                   </span>
                 </Tooltip>
                 <span className="ml-auto tabular-nums font-medium text-foreground">
-                  {market.unownedPercent}%
+                  {room.unclaimedSharePct ?? market.unownedPercent}%
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Tooltip
                   content={
-                    buyersRoomUnits > 0
-                      ? roomIsShareBound
-                        ? "Capacity you may still add here, limited by unclaimed share. Buyers exist for more than the market has left to claim."
-                        : "Capacity you may still add here, limited by unmet demand. Building past it produces units that go unsold."
-                      : "No unmet demand for this output right now, so a build would produce units nobody buys. Unclaimed share stays above zero because it counts market nobody has built into, not buyers waiting."
+                    room.roomHeldByOwnIdle
+                      ? "Your plants here are already running below capacity because sales set the pace. Output climbs about 15% a turn while buyers keep taking it, so new capacity would sit idle. Fill what you have first."
+                      : buyersRoomUnits > 0
+                        ? roomIsShareBound
+                          ? "Capacity you may still add here, limited by unclaimed share. Buyers exist for more than the market has left to claim."
+                          : "Capacity you may still add here, limited by unmet demand. Building past it produces units that go unsold."
+                        : "No unmet demand for this output right now, so a build would produce units nobody buys. Unclaimed share stays above zero because it counts market nobody has built into, not buyers waiting."
                   }
                 >
                   <span className="cursor-help border-b border-dashed border-card-border/70 text-muted">
