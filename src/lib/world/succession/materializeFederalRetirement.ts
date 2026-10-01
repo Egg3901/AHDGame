@@ -1,25 +1,108 @@
-import type { ClientSession, Db } from "mongodb";
+/**
+ * Complete federation dissolution retires offices, cabinet posts and pending votes.
+ * materializeFederationFederalRetirement archives their history and clears office
+ * links in the settlement transaction, preserving residents and their accounts.
+ */
+import type { ClientSession, Db, Document } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CountryGameState, ElectedOfficial, Election } from "@/lib/db/types";
+import type {
+  Character,
+  CountryGameState,
+  ElectedOfficial,
+  Election,
+  ElectionCandidate,
+  NPP,
+} from "@/lib/db/types";
+import { FEDERATION_ARCHIVED_POLITICAL_ROWS_COLLECTION } from "./materializeRussianCongress";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 
-/** Retire only the active federal institutions after a complete dissolution.
- * Completed election records remain historical; player characters and their
- * protected wallets are handled by the residence materializer. */
 export async function materializeFederationFederalRetirement(input: {
   db: Db;
   session: ClientSession;
   sourceCountryId: CountryId;
+  applicationId: string;
   appliedOnTurn: number;
   now: Date;
 }): Promise<{ cancelledElections: number; vacatedOffices: number }> {
-  const { db, session, sourceCountryId, appliedOnTurn, now } = input;
-  if (!Number.isSafeInteger(appliedOnTurn) || appliedOnTurn < 1 || !Number.isFinite(now.getTime()))
-    throw new Error("Federation retirement needs a valid turn and time");
+  const { db, session, sourceCountryId, applicationId, appliedOnTurn, now } = input;
+  if (
+    !session.inTransaction() ||
+    !applicationId ||
+    !Number.isSafeInteger(appliedOnTurn) ||
+    appliedOnTurn < 1 ||
+    !Number.isFinite(now.getTime())
+  )
+    throw new Error("Federation retirement needs a transaction, application, turn and time");
   const country = await db
     .collection<CountryGameState>("countryGameStates")
     .findOne({ _id: sourceCountryId, dissolvedTurn: null }, { session });
   if (!country) throw new Error("Federation source country changed before dissolution");
+  // Keep historical offices and cabinet memberships before vacating the source.
+  // Each collection is read once and archived in the existing settlement ledger.
+  for (const collectionName of ["electedOfficials", "cabinetMembers", "governmentFormations"]) {
+    const filter =
+      collectionName === "governmentFormations"
+        ? { _id: sourceCountryId }
+        : { countryId: sourceCountryId };
+    const rows = await db.collection<Document>(collectionName).find(filter, { session }).toArray();
+    if (rows.length)
+      await db
+        .collection<{
+          _id: string;
+          applicationId: string;
+          sourceCountryId: CountryId;
+          value: Document;
+        }>(FEDERATION_ARCHIVED_POLITICAL_ROWS_COLLECTION)
+        .insertMany(
+          rows.map((value) => ({
+            _id: `${applicationId}:${collectionName}:${value._id.toString()}`,
+            applicationId,
+            sourceCountryId,
+            value,
+          })),
+          { session }
+        );
+  }
+  const activeElectionIds = await db
+    .collection<Election>("elections")
+    .find(
+      { countryId: sourceCountryId, status: { $in: ["upcoming", "active"] } },
+      { session, projection: { _id: 1 } }
+    )
+    .toArray();
+  if (activeElectionIds.length)
+    await db.collection<ElectionCandidate>("electionCandidates").updateMany(
+      {
+        electionId: { $in: activeElectionIds.map((election) => election._id) },
+        status: "active",
+      },
+      { $set: { status: "withdrawn", updatedAt: now } },
+      { session }
+    );
+  await db
+    .collection<Character>("characters")
+    .updateMany(
+      { countryId: sourceCountryId, currentOffice: { $ne: null } },
+      { $set: { currentOffice: null, updatedAt: now } },
+      { session }
+    );
+  await db
+    .collection<NPP>("npps")
+    .updateMany(
+      { countryId: sourceCountryId, currentOffice: { $ne: null } },
+      { $set: { currentOffice: null, updatedAt: now } },
+      { session }
+    );
+  for (const collectionName of ["pmAppointmentVotes", "noConfidenceVotes"])
+    await db
+      .collection(collectionName)
+      .updateMany(
+        { countryId: sourceCountryId, status: "active" },
+        { $set: { status: "cancelled", closedAt: now, updatedAt: now } },
+        { session }
+      );
+  await db.collection("cabinetMembers").deleteMany({ countryId: sourceCountryId }, { session });
+  await db.collection("ukCabinetCooldowns").deleteMany({ countryId: sourceCountryId }, { session });
   const elections = await db
     .collection<Election>("elections")
     .updateMany(
@@ -39,6 +122,30 @@ export async function materializeFederationFederalRetirement(input: {
         pmCharacterId: null,
         pmNppId: null,
         pmName: null,
+        hosCharacterId: null,
+        hosNppId: null,
+        hosName: null,
+        presidentNppId: null,
+        presidentName: null,
+        governingPartyId: null,
+        coalitionId: null,
+        coalitionPartyIds: null,
+        formationType: null,
+        seatsByParty: {},
+        totalSeats: 0,
+        totalSeatsSupporting: 0,
+        majorityThreshold: 1,
+        activeVoteId: null,
+        formedAt: null,
+        formedTurn: null,
+        pmVacancyDeadlineTurn: null,
+        pmAppointmentNominationLockId: null,
+        pmAppointmentNominationLockExpiresAt: null,
+        governingAgenda: null,
+        fiscalStance: null,
+        commandStance: null,
+        governingGoals: null,
+        ministerialReshuffle: null,
         updatedAt: now,
       },
     },
