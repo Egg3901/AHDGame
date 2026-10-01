@@ -193,7 +193,7 @@ export async function authorizeRussianConstitutionalMandate(input: {
       countryId: "RU",
       stateId: "ru_national",
       status: "signed",
-      enactedAt: { $exists: true, $ne: null },
+      enactedAt: { $type: "date" },
     },
     { session, projection: { russianConstitutionalMandate: 1, enactedAt: 1 } }
   );

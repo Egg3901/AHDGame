@@ -184,7 +184,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       countryBefore
     );
     expect(
-      await db.collection("russianConstitutionalProposals").findOne({ _id: proposal._id })
+      await db.collection<Fixture>("russianConstitutionalProposals").findOne({ _id: proposal._id })
     ).toMatchObject({ status: "open" });
     await db.command({ collMod: "russianConstitutionalProposals", validator: {} });
     commands = 0;
