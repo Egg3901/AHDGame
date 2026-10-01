@@ -180,7 +180,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           ageConfirmed: formData.ageConfirmed,
           termsAccepted: formData.termsAccepted,
           fingerprint,
-          fingerprintComponents,
+          fingerprintComponents: fingerprint ? fingerprintComponents : undefined,
           deviceKey: deviceKey || undefined,
           turnstileToken: turnstileToken || undefined,
         }),
@@ -204,7 +204,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
           email: formData.email,
           password: formData.password,
           fingerprint,
-          fingerprintComponents,
+          fingerprintComponents: fingerprint ? fingerprintComponents : undefined,
           deviceKey: deviceKey || undefined,
         }),
       });

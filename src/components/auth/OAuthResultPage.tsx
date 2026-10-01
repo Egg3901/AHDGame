@@ -17,6 +17,7 @@ import { safeLakesideLoginReturn } from "@/lib/auth/lakesideLoginReturn";
 async function recordFingerprint(): Promise<void> {
   try {
     const { hash, components } = await generateFingerprintData();
+    if (!hash) return;
     await fetch("/api/auth/record-fingerprint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

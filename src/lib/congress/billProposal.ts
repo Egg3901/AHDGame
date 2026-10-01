@@ -9,10 +9,15 @@ import { validateElectoralLawProvision } from "@/lib/elections/electoralLaws";
 import type {
   EuropeanTreatyProvision,
   CentralBankIndependenceProvision,
+  EconomicSystemReformProvision,
   EuroAdoptionProvision,
   ElectoralLawProvision,
 } from "@/lib/db/types/legislation";
 import { canLegislateBankIndependence } from "@/lib/centralBank/governance";
+import {
+  ECONOMIC_SYSTEM_TARGETS,
+  canLegislateEconomicSystem,
+} from "@/lib/economy/economicSystemReformRules";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
@@ -81,6 +86,7 @@ export type ValidatedProvisions =
       unionLawProvisions: UnionLawProvision[];
       electoralLawProvisions: ElectoralLawProvision[];
       centralBankProvisions: CentralBankIndependenceProvision[];
+      economicSystemReformProvisions: EconomicSystemReformProvision[];
       euroAdoptionProvisions: EuroAdoptionProvision[];
       europeanTreatyProvisions: EuropeanTreatyProvision[];
     }
@@ -115,6 +121,7 @@ export async function validateBillProvisions(
   const validatedUnionLawProvisions: UnionLawProvision[] = [];
   const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
   const validatedCentralBankProvisions: CentralBankIndependenceProvision[] = [];
+  const validatedEconomicSystemReformProvisions: EconomicSystemReformProvision[] = [];
   const validatedEuroAdoptionProvisions: EuroAdoptionProvision[] = [];
   const validatedEuropeanTreatyProvisions: EuropeanTreatyProvision[] = [];
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
@@ -358,6 +365,52 @@ export async function validateBillProvisions(
       continue;
     }
 
+    // Economic system reform: a legislated target for the marketization dial.
+    // Economy bills only, one per bill, and only where the era began planned.
+    if (
+      "type" in (rawP as object) &&
+      (rawP as { type: unknown }).type === "economic_system_reform"
+    ) {
+      if (
+        !CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(
+          category as Parameters<typeof CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has>[0]
+        )
+      ) {
+        return {
+          ok: false,
+          status: 400,
+          error: "Economic system reform can only be included in economy bills.",
+        };
+      }
+      const p = rawP as { type: "economic_system_reform"; target?: unknown };
+      if (!ECONOMIC_SYSTEM_TARGETS.includes(p.target as EconomicSystemReformProvision["target"])) {
+        return {
+          ok: false,
+          status: 400,
+          error: 'Economic system target must be "dual_track", "market" or "command".',
+        };
+      }
+      if (sourceCountry && !canLegislateEconomicSystem(sourceCountry)) {
+        return {
+          ok: false,
+          status: 400,
+          error: "Only countries with a planned economy can legislate their economic system.",
+        };
+      }
+      if (validatedEconomicSystemReformProvisions.length > 0) {
+        return {
+          ok: false,
+          status: 400,
+          error: "A bill can carry only one economic system reform.",
+        };
+      }
+      validatedEconomicSystemReformProvisions.push({
+        type: "economic_system_reform",
+        target: p.target as EconomicSystemReformProvision["target"],
+      });
+      continue;
+    }
+
     // Handle union-law provisions (v3 Phase 7b)
     if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "union_law") {
       if (
@@ -550,6 +603,7 @@ export async function validateBillProvisions(
     unionLawProvisions: validatedUnionLawProvisions,
     electoralLawProvisions: validatedElectoralLawProvisions,
     centralBankProvisions: validatedCentralBankProvisions,
+    economicSystemReformProvisions: validatedEconomicSystemReformProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
   };

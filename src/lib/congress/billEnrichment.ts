@@ -1,4 +1,5 @@
 import { describeElectoralLaw } from "@/lib/elections/electoralLaws";
+import { ECONOMIC_SYSTEM_TARGET_LABEL } from "@/lib/economy/economicSystemReformRules";
 import { warGoalLabel } from "@/lib/military/warGoals";
 import type { Db } from "mongodb";
 import { getPartyHex, formatBillPositionLabel } from "@/lib/utils/politics";
@@ -525,6 +526,16 @@ export async function resolveBillProvisions(
           provisionsResolved.push({
             legislationTypeName: "Electoral Law",
             proposed: { name: describeElectoralLaw(provision) },
+            effectDirection: 0,
+            directionLabel: "Center",
+          });
+          continue;
+        }
+
+        if (provision.type === "economic_system_reform") {
+          provisionsResolved.push({
+            legislationTypeName: "Economic System Reform",
+            proposed: { name: ECONOMIC_SYSTEM_TARGET_LABEL[provision.target] },
             effectDirection: 0,
             directionLabel: "Center",
           });

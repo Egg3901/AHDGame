@@ -187,7 +187,7 @@ export default function LoginPageClient({
         body: JSON.stringify({
           ...formData,
           fingerprint,
-          fingerprintComponents,
+          fingerprintComponents: fingerprint ? fingerprintComponents : undefined,
           deviceKey: deviceKey || undefined,
         }),
       });

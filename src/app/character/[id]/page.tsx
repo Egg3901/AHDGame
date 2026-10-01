@@ -51,6 +51,8 @@ import { isPatreonActive } from "@/lib/db/types";
 import { PolicyDemographicsCard } from "@/app/profile/components/PolicyDemographicsCard";
 import type { CompassMarker } from "@/components/PoliticalCompass";
 import { InteractCard } from "@/app/profile/components/InteractCard";
+import { PlayerSafetyActions } from "@/components/profile/PlayerSafetyActions";
+import { hasBlocked } from "@/lib/safety/playerSafety";
 import { ProfileAchievements } from "@/components/ProfileAchievements";
 import { CampaignSongPlayer } from "@/components/CampaignSongPlayer";
 import { ProfileHeader } from "@/app/profile/components/ProfileHeader";
@@ -594,6 +596,11 @@ export default async function CharacterPage({ params }: PageProps) {
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const isOwnProfile = userData?.character?._id?.toString() === character._id.toString();
+  // A viewer who blocked this player sees no bio or campaign song from them.
+  const viewerHasBlocked =
+    !!userData?.userId && !isOwnProfile && character.userId
+      ? await hasBlocked(await getDb(), new ObjectId(userData.userId), character.userId)
+      : false;
   const canInfluence = userData?.hasCharacter && !isOwnProfile && !isBanned;
 
   const partyHex = getPartyHex(character.party, party?.color ?? undefined);
@@ -847,7 +854,7 @@ export default async function CharacterPage({ params }: PageProps) {
     officesHeldCount: officesHeld.size,
     activeRaceCount: candidateElections.length,
   });
-  const publicOverview = character.bio?.trim() || publicSummary;
+  const publicOverview = (!viewerHasBlocked && character.bio?.trim()) || publicSummary;
   const heroStatusLine = buildHeroStatusLine({
     officeLabel,
     partyName: publicPartyName,
@@ -1187,7 +1194,7 @@ export default async function CharacterPage({ params }: PageProps) {
                 </section>
               )}
 
-              {character.campaignSongUrl && (
+              {character.campaignSongUrl && !viewerHasBlocked && (
                 <div className="store-app-hidden rounded-xl border border-card-border bg-card p-4 shadow-card">
                   <CampaignSongPlayer
                     videoId={character.campaignSongUrl}
@@ -1227,6 +1234,22 @@ export default async function CharacterPage({ params }: PageProps) {
                       </Link>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {userData && !isOwnProfile && (
+                <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+                  {viewerHasBlocked && (
+                    <p className="mb-3 text-xs text-muted">
+                      You blocked this player. Their bio, campaign song and mail are hidden from
+                      you.
+                    </p>
+                  )}
+                  <PlayerSafetyActions
+                    characterId={character._id.toString()}
+                    characterName={character.name}
+                    initiallyBlocked={viewerHasBlocked}
+                  />
                 </div>
               )}
 
@@ -1270,9 +1293,11 @@ export default async function CharacterPage({ params }: PageProps) {
                 Public Overview
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-foreground">{publicOverview}</p>
-              {character.bio?.trim() && character.bio.trim() !== publicSummary && (
-                <p className="mt-3 text-sm leading-relaxed text-muted">{publicSummary}</p>
-              )}
+              {!viewerHasBlocked &&
+                character.bio?.trim() &&
+                character.bio.trim() !== publicSummary && (
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{publicSummary}</p>
+                )}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {overviewStats.map((stat) => (
                   <div
