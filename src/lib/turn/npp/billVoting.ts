@@ -58,10 +58,8 @@ import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import { ADDRESS_AGENDA_FORCE_BIAS } from "@/lib/constants/governorOffice";
-import {
-  getOfficeTypeForChamber,
-  getJointSittingOfficeTypes,
-} from "@/lib/legislature/chamberOfficeType";
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { resolveNppBillCountryId, resolveNppBillVoterOffices } from "./rules/billVoterOffices";
 import { resolveBillVoteField, type BillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 
@@ -71,7 +69,7 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     now,
     nppMap,
     nppOfficials,
-    activeBills,
+    activeBills: storedBills,
     billWhips,
     statePartyOrgs,
     legislationTypeMap,
@@ -79,6 +77,10 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     currentTurn,
   } = ctx;
 
+  const activeBills = storedBills.map((bill) => ({
+    ...bill,
+    countryId: resolveNppBillCountryId(bill, ctx.statesById),
+  }));
   let votescast = 0;
   const officialsByOfficeType = new Map<string, typeof nppOfficials>();
   for (const official of nppOfficials) {
@@ -86,10 +88,15 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     officials.push(official);
     officialsByOfficeType.set(official.officeType, officials);
   }
-  const vetoOverrideOfficials = [
-    ...(officialsByOfficeType.get("house") ?? []),
-    ...(officialsByOfficeType.get("senate") ?? []),
-  ];
+  const runtimeCountryOffices = new Map(ctx.runtimeCountryOffices);
+  // Standalone callers share the same one-read snapshot as the context loader.
+  if (
+    ctx.preset === "1991-default" &&
+    activeBills.some((bill) => bill.countryId === "RU") &&
+    !runtimeCountryOffices.has("RU")
+  ) {
+    runtimeCountryOffices.set("RU", await loadRuntimeCountryOffices(db, "RU", ctx.preset));
+  }
   const countryStateByCountry = new Map(
     await Promise.all(
       Array.from(new Set(activeBills.map((bill) => (bill.countryId ?? "US") as CountryId))).map(
@@ -165,9 +172,8 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
 
   for (const bill of activeBills) {
     const isOtherChamber = bill.status === "active_other";
-    const isUSVetoOverride = bill.status === "veto_override";
+    const isVetoOverride = bill.status === "veto_override";
     const isJPShugiinOverride = bill.status === "override_shugiin";
-    const chamberType = bill.currentChamber ?? "house";
 
     // Bills are country-scoped. US, BR, and others all map their upper chamber
     // to officeType "senate" (likewise "house"), so the global
@@ -179,28 +185,20 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     const billRuntime =
       countryStateByCountry.get(billCountry) ?? (await getCountryState(ctx.db, billCountry));
 
-    // A concurrent bill has BOTH chambers live at once — the same shape
-    // `vetoOverrideOfficials` (above) already handles, made country-aware.
-    // `getOfficeTypeForChamber` is already country-aware, so this is a union, not new
-    // country logic.
     const isConcurrent = bill.status === "active_both";
-    const concurrentOfficeTypes = isConcurrent
-      ? getJointSittingOfficeTypes(billCountry, ctx.preset)
-      : [];
-    const lowerOfficeType = isConcurrent ? (concurrentOfficeTypes[0] ?? "") : "";
-
-    const relevantOfficials = isUSVetoOverride
-      ? vetoOverrideOfficials
-      : isJPShugiinOverride
-        ? (officialsByOfficeType.get("shugiin") ?? [])
-        : isConcurrent
-          ? concurrentOfficeTypes.flatMap((t) => officialsByOfficeType.get(t) ?? [])
-          : (officialsByOfficeType.get(getOfficeTypeForChamber(billCountry, chamberType)) ?? []);
+    const { officeTypes, lowerOfficeType } = resolveNppBillVoterOffices(
+      bill,
+      ctx.preset,
+      runtimeCountryOffices.get(billCountry)
+    );
+    const relevantOfficials = officeTypes.flatMap(
+      (officeType) => officialsByOfficeType.get(officeType) ?? []
+    );
 
     // Determine vote field — JP override_shugiin uses main "votes" (reset by jpBillLifecycle)
     const voteField = isOtherChamber
       ? "otherChamberVotes"
-      : isUSVetoOverride
+      : isVetoOverride
         ? "vetoOverrideVotes"
         : "votes";
     /**
@@ -221,7 +219,6 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
         : field === "vetoOverrideVotes"
           ? bill.vetoOverrideVotes
           : bill.votes) ?? {};
-    const existingVotes = votesInField(voteField);
 
     /**
      * Whether THIS official's chamber has already closed.
@@ -403,7 +400,7 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
 
       // Override votes don't allow abstain (US veto override or JP Shugiin override).
       let vote: "for" | "against" | "abstain" = rawVerdict;
-      if ((isUSVetoOverride || isJPShugiinOverride) && vote === "abstain") {
+      if ((isVetoOverride || isJPShugiinOverride) && vote === "abstain") {
         vote = "against";
       }
 

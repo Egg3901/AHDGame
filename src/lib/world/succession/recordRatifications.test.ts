@@ -4,6 +4,7 @@ import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { getWorldEntityOrThrow } from "@/lib/world/worldEntityManifest";
 import { planSuccessionFinances } from "./rules/financialSettlement";
 import { openFederationPoliticalProposal } from "./politicalProposal";
+import { loadPersistedFederationApproval } from "./ratificationStore";
 import { recordFederationRatifications } from "./recordRatifications";
 import { processFederationRatifications } from "@/lib/turn/federationRatifications";
 import { buildRatifiedFederationActivation } from "./buildRatifiedActivation";
@@ -107,6 +108,46 @@ describe("federation ratification records", () => {
     expect(await db.collection("federationRatifications").countDocuments({})).toBe(2);
   });
 
+  it("leaves a pending veto override unratified without aborting the turn sweep", async () => {
+    const { db, proposal, args } = await scenario();
+    await db
+      .collection("bills")
+      .updateOne({ _id: proposal.billId }, { $set: { status: "veto_override" } });
+    expect(await processFederationRatifications(db, "1991-default", 120)).toBe(0);
+    await expect(recordFederationRatifications(args)).rejects.toThrow("enacted");
+    expect(await db.collection("federationRatifications").countDocuments({})).toBe(0);
+    await db
+      .collection("bills")
+      .updateOne({ _id: proposal.billId }, { $set: { status: "signed", enactedAt: new Date(1) } });
+    expect(await processFederationRatifications(db, "1991-default", 121)).toBe(1);
+    expect(await db.collection("federationRatifications").countDocuments({})).toBe(2);
+  });
+  it("does not accept a pending override as a persisted enacted mandate", async () => {
+    const { db, proposal } = await scenario();
+    await db
+      .collection("bills")
+      .updateOne(
+        { _id: proposal.billId },
+        { $set: { status: "veto_override", enactedAt: new Date(1) } }
+      );
+    await expect(
+      loadPersistedFederationApproval({
+        db,
+        sourceEntityId: "RU",
+        termsHash: proposal.termsHash,
+        appliedOnTurn: 120,
+        approval: {
+          settlementId: "ussr-1",
+          revision: 1,
+          availableFromYear: 1991,
+          currentYear: 1991,
+          requiredParticipants: ["RU", "UKR"],
+          parentMandate: null,
+          consents: [],
+        },
+      })
+    ).rejects.toThrow("unique enacted");
+  });
   it("waits for the enacted bill, then persists source and autonomous consent exactly once", async () => {
     const { db, proposal, args } = await scenario();
     await expect(recordFederationRatifications(args)).rejects.toThrow("enacted");

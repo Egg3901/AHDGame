@@ -46,7 +46,7 @@ export async function recordFederationRatifications(input: {
   const bill = await db.collection<Bill>("bills").findOne({
     _id: proposal.billId,
     countryId: sourceCountryId,
-    status: { $in: ["signed", "veto_override"] },
+    status: "signed",
     "federationSettlementMandate.termsHash": proposal.termsHash,
     "federationSettlementMandate.settlementId": settlementId,
     "federationSettlementMandate.revision": revision,

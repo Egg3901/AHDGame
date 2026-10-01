@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -81,5 +81,74 @@ describe("loadNPPContext", () => {
       status: "active_other",
       otherChamberVotingEndsAt: { $gt: gameNow },
     });
+  });
+});
+
+describe("Russian NPC context constitution snapshot", () => {
+  it("reads one projected marker snapshot for multiple bills and hydrates only current deputies", async () => {
+    const db = createMockDb();
+    const { loadNPPContext } = await import("./context");
+    const nppId = new ObjectId();
+    const obsoleteId = new ObjectId();
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 50,
+      preset: "1991-default",
+    });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 24,
+    });
+    db.collection("bills")
+      .find()
+      .toArray.mockResolvedValue(
+        [1, 2].map(() => ({
+          _id: new ObjectId(),
+          countryId: "RU",
+          status: "active",
+          currentChamber: "congressOfPeoplesDeputies",
+          legislationTypeId: "tax.income",
+          votes: {},
+        }))
+      );
+    db.collection("electedOfficials")
+      .find()
+      .toArray.mockResolvedValue([
+        { _id: new ObjectId(), countryId: "RU", officeType: "congressDeputy", nppId },
+        {
+          _id: new ObjectId(),
+          countryId: "RU",
+          officeType: "unionCongressDeputy",
+          nppId: obsoleteId,
+        },
+      ]);
+    db.collection("npps")
+      .find()
+      .toArray.mockResolvedValue(
+        [nppId, obsoleteId].map((_id) => ({ _id, policies: { economic: 0, social: 0 } }))
+      );
+    db.collection("npps")
+      .aggregate()
+      .toArray.mockResolvedValue([{ _id: nppId, domainPositions: { "tax.income": 30 } }]);
+    const ctx = await loadNPPContext(new Date(0), { db: db as unknown as Db });
+    expect(db.collectionMocks.countryGameStates.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.countryGameStates.findOne).toHaveBeenCalledWith(
+      { _id: "RU" },
+      expect.objectContaining({
+        projection: expect.objectContaining({
+          ruSovietSuccessionSinceTurn: 1,
+          ruFederalAssemblySinceTurn: 1,
+        }),
+      })
+    );
+    expect(ctx.runtimeCountryOffices?.get("RU")?.lowerOfficeType).toBe("congressDeputy");
+    const aggregateCalls = db.collectionMocks.npps.aggregate.mock.calls.filter(
+      ([pipeline]) => pipeline !== undefined
+    );
+    expect(aggregateCalls).toHaveLength(1);
+    expect(aggregateCalls[0][0][0]).toEqual({ $match: { _id: { $in: [nppId] } } });
+    expect(ctx.nppMap.get(nppId.toString())?.policies.domainPositions).toEqual({
+      "tax.income": 30,
+    });
+    expect(ctx.nppMap.get(obsoleteId.toString())?.policies.domainPositions).toBeUndefined();
   });
 });
