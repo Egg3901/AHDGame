@@ -279,6 +279,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "federationResidentHolds", category: "runtime" },
   { name: "federationFiscalAccounts", category: "runtime" },
   { name: "federationLegacyServiceTurns", category: "runtime" },
+  { name: "federationContinuingServiceTurns", category: "runtime" },
   { name: "federationSettlementApplications", category: "runtime" },
   { name: "worldEntityStates", category: "runtime" },
   {

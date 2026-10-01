@@ -15,6 +15,7 @@ import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital"
 // these imports, so every name below still resolves to its mock.
 import { processBondTurn } from "./bondTurn";
 import { processLegacyFederationServiceTurn } from "@/lib/world/succession/legacyServiceTurn";
+import { processContinuingFederationServiceTurn } from "@/lib/world/succession/continuingServiceTurn";
 import { getDb } from "@/lib/mongodb";
 import {
   getBondCountryId,
@@ -33,6 +34,9 @@ import { executeCorporationBondRestructure } from "@/lib/bonds/executeCorporatio
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/world/succession/legacyServiceTurn", () => ({
   processLegacyFederationServiceTurn: vi.fn().mockResolvedValue(0),
+}));
+vi.mock("@/lib/world/succession/continuingServiceTurn", () => ({
+  processContinuingFederationServiceTurn: vi.fn().mockResolvedValue(0),
 }));
 vi.mock("@/lib/bonds/sovereign", () => ({
   getBondCountryId: vi.fn().mockReturnValue("US"),
@@ -157,6 +161,22 @@ describe("processBondTurn", () => {
     db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ preset: "1991-default" });
     await processBondTurn(10);
     expect(processLegacyFederationServiceTurn).toHaveBeenCalledWith(db, 10, expect.any(Date), []);
+    expect(processContinuingFederationServiceTurn).toHaveBeenCalledWith(
+      db,
+      10,
+      expect.any(Date),
+      []
+    );
+  });
+
+  it("stops creditor payouts when continuing successor funding fails", async () => {
+    db.collection("gameState");
+    db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ preset: "1991-default" });
+    vi.mocked(processContinuingFederationServiceTurn).mockRejectedValueOnce(
+      new Error("continuing funding failed")
+    );
+    await expect(processBondTurn(10)).rejects.toThrow("continuing funding failed");
+    expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("stops creditor payouts when the legacy funding journal fails", async () => {
