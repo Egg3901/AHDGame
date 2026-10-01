@@ -26,6 +26,20 @@ export interface RussianCouncilCohortBallot {
 }
 
 export function resolveRussianCouncilCohort(ballots: readonly RussianCouncilCohortBallot[]) {
+  return resolveRussianCouncilBallots(ballots, false);
+}
+
+/** Historical losing nominations do not bar an owner from a later failed-poll generation. */
+export function resolveRussianCouncilAccumulatedCohort(
+  ballots: readonly RussianCouncilCohortBallot[]
+) {
+  return resolveRussianCouncilBallots(ballots, true);
+}
+
+function resolveRussianCouncilBallots(
+  ballots: readonly RussianCouncilCohortBallot[],
+  accumulated: boolean
+) {
   if (
     ballots.length !== 89 ||
     new Set(ballots.map((row) => row.id)).size !== 89 ||
@@ -53,9 +67,9 @@ export function resolveRussianCouncilCohort(ballots: readonly RussianCouncilCoho
   )
     throw new Error("Council nominees need unique candidacies and identified eligible owners");
   const players = candidates.filter((row) => !row.isNpc).map((row) => row.ownerId);
-  if (new Set(players).size !== players.length)
+  if (!accumulated && new Set(players).size !== players.length)
     throw new Error("A player cannot contest multiple Council subject mandates");
-  return [...ballots]
+  const results = [...ballots]
     .sort(
       (a, b) => boundaries.get(a.seatId)!.districtNumber - boundaries.get(b.seatId)!.districtNumber
     )
@@ -94,4 +108,10 @@ export function resolveRussianCouncilCohort(ballots: readonly RussianCouncilCoho
         vacancies: decision.vacancies,
       };
     });
+  const playerWinners = results.flatMap((row) =>
+    row.winners.filter((winner) => !winner.isNpc).map((winner) => winner.ownerId)
+  );
+  if (new Set(playerWinners).size !== playerWinners.length)
+    throw new Error("A player cannot hold multiple Council subject mandates");
+  return results;
 }
