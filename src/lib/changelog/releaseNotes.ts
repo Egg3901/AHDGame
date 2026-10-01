@@ -192,13 +192,17 @@ export function foldNotes(notes: ReleaseNote[], lede: string): string {
     body += `\n### ${name}\n\n`;
     for (const note of list) {
       body += `- **${note.title}**${note.summary ? `\n  ${note.summary}` : ""}\n`;
-      if (note.content?.trim()) {
-        body += `\n${note.content
-          .trim()
-          .split("\n")
-          .map((line) => `  ${line}`)
-          .join("\n")}\n\n`;
-      }
+    }
+  }
+  const detailed = ordered.filter((note) => note.content?.trim());
+  if (detailed.length > 0) {
+    body += "\n## Detailed release notes\n";
+    for (const note of detailed) {
+      // Keep blocks outside the summary list: the site's list renderer is inline.
+      const content = note.content!.trim().replace(/^(#{1,6}) /gm, (_, hashes: string) => {
+        return `${"#".repeat(Math.min(6, hashes.length + 2))} `;
+      });
+      body += `\n### ${note.title}\n\n${content}\n`;
     }
   }
   return body;

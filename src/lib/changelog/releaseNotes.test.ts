@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ReactMarkdown from "react-markdown";
 import { foldNotes, type ReleaseNote } from "./releaseNotes";
 
 describe("release balance detail", () => {
@@ -17,5 +20,9 @@ describe("release balance detail", () => {
     expect(release).toContain("Commons threshold: 20% to 10%.");
     expect(release).toContain("US House uses a separate rule.");
     expect(release).toContain("Fairer seat thresholds.");
+    const html = renderToStaticMarkup(createElement(ReactMarkdown, { children: release }));
+    for (const item of html.match(/<li>[\s\S]*?<\/li>/g) ?? []) {
+      expect(item).not.toMatch(/<h[1-6][ >]/);
+    }
   });
 });
