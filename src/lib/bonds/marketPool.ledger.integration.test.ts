@@ -192,7 +192,13 @@ it("preserves cash outcomes with shadow disabled", async () => {
   const { db } = fixture("USD", 1, 100, false);
   await processBondMarketPoolTurn(db, TURN, NOW);
   await creditBondPool(db, "USD", 2.345, "couponsIn", NOW);
-  expect((await db.collection("bondMarketPools").findOne({ _id: "USD" }))?.cashLocal).toBe(110.35);
+  expect(
+    (
+      await db
+        .collection<{ _id: string; cashLocal: number }>("bondMarketPools")
+        .findOne({ _id: "USD" })
+    )?.cashLocal
+  ).toBe(110.35);
   expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
 });
 
@@ -246,7 +252,13 @@ it("does not fail successful cash writes when shadow insertion fails", async () 
     new Error("shadow insert failure")
   );
   await expect(creditBondPool(db, "USD", 2.35, "couponsIn", NOW)).resolves.toBeUndefined();
-  expect((await db.collection("bondMarketPools").findOne({ _id: "USD" }))?.cashLocal).toBe(102.35);
+  expect(
+    (
+      await db
+        .collection<{ _id: string; cashLocal: number }>("bondMarketPools")
+        .findOne({ _id: "USD" })
+    )?.cashLocal
+  ).toBe(102.35);
 });
 
 it("publishes no witness when the authoritative credit fails", async () => {

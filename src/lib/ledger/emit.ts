@@ -27,12 +27,10 @@ export async function emitLedgerEntries(
   if (inputs.length === 0) return;
   try {
     const docs = inputs.map(finalizeLedgerEntry);
-    await db
-      .collection<LedgerEntry>(LEDGER_ENTRIES_COLLECTION)
-      .insertMany(docs, {
-        ordered: false,
-        ...(options?.session ? { session: options.session } : {}),
-      });
+    await db.collection<LedgerEntry>(LEDGER_ENTRIES_COLLECTION).insertMany(docs, {
+      ordered: false,
+      ...(options?.session ? { session: options.session } : {}),
+    });
   } catch (err) {
     Sentry.captureException(err, {
       extra: { phase: "emitLedgerEntries", count: inputs.length },
