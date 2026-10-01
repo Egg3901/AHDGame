@@ -515,6 +515,26 @@ describe("Bound first-Duma filing", () => {
       })
     );
   });
+  it.each(["list", "constituency"] as const)(
+    "rejects a certified unseated Council winner before Duma %s filing side effects",
+    async (tier) => {
+      const { db } = await setupDuma(tier);
+      const councilId = new ObjectId();
+      const country = await db.collectionMocks.countryGameStates.findOne();
+      country.ruFirstCouncilElectionCohortId = councilId;
+      db.collection("russianCouncilElectionResults").findOne.mockResolvedValue({
+        result: [{ winners: [{ ownerId: characterOid.toHexString(), isNpc: false }] }],
+      });
+      const res = await POST(makeReq(), {
+        params: Promise.resolve({ id: electionOid.toHexString() }),
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toContain("Council mandate");
+      expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.electionCandidates.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.electionCandidates.updateMany).not.toHaveBeenCalled();
+    }
+  );
   it.each(["eligible", "winner", "missing-journal", "wrong-ballot", "wrong-predecessor"])(
     "checks %s repeat filing against immutable generation lineage",
     async (reason) => {

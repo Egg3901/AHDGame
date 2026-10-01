@@ -80,6 +80,7 @@ export async function materializeRussianDumaElectionResult(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruFirstCouncilElectionCohortId: 1,
       },
     }
   );
@@ -125,7 +126,12 @@ export async function materializeRussianDumaElectionResult(input: {
   )
     throw new Error("The entire first-Duma cohort must finish before certification");
   const { ballots, counted, candidates, registeredCandidateIds, votesByElection } =
-    await loadRussianDumaCertificationInputs({ db, session, cohort });
+    await loadRussianDumaCertificationInputs({
+      db,
+      session,
+      cohort,
+      councilCohortId: country.ruFirstCouncilElectionCohortId,
+    });
   const electionIds = cohort.map((row) => row._id);
   const tallies = db.collection<ElectionVoteTally>("electionVoteTallies");
   const result = resolveRussianDumaCohort(ballots);

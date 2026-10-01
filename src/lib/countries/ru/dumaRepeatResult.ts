@@ -84,6 +84,7 @@ export async function materializeRussianDumaRepeatResult(input: {
       session,
       projection: {
         ruFirstDumaElectionCohortId: 1,
+        ruFirstCouncilElectionCohortId: 1,
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
@@ -155,7 +156,12 @@ export async function materializeRussianDumaRepeatResult(input: {
     )
   )
     throw new Error("The complete Duma repeat generation must finish before certification");
-  const loaded = await loadRussianDumaCertificationInputs({ db, session, cohort });
+  const loaded = await loadRussianDumaCertificationInputs({
+    db,
+    session,
+    cohort,
+    councilCohortId: country.ruFirstCouncilElectionCohortId,
+  });
   const combined = resolveRussianDumaRepeatGeneration({
     previousBallots: previous.ballots,
     replacements: loaded.ballots,

@@ -3,7 +3,7 @@
  * loadRussianDumaCertificationInputs serves initial and repeat rounds, retaining
  * counted withdrawals and avoiding a query per constituency or nominee.
  */
-import { type ClientSession, type Db } from "mongodb";
+import { type ClientSession, type Db, type ObjectId } from "mongodb";
 import type {
   Character,
   Election,
@@ -11,6 +11,7 @@ import type {
   ElectionVoteTally,
   NPP,
 } from "@/lib/db/types";
+import { loadPendingRussianCouncilOwners } from "./pendingCouncilMandates";
 import type { RussianDumaResultRecord } from "./dumaElectionResult";
 import type { RussianDumaCohortBallot } from "./rules/assemblyCohort";
 
@@ -18,6 +19,7 @@ export async function loadRussianDumaCertificationInputs(input: {
   db: Db;
   session: ClientSession;
   cohort: readonly Election[];
+  councilCohortId?: ObjectId;
 }) {
   const { db, session, cohort } = input;
   const electionIds = cohort.map((row) => row._id);
@@ -77,7 +79,7 @@ export async function loadRussianDumaCertificationInputs(input: {
             $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
             isTechnocrat: { $ne: true },
           },
-          { session, batchSize: 1000, projection: { party: 1 } }
+          { session, batchSize: 1000, projection: { party: 1, currentOffice: 1 } }
         )
         .toArray()
     : [];
@@ -90,10 +92,29 @@ export async function loadRussianDumaCertificationInputs(input: {
             countryId: "RU",
             federationPendingResidenceId: { $exists: false },
           },
-          { session, batchSize: 1000, projection: { party: 1, homeState: 1 } }
+          { session, batchSize: 1000, projection: { party: 1, homeState: 1, currentOffice: 1 } }
         )
         .toArray()
     : [];
+  const pendingCouncil = await loadPendingRussianCouncilOwners({
+    db,
+    session,
+    cohortId: input.councilCohortId,
+    mandateSinceTurn: cohort[0]?.russianDumaRound?.mandateSinceTurn,
+  });
+  const councilOwners = new Set([
+    ...npcs
+      .filter(
+        (row) =>
+          (typeof row.currentOffice === "string" ? row.currentOffice : row.currentOffice?.type) ===
+          "federationCouncilMember"
+      )
+      .map((row) => `npc:${row._id.toHexString()}`),
+    ...players
+      .filter((row) => row.currentOffice?.type === "federationCouncilMember")
+      .map((row) => `player:${row._id.toHexString()}`),
+    ...pendingCouncil,
+  ]);
   const owners = new Map<string, { party: string; homeState?: string }>([
     ...npcs.map(
       (row) => [`npc:${row._id.toHexString()}`, { party: row.party, homeState: undefined }] as const
@@ -162,6 +183,7 @@ export async function loadRussianDumaCertificationInputs(input: {
           isNpc: !!row.isNPP,
           eligible:
             row.status === "active" &&
+            !councilOwners.has(`${row.isNPP ? "npc" : "player"}:${ownerId.toHexString()}`) &&
             owner?.party === row.party &&
             (!!row.isNPP ||
               election.russianDumaRound!.tier === "list" ||
