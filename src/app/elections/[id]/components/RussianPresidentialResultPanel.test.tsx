@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../messages/en/elections.json";
 import { RussianPresidentialResultPanel } from "./RussianPresidentialResultPanel";
@@ -10,7 +10,7 @@ const candidates = [
   { id: "a", characterName: "Leader", partyName: "First" },
   { id: "b", characterName: "Other", partyName: "Second" },
 ];
-function panel(outcome: "won" | "runoff" | "repeat") {
+function panel(outcome: "won" | "runoff" | "repeat", actions = {}) {
   const tally: GeneralVotes = {
     totalVotes: { a: 35, b: 25 },
     candidateNames: { a: "Leader", b: "Other" },
@@ -29,11 +29,17 @@ function panel(outcome: "won" | "runoff" | "repeat") {
   };
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <RussianPresidentialResultPanel candidates={candidates} tally={tally} />
+      <RussianPresidentialResultPanel candidates={candidates} tally={tally} {...actions} />
     </NextIntlClientProvider>
   );
 }
 describe("Russian direct ballot display", () => {
+  it("keeps endorsement available on the direct ballot", () => {
+    const onEndorse = vi.fn();
+    panel("runoff", { canEndorse: true, onEndorse });
+    screen.getAllByRole("button", { name: "Endorse" })[0].click();
+    expect(onEndorse).toHaveBeenCalledWith("a");
+  });
   it("reports a certified winner and participation without an electoral college", () => {
     panel("won");
     expect(screen.getByText("Leader wins the certified ballot.")).toBeTruthy();

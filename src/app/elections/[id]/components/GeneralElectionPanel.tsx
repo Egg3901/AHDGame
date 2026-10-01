@@ -375,8 +375,158 @@ export function GeneralElectionPanel({
     color: colorMap.get(c.id)!,
   }));
 
+  const supportModal = (
+    <Modal
+      open={!!supportingCampaignId}
+      title="Support Campaign"
+      onClose={() => {
+        if (!supporting) {
+          setSupportingCampaignId(null);
+          setSupportResult(null);
+          setSupportError("");
+        }
+      }}
+    >
+      <div className="space-y-4 text-sm">
+        {supportResult ? (
+          <div className="space-y-2">
+            <p className="text-success text-sm font-medium">Contribution successful!</p>
+            <p className="text-muted text-xs">
+              Added{" "}
+              <span className="text-foreground font-medium">
+                {supportResult.strengthAdded.toFixed(1)}
+              </span>{" "}
+              campaign strength
+              {supportResult.clicks > 1 ? ` across ×${supportResult.clicks}` : ""} for{" "}
+              <span className="text-amber-400 font-medium">
+                {formatCurrencyFaceAmount(supportResult.costFunds, supportResult.currencyCode)}
+              </span>{" "}
+              and{" "}
+              <span className="text-cyan-400 font-medium">{supportResult.costActions} actions</span>
+              .
+            </p>
+            <button
+              onClick={() => {
+                setSupportingCampaignId(null);
+                setSupportResult(null);
+              }}
+              className="w-full rounded-lg bg-primary/10 border border-primary/30 px-4 py-2 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        ) : (
+          <>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted">Amount</div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {supportClickOptions.map((opt) => {
+                  const isActive =
+                    opt.value === "max" ? supportClicks === "max" : supportClicks === opt.value;
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => setSupportClicks(opt.value)}
+                      disabled={supporting || !opt.enabled}
+                      title={opt.enabled ? undefined : "You cannot afford this many"}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isActive
+                          ? "border-primary/60 bg-primary/15 text-primary"
+                          : "border-card-border text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted">
+                A batch costs exactly what the same number of single contributions would: it just
+                spends them in one go.
+              </p>
+            </div>
+            <p className="text-muted text-xs">
+              {supportPreview ? (
+                <>
+                  Spend{" "}
+                  <span className="font-medium text-amber-400">
+                    {formatCurrencyFaceAmount(
+                      supportPreview.costFunds,
+                      supportPreview.currencyCode
+                    )}
+                  </span>{" "}
+                  and{" "}
+                  <span className="font-medium text-cyan-400">
+                    {supportPreview.costActions} actions
+                  </span>{" "}
+                  to add{" "}
+                  <span className="font-medium text-primary">
+                    {supportPreview.strengthAdded.toFixed(1)} strength
+                  </span>
+                  ?
+                </>
+              ) : supportContext ? (
+                <>You cannot afford a contribution to this campaign right now.</>
+              ) : (
+                <>Loading contribution cost…</>
+              )}
+            </p>
+            {/* A selected step can fall out of reach without the player
+                    touching anything: contributing raises the campaign's
+                    strength, which raises the price of the next batch. Say so
+                    rather than leaving Confirm mysteriously dead. */}
+            {supportPreview && !supportPreview.affordable && (
+              <p className="text-error text-xs">
+                You can afford {supportContext?.maxClicks ?? 0} of these right now.
+              </p>
+            )}
+            {supportError && <p className="text-error text-xs">{supportError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSupportConfirm}
+                disabled={supporting || !supportPreview?.affordable}
+                className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {supporting
+                  ? "Contributing..."
+                  : supportPreview && supportPreview.clicks > 1
+                    ? `Confirm ×${supportPreview.clicks}`
+                    : "Confirm"}
+              </button>
+              <button
+                onClick={() => {
+                  setSupportingCampaignId(null);
+                  setSupportError("");
+                }}
+                disabled={supporting}
+                className="flex-1 rounded-lg border border-card-border px-3 py-2 text-xs font-medium text-muted hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
   if (countryId === "RU" && electionType === "president")
-    return <RussianPresidentialResultPanel candidates={sorted} tally={tally} />;
+    return (
+      <>
+        <RussianPresidentialResultPanel
+          candidates={sorted}
+          tally={tally}
+          canEndorse={canEndorse}
+          endorsedCandidateId={endorsedCandidateId}
+          endorsing={endorsing}
+          onEndorse={handleEndorse}
+          canSupport={canSupport}
+          supporting={supporting}
+          onSupport={handleSupportOpen}
+        />
+        {supportModal}
+      </>
+    );
 
   // Presidential election - enhanced table view
   if (isPresident) {
@@ -519,141 +669,7 @@ export function GeneralElectionPanel({
         )}
 
         {/* Support Campaign Modal */}
-        <Modal
-          open={!!supportingCampaignId}
-          title="Support Campaign"
-          onClose={() => {
-            if (!supporting) {
-              setSupportingCampaignId(null);
-              setSupportResult(null);
-              setSupportError("");
-            }
-          }}
-        >
-          <div className="space-y-4 text-sm">
-            {supportResult ? (
-              <div className="space-y-2">
-                <p className="text-success text-sm font-medium">Contribution successful!</p>
-                <p className="text-muted text-xs">
-                  Added{" "}
-                  <span className="text-foreground font-medium">
-                    {supportResult.strengthAdded.toFixed(1)}
-                  </span>{" "}
-                  campaign strength
-                  {supportResult.clicks > 1 ? ` across ×${supportResult.clicks}` : ""} for{" "}
-                  <span className="text-amber-400 font-medium">
-                    {formatCurrencyFaceAmount(supportResult.costFunds, supportResult.currencyCode)}
-                  </span>{" "}
-                  and{" "}
-                  <span className="text-cyan-400 font-medium">
-                    {supportResult.costActions} actions
-                  </span>
-                  .
-                </p>
-                <button
-                  onClick={() => {
-                    setSupportingCampaignId(null);
-                    setSupportResult(null);
-                  }}
-                  className="w-full rounded-lg bg-primary/10 border border-primary/30 px-4 py-2 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <>
-                <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted">Amount</div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {supportClickOptions.map((opt) => {
-                      const isActive =
-                        opt.value === "max" ? supportClicks === "max" : supportClicks === opt.value;
-                      return (
-                        <button
-                          key={String(opt.value)}
-                          type="button"
-                          onClick={() => setSupportClicks(opt.value)}
-                          disabled={supporting || !opt.enabled}
-                          title={opt.enabled ? undefined : "You cannot afford this many"}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                            isActive
-                              ? "border-primary/60 bg-primary/15 text-primary"
-                              : "border-card-border text-muted hover:text-foreground"
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="mt-1.5 text-[11px] text-muted">
-                    A batch costs exactly what the same number of single contributions would: it
-                    just spends them in one go.
-                  </p>
-                </div>
-                <p className="text-muted text-xs">
-                  {supportPreview ? (
-                    <>
-                      Spend{" "}
-                      <span className="font-medium text-amber-400">
-                        {formatCurrencyFaceAmount(
-                          supportPreview.costFunds,
-                          supportPreview.currencyCode
-                        )}
-                      </span>{" "}
-                      and{" "}
-                      <span className="font-medium text-cyan-400">
-                        {supportPreview.costActions} actions
-                      </span>{" "}
-                      to add{" "}
-                      <span className="font-medium text-primary">
-                        {supportPreview.strengthAdded.toFixed(1)} strength
-                      </span>
-                      ?
-                    </>
-                  ) : supportContext ? (
-                    <>You cannot afford a contribution to this campaign right now.</>
-                  ) : (
-                    <>Loading contribution cost…</>
-                  )}
-                </p>
-                {/* A selected step can fall out of reach without the player
-                    touching anything: contributing raises the campaign's
-                    strength, which raises the price of the next batch. Say so
-                    rather than leaving Confirm mysteriously dead. */}
-                {supportPreview && !supportPreview.affordable && (
-                  <p className="text-error text-xs">
-                    You can afford {supportContext?.maxClicks ?? 0} of these right now.
-                  </p>
-                )}
-                {supportError && <p className="text-error text-xs">{supportError}</p>}
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSupportConfirm}
-                    disabled={supporting || !supportPreview?.affordable}
-                    className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {supporting
-                      ? "Contributing..."
-                      : supportPreview && supportPreview.clicks > 1
-                        ? `Confirm ×${supportPreview.clicks}`
-                        : "Confirm"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSupportingCampaignId(null);
-                      setSupportError("");
-                    }}
-                    disabled={supporting}
-                    className="flex-1 rounded-lg border border-card-border px-3 py-2 text-xs font-medium text-muted hover:text-foreground transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </Modal>
+        {supportModal}
       </div>
     );
   }

@@ -374,7 +374,10 @@
       "counting": "Votes are accumulating. No winner is certified yet.",
       "participation": "{participants, number} participants out of {registered, number} registered voters.",
       "rules": "A valid election requires at least 50% turnout. The first round requires a majority of participating voters.",
-      "votes": "{votes, number} votes ({share}%)"
+      "votes": "{votes, number} votes ({share}%)",
+      "endorse": "Endorse",
+      "withdrawEndorsement": "Withdraw endorsement",
+      "supportCampaign": "Support campaign"
     }
   }
 }

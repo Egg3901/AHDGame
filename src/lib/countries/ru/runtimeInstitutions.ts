@@ -23,6 +23,16 @@ export function ru1991PresidentialConfig(config: CountryConfig): CountryConfig {
         actionBonus: 4,
         partyStrengthWeight: 1,
       },
+      {
+        key: "vicePresident",
+        label: "Vice President",
+        labelPlural: "Vice Presidents",
+        isExecutive: true,
+        isSubNational: false,
+        termYears: 5,
+        actionBonus: 2,
+        partyStrengthWeight: 1,
+      },
     ],
   };
 }

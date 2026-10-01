@@ -5,9 +5,23 @@ import type { CandidateDetail, GeneralVotes } from "./ElectionDetailTypes";
 export function RussianPresidentialResultPanel({
   candidates,
   tally,
+  canEndorse = false,
+  endorsedCandidateId,
+  endorsing = false,
+  onEndorse,
+  canSupport = false,
+  supporting = false,
+  onSupport,
 }: {
-  candidates: Pick<CandidateDetail, "id" | "characterName" | "partyName">[];
+  candidates: Pick<CandidateDetail, "id" | "characterName" | "partyName" | "campaignId">[];
   tally: GeneralVotes;
+  canEndorse?: boolean;
+  endorsedCandidateId?: string | null;
+  endorsing?: boolean;
+  onEndorse?: (id: string) => void;
+  canSupport?: boolean;
+  supporting?: boolean;
+  onSupport?: (id: string) => void;
 }) {
   const t = useTranslations("elections.russianPresidential");
   const result = tally.russianPresidentialResult;
@@ -51,6 +65,16 @@ export function RussianPresidentialResultPanel({
                   : "0.0",
               })}
             </span>
+            {canEndorse && onEndorse && (
+              <button disabled={endorsing} onClick={() => onEndorse(candidate.id)}>
+                {t(endorsedCandidateId === candidate.id ? "withdrawEndorsement" : "endorse")}
+              </button>
+            )}
+            {canSupport && candidate.campaignId && onSupport && (
+              <button disabled={supporting} onClick={() => onSupport(candidate.campaignId!)}>
+                {t("supportCampaign")}
+              </button>
+            )}
           </li>
         ))}
       </ul>

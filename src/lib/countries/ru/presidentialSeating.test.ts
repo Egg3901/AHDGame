@@ -91,6 +91,19 @@ function scenario() {
   };
 }
 describe("Russian certified presidential office handover", () => {
+  it("vacates and archives the ticket's cabinet posts while preserving other ministers", async () => {
+    const { mem, president, input } = scenario();
+    const retainedId = new ObjectId();
+    mem.seed("cabinetMembers", [
+      { _id: new ObjectId(), countryId: "RU", characterId: president },
+      { _id: retainedId, countryId: "RU", characterId: new ObjectId() },
+    ]);
+    expect(await seat(input)).toBe(true);
+    expect(mem.collection("cabinetMembers").docs.map((row) => row._id)).toEqual([retainedId]);
+    expect(
+      mem.collection("russianPresidentialOfficeArchives").docs.filter((row) => row.cabinetMember)
+    ).toHaveLength(1);
+  });
   it("seats the ticket, archives the Chairman and preserves Congress and its PM", async () => {
     const { mem, president, vice, input } = scenario();
     expect(await seat(input)).toBe(true);
