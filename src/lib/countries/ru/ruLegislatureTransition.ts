@@ -1,3 +1,9 @@
+/** A ratified post-Soviet mandate opens Assembly elections from September 1993.
+ * Congress remains until a certified replacement can take office from January
+ * 1994. Raw turn markers keep the completed handover idempotent.
+ * https://www.prlib.ru/news/2038679
+ * https://www.constitution.ru/en/10003000-10.htm
+ */
 import type { Db } from "mongodb";
 import type { CountryGameState, ElectedOfficial, GameState, State } from "@/lib/db/types";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
@@ -7,12 +13,6 @@ import { RU_1991_ECONOMIC_REGION_POPULATION } from "@/lib/countries/ru/data/ruPo
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 
-/** A ratified post-Soviet mandate opens Assembly elections from September 1993.
- * Congress remains until a certified replacement can take office from January
- * 1994. Raw turn markers keep the completed handover idempotent.
- * https://www.prlib.ru/news/2038679
- * https://www.constitution.ru/en/10003000-10.htm
- */
 export async function processRuLegislatureTransition(
   db: Db,
   gameState: Pick<GameState, "preset" | "preIteration" | "preIterationTurns">,
