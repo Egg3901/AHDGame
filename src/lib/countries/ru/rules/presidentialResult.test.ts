@@ -12,6 +12,12 @@ const first: RussianPresidentialBallot = {
   participants: 60,
 };
 describe("Russian 1991 direct presidential result", () => {
+  it("repeats an invalidated ballot without electing its apparent winner", () => {
+    expect(decide({ ...first, invalidated: true })).toEqual({
+      outcome: "repeat",
+      reason: "invalid-ballot",
+    });
+  });
   it("requires a popular majority rather than electoral-college units", () => {
     expect(decide(first)).toEqual({ outcome: "won", winnerCandidateId: "a" });
     expect(

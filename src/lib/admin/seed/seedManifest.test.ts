@@ -22,6 +22,7 @@ describe("seed manifest classification coverage", () => {
   it("resets the federation publication and protected-choice journals", () => {
     for (const name of [
       "russianConstitutionalProposals",
+      "russianPresidentialElectionResults",
       "federationRelocations",
       "federationPublicationPreparations",
       "federationPreparedEffects",

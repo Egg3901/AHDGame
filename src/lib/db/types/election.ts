@@ -77,6 +77,13 @@ export interface Election {
    * which resolve to v1.
    */
   rulesetVersion?: number;
+  /** A Russian direct ballot freezes its mandate, electorate and round. */
+  russianPresidentialRound?: {
+    round: 1 | 2;
+    mandateSinceTurn: number;
+    registeredVoters: number;
+    predecessorElectionId?: ObjectId;
+  };
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**

@@ -10,13 +10,16 @@ export interface RussianPresidentialBallot {
   votesAgainst: Readonly<Record<string, number>>;
   registeredVoters: number;
   participants: number;
+  /** A withdrawn or otherwise ineligible registered candidate invalidates this ballot. */
+  invalidated?: boolean;
 }
 export type RussianPresidentialResult =
   | { outcome: "won"; winnerCandidateId: string }
   | { outcome: "runoff"; finalistCandidateIds: [string, string] }
   | {
       outcome: "repeat";
-      reason: "low-turnout" | "no-majority" | "tied-finalists" | "no-runoff-winner";
+      reason:
+        "low-turnout" | "no-majority" | "tied-finalists" | "no-runoff-winner" | "invalid-ballot";
     };
 
 /** Law 1096-1 of 24 April 1991, articles 15-17. The runoff also needs more
@@ -57,6 +60,7 @@ export function decideRussianPresidentialResult(
     ids.some((id) => BigInt(votesFor[id]) + BigInt(votesAgainst[id]) > BigInt(participants))
   )
     throw new Error("Russian presidential counts exceed participation");
+  if (ballot.invalidated) return { outcome: "repeat", reason: "invalid-ballot" };
   if (BigInt(participants) * BigInt(2) < BigInt(registeredVoters))
     return { outcome: "repeat", reason: "low-turnout" };
   const ranked = [...ids].sort((a, b) => votesFor[b] - votesFor[a] || a.localeCompare(b));

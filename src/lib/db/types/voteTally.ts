@@ -71,6 +71,14 @@ export interface ElectionVoteTally {
   electoralVotesByCandidate?: Record<string, number>;
   /** President only: how the race was resolved when finalized */
   resolutionMode?: "majority" | "contingent" | "contingent_deadlock";
+  /** Russia counts popular ballots; no electoral votes are invented for display. */
+  russianPresidentialResult?: {
+    outcome: "won" | "runoff" | "repeat";
+    winnerCandidateId?: string;
+    round: 1 | 2;
+    registeredVoters: number;
+    participants: number;
+  };
   /** President only: House/Senate contingent vote breakdown when no EV majority */
   contingentResult?: {
     eligiblePresidentCandidateIds: string[];
