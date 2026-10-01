@@ -3,20 +3,11 @@
  * materializeRussianDumaNpcAdmission registers bounded party slates atomically
  * against the frozen cohort and leaves existing player candidacies intact.
  */
-import { createHash } from "node:crypto";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
-import type {
-  CountryGameState,
-  Election,
-  ElectionCandidate,
-  GameState,
-  NPP,
-  PoliticalParty,
-} from "@/lib/db/types";
+import type { CountryGameState, Election, GameState } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { ensureBoundedNpcCandidateGuards } from "@/lib/admin/seed/indexes/boundedNpcCandidates";
-import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
-import { planRussianDumaNpcSlates } from "./rules/assemblyNpcSlates";
+import { registerRussianDumaNpcSlates } from "./dumaNpcRegistration";
 import { resolveRussianDumaCohort } from "./rules/assemblyCohort";
 import { hasAuthorizedPostSovietTransition } from "./rules/postSovietTransition";
 export async function materializeRussianDumaNpcAdmission(input: {
@@ -114,104 +105,13 @@ export async function materializeRussianDumaNpcAdmission(input: {
       candidates: [],
     }))
   );
-  const parties = await db
-    .collection<PoliticalParty>("politicalParties")
-    .find(
-      { countryId: "RU", regimeStatus: { $ne: "banned" } },
-      { session, projection: { sequentialId: 1 } }
-    )
-    .toArray();
-  const partyIds = parties.map((party) => String(party.sequentialId));
-  if (parties.some((party) => !Number.isSafeInteger(party.sequentialId) || party.sequentialId < 1))
-    throw new Error("Duma NPC admission needs registered party identities");
-  const profiles = await db
-    .collection<NPP>("npps")
-    .find(
-      {
-        countryId: "RU",
-        party: { $in: partyIds },
-        isTechnocrat: { $ne: true },
-        $or: [{ retiredAt: null }, { retiredAt: { $exists: false } }],
-      },
-      {
-        session,
-        batchSize: 1000,
-        projection: { name: 1, party: 1, homeState: 1, currentOffice: 1 },
-      }
-    )
-    .toArray();
-  const active = await db
-    .collection<ElectionCandidate>("electionCandidates")
-    .find(
-      { electionId: { $in: elections.map((row) => row._id) }, status: "active" },
-      {
-        session,
-        batchSize: 1000,
-        projection: { electionId: 1, party: 1, isNPP: 1, russianDumaNomination: 1 },
-      }
-    )
-    .toArray();
-  if (active.some((row) => !row.russianDumaNomination))
-    throw new Error("Duma active candidacy has no frozen nomination");
-  const plan = planRussianDumaNpcSlates({
-    ballots: elections.map((row) => ({
-      id: row._id.toHexString(),
-      regionId: row.state,
-      tier: row.russianDumaRound!.tier,
-    })),
-    parties: partyIds,
-    profiles: profiles.map((row) => {
-      const office =
-        typeof row.currentOffice === "string" ? row.currentOffice : row.currentOffice?.type;
-      return {
-        id: row._id.toHexString(),
-        party: row.party,
-        homeState: row.homeState,
-        eligible:
-          !row.currentOffice ||
-          (office != null &&
-            ["congressDeputy", "dumaDeputy", "federationCouncilMember"].includes(office)),
-      };
-    }),
-    activeCandidates: active.map((row) => ({
-      electionId: row.electionId.toHexString(),
-      party: row.party,
-      isNpc: row.isNPP === true,
-    })),
+  const registration = await registerRussianDumaNpcSlates({
+    db,
+    session,
+    cohortId,
+    elections,
+    now,
   });
-  const profileById = new Map(profiles.map((row) => [row._id.toHexString(), row]));
-  const documents: ElectionCandidate[] = plan.nominees.map((nominee) => {
-    const profile = profileById.get(nominee.profileId)!;
-    const id = new ObjectId(
-      createHash("sha256")
-        .update(`duma:${cohortId.toHexString()}:${nominee.nomineeKey}`)
-        .digest("hex")
-        .slice(0, 24)
-    );
-    return {
-      _id: id,
-      boundedNpcNomineeId: id,
-      electionId: new ObjectId(nominee.electionId),
-      countryId: "RU",
-      characterId: profile._id,
-      nppId: profile._id,
-      isNPP: true,
-      characterName: `${profile.name} slate`,
-      party: nominee.party,
-      status: "active",
-      enteredAt: now,
-      support: DEFAULT_CANDIDATE_SUPPORT,
-      russianDumaNomination: {
-        capacity: nominee.capacity,
-        registrationOrder: now.getTime(),
-        nominationOrder: Number.MAX_SAFE_INTEGER,
-      },
-    };
-  });
-  if (documents.length)
-    await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .insertMany(documents, { session, ordered: true });
   const claimed = await countries.updateOne(
     {
       _id: "RU",
@@ -221,7 +121,7 @@ export async function materializeRussianDumaNpcAdmission(input: {
     {
       $set: {
         ruDumaNpcAdmissionCohortId: cohortId,
-        ruDumaUnrepresentedParties: plan.unrepresentedParties,
+        ruDumaUnrepresentedParties: registration.unrepresentedParties,
         updatedAt: now,
       },
     },
@@ -229,7 +129,7 @@ export async function materializeRussianDumaNpcAdmission(input: {
   );
   if (claimed.matchedCount !== 1)
     throw new Error("Duma NPC admission binding changed during registration");
-  return { created: documents.length, unrepresentedParties: plan.unrepresentedParties };
+  return registration;
 }
 export async function admitRussianDumaNpcNominees(input: {
   db: Db;

@@ -1,6 +1,7 @@
 import { MongoClient, ObjectId } from "mongodb";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { Election } from "@/lib/db/types";
+import type { Election, ElectionCandidate } from "@/lib/db/types";
+import { admitRussianDumaRepeatNpcNominees } from "./dumaRepeatNpcAdmission";
 import { admitRussianDumaNpcNominees } from "./dumaNpcAdmission";
 import { certifyRussianDumaRepeat } from "./dumaRepeatResult";
 import {
@@ -124,7 +125,21 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       .toArray();
     const npcId = new ObjectId();
     const officialId = new ObjectId();
-    await db.collection("npps").insertOne({ _id: npcId, countryId: "RU", party: "1" });
+    await db
+      .collection("npps")
+      .insertOne({
+        _id: npcId,
+        countryId: "RU",
+        party: "1",
+        name: "Existing profile",
+        homeState: "CEN",
+        currentOffice: { type: "congressDeputy" },
+        wealth: 12345,
+      });
+    await db.collection("politicalParties").insertMany([
+      { countryId: "RU", sequentialId: 1 },
+      { countryId: "RU", sequentialId: 2 },
+    ]);
     await db
       .collection("electedOfficials")
       .insertOne({ _id: officialId, countryId: "RU", officeType: "congressDeputy" });
@@ -233,23 +248,55 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(
       await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
     ).not.toHaveProperty("ruFederalAssemblySinceTurn");
-    const repeatCandidates = replacements.map((row) => ({
-      _id: new ObjectId(),
-      electionId: row._id,
-      countryId: "RU",
-      characterId: npcId,
-      nppId: npcId,
-      isNPP: true,
-      party: "1",
-      characterName: "Repeat bounded nominee",
-      status: "active",
-      russianDumaNomination: {
-        registrationOrder: 3000,
-        nominationOrder: 0,
-        capacity: row.totalSeats!,
-      },
-    }));
-    await db.collection("electionCandidates").insertMany(repeatCandidates);
+    const profileBefore = await db.collection("npps").findOne({ _id: npcId });
+    const admission = {
+      db,
+      rootCohortId: opened!.cohortId,
+      generation: 1,
+      turn: 142,
+      now: new Date(3000),
+    };
+    await db.command({
+      collMod: RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
+      validator: { npcAdmission: { $exists: false } },
+    });
+    await expect(admitRussianDumaRepeatNpcNominees(admission)).rejects.toMatchObject({ code: 121 });
+    expect(
+      await db
+        .collection("electionCandidates")
+        .countDocuments({ electionId: { $in: result!.record.electionIds } })
+    ).toBe(0);
+    expect(
+      await db
+        .collection(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION)
+        .findOne({ _id: result!.record._id })
+    ).not.toHaveProperty("npcAdmission");
+    await db.command({ collMod: RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION, validator: {} });
+    const admitted = await admitRussianDumaRepeatNpcNominees(admission);
+    expect(admitted).toEqual({ created: 2, unrepresentedParties: ["2"] });
+    commands = 0;
+    expect(await admitRussianDumaRepeatNpcNominees({ ...admission, turn: 143 })).toEqual({
+      created: 0,
+      unrepresentedParties: ["2"],
+    });
+    expect(commands).toBeLessThanOrEqual(3);
+    expect(await db.collection("npps").findOne({ _id: npcId })).toEqual(profileBefore);
+    expect(await db.collection("npps").countDocuments()).toBe(1);
+    const admittedRows = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId: { $in: result!.record.electionIds } })
+      .toArray();
+    const repeatCandidates = replacements.map((row) =>
+      admittedRows.find((candidate) => candidate.electionId.equals(row._id))!
+    );
+    expect(
+      repeatCandidates.every(
+        (row) =>
+          row.boundedNpcNomineeId?.equals(row._id) &&
+          row.nppId?.equals(npcId) &&
+          row.characterId.equals(npcId)
+      )
+    ).toBe(true);
     await db.collection("electionVoteTallies").insertMany(
       replacements.map((row, index) => ({
         _id: new ObjectId(),
@@ -325,15 +372,19 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     const last = await db
       .collection<Election>("elections")
       .findOne({ _id: next!.record.electionIds[0] });
-    const lastCandidate = {
-      ...repeatCandidates.find((row) =>
-        row.electionId.equals(replacements.find((row) => row.totalSeats === 1)!._id)
-      )!,
-      _id: new ObjectId(),
-      electionId: last!._id,
-      status: "active",
-    };
-    await db.collection("electionCandidates").insertOne(lastCandidate);
+    expect(
+      await admitRussianDumaRepeatNpcNominees({
+        ...admission,
+        generation: 2,
+        turn: 155,
+        now: new Date(5000),
+      })
+    ).toEqual({ created: 1, unrepresentedParties: ["2"] });
+    const lastCandidate = (await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .findOne({ electionId: last!._id, status: "active" }))!;
+    expect(lastCandidate.boundedNpcNomineeId?.equals(lastCandidate._id)).toBe(true);
+    expect(lastCandidate.nppId?.equals(npcId)).toBe(true);
     await db.collection("electionVoteTallies").insertOne({
       _id: new ObjectId(),
       electionId: last!._id,

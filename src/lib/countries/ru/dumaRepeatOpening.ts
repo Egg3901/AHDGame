@@ -36,6 +36,11 @@ export interface RussianDumaRepeatOpeningRecord {
   createdAt: Date;
   electionIds: ObjectId[];
   seatIds: string[];
+  npcAdmission?: {
+    completedOnTurn: number;
+    unrepresentedParties: string[];
+    createdCandidates: number;
+  };
 }
 
 export async function materializeRussianDumaRepeatOpening(input: {
