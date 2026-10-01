@@ -5,10 +5,12 @@
  * the dot-com era: a cursor blinks on an empty field for a moment, the name
  * arrives a key at a time, and the cursor blinks twice more and goes.
  *
- * There is one run per page load, timed from a clock every copy of the
- * wordmark shares. The loading navbar starts it and the real navbar, mounting a
- * beat later, picks the run up where it was instead of starting again.
+ * There is one run per page load, shared by every mounted copy of the
+ * wordmark. The loading navbar starts it, and the real navbar, mounting a beat
+ * later, picks it up from the keys already typed instead of an empty field.
  * Client-side navigation keeps the navbar mounted, so it does not retype.
+ * The run advances one key per animation frame at most, so a busy main thread
+ * (the landing globe hydrating) stalls the typist rather than skipping keys.
  * Reduced motion shows the name at once, and screen readers always get the
  * whole name.
  */
@@ -18,35 +20,60 @@ export const WORDMARK = "A House Divided";
 
 /** The empty field shows a blinking cursor this long before the first key. */
 const CURSOR_IDLE_MS = 900;
-/** Time per key. */
+/** Shortest time between keys. */
 const KEY_MS = 70;
 /** The cursor stays after the last key for a couple of blinks. */
 const CURSOR_LINGER_MS = 1500;
-const TYPING_DONE_MS = CURSOR_IDLE_MS + WORDMARK.length * KEY_MS;
-const RUN_MS = TYPING_DONE_MS + CURSOR_LINGER_MS;
 
-/** When this page load's run began; shared by every mounted wordmark. */
-let runStartedAt: number | null = null;
+export type WordmarkRun = {
+  startedAt: number;
+  keys: number;
+  lastKeyAt: number;
+  /** When the last key landed, once it has. */
+  typedAt: number | null;
+};
 
-/** Characters shown and cursor state at `elapsed` ms into the run. */
-export function typedWordmarkFrame(elapsed: number): {
+export type WordmarkFrame = {
   keys: number;
   cursor: "blinking" | "typing" | "gone";
-} {
-  const keys = Math.max(
-    0,
-    Math.min(WORDMARK.length, Math.floor((elapsed - CURSOR_IDLE_MS) / KEY_MS) + 1)
-  );
-  if (elapsed >= RUN_MS) return { keys: WORDMARK.length, cursor: "gone" };
-  // A terminal cursor holds steady while keys arrive and blinks when idle.
+};
+
+const START_FRAME: WordmarkFrame = { keys: 0, cursor: "blinking" };
+
+/** This page load's run, and the frame it last showed. */
+let run: WordmarkRun | null = null;
+let lastFrame = START_FRAME;
+
+/** The run one animation frame on, at `now`: one more key at most. */
+export function advanceWordmarkRun(current: WordmarkRun | null, now: number): WordmarkRun {
+  if (!current) return { startedAt: now, keys: 0, lastKeyAt: now, typedAt: null };
+  if (
+    current.keys >= WORDMARK.length ||
+    now - current.startedAt < CURSOR_IDLE_MS ||
+    now - current.lastKeyAt < KEY_MS
+  ) {
+    return current;
+  }
+  const keys = current.keys + 1;
+  return { ...current, keys, lastKeyAt: now, typedAt: keys === WORDMARK.length ? now : null };
+}
+
+/** Characters shown and cursor state for a run at `now`. */
+export function wordmarkFrame(current: WordmarkRun | null, now: number): WordmarkFrame {
+  if (!current || current.typedAt === null) {
+    // A terminal cursor holds steady while keys arrive and blinks when idle.
+    return { keys: current?.keys ?? 0, cursor: current?.keys ? "typing" : "blinking" };
+  }
   return {
-    keys,
-    cursor: elapsed >= CURSOR_IDLE_MS && elapsed < TYPING_DONE_MS ? "typing" : "blinking",
+    keys: WORDMARK.length,
+    cursor: now - current.typedAt < CURSOR_LINGER_MS ? "blinking" : "gone",
   };
 }
 
 export function Wordmark({ typed = false, className }: { typed?: boolean; className?: string }) {
-  const [elapsed, setElapsed] = useState(0);
+  // Before hydration finishes no run exists, so this matches the server's
+  // empty field; a copy mounted later starts where the run is.
+  const [frame, setFrame] = useState(() => lastFrame);
   const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
@@ -55,21 +82,23 @@ export function Wordmark({ typed = false, className }: { typed?: boolean; classN
       const timer = window.setTimeout(() => setReduced(true), 0);
       return () => window.clearTimeout(timer);
     }
-    runStartedAt ??= performance.now();
-    const startedAt = runStartedAt;
-    let frame = 0;
-    const tick = () => {
-      const ms = performance.now() - startedAt;
-      setElapsed(ms);
-      if (ms < RUN_MS) frame = requestAnimationFrame(tick);
+    let handle = 0;
+    const tick = (now: number) => {
+      run = advanceWordmarkRun(run, now);
+      const next = wordmarkFrame(run, now);
+      lastFrame = next;
+      setFrame((shown) =>
+        shown.keys === next.keys && shown.cursor === next.cursor ? shown : next
+      );
+      if (next.cursor !== "gone") handle = requestAnimationFrame(tick);
     };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    handle = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(handle);
   }, [typed]);
 
   if (!typed || reduced) return <span className={className}>{WORDMARK}</span>;
 
-  const { keys, cursor } = typedWordmarkFrame(elapsed);
+  const { keys, cursor } = frame;
   return (
     <span className={className}>
       <span className="sr-only">{WORDMARK}</span>
