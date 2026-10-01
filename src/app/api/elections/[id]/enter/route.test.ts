@@ -425,3 +425,158 @@ describe("POST /api/elections/[id]/enter — UK regional party geography", () =>
     expect(body.error).toMatch(/already hold a Commons seat/);
   });
 });
+
+describe("Bound first-Duma filing", () => {
+  const cohortId = new ObjectId();
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  async function setupDuma(tier: "list" | "constituency" = "list", party = "1") {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: party,
+      partyDocReturn: null,
+    });
+    db.collection("gameState");
+    db.collectionMocks.politicalParties.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "RU",
+      sequentialId: 1,
+      regimeStatus: null,
+    });
+    db.collection("countryGameStates");
+    db.collection("countryState");
+    db.collectionMocks.countryState.findOne.mockResolvedValue({
+      _id: "RU",
+      governmentType: "parliamentaryRepublic",
+    });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+    });
+    db.collectionMocks.countryGameStates.findOne.mockResolvedValue({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruFederalAssemblyMandateSinceTurn: 129,
+      ruFirstDumaElectionCohortId: cohortId,
+    });
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date(1000),
+      currentTurn: 130,
+    } as never);
+    const election = {
+      _id: electionOid,
+      countryId: "RU",
+      electionType: "dumaDeputy",
+      status: "active",
+      primaryEndTurn: 139,
+      primaryEndTime: new Date(10000),
+      state: tier === "list" ? "RU" : "CEN",
+      seatId: tier === "list" ? "RU-duma-national-list" : "RU-duma-CEN-1",
+      totalSeats: tier === "list" ? 225 : 1,
+      russianDumaRound: { cohortId, mandateSinceTurn: 129, tier, registeredVoters: 10000 },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: "duma-player",
+        character: {
+          _id: characterOid,
+          countryId: "RU",
+          homeState: "CEN",
+          name: "Duma player",
+          party,
+          careerHistory: [],
+          executiveTermsServed: 0,
+        },
+      },
+    } as never);
+    return { db, election };
+  }
+  it("admits a Russian regional resident to the national list with a frozen one-seat nomination", async () => {
+    const { db } = await setupDuma();
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "RU",
+        characterId: characterOid,
+        russianDumaNomination: { registrationOrder: 1000, nominationOrder: 1000, capacity: 1 },
+      })
+    );
+  });
+  it("rejects an unbound cohort before inserting any candidate", async () => {
+    const { db, election } = await setupDuma();
+    election.russianDumaRound.cohortId = new ObjectId();
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toMatch(/ratified constitutional mandate/);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+  it.each(["missing", "banned", "foreign", "malformed-id"])(
+    "rejects a %s national list association",
+    async (reason) => {
+      const { db } = await setupDuma("list", reason === "malformed-id" ? "1x" : "1");
+      db.collectionMocks.politicalParties.findOne.mockResolvedValue(
+        reason === "missing"
+          ? null
+          : {
+              _id: new ObjectId(),
+              countryId: reason === "foreign" ? "PL" : "RU",
+              sequentialId: 1,
+              regimeStatus: reason === "banned" ? "banned" : null,
+            }
+      );
+      const res = await POST(makeReq(), {
+        params: Promise.resolve({ id: electionOid.toHexString() }),
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toMatch(/existing unbanned Russian party/);
+      expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    }
+  );
+  it("rejects independent national lists and accepts independent home constituencies", async () => {
+    const { db } = await setupDuma("list", "independent");
+    const list = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(list.status).toBe(403);
+    expect((await list.json()).error).toMatch(/Independent/);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    const district = await setupDuma("constituency", "independent");
+    expect(
+      (await POST(makeReq(), { params: Promise.resolve({ id: electionOid.toHexString() }) })).status
+    ).toBe(200);
+    expect(district.db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalled();
+  });
+  it("does not exempt an out-of-home constituency from residence checks", async () => {
+    const { db, election } = await setupDuma("constituency");
+    election.state = "NWR";
+    election.seatId = "RU-duma-NWR-1";
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(res.status).toBe(403);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+  it("keeps the normal active-candidacy guard for a national list", async () => {
+    const { db } = await setupDuma();
+    const { findBlockingActiveCandidacy } = await import("@/lib/elections/activeCandidacy");
+    vi.mocked(findBlockingActiveCandidacy).mockResolvedValueOnce({
+      election: { electionType: "dumaDeputy", state: "CEN" },
+    } as never);
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/already running/);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+});

@@ -135,6 +135,13 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       },
     }));
     await db.collection("electionCandidates").insertMany(candidates);
+    const withdrawn: Fixture = { ...candidates[0], _id: new ObjectId(), status: "withdrawn" };
+    delete withdrawn.russianDumaNomination;
+    await db.collection<Fixture>("electionCandidates").insertOne(withdrawn);
+    await db
+      .collection("electionCandidates")
+      .updateOne({ _id: candidates[1]._id }, { $set: { status: "withdrawn" } });
+
     await db.collection("electionVoteTallies").insertMany(
       elections.map((row, index) => ({
         _id: new ObjectId(),
@@ -167,12 +174,21 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
         .countDocuments({ "russianDumaBallot.certifiedCohortId": { $exists: true } })
     ).toBe(0);
     expect(await db.collection(RUSSIAN_DUMA_RESULTS_COLLECTION).countDocuments()).toBe(0);
+    expect(await db.collection("electionCandidates").countDocuments({ status: "active" })).toBe(
+      225
+    );
     expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
     await db.command({ collMod: RUSSIAN_DUMA_RESULTS_COLLECTION, validator: {} });
     commands = 0;
     const result = await certifyRussianDumaElection(input);
     const certificationCommands = commands;
-    expect(result.result.constituencyResults.filter((row) => row.winner)).toHaveLength(225);
+    expect(result.result.constituencyResults.filter((row) => row.winner)).toHaveLength(224);
+    expect(result.nominees).toHaveLength(226);
+    expect(await db.collection("electionCandidates").countDocuments({ status: "active" })).toBe(0);
+    expect(result.nominees.some((row) => row.candidateId.equals(withdrawn._id))).toBe(false);
+    expect(
+      Object.values(result.votesByElection[elections[1]._id.toHexString()].votes)[0]
+    ).toBeGreaterThan(0);
     expect(result.result.listDecision.outcome).toBe("elected");
     expect(certificationCommands).toBeLessThanOrEqual(18);
     expect(await db.collection("electionVoteTallies").countDocuments({ finalized: true })).toBe(

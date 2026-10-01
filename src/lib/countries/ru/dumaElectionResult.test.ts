@@ -100,12 +100,39 @@ function scenario() {
   };
 }
 describe("Atomic first-Duma cohort certification", () => {
+  it("ignores candidates withdrawn before the roster froze", async () => {
+    const { mem, input } = scenario();
+    const old: Record<string, unknown> & { _id: ObjectId } = {
+      ...mem.collection("electionCandidates").docs[0],
+      _id: new ObjectId(),
+      status: "withdrawn",
+    };
+    delete old.russianDumaNomination;
+    mem.collection("electionCandidates").docs.push(old);
+    const result = await certify(input);
+    expect(result.result.constituencyResults.filter((row) => row.winner)).toHaveLength(225);
+    expect(result.nominees).toHaveLength(226);
+    expect(result.nominees.some((row) => row.candidateId.equals(old._id))).toBe(false);
+  });
+  it("preserves counted votes of a later withdrawal without seating that candidate", async () => {
+    const { mem, input } = scenario();
+    mem.collection("electionCandidates").docs[0].status = "withdrawn";
+    const result = await certify(input);
+    expect(result.result.constituencyResults.filter((row) => row.winner)).toHaveLength(224);
+    expect(
+      Object.values(result.votesByElection[Object.keys(result.votesByElection)[0]].votes)[0]
+    ).toBeGreaterThan(0);
+    expect(result.nominees).toHaveLength(226);
+  });
   it("certifies both tiers together, preserves Congress and replays the same journal", async () => {
     const { mem, input } = scenario();
     const result = await certify(input);
     expect(result.result.constituencyResults.filter((row) => row.winner)).toHaveLength(225);
     expect(Object.values(result.result.listAssignment!.seatsByNominee)).toEqual([225]);
     expect(mem.collection("elections").docs.every((row) => row.status === "resolved")).toBe(true);
+    expect(
+      mem.collection("electionCandidates").docs.every((row) => row.status === "withdrawn")
+    ).toBe(true);
     expect(mem.collection("electionVoteTallies").docs.every((row) => row.finalized)).toBe(true);
     expect(mem.collection("electedOfficials").docs[0].officeType).toBe("congressDeputy");
     expect(mem.collection("countryGameStates").docs[0]).not.toHaveProperty(

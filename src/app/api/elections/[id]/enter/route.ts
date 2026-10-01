@@ -26,6 +26,7 @@ import {
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { validateRussianDumaPlayerFiling } from "@/lib/countries/ru/dumaPlayerFiling";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -158,6 +159,31 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Runtime governmentType so a post-Stage-4 conversion immediately
     // changes which gates apply to candidate entry.
     const electionRuntime = await getCountryState(db, electionCountry);
+    const dumaFiling = election.russianDumaRound
+      ? await validateRussianDumaPlayerFiling({
+          db,
+          election,
+          character,
+          turn: currentTurn,
+          registrationOrder: now.getTime(),
+        })
+      : null;
+    if (dumaFiling && !dumaFiling.allowed) {
+      const errors = {
+        "unbound-mandate":
+          "This Duma election no longer matches its ratified constitutional mandate.",
+        "invalid-ballot": "This Duma ballot has an invalid district or filing schedule.",
+        "filing-closed": "The Duma candidate filing period has ended.",
+        "invalid-residence":
+          "You must live in an eligible Russian region to contest this Duma ballot.",
+        "independent-list":
+          "Independent candidates may contest a Duma constituency, but cannot join the national party list.",
+        "unregistered-list":
+          "Join an existing unbanned Russian party before contesting the national list.",
+      };
+      logRequest("POST", path, 403, Date.now() - start);
+      return NextResponse.json({ error: errors[dumaFiling.reason] }, { status: 403 });
+    }
     const electionRuntimeConfig = { governmentType: electionRuntime.governmentType };
     if (electionRuntime.governmentType === "onePartyState") {
       const characterPartySeqId = Number.parseInt(character.party ?? "0", 10);
@@ -215,7 +241,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Enforce home-state restriction — players can only run in their own state.
     // Nationwide executive races (president, uachtaran) use the country code
     // as state and are exempt from this check.
-    if (!isNationwideExecutive && election.state && character.homeState !== election.state) {
+    if (
+      !isNationwideExecutive &&
+      !(dumaFiling?.allowed && dumaFiling.nationalList) &&
+      election.state &&
+      character.homeState !== election.state
+    ) {
       logRequest("POST", path, 403, Date.now() - start);
       return NextResponse.json(
         {
@@ -350,6 +381,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
       support: DEFAULT_CANDIDATE_SUPPORT,
       enteredAt: now,
+      ...(dumaFiling?.allowed ? { russianDumaNomination: dumaFiling.nomination } : {}),
       ...(priorCandidacy?.lastRallyTurn !== undefined
         ? { lastRallyTurn: priorCandidacy.lastRallyTurn }
         : {}),

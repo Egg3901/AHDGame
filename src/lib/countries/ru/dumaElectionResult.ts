@@ -209,11 +209,18 @@ export async function materializeRussianDumaElectionResult(input: {
     rosterByElection.set(id, roster);
   }
   const tallyByElection = new Map(counted.map((row) => [row.electionId.toHexString(), row]));
+  const registeredCandidateIds = new Set<string>();
   const votesByElection: RussianDumaResultRecord["votesByElection"] = {};
   const ballots: RussianDumaCohortBallot[] = cohort.map((election) => {
     const id = election._id.toHexString();
     const tally = tallyByElection.get(id)!;
-    const roster = rosterByElection.get(id) ?? [];
+    // A pre-count withdrawal is absent from the frozen ballot. A withdrawal
+    // after counting retains its votes but cannot receive a mandate.
+    const roster = (rosterByElection.get(id) ?? []).filter(
+      (row) =>
+        row.status === "active" ||
+        Object.prototype.hasOwnProperty.call(tally.totalVotes, row._id.toHexString())
+    );
     const keys = roster
       .map((row) => row._id.toHexString())
       .sort()
@@ -231,6 +238,7 @@ export async function materializeRussianDumaElectionResult(input: {
     )
       throw new Error("The Duma tally does not match its frozen nominee roster");
     const againstAllVotes = tally.russianDumaBallot?.againstAllVotes ?? 0;
+    for (const candidate of roster) registeredCandidateIds.add(candidate._id.toHexString());
     votesByElection[id] = { votes: { ...tally.totalVotes }, againstAllVotes };
     return {
       id,
@@ -289,6 +297,18 @@ export async function materializeRussianDumaElectionResult(input: {
     { session }
   );
   if (resolved.matchedCount !== 226) throw new Error("Duma ballots changed during certification");
+  // Release the global active-candidacy index for future and repeat ballots.
+  // The immutable result above retains the nominees and counted votes.
+  const expectedActive = candidates.filter((row) => row.status === "active").length;
+  const retired = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .updateMany(
+      { electionId: { $in: electionIds }, status: "active" },
+      { $set: { status: "withdrawn", withdrawnAt: now } },
+      { session }
+    );
+  if (retired.matchedCount !== expectedActive)
+    throw new Error("Duma candidacies changed during certification");
   // Take a write conflict on the bound mandate without activating the Assembly.
   const bound = await countries.updateOne(
     {
@@ -310,13 +330,15 @@ export async function materializeRussianDumaElectionResult(input: {
     createdAt: now,
     result,
     votesByElection,
-    nominees: candidates.map((row) => ({
-      candidateId: row._id,
-      ownerId: row.isNPP ? row.nppId! : row.characterId,
-      isNpc: !!row.isNPP,
-      name: row.characterName,
-      party: row.party,
-    })),
+    nominees: candidates
+      .filter((row) => registeredCandidateIds.has(row._id.toHexString()))
+      .map((row) => ({
+        candidateId: row._id,
+        ownerId: row.isNPP ? row.nppId! : row.characterId,
+        isNpc: !!row.isNPP,
+        name: row.characterName,
+        party: row.party,
+      })),
   };
   await results.insertOne(record, { session });
   return record;
