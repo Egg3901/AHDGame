@@ -622,9 +622,16 @@ describe("processBillLifecycle", () => {
 
       // Legislation effect and enactment hook should be called
       const { applyLegislationEffect } = await import("@/lib/legislationEffects");
-      expect(applyLegislationEffect).toHaveBeenCalledWith(expect.anything(), bill);
+      expect(applyLegislationEffect).toHaveBeenCalledWith(expect.anything(), {
+        ...bill,
+        countryId: "US",
+      });
       const { onBillEnacted } = await import("@/lib/billEnactment");
-      expect(onBillEnacted).toHaveBeenCalledWith(expect.anything(), bill, 10);
+      expect(onBillEnacted).toHaveBeenCalledWith(
+        expect.anything(),
+        { ...bill, countryId: "US" },
+        10
+      );
     });
   });
 
