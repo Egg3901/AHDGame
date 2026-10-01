@@ -1,5 +1,6 @@
 ---
 title: Preserve exact corporate escrow cash receipts
+date: 2026-10-01
 badges: [patch]
 areas: [backend, engine]
 tags: [accounting, corporations]
