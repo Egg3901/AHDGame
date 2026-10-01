@@ -69,12 +69,14 @@ vi.mock("lightweight-charts", () => {
   const series = () => ({
     setData: vi.fn(),
     applyOptions: vi.fn(),
+    priceScale: () => ({ applyOptions: vi.fn() }),
   });
   return {
     CandlestickSeries: {},
     HistogramSeries: {},
     LineSeries: {},
     CrosshairMode: { Normal: 0 },
+    PriceScaleMode: { Normal: 0, Logarithmic: 1 },
     createChart: vi.fn(() => ({
       addSeries: () => series(),
       removeSeries: vi.fn(),
@@ -85,7 +87,7 @@ vi.mock("lightweight-charts", () => {
       subscribeCrosshairMove: vi.fn(),
       unsubscribeCrosshairMove: vi.fn(),
     })),
-    createSeriesMarkers: () => ({ setMarkers: vi.fn() }),
+    createSeriesMarkers: () => ({ setMarkers: vi.fn(), detach: vi.fn() }),
   };
 });
 
@@ -107,7 +109,10 @@ function mockFetchFor(url: string) {
     });
   }
   if (url.startsWith("/api/stock-exchange?")) {
-    return Promise.resolve({ ok: true, json: async () => ({ listings: [] }) });
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ exchange: "NYSE", exchangeName: "NYSE", listings: [] }),
+    });
   }
   if (url.startsWith("/api/commodities")) {
     return Promise.resolve({ ok: true, json: async () => ({ commodities: [] }) });
