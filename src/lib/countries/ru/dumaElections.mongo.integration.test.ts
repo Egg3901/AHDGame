@@ -16,6 +16,11 @@ import {
   type RussianDumaResultRecord,
 } from "./dumaElectionResult";
 import { RU_1991_ECONOMIC_REGION_POPULATION } from "./data/ruPopulation1991";
+import {
+  openRussianCouncilElection,
+  RUSSIAN_COUNCIL_OPENINGS_COLLECTION,
+} from "./councilElectionOpening";
+import { admitRussianCouncilNpcNominees } from "./councilNpcAdmission";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
 describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
@@ -47,6 +52,132 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
   });
   afterAll(async () => {
     await client?.close();
+  });
+  it("rolls back Council ballots and their mandate claim on a late opening receipt failure, then retries and replays", async () => {
+    const db = client.db(databaseName);
+    await db.collection<Fixture>("countryGameStates").insertOne({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 48,
+      ruFederalAssemblyMandateSinceTurn: 129,
+    });
+    await db.collection<Fixture>("states").insertMany(
+      Object.entries(RU_1991_ECONOMIC_REGION_POPULATION).map(([id, population]) => ({
+        _id: id,
+        countryId: "RU",
+        population,
+        votingEligiblePopulation: population * 0.7,
+      }))
+    );
+    const officialId = new ObjectId();
+    await db
+      .collection("electedOfficials")
+      .insertOne({ _id: officialId, countryId: "RU", officeType: "congressDeputy" });
+    await db.createCollection(RUSSIAN_COUNCIL_OPENINGS_COLLECTION, {
+      validator: { preset: "reject-late-receipt" },
+    });
+    const input = { db, game: { preset: "1991-default" }, turn: 129, now: new Date(1000) };
+    await expect(openRussianCouncilElection(input)).rejects.toMatchObject({ code: 121 });
+    expect(await db.collection("elections").countDocuments()).toBe(0);
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruFirstCouncilElectionCohortId");
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    await db.command({ collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION, validator: {} });
+    commands = 0;
+    const opened = await openRussianCouncilElection(input);
+    expect(opened?.created).toBe(true);
+    expect(commands).toBeLessThanOrEqual(10);
+    expect(await db.collection("elections").countDocuments()).toBe(89);
+    expect(await db.collection(RUSSIAN_COUNCIL_OPENINGS_COLLECTION).countDocuments()).toBe(1);
+    commands = 0;
+    expect(await openRussianCouncilElection({ ...input, turn: 130 })).toEqual({
+      cohortId: opened!.cohortId,
+      created: false,
+    });
+    expect(commands).toBeLessThanOrEqual(5);
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruFederalAssemblySinceTurn");
+    await db
+      .collection("politicalParties")
+      .insertMany(
+        [1, 2, 3].map((sequentialId) => ({ _id: new ObjectId(), countryId: "RU", sequentialId }))
+      );
+    const profileIds = [1, 2, 3, 4, 5].map(
+      (number) => new ObjectId(number.toString(16).padStart(24, "0"))
+    );
+    await db.collection("npps").insertMany(
+      profileIds.map((_id, index) => ({
+        _id,
+        countryId: "RU",
+        name: `Council fixture ${index}`,
+        party: index < 2 ? "1" : index < 4 ? "2" : "3",
+        homeState: "CEN",
+        currentOffice: { type: "congressDeputy" },
+        personalAccount: { wealth: 12345 },
+      }))
+    );
+    const duma = await openRussianDumaElection(input);
+    await admitRussianDumaNpcNominees({
+      db,
+      cohortId: duma!.cohortId,
+      turn: 129,
+      now: new Date(2000),
+    });
+    const dumaCandidates = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ countryId: "RU" }, { batchSize: 1000 })
+      .toArray();
+    const reserved = new Set(dumaCandidates.map((row) => row.nppId!.toHexString()));
+    const admission = { db, cohortId: opened!.cohortId, turn: 129, now: new Date(3000) };
+    await db.command({
+      collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION,
+      validator: { npcAdmission: { $exists: false } },
+    });
+    await expect(admitRussianCouncilNpcNominees(admission)).rejects.toMatchObject({ code: 121 });
+    expect(await db.collection("electionCandidates").countDocuments()).toBe(dumaCandidates.length);
+    await db.command({ collMod: RUSSIAN_COUNCIL_OPENINGS_COLLECTION, validator: {} });
+    expect(await admitRussianCouncilNpcNominees(admission)).toEqual({
+      created: 356,
+      unrepresentedParties: ["3"],
+    });
+    const councilCandidates = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find(
+        {
+          electionId: {
+            $in: (
+              await db
+                .collection<Election>("elections")
+                .find({ electionType: "federationCouncilMember" })
+                .toArray()
+            ).map((row) => row._id),
+          },
+        },
+        { batchSize: 1000 }
+      )
+      .toArray();
+    expect(
+      councilCandidates.every(
+        (row) =>
+          row.boundedNpcNomineeId?.equals(row._id) &&
+          !reserved.has(row.nppId!.toHexString()) &&
+          row.russianCouncilNomination?.registrationOrder === 3000
+      )
+    ).toBe(true);
+    commands = 0;
+    expect(await admitRussianCouncilNpcNominees({ ...admission, turn: 130 })).toEqual({
+      created: 0,
+      unrepresentedParties: ["3"],
+    });
+    expect(commands).toBeLessThanOrEqual(3);
+    expect(await db.collection("npps").countDocuments()).toBe(5);
+    expect(
+      (await db.collection("npps").find({}).toArray()).every(
+        (row) => row.personalAccount.wealth === 12345
+      )
+    ).toBe(true);
   });
   it("rolls back a partially inserted first Duma cohort, then retries and replays in bounded commands", async () => {
     const db = client.db(databaseName);

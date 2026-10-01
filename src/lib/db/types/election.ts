@@ -96,6 +96,13 @@ export interface Election {
     registeredVoters: number;
     regionalDistrictCount?: number;
   };
+  /** The first Council freezes one two-seat ballot per federal subject. */
+  russianCouncilRound?: {
+    cohortId: ObjectId;
+    mandateSinceTurn: number;
+    registeredVoters: number;
+    districtNumber: number;
+  };
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**
@@ -142,6 +149,8 @@ export interface ElectionCandidate {
     nominationOrder: number;
     capacity: number;
   };
+  /** Frozen individual Council nomination order. */
+  russianCouncilNomination?: { registrationOrder: number };
   /** Server-created nominee identity for an NPC profile representing a bounded slate. */
   boundedNpcNomineeId?: ObjectId;
   isNPP?: boolean;
