@@ -79,7 +79,7 @@ describe("Amended 1993 Council block ballots", () => {
   });
   it("defers two remaining nominees even when their votes reach quorum", () => {
     const input = fixture();
-    input.options.pop();
+    input.options = input.options.slice(0, 2);
     expect(resolve(input)).toMatchObject({ outcome: "repeat", reason: "insufficient-nominees" });
   });
   it("repeats invalidated, empty and zero-registration ballots", () => {
