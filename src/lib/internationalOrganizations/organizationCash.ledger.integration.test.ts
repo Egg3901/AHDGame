@@ -102,7 +102,7 @@ it("does not witness rejected or zero cash movements", async () => {
   expect(await disburseFromOrganizationFund(db, "UN", 2000)).toBe(false);
   expect(await disburseFromOrganizationFund(db, "UN", 0.4)).toBe(false);
   await creditOrganizationFund(db, "UN", 0.4);
-  expect(await chargeOrganizationDues(db, "UN", [{ countryId: "GB", gdpUsd: 48000000 }])).toBe(0);
+  expect(await chargeOrganizationDues(db, "UN", [{ countryId: "UK", gdpUsd: 48000000 }])).toBe(0);
   expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
   expect(
     (await db.collection("organizationFunds").findOne({ organizationId: "UN" }))?.balanceLocal
@@ -203,13 +203,13 @@ it("resolves legacy native fund currencies without counting a balanceUsd UI fall
 
 it("reconciles mixed-currency dues using each actual stock's valuation", async () => {
   const { memory, db } = fixture(cases[0]);
-  memory.seed("federalBudget", [{ countryId: "GB", currencyCode: "GBP", treasuryBalance: 1000 }]);
+  memory.seed("federalBudget", [{ countryId: "UK", currencyCode: "GBP", treasuryBalance: 1000 }]);
   memory.seed("exchangeRates", [
     { currencyCode: "USD", rate: 1 },
     { currencyCode: "GBP", rate: 0.73 },
   ]);
   const opening = await collectBalances(db);
-  await chargeOrganizationDues(db, "UN", [{ countryId: "GB", gdpUsd: 48000000 }]);
+  await chargeOrganizationDues(db, "UN", [{ countryId: "UK", gdpUsd: 48000000 }]);
   const entries = await db.collection<LedgerEntry>("ledgerEntries").find({ turn: TURN }).toArray();
   expect(entries).toHaveLength(2);
   expect(entries[0].legs[0].currencyCode).toBe("GBP");
