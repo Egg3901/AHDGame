@@ -14,6 +14,8 @@ export interface ReleaseNote {
   topic: string;
   title: string;
   summary: string;
+  /** Detailed rules and balance changes must survive the release fold. */
+  content?: string;
   date: string;
   tags: string[];
   badges: ChangelogBadge[];
@@ -190,6 +192,13 @@ export function foldNotes(notes: ReleaseNote[], lede: string): string {
     body += `\n### ${name}\n\n`;
     for (const note of list) {
       body += `- **${note.title}**${note.summary ? `\n  ${note.summary}` : ""}\n`;
+      if (note.content?.trim()) {
+        body += `\n${note.content
+          .trim()
+          .split("\n")
+          .map((line) => `  ${line}`)
+          .join("\n")}\n\n`;
+      }
     }
   }
   return body;
