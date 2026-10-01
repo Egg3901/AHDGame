@@ -186,8 +186,9 @@ export async function materializeRussianPresidentialElectionResult(input: {
     createdAt: now,
   };
   if (decision.outcome === "won") {
+    const winnerCandidateId = decision.winnerCandidateId;
     const winner = candidates.find(
-      (candidate) => candidate._id.toHexString() === decision.winnerCandidateId
+      (candidate) => candidate._id.toHexString() === winnerCandidateId
     )!;
     const ownerId = winner.isNPP ? winner.nppId : winner.characterId;
     if (!ownerId) throw new Error("Russian presidential winner has no owner");
