@@ -59,7 +59,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         tintColor: imperial.tintColor ?? userBorder?.tintColor ?? null,
         bio: imperial.bio,
         campaignSongUrl: imperial.campaignSongUrl,
-        campaignSongAutoplay: imperial.campaignSongAutoplay,
         corporations: corporations.map((c) => ({
           id: c._id.toString(),
           name: c.name,
