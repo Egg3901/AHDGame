@@ -14,7 +14,7 @@ areas: [fullstack]
 
 - Chart ranges use game months and years, including founding-phase calendar offsets. Bucket tooltips show both start and end dates.
 - Long history retains monthly or quarterly detail, includes all recorded turns, and offers logarithmic scaling.
-- Live-print candles use one valuation source for all O/H/L/C values. Charts refresh every minute and when the world turn changes, preserving zoom.
+- Live-print candles use one valuation source for all O/H/L/C values. Charts and stock quotes refresh every minute and when the world turn changes. Charts preserve zoom, and quote snapshots revalidate immediately instead of lingering in a shared cache.
 - Capitalization changes, price-basket returns, and continuity-adjusted indices are explicitly distinguished. Exchange, sector and grouped-listing returns use starting capitalization weights instead of magnifying winners with ending weights. Only recorded splits adjust historical price bases; issuance is not counted as a split gain.
 - Price and volume use identical buckets. Invalid trade records cannot poison turnover totals; incomplete turnover is visibly flagged, and new invalid audit writes are rejected.
 - Missing turns, listing coverage changes, constituent removals, and large stored repricings are annotated without smoothing away history.

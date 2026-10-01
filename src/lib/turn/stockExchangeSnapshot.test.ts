@@ -33,7 +33,7 @@ import { getPublicShareQuote, getRoundedPublicMarketCap } from "@/lib/corporatio
 
 describe("stockExchangeSnapshot", () => {
   let mockDb: Db;
-  let mockCollection: ReturnType<typeof vi.fn>;
+  let mockCollection: ReturnType<typeof vi.fn<(name: string) => any>>;
   let mockUpdateOne: ReturnType<typeof vi.fn>;
   let intradayBulkWrite: ReturnType<typeof vi.fn>;
 

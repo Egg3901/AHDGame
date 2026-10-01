@@ -62,6 +62,9 @@ export interface StockListing {
 }
 
 export interface ExchangeData {
+  /** Snapshot observation time, independent of its game turn. */
+  asOf?: string | null;
+  turn?: number;
   exchange: string;
   exchangeName: string;
   listings: StockListing[];

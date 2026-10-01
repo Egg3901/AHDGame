@@ -1,4 +1,6 @@
 "use client";
+import { LocalTime, RelativeTime } from "@/components/time/LocalTime";
+import { useExchangeQuotes } from "./useExchangeQuotes";
 import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
 
 import { useState, useEffect, use, Suspense, useCallback, useMemo } from "react";
@@ -45,12 +47,8 @@ import { useAuthMe } from "@/contexts/AuthDataContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
 
-/**
- * Shared history window (newest 2000 turns). One fetch feeds both the overview
- * chart, which slices per timeframe client-side, and the stats tab, so the two
- * never hold overlapping copies from different requests.
- */
-const HISTORY_LIMIT = 2000;
+/** Complete recorded history for year-by-year market statistics. */
+const HISTORY_LIMIT = 0;
 
 const VALID_TABS: StockTab[] = [
   "stocks",
@@ -264,7 +262,6 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
       turnStatusForGate?.currentYear ?? null
     );
   const { navData } = useAuthMe();
-  const [data, setData] = useState<ExchangeData | null>(null);
   const [commodities, setCommodities] = useState<CommodityData[]>([]);
   const [bondListings, setBondListings] = useState<BondListing[]>([]);
   const [wealthEntries, setWealthEntries] = useState<WealthEntry[]>([]);
@@ -300,6 +297,15 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
   const [auctionViewerCountryId, setAuctionViewerCountryId] = useState<string | null>(null);
   const turnStatus = useGameTurnStatus();
   const currentTurn = turnStatus?.currentTurn ?? 0;
+  const exchangeApi =
+    exchangeMeta[exchangeFilter]?.exchangeApi ??
+    exchangeMeta[exchangeFilter.toUpperCase()]?.exchangeApi ??
+    "global";
+  const {
+    data,
+    error: quoteError,
+    loading: quoteLoading,
+  } = useExchangeQuotes(exchangeApi, currentTurn);
   // Prefer the server's pinned display year (honors the pre-iteration date
   // freeze); fall back to computing from the raw turn only if it's absent.
   const gameYear =
@@ -356,7 +362,6 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
       if (!background) {
         setLoading(true);
         setError("");
-        setData(null);
         setCommodities([]);
         setBondListings([]);
         setWealthEntries([]);
@@ -387,10 +392,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         };
 
         const primaryRequests: Array<Promise<ApiResult>> = [];
-        // The always-visible stats strip and stock ticker need listings. This is
-        // a cheap stockExchangeSnapshots document read; the bonds and wealth
-        // endpoints are loaded only when a tab actually needs them.
-        primaryRequests.push(loadExchangeData(`/api/stock-exchange?exchange=${exchangeApi}`));
+        // Live stock quotes poll independently; these other boards refresh every five minutes.
         primaryRequests.push(
           loadExchangeData(
             exchangeApi === "global"
@@ -418,11 +420,6 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         const primaryResults = await Promise.all(primaryRequests);
         if (primaryResults.length > 0) {
           let idx = 0;
-          const { res: listingsRes, json: listingsJson } = primaryResults[idx++];
-          const listingsData = listingsJson as Record<string, unknown>;
-          if (listingsRes.ok) setData(listingsJson as ExchangeData);
-          else if (!background)
-            setError((listingsData.error as string) || "Failed to load exchange data");
           {
             const { res, json } = primaryResults[idx++];
             const d = json as Record<string, unknown>;
@@ -867,6 +864,21 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
               </span>
             </div>
           </div>
+          {data?.asOf && (
+            <p className="px-4 py-1.5 text-[10px] text-muted border-t border-card-border">
+              Quotes observed <RelativeTime value={data.asOf} /> ({" "}
+              <LocalTime
+                value={data.asOf}
+                options={{ month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }}
+              />
+              ). Checked every minute.
+            </p>
+          )}
+          {quoteError && data && (
+            <p role="status" className="px-4 py-1.5 text-xs text-error">
+              {quoteError}
+            </p>
+          )}
           {currentTurn > 0 && (
             <div className="flex items-center justify-between px-4 py-1.5 bg-card-elevated/40 border-t border-card-border">
               <span className="text-[10px] font-mono text-muted tracking-wider">
@@ -945,11 +957,11 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
           </div>
 
           <div className="min-h-[480px]">
-            {loading ? (
+            {loading || quoteLoading ? (
               <MarketTableSkeleton />
-            ) : error ? (
+            ) : error || (quoteError && !data) ? (
               <div className="rounded-xl border border-error/20 bg-error/5 p-6 text-center text-error">
-                {error}
+                {error || quoteError}
               </div>
             ) : (
               <>
