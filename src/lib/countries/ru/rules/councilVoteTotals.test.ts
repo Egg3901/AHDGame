@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { russianCouncilVoteTotals as count } from "./councilVoteTotals";
-function fixture(): Parameters<typeof count>[0] {
+type CountInput = Parameters<typeof count>[0];
+function fixture(): Omit<CountInput, "nominees" | "rawVotes"> & {
+  nominees: Array<CountInput["nominees"][number]>;
+  rawVotes: Record<string, number>;
+} {
   return {
     registeredVoters: 100,
     priorVotes: {},
