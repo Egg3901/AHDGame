@@ -9,12 +9,13 @@
  * wordmark. The loading navbar starts it, and the real navbar, mounting a beat
  * later, picks it up from the keys already typed instead of an empty field.
  * Client-side navigation keeps the navbar mounted, so it does not retype.
- * The run advances one key per animation frame at most, so a busy main thread
- * (the landing globe hydrating) stalls the typist rather than skipping keys.
- * Reduced motion shows the name at once, and screen readers always get the
- * whole name.
+ * The run advances one key per animation frame at most and commits it in that
+ * frame, so a busy main thread (the landing globe hydrating) stalls the typist
+ * rather than skipping keys. Reduced motion shows the name at once, and screen
+ * readers always get the whole name.
  */
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 export const WORDMARK = "A House Divided";
 
@@ -83,13 +84,17 @@ export function Wordmark({ typed = false, className }: { typed?: boolean; classN
       return () => window.clearTimeout(timer);
     }
     let handle = 0;
+    let shown: WordmarkFrame | null = null;
     const tick = (now: number) => {
       run = advanceWordmarkRun(run, now);
       const next = wordmarkFrame(run, now);
       lastFrame = next;
-      setFrame((shown) =>
-        shown.keys === next.keys && shown.cursor === next.cursor ? shown : next
-      );
+      if (!shown || shown.keys !== next.keys || shown.cursor !== next.cursor) {
+        shown = next;
+        // Commit inside this frame. A scheduled render can land after the next
+        // frame's tick and fold two keys into one paint.
+        flushSync(() => setFrame(next));
+      }
       if (next.cursor !== "gone") handle = requestAnimationFrame(tick);
     };
     handle = requestAnimationFrame(tick);
