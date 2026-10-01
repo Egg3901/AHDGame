@@ -330,7 +330,10 @@ describe("Russian runtime bill actions", () => {
         character: { _id: new ObjectId() } as Character,
         countryId: "RU",
         bill: {} as Bill,
-        input: { action, vote: "for" },
+        input:
+          action === "vote" || action === "veto_override_vote"
+            ? { action, vote: "for" }
+            : { action },
       });
       expect(result.status).toBe(409);
       expect(db.collection("bills").updateOne).not.toHaveBeenCalled();
