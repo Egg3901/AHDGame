@@ -38,7 +38,8 @@ function currentOfficeType(office: NPP["currentOffice"] | string) {
 export async function loadRussianAssemblySeatingInputs(
   db: Db,
   session: ClientSession,
-  turn: number
+  turn: number,
+  options: { activeAssembly?: boolean } = {}
 ) {
   const game = await db
     .collection<GameState>("gameState")
@@ -72,7 +73,9 @@ export async function loadRussianAssemblySeatingInputs(
   if (
     !country?.ruFirstDumaElectionCohortId ||
     !country.ruFirstCouncilElectionCohortId ||
-    country.ruFederalAssemblySinceTurn != null ||
+    (options.activeAssembly
+      ? country.ruFederalAssemblySinceTurn == null
+      : country.ruFederalAssemblySinceTurn != null) ||
     !hasAuthorizedPostSovietTransition(
       turn,
       country.ruSovietSuccessionSinceTurn,
@@ -114,7 +117,7 @@ export async function loadRussianAssemblySeatingInputs(
       !Number.isSafeInteger(receipt.resolvedOnTurn) ||
       receipt.resolvedOnTurn < receipt.mandateSinceTurn ||
       receipt.resolvedOnTurn > turn ||
-      receipt.seatedOnTurn != null
+      (!options.activeAssembly && receipt.seatedOnTurn != null)
     )
       throw new Error("Assembly handover needs current unseated certified families");
   }
@@ -230,7 +233,10 @@ export async function loadRussianAssemblySeatingInputs(
     TURNS_PER_YEAR
   );
   const termEndTurn = Math.min(dumaTermEndTurn, councilTermEndTurn);
-  if (turn >= termEndTurn) return null;
+  if (
+    turn >= (options.activeAssembly ? Math.max(dumaTermEndTurn, councilTermEndTurn) : termEndTurn)
+  )
+    return null;
   const chars = certified.owners
     .filter((row) => !row.isNpc)
     .map((row) => new ObjectId(row.ownerId));
@@ -270,7 +276,10 @@ export async function loadRussianAssemblySeatingInputs(
     .collection<ElectedOfficial>("electedOfficials")
     .find({ $or: [{ countryId: "RU" }, ...identities] }, { session, batchSize: 10000 })
     .toArray();
-  if (offices.some((row) => ["dumaDeputy", "federationCouncilMember"].includes(row.officeType)))
+  if (
+    !options.activeAssembly &&
+    offices.some((row) => ["dumaDeputy", "federationCouncilMember"].includes(row.officeType))
+  )
     throw new Error("Assembly handover cannot overwrite unjournaled chamber offices");
   const cabinet = identities.length
     ? await db
@@ -281,6 +290,13 @@ export async function loadRussianAssemblySeatingInputs(
         )
         .toArray()
     : [];
+  const compatible = (
+    chamber: "dumaDeputy" | "federationCouncilMember",
+    type: string | undefined,
+    countryId: string | undefined
+  ) =>
+    (options.activeAssembly && countryId === "RU" && type === chamber) ||
+    russianFirstAssemblyOfficeCompatible(chamber, type, countryId);
   const incompatible = new Set<string>();
   const chambers = new Map(
     certified.owners.map((row) => [
@@ -299,8 +315,7 @@ export async function loadRussianAssemblySeatingInputs(
       if (!ownerId) continue;
       const key = `${kind}:${ownerId.toHexString()}`;
       const chamber = chambers.get(key);
-      if (chamber && !russianFirstAssemblyOfficeCompatible(chamber, row.officeType, row.countryId))
-        incompatible.add(key);
+      if (chamber && !compatible(chamber, row.officeType, row.countryId)) incompatible.add(key);
     }
   }
   const governmentOffices = new Map(
@@ -331,7 +346,7 @@ export async function loadRussianAssemblySeatingInputs(
       isTechnocrat: false,
       incompatibleOffice:
         incompatible.has(`player:${row._id.toHexString()}`) ||
-        !russianFirstAssemblyOfficeCompatible(
+        !compatible(
           chambers.get(`player:${row._id.toHexString()}`)!,
           currentOfficeType(row.currentOffice),
           row.countryId
@@ -346,7 +361,7 @@ export async function loadRussianAssemblySeatingInputs(
       isTechnocrat: row.isTechnocrat === true,
       incompatibleOffice:
         incompatible.has(`npc:${row._id.toHexString()}`) ||
-        !russianFirstAssemblyOfficeCompatible(
+        !compatible(
           chambers.get(`npc:${row._id.toHexString()}`)!,
           currentOfficeType(row.currentOffice),
           row.countryId
@@ -354,7 +369,7 @@ export async function loadRussianAssemblySeatingInputs(
     })),
   ];
   const plan = applyRussianAssemblyOwnerEligibility(certified.seats, statuses);
-  if (!plan.canReplaceCongress) return null;
+  if (!options.activeAssembly && !plan.canReplaceCongress) return null;
   const allocation: Record<string, number> = {};
   for (const row of duma.ballots.filter((row) => row.tier === "constituency"))
     allocation[row.regionId] = (allocation[row.regionId] ?? 0) + 1;
@@ -374,6 +389,7 @@ export async function loadRussianAssemblySeatingInputs(
     dumaRoot,
     councilRoot,
     certified,
+    offices,
     plan,
     allocation,
     regions,

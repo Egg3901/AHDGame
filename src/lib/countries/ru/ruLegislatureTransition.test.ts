@@ -1,8 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
-const mocks = vi.hoisted(() => ({ transaction: vi.fn(), seating: vi.fn() }));
+const mocks = vi.hoisted(() => ({ transaction: vi.fn(), seating: vi.fn(), vacancy: vi.fn() }));
 vi.mock("@/lib/db/runRequiredTransaction", () => ({ runRequiredTransaction: mocks.transaction }));
 vi.mock("./assemblySeating", () => ({ materializeRussianAssemblySeating: mocks.seating }));
+vi.mock("./assemblyVacancySeating", () => ({
+  materializeRussianAssemblyVacancySeating: mocks.vacancy,
+}));
 import { processRuLegislatureTransition } from "./ruLegislatureTransition";
 const NOW = new Date("2026-01-01T00:00:00Z");
 beforeEach(() => {
@@ -56,6 +59,31 @@ describe("Russian 1993 legislature transition", () => {
     expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 146, NOW)).toBe(
       "none"
     );
+  });
+  it("routes an active Assembly to transactional vacancy seating", async () => {
+    const db = {
+      client: "owned-client",
+      collection: () => ({
+        findOne: async () => ({
+          ruFirstDumaElectionCohortId: "duma",
+          ruFirstCouncilElectionCohortId: "council",
+          ruSovietSuccessionSinceTurn: 48,
+          ruFederalAssemblyMandateSinceTurn: 129,
+          ruFederalAssemblySinceTurn: 145,
+        }),
+      }),
+    } as unknown as Db;
+    mocks.vacancy.mockResolvedValueOnce(true);
+    expect(await processRuLegislatureTransition(db, { preset: "1991-default" }, 150, NOW)).toBe(
+      "federalAssembly"
+    );
+    expect(mocks.seating).not.toHaveBeenCalled();
+    expect(mocks.vacancy).toHaveBeenCalledWith({
+      db,
+      session: "active-session",
+      turn: 150,
+      now: NOW,
+    });
   });
   it("preserves legacy marker-only worlds without opening a transaction", async () => {
     const db = {

@@ -59,6 +59,7 @@ export async function validateRussianCouncilPlayerFiling(input: {
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstCouncilElectionCohortId: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruFederalAssemblySinceTurn: 1,
       },
     }
   );
@@ -68,6 +69,7 @@ export async function validateRussianCouncilPlayerFiling(input: {
     session,
     country,
     cohortId: binding.cohortId,
+    turn,
   });
   if (!bound) return reject("unbound-mandate");
   const { opening, rootCohortId } = bound;

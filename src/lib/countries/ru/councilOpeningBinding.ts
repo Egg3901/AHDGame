@@ -14,15 +14,21 @@ import {
   type RussianCouncilResultRecord,
 } from "./councilElectionResult";
 import { planRussianCouncilDistricts } from "./rules/councilDistricts";
+import { planRussianDumaBallot } from "./rules/assemblySchedule";
+import { loadRussianAssemblyRepeatTerm } from "./assemblyRepeatTerm";
 import { pendingRussianCouncilRepeatBallots } from "./rules/councilRepeat";
 
 export async function loadRussianCouncilOpeningBinding(input: {
   db: Db;
   session?: ClientSession;
   cohortId: ObjectId;
+  turn?: number;
   country: Pick<
     CountryGameState,
-    "ruFirstCouncilElectionCohortId" | "ruFederalAssemblyMandateSinceTurn"
+    | "ruFirstCouncilElectionCohortId"
+    | "ruFederalAssemblyMandateSinceTurn"
+    | "ruFirstDumaElectionCohortId"
+    | "ruFederalAssemblySinceTurn"
   >;
 }) {
   const { db, session, cohortId, country } = input;
@@ -46,6 +52,7 @@ export async function loadRussianCouncilOpeningBinding(input: {
           seatIds: 1,
           registeredBySubject: 1,
           npcAdmission: 1,
+          openedOnTurn: 1,
         },
       }
     );
@@ -107,12 +114,29 @@ export async function loadRussianCouncilOpeningBinding(input: {
     !previous ||
     !(previous.rootCohortId ?? previous.cohortId).equals(rootCohortId) ||
     previous._id !== previous.cohortId.toHexString() ||
-    previous.seatedOnTurn != null ||
+    (previous.seatedOnTurn != null && country.ruFederalAssemblySinceTurn == null) ||
     ((previous.generation ?? 0) === 0 &&
       (!previous.cohortId.equals(rootCohortId) || previous.rootCohortId != null)) ||
     (previous.generation ?? 0) + 1 !== generation
   )
     return null;
+  if (country.ruFederalAssemblySinceTurn != null) {
+    if (input.turn == null) return null;
+    const term = await loadRussianAssemblyRepeatTerm({
+      db,
+      session,
+      country,
+      chamber: "council",
+      turn: input.turn,
+      previous,
+    });
+    if (
+      !Number.isSafeInteger(opening.openedOnTurn) ||
+      (term.stage === "seated" &&
+        planRussianDumaBallot(opening.openedOnTurn).endTurn >= term.termEndTurn)
+    )
+      return null;
+  }
   const pending = pendingRussianCouncilRepeatBallots(previous.ballots);
   if (
     !pending.length ||

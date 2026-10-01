@@ -56,6 +56,7 @@ export async function materializeRussianCouncilNpcAdmission(input: {
       projection: {
         ruFirstCouncilElectionCohortId: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruFederalAssemblySinceTurn: 1,
         ruDumaNpcAdmissionCohortId: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
       },
@@ -69,7 +70,7 @@ export async function materializeRussianCouncilNpcAdmission(input: {
   )
     return null;
   const openings = db.collection<RussianCouncilOpeningRecord>(RUSSIAN_COUNCIL_OPENINGS_COLLECTION);
-  const binding = await loadRussianCouncilOpeningBinding({ db, session, country, cohortId });
+  const binding = await loadRussianCouncilOpeningBinding({ db, session, country, cohortId, turn });
   if (!binding) throw new Error("Council admission lost its opening receipt");
   const { opening: receipt, rootCohortId } = binding;
   if (receipt.npcAdmission)
@@ -287,16 +288,22 @@ export async function admitRussianCouncilNpcNominees(
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1 } });
   if (game?.preset !== "1991-default") return null;
-  const country = await input.db
-    .collection<CountryGameState>("countryGameStates")
-    .findOne(
-      { _id: "RU" },
-      { projection: { ruFirstCouncilElectionCohortId: 1, ruFederalAssemblyMandateSinceTurn: 1 } }
-    );
+  const country = await input.db.collection<CountryGameState>("countryGameStates").findOne(
+    { _id: "RU" },
+    {
+      projection: {
+        ruFirstCouncilElectionCohortId: 1,
+        ruFirstDumaElectionCohortId: 1,
+        ruFederalAssemblySinceTurn: 1,
+        ruFederalAssemblyMandateSinceTurn: 1,
+      },
+    }
+  );
   if (!country) return null;
   const bound = await loadRussianCouncilOpeningBinding({
     db: input.db,
     cohortId: input.cohortId,
+    turn: input.turn,
     country,
   });
   if (!bound) return null;

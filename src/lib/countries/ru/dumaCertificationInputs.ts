@@ -20,6 +20,7 @@ export async function loadRussianDumaCertificationInputs(input: {
   session: ClientSession;
   cohort: readonly Election[];
   councilCohortId?: ObjectId;
+  protectedDumaPlayerOwners?: ReadonlySet<string>;
 }) {
   const { db, session, cohort } = input;
   const electionIds = cohort.map((row) => row._id);
@@ -183,6 +184,7 @@ export async function loadRussianDumaCertificationInputs(input: {
           isNpc: !!row.isNPP,
           eligible:
             row.status === "active" &&
+            (!!row.isNPP || !input.protectedDumaPlayerOwners?.has(ownerId.toHexString())) &&
             !councilOwners.has(`${row.isNPP ? "npc" : "player"}:${ownerId.toHexString()}`) &&
             owner?.party === row.party &&
             (!!row.isNPP ||

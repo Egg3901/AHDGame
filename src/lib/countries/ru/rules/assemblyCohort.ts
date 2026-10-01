@@ -259,11 +259,7 @@ export function resolveRussianDumaRepeatGeneration(input: {
     })
   )
     throw new Error("Duma repeats need new identities in their original ballot territories");
-  const protectedPlayers = new Set(
-    previous.constituencyResults
-      .filter((row) => row.winner && !row.winner.isNpc)
-      .map((row) => row.winner!.ownerId)
-  );
+  const protectedPlayers = russianDumaProtectedConstituencyOwners(input.previousBallots);
   const playerNominees = input.replacements
     .filter((row) => row.tier === "constituency")
     .flatMap((row) => row.candidates.filter((c) => !c.isNpc && c.eligible).map((c) => c.ownerId));
@@ -275,4 +271,16 @@ export function resolveRussianDumaRepeatGeneration(input: {
   const replacementsBySeat = new Map(input.replacements.map((row) => [row.seatId, row]));
   const ballots = input.previousBallots.map((row) => replacementsBySeat.get(row.seatId) ?? row);
   return { ballots, result: resolveRussianDumaBallots(ballots, true) };
+}
+
+/** Constituency player winners retain their certified mandates during repeats. */
+export function russianDumaProtectedConstituencyOwners(
+  ballots: readonly RussianDumaCohortBallot[]
+) {
+  const result = resolveRussianDumaBallots(ballots, true);
+  return new Set(
+    result.constituencyResults
+      .filter((row) => row.winner && !row.winner.isNpc)
+      .map((row) => row.winner!.ownerId)
+  );
 }

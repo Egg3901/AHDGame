@@ -39,6 +39,7 @@ export async function materializeRussianDumaNpcAdmission(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstDumaElectionCohortId: 1,
+        ruFirstCouncilElectionCohortId: 1,
         ruDumaNpcAdmissionCohortId: 1,
         ruDumaUnrepresentedParties: 1,
       },
@@ -110,6 +111,8 @@ export async function materializeRussianDumaNpcAdmission(input: {
     session,
     cohortId,
     elections,
+    councilCohortId: country.ruFirstCouncilElectionCohortId,
+    mandateSinceTurn: country.ruFederalAssemblyMandateSinceTurn,
     now,
   });
   const claimed = await countries.updateOne(
