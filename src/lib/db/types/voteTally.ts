@@ -35,6 +35,13 @@ export interface ElectionVoteTally {
   candidateParties: Record<string, string>;
   turnSnapshots: VoteTurnSnapshot[];
   finalized: boolean;
+  /** Native first-Duma valid against-all ballots and certification outcome. */
+  russianDumaBallot?: {
+    againstAllVotes: number;
+    invalidated?: boolean;
+    outcome?: "elected" | "repeat";
+    certifiedCohortId?: ObjectId;
+  };
   seatsEstimate?: Record<string, number>;
   /** Stored when primary resolves; used for wiki election history. */
   primaryResults?: PrimaryResults;

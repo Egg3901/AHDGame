@@ -132,6 +132,12 @@ export interface ElectionCandidate {
   party: string;
   status: CandidateStatus;
   seatsRequested?: number;
+  /** Frozen first-Duma nomination order and bounded NPC list capacity. */
+  russianDumaNomination?: {
+    registrationOrder: number;
+    nominationOrder: number;
+    capacity: number;
+  };
   isNPP?: boolean;
   nppId?: ObjectId;
   enteredAt: Date;
