@@ -66,7 +66,7 @@ export async function processFederationRatifications(
     }
     if (
       !bill ||
-      !["signed", "veto_override"].includes(bill.status) ||
+      bill.status !== "signed" ||
       bill.federationSettlementMandate?.termsHash !== proposal.termsHash
     )
       continue;
