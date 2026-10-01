@@ -1306,6 +1306,22 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
   if (noStartingParties) await clearStartingPolitics(db, preset);
 
+  // Only a genuinely fresh historical world receives this candidate bench.
+  // Reference refreshes and existing live worlds retain their actor population.
+  if (
+    !globallyVacant &&
+    !preIteration &&
+    shouldSeedHistoricalOfficials({
+      mode,
+      preIteration,
+      preExistingOfficials: preExistingOfficialsCount,
+      preExistingNpps: preExistingNppsCount,
+    })
+  ) {
+    const { seedModernPartyBench } = await import("@/lib/npp/seedModernPartyBench");
+    await seedModernPartyBench(db, preset, log);
+  }
+
   const [
     stateCount,
     seatCount,
