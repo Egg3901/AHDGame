@@ -58,7 +58,7 @@ export async function loadPersistedFederationApproval(input: {
     .find(
       {
         countryId: sourceEntityId,
-        status: { $in: ["signed", "veto_override"] },
+        status: "signed",
         "federationSettlementMandate.settlementId": approval.settlementId,
         "federationSettlementMandate.revision": approval.revision,
         "federationSettlementMandate.termsHash": termsHash,
