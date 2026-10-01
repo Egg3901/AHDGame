@@ -78,7 +78,7 @@ export async function GET(request: Request) {
     const [history, previous, intradayRows] = await Promise.all([
       collection
         .find({ turn: { $gte: firstTurn, $lte: lastTurn } })
-        .project({
+        .project<MarketCapHistory>({
           turn: 1,
           createdAt: 1,
           globalMarketCap: 1,
@@ -98,7 +98,15 @@ export async function GET(request: Request) {
           exchange: sector ? `sector:${sector}` : exchange,
           turn: { $gte: Math.max(1, firstTurn - 1), $lte: lastTurn },
         })
-        .project({ turn: 1, open: 1, last: 1, high: 1, low: 1, prints: 1, updatedAt: 1 })
+        .project<MarketIndexIntraday>({
+          turn: 1,
+          open: 1,
+          last: 1,
+          high: 1,
+          low: 1,
+          prints: 1,
+          updatedAt: 1,
+        })
         .sort({ turn: 1 })
         .toArray(),
     ]);
@@ -172,7 +180,7 @@ export async function GET(request: Request) {
     }
     const volumes = new Map(turnover.map((r) => [r._id, r]));
     const inputs: CandleInput[] = [];
-    let prior = previous;
+    let prior: MarketCapHistory | null = previous;
     let invalidPriceTurns = 0;
     for (const h of history) {
       const cap = capFor(h);
