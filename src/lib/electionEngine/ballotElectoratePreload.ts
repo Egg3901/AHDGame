@@ -8,6 +8,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { AccumulateVoteTurnPreload } from "./types";
 import { isNationwideDirectExecutiveElection } from "@/lib/elections/nationwideExecutive";
 import { bindRussianPresidentialElectorate } from "@/lib/countries/ru/presidentialElectoratePreload";
+import { bindRussianCouncilElectorate } from "@/lib/countries/ru/councilElectoratePreload";
 import {
   bindRussianDumaElectorate,
   usesRussianDumaNationalElectorate,
@@ -34,5 +35,8 @@ export function bindBallotElectorate(
   election: Election,
   preload: AccumulateVoteTurnPreload
 ): AccumulateVoteTurnPreload {
-  return bindRussianDumaElectorate(election, bindRussianPresidentialElectorate(election, preload));
+  return bindRussianDumaElectorate(
+    election,
+    bindRussianCouncilElectorate(election, bindRussianPresidentialElectorate(election, preload))
+  );
 }
