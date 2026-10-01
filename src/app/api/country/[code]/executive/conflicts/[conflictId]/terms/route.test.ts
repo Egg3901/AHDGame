@@ -271,7 +271,8 @@ describe("POST impose terms", () => {
       expect.anything(),
       expect.anything(),
       "stalemate",
-      40
+      40,
+      expect.objectContaining({ endingType: "peace" })
     );
   });
 
@@ -279,6 +280,12 @@ describe("POST impose terms", () => {
     // Guards the check above from being vacuous.
     const { POST } = await import("./route");
     await POST(req(indemnity), params);
-    expect(resolveConflict).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveConflict).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 });

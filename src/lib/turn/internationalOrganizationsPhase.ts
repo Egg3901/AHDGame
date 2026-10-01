@@ -1,3 +1,4 @@
+import { captureServerGameEvent } from "@/lib/analytics/serverPosthog";
 import {
   loadOrganizationCashContext,
   type OrganizationCashContext,
@@ -403,6 +404,7 @@ async function expireActiveSanctions(db: Db, currentTurn: number): Promise<numbe
   for (const r of expired) {
     await liftOrganizationSanctions(db, r._id);
     await col.updateOne({ _id: r._id }, { $set: { status: "terminated", terminatedAt: now } });
+    await captureDiplomaticExpiry(db, currentTurn, r);
   }
   return expired.length;
 }
@@ -423,6 +425,7 @@ async function expireActiveDirectives(db: Db, currentTurn: number): Promise<numb
     { _id: { $in: expired.map((r) => r._id) } },
     { $set: { status: "terminated", terminatedAt: new Date() } }
   );
+  for (const item of expired) await captureDiplomaticExpiry(db, currentTurn, item);
   return expired.length;
 }
 
@@ -446,6 +449,7 @@ async function expireActiveJointStatements(db: Db, currentTurn: number): Promise
     { _id: { $in: expired.map((r) => r._id) } },
     { $set: { status: "terminated", terminatedAt: new Date() } }
   );
+  for (const item of expired) await captureDiplomaticExpiry(db, currentTurn, item);
   return expired.length;
 }
 
@@ -464,6 +468,7 @@ async function expireActiveAgencyFunding(db: Db, currentTurn: number): Promise<n
     { _id: { $in: expired.map((r) => r._id) } },
     { $set: { status: "terminated", terminatedAt: new Date() } }
   );
+  for (const item of expired) await captureDiplomaticExpiry(db, currentTurn, item);
   return expired.length;
 }
 
@@ -730,6 +735,20 @@ async function resolveExpiredOrganizationLegislation(
           },
         }
       );
+      await captureServerGameEvent({
+        db,
+        turn: currentTurn,
+        event: "diplomacy_resolved",
+        distinctId: "system:turn-processor",
+        insertId: `diplomacy_resolved:${item._id}:${currentTurn}`,
+        nationId: item.proposingCountryId,
+        properties: {
+          proposal_id: item._id.toString(),
+          organization_id: item.organizationId,
+          action_type: item.type,
+          outcome: "rejected",
+        },
+      });
       // A resolution that fails leaves the pending list without explanation
       // otherwise, and under a roll-based threshold failing is ordinary. The
       // proposer is the one country guaranteed to have a page to log it on.
@@ -1250,4 +1269,27 @@ async function applyResolutionEffect(
       return;
     }
   }
+}
+
+async function captureDiplomaticExpiry(
+  db: Db,
+  turn: number,
+  item: OrganizationLegislation
+): Promise<void> {
+  await captureServerGameEvent({
+    db,
+    turn,
+    event: "diplomacy_status_changed",
+    distinctId: "system:turn-processor",
+    insertId: `diplomacy-expired:${item._id}`,
+    nationId: item.proposingCountryId,
+    properties: {
+      proposal_id: item._id.toString(),
+      organization_id: item.organizationId,
+      action_type: item.type,
+      from_status: "active",
+      to_status: "terminated",
+      transition_type: "expiry",
+    },
+  });
 }

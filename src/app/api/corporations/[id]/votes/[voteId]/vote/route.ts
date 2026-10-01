@@ -156,6 +156,8 @@ export async function POST(request: Request, { params }: RouteParams) {
         db,
         vote: updatedVote,
         totalEligibleShares: totalVotingPower(corporation),
+        nationId: corporation.countryId,
+        flushTelemetry: true,
         currentTurn,
       });
       if (claimed && outcome !== "open") {

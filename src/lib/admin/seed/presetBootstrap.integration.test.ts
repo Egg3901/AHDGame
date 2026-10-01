@@ -59,9 +59,12 @@ interface Built {
 
 const built = new Map<string, Built>();
 
-beforeAll(async () => {
-  const { probeBootstrap } = await import("@/lib/test-utils/__fixtures__/bootstrapProbe");
-  for (const preset of PRESETS) {
+// Bound each complete world independently rather than charging all three
+// bootstraps to one setup timer. Hooks remain sequential: probeBootstrap shares
+// its active database through probeDb, so parallel worlds would contaminate it.
+for (const preset of PRESETS) {
+  beforeAll(async () => {
+    const { probeBootstrap } = await import("@/lib/test-utils/__fixtures__/bootstrapProbe");
     const { db } = await probeBootstrap(preset);
     const counts: Record<string, Record<string, number>> = {};
     for (const collection of COUNTRY_SCOPED) {
@@ -73,8 +76,8 @@ beforeAll(async () => {
       }
     }
     built.set(preset, { db, counts });
-  }
-}, 600_000);
+  }, 600_000);
+}
 
 describe("a bootstrapped world matches its era roster", () => {
   it.each(PRESETS)("%s seeds nothing for a country the era does not contain", (preset) => {

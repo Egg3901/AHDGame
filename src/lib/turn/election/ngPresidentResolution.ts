@@ -22,6 +22,7 @@ import {
   NG_ZONES,
 } from "@/lib/nigeriaPresidentialElectionEngine";
 import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captureResultSnapshot";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 
 /** Minimal candidate shape the decision needs (id + party key). */
 export interface NGPresidentCandidate {
@@ -117,7 +118,8 @@ export async function resolveNGPresidentElection(
   db: Db,
   election: Election,
   tally: ElectionVoteTally,
-  now: Date
+  now: Date,
+  currentTurn = election.endTurn ?? 0
 ): Promise<boolean> {
   const candidateParties = tally.candidateParties ?? {};
   const candidateIds = Object.keys(candidateParties);
@@ -166,6 +168,14 @@ export async function resolveNGPresidentElection(
     return false;
   }
 
+  const previousPresident = await db
+    .collection("electedOfficials")
+    .findOne({
+      countryId: election.countryId ?? "NG",
+      officeType: "president",
+    })
+    .catch(() => null);
+
   try {
     await seatPresidentialExecutive(db, {
       election,
@@ -173,6 +183,7 @@ export async function resolveNGPresidentElection(
       vpCharId: winnerCandidate.runningMateId,
       vpNppId: undefined,
       now,
+      turn: currentTurn,
     });
   } catch (err) {
     console.error(
@@ -210,6 +221,36 @@ export async function resolveNGPresidentElection(
   await db.collection<Campaign>("campaigns").deleteMany({ electionId: election._id });
 
   await captureElectionResultSnapshot(db, election, now);
+
+  if (!winnerCandidate.isNPP && winnerCandidate.characterId) {
+    const totals = tally.totalVotes ?? {};
+    const votesCast = Object.values(totals).reduce((sum, votes) => sum + votes, 0);
+    const winnerVotes = totals[winnerCandidateId] ?? 0;
+    const runnerVotes = Object.entries(totals)
+      .filter(([candidateId]) => candidateId !== winnerCandidateId)
+      .reduce((highest, [, votes]) => Math.max(highest, votes), 0);
+    const winnerAccount = await db
+      .collection<{ userId?: ObjectId }>("characters")
+      .findOne({ _id: winnerCandidate.characterId }, { projection: { userId: 1 } })
+      .catch(() => null);
+    await captureElectionWon({
+      db,
+      accountId: winnerAccount?.userId?.toString(),
+      electionId: election._id.toString(),
+      electionType: election.electionType,
+      partyId: winnerCandidate.party,
+      seatCount: 1,
+      voteSharePct: votesCast > 0 ? (winnerVotes / votesCast) * 100 : 0,
+      marginPct: votesCast > 0 ? ((winnerVotes - runnerVotes) / votesCast) * 100 : 0,
+      incumbent:
+        (!winnerCandidate.isNPP &&
+          previousPresident?.characterId?.equals(winnerCandidate.characterId)) ||
+        (!!winnerCandidate.isNPP && previousPresident?.nppId?.equals(winnerCandidate.nppId)) ||
+        false,
+      nationId: election.countryId ?? "NG",
+      turn: currentTurn,
+    });
+  }
 
   console.log(
     `[Turn] NG president election ${election._id} resolved — candidate ${winnerCandidateId} seated`

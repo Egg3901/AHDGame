@@ -9,6 +9,11 @@ import {
   CHAIR_ACCEPTANCE_WINDOW_TURNS,
 } from "./centralBankChairSelection";
 
+const officeCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: officeCapture,
+}));
+
 // ─── Pure helper tests (no DB mocking needed) ────────────────────────────────
 
 describe("weightedRandomPick", () => {
@@ -453,6 +458,14 @@ describe("processCentralBankChairSelection", () => {
     const { processCentralBankChairSelection } = await import("./centralBankChairSelection");
     const result = await processCentralBankChairSelection(mockDb as any, 192, gameNow);
     expect(result.selectionsTriggered).toBe(1);
+    expect(officeCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "centralBankChair",
+        transitionType: "lost",
+        turn: 192,
+        nationId: "US",
+      })
+    );
   });
 
   it("does not consider banned users for economic picks", async () => {

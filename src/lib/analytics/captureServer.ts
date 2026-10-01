@@ -1,8 +1,20 @@
+import type { GameIteration } from "@/lib/db/types/gameState";
+import { gameEventEnvelope } from "./gameEventEnvelope";
+
 /** Server events use the same event name and properties at both destinations. */
 export async function captureServerProductEvent(
   event: string,
-  properties: Record<string, string | number | boolean>
+  properties: Record<string, string | number | boolean>,
+  context?: { iteration?: GameIteration | null; turn?: number }
 ): Promise<void> {
+  const eventProperties = {
+    ...properties,
+    ...gameEventEnvelope(
+      context?.iteration,
+      context?.turn ??
+        (typeof properties.turn_number === "number" ? properties.turn_number : undefined)
+    ),
+  };
   const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const amplitudeKey = process.env.NEXT_PUBLIC_AMPLITUDE_API_KEY;
   const distinctId = "system:turn-processor";
@@ -15,7 +27,7 @@ export async function captureServerProductEvent(
             api_key: posthogKey,
             event,
             distinct_id: distinctId,
-            properties,
+            properties: eventProperties,
           }),
           signal: AbortSignal.timeout(2000),
         })
@@ -26,7 +38,7 @@ export async function captureServerProductEvent(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             api_key: amplitudeKey,
-            events: [{ user_id: distinctId, event_type: event, event_properties: properties }],
+            events: [{ user_id: distinctId, event_type: event, event_properties: eventProperties }],
           }),
           signal: AbortSignal.timeout(2000),
         })

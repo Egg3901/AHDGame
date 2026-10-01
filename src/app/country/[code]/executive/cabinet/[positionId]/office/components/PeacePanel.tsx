@@ -6,7 +6,6 @@ import { type CountryId, type GovernmentType } from "@/lib/constants/countries";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
 import type { PeaceTerm } from "@/lib/military/peaceTerm";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
-import { captureProductEvent } from "@/lib/analytics/capture";
 
 interface OfferView {
   id: string;
@@ -302,23 +301,6 @@ export function PeacePanel({
         return;
       }
       setNote(payload?.warResolved ? "Accepted. The war is over." : done);
-      if (payload?.warResolved) {
-        const offerId = url.split("/").at(-1);
-        const acceptedOffer = offers.find((offer) => offer.id === offerId);
-        const settledWar = wars.find((war) => war.conflictId === acceptedOffer?.conflictId);
-        if (
-          settledWar?.declaredByBillId &&
-          settledWar.attackerNation &&
-          settledWar.defenderNation &&
-          acceptedOffer
-        ) {
-          void captureProductEvent("war_ended", {
-            attacker_nation: settledWar.attackerNation,
-            defender_nation: settledWar.defenderNation,
-            outcome: acceptedOffer.term.kind,
-          });
-        }
-      }
       await load();
     } catch {
       setError("That could not be done.");

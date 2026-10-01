@@ -25,6 +25,8 @@
  * preempt a pending VONC by calling snap.
  */
 
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 
 import type { Db } from "mongodb";
@@ -103,8 +105,17 @@ export async function vacateDissolvedLowerChamber(
   db: Db,
   countryId: CountryId,
   lowerChamberKey: string,
-  now: Date
+  now: Date,
+  currentTurn = 0
 ): Promise<void> {
+  const departing = await db
+    .collection<Character>("characters")
+    .find(
+      { countryId, "currentOffice.type": lowerChamberKey },
+      { projection: { _id: 1, party: 1 } }
+    )
+    .toArray()
+    .catch(() => []);
   await db.collection<ElectedOfficial>("electedOfficials").deleteMany({
     officeType: lowerChamberKey,
     ...officialsCountryScope(countryId),
@@ -126,6 +137,20 @@ export async function vacateDissolvedLowerChamber(
       { $set: { currentOffice: null, updatedAt: now } }
     ),
   ]);
+  await Promise.all(
+    departing.map((character) =>
+      captureOfficeTransition({
+        db,
+        officeType: lowerChamberKey,
+        transitionType: "lost",
+        partyId: character.party ?? undefined,
+        selectionMethod: "removal",
+        nationId: countryId,
+        turn: currentTurn,
+      })
+    )
+  );
+  await flushServerPosthog();
 }
 
 export async function triggerSnapElection(
@@ -315,7 +340,7 @@ export async function triggerSnapElection(
   // 4. Dissolution immediately ends every lower-chamber mandate. This must
   //    happen before government cleanup so cabinet members cannot be restored
   //    to seats that no longer exist.
-  await vacateDissolvedLowerChamber(db, countryId, lowerChamberKey, now);
+  await vacateDissolvedLowerChamber(db, countryId, lowerChamberKey, now, currentTurn);
 
   // 5. Increment counters. Auto-snap still increments so operators can see
   //    that an auto-snap fired; the only difference is that the limit was

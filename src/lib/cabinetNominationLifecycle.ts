@@ -26,6 +26,9 @@ import type {
   CareerEvent,
 } from "@/lib/db/types";
 import type { OfficeType } from "@/lib/db/types/character";
+import type { CountryId } from "@/lib/constants/countries";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { cabinetOfficeTypeForCountry } from "@/lib/actions/officeActionBonus";
 
 /**
  * NPP vote based on party lines: same party as nominee -> for; opposite -> against.
@@ -174,7 +177,8 @@ async function castNPPCabinetVotes(
 async function seatConfirmedVicePresident(
   db: Awaited<ReturnType<typeof import("@/lib/mongodb").getDb>>,
   nom: CabinetNomination,
-  now: Date
+  now: Date,
+  currentTurn: number
 ): Promise<void> {
   const countryId = nom.countryId ?? "US";
 
@@ -244,6 +248,32 @@ async function seatConfirmedVicePresident(
       $push: { careerHistory: vpCareer },
     }
   );
+  if (existingVp?.characterId && !existingVp.characterId.equals(nom.nomineeCharacterId)) {
+    await captureOfficeTransition({
+      db,
+      officeType: "vicePresident",
+      transitionType: "lost",
+      partyId: existingVp.party,
+      selectionMethod: "appointment",
+      tenureTurns: 0,
+      careerStage: 0,
+      nationId: countryId,
+      turn: currentTurn,
+    });
+  }
+  if (!existingVp?.characterId?.equals(nom.nomineeCharacterId)) {
+    await captureOfficeTransition({
+      db,
+      officeType: "vicePresident",
+      transitionType: "gained",
+      partyId: nom.nomineeParty,
+      selectionMethod: "appointment",
+      tenureTurns: 0,
+      careerStage: 0,
+      nationId: countryId,
+      turn: currentTurn,
+    });
+  }
 }
 
 export async function processCabinetNominationLifecycle(
@@ -318,6 +348,43 @@ export async function processCabinetNominationLifecycle(
     })
     .toArray();
 
+  const cabinetMemberFilters = expired
+    .filter((nom) => nom.positionId !== "vicePresident")
+    .map((nom) => ({
+      countryId: (nom.countryId ?? "US") as CountryId,
+      positionId: nom.positionId,
+    }));
+  const cabinetNomineeFilters = expired
+    .filter((nom) => nom.positionId !== "vicePresident" && nom.nomineeCharacterId)
+    .map((nom) => ({
+      countryId: (nom.countryId ?? "US") as CountryId,
+      characterId: nom.nomineeCharacterId!,
+    }));
+  const priorCabinetMembers =
+    cabinetMemberFilters.length > 0 || cabinetNomineeFilters.length > 0
+      ? await db
+          .collection<CabinetMember>("cabinetMembers")
+          .find(
+            {
+              $or: [
+                ...(cabinetMemberFilters.length > 0 ? cabinetMemberFilters : []),
+                ...cabinetNomineeFilters,
+              ],
+            },
+            { projection: { countryId: 1, positionId: 1, characterId: 1, nppId: 1, party: 1 } }
+          )
+          .toArray()
+          .catch(() => [])
+      : [];
+  const priorCabinetBySeat = new Map(
+    priorCabinetMembers.map((member) => [`${member.countryId}:${member.positionId}`, member])
+  );
+  const priorCabinetByCharacter = new Map(
+    priorCabinetMembers
+      .filter((member) => member.characterId)
+      .map((member) => [`${member.countryId}:${member.characterId!.toString()}`, member])
+  );
+
   const notificationInputs: NotificationInput[] = [];
 
   for (const nom of expired) {
@@ -346,9 +413,15 @@ export async function processCabinetNominationLifecycle(
     if (passed) {
       // VP nominations seat the character as VP; all other positions create a CabinetMember.
       if (nom.positionId === "vicePresident") {
-        await seatConfirmedVicePresident(db, nom, now);
+        await seatConfirmedVicePresident(db, nom, now, currentTurn);
       } else {
         // Confirm: create or replace cabinet member
+        const oldSeatHolder = priorCabinetBySeat.get(`${nom.countryId ?? "US"}:${nom.positionId}`);
+        const nomineeOldSeat = nom.nomineeCharacterId
+          ? priorCabinetByCharacter.get(`${nom.countryId ?? "US"}:${nom.nomineeCharacterId}`)
+          : undefined;
+        const nominationNation = (nom.countryId ?? "US") as CountryId;
+        const nominationOffice = cabinetOfficeTypeForCountry(nominationNation);
         await db
           .collection<CabinetMember>("cabinetMembers")
           // Country-scoped: position ids are not unique across countries, so an
@@ -421,6 +494,49 @@ export async function processCabinetNominationLifecycle(
           await db
             .collection<Character>("characters")
             .updateOne({ _id: nom.nomineeCharacterId }, { $push: { careerHistory: careerEvent } });
+        }
+        const outgoing = new Map(
+          [oldSeatHolder, nomineeOldSeat]
+            .filter((member): member is CabinetMember => {
+              if (!member) return false;
+              if (member.positionId !== nom.positionId) return true;
+              if (nom.nomineeCharacterId && member.characterId?.equals(nom.nomineeCharacterId)) {
+                return false;
+              }
+              return !(nom.nomineeMode === "npp" && member.nppId?.equals(nom.nomineeNppId!));
+            })
+            .map((member) => [member._id.toString(), member])
+        );
+        await Promise.all(
+          [...outgoing.values()].map((member) =>
+            captureOfficeTransition({
+              db,
+              officeType: nominationOffice,
+              transitionType: "lost",
+              partyId: member.party,
+              selectionMethod: "appointment",
+              tenureTurns: 0,
+              careerStage: 0,
+              nationId: nominationNation,
+              turn: currentTurn,
+            })
+          )
+        );
+        const sameOfficeHolder =
+          (nom.nomineeCharacterId && oldSeatHolder?.characterId?.equals(nom.nomineeCharacterId)) ||
+          (nom.nomineeMode === "npp" && oldSeatHolder?.nppId?.equals(nom.nomineeNppId!));
+        if (!sameOfficeHolder) {
+          await captureOfficeTransition({
+            db,
+            officeType: nominationOffice,
+            transitionType: "gained",
+            partyId: nom.nomineeParty,
+            selectionMethod: "appointment",
+            tenureTurns: 0,
+            careerStage: 0,
+            nationId: nominationNation,
+            turn: currentTurn,
+          });
         }
       }
 

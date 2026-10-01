@@ -9,6 +9,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { executePresidentialBillAction } from "@/lib/presidentialBillAction";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { z } from "zod";
 import type { Bill, ElectedOfficial } from "@/lib/db/types";
 import { VETO_MESSAGE_MIN_LENGTH, VETO_MESSAGE_MAX_LENGTH } from "@/lib/constants/governorOffice";
@@ -93,6 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: result.error }, { status });
     }
 
+    await flushServerPosthog();
     return NextResponse.json({ success: true, message: result.message });
   } catch (error) {
     return handleRouteError(error);

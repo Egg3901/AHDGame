@@ -8,6 +8,7 @@
 /** Analytics consent choice. Owned by CookieConsent; read raw by pre-hydration scripts. */
 export const COOKIE_CONSENT_KEY = "ahd-cookie-consent";
 export const FIRST_TURN_KEY = "ahd-posthog-first-turn";
+export const FIRST_MEANINGFUL_ACTION_KEY = "ahd-posthog-first-meaningful-action";
 export const ACCOUNT_CREATED_KEY = "ahd-posthog-account-created";
 /** Last PostHog assignment for the profile redesign, read before hydration to avoid a flash. */
 export const PROFILE_DESIGN_KEY = "ahd-posthog-profile-design";

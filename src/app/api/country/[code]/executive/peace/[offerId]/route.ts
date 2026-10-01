@@ -16,6 +16,7 @@ import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { isOfferLive, validatePeaceOffer, maxIndemnityForGdp } from "@/lib/military/peaceOffer";
 import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
 import { acceptPeace } from "@/lib/military/acceptPeace";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { getCountryState } from "@/lib/countryState";
 import type { FederalBudget } from "@/lib/db/types";
 
@@ -155,6 +156,7 @@ export async function POST(
     if (!applied.applied) {
       return NextResponse.json({ error: "That offer is no longer open." }, { status: 409 });
     }
+    if (applied.resolved) await flushServerPosthog();
 
     return NextResponse.json({
       success: true,

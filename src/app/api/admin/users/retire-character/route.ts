@@ -1,3 +1,4 @@
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 // GET — Fetch retired characters for a given user
 // POST — Admin retires a user's active character
 // Auth: requireAdmin
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
     const recapOpts = await buildRetireRecapOpts(db, character);
     await retireCharacter(db, character, userId, "admin_action", recapOpts);
 
+    await flushServerPosthog();
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleRouteError(error);
