@@ -22,6 +22,10 @@ import {
 } from "./councilElectionOpening";
 import { admitRussianCouncilNpcNominees } from "./councilNpcAdmission";
 import { registerRussianCouncilPlayerCandidate } from "./councilPlayerFiling";
+import {
+  certifyRussianCouncilElection,
+  RUSSIAN_COUNCIL_RESULTS_COLLECTION,
+} from "./councilElectionResult";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 type Fixture = { _id: string | ObjectId; [key: string]: unknown };
 describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
@@ -272,6 +276,107 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(
       (await db.collection("npps").find({}).toArray()).every(
         (row) => row.personalAccount.wealth === 12345
+      )
+    ).toBe(true);
+    const subjects = await db
+      .collection<Election>("elections")
+      .find({
+        "russianCouncilRound.cohortId": opened!.cohortId,
+      })
+      .toArray();
+    const registered = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({
+        electionId: { $in: subjects.map((row) => row._id) },
+        status: "active",
+      })
+      .toArray();
+    await db.collection("electionVoteTallies").insertMany(
+      subjects.map((election) => {
+        const nominees = registered
+          .filter((row) => row.electionId.equals(election._id))
+          .sort(
+            (a, b) =>
+              a.russianCouncilNomination!.registrationOrder -
+              b.russianCouncilNomination!.registrationOrder
+          );
+        const voters = election.russianCouncilRound!.registeredVoters;
+        return {
+          _id: new ObjectId(),
+          electionId: election._id,
+          finalized: false,
+          totalVotes: Object.fromEntries(
+            nominees.map((row, index) => [
+              row._id.toHexString(),
+              index === 0 ? voters : index === 1 ? Math.floor(voters / 2) : 0,
+            ])
+          ),
+          candidateParties: Object.fromEntries(
+            nominees.map((row) => [row._id.toHexString(), row.party])
+          ),
+          russianCouncilBallot: {
+            registeredVoters: voters,
+            validBallots: voters,
+            againstAllVotes: 0,
+            registrationOrderByCandidate: Object.fromEntries(
+              nominees.map((row) => [
+                row._id.toHexString(),
+                row.russianCouncilNomination!.registrationOrder,
+              ])
+            ),
+          },
+        };
+      })
+    );
+    await db
+      .collection("elections")
+      .updateMany(
+        { "russianCouncilRound.cohortId": opened!.cohortId },
+        { $set: { status: "completed", endTurn: 141 } }
+      );
+    await db.createCollection(RUSSIAN_COUNCIL_RESULTS_COLLECTION, {
+      validator: { preset: "reject-late-receipt" },
+    });
+    const certification = { db, cohortId: opened!.cohortId, turn: 141, now: new Date(4000) };
+    await expect(certifyRussianCouncilElection(certification)).rejects.toMatchObject({ code: 121 });
+    expect(await db.collection("electionVoteTallies").countDocuments({ finalized: true })).toBe(0);
+    expect(await db.collection("elections").countDocuments({ status: "resolved" })).toBe(0);
+    expect(
+      await db.collection("electionCandidates").countDocuments({
+        electionId: { $in: subjects.map((row) => row._id) },
+        status: "active",
+      })
+    ).toBe(registered.length);
+    expect(await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).countDocuments()).toBe(0);
+    await db.command({ collMod: RUSSIAN_COUNCIL_RESULTS_COLLECTION, validator: {} });
+    commands = 0;
+    const receipt = await certifyRussianCouncilElection(certification);
+    expect(commands).toBeLessThanOrEqual(20);
+    expect(receipt.result).toHaveLength(89);
+    expect(receipt.result.reduce((sum, row) => sum + row.winners.length, 0)).toBe(178);
+    expect(await db.collection("electionVoteTallies").countDocuments({ finalized: true })).toBe(89);
+    expect(
+      await db.collection("electionCandidates").countDocuments({
+        electionId: { $in: subjects.map((row) => row._id) },
+        status: "active",
+      })
+    ).toBe(0);
+    commands = 0;
+    expect(await certifyRussianCouncilElection(certification)).toEqual(receipt);
+    expect(commands).toBeLessThanOrEqual(4);
+    expect(await db.collection(RUSSIAN_COUNCIL_RESULTS_COLLECTION).countDocuments()).toBe(1);
+    expect(await db.collection("electedOfficials").findOne({ _id: officialId })).not.toBeNull();
+    expect(
+      await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
+    ).not.toHaveProperty("ruFederalAssemblySinceTurn");
+    expect(
+      (await db.collection("npps").find({}).toArray()).every(
+        (row) => row.personalAccount.wealth === 12345
+      )
+    ).toBe(true);
+    expect(
+      (await db.collection("characters").find({}).toArray()).every(
+        (row) => row.personalAccount.wealth === 23456
       )
     ).toBe(true);
   });
