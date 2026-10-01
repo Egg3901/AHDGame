@@ -162,7 +162,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
       validator: { countryId: { $ne: "RU" } },
     });
     const input = { db, cohortId: opened!.cohortId, turn: 141, now: new Date(2000) };
-    await expect(certifyRussianDumaElection(input)).rejects.toThrow();
+    await expect(certifyRussianDumaElection(input)).rejects.toMatchObject({ code: 121 });
     expect(
       await db.collection("elections").countDocuments({ countryId: "RU", status: "completed" })
     ).toBe(226);
@@ -185,6 +185,24 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     const certificationCommands = commands;
     expect(result.result.constituencyResults.filter((row) => row.winner)).toHaveLength(224);
     expect(result.nominees).toHaveLength(226);
+    expect(result.ballots).toHaveLength(226);
+    const countedWithdrawal = result.ballots!.find(
+      (row) => row.id === elections[1]._id.toHexString()
+    )!;
+    expect(countedWithdrawal.candidates[0]).toMatchObject({
+      id: candidates[1]._id.toHexString(),
+      party: "1",
+      eligible: false,
+      registrationOrder: 0,
+      nominationOrder: 0,
+      capacity: 1,
+    });
+    expect(countedWithdrawal.candidates[0].votes).toBeGreaterThan(0);
+    const snapshot = await db
+      .collection(RUSSIAN_DUMA_RESULTS_COLLECTION)
+      .findOne({ _id: opened!.cohortId.toHexString() });
+    expect(snapshot?.ballots).toEqual(result.ballots);
+
     expect(await db.collection("electionCandidates").countDocuments({ status: "active" })).toBe(0);
     expect(result.nominees.some((row) => row.candidateId.equals(withdrawn._id))).toBe(false);
     expect(
@@ -201,6 +219,12 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     expect(
       await db.collection<Fixture>("countryGameStates").findOne({ _id: "RU" })
     ).not.toHaveProperty("ruFederalAssemblyElectionCertifiedSinceTurn");
+    await db
+      .collection("electionCandidates")
+      .updateOne(
+        { _id: candidates[1]._id },
+        { $set: { party: "99", "russianDumaNomination.nominationOrder": 900 } }
+      );
     commands = 0;
     expect(await certifyRussianDumaElection({ ...input, turn: 142 })).toEqual(result);
     const replayCommands = commands;
