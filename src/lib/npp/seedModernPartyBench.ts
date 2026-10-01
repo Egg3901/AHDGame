@@ -17,44 +17,40 @@ export async function seedModernPartyBench(
 ): Promise<number> {
   if (preset !== "1991-default" && preset !== "2019-default") return 0;
   const access = await getAllCountryAccess(db);
-  const state = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+  const state = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { startingPartiesMode: 1 } });
   const noParties = state?.startingPartiesMode === "none";
-  const parties = await db
-    .collection<PoliticalParty>("politicalParties")
-    .aggregate<{
-      sequentialId: number;
-      countryId: CountryId;
-    }>([
-      { $match: { isDefault: true, memberCount: 0 } },
-      { $project: { sequentialId: 1, countryId: { $ifNull: ["$countryId", "US"] } } },
+  const parties = (
+    await db
+      .collection<PoliticalParty>("politicalParties")
+      .find(
+        { isDefault: true, memberCount: 0 },
+        {
+          projection: { sequentialId: 1, countryId: 1 },
+        }
+      )
+      .toArray()
+  )
+    .map((party) => ({
+      sequentialId: party.sequentialId,
+      countryId: party.countryId ?? "US",
+    }))
+    .sort((a, b) => a.countryId.localeCompare(b.countryId) || a.sequentialId - b.sequentialId);
+  // One projected population read supplies both membership and unique names.
+  // Keep the bootstrap usable by the production and in-memory adapters.
+  const liveNpps = await db
+    .collection<NPP>("npps")
+    .find(
+      { retiredAt: null },
       {
-        $lookup: {
-          from: "npps",
-          let: { partyId: { $toString: "$sequentialId" }, countryId: "$countryId" },
-          pipeline: [
-            {
-              $match: {
-                retiredAt: null,
-                $expr: {
-                  $and: [
-                    { $eq: ["$party", "$$partyId"] },
-                    { $eq: [{ $ifNull: ["$countryId", "US"] }, "$$countryId"] },
-                  ],
-                },
-              },
-            },
-            { $project: { _id: 1 } },
-            { $limit: 1 },
-          ],
-          as: "members",
-        },
-      },
-      { $match: { "members.0": { $exists: false } } },
-      { $project: { sequentialId: 1, countryId: 1 } },
-      { $sort: { countryId: 1, sequentialId: 1 } },
-    ])
+        projection: { name: 1, party: 1, countryId: 1 },
+      }
+    )
     .toArray();
+  const activeMembership = new Set(liveNpps.map((npp) => `${npp.countryId ?? "US"}:${npp.party}`));
   const required = parties.filter((party) => {
+    if (activeMembership.has(`${party.countryId}:${party.sequentialId}`)) return false;
     if (!access[party.countryId]?.registered) {
       log(
         `Excluded ${party.countryId}:${party.sequentialId} from the bench: country is absent, dissolved or unregistered`
@@ -104,16 +100,7 @@ export async function seedModernPartyBench(
       regionByParty.set(key, org.stateId);
     }
   }
-  const names = await db
-    .collection<NPP>("npps")
-    .find(
-      { retiredAt: null },
-      {
-        projection: { name: 1 },
-      }
-    )
-    .toArray();
-  const context: NPPGenerationContext = { existingNames: new Set(names.map((npp) => npp.name)) };
+  const context: NPPGenerationContext = { existingNames: new Set(liveNpps.map((npp) => npp.name)) };
   const actors: NPP[] = [];
   for (const party of required) {
     actors.push(
