@@ -205,6 +205,16 @@ function resolveRussianDumaBallots(ballots: readonly RussianDumaCohortBallot[], 
   return { constituencyResults, listElectionId: list.id, listDecision, listAssignment };
 }
 
+/** Select failed ballots from a certified board without reopening successful seats. */
+export function pendingRussianDumaRepeatBallots(ballots: readonly RussianDumaCohortBallot[]) {
+  const result = resolveRussianDumaBallots(ballots, true);
+  const pending = new Set(
+    result.constituencyResults.filter((row) => !row.winner).map((row) => row.seatId)
+  );
+  if (result.listDecision.outcome === "repeat") pending.add("RU-duma-national-list");
+  return ballots.filter((row) => pending.has(row.seatId));
+}
+
 /**
  * Repeat only the failed ballots, retaining each successful constituency unchanged.
  * A new national list or district freezes its own register; list assignments are
