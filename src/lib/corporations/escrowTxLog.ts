@@ -19,7 +19,7 @@ interface EscrowEntryBase {
  * Per-turn escrow funding sweep (treasury → escrow). Internal, money-conserving
  * move within the corp, so counterparty is "system" and it carries no suspect
  * threshold. Amount is a NEGATIVE treasury debit. Returns null when nothing
- * moved this turn.
+ * moved this turn. Native precision matches the authoritative cash writer.
  */
 export function buildEscrowFundingTxEntry(
   input: EscrowEntryBase & { escrowFundingMove: number }
@@ -32,17 +32,17 @@ export function buildEscrowFundingTxEntry(
     subjectType: "corporation",
     subjectId: input.corpId,
     subjectName: input.corpName,
-    amount: -Math.round(input.escrowFundingMove),
+    amount: -input.escrowFundingMove,
     currencyCode: input.currencyCode,
     counterpartyType: "system",
-    meta: { escrowBalanceAfter: Math.round(input.escrowBalanceAfter) },
+    meta: { escrowBalanceAfter: input.escrowBalanceAfter },
   };
 }
 
 /**
  * Manual escrow withdrawal (escrow → treasury). Internal, money-conserving;
  * counterparty "system", no threshold. Amount is a POSITIVE treasury credit.
- * Returns null for a non-positive amount.
+ * Returns null for a non-positive amount. Native precision matches the withdrawal.
  */
 export function buildEscrowWithdrawalTxEntry(
   input: EscrowEntryBase & { amount: number }
@@ -55,9 +55,9 @@ export function buildEscrowWithdrawalTxEntry(
     subjectType: "corporation",
     subjectId: input.corpId,
     subjectName: input.corpName,
-    amount: Math.round(input.amount),
+    amount: input.amount,
     currencyCode: input.currencyCode,
     counterpartyType: "system",
-    meta: { escrowBalanceAfter: Math.round(input.escrowBalanceAfter) },
+    meta: { escrowBalanceAfter: input.escrowBalanceAfter },
   };
 }
