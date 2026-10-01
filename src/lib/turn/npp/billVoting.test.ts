@@ -1303,3 +1303,25 @@ describe("Russian NPC bill votes use the active constitution", () => {
     expect(db._calls.bills).toHaveLength(0);
   });
 });
+
+it("votes on legacy UK national bills only through Commons", async () => {
+  const uk = makeNPP({ countryId: "UK" });
+  const us = makeNPP();
+  const db = makeMockDb();
+  const { processBillVoting } = await import("./billVoting");
+  expect(
+    await processBillVoting(
+      makeCtx(db, {
+        activeBills: [makeBill({ stateId: "uk_national", currentChamber: "commons" })],
+        nppMap: new Map([uk, us].map((n) => [n._id.toString(), n])),
+        nppOfficials: [
+          makeOfficial(uk._id, "house", { countryId: "UK", officeType: "commons" }),
+          makeOfficial(us._id, "house"),
+        ],
+      })
+    )
+  ).toBe(1);
+  const update = db._calls.bills[0][1] as { $set: Record<string, unknown> };
+  expect(Object.keys(update.$set)).toContain(`votes.npp_${uk._id}`);
+  expect(Object.keys(update.$set)).not.toContain(`votes.npp_${us._id}`);
+});

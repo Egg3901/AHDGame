@@ -59,7 +59,7 @@ import { getCountryState } from "@/lib/countryState";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import { ADDRESS_AGENDA_FORCE_BIAS } from "@/lib/constants/governorOffice";
 import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
-import { resolveNppBillVoterOffices } from "./rules/billVoterOffices";
+import { resolveNppBillCountryId, resolveNppBillVoterOffices } from "./rules/billVoterOffices";
 import { resolveBillVoteField, type BillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 
@@ -69,7 +69,7 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     now,
     nppMap,
     nppOfficials,
-    activeBills,
+    activeBills: storedBills,
     billWhips,
     statePartyOrgs,
     legislationTypeMap,
@@ -77,6 +77,10 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
     currentTurn,
   } = ctx;
 
+  const activeBills = storedBills.map((bill) => ({
+    ...bill,
+    countryId: resolveNppBillCountryId(bill, ctx.statesById),
+  }));
   let votescast = 0;
   const officialsByOfficeType = new Map<string, typeof nppOfficials>();
   for (const official of nppOfficials) {

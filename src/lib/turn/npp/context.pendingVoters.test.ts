@@ -196,3 +196,22 @@ describe("active Russian NPC policy hydration", () => {
     ).toEqual([]);
   });
 });
+
+it("hydrates legacy UK national bills without selecting US deputies", () => {
+  const uk = new ObjectId();
+  const us = new ObjectId();
+  expect(
+    collect({
+      officials: [official(uk, { countryId: "UK", officeType: "commons" }), official(us)],
+      bills: [
+        {
+          _id: new ObjectId(),
+          stateId: "uk_national",
+          currentChamber: "commons",
+          status: "active",
+          votes: {},
+        } as Bill,
+      ],
+    })
+  ).toEqual([uk.toString()]);
+});

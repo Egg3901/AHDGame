@@ -30,7 +30,7 @@ import {
   loadRuntimeCountryOffices,
   type RuntimeCountryOffices,
 } from "@/lib/countries/runtimeOffices";
-import { resolveNppBillVoterOffices } from "./rules/billVoterOffices";
+import { resolveNppBillCountryId, resolveNppBillVoterOffices } from "./rules/billVoterOffices";
 import { resolveBillVoteField } from "@/lib/congress/billVoteField";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { isBillWhipInCurrentPhase } from "@/lib/congress/billWhipPhase";
@@ -261,8 +261,10 @@ export function collectPendingNppVoterIds(opts: {
     }
   }
 
-  for (const bill of opts.bills) {
-    const countryId = (bill.countryId ?? "US") as CountryId;
+  const statesById = new Map(opts.states.map((state) => [state._id, state]));
+  for (const storedBill of opts.bills) {
+    const countryId = resolveNppBillCountryId(storedBill, statesById);
+    const bill = { ...storedBill, countryId };
     const { officeTypes, lowerOfficeType } = resolveNppBillVoterOffices(
       bill,
       opts.preset,
@@ -450,7 +452,11 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   const preset = typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined;
 
   const runtimeCountryOffices = new Map<CountryId, RuntimeCountryOffices>();
-  if (preset === "1991-default" && activeBills.some((bill) => bill.countryId === "RU")) {
+  const billStatesById = new Map(allStates.map((state) => [state._id, state]));
+  if (
+    preset === "1991-default" &&
+    activeBills.some((bill) => resolveNppBillCountryId(bill, billStatesById) === "RU")
+  ) {
     runtimeCountryOffices.set("RU", await loadRuntimeCountryOffices(db, "RU", preset));
   }
   const nppMap = new Map(allNPPs.map((n) => [n._id.toString(), n]));
