@@ -73,7 +73,7 @@ export function GeneralElectionPanel({
   electionId?: string;
   myCharId?: string | null;
   myEndorsedCandidateId?: string | null;
-  countryId?: "US" | "UK" | "DE";
+  countryId?: "US" | "UK" | "DE" | "RU";
   /** Rendered between the tally and the trend charts (non-presidential). */
   afterTally?: React.ReactNode;
   /** Blend detail chrome — region, country and year for the verdict hero. */

@@ -256,7 +256,7 @@ describe.skipIf(!uri)("federation settlement on an isolated Mongo replica set", 
       ruPresidencyElectionCertifiedSinceTurn: 84,
       ruPresidencyCertifiedElectionId: electionId,
     });
-    await db.collection("russianPresidentialElectionResults").insertOne({
+    await db.collection<Fixture>("russianPresidentialElectionResults").insertOne({
       _id: electionId.toHexString(),
       electionId,
       countryId: "RU",
