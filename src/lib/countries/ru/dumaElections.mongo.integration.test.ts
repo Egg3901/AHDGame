@@ -7,6 +7,7 @@ import { certifyRussianDumaRepeat } from "./dumaRepeatResult";
 import {
   openRussianDumaRepeat,
   RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
+  type RussianDumaRepeatOpeningRecord,
 } from "./dumaRepeatOpening";
 import { openRussianDumaElection } from "./dumaElectionOpening";
 import {
@@ -266,7 +267,7 @@ describe.skipIf(!uri)("First Duma on an isolated Mongo replica set", () => {
     ).toBe(0);
     expect(
       await db
-        .collection(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION)
+        .collection<RussianDumaRepeatOpeningRecord>(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION)
         .findOne({ _id: result!.record._id })
     ).not.toHaveProperty("npcAdmission");
     await db.command({ collMod: RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION, validator: {} });
