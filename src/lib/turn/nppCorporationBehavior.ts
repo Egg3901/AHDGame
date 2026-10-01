@@ -118,6 +118,8 @@ import {
   reinvestPoolHeadroomUnits,
   type ReinvestCandidate,
 } from "@/lib/turn/npp/reinvestCandidatePool";
+import type { NppCorpUpdateOp } from "./npp/nppCashWrite";
+import type { NppReinvestmentCashWitness } from "./npp/reinvestmentCashLedger";
 import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
 import {
   drawFoundedCapacityFromPools,
@@ -203,14 +205,7 @@ export async function processNppCorporationDecisions(
   techTreesEnabled: boolean = false,
   preloaded?: NppCorporationDecisionPreload
 ): Promise<{
-  corpUpdates: Array<{
-    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
-    update: {
-      $set?: Record<string, unknown>;
-      $inc?: Record<string, number>;
-      $addToSet?: { unlockedTechNodeIds: string };
-    };
-  }>;
+  corpUpdates: NppCorpUpdateOp[];
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -219,6 +214,7 @@ export async function processNppCorporationDecisions(
   divestedSectorIds: ObjectId[];
   techLedger: TechUnlockLedgerInput[];
   foundingCashWitnesses?: NppFoundingCashWitness[];
+  reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -227,14 +223,7 @@ export async function processNppCorporationDecisions(
         .find({ ceoType: "npp", suspended: { $ne: true } })
         .toArray();
 
-  const corpUpdates: Array<{
-    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
-    update: {
-      $set?: Record<string, unknown>;
-      $inc?: Record<string, number>;
-      $addToSet?: { unlockedTechNodeIds: string };
-    };
-  }> = [];
+  const corpUpdates: NppCorpUpdateOp[] = [];
   const allSectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -243,6 +232,7 @@ export async function processNppCorporationDecisions(
   const allDivestedSectorIds: ObjectId[] = [];
   const techLedger: TechUnlockLedgerInput[] = [];
   const foundingCashWitnesses: NppFoundingCashWitness[] = [];
+  const decisionCashOps: NppCorpUpdateOp[] = [];
   const operatorObservations: NppOperatorObservation[] = [];
 
   if (nppCorps.length === 0)
@@ -536,7 +526,10 @@ export async function processNppCorporationDecisions(
       turn,
       now,
     });
-    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
+    if (corpUpdateOp) {
+      corpUpdates.push(corpUpdateOp);
+      decisionCashOps.push(corpUpdateOp);
+    }
     if (witness) foundingCashWitnesses.push(witness);
 
     // Budget tech from post-decision cash and preserve the same safety floor.
@@ -578,11 +571,13 @@ export async function processNppCorporationDecisions(
     eraUnitScale: plants?.eraUnitScale ?? 1,
     now,
   });
-  await flushNppCapacityWriteback(db, {
+  const reinvestmentCashWitnesses = await flushNppCapacityWriteback(db, {
     turn,
     now,
     entryDiagnostics,
     capexRows,
+    cashOperations: decisionCashOps,
+    shadowEnabled: ledgerShadow,
     capacityObservations,
     operatorObservations,
   });
@@ -594,6 +589,7 @@ export async function processNppCorporationDecisions(
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
     ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
+    ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };
 }
 
