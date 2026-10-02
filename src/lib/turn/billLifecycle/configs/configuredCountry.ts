@@ -5,7 +5,10 @@ import {
   type CountryId,
   type CountryConfig,
 } from "@/lib/constants/countries";
-import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
+import {
+  getVotingUpperChamberKey,
+  resolveCountryOfficeLayout,
+} from "@/lib/countries/rules/officeLayout";
 import {
   getOfficeTypeForChamber,
   getUpperChamberOfficeType,
@@ -38,7 +41,7 @@ export function buildConfiguredCountryBillLifecycle(
     ? offices.upperOfficeType
     : getUpperChamberOfficeType(countryId, preset);
   const upperChamber = upperOfficeType ? country.legislature.upperChamber?.key : undefined;
-  const hasElectedUpperChamber = Boolean(upperChamber && country.upperElectionSystem);
+  const hasVotingUpperChamber = Boolean(upperChamber && getVotingUpperChamberKey(country));
   const hasPresidentialAction =
     isPresidentialGovernmentType(country.governmentType) ||
     (runtimeCountry !== undefined &&
@@ -70,13 +73,13 @@ export function buildConfiguredCountryBillLifecycle(
       officeTypeFor,
       passRule: "simpleMajority",
       onReject: "fail",
-      onPassStatus: hasElectedUpperChamber ? "active_other" : finalVoteStatus,
+      onPassStatus: hasVotingUpperChamber ? "active_other" : finalVoteStatus,
       execActionCheckOnPass: hasPresidentialAction,
       votingDurationHours: VOTING_HOURS,
     },
   ];
 
-  if (hasElectedUpperChamber && upperChamber) {
+  if (hasVotingUpperChamber && upperChamber) {
     stages.push({
       kind: "chamberVote",
       status: "active_other",

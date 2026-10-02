@@ -129,3 +129,33 @@ export function ru1993FederalAssemblyConfig(config: CountryConfig): CountryConfi
     ],
   };
 }
+
+/** Regional heads and delegates serve through their actual regional authority,
+ * while the Council keeps its statutory upper-chamber vote on ordinary laws. */
+export function ruRegionalCouncilConfig(
+  config: CountryConfig,
+  mode: "regionalHeads" | "regionalDelegates"
+): CountryConfig {
+  if (!config.legislature.upperChamber)
+    throw new Error("Regional Council needs its active upper chamber");
+  return {
+    ...config,
+    legislature: {
+      ...config.legislature,
+      upperChamber: {
+        ...config.legislature.upperChamber,
+        elected: false,
+        participatesInOrdinaryBills: true,
+        description:
+          mode === "regionalHeads"
+            ? "The executive head and legislative chair of each federal subject represent their region ex officio."
+            : "Executive and legislative regional authorities appoint separate representatives. Membership follows the appointing authority, with no fixed national election cycle.",
+      },
+    },
+    upperElectionSystem: undefined,
+    electionSystems: { ...config.electionSystems, upperChamber: undefined },
+    officeTypes: config.officeTypes.map((office) =>
+      office.key === "federationCouncilMember" ? { ...office, termYears: undefined } : office
+    ),
+  };
+}

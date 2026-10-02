@@ -41,6 +41,7 @@ import {
   ru1991PresidentialConfig,
   ru1993DissolvedCongressConfig,
   ru1993FederalAssemblyConfig,
+  ruRegionalCouncilConfig,
 } from "@/lib/countries/ru/runtimeInstitutions";
 import { SE_ERAS } from "@/lib/countries/se/eras";
 import { TR_ERAS } from "@/lib/countries/tr/eras";
@@ -156,6 +157,8 @@ export interface ChamberConfig {
   description: string;
   /** True for elected chambers (US Senate, JP Sangiin); false/omitted for appointed (CA Senate, DE Bundesrat, UK Lords) */
   elected?: boolean;
+  /** An appointed upper chamber can still approve ordinary bills. */
+  participatesInOrdinaryBills?: boolean;
   /**
    * True only for an upper chamber elected per-region in rotating classes
    * (US Senate: 2 per state across 3 classes, keyed by `SENATE_CLASSES`). Drives
@@ -1309,6 +1312,7 @@ export function getCountryConfigForRuntime(
     ruCongressDissolvedSinceTurn?: number;
     ruFederalAssemblySinceTurn?: number;
     ruDumaCurrentConvocationCohortId?: unknown;
+    ruCouncilComposition?: { mode: "regionalHeads" | "regionalDelegates" };
   } | null
 ): CountryConfig {
   const config = getCountryConfig(id, preset);
@@ -1350,11 +1354,22 @@ export function getCountryConfigForRuntime(
       ? ru1991PresidentialConfig(effectiveCongress)
       : effectiveCongress;
   if (countryState?.ruFederalAssemblySinceTurn != null) {
-    const assembly = ru1993FederalAssemblyConfig(presidential);
+    const firstAssembly = ru1993FederalAssemblyConfig(presidential);
+    const assembly = countryState.ruCouncilComposition
+      ? ruRegionalCouncilConfig(firstAssembly, countryState.ruCouncilComposition.mode)
+      : firstAssembly;
     return countryState.ruDumaCurrentConvocationCohortId
       ? {
           ...assembly,
           lowerElectionSystem: { ...assembly.lowerElectionSystem, termYears: 4 },
+          legislature: {
+            ...assembly.legislature,
+            lowerChamber: {
+              ...assembly.legislature.lowerChamber,
+              description:
+                "225 constituency deputies and 225 party-list deputies, elected for a four-year convocation.",
+            },
+          },
           officeTypes: assembly.officeTypes.map((office) =>
             office.key === "dumaDeputy" ? { ...office, termYears: 4 } : office
           ),

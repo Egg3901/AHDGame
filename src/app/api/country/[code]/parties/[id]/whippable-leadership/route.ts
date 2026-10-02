@@ -1,10 +1,12 @@
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 // src/app/api/parties/[id]/whippable-leadership/route.ts
 import { NextResponse } from "next/server";
 import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
-import { getCountryConfig, COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type {
   BillWhip,
   CabinetNomination,
@@ -127,10 +129,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Get country-specific chamber keys
-    const config = getCountryConfig(countryId);
-    const upperKey = config.upperElectionSystem
-      ? (config.legislature.upperChamber?.key ?? null)
-      : null;
+    const { config } = await loadRuntimeCountryOffices(db, countryId);
+    const upperKey = getVotingUpperChamberKey(config);
     const lowerKey = config.legislature.lowerChamber.key;
     const confidenceChamberKey = getConfidenceWhipChamber(countryId);
     const cabinetChamberKey = getCabinetWhipChamber(countryId);
@@ -140,8 +140,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Identical for most countries; CN differs (key "npc" vs office "npcDelegate"),
     // so querying officials by the raw key would match zero delegates and suppress
     // every whippable item (PM/no-confidence/cabinet) for the chair.
-    const lowerOfficeType = getOfficeTypeForChamber(countryId, lowerKey);
-    const upperOfficeType = upperKey ? getOfficeTypeForChamber(countryId, upperKey) : null;
+    const lowerOfficeType = getOfficeTypeForChamber(countryId, lowerKey, undefined, config);
+    const upperOfficeType = upperKey
+      ? getOfficeTypeForChamber(countryId, upperKey, undefined, config)
+      : null;
     const officeTypes = upperOfficeType ? [upperOfficeType, lowerOfficeType] : [lowerOfficeType];
 
     // Union of NPP and character officials — bills/leadership items should be shown

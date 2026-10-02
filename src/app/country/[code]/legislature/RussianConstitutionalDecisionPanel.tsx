@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 interface Decision {
-  kind: "presidency" | "federalAssembly";
+  kind: "presidency" | "federalAssembly" | "regionalHeads" | "regionalDelegates";
+  threshold?: "majority";
   available: boolean;
   reason: string;
   seatCapacity: number;
@@ -68,8 +69,20 @@ export default function RussianConstitutionalDecisionPanel() {
       {decisions.map((decision) => (
         <div key={decision.kind} className="space-y-2 rounded border border-border p-3">
           <h3 className="font-semibold">{t(decision.kind)}</h3>
-          <p>{t(decision.kind === "presidency" ? "presidencyHelp" : "assemblyHelp")}</p>
-          <p>{t("threshold", { seats: decision.seatCapacity })}</p>
+          <p>
+            {t(
+              decision.kind === "presidency"
+                ? "presidencyHelp"
+                : decision.kind === "federalAssembly"
+                  ? "assemblyHelp"
+                  : `${decision.kind}Help`
+            )}
+          </p>
+          <p>
+            {t(decision.threshold === "majority" ? "ordinaryThreshold" : "threshold", {
+              seats: decision.seatCapacity,
+            })}
+          </p>
           {!decision.available && <p>{t(`reasons.${decision.reason}`)}</p>}
           {decision.proposal && (
             <p>

@@ -271,6 +271,16 @@ describe("Russian runtime bill actions", () => {
     [{ ruSovietSuccessionSinceTurn: 4 }, "congressOfPeoplesDeputies", "congressDeputy"],
     [{ ruFederalAssemblySinceTurn: 4 }, "stateDuma", "dumaDeputy"],
     [{ ruFederalAssemblySinceTurn: 4 }, "federationCouncil", "federationCouncilMember"],
+    [
+      { ruFederalAssemblySinceTurn: 4, ruCouncilComposition: { mode: "regionalHeads" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
+    [
+      { ruFederalAssemblySinceTurn: 4, ruCouncilComposition: { mode: "regionalDelegates" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
   ] as const)(
     "accepts the current Russian deputy ballot for %j",
     async (markers, chamber, officeType) => {

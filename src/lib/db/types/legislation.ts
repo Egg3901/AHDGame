@@ -575,6 +575,12 @@ export interface Bill {
     revision: number;
     kind: "presidency" | "federalAssembly";
   };
+  /** A Council formation statute follows ordinary full-capacity chamber majorities. */
+  russianCouncilFormationMandate?: {
+    proposalId: string;
+    revision: number;
+    mode: "regionalHeads" | "regionalDelegates";
+  };
   /** Enacted parent mandate for one negotiated federation settlement revision. */
   federationSettlementMandate?: {
     settlementId: string;

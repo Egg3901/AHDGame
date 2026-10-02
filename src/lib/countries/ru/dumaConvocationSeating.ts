@@ -36,6 +36,7 @@ import { planRussianDumaSeating, type RussianAssemblySeat } from "./rules/assemb
 import { applyRussianAssemblyOwnerEligibility } from "./rules/assemblyOwnerEligibility";
 import { russianDumaConvocationOfficeCompatible } from "./rules/dumaConvocation";
 import { planRussianAssemblyVacancySeating } from "./rules/assemblyVacancySeating";
+import type { RussianCouncilCompositionSeating } from "./councilCompositionSeating";
 
 export async function materializeRussianDumaConvocationSeating(input: {
   db: Db;
@@ -57,7 +58,10 @@ export async function materializeRussianDumaConvocationSeating(input: {
   if (game?.preset !== "1991-default") return false;
   const country = await db
     .collection<CountryGameState>("countryGameStates")
-    .findOne({ _id: "RU" }, { session, projection: RUSSIAN_DUMA_AUTHORITY_PROJECTION });
+    .findOne(
+      { _id: "RU" },
+      { session, projection: { ...RUSSIAN_DUMA_AUTHORITY_PROJECTION, ruCouncilComposition: 1 } }
+    );
   if (!country?.ruDumaConvocationCohortId) return false;
   const root = country.ruDumaConvocationCohortId;
   const authority = await loadRussianDumaAuthority({ db, session, country, root, turn });
@@ -194,6 +198,27 @@ export async function materializeRussianDumaConvocationSeating(input: {
     { session, sort: { generation: -1 }, projection: { _id: 1 } }
   );
   if (!retainedCouncil) throw new Error("Duma handover lacks the retained Council certificate");
+  if (country.ruCouncilComposition) {
+    const composition = await db
+      .collection<RussianCouncilCompositionSeating>("russianCouncilCompositionSeatings")
+      .findOne(
+        {
+          _id: country.ruCouncilComposition.receiptId,
+          countryId: "RU",
+          preset: "1991-default",
+          mode: country.ruCouncilComposition.mode,
+          proposalId: country.ruCouncilComposition.proposalId,
+          formationRevision: country.ruCouncilComposition.revision,
+        },
+        { session, projection: { seatedOnTurn: 1 } }
+      );
+    if (
+      !composition ||
+      !Number.isSafeInteger(composition.seatedOnTurn) ||
+      composition.seatedOnTurn > turn
+    )
+      throw new Error("Duma handover lacks its actual appointed Council custody");
+  }
   const firstAssembly = await journals.findOne(
     { _id: `${opening.firstDumaRoot.toHexString()}:${opening.firstCouncilRoot.toHexString()}` },
     { session, projection: { councilTermEndTurn: 1 } }
@@ -608,6 +633,9 @@ export async function materializeRussianDumaConvocationSeating(input: {
       termEndTurn: opening.termEndTurn,
       dumaTermEndTurn: opening.termEndTurn,
       councilTermEndTurn: firstAssembly.councilTermEndTurn,
+      ...(country.ruCouncilComposition
+        ? { councilCompositionReceiptId: country.ruCouncilComposition.receiptId }
+        : {}),
       createdAt: now,
       officialIds: [...(latest?.officialIds ?? []), ...added.map((row) => row._id)],
       dumaSeats: delta.dumaSeats,

@@ -48,26 +48,32 @@
       "freshVote": "Revised terms require a new legislative vote and fresh consent from every successor. Previous approvals do not carry over."
     },
     "russianConstitution": {
-      "title": "Russian constitutional decisions",
-      "separateDecisions": "The presidency and Federal Assembly require separate parliamentary decisions and certified elections. Existing offices remain until their replacements are certified.",
+      "title": "Russian institutional decisions",
+      "separateDecisions": "Each institutional change requires its own parliamentary decision. Current officeholders remain until a lawful successor can take office.",
       "presidency": "Presidency",
       "federalAssembly": "Federal Assembly",
       "presidencyHelp": "Authorize a direct presidential election without replacing the current legislature.",
       "assemblyHelp": "Authorize elections for a 450-seat State Duma and 178-seat Federation Council without establishing a presidency.",
       "threshold": "Approval requires two-thirds of the full chamber capacity of {seats} seats. Vacancies and abstentions do not reduce the threshold.",
-      "loadError": "Constitutional decisions could not be loaded.",
-      "openError": "The constitutional bill could not be opened.",
-      "billStatus": "The constitutional bill is {status}.",
+      "loadError": "Institutional decisions could not be loaded.",
+      "openError": "The institutional bill could not be opened.",
+      "billStatus": "The institutional bill is {status}.",
       "viewBill": "View bill",
       "revise": "Open a revised decision",
       "open": "Open parliamentary decision",
       "reasons": {
         "before-date": "The historical decision date has not arrived.",
         "awaiting-succession": "A ratified Soviet succession settlement is required first.",
-        "already-authorized": "This constitutional decision has already been authorized.",
+        "already-authorized": "This institutional decision has already been authorized.",
         "no-legislature": "No active legislature can authorize this decision.",
-        "other-era": "This decision is unavailable in this era."
-      }
+        "other-era": "This decision is unavailable in this era.",
+        "awaiting-assembly": "A seated Federal Assembly is required before changing Council formation."
+      },
+      "regionalHeads": "Regional heads in the Council",
+      "regionalDelegates": "Separate regional Council representatives",
+      "regionalHeadsHelp": "Let the executive head and legislative chair of each federal subject represent their region in the Council.",
+      "regionalDelegatesHelp": "Let regional executive and legislative authorities appoint separate Council representatives, whose mandates follow the appointing authority.",
+      "ordinaryThreshold": "Each chamber must approve by a majority of its full capacity. The lower chamber has {seats} seats. Ordinary enactment and veto rules still apply."
     }
   }
 }

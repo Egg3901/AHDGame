@@ -94,6 +94,24 @@ describe("Russian constitutional decision routes", () => {
     expect((await POST(request({ kind: "federalAssembly" }), params)).status).toBe(409);
     expect(mem.collection("bills").docs).toHaveLength(0);
   });
+  it("opens separate statutory Council formation bills only after their date and Assembly seating", async () => {
+    mocks.getGameState.mockResolvedValue({ preset: "1991-default", currentTurn: 237 });
+    const country = mem.collection("countryGameStates").docs[0];
+    country.ruFederalAssemblySinceTurn = 145;
+    mem.collection("electedOfficials").docs[0].officeType = "dumaDeputy";
+    expect((await POST(request({ kind: "regionalHeads" }), params)).status).toBe(201);
+    expect((await POST(request({ kind: "regionalDelegates" }), params)).status).toBe(409);
+    expect(mem.collection("bills").docs).toHaveLength(1);
+    expect(mem.collection("bills").docs[0]).toMatchObject({
+      russianCouncilFormationMandate: { mode: "regionalHeads", revision: 1 },
+    });
+    expect(country).not.toHaveProperty("ruCouncilComposition");
+    const response = await GET(new Request("http://localhost"), params);
+    const body = await response.json();
+    expect(body.decisions).toContainEqual(
+      expect.objectContaining({ kind: "regionalHeads", threshold: "majority", seatCapacity: 450 })
+    );
+  });
   it("preserves the government formation freeze", async () => {
     mocks.checkLegislationFreeze.mockResolvedValue({
       ok: false,

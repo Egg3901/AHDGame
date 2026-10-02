@@ -50,4 +50,24 @@ describe("NPC Russian constitutional introduction", () => {
     mem.collection("electedOfficials").docs[0].officeType = "unionCongressDeputy";
     expect(await processRussianConstitutionalNpcProposals(db, game, 129, new Date(0))).toBe(0);
   });
+  it("introduces a dated Council law through normal votes and never retries rejection", async () => {
+    const { db, mem } = scenario();
+    Object.assign(mem.collection("countryGameStates").docs[0], {
+      ruFederalAssemblySinceTurn: 145,
+      ruFederalAssemblyMandateSinceTurn: 129,
+      ruPresidencySinceTurn: 141,
+      ruPresidencyMandateSinceTurn: 128,
+    });
+    mem.collection("electedOfficials").docs[0].officeType = "dumaDeputy";
+    expect(await processRussianConstitutionalNpcProposals(db, game, 237, new Date(1000))).toBe(1);
+    expect(mem.collection("bills").docs[0]).toMatchObject({
+      status: "proposed",
+      russianCouncilFormationMandate: { mode: "regionalHeads" },
+    });
+    expect(mem.collection("countryGameStates").docs[0]).not.toHaveProperty(
+      "ruCouncilFormationMandate"
+    );
+    mem.collection("bills").docs[0].status = "failed";
+    expect(await processRussianConstitutionalNpcProposals(db, game, 238, new Date(1000))).toBe(0);
+  });
 });

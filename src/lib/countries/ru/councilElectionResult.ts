@@ -84,6 +84,7 @@ export async function materializeRussianCouncilElectionResult(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstCouncilElectionCohortId: 1,
+        ruCouncilComposition: 1,
         ruFirstDumaElectionCohortId: 1,
         ruDumaConvocationCohortId: 1,
       },
@@ -91,6 +92,7 @@ export async function materializeRussianCouncilElectionResult(input: {
   );
   if (
     game?.preset !== "1991-default" ||
+    country?.ruCouncilComposition ||
     !country?.ruFirstCouncilElectionCohortId?.equals(cohortId) ||
     !hasAuthorizedPostSovietTransition(
       turn,

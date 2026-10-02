@@ -4,6 +4,7 @@
  * Returns individual voter details for a bill's origin or other chamber votes.
  * Public endpoint — no auth required.
  */
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -39,7 +40,7 @@ function resolveVoteOfficeType(
   chamber: "origin" | "other",
   config: CountryConfig
 ) {
-  const upperKey = config.upperElectionSystem ? config.legislature.upperChamber?.key : null;
+  const upperKey = getVotingUpperChamberKey(config);
   const chamberKey =
     chamber === "origin"
       ? resolvePrimaryVoteChamberKey(bill, config.legislature.lowerChamber.key)

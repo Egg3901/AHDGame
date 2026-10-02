@@ -3,6 +3,7 @@
  * performNationalBillAction preserves voting windows and costs while refusing
  * legislative actions from a dissolved chamber.
  */
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 import type { AuthUser } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -63,9 +64,7 @@ export async function performNationalBillAction(
   const preset = gameState?.preset;
   const { config } = await loadRuntimeCountryOffices(db, countryId, preset);
   const lowerKey = config.legislature.lowerChamber.key;
-  const upperKey = config.upperElectionSystem
-    ? (config.legislature.upperChamber?.key ?? null)
-    : null;
+  const upperKey = getVotingUpperChamberKey(config);
   const chamberKeys = upperKey ? [lowerKey, upperKey] : [lowerKey];
   // Office types seated members are stored under. Identical to the chamber keys
   // for every country except CN ("npc" chamber → "npcDelegate" office), so

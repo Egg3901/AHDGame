@@ -31,6 +31,8 @@ export interface RussianAssemblySeatingRecord {
   councilRootCohortId: ObjectId;
   dumaResultId: string;
   councilResultId: string;
+  /** Actual appointed Council custody; original Council roots and clocks remain historical. */
+  councilCompositionReceiptId?: string;
   seatedOnTurn: number;
   termEndTurn: number;
   dumaTermEndTurn: number;

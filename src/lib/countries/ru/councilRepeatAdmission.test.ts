@@ -272,4 +272,30 @@ describe("Council repeat admission uses the frozen generation", () => {
       await loadRussianCouncilOpeningBinding({ db, country, cohortId: new ObjectId() })
     ).toBeNull();
   });
+  it("rejects old elected Council admission after actual regional composition is installed", async () => {
+    const { mem, db, rootCohortId, npc, filing } = await scenario();
+    const country = mem.collection("countryGameStates").docs[0];
+    country.ruCouncilComposition = {
+      mode: "regionalHeads",
+      proposalId: "enacted",
+      revision: 1,
+      sinceTurn: 237,
+      receiptId: "installed",
+    };
+    expect(
+      await loadRussianCouncilOpeningBinding({
+        db,
+        country: country as unknown as Parameters<
+          typeof loadRussianCouncilOpeningBinding
+        >[0]["country"],
+        cohortId: rootCohortId,
+      })
+    ).toBeNull();
+    expect(await materializeRussianCouncilNpcAdmission(npc)).toBeNull();
+    expect(await validateRussianCouncilPlayerFiling(filing)).toMatchObject({
+      allowed: false,
+      reason: "unbound-mandate",
+    });
+    expect(mem.collection("electionCandidates").docs).toHaveLength(0);
+  });
 });

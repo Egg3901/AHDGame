@@ -1,10 +1,12 @@
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { NextResponse } from "next/server";
 import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug, listCaucusMemberships } from "@/lib/db/caucusLookup";
-import { getCountryConfig, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Bill, BillWhip } from "@/lib/db/types";
 import { resolveWhipIssuerRole } from "@/lib/partyWhips/issuerRole";
 import {
@@ -115,6 +117,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json(selectedStateId ? { stateSenate: [] } : {});
     }
 
+    const { config } = await loadRuntimeCountryOffices(db, countryId, gameStateForBills?.preset);
     const activeBills = selectedStateId
       ? await db
           .collection<Bill>("bills")
@@ -161,11 +164,9 @@ export async function GET(request: Request, { params }: RouteParams) {
                     countryId: { $exists: false },
                     currentChamber: {
                       $in: [
-                        getCountryConfig(countryId).legislature.lowerChamber.key,
-                        ...(getCountryConfig(countryId).upperElectionSystem
-                          ? ([getCountryConfig(countryId).legislature.upperChamber?.key].filter(
-                              Boolean
-                            ) as string[])
+                        config.legislature.lowerChamber.key,
+                        ...(getVotingUpperChamberKey(config)
+                          ? ([config.legislature.upperChamber?.key].filter(Boolean) as string[])
                           : []),
                       ],
                     },
@@ -268,17 +269,14 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const result: Record<string, BillWhipItem[]> = {};
-    const config = getCountryConfig(countryId);
     const lowerKey = config.legislature.lowerChamber.key;
-    const upperKey = config.upperElectionSystem
-      ? (config.legislature.upperChamber?.key ?? null)
-      : null;
+    const upperKey = getVotingUpperChamberKey(config);
     const chamberKeys = upperKey ? [upperKey, lowerKey] : [lowerKey];
     for (const chamberKey of chamberKeys) result[chamberKey] = [];
 
     for (const bill of activeBills) {
       const activeChambers: string[] = [];
-      if (bill.status === "veto_override") {
+      if (bill.status === "veto_override" || bill.status === "active_both") {
         activeChambers.push(...chamberKeys);
       } else if (bill.currentChamber && chamberKeys.includes(bill.currentChamber)) {
         activeChambers.push(bill.currentChamber);

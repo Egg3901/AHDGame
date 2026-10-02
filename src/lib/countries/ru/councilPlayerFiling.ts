@@ -59,6 +59,7 @@ export async function validateRussianCouncilPlayerFiling(input: {
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFirstCouncilElectionCohortId: 1,
+        ruCouncilComposition: 1,
         ruFirstDumaElectionCohortId: 1,
         ruDumaConvocationCohortId: 1,
         ruFederalAssemblySinceTurn: 1,

@@ -14,7 +14,13 @@ import {
   openRussianConstitutionalProposal,
   RussianConstitutionalDecisionConflict,
 } from "@/lib/countries/ru/constitutionalProposals";
-const bodySchema = z.object({ kind: z.enum(["presidency", "federalAssembly"]) }).strict();
+import {
+  loadRussianCouncilFormationDecisions,
+  openRussianCouncilFormationProposal,
+} from "@/lib/countries/ru/councilFormationProposals";
+const bodySchema = z
+  .object({ kind: z.enum(["presidency", "federalAssembly", "regionalHeads", "regionalDelegates"]) })
+  .strict();
 type RouteContext = { params: Promise<{ code: string }> };
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
@@ -29,7 +35,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const game = await getGameState(db);
     if (!game) return NextResponse.json({ decisions: [] });
     return NextResponse.json(
-      { decisions: await loadRussianConstitutionalDecisions(db, game, game.currentTurn ?? 1) },
+      {
+        decisions: [
+          ...(await loadRussianConstitutionalDecisions(db, game, game.currentTurn ?? 1)),
+          ...(await loadRussianCouncilFormationDecisions(db, game, game.currentTurn ?? 1)),
+        ],
+      },
       { headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
@@ -76,15 +87,18 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     const freeze = await checkLegislationFreeze("RU");
     if (!freeze.ok) return freeze.response;
-    const proposal = await openRussianConstitutionalProposal({
+    const input = {
       db,
       game,
       turn: game.currentTurn ?? 1,
       now: new Date(),
-      kind: parsed.data.kind,
       sponsor: official && character ? character : null,
       sponsorParty: typeof official?.party === "string" ? official.party : undefined,
-    });
+    };
+    const proposal =
+      parsed.data.kind === "regionalHeads" || parsed.data.kind === "regionalDelegates"
+        ? await openRussianCouncilFormationProposal({ ...input, mode: parsed.data.kind })
+        : await openRussianConstitutionalProposal({ ...input, kind: parsed.data.kind });
     return NextResponse.json(
       {
         billId: proposal.billId.toHexString(),

@@ -39,6 +39,7 @@ export async function processRuLegislatureTransition(
         ruSovietSuccessionSinceTurn: 1,
         ruFederalAssemblyMandateSinceTurn: 1,
         ruFederalAssemblySinceTurn: 1,
+        ruCouncilComposition: 1,
       },
     }
   );
@@ -55,17 +56,20 @@ export async function processRuLegislatureTransition(
   const seated = await runRequiredTransaction(
     async (session) => {
       const input = { db, session, turn: currentTurn, now };
-      if (!country.ruDumaConvocationCohortId)
+      if (!country.ruDumaConvocationCohortId) {
+        if (country.ruCouncilComposition) return false;
         return (
           country.ruFederalAssemblySinceTurn == null
             ? materializeRussianAssemblySeating
             : materializeRussianAssemblyVacancySeating
         )(input);
+      }
       // The outgoing first Assembly can still fill its own certified vacancies
       // during the next Duma campaign. Handover then uses the same transaction.
-      const firstDelta = !country.ruDumaCurrentConvocationCohortId
-        ? await materializeRussianAssemblyVacancySeating(input)
-        : false;
+      const firstDelta =
+        !country.ruDumaCurrentConvocationCohortId && !country.ruCouncilComposition
+          ? await materializeRussianAssemblyVacancySeating(input)
+          : false;
       const handover = await materializeRussianDumaConvocationSeating(input);
       return firstDelta || handover;
     },

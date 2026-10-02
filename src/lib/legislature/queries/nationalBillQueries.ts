@@ -2,6 +2,7 @@
  * National bills display the active legislature and its current voting mandates.
  * listNationalLegislatureBills and getNationalBillDetail preserve concluded snapshots and identify the active deputy or president controls.
  */
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUser } from "@/lib/auth";
 import { getPartyMap } from "@/lib/db/partyMap";
@@ -684,9 +685,7 @@ export async function getNationalBillDetail(
   const preset = await getGameStatePreset(db);
   const { config } = await loadRuntimeCountryOffices(db, country, preset);
   const lowerKey = config.legislature.lowerChamber.key;
-  const upperKey = config.upperElectionSystem
-    ? (config.legislature.upperChamber?.key ?? null)
-    : null;
+  const upperKey = getVotingUpperChamberKey(config);
 
   let myCharacterId: string | null = null;
   let isHouseMember = false;
