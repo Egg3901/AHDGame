@@ -171,7 +171,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^10.0.5",
     "d3-geo": "^3.1.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.11.0",
     "eslint-config-next": "16.3.5",
     "eslint-config-prettier": "^10.1.8",
     "happy-dom": "^20.11.6",
