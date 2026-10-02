@@ -58,7 +58,7 @@ async function main() {
           .collection<Document>("gameConfig")
           .insertOne({ _id: "default", ledgerShadow: mode !== "shadow_off", forexEnabled: true });
         created = true;
-        await db.collection<Document>("gameState").insertOne({
+        await db.collection<Document & { _id: string }>("gameState").insertOne({
           _id: "current",
           currentTurn: 49,
           currentYear: 1991,
