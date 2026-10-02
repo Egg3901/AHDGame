@@ -202,7 +202,10 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
                         },
                       ]
                     : []),
-                  { label: "Issued At Turn", value: `T${bond.issuedAtTurn}` },
+                  {
+                    label: "Issued At Turn",
+                    value: bond.issuedAtTurn < 0 ? "Before reset" : `T${bond.issuedAtTurn}`,
+                  },
                   { label: "Matures At Turn", value: `T${bond.maturityTurn}` },
                   { label: "Coupon / Turn", value: fmtBond(bond.perTurnCoupon) },
                   { label: "Total Interest Paid", value: fmtBond(bond.totalInterestPaid) },
