@@ -154,7 +154,7 @@ describe("1991-default seed bundles — coverage", () => {
     expect(totalByParty.get("ie_independent")).toBe(2);
   });
 
-  it("national budgets configs cover the full 1991 roster (incl. FR/IT/ES/SE/TR NPP tier)", () => {
+  it("national budgets configs cover the full 1991 roster, including Soviet and successor countries", () => {
     const configs = getNationalBudgetSeedConfigsForPreset("1991-default");
     const countries = new Set(configs.map((c) => c.countryId));
     expect(countries).toEqual(
@@ -175,6 +175,13 @@ describe("1991-default seed bundles — coverage", () => {
         "AT",
         "FI",
         "GR",
+        "RU",
+        "PL",
+        "CS",
+        "HU",
+        "RO",
+        "BG",
+        "YU",
       ])
     );
   });

@@ -224,7 +224,10 @@ export async function purchaseBondUnitsForFund(
     if (options?.turn !== undefined) {
       const ledgerEntry = bondPurchaseLedgerEntry(fund, planned.plan, options.turn, now);
       if (options.ledgerSink) options.ledgerSink.push(ledgerEntry);
-      else await emitTx(db, ledgerEntry, options.thresholds, options.turnLengthMinutes);
+      else
+        await emitTx(db, ledgerEntry, options.thresholds, {
+          turnLengthMinutes: options.turnLengthMinutes,
+        });
     }
 
     return { ok: true, units: affordableUnits, costAnchor, markedValueAnchor, bondId: bond._id };

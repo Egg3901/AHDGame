@@ -25,7 +25,6 @@ import type {
   GameConfig,
   IndexFund,
   IndexFundHolding,
-  IndexFundRedemptionQueueEntry,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
@@ -37,18 +36,12 @@ import {
   updateFundNav,
   updateFundConstituents,
   updateFundHoldings,
-  listPendingRedemptions,
   insertFundTransaction,
   insertFundSnapshot,
   setFundStatus,
-  FUND_REDEMPTION_QUEUE_COLLECTION,
   insertFundTransactionsBulk,
 } from "@/lib/indexFunds/fundQueries";
-import {
-  calculateBackingRatio,
-  quoteCashOnlyRedemption,
-  proRataRedemptionCashShare,
-} from "@/lib/indexFunds/unitAccounting";
+import { calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
 import {
   buildIndexFundTargetConstituents,
   type IndexFundCandidate,
@@ -81,10 +74,8 @@ import {
   sumFundBondHoldingsByFundId,
   sumFundBondHoldingsValueAnchor,
 } from "@/lib/bonds/fundBondHoldings";
-import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import {
   corpLiquidCapitalToAnchor,
   resolveCorpLiquidCurrencyCode,
@@ -102,11 +93,6 @@ import {
 } from "@/lib/indexFunds/fundCrossRebalancing";
 import { findRemovedConstituentHoldings } from "@/lib/indexFunds/fundConstituentLifecycle";
 import { writeOffDeadConstituentHoldings } from "@/lib/indexFunds/fundHoldingWriteOff";
-import {
-  redemptionEntryStatusAfterPayout,
-  remainingRedemptionUnits,
-} from "@/lib/indexFunds/fundRedemptionQueue";
-import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
 import { emitTx, emitTxBulk, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
@@ -119,7 +105,7 @@ import {
   INDEX_FUND_BID_MAX_OPEN_TURNS,
 } from "@/lib/indexFunds/fundBidPolicy";
 import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { EquityMarketPool, IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types";
 import {
@@ -135,6 +121,8 @@ import {
 import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
 import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
+import { processQueuedRedemptions } from "@/lib/indexFunds/fundCronRedemptions";
+export * from "@/lib/indexFunds/fundCronRedemptions";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -1015,362 +1003,6 @@ export async function rebalanceConstituents(
     writtenOffValueAnchor: writeOff.writtenOffValueAnchor,
     unsellableCount: writeOff.unsellableCount,
   };
-}
-
-// ── Pass 3c: Process queued redemptions ───────────────────────────────
-
-export async function processQueuedRedemptions(
-  db: Db,
-  fund: IndexFund,
-  forexEnabled: boolean,
-  currentTurn: number
-): Promise<number> {
-  const pending = await listPendingRedemptions(db, fund._id);
-  if (pending.length === 0) return 0;
-
-  // #992 tranche 6: one batched NPP lookup for the pass so each NPP
-  // redemption below can be denominated in the NPP home currency (the
-  // npp:<id>:<homeCurrency> snapshot key) without a per-entry read.
-  const nppCurrencyById = new Map<string, CurrencyCode>();
-  const queuedNppObjectIds = pending.flatMap((e) => (e.nppId ? [e.nppId] : []));
-  if (queuedNppObjectIds.length > 0) {
-    const nppDocs = await db
-      .collection<{ _id: ObjectId; countryId?: string }>("npps")
-      .find({ _id: { $in: queuedNppObjectIds } })
-      .project({ countryId: 1 })
-      .toArray();
-    for (const doc of nppDocs) {
-      const cur = COUNTRY_CURRENCY_MAP[doc.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
-      nppCurrencyById.set(doc._id.toString(), cur);
-    }
-  }
-
-  // Wallet credits are in the fund's native currency; the ₳ → native multiplier
-  // is stamped on each queue entry at request time (entry.redeemFxRate, ticket
-  // #857 grandfather) — 1 for pre-fix legacy units, the fund rate for post-fix
-  // units. Fund `cashAnchor` and NPP investment cash stay in ₳. We still gate on
-  // rate availability so a momentary outage defers rather than risks a bad payout.
-  if (forexEnabled) {
-    const fxResult = await loadCharacterFxRate(db, fund.anchorCurrencyCode);
-    if (!fxResult.ok) {
-      // Rate unavailable — defer payouts to a later cycle.
-      console.warn(
-        `[indexfund-cron] deferring ${pending.length} queued redemption(s) for ${fund.slug}: FX rate for ${fund.anchorCurrencyCode} unavailable`
-      );
-      return 0;
-    }
-  }
-
-  let paid = 0;
-  let fundState = fund;
-  let availableCash = fund.cashAnchor;
-  // #992 tranche 6: thresholds for the bond-sale ledger rows below, loaded
-  // at most once per redemption pass and only when a bond sale actually runs.
-  let bondSaleThresholds: Awaited<ReturnType<typeof loadTxThresholds>> | undefined;
-
-  // Units still unserved in this pass. Decremented as each entry is handled so
-  // the share is measured against who is still waiting, not the original queue.
-  let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
-
-  for (const pendingEntry of pending) {
-    // Claim before any fund debit or holder credit. If a later write fails, a
-    // processing row is quarantined for manual reconciliation instead of being
-    // paid a second time on the next turn. Automatic replay is unsafe because a
-    // crash can occur on either side of the holder credit.
-    const entry = await db
-      .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
-      .findOneAndUpdate(
-        {
-          _id: pendingEntry._id,
-          status: pendingEntry.status,
-          units: pendingEntry.units,
-          paidAmountAnchor: pendingEntry.paidAmountAnchor,
-        },
-        { $set: { status: "processing", processingStartedAt: new Date(), updatedAt: new Date() } },
-        { returnDocument: "before" }
-      );
-    if (!entry) continue;
-    const restoreQueueClaim = async () => {
-      await db
-        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
-        .updateOne(
-          { _id: entry._id, status: "processing" },
-          {
-            $set: { status: entry.status, updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
-          }
-        );
-    };
-
-    const unitsRemaining = remainingRedemptionUnits(entry);
-    if (unitsRemaining <= 0) {
-      await db
-        .collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION)
-        .updateOne(
-          { _id: entry._id, status: "processing" },
-          {
-            $set: { status: "paid", updatedAt: new Date() },
-            $unset: { processingStartedAt: "" },
-          }
-        );
-      continue;
-    }
-
-    // Forward pricing. The payout is struck at the fund's CURRENT NAV, never at
-    // `requestedNavAnchor` (kept only as the record of what was quoted at
-    // request). Honouring a locked price across many turns is what let one
-    // GLB50 holder draw 2.46B out of a fund whose assets were falling under
-    // them, because their claim stayed fixed in cash terms while everyone
-    // else's shrank. A real open-end fund forward-prices for exactly this
-    // reason: a redemption spanning several valuation points gets each point's
-    // NAV, so the redeemer carries the market like every other holder.
-    const redemptionNav = fundState.quotedNav;
-    if (!Number.isFinite(redemptionNav) || redemptionNav <= 0) {
-      await restoreQueueClaim();
-      break;
-    }
-
-    const entryObligation = unitsRemaining * redemptionNav;
-    if (availableCash < entryObligation && fundState.holdings.length > 0) {
-      await sellFundHoldingsForRedemptionCash(db, fundState, entryObligation - availableCash, {
-        note: "Queued redemption liquidity",
-      });
-      fundState = (await getFundById(db, fund._id)) ?? fundState;
-      availableCash = fundState.cashAnchor;
-    }
-    // Bonds are the next line of liquidity: sold to the market pool at its
-    // bid, as far as the pool can pay. The only line for a bond fund.
-    if (availableCash < entryObligation) {
-      bondSaleThresholds ??= await loadTxThresholds(db);
-      const bondSale = await sellFundBondHoldingsForCash(
-        db,
-        fundState,
-        entryObligation - availableCash,
-        new Date(),
-        { turn: currentTurn, thresholds: bondSaleThresholds }
-      );
-      if (bondSale.proceedsAnchor > 0) {
-        fundState = (await getFundById(db, fund._id)) ?? fundState;
-        availableCash = fundState.cashAnchor;
-      }
-    }
-
-    if (availableCash <= 0) {
-      await restoreQueueClaim();
-      break;
-    }
-
-    // Pro-rata gate: never let one entry consume the book while others wait.
-    // Measured against cash available now, after any liquidation above.
-    const cashForThisEntry = proRataRedemptionCashShare({
-      entryUnits: unitsRemaining,
-      unservedUnits,
-      availableCashAnchor: availableCash,
-    });
-    unservedUnits = Math.max(0, unservedUnits - unitsRemaining);
-
-    const quote = quoteCashOnlyRedemption({
-      quotedNav: redemptionNav,
-      requestedUnits: unitsRemaining,
-      cashAnchor: cashForThisEntry,
-    });
-
-    if (quote.redeemableUnits <= 0) {
-      // This entry's pro-rata slice will not buy a whole unit. That says
-      // nothing about the next entry, and the genuinely-out-of-cash case
-      // already broke out above, so move on rather than starving the queue.
-      await restoreQueueClaim();
-      continue;
-    }
-
-    const paidAmount = quote.paidAmountAnchor;
-    // Native-currency equivalent for personal wallet credits (₳ × blended rate).
-    // Absent redeemFxRate = pre-fix queue row → credit rate-free (× 1), matching
-    // what the holder was owed under the old symmetric-scale code (no windfall).
-    const redeemFxRate = entry.redeemFxRate ?? 1;
-    const paidNative = forexEnabled ? paidAmount * redeemFxRate : paidAmount;
-
-    // New queue rows burned units at request time; legacy rows burn as they pay.
-    const shouldBurnUnitsNow = entry.unitsBurnedAtRequest !== true;
-    const debitFilter: Record<string, unknown> = {
-      _id: fund._id,
-      cashAnchor: { $gte: paidAmount },
-    };
-    const debitInc: Record<string, number> = { cashAnchor: -paidAmount };
-    if (shouldBurnUnitsNow) {
-      debitFilter.unitSupply = { $gte: quote.redeemableUnits };
-      debitInc.unitSupply = -quote.redeemableUnits;
-    }
-
-    // Guarded debit: only pay out if the fund still holds enough cash. Legacy
-    // queued rows also require supply because their units were not burned yet.
-    const debitResult = await db.collection<IndexFund>("indexFunds").updateOne(debitFilter, {
-      $inc: debitInc,
-      $set: { updatedAt: new Date() },
-    });
-    if (debitResult.matchedCount === 0) {
-      await restoreQueueClaim();
-      break;
-    }
-    availableCash -= paidAmount;
-
-    if (entry.characterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("characters")
-        .updateOne({ _id: entry.characterId }, { $inc: inc, $set: { updatedAt: new Date() } });
-      if (creditResult.matchedCount === 0) {
-        // Character gone — refund the fund cash and skip this entry
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else if (entry.imperialCharacterId) {
-      const inc = buildPersonalBalanceInc(paidNative, fundState.anchorCurrencyCode, forexEnabled);
-      const creditResult = await db
-        .collection("imperialCharacters")
-        .updateOne(
-          { _id: entry.imperialCharacterId },
-          { $inc: inc, $set: { updatedAt: new Date() } }
-        );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else if (entry.nppId) {
-      const creditResult = await db.collection("npps").updateOne(
-        { _id: entry.nppId },
-        {
-          $inc: { nppInvestmentCashAnchor: paidAmount },
-          $set: { updatedAt: new Date() },
-        }
-      );
-      if (creditResult.matchedCount === 0) {
-        await db.collection<IndexFund>("indexFunds").updateOne(
-          { _id: fund._id },
-          {
-            $inc: {
-              cashAnchor: paidAmount,
-              ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-            },
-          }
-        );
-        await restoreQueueClaim();
-        continue;
-      }
-    } else {
-      await db.collection<IndexFund>("indexFunds").updateOne(
-        { _id: fund._id },
-        {
-          $inc: {
-            cashAnchor: paidAmount,
-            ...(shouldBurnUnitsNow ? { unitSupply: quote.redeemableUnits } : {}),
-          },
-        }
-      );
-      await restoreQueueClaim();
-      continue;
-    }
-
-    const remainingAfterPay = quote.queuedUnits;
-    await db.collection<IndexFundRedemptionQueueEntry>(FUND_REDEMPTION_QUEUE_COLLECTION).updateOne(
-      { _id: entry._id, status: "processing" },
-      {
-        $set: {
-          status: redemptionEntryStatusAfterPayout(remainingAfterPay),
-          paidAmountAnchor: (entry.paidAmountAnchor ?? 0) + paidAmount,
-          units: remainingAfterPay,
-          requestedAmountAnchor: remainingAfterPay * redemptionNav,
-          updatedAt: new Date(),
-        },
-        $unset: { processingStartedAt: "" },
-      }
-    );
-
-    await insertFundTransaction(db, {
-      fundId: fund._id,
-      kind: "redemption",
-      holderKind: entry.holderKind,
-      characterId: entry.characterId,
-      imperialCharacterId: entry.imperialCharacterId,
-      nppId: entry.nppId,
-      units: quote.redeemableUnits,
-      navAnchor: redemptionNav,
-      amountAnchor: paidAmount,
-      note: "Paid from queued redemption",
-      createdAt: new Date(),
-    });
-
-    // #992 tranche 6: the NPP credit above moved nppInvestmentCashAnchor, and
-    // unlike the character/imperial legs (which logIndexFundRedeem evidences)
-    // it had no ledger row, so every queue-paid NPP redemption read as an
-    // unexplained NPP inflow. One npp-subject index_fund_redeem row per paid
-    // NPP entry, denominated in the NPP home currency from the batched lookup
-    // with the ₳ value stated outright. The shadow ledger mirrors the fund
-    // cash side off meta when the currencies match (same convention as the
-    // NPP subscribe rows); a cross-currency pair stays single-sided under
-    // fund_redemption, never guessed. Emitted here, after the queue row and
-    // the fund transaction both landed, so a retry can never double-book it.
-    if (entry.nppId) {
-      const nppCurrency = nppCurrencyById.get(entry.nppId.toString()) ?? "USD";
-      await emitTx(db, {
-        type: "index_fund_redeem",
-        turn: currentTurn,
-        createdAt: new Date(),
-        subjectType: "npp",
-        subjectId: entry.nppId,
-        subjectName: `NPP ${entry.nppId.toString()}`,
-        amount: paidAmount,
-        anchorAmount: paidAmount,
-        currencyCode: nppCurrency,
-        counterpartyType: "system",
-        counterpartyName: fund.name,
-        meta: {
-          fundId: fund._id.toString(),
-          fundCurrency: fund.anchorCurrencyCode,
-          units: quote.redeemableUnits,
-          source: "cron_queue",
-        },
-      });
-    }
-
-    if (entry.holderKind === "character" || entry.holderKind === "imperial_character") {
-      const holder = await resolveIndexFundHolder(db, entry);
-      if (holder) {
-        void logIndexFundRedeem(db, {
-          fund: fundState,
-          holder,
-          units: quote.redeemableUnits,
-          navAnchor: redemptionNav,
-          amountAnchor: paidAmount,
-          source: "cron_queue",
-          queuedRemainder: remainingAfterPay,
-          turn: currentTurn,
-        });
-      }
-    }
-
-    paid++;
-  }
-
-  return paid;
 }
 
 // ── Main engine ───────────────────────────────────────────────────────

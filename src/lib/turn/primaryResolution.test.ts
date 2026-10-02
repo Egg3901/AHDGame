@@ -44,7 +44,8 @@ vi.mock("@/lib/primaryScore", () => ({
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
   getAllStateApprovalsForElection: vi.fn().mockResolvedValue(new Map()),
 }));
-vi.mock("@/lib/utils/electionLabels", () => ({
+vi.mock("@/lib/utils/electionLabels", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils/electionLabels")>()),
   formatElectionTypeLabel: vi.fn().mockReturnValue("Senate"),
 }));
 
@@ -79,86 +80,136 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
   });
 
-  it("records primaryResults for uncontested parties without eliminating anyone", async () => {
-    const electionId = new ObjectId();
-    const election = {
-      _id: electionId,
-      electionType: "senate",
-      status: "active",
-      countryId: "US",
-      state: "CA",
-      primaryEndTime: new Date(NOW.getTime() - 1000),
-      endTime: new Date(NOW.getTime() + 100000),
-    };
+  it.each(["regional", "Russian presidency", "Duma list", "Council subject"])(
+    "records uncontested %s primary results without US delegates",
+    async (kind) => {
+      const electionId = new ObjectId();
+      const election = {
+        _id: electionId,
+        electionType:
+          kind === "regional"
+            ? "senate"
+            : kind === "Duma list"
+              ? "dumaDeputy"
+              : kind === "Council subject"
+                ? "federationCouncilMember"
+                : "president",
+        status: "active",
+        countryId: kind === "regional" ? "US" : "RU",
+        state: kind === "regional" ? "CA" : kind === "Council subject" ? "CEN" : "RU",
+        ...(kind === "Duma list"
+          ? {
+              seatId: "RU-duma-national-list",
+              totalSeats: 225,
+              russianDumaRound: {
+                cohortId: new ObjectId(),
+                mandateSinceTurn: 72,
+                tier: "list",
+                registeredVoters: 1000,
+              },
+            }
+          : {}),
+        ...(kind === "Council subject"
+          ? {
+              seatId: "RU-council-77",
+              totalSeats: 2,
+              russianCouncilRound: {
+                cohortId: new ObjectId(),
+                mandateSinceTurn: 72,
+                registeredVoters: 1000,
+                districtNumber: 77,
+              },
+            }
+          : {}),
+        primaryEndTime: new Date(NOW.getTime() - 1000),
+        endTime: new Date(NOW.getTime() + 100000),
+      };
 
-    const candidate1 = {
-      _id: new ObjectId(),
-      electionId,
-      party: "DEM",
-      characterName: "Alice",
-      characterId: new ObjectId(),
-      isNPP: false,
-      status: "active",
-    };
-    const candidate2 = {
-      _id: new ObjectId(),
-      electionId,
-      party: "GOP",
-      characterName: "Bob",
-      characterId: new ObjectId(),
-      isNPP: false,
-      status: "active",
-    };
+      const candidate1 = {
+        _id: new ObjectId(),
+        electionId,
+        party: "DEM",
+        characterName: "Alice",
+        characterId: new ObjectId(),
+        isNPP: false,
+        status: "active",
+      };
+      const secondOwner = new ObjectId();
+      const candidate2 = {
+        _id: new ObjectId(),
+        electionId,
+        party: kind === "Duma list" || kind === "Council subject" ? "DEM" : "GOP",
+        characterName: "Bob",
+        characterId: secondOwner,
+        isNPP: kind === "Duma list",
+        ...(kind === "Duma list"
+          ? {
+              nppId: secondOwner,
+              russianDumaNomination: {
+                registrationOrder: 10,
+                nominationOrder: Number.MAX_SAFE_INTEGER,
+                capacity: 225,
+              },
+            }
+          : {}),
+        status: "active",
+      };
 
-    // elections.find returns our election
-    db.collectionMocks["elections"] = db.collection("elections");
-    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+      // elections.find returns our election
+      db.collectionMocks["elections"] = db.collection("elections");
+      db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
 
-    // parties
-    db.collectionMocks["politicalParties"] = db.collection("politicalParties");
-    db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
+      // parties
+      db.collectionMocks["politicalParties"] = db.collection("politicalParties");
+      db.collectionMocks["politicalParties"].find.mockReturnValue(makeCursor([]));
 
-    // candidates — one per party
-    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
-    db.collectionMocks["electionCandidates"].find.mockReturnValue(
-      makeCursor([candidate1, candidate2])
-    );
+      // candidates — one per party
+      db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+      db.collectionMocks["electionCandidates"].find.mockReturnValue(
+        makeCursor([candidate1, candidate2])
+      );
 
-    const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
-    vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
-      [candidate1, candidate2].map((c) => ({
-        candidateId: c._id.toString(),
-        charEP: 0,
-        charSP: 0,
-        favorability: 50,
-        politicalInfluence: 100,
-      })) as never
-    );
-    const { calcPrimaryScore } = await import("@/lib/primaryScore");
-    vi.mocked(calcPrimaryScore).mockReturnValue(50);
+      const { fetchEnrichedCandidates } = await import("@/lib/electionEngine");
+      vi.mocked(fetchEnrichedCandidates).mockResolvedValue(
+        [candidate1, candidate2].map((c) => ({
+          candidateId: c._id.toString(),
+          charEP: 0,
+          charSP: 0,
+          favorability: 50,
+          politicalInfluence: 100,
+        })) as never
+      );
+      const { calcPrimaryScore } = await import("@/lib/primaryScore");
+      vi.mocked(calcPrimaryScore).mockReturnValue(50);
 
-    db.collectionMocks["characters"] = db.collection("characters");
-    db.collectionMocks["characters"].find.mockReturnValue(
-      makeCursor(
-        [candidate1, candidate2].map((c) => ({ _id: c.characterId, userId: new ObjectId() }))
-      )
-    );
-    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
-    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
+      db.collectionMocks["characters"] = db.collection("characters");
+      db.collectionMocks["characters"].find.mockReturnValue(
+        makeCursor(
+          [candidate1, candidate2].map((c) => ({ _id: c.characterId, userId: new ObjectId() }))
+        )
+      );
+      db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+      db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
-    await resolvePrimariesIfNeeded(NOW, 100);
+      const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
+      await resolvePrimariesIfNeeded(NOW, 100);
 
-    // No withdrawals — each party already at/under the advance cap
-    expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
-    // But still stamp primaryResults so districted house (and similar) can split
-    // seats by primary share rather than falling back to general-vote share.
-    const { initElectionVoteTally } = await import("@/lib/electionEngine");
-    expect(initElectionVoteTally).toHaveBeenCalled();
-    const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
-    expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
-    expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
-  });
+      // No withdrawals — each party already at/under the advance cap
+      expect(db.collectionMocks["electionCandidates"].updateMany).not.toHaveBeenCalled();
+      // But still stamp primaryResults so districted house (and similar) can split
+      // seats by primary share rather than falling back to general-vote share.
+      const { initElectionVoteTally } = await import("@/lib/electionEngine");
+      expect(initElectionVoteTally).toHaveBeenCalled();
+      const { initPresidentVoteTally } = await import("@/lib/presidentialElectionEngine");
+      expect(initPresidentVoteTally).not.toHaveBeenCalled();
+      const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
+      expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
+      if (kind === "Duma list" || kind === "Council subject") {
+        expect(primaryResults?.byParty?.DEM).toHaveLength(2);
+        expect(primaryResults?.byParty?.DEM?.every((row) => row.won)).toBe(true);
+      } else expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);
+    }
+  );
 
   it("eliminates lowest-scoring candidates in a contested primary", async () => {
     const electionId = new ObjectId();
@@ -1330,6 +1381,148 @@ describe("accumulateGeneralElectionVotes", () => {
     expect(options?.preload?.turnoutByState.get("IE")?.modifiers.ie_voterGroups.urban).toBeCloseTo(
       1
     );
+  });
+
+  it("preloads a frozen Duma national electorate from batched regional reads", async () => {
+    const electionId = new ObjectId();
+    const election = {
+      _id: electionId,
+      electionType: "dumaDeputy",
+      seatId: "RU-duma-national-list",
+      totalSeats: 225,
+      russianDumaRound: {
+        cohortId: new ObjectId(),
+        tier: "list",
+        mandateSinceTurn: 72,
+        registeredVoters: 250,
+      },
+      status: "active",
+      countryId: "RU",
+      state: "RU",
+      primaryEndTime: new Date(NOW.getTime() - 10_000),
+      endTime: new Date(NOW.getTime() + 100_000),
+    };
+    const candidate = {
+      _id: new ObjectId(),
+      electionId,
+      party: "1",
+      characterName: "Ronan",
+      characterId: new ObjectId(),
+      isNPP: false,
+      status: "active",
+    };
+    const states = [
+      {
+        _id: "DUB",
+        countryId: "RU",
+        name: "Dublin",
+        population: 100,
+        votingEligiblePopulation: 80,
+        gdp: 10,
+        houseDistricts: 1,
+        stateSenateSeats: 1,
+        region: "Leinster",
+      },
+      {
+        _id: "COR",
+        countryId: "RU",
+        name: "Cork",
+        population: 300,
+        votingEligiblePopulation: 240,
+        gdp: 20,
+        houseDistricts: 1,
+        stateSenateSeats: 1,
+        region: "Munster",
+      },
+    ];
+    const demographics = [
+      {
+        _id: "DUB",
+        countryId: "RU",
+        categoryWeights: { ie_voterGroups: 100 },
+        groups: {
+          urban: { population: 70, economicLean: -2, socialLean: -1, turnout: 60 },
+          rural: { population: 30, economicLean: 2, socialLean: 1, turnout: 80 },
+        },
+        lastUpdated: NOW,
+      },
+      {
+        _id: "COR",
+        countryId: "RU",
+        categoryWeights: { ie_voterGroups: 100 },
+        groups: {
+          urban: { population: 30, economicLean: -1, socialLean: 0, turnout: 50 },
+          rural: { population: 70, economicLean: 1, socialLean: 2, turnout: 70 },
+        },
+        lastUpdated: NOW,
+      },
+    ];
+    const turnout = states.map((state, index) => ({
+      _id: state._id,
+      countryId: "RU",
+      modifiers: { ie_voterGroups: { urban: index === 0 ? 4 : 0, rural: 0 } },
+      lastDecayApplied: NOW,
+      lastUpdated: NOW,
+    }));
+    const partyOrgs = states.map((state, index) => ({
+      _id: `${state._id}_1`,
+      countryId: "RU",
+      stateId: state._id,
+      partyId: "1",
+      organization: index === 0 ? 20 : 80,
+      chairId: null,
+      viceChairId: null,
+      treasurerId: null,
+      treasury: 0,
+      stateTaxRate: 0,
+      politicalStrength: 0,
+      updatedAt: NOW,
+      hasPresence: true,
+    }));
+
+    db.collectionMocks["elections"] = db.collection("elections");
+    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+    db.collectionMocks["demographicCategories"] = db.collection("demographicCategories");
+    db.collectionMocks["demographicCategories"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["states"] = db.collection("states");
+    db.collectionMocks["states"].find.mockReturnValue(makeCursor(states));
+    db.collectionMocks["stateDemographics"] = db.collection("stateDemographics");
+    db.collectionMocks["stateDemographics"].find.mockReturnValue(makeCursor(demographics));
+    db.collectionMocks["statePartyOrg"] = db.collection("statePartyOrg");
+    db.collectionMocks["statePartyOrg"].find.mockReturnValue(makeCursor(partyOrgs));
+    db.collectionMocks["stateDemographicTurnout"] = db.collection("stateDemographicTurnout");
+    db.collectionMocks["stateDemographicTurnout"].find.mockReturnValue(makeCursor(turnout));
+    db.collectionMocks["demographicDefaults"] = db.collection("demographicDefaults");
+    db.collectionMocks["demographicDefaults"].find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+      makeCursor([{ _id: new ObjectId(), electionId }])
+    );
+    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+    db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
+
+    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
+    await accumulateGeneralElectionVotes(NOW, 10);
+
+    const { accumulateVoteTurn } = await import("@/lib/electionEngine");
+    const options = vi.mocked(accumulateVoteTurn).mock.calls[0]?.[3];
+    expect(options?.preload?.stateMap.get("RU")).toMatchObject({
+      _id: "RU",
+      countryId: "RU",
+      population: 400,
+      votingEligiblePopulation: 250,
+      votingSystem: "fptp",
+    });
+    expect(options?.preload?.demographicsMap.get("RU")?.groups.urban.population).toBeCloseTo(40);
+    expect(options?.preload?.statePartyOrgsByState.get("RU")?.[0]?.organization).toBeCloseTo(65);
+    expect(options?.preload?.turnoutByState.get("RU")?.modifiers.ie_voterGroups.urban).toBeCloseTo(
+      1
+    );
+    expect(options?.preload?.registrationPoolByState?.get("RU")?.unregistered).toBe(0);
+    expect(db.collectionMocks.states.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.states.find.mock.calls[0][0]).toEqual({
+      $or: [{ _id: { $in: ["RU"] } }, { countryId: { $in: ["RU"] } }],
+    });
   });
 
   it("uses presidential engine for president elections", async () => {

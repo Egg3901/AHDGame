@@ -50,9 +50,12 @@ export const ELECTION_TYPE_LABEL_MAP: Record<string, string> = {
   landAssembly: "Landtag",
   // Eastern bloc Tier-1 unicameral assemblies
   sejm: "Sejm",
+  senat: "Senate",
   chamberOfThePeople: "Chamber of the People",
+  chamberOfNations: "Chamber of Nations",
   nationalAssembly: "National Assembly",
   grandNationalAssembly: "Grand National Assembly",
+  chamberOfDeputies: "Assembly of Deputies",
   federalAssembly: "Federal Assembly",
   // IE offices
   dail: "Dáil Éireann",
@@ -102,9 +105,12 @@ export const ELECTION_TYPE_SHORT_LABEL: Record<string, string> = {
   republicSupremeSoviet: "Republic Soviet",
   // Eastern bloc Tier-1 unicameral assemblies
   sejm: "Sejm",
+  senat: "Senate",
   chamberOfThePeople: "Chamber of the People",
+  chamberOfNations: "Chamber of Nations",
   nationalAssembly: "National Assembly",
   grandNationalAssembly: "Grand National Assembly",
+  chamberOfDeputies: "Deputies",
   federalAssembly: "Federal Assembly",
   // IE offices
   dail: "Dáil",
@@ -236,8 +242,10 @@ export const MULTI_SEAT_TYPES: ReadonlySet<string> = new Set([
   // Eastern bloc Tier-1 unicameral assemblies (DD multi-seat regional pattern).
   "sejm",
   "chamberOfThePeople",
+  "chamberOfNations",
   "nationalAssembly",
   "grandNationalAssembly",
+  "chamberOfDeputies",
   "federalAssembly",
   "sejmDeputy",
   "assemblyDeputy",
@@ -308,8 +316,10 @@ const CHAMBER_KEY_TO_OFFICE_TYPE: Readonly<Record<string, string>> = {
   // these are fallbacks for chamber-key election types.
   sejm: "sejmDeputy",
   chamberOfThePeople: "assemblyDeputy",
+  chamberOfNations: "nationsDeputy",
   nationalAssembly: "assemblyDelegate",
   grandNationalAssembly: "assemblyDeputy",
+  chamberOfDeputies: "deputy",
   federalAssembly: "assemblyDelegate",
 };
 

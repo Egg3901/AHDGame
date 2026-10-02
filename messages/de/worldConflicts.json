@@ -7,6 +7,31 @@
       "warsLabel": "KRIEGE",
       "warsDetail": "{active, plural, one {# aktiv} other {# aktiv}}, {nuclear, plural, one {# nuklear} other {# nuklear}}",
       "warsHelp": "Jeder aktive Krieg auf der Konfliktseite erhöht den Mindestwert entsprechend seiner Intensität. Jeder Krieg mit Atommächten auf gegnerischen Seiten garantiert mindestens die Krisenstufe. Andere Kriege werden nach ihrer Intensität gewichtet."
+    },
+    "federationFinances": {
+      "title": "Finanzen der Föderationsauflösung",
+      "accounting": "Beträge werden in der gemeinsamen Rechnungseinheit angezeigt. Bestehende Anleihen behalten ihren Emittenten und ihre Währung.",
+      "administration": "Abwicklungsverwaltung {source}, Runde {turn}",
+      "creditorDue": "Fällige Gläubigerzahlung",
+      "overdraft": "Offener Überziehungskredit",
+      "cash": "Kassenbestand der Verwaltung",
+      "successor": "Nachfolgestaat",
+      "contribution": "Beitrag in dieser Runde",
+      "arrears": "Offene Rückstände",
+      "risk": "Unbezahlte Beiträge senken die Stabilität der Nachfolgestaaten. Spätere Beiträge tilgen den Überziehungskredit."
+    },
+    "federationDecisions": {
+      "assets": "Anteile am öffentlichen Finanzvermögen",
+      "debt": "Anteile an Staatsschulden und Kassendefizit",
+      "population": "Aktuelle Bevölkerungsanteile verwenden",
+      "negotiated": "Ausgehandelte Anteile vorschlagen",
+      "totalRequired": "Gib jeden Nachfolgestaat an. Jede Aufteilung muss insgesamt 100 Prozent ergeben.",
+      "percentLabel": "Anteil von {entity} (%)",
+      "share": "{entity}: {share}",
+      "consentStatus": "{entity}: {choice}",
+      "approved": "zugestimmt",
+      "rejected": "abgelehnt",
+      "freshVote": "Überarbeitete Bedingungen erfordern eine neue Abstimmung und die erneute Zustimmung aller Nachfolgestaaten. Frühere Zustimmungen werden nicht übernommen."
     }
   }
 }

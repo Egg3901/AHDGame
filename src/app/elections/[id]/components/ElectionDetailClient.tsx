@@ -1,5 +1,6 @@
 "use client";
 
+import { Hu1991ConstituencyPicker } from "./Hu1991ConstituencyPicker";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
@@ -254,12 +255,21 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     };
   }, [fetchElection, fetchWire]);
 
+  const [huDistrictId, setHuDistrictId] = useState("");
   const handleEnter = async () => {
     if (!election) return;
     if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/elections/${id}/enter`, { method: "POST" });
+      const res = await fetch(`/api/elections/${id}/enter`, {
+        method: "POST",
+        ...(election.hungarianAssemblyRound?.round === 1 && huDistrictId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ constituencyId: huDistrictId }),
+            }
+          : {}),
+      });
       const data = await res.json();
       if (res.ok) {
         showToast(data.message ?? "Entered race", "success");
@@ -415,6 +425,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // EV bar, a state tile board and persuasion drivers. Down-ballot races have
   // no college, so they keep the existing view.
   if (
+    election.countryId !== "RU" &&
     election.electionType === "president" &&
     isGeneralPhase &&
     !localIsEnded &&
@@ -438,6 +449,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="The full map, the trends, and your campaign operations."
         >
+          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+            <Hu1991ConstituencyPicker
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -496,7 +514,12 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // Proposal D covers the presidential primary specifically: a delegate race
   // across party fields. Down-ballot races have no delegate model, so they keep
   // the existing view.
-  if (election.electionType === "president" && localInPrimary && !localIsUpcoming) {
+  if (
+    election.countryId !== "RU" &&
+    election.electionType === "president" &&
+    localInPrimary &&
+    !localIsUpcoming
+  ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}
@@ -506,6 +529,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="Filing, the state map, and your campaign operations."
         >
+          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+            <Hu1991ConstituencyPicker
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -566,6 +596,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         <ElectionNavigation election={election} />
 
+        {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+          <Hu1991ConstituencyPicker
+            regionId={election.state}
+            value={huDistrictId}
+            onChange={setHuDistrictId}
+          />
+        )}
         <ElectionHeader
           election={election}
           electionYear={electionYear}

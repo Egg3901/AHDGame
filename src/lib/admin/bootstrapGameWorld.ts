@@ -16,6 +16,7 @@ import {
   ensureJPCouncillorElections,
   ensureDEElections,
   ensureBRElections,
+  ensureBRGovernorElections,
   ensureNGElections,
   ensureIEElections,
   ensureIEUachtaranElections,
@@ -205,6 +206,10 @@ import { seedEasternBlocCountry, seedEasternBlocBudget } from "@/lib/admin/seed/
 import { seedEasternBlocStatePartyOrg } from "@/lib/admin/seed/seedEasternBlocStatePartyOrg";
 import { seedCountryGameStates } from "@/lib/admin/seed/seedCountryGameStates";
 import { seedMacroCountries } from "@/lib/world/macro";
+import {
+  FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION,
+  WORLD_ENTITY_STATES_COLLECTION,
+} from "@/lib/world/succession/runtimeEntities";
 import { getHuSeedConfig } from "@/lib/seeds/hu/huSeed";
 import { getPlSeedConfig } from "@/lib/seeds/pl/plSeed";
 import { getRoSeedConfig } from "@/lib/seeds/ro/roSeed";
@@ -547,9 +552,81 @@ export async function seedAllCountryData(
       // one-party each and share this one.
       await seedEasternBlocStatePartyOrg(db, resetReference, log, preset);
     })(),
+    pack(async (log) => {
+      if (preset !== "2027-default") return;
+      const {
+        seedHURegions,
+        seedHUParties,
+        seedHUDemographics,
+        seedHUStateMetrics,
+        seedHUBaselines,
+        seedHUStatePartyOrg,
+        seedHUGovernmentFormation,
+      } = await import("./seed/seedHU");
+      await seedHURegions(db, resetReference, log, preset);
+      await seedHUParties(db, log, preset);
+      await seedHUDemographics(db, resetReference, log, preset);
+      await seedHUStateMetrics(db, resetReference, log, preset);
+      await seedHUBaselines(db, resetReference, log, preset);
+      await seedHUStatePartyOrg(db, resetReference, log, preset);
+      await seedHUGovernmentFormation(db, log, preset);
+    })(),
+    // Modern PL, RO, RU and BG political substrate (2027-default only). The Cold-War
+    // one-party block above self-guards on isEasternBlocEra, and the 1991
+    // successor seeders below self-guard on preset, so this pack only runs
+    // where neither does. Scoped to each country's rows throughout.
+    pack(async (log) => {
+      if (preset !== "2027-default") return;
+      const { seedModernTransitionCountry } = await import("./seed/seedModernTransitionCountries");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "PL");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "RO");
+      await seedModernTransitionCountry(db, resetReference, log, preset, "RU");
+      const { seedBG2027 } = await import("./seed/seedBG2027");
+      await seedBG2027(db, resetReference, log, preset);
+    })(),
+    pack(async (log) => {
+      if (preset !== "2019-default") return;
+      const { seedModern2019 } = await import("./seed/seedModern2019");
+      await seedModern2019(db, resetReference, log, preset);
+    })(),
   ]);
 
   for (const buffer of packBuffers) for (const line of buffer) log(line);
+
+  const { seedSuccessorRegions1991 } = await import("./seed/seedSuccessorRegions1991");
+  await seedSuccessorRegions1991(db, resetReference, preset, log);
+
+  const { seedSuccessorMetrics1991 } = await import("./seed/seedSuccessorMetrics1991");
+  await seedSuccessorMetrics1991(db, resetReference, preset, log);
+
+  const { seedSuccessorDemographics1991 } = await import("./seed/seedSuccessorDemographics1991");
+  await seedSuccessorDemographics1991(db, resetReference, preset, log);
+
+  const { seedSuccessorParties1991 } = await import("./seed/seedSuccessorParties1991");
+  await seedSuccessorParties1991(db, preset, log);
+
+  const { seedSuccessorStatePartyOrg1991 } = await import("./seed/seedSuccessorStatePartyOrg1991");
+  await seedSuccessorStatePartyOrg1991(db, resetReference, preset, log);
+
+  // HU's 1991 successor institutions are parliamentary. Seed their pending
+  // formation after the successor party roster, not in the 2027 HU pack above.
+  if (preset === "1991-default") {
+    const { seedHUGovernmentFormation } = await import("./seed/seedHU");
+    await seedHUGovernmentFormation(db, log, preset);
+    const { seedCSGovernmentFormation1991 } = await import("./seed/seedCSGovernmentFormation1991");
+    await seedCSGovernmentFormation1991(db, log, preset);
+    const { seedBGGovernmentFormation1991 } = await import("./seed/seedBGGovernmentFormation1991");
+    await seedBGGovernmentFormation1991(db, log, preset);
+    const { seedROGovernmentFormation1991 } = await import("./seed/seedROGovernmentFormation1991");
+    await seedROGovernmentFormation1991(db, log, preset);
+  }
+
+  const { ensureDemographicBaselines } = await import("./seed/ensureDemographicBaselines");
+  await ensureDemographicBaselines(db, log);
+
+  const { reconcileModernRegionPopulation } =
+    await import("./seed/reconcileModernRegionPopulation");
+  await reconcileModernRegionPopulation(db, preset, log);
 
   // Stand up the per-region age/sex cohort vectors (the demographic SSOT the turn
   // engine evolves) and stamp turn-0 derived population metrics (sexRatio /
@@ -647,7 +724,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   await seedDeBudgets(db, resetReference, log, preset);
   await seedBrBudgets(db, resetReference, log, preset);
   await seedCnBudgets(db, resetReference, log, preset);
-  await seedRuBudgets(db, resetReference, log, preset);
+  // The legacy RU seeder constructs Soviet SOEs. The 2019 democratic fiscal
+  // pack below owns the modern RU budget and sovereign issuer instead.
+  if (preset !== "2019-default") await seedRuBudgets(db, resetReference, log, preset);
   await seedFrBudgets(db, resetReference, log, preset);
   await seedItBudgets(db, resetReference, log, preset);
   await seedEsBudgets(db, resetReference, log, preset);
@@ -675,6 +754,20 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       );
     }
   }
+
+  const { seedSuccessorBudgets1991 } = await import("./seed/seedSuccessorBudgets1991");
+  await guarded("seedSuccessorBudgets1991", () =>
+    seedSuccessorBudgets1991(db, resetReference, preset, log)
+  );
+  const { seedModernBudgets2019 } = await import("./seed/seedModernBudgets2019");
+  await guarded("seedModernBudgets2019", () =>
+    seedModernBudgets2019(db, resetReference, preset, log)
+  );
+  const { seedModernTransitionBudgets2027 } =
+    await import("./seed/seedModernTransitionBudgets2027");
+  await guarded("seedModernTransitionBudgets2027", () =>
+    seedModernTransitionBudgets2027(db, resetReference, preset, log)
+  );
 
   // Every command-economy seeder above reads `commandEconomyEnabled` itself and
   // falls back to the legacy single-corp shape via a silent `return` or an empty
@@ -717,6 +810,8 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // rather than an orphaned principal with zero instruments (#3370 P3).
   await guarded("seedSovereignBondInstruments", () => seedSovereignBondInstruments(db, log, 0));
   await seedCountryGameStates(db, preset, getStartingYearForPreset(preset), log);
+  await db.collection(WORLD_ENTITY_STATES_COLLECTION).deleteMany({});
+  await db.collection(FEDERATION_SETTLEMENT_APPLICATIONS_COLLECTION).deleteMany({});
   await seedMacroCountries(db, preset, log);
   await reconcileSignedTariffBills(db);
 
@@ -801,6 +896,13 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     );
   });
 
+  // Currency unions are applied only after every budget, bond, corporation and
+  // wallet seed has written its authored legacy denomination. This one pass
+  // preserves anchor value while making the selected era internally coherent.
+  await guarded("applyEraCurrencyTopology", async () => {
+    const { applyEraCurrencyTopology } = await import("@/lib/admin/seed/applyEraCurrencyTopology");
+    await applyEraCurrencyTopology(db, preset, log);
+  });
   if (noStartingParties && seedOnly) {
     await clearStartingPolitics(db, preset);
     log("Cleared starting politics; economic NPP ownership retained with independent affiliation");
@@ -990,7 +1092,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
 
     // Formation docs must follow the executive seed so the Premier / President
     // NPP exists to link (RU starts FORMED; BR links the seeded PTB president).
-    await seedRUGovernmentFormation(db, log);
+    await seedRUGovernmentFormation(db, log, preset);
     await seedBRGovernmentFormation(db, log);
   }
 
@@ -1048,6 +1150,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           `${ukRoster.nppsCreated} NPPs, ${ukRoster.officialsCreated} officials`
       );
     }
+    if (preset === "1991-default") {
+      const { seed1991FederationLegislatures } =
+        await import("./seed/seed1991FederationLegislatures");
+      await seed1991FederationLegislatures(db, preset, preIteration ? "priors" : "winners", log);
+    }
   }
 
   // Seed governorOfficeState rows for every regional executive seat so the
@@ -1094,6 +1201,7 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
           },
           async () => {
             await ensureBRElections(now);
+            await ensureBRGovernorElections(now);
           },
           async () => {
             await ensureNGElections(now);
@@ -1155,7 +1263,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
   // re-runs this every turn; seeding it here makes a freshly bootstrapped world
   // correct before turn 1 fires, rather than showing "Vacant" until the first tick.
   const { syncAllPartyChairHeadsOfState } = await import("@/lib/turn/partyChairHeadOfState");
-  const chairHosResults = globallyVacant ? [] : await syncAllPartyChairHeadsOfState(db, now);
+  const chairHosResults = globallyVacant
+    ? []
+    : await syncAllPartyChairHeadsOfState(db, now, preset);
   const seated = chairHosResults.filter((r) => r.action !== "noop");
   log(
     `Party-chair head-of-state sync (bootstrap): ${seated.length}/${chairHosResults.length} seated ` +

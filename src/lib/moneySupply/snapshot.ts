@@ -38,12 +38,14 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     .findOne({ _id: "default" }, { projection: { moneySupplyEnabled: 1 } });
   if (!isMoneySupplyEnabledFromConfig(config)) return 0;
 
+  const gameState = await db
+    .collection<{ _id: string; preset?: string }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1 } });
+  const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
+  const currencyFor = (countryId: CountryId) => homeCurrency(countryId, preset);
   let banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   if (banks.some((bank) => bank.externalBroadMoney == null)) {
-    const gameState = await db
-      .collection<{ _id: string; preset?: string }>("gameState")
-      .findOne({ _id: "current" }, { projection: { preset: 1 } });
-    await seedMoneySupplyBaselines(db, gameState?.preset ?? DEFAULT_SEED_PRESET);
+    await seedMoneySupplyBaselines(db, preset);
     banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
   }
   const [
@@ -156,12 +158,12 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   ]);
   const byCurrency = new Map<CurrencyCode, MutableComponents>();
 
-  addCentralBankMoney(byCurrency, banks);
-  addHouseholdMoneyFromDemography(byCurrency, states, medianIncomeDocs);
+  addCentralBankMoney(byCurrency, banks, preset);
+  addHouseholdMoneyFromDemography(byCurrency, states, medianIncomeDocs, preset);
 
   for (const character of characters) {
     const country = character.countryId as CountryId;
-    const currency = homeCurrency(country);
+    const currency = currencyFor(country);
     const balances = character.currencyBalances;
     if (balances) {
       addComponent(byCurrency, currency, "campaignLiquid", balances.campaign);
@@ -183,7 +185,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       addComponent(byCurrency, code as CurrencyCode, "creditOutstanding", amount);
   }
   for (const npp of npps) {
-    const currency = homeCurrency(npp.countryId as CountryId);
+    const currency = currencyFor(npp.countryId as CountryId);
     addComponent(byCurrency, currency, "nppLiquid", npp.funds);
     for (const [code, amount] of Object.entries(npp.currencyBalances?.personal ?? {}))
       addComponent(byCurrency, code as CurrencyCode, "nppLiquid", amount);
@@ -194,21 +196,21 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   for (const corp of corporations)
     addComponent(
       byCurrency,
-      (corp.liquidCurrencyCode ?? homeCurrency(corp.countryId as CountryId)) as CurrencyCode,
+      (corp.liquidCurrencyCode ?? currencyFor(corp.countryId as CountryId)) as CurrencyCode,
       "corporateLiquid",
       corp.liquidCapital
     );
   for (const party of parties)
     addComponent(
       byCurrency,
-      homeCurrency(party.countryId as CountryId),
+      currencyFor(party.countryId as CountryId),
       "partyLiquid",
       party.treasury
     );
   for (const budget of budgets)
     addComponent(
       byCurrency,
-      (budget.currencyCode ?? homeCurrency(budget.countryId as CountryId)) as CurrencyCode,
+      (budget.currencyCode ?? currencyFor(budget.countryId as CountryId)) as CurrencyCode,
       "governmentLiquid",
       governmentLiquidFromTreasury(budget.treasuryBalance)
     );
@@ -245,7 +247,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   for (const fund of organizationFunds)
     addComponent(
       byCurrency,
-      homeCurrency(fund.currencyCountryId),
+      currencyFor(fund.currencyCountryId),
       "organizationLiquid",
       fund.balanceLocal
     );
@@ -262,7 +264,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   for (const pool of equityPools)
     addComponent(byCurrency, pool._id as CurrencyCode, "equityPoolCash", pool.cashLocal ?? 0);
   for (const bond of bonds) {
-    const currency = (bond.currencyCode ?? homeCurrency(bond.countryId!)) as CurrencyCode;
+    const currency = (bond.currencyCode ?? currencyFor(bond.countryId!)) as CurrencyCode;
     addComponent(byCurrency, currency, "sovereignBondsOutstanding", bond.totalIssued);
     addComponent(
       byCurrency,
@@ -285,7 +287,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     bankId: string,
     netMoneyCreatedLifetime: number
   ): Promise<void> {
-    const currencyCode = homeCurrency(countryId);
+    const currencyCode = currencyFor(countryId);
     const aggregates = aggregatesForCurrency(byCurrency, currencyCode);
     const prior = await db
       .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
@@ -345,11 +347,11 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   // netMoneyCreatedLifetime: 0 reflect that there is no CB operations ledger
   // behind these currencies.
   const bankedCountryIds = new Set(banks.map((bank) => bank.countryId));
-  const writtenCurrencies = new Set(banks.map((bank) => homeCurrency(bank.countryId)));
+  const writtenCurrencies = new Set(banks.map((bank) => currencyFor(bank.countryId)));
   for (const budget of budgets) {
     const countryId = budget.countryId as CountryId | undefined;
     if (!countryId || bankedCountryIds.has(countryId)) continue;
-    const currencyCode = homeCurrency(countryId);
+    const currencyCode = currencyFor(countryId);
     if (writtenCurrencies.has(currencyCode)) continue;
     writtenCurrencies.add(currencyCode);
     await writeSnapshot(countryId, countryId, 0);

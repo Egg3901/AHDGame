@@ -2,6 +2,37 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryDb } from "./inMemoryDb";
 
 describe("inMemoryDb document paths", () => {
+  it("sorts a find cursor before limiting the latest revision", async () => {
+    const db = createInMemoryDb();
+    db.seed("revisions", [
+      { _id: "first", source: "CS", revision: 1 },
+      { _id: "other", source: "YU", revision: 9 },
+      { _id: "latest", source: "CS", revision: 3 },
+      { _id: "second", source: "CS", revision: 2 },
+    ]);
+    expect(
+      await db
+        .collection("revisions")
+        .find({ source: "CS" })
+        .sort({ revision: -1 })
+        .limit(1)
+        .toArray()
+    ).toEqual([{ _id: "latest", source: "CS", revision: 3 }]);
+  });
+  it("sorts equal dates by the next key and keeps missing values below dates", async () => {
+    const db = createInMemoryDb();
+    db.seed("events", [
+      { _id: "later-tie", at: new Date(10), sequence: 2 },
+      { _id: "missing", sequence: 0 },
+      { _id: "earlier-tie", at: new Date(10), sequence: 1 },
+      { _id: "newest", at: new Date(20), sequence: 3 },
+    ]);
+    expect(
+      (await db.collection("events").find({}).sort({ at: -1, sequence: 1 }).toArray()).map(
+        (row) => row._id
+      )
+    ).toEqual(["newest", "earlier-tie", "later-tie", "missing"]);
+  });
   it("applies ordinary nested updates", async () => {
     const db = createInMemoryDb();
     db.seed("items", [{ _id: "one", nested: { value: 1 } }]);
@@ -248,6 +279,7 @@ describe("bulkWrite update/delete many", () => {
     ]);
 
     expect(res.modifiedCount).toBe(2);
+    expect(res.matchedCount).toBe(2);
     expect(await coll.countDocuments({ representingUnionId: "u1" })).toBe(2);
     expect(await coll.countDocuments({ representingUnionId: null })).toBe(1);
   });

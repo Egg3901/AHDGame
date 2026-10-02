@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import type { CountryId } from "@/lib/constants/countries";
+import type { CountryId, GovernmentType } from "@/lib/constants/countries";
 import type { Bill } from "@/lib/db/types";
 import type { BillVoteSnapshot } from "@/lib/db/types/voteSnapshot";
 
@@ -37,6 +37,8 @@ export interface ChamberVoteStage {
   /** Resolves the office type to scope votes against, from the bill's chamber. */
   officeTypeFor: (bill: StageBillContext) => string;
   passRule: PassRule;
+  /** A country-specific constitutional check may supersede ordinary passage. */
+  passCheck?: (bill: Bill, totals: VoteTotals) => boolean | undefined;
   onReject: OnReject;
   /** Next status on pass (the following stage's status, or a terminal status). */
   onPassStatus: string;
@@ -124,6 +126,10 @@ export type BillStage =
 export type SponsorNotifier = (db: Db, bill: Bill, status: Bill["status"]) => Promise<void>;
 
 export interface BillLifecycleConfig {
+  /** Resolved once by the shell; prevents obsolete regime passage exemptions. */
+  governmentType?: GovernmentType;
+  /** Independent presidency can coexist with a parliamentary government. */
+  hasPresidentialExecutive?: boolean;
   country: CountryId;
   level: "national" | "regional";
   /** Ordered phase graph. Each stage owns a distinct bill status. */

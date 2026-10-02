@@ -9,6 +9,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getTotalPersonalWealth } from "@/lib/currency/characterFunds";
 import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getBondCountryId, isCorporateBond } from "@/lib/bonds/sovereign";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { sumObligationInternal, toInternalUnits } from "./locMath";
@@ -32,7 +33,7 @@ export async function computePlayerNetWorthInternal(
   const corporations = await db
     .collection<Corporation>("corporations")
     .find({ "shareholders.characterId": charId })
-    .project({ sharePrice: 1, shareholders: 1, countryId: 1 })
+    .project({ sharePrice: 1, shareholders: 1, countryId: 1, liquidCurrencyCode: 1 })
     .toArray();
 
   let stockInternal = 0;
@@ -43,7 +44,7 @@ export async function computePlayerNetWorthInternal(
     if (!sh || sh.shares <= 0) continue;
     const quote = getPublicShareQuote(corp);
     const value = sh.shares * quote;
-    const cur = COUNTRY_CURRENCY_MAP[corp.countryId as CountryId] ?? "USD";
+    const cur = resolveCorpLiquidCurrencyCode(corp) ?? "USD";
     const rate = exchangeRates[cur];
     if (rate && rate > 0) stockInternal += toInternalUnits(value, rate);
   }

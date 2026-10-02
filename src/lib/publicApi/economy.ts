@@ -4,6 +4,9 @@ import type { StockExchangeSnapshot } from "@/lib/db/types";
 import type { ElectedOfficial, PoliticalParty, Bill } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { bgAssemblyName } from "@/lib/countries/bg/rules/assemblyTransition";
 import { getCountryState } from "@/lib/countryState";
 import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
@@ -211,6 +214,15 @@ export async function queryLegislature(db: Db, country: string) {
 
   const chamberName = (countryConfig as unknown as Record<string, unknown>).legislature as
     { lowerChamber?: { name?: string } } | undefined;
+  const bgAssembly =
+    country === "BG"
+      ? await Promise.all([
+          getGameStatePreset(db),
+          db
+            .collection<{ _id: string; bgOrdinaryAssemblySinceTurn?: number }>("countryGameStates")
+            .findOne({ _id: "BG" }, { projection: { bgOrdinaryAssemblySinceTurn: 1 } }),
+        ])
+      : null;
 
   const [officials, parties, pendingBills, recentlyPassed] = await Promise.all([
     db
@@ -246,7 +258,7 @@ export async function queryLegislature(db: Db, country: string) {
   for (const official of officials) {
     if (official.party) seatCounts.set(official.party, (seatCounts.get(official.party) ?? 0) + 1);
   }
-  const totalSeats = officials.length;
+  const totalSeats = country === "BG" ? await getLiveLowerChamberSeats(db, "BG") : officials.length;
 
   const composition = [...seatCounts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -263,7 +275,9 @@ export async function queryLegislature(db: Db, country: string) {
   return {
     found: true,
     countryId: country,
-    chamber: chamberName?.lowerChamber?.name ?? "Legislature",
+    chamber: bgAssembly
+      ? bgAssemblyName(bgAssembly[0], bgAssembly[1]?.bgOrdinaryAssemblySinceTurn)
+      : (chamberName?.lowerChamber?.name ?? "Legislature"),
     totalSeats,
     composition,
     pendingBills: pendingBills.map((b) => ({

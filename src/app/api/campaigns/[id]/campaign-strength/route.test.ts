@@ -64,10 +64,13 @@ function campaignDb(collections: Record<string, Record<string, unknown>>) {
             ...collections[name],
             find: vi.fn(() => ({ toArray: async () => [{ currencyCode: "USD", baseRate: 1 }] })),
           }
-        : (collections[name] ??
-          (name === "gameConfig" || name === "gameState"
-            ? { findOne: vi.fn().mockResolvedValue(null) }
-            : undefined))
+        : name === "gameState"
+          ? (collections[name] ?? {
+              findOne: vi.fn().mockResolvedValue({ preset: "1991-default" }),
+            })
+          : name === "gameConfig"
+            ? (collections[name] ?? { findOne: vi.fn().mockResolvedValue(null) })
+            : collections[name]
     ),
   };
 }

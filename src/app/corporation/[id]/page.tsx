@@ -714,7 +714,21 @@ export default function CorporationDetailPage() {
                 <ErrorRef code={errorRef} />
               </div>
             )}
-            <BackButton />
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  hasLoaded.current = false;
+                  setError("");
+                  setErrorRef(null);
+                  void fetchCorporation();
+                }}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Retry
+              </button>
+              <BackButton />
+            </div>
           </div>
         </main>
       </div>

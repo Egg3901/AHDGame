@@ -2,12 +2,19 @@
  * Election vote tally accumulation and initialization.
  */
 
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import { russianDumaVoteTotals } from "@/lib/countries/ru/rules/assemblyVoteIncrement";
+import { russianCouncilVoteTotals } from "@/lib/countries/ru/rules/councilVoteTotals";
+import { resolveRussianCouncilBallot } from "@/lib/countries/ru/rules/councilResult";
+import { russianPresidentialVoteIncrement } from "@/lib/countries/ru/rules/presidentialVoteIncrement";
+import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { applyNationalAds } from "@/lib/campaignTargeting/nationalAds";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 
 import { getDb } from "@/lib/mongodb";
 import type {
   Election,
+  Campaign,
   ElectionCandidate,
   ElectionVoteTally,
   PrimaryResults,
@@ -436,16 +443,36 @@ export async function accumulateVoteTurn(
   // ── Cumulative ceiling ────────────────────────────────────────────────────
   // The strength multiplier above sits outside both caps, so the closing
   // surge could still carry the race past the registered electorate. Ballots
-  // already on the board (active candidates only, matching `newTotals`) plus
-  // this slice may never exceed it.
-  const alreadyCast = candidates.reduce(
-    (sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0),
-    0
-  );
+  // already on the board plus this slice may never exceed it. Bound Duma
+  // ballots also retain votes cast before a nominee withdrew.
+  const isBgOrdinary =
+    preset === "1991-default" &&
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    election.cycle >= 1;
+  const isHu1991 = isHu1991AssemblyCampaign(election);
+  const isBoundDuma =
+    election.countryId === "RU" &&
+    election.electionType === "dumaDeputy" &&
+    election.russianDumaRound != null;
+  const isBoundCouncil =
+    election.countryId === "RU" &&
+    election.electionType === "federationCouncilMember" &&
+    election.russianCouncilRound != null;
+  const alreadyCast = isBoundCouncil
+    ? (tally.russianCouncilBallot?.validBallots ?? 0)
+    : isBoundDuma
+      ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
+        (tally.russianDumaBallot?.againstAllVotes ?? 0)
+      : isHu1991
+        ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0)
+        : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
-    scalePoolToRegistered(electorate, registrationPool?.unregistered)
+    isHu1991
+      ? election.hungarianAssemblyRound!.registeredVoters
+      : scalePoolToRegistered(electorate, registrationPool?.unregistered)
   );
   // Determine if we are in the general election phase (after primary end).
   // Turn-first (drift-immune, freezes on pause); falls back to the Date for
@@ -722,10 +749,10 @@ export async function accumulateVoteTurn(
     );
   const EXECUTIVE_ENDORSEMENT_VOTE_BONUS = 1.015;
 
-  // Build new totals using ONLY active candidates — withdrawn candidates'
-  // historical votes are excluded so vote share and seat projections are correct.
+  // Start with active increments. Bound Duma ballots then restore counted
+  // withdrawals, which remain part of participation and certification.
   const activeCandidateIds = new Set(enriched.map((ec) => ec.candidateId));
-  const newTotals: Record<string, number> = {};
+  let newTotals: Record<string, number> = {};
   for (const ec of enriched) {
     const raw = votesPerCandidate[ec.candidateId] ?? 0;
     const multiplier = executiveEndorsedCandidateIds.has(ec.candidateId)
@@ -735,10 +762,124 @@ export async function accumulateVoteTurn(
       (tally.totalVotes[ec.candidateId] ?? 0) + Math.round(raw * multiplier);
   }
 
+  if (election.countryId === "RU" && election.russianPresidentialRound) {
+    const campaigns = await db
+      .collection<Campaign>("campaigns")
+      .find({ electionId }, { projection: { candidateId: 1, campaignStrength: 1 } })
+      .toArray();
+    const strengths = new Map(
+      campaigns.map((campaign) => [campaign.candidateId.toString(), campaign.campaignStrength ?? 0])
+    );
+    const rawVotes = Object.fromEntries(
+      enriched.map((candidate) => [
+        candidate.candidateId,
+        newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+      ])
+    );
+    const campaignStrength = Object.fromEntries(
+      candidates.map((candidate) => [
+        candidate._id.toString(),
+        strengths.get(campaignStrengthLookupKey(candidate)) ?? 0,
+      ])
+    );
+    const increments = russianPresidentialVoteIncrement({
+      registeredVoters: election.russianPresidentialRound.registeredVoters,
+      priorVotes: tally.totalVotes,
+      rawVotes,
+      campaignStrength,
+    });
+    for (const candidate of enriched)
+      newTotals[candidate.candidateId] =
+        (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
+  }
+
+  if (isBgOrdinary || isHu1991)
+    for (const [id, votes] of Object.entries(tally.totalVotes)) {
+      if (!activeCandidateIds.has(id)) newTotals[id] = votes;
+    }
+  if (isBoundDuma) {
+    newTotals = russianDumaVoteTotals({
+      registeredVoters: election.russianDumaRound!.registeredVoters,
+      againstAllVotes: tally.russianDumaBallot?.againstAllVotes,
+      priorVotes: tally.totalVotes,
+      rawVotes: Object.fromEntries(
+        enriched.map((candidate) => [
+          candidate.candidateId,
+          newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+        ])
+      ),
+    });
+  }
+
+  if (isHu1991) {
+    // The shared vote-ledger arithmetic preserves historical cast marks and
+    // clamps only the new slice to the frozen registered electorate.
+    newTotals = russianDumaVoteTotals({
+      registeredVoters: election.hungarianAssemblyRound!.registeredVoters,
+      priorVotes: tally.totalVotes,
+      rawVotes: Object.fromEntries(
+        enriched.map((candidate) => [
+          candidate.candidateId,
+          newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+        ])
+      ),
+    });
+  }
+  let councilTotals: ReturnType<typeof russianCouncilVoteTotals> | null = null;
+  if (isBoundCouncil) {
+    const rawVotes = Object.fromEntries(
+      enriched.map((candidate) => [
+        candidate.candidateId,
+        newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+      ])
+    );
+    const nominationById = new Map(
+      candidates.map((candidate) => [
+        candidate._id.toHexString(),
+        candidate.russianCouncilNomination,
+      ])
+    );
+    councilTotals = russianCouncilVoteTotals({
+      registeredVoters: election.russianCouncilRound!.registeredVoters,
+      priorVotes: tally.totalVotes,
+      ledger: tally.russianCouncilBallot,
+      rawVotes,
+      rawAgainstAllVotes: Object.values(rawVotes).every((count) => count === 0)
+        ? Math.max(0, Math.floor(effEffectiveTurnPool))
+        : 0,
+      nominees: enriched.map((candidate) => {
+        const nomination = nominationById.get(candidate.candidateId);
+        if (!nomination) throw new Error("Council voting needs each nominee's frozen registration");
+        return {
+          id: candidate.candidateId,
+          registrationOrder: nomination.registrationOrder,
+          economicLean: candidate.charEP,
+          socialLean: candidate.charSP,
+          favorability: candidate.favorability,
+        };
+      }),
+    });
+    newTotals = councilTotals.votes;
+  }
+
   // For house/stateSenate races, compute per-candidate seat estimates
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
+    if (isBgOrdinary || isHu1991) return undefined;
+    if (councilTotals) {
+      const result = resolveRussianCouncilBallot({
+        ...councilTotals.ballot,
+        invalidated: tally.russianCouncilBallot?.invalidated,
+      });
+      const winners =
+        result.outcome === "elected" && result.winnerIds.every((id) => activeCandidateIds.has(id))
+          ? new Set(result.winnerIds)
+          : new Set<string>();
+      return Object.fromEntries(
+        enriched.map((row) => [row.candidateId, winners.has(row.candidateId) ? 1 : 0])
+      );
+    }
     const electionType = election.electionType as string;
     const totalSeats = election.totalSeats as number | undefined;
     if (!totalSeats || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
@@ -810,19 +951,48 @@ export async function accumulateVoteTurn(
     return seats;
   })();
 
+  const nativeRussianTotal = councilTotals
+    ? councilTotals.ledger.validBallots
+    : (election.countryId === "RU" && election.russianPresidentialRound) || isBoundDuma
+      ? Object.values(newTotals).reduce((sum, count) => sum + count, 0) +
+        (isBoundDuma ? (tally.russianDumaBallot?.againstAllVotes ?? 0) : 0)
+      : null;
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,
     recordedAt: now,
     cumulativeVotes: { ...newTotals },
-    sharesPct,
+    sharesPct:
+      nativeRussianTotal == null
+        ? sharesPct
+        : Object.fromEntries(
+            Object.entries(newTotals).map(([id, count]) => [
+              id,
+              nativeRussianTotal ? (count / nativeRussianTotal) * 100 : 0,
+            ])
+          ),
     ...(seatsEstimate ? { seatsEstimate } : {}),
+    ...(councilTotals
+      ? {
+          russianCouncilBallot: {
+            registeredVoters: councilTotals.ledger.registeredVoters,
+            validBallots: councilTotals.ledger.validBallots,
+            againstAllVotes: councilTotals.ledger.againstAllVotes,
+          },
+        }
+      : {}),
   };
 
-  // Sync candidateNames/candidateParties: remove withdrawn, add any who joined after tally init
+  // Sync nominee labels, retaining counted Duma withdrawals for certification.
   const cleanedNames = { ...tally.candidateNames };
   const cleanedParties = { ...tally.candidateParties };
   for (const key of Object.keys(tally.totalVotes)) {
-    if (!activeCandidateIds.has(key)) {
+    if (
+      !activeCandidateIds.has(key) &&
+      !isBoundDuma &&
+      !isBoundCouncil &&
+      !isBgOrdinary &&
+      !isHu1991
+    ) {
       delete cleanedNames[key];
       delete cleanedParties[key];
     }
@@ -835,10 +1005,24 @@ export async function accumulateVoteTurn(
   }
 
   const tallyUpdate = {
+    ...(isBgOrdinary || isHu1991 ? { $unset: { seatsEstimate: "" as const } } : {}),
     $set: {
+      ...(isBgOrdinary ? { bgOrdinaryBallot: true as const } : {}),
+      ...(isHu1991 ? { hungarianAssemblyBallot: true as const } : {}),
       totalVotes: newTotals,
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,
+      ...(councilTotals
+        ? { russianCouncilBallot: { ...tally.russianCouncilBallot, ...councilTotals.ledger } }
+        : {}),
+      ...(isBoundDuma
+        ? {
+            russianDumaBallot: {
+              ...tally.russianDumaBallot,
+              againstAllVotes: tally.russianDumaBallot?.againstAllVotes ?? 0,
+            },
+          }
+        : {}),
       ...(seatsEstimate ? { seatsEstimate } : {}),
       updatedAt: now,
     },

@@ -25,8 +25,7 @@ import {
   ensureUKElections,
   ensureUKRegionalCouncilElections,
 } from "@/lib/turn/perpetualElections";
-import { STARTING_YEAR, MS_PER_TURN } from "@/lib/constants/turnTime";
-import { yearOfTurn } from "@/lib/utils/gameDate";
+import { STARTING_YEAR } from "@/lib/constants/turnTime";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { seedUnownedSectors } from "@/lib/admin/seed/seedUnownedSectors";
@@ -642,6 +641,7 @@ async function processTurnImpl(
       durationMs: Date.now() - startTime,
       success: completion.success,
       warnings,
+      health: lastHealth,
       phaseStatuses,
       phases: context.phaseResults,
       createdAt: context.realNow,
@@ -824,6 +824,7 @@ async function processTurnImpl(
           durationMs: Date.now() - startTime,
           success: false,
           warnings: [...warnings],
+          health: lastHealth,
           phaseStatuses: finalizedPhaseStatuses,
           phases: phaseResultsForFailure,
           createdAt: failureTime,

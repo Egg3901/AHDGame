@@ -12,7 +12,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { seedFromSeats } from "@/lib/npp/seedHistorical";
-import type { HistoricalSeat } from "@/lib/constants/historicalSeats";
+import { seatGroupsFor, type HistoricalSeat } from "@/lib/constants/historicalSeats";
+import { buildSeatId } from "@/lib/seats";
+import { collectSeatIntegrity } from "@/lib/turn/gameHealthSnapshot";
 import type { Db } from "mongodb";
 
 vi.mock("@/lib/db/sequentialId", async (importOriginal) => {
@@ -125,4 +127,57 @@ describe("seedFromSeats historical roster", () => {
     expect(names).not.toContain("Alan Cranston");
     expect(ctx.npps.every((n) => !("birthYear" in n))).toBe(true);
   });
+
+  it.each([
+    ["1991-default", "Mary Robinson", 1944],
+    ["2019-default", "Michael D. Higgins", 1941],
+  ])("seats the documented Irish Uachtarán at %s opening", async (preset, name, birthYear) => {
+    const presidentialSeats = seatGroupsFor(preset).IE!.filter(
+      (seat) => seat.officeType === "uachtaran"
+    );
+    expect(presidentialSeats).toEqual([{ state: "IE", officeType: "uachtaran", party: "ie_ind" }]);
+
+    const result = await seedFromSeats(ctx.db as unknown as Db, presidentialSeats, "winners", {
+      presetId: preset,
+    });
+    expect(result).toMatchObject({ nppsCreated: 1, officialsCreated: 1 });
+    expect(ctx.npps).toHaveLength(1);
+    expect(ctx.npps[0]).toMatchObject({
+      name,
+      birthYear,
+      countryId: "IE",
+      currentOffice: { type: "uachtaran" },
+    });
+    expect(ctx.officials).toHaveLength(1);
+    expect(ctx.officials[0]).toMatchObject({
+      countryId: "IE",
+      officeType: "uachtaran",
+      state: "IE",
+      characterName: name,
+    });
+
+    const seatId = buildSeatId("IE", "uachtaran", "IE");
+    ctx.db.collection("seats");
+    ctx.db.collectionMocks.seats!.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: seatId, countryId: "IE", electionType: "uachtaran", state: "IE" },
+        ]),
+    });
+    ctx.db.collectionMocks.electedOfficials!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(ctx.officials),
+    });
+    expect(await collectSeatIntegrity(ctx.db as unknown as Db)).toEqual({
+      orphanedOfficialCount: 0,
+      seatBackedSeatsWithoutOfficials: 0,
+    });
+  });
+
+  it.each(["1999-default", "2007-default"])(
+    "does not back-project the 2019 presidential roster into %s",
+    (preset) => {
+      expect(seatGroupsFor(preset).IE!.some((seat) => seat.officeType === "uachtaran")).toBe(false);
+    }
+  );
 });

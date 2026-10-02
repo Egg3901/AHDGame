@@ -9,6 +9,12 @@ export interface VoteTurnSnapshot {
   sharesPct: Record<string, number>;
   /** Multi-seat races only (house, stateSenate, commons, …): Hamilton seat projection at this turn. */
   seatsEstimate?: Record<string, number>;
+  /** Native Council snapshots count valid voters separately from candidate marks. */
+  russianCouncilBallot?: {
+    registeredVoters: number;
+    validBallots: number;
+    againstAllVotes: number;
+  };
 }
 
 /** Stored when primary resolves — canonical primary results for wiki/history. */
@@ -43,11 +49,34 @@ export interface ElectionVoteTally {
   candidateParties: Record<string, string>;
   turnSnapshots: VoteTurnSnapshot[];
   finalized: boolean;
+  /** Native first-Duma valid against-all ballots and certification outcome. */
+  russianDumaBallot?: {
+    againstAllVotes: number;
+    invalidated?: boolean;
+    outcome?: "elected" | "repeat";
+    certifiedCohortId?: ObjectId;
+  };
+  /** Native Council candidate marks may total up to twice valid participation. */
+  russianCouncilBallot?: {
+    registeredVoters: number;
+    validBallots: number;
+    againstAllVotes: number;
+    registrationOrderByCandidate: Record<string, number>;
+    invalidated?: boolean;
+    outcome?: "elected" | "repeat";
+    certifiedCohortId?: ObjectId;
+  };
+  /** Counted Bulgarian list votes survive withdrawals; seats require a national count. */
+  bgOrdinaryBallot?: true;
+  /** Native Hungarian marks survive withdrawal while statutory counts remain pending. */
+  hungarianAssemblyBallot?: true;
   seatsEstimate?: Record<string, number>;
   /** Actual non-presidential resolver receipt. Absent on historical tallies. */
   resolutionPath?:
     | "single_winner"
     | "hare_quota"
+    | "bg_ordinary_national"
+    | "hu_statutory_mixed"
     | "districted_house"
     | "bloc_list"
     | "sainte_lague"
@@ -91,6 +120,14 @@ export interface ElectionVoteTally {
   electoralVotesByCandidate?: Record<string, number>;
   /** President only: how the race was resolved when finalized */
   resolutionMode?: "majority" | "contingent" | "contingent_deadlock";
+  /** Russia counts popular ballots; no electoral votes are invented for display. */
+  russianPresidentialResult?: {
+    outcome: "won" | "runoff" | "repeat";
+    winnerCandidateId?: string;
+    round: 1 | 2;
+    registeredVoters: number;
+    participants: number;
+  };
   /** President only: House/Senate contingent vote breakdown when no EV majority */
   contingentResult?: {
     eligiblePresidentCandidateIds: string[];

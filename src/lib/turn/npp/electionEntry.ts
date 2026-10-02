@@ -26,6 +26,8 @@
  *    (npp.countryId === election.countryId). US NPPs can't enter UK races.
  */
 
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import { ObjectId } from "mongodb";
 import type { Election, ElectionCandidate, NPP } from "@/lib/db/types";
 import {
@@ -40,7 +42,7 @@ import {
 } from "@/lib/elections/nationwideExecutive";
 import { isSpecialCommonsElection, officeKeyForElectionType } from "@/lib/utils/electionLabels";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getCountryConfigForRuntime, type CountryId } from "@/lib/constants/countries";
 import {
   canFieldExecutiveCandidate,
   canFieldLegislativeCandidate,
@@ -101,7 +103,7 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   // ONLY in autonomy-active countries (autonomy enabled AND not player-enabled),
   // where there is no player to contest the presidency — the seating + VP path
   // already supports NPP presidents (presidentResolution.ts). Player-enabled
-  // countries keep the block; the gate is strictly per-country.
+  // countries keep the block, except bound Russian direct first-round ballots.
   const presidentCountryIds = new Set<CountryId>(
     ctx.openPrimaries
       .filter((p) => p.electionType === "president")
@@ -114,8 +116,17 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
 
   const openPrimaries = ctx.openPrimaries.filter((p) => {
     if (isElectionTypeEntryBlocked(p.electionType)) return false;
+    // Bound Assembly families use their atomic slate shells.
+    if (
+      isNativeRussianAssemblyElection(p) ||
+      (isHu1991AssemblyCampaign(p) && p.hungarianAssemblyRound?.round === 2)
+    )
+      return false;
     if (p.electionType === "president") {
-      return autonomyPresidentCountries.has((p.countryId ?? "US") as CountryId);
+      return (
+        (p.countryId === "RU" && p.russianPresidentialRound?.round === 1) ||
+        autonomyPresidentCountries.has((p.countryId ?? "US") as CountryId)
+      );
     }
     return true;
   });
@@ -238,7 +249,9 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     // the partyByCompositeKey map already in context — independents have no
     // entry and resolve to a null party, which the legislative gate rejects.
     const primaryCountry = (primary.countryId ?? npp.countryId ?? "US") as CountryId;
-    const primaryConfig = COUNTRY_CONFIGS[primaryCountry];
+    const primaryConfig =
+      ctx.runtimeCountryOffices?.get(primaryCountry)?.config ??
+      getCountryConfigForRuntime(primaryCountry, ctx.preset);
     if (primaryConfig?.governmentType === "onePartyState") {
       const nppParty = ctx.partyByCompositeKey.get(`${primaryCountry}:${npp.party}`);
       if (!canFieldLegislativeCandidate(primaryConfig, nppParty ?? null)) {

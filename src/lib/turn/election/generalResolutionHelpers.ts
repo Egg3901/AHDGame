@@ -138,10 +138,16 @@ export async function sweepStaleOffice(
   state: string,
   now: Date,
   chamberClass?: 1 | 2,
-  telemetry?: { turn: number; nationId?: string }
+  telemetryOrCountry?: { turn: number; nationId?: string } | Election["countryId"]
 ): Promise<void> {
   // Normalize snap types — a snap_commons election sweeps "commons" officials.
-  const officeType = officeKeyForElectionType(electionType);
+  // Country chamber keys can differ from their seated office type. Bulgaria's
+  // nationalAssembly, for example, seats assemblyDeputy holders.
+  const telemetry = typeof telemetryOrCountry === "object" ? telemetryOrCountry : undefined;
+  const countryId = (
+    typeof telemetryOrCountry === "string" ? telemetryOrCountry : telemetry?.nationId
+  ) as Election["countryId"];
+  const officeType = officeKeyForElectionType(electionType, countryId);
   const officialFilter: Record<string, unknown> = { officeType, state };
   if (chamberClass) officialFilter.chamberClass = chamberClass;
 

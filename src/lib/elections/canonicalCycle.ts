@@ -92,7 +92,8 @@ const BETA_PARLIAMENT_CYCLES: Record<
       | "frSenat"
       | "ruSupremeSoviet"
       | "ruRepublicSoviet"
-      | "ddVolkskammer";
+      | "ddVolkskammer"
+      | "csFederalAssembly";
     periodHours: number;
   }
 > = {
@@ -148,6 +149,7 @@ const BETA_PARLIAMENT_CYCLES: Record<
   // land. Era-gated OFF outside 1953/1979 via null ddVolkskammer.
   sejm: { anchor: "ddVolkskammer", periodHours: 192 },
   chamberOfThePeople: { anchor: "ddVolkskammer", periodHours: 240 },
+  chamberOfNations: { anchor: "csFederalAssembly", periodHours: 96 },
   nationalAssembly: { anchor: "ddVolkskammer", periodHours: 240 },
   grandNationalAssembly: { anchor: "ddVolkskammer", periodHours: 240 },
   federalAssembly: { anchor: "ddVolkskammer", periodHours: 192 },
@@ -246,6 +248,85 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   const dur = DEFAULT_DURATIONS[electionType];
   if (!dur) return null;
   const anchors = getCycleAnchors(ctx);
+  // Romania's 1990 constituent chambers stood until the September 1992
+  // election. Subsequent parliamentary terms are modeled on a four-year cycle.
+  // The 1992 seat redistribution (341 deputies, 143 senators) still needs a
+  // timed regional/chamber transition; the current regions retain 396/119.
+  // https://legislatie.just.ro/public/DetaliiDocument/94779
+  // https://legislatie.just.ro/public/DetaliiDocument/94780
+  if (
+    countryId === "RO" &&
+    ctx.preset === "1991-default" &&
+    (electionType === "chamberOfDeputies" || electionType === "senat")
+  ) {
+    const endTurn =
+      (1992 - ctx.startingYear + 1) * 48 + (ctx.preIterationTurns ?? 0) + (cycle - 1) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+
+  // The same election law requires both chambers to vote together and begin
+  // and end their terms together. PL has no Senate in the Cold War presets.
+  // https://libr.sejm.gov.pl/tek01/txt/aktpl/e1991-tekst.html
+  if (countryId === "PL" && electionType === "senat" && ctx.preset !== "1991-default") {
+    return null;
+  }
+  if (
+    ctx.preset === "1991-default" &&
+    countryId === "PL" &&
+    (electionType === "sejm" || electionType === "senat")
+  ) {
+    const firstElection = anchors.plSejm;
+    if (firstElection == null) return null;
+    // The Sejm elected on 27 October 1991 was dissolved early; its successor
+    // was elected on 19 September 1993. Model four-year terms after that.
+    // Polish Election Commission notices, as published by the Sejm:
+    // https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=WMP19910410288
+    // https://isap.sejm.gov.pl/isap.nsf/DocDetails.xsp?id=wmp19930500470
+    // At the turn-1 reset, the 48-turn year-end anchor offers only 23 primary
+    // turns after turn 1. One bootstrap turn keeps the required 24+24 window.
+    const endTurn = cycle === 1 ? firstElection + 1 : firstElection + 96 + (cycle - 2) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+
+  // The 1991 successor parliaments have their own post-1990 election dates.
+  // Cold War lower chambers retain the existing Volkskammer schedule.
+  const bgOrdinaryAssembly =
+    ctx.preset === "1991-default" && countryId === "BG" && electionType === "nationalAssembly";
+  if (bgOrdinaryAssembly) {
+    // Ordinary terms last four years. The historical December 1994 election
+    // was early; it must follow a political dissolution, not a forced timer.
+    // https://data.ipu.org/election-summary/HTML/2045_94.htm
+    const firstTurn = (1991 - ctx.startingYear) * 48 + 38 + (ctx.preIterationTurns ?? 0);
+    const endTurn = firstTurn + (cycle - 1) * 192;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
+  const successorAnchor =
+    ctx.preset === "1991-default" && countryId === "CS" && electionType === "chamberOfThePeople"
+      ? anchors.csFederalAssembly
+      : ctx.preset === "1991-default" && countryId === "HU" && electionType === "nationalAssembly"
+        ? anchors.huNationalAssembly
+        : null;
+  if (successorAnchor != null) {
+    const periodHours = electionType === "chamberOfThePeople" ? 96 : 192;
+    const endTurn = successorAnchor + (cycle - 1) * periodHours;
+    return {
+      endTurn,
+      primaryEndTurn: endTurn - dur.generalDurationHours,
+      startTurn: cycle === 1 ? 1 : endTurn - dur.durationHours,
+    };
+  }
 
   // Concurrent-general countries (NG): President + NASS + Governors share ONE
   // 4-year (192-turn) cycle anchored to `ngGeneral`, dropping the US senate-class
@@ -306,23 +387,38 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
     }
     case "governor":
     case "stateSenate": {
+      // The aggregate BR governor roster is authored only for 1991 and the
+      // modern presets. Earlier BR worlds did not run this regional election.
+      if (
+        electionType === "governor" &&
+        countryId === "BR" &&
+        (ctx.preset === "1953-default" || ctx.preset === "1979-default")
+      ) {
+        return null;
+      }
       // D10: RU First Secretaries ride the republic-soviet cycle, and DD Land
       // First Secretaries ride the Volkskammer cycle (Bezirk/Land elections
       // were held with the chamber's) — anchor overrides only (the 192-turn
       // period already comes from dur.durationHours). Null anchors era-gate
-      // both OFF outside the Cold-War presets. Every other country keeps the
-      // shared governorStateSenate anchor.
+      // both OFF outside the Cold-War presets. Brazil's modeled macroregion
+      // governors ride its general election; other countries keep the shared
+      // governorStateSenate anchor.
       // UKR/BLR/BAL oblast/republic first secretaries ride the republic-soviet
       // cycle for the same reason RU's do: the regional soviets were elected on
       // the republic cycle, not on a separate schedule of their own.
       const govAnchor =
         electionType === "governor" && customCycle1EndTurn !== undefined
           ? customCycle1EndTurn
-          : countryId === "RU" || countryId === "UKR" || countryId === "BLR" || countryId === "BAL"
-            ? anchors.ruRepublicSoviet
-            : countryId === "DD"
-              ? anchors.ddVolkskammer
-              : anchors.governorStateSenate;
+          : electionType === "governor" && countryId === "BR"
+            ? anchors.brChamber
+            : countryId === "RU" ||
+                countryId === "UKR" ||
+                countryId === "BLR" ||
+                countryId === "BAL"
+              ? anchors.ruRepublicSoviet
+              : countryId === "DD"
+                ? anchors.ddVolkskammer
+                : anchors.governorStateSenate;
       if (govAnchor == null) return null;
       const endTurn = cycle === 1 ? govAnchor : govAnchor + (cycle - 1) * dur.durationHours;
       return {

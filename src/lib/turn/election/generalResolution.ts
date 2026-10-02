@@ -1,3 +1,10 @@
+/**
+ * Ordinary completed elections assign winners and advance their next cycle.
+ * resolveOneGeneralElection leaves bound Assembly ballots to cohort certification,
+ * which prevents a district from replacing Congress before chamber handover.
+ */
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -46,6 +53,8 @@ import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independenceDesireHook";
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
+import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
+import { apportionSeats as apportionCandidateSeats } from "@/lib/country/seatApportionment";
 import type { ElectionNewsOutcome } from "./electionNotifications";
 import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
 import {
@@ -99,8 +108,13 @@ export async function resolveOneGeneralElection(
   election: Election,
   tally: ElectionVoteTally | null | undefined,
   currentTurn: number,
-  now: Date
+  now: Date,
+  bgEligibleParties: ReadonlySet<string> | null = null,
+  huMixedCandidateSeats?: Readonly<Record<string, number>>,
+  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
+  if (isNativeRussianAssemblyElection(election) || isHu1991AssemblyCampaign(election))
+    return { resolved: false, newsOutcomes: [] };
   const newsOutcomes: ElectionNewsOutcome[] = [];
 
   // Atomic claim: prevent concurrent resolution from corrupting office data.
@@ -119,11 +133,40 @@ export async function resolveOneGeneralElection(
   }
 
   try {
+    // BG changes from the 1991 transitional assembly to modern party-list PR.
+    // The base config is the 1979 single-party FPTP chamber, so read the live
+    // preset before method dispatch instead of silently using that default.
+    const bgPreset =
+      election.countryId === "BG"
+        ? (await (await getGameStateCollection(db)).findOne({ _id: "current" }))?.preset
+        : undefined;
+    if (election.countryId === "BG" && !bgPreset) {
+      throw new Error("Bulgaria election resolution requires the active preset");
+    }
+    const electionMethod = getElectionMethod(election.countryId, election.electionType, bgPreset);
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      bgPreset === "2027-default" &&
+      electionMethod !== "pr_hareQuota"
+    ) {
+      throw new Error("Bulgaria 2027 Assembly requires parliamentary proportional representation");
+    }
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle >= 1 &&
+      bgPreset === "1991-default" &&
+      !tally?.finalized &&
+      !bgOrdinaryCandidateSeats
+    ) {
+      throw new Error("Bulgarian ordinary Assembly requires its frozen national allocation");
+    }
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
     // method — `pr_sainteLague` is unique to the DE Landtag — before any other
     // logic runs.
-    if (getElectionMethod(election.countryId, election.electionType) === "pr_sainteLague") {
+    if (electionMethod === "pr_sainteLague") {
       const { resolveDELandtagElection } = await import("./germanyLandtag");
       if (!tally?.finalized) {
         await resolveDELandtagElection(db, election, now, currentTurn);
@@ -145,6 +188,23 @@ export async function resolveOneGeneralElection(
         );
       }
       return { resolved: true, newsOutcomes };
+    }
+
+    if (
+      election.countryId === "RU" &&
+      election.electionType === "president" &&
+      election.russianPresidentialRound
+    ) {
+      const { resolveRussianPresidentialElection } =
+        await import("@/lib/countries/ru/resolvePresidentialElection");
+      await resolveRussianPresidentialElection({
+        db,
+        electionId: election._id,
+        turn: currentTurn,
+        now,
+      });
+      await voidDebateSessionsForElection(db, election._id, now);
+      return { resolved: true, newsOutcomes: [] };
     }
 
     if (tally?.finalized && election.electionType !== "president") {
@@ -227,6 +287,14 @@ export async function resolveOneGeneralElection(
       return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
     }
 
+    // Closed lists can seat a registered replacement with zero personal votes.
+    // Preserve that nominee in the candidate load and saved result, rather than
+    // discarding their national mandate because they had no tally key.
+    if (bgOrdinaryCandidateSeats)
+      effectiveVotes = {
+        ...Object.fromEntries(Object.keys(bgOrdinaryCandidateSeats).map((id) => [id, 0])),
+        ...effectiveVotes,
+      };
     const candidateIds = Object.keys(effectiveVotes);
     const candidates = await db
       .collection<ElectionCandidate>("electionCandidates")
@@ -381,7 +449,18 @@ export async function resolveOneGeneralElection(
     if (candidateCharIds.length > 0) {
       const existingChars = await db
         .collection<Character>("characters")
-        .find({ _id: { $in: candidateCharIds } }, { projection: { _id: 1 } })
+        .find(
+          {
+            _id: { $in: candidateCharIds },
+            ...(bgOrdinaryCandidateSeats
+              ? {
+                  countryId: "BG",
+                  federationPendingResidenceId: { $exists: false },
+                }
+              : {}),
+          },
+          { projection: { _id: 1 } }
+        )
         .toArray();
       const existingCharIds = new Set(existingChars.map((c) => c._id.toString()));
       for (const c of candidates) {
@@ -510,8 +589,116 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
+    const bgOrdinaryAllocation = bgOrdinaryCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = { ...bgOrdinaryCandidateSeats };
+          const eligibleIds = new Set(ranked.map((row) => row.id));
+          for (const [id, seats] of Object.entries(seatsEstimate)) {
+            const candidate = candidateMap.get(id);
+            if (
+              !Number.isSafeInteger(seats) ||
+              seats < 0 ||
+              (seats > 0 && (!eligibleIds.has(id) || !candidate || (!candidate.isNPP && seats > 1)))
+            )
+              throw new Error("Bulgarian frozen allocation has an unavailable or invalid holder");
+          }
+          if (Object.values(seatsEstimate).reduce((sum, seats) => sum + seats, 0) !== totalSeats)
+            throw new Error("Bulgarian frozen allocation does not fill the regional capacity");
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
+    const bgAllocation =
+      bgEligibleParties &&
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle === 1
+        ? (() => {
+            const seatsEstimate = bgDhondtSeats(
+              ranked.map((candidate) => {
+                const row = candidateMap.get(candidate.id);
+                if (!row?.party) throw new Error("Bulgaria list candidate has no party");
+                return {
+                  id: candidate.id,
+                  party: row.party,
+                  votes: candidate.votes,
+                  listOrder: row.enteredAt?.getTime() ?? 0,
+                };
+              }),
+              totalSeats,
+              bgEligibleParties
+            );
+            return {
+              isMultiSeat: true,
+              authoritativeSeats: totalSeats,
+              seatsEstimate,
+              winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+                string,
+                number,
+              ][],
+              losers: Object.entries(seatsEstimate)
+                .filter(([, seats]) => seats === 0)
+                .map(([id]) => id),
+            };
+          })()
+        : null;
+    const huAllocation = huMixedCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = Object.fromEntries(
+            ranked.map((candidate) => [candidate.id, 0])
+          );
+          const wantedByParty: Record<string, number> = {};
+          for (const [candidateId, seats] of Object.entries(huMixedCandidateSeats)) {
+            const rawParty =
+              candidateMap.get(candidateId)?.party ?? tally.candidateParties[candidateId];
+            if (!rawParty) throw new Error("Hungary mixed mandate has no party");
+            const party = rawParty === "independent" ? `independent@${candidateId}` : rawParty;
+            wantedByParty[party] = (wantedByParty[party] ?? 0) + seats;
+          }
+          for (const [party, seats] of Object.entries(wantedByParty)) {
+            const eligible = ranked.filter(
+              (candidate) =>
+                (candidate.party === "independent"
+                  ? `independent@${candidate.id}`
+                  : candidate.party) === party
+            );
+            if (eligible.length === 0) continue; // a vacant bloc, never seat an ineligible holder
+            const shares = apportionCandidateSeats(
+              Object.fromEntries(eligible.map((candidate) => [candidate.id, candidate.votes])),
+              seats
+            );
+            for (const [candidateId, count] of Object.entries(shares))
+              seatsEstimate[candidateId] = count;
+          }
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
     const { isMultiSeat, seatsEstimate, winners, losers } =
       districted ??
+      bgOrdinaryAllocation ??
+      bgAllocation ??
+      huAllocation ??
       allocateSeats(
         election.electionType,
         election.state,
@@ -778,6 +965,9 @@ export async function resolveOneGeneralElection(
           officeType = { type: "peoplesCongress", state: election.state, seatsHeld: seats };
           break;
         default:
+          // Persist the same country-specific office key used by the official
+          // row. A chamber key such as BG nationalAssembly is not itself the
+          // holder's assemblyDeputy office type.
           officeType = {
             type: officeKeyForElectionType(election.electionType, election.countryId),
             state: election.state,
@@ -1183,17 +1373,19 @@ export async function resolveOneGeneralElection(
             };
           }),
           resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
-          resolutionPath: districted
-            ? "districted_house"
-            : runtimeBlocQuota
-              ? "bloc_list"
-              : election.countryId === "DE" &&
-                  (election.electionType === "bundestag" ||
-                    election.electionType === "snap_bundestag")
-                ? "ams_direct"
-                : isMultiSeat
-                  ? "hare_quota"
-                  : "single_winner",
+          resolutionPath: bgOrdinaryAllocation
+            ? "bg_ordinary_national"
+            : districted
+              ? "districted_house"
+              : runtimeBlocQuota
+                ? "bloc_list"
+                : election.countryId === "DE" &&
+                    (election.electionType === "bundestag" ||
+                      election.electionType === "snap_bundestag")
+                  ? "ams_direct"
+                  : isMultiSeat
+                    ? "hare_quota"
+                    : "single_winner",
         },
       }
     );
@@ -1384,18 +1576,31 @@ export async function resolveOneGeneralElection(
     // RU actions are DESTRUCTIVE (formation reset), so an explicit cycle guard
     // inside handleRuConvocationReset makes the trigger idempotent: only the
     // first resolver of a new cycle resets the government (spec §2.4).
-    if (election.countryId === "RU" && election.electionType === "supremeSovietDeputy") {
+    const regularRuType = election.electionType.startsWith("snap_")
+      ? election.electionType.slice(5)
+      : election.electionType;
+    if (
+      election.countryId === "RU" &&
+      [
+        "supremeSovietDeputy",
+        "unionCongressDeputy",
+        "congressDeputy",
+        "congressOfPeoplesDeputies",
+        "dumaDeputy",
+        "stateDuma",
+      ].includes(regularRuType)
+    ) {
       try {
         const remaining = await db.collection<Election>("elections").countDocuments({
           countryId: "RU",
-          electionType: "supremeSovietDeputy",
+          electionType: election.electionType,
           cycle: election.cycle,
-          status: { $ne: "resolved" satisfies ElectionStatus },
+          status: { $in: ["upcoming", "active", "completed"] satisfies ElectionStatus[] },
           _id: { $ne: election._id },
         });
         if (remaining === 0) {
           const { handleRuConvocationReset } = await import("@/lib/turn/ruConvocation");
-          await handleRuConvocationReset(db, election.cycle ?? 1, now);
+          await handleRuConvocationReset(db, election.cycle ?? 1, now, election.electionType);
         }
       } catch (err) {
         logger.error("Turn", `RU convocation trigger failed (cycle ${election.cycle})`, err);

@@ -8,6 +8,7 @@ import { publicPageMetadata } from "@/lib/siteMetadata";
 import type { WorldEntityMapSnapshot } from "@/lib/world/worldEntityMap";
 import { loadWorldEntityMapSnapshot } from "@/lib/world/worldEntityMapLoader";
 import { loadBlocMapData, type BlocMapData } from "@/lib/world/blocMembership";
+import { loadLegacyServiceSnapshots } from "@/lib/world/succession/legacyServiceSnapshot";
 import WorldClient from "./WorldClient";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
@@ -50,6 +51,7 @@ export default async function WorldPage() {
       conflictsEnabled={!!gameState?.conflictsEnabled}
       worldEntities={worldEntities}
       blocMapData={blocMapData}
+      legacyFinances={await loadLegacyServiceSnapshots(db, preset)}
     />
   );
 }

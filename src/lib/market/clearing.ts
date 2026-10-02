@@ -428,6 +428,13 @@ export function computeClearingFactors(args: {
   /** Optional book-sanity hook — called once per cleared commodity. */
   onBookDiagnostic?: (d: ClearingBookDiagnostic) => void;
   /**
+   * Commodities whose lagged price row was written by a prior market turn.
+   * A reset seeds turn-0 price rows with zero supply/demand; comparing a new
+   * producer against that placeholder is not a supply-ledger invariant check.
+   * Omitted by standalone callers to retain the existing comparison behavior.
+   */
+  initializedLaggedBooks?: ReadonlySet<CommodityType>;
+  /**
    * Brand-loyalty slice (A2b, brandLoyaltySliceEnabled). When true, each
    * commodity runs a loyal-slice pre-pass off sectors' `brandLoyalty` before
    * cheapest-first. Omitted/false ⇒ clearing is byte-identical to today.
@@ -654,7 +661,9 @@ export function computeClearingFactors(args: {
         exemptRealUnits,
         laggedSupply,
         laggedDemand: bal?.demand ?? 0,
-        invariantBreach: isClearingBookBreach(normalizedOfferedUnits, laggedSupply),
+        invariantBreach:
+          (args.initializedLaggedBooks?.has(commodity) ?? true) &&
+          isClearingBookBreach(normalizedOfferedUnits, laggedSupply),
       });
     }
 

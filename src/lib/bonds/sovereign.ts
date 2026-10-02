@@ -261,7 +261,6 @@ export function applySovereignDebtAdjustment(
 
 function buildSovereignBondDoc(params: {
   countryId: CountryId;
-  currencyCode: CurrencyCode | undefined;
   turn: number;
   now: Date;
   issueAmount: number;
@@ -272,6 +271,11 @@ function buildSovereignBondDoc(params: {
   credibilitySpreadPp?: number;
   /** Democratic backsliding premium in percentage points. */
   democraticSpreadPp?: number;
+  /**
+   * Explicit home currency (usually the budget's `currencyCode`). Preferred
+   * over the era-blind map fallback, so 2027 euro members issue in EUR.
+   */
+  currencyCode?: CurrencyCode | string | null;
 }): { bondDoc: Omit<Bond, "_id">; annualCouponCost: number } {
   const { countryId, turn, now, issueAmount, maturityTurns, primeRate, countryCorporation } =
     params;
@@ -307,8 +311,10 @@ function buildSovereignBondDoc(params: {
     restructureExtendedMaturityTurn: null,
     originalMaturityTurn: null,
     originalTotalIssued: null,
-    // Sovereign bonds denominate in the issuing country's currency.
-    currencyCode: params.currencyCode,
+    // Sovereign bonds denominate in the issuing country's currency: the
+    // caller's explicit code (the budget row) wins, the era-blind map is
+    // only the fallback for callers without a budget in hand.
+    currencyCode: resolveCountryCurrencyCode({ countryId, currencyCode: params.currencyCode }),
     createdAt: now,
     updatedAt: now,
   };
@@ -361,13 +367,13 @@ async function issueSovereignBondSeries(
 
   const { bondDoc } = buildSovereignBondDoc({
     countryId,
-    currencyCode: resolveCountryCurrencyCode(budget),
     turn,
     now,
     issueAmount: normalizedIssueAmount,
     maturityTurns,
     primeRate,
     countryCorporation,
+    currencyCode: budget.currencyCode,
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
@@ -593,7 +599,9 @@ export async function issueScheduledSovereignBondSeries(
     // the cash it has and the appetite the demand model gives this issuer.
     // Without a funded pool, units remain unplaced unless monetary financing supplies cash.
     const poolCurrency: CurrencyCode =
-      resolveCountryCurrencyCode(budgetDoc) ?? COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+      resolveCountryCurrencyCode({ countryId, currencyCode: budgetDoc.currencyCode }) ??
+      COUNTRY_CURRENCY_MAP[countryId] ??
+      "USD";
     // Plan the ladder first so the gated consolidation (#1001) reshapes rungs
     // before pool underwriting sees them. Gate off: the same rungs, same order.
     const tranchePlans = consolidateSovereignTranches(
@@ -741,7 +749,10 @@ export async function reconcileSovereignDebt(
   if (gap >= BOND_UNIT_FACE_VALUE) {
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
-    const currencyCode = resolveCountryCurrencyCode(budget);
+    const currencyCode = resolveCountryCurrencyCode({
+      countryId,
+      currencyCode: budget.currencyCode,
+    });
 
     for (const [maturityStr, fraction] of Object.entries(distribution)) {
       if (!fraction || fraction <= 0) continue;

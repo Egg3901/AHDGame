@@ -30,11 +30,15 @@ import {
   loadCampaignCurrencyRates,
   loadCampaignPriceLevel,
 } from "@/lib/campaigns/campaignCurrency";
-import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
+import {
+  COUNTRY_CURRENCY_MAP,
+  getSeedCurrencyCode,
+  type CurrencyCode,
+} from "@/lib/constants/currencies";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { makeSeededRng } from "@/lib/events/substrate/rng";
-import { getNppAutonomyLevel, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
+import { getNppAutonomyWorldContext, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerArchetype";
 import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
@@ -248,7 +252,7 @@ export async function processNppActions(
   //        NPP-driven markets, so autonomy runs wild where no players compete).
   //   v4 — the same, applied GLOBALLY (player-enabled countries included).
   // Below v3 the decision path is byte-identical to the pre-v3 logic.
-  const level = await getNppAutonomyLevel(db);
+  const { level, preset } = await getNppAutonomyWorldContext(db);
   const econActive = nppAutonomyLevelAtLeast(level, "v3"); // v3 or v4
   const econGlobal = nppAutonomyLevelAtLeast(level, "v4"); // v4 only
 
@@ -284,7 +288,7 @@ export async function processNppActions(
   const campaignRates = await loadCampaignCurrencyRates(db);
   const priceLevel = await loadCampaignPriceLevel(db);
   const rateForCountry = (countryId: string): number =>
-    campaignLocalRate(countryId, campaignRates) * priceLevel;
+    campaignLocalRate(countryId, campaignRates, preset) * priceLevel;
 
   // Parties, loaded ONCE up front and keyed "countryId:sequentialId". This query
   // used to run after the NPP loop purely to resolve treasury-flush targets; it
@@ -612,11 +616,11 @@ export async function processNppActions(
   }
 
   if (econActive) {
-    await investNppBondSurplus(db, currentTurn, econScopeCountries);
-    await investNppStockSurplus(db, currentTurn, econScopeCountries);
-    await sellNppStockSurplus(db, currentTurn, econScopeCountries);
+    await investNppBondSurplus(db, currentTurn, econScopeCountries, preset);
+    await investNppStockSurplus(db, currentTurn, econScopeCountries, preset);
+    await sellNppStockSurplus(db, currentTurn, econScopeCountries, preset);
     await buildNppPartyOrgSurplus(db, currentTurn, econScopeCountries);
-    await foundNppCorporationsSurplus(db, currentTurn, econScopeCountries);
+    await foundNppCorporationsSurplus(db, currentTurn, econScopeCountries, preset);
   }
 
   return result;
@@ -637,7 +641,8 @@ export async function processNppActions(
 async function investNppBondSurplus(
   db: Db,
   currentTurn: number,
-  countryScope: CountryId[] | null = null
+  countryScope: CountryId[] | null = null,
+  preset?: string
 ): Promise<void> {
   // Investment capital is the personal forex account (₳), NOT campaign funds
   // and NOT savings — the full campaign/economy wall.
@@ -656,7 +661,9 @@ async function investNppBondSurplus(
 
   for await (const npp of cursor) {
     const countryId = (npp.countryId ?? "US") as CountryId;
-    const homeCurrency = COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+    const homeCurrency = preset
+      ? getSeedCurrencyCode(countryId, preset)
+      : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD");
     const cashAnchor = npp.nppInvestmentCashAnchor ?? 0;
     if (cashAnchor <= NPP_BOND_INVEST_RESERVE_FLOOR) continue;
 
@@ -750,7 +757,7 @@ async function investNppBondSurplus(
 
     // nppBuyBond debits nppInvestmentCashAnchor atomically (guarded); a failed
     // float race leaves the ₳ untouched — no plumbing move needed here anymore.
-    const result = await nppBuyBond(db, npp, bond._id, units, currentTurn, homeRate, bond);
+    const result = await nppBuyBond(db, npp, bond._id, units, currentTurn, homeRate, bond, preset);
     if (result.ok) {
       bond.publicFloat -= units;
     }
@@ -783,7 +790,8 @@ type StockCandidateCorp = Pick<
 async function investNppStockSurplus(
   db: Db,
   currentTurn: number,
-  countryScope: CountryId[] | null = null
+  countryScope: CountryId[] | null = null,
+  preset?: string
 ): Promise<void> {
   void currentTurn; // kept for signature symmetry with the bond sweep; not needed by nppBuyShares.
 
@@ -802,7 +810,9 @@ async function investNppStockSurplus(
 
   for await (const npp of cursor) {
     const countryId = (npp.countryId ?? "US") as CountryId;
-    const homeCurrency = COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
+    const homeCurrency = preset
+      ? getSeedCurrencyCode(countryId, preset)
+      : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD");
     const cashAnchor = npp.nppInvestmentCashAnchor ?? 0;
     if (cashAnchor <= NPP_STOCK_INVEST_RESERVE_FLOOR) continue;
 
@@ -907,7 +917,7 @@ async function investNppStockSurplus(
 
     // nppBuyShares debits nppInvestmentCashAnchor atomically (guarded); a failed
     // float race leaves the ₳ untouched — no plumbing move needed here anymore.
-    const result = await nppBuyShares(db, npp, corp._id, shares, homeRate, corp);
+    const result = await nppBuyShares(db, npp, corp._id, shares, homeRate, corp, preset);
     if (result.ok) {
       corp.publicFloat = (corp.publicFloat ?? 0) - shares;
     }
@@ -1032,7 +1042,8 @@ async function buildNppPartyOrgSurplus(
 async function sellNppStockSurplus(
   db: Db,
   currentTurn: number,
-  countryScope: CountryId[] | null = null
+  countryScope: CountryId[] | null = null,
+  preset?: string
 ): Promise<void> {
   const corps = await db
     .collection<Corporation>("corporations")
@@ -1110,7 +1121,10 @@ async function sellNppStockSurplus(
 
       const countryId = countryById.get(holding.nppId.toString());
       if (!countryId) continue;
-      const homeRate = fxByCcy.get(COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD") ?? 1;
+      const homeCurrency = preset
+        ? getSeedCurrencyCode(countryId as CountryId, preset)
+        : (COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD");
+      const homeRate = fxByCcy.get(homeCurrency) ?? 1;
 
       // Proceeds credit nppInvestmentCashAnchor (the forex account), not funds.
       const result = await nppSellShares(
@@ -1120,7 +1134,8 @@ async function sellNppStockSurplus(
         sharesToSell,
         currentTurn,
         homeRate,
-        corp
+        corp,
+        preset
       );
       if (result.ok) {
         corp.publicFloat = (corp.publicFloat ?? 0) + sharesToSell;
@@ -1141,7 +1156,8 @@ async function sellNppStockSurplus(
 export async function foundNppCorporationsSurplus(
   db: Db,
   currentTurn: number,
-  countryScope: CountryId[] | null = null
+  countryScope: CountryId[] | null = null,
+  preset?: string
 ): Promise<void> {
   // Founding draws from the personal forex account (₳). Pre-filter the pool by
   // ₳ investment capital; the core enforces exact per-NPP affordability (fee is
@@ -1216,8 +1232,11 @@ export async function foundNppCorporationsSurplus(
       Math.floor(rng() * CORPORATION_TYPES.length)
     ] as CorporationType;
 
-    const homeRate =
-      fxByCcy.get(COUNTRY_CURRENCY_MAP[(npp.countryId ?? "US") as CountryId] ?? "USD") ?? 1;
+    const homeCountry = (npp.countryId ?? "US") as CountryId;
+    const homeCurrency = preset
+      ? getSeedCurrencyCode(homeCountry, preset)
+      : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
+    const homeRate = fxByCcy.get(homeCurrency) ?? 1;
     await nppFoundCorporation(
       db,
       npp,
@@ -1225,7 +1244,8 @@ export async function foundNppCorporationsSurplus(
       NPP_FOUNDING_FEE,
       currentTurn,
       homeRate,
-      blockedSet
+      blockedSet,
+      preset
     );
   }
 }

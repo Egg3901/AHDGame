@@ -20,7 +20,7 @@ vi.mock("@/lib/discordWebhooks", () => ({
 
 type Doc = Record<string, unknown>;
 
-function makeDb(vote: Doc | null) {
+function makeDb(vote: Doc | null, preset?: string, markers: Doc = {}) {
   const voteUpdates: Doc[] = [];
   const officialDeletes: Doc[] = [];
   const officialInserts: Doc[] = [];
@@ -31,11 +31,19 @@ function makeDb(vote: Doc | null) {
       voteUpdates.push(u);
       return Promise.resolve(vote);
     }),
+    updateOne: vi.fn().mockImplementation((_f: Doc, u: Doc) => {
+      voteUpdates.push(u);
+      return Promise.resolve({ matchedCount: 1 });
+    }),
     updateMany: vi.fn().mockResolvedValue({}),
   };
   const db = {
     collection: vi.fn().mockImplementation((name: string) => {
       if (name === "pmAppointmentVotes") return votesColl;
+      if (name === "gameState")
+        return { findOne: vi.fn().mockResolvedValue({ _id: "current", preset }) };
+      if (name === "countryGameStates")
+        return { findOne: vi.fn().mockResolvedValue({ _id: "RU", ...markers }) };
       if (name === "governmentFormations") {
         return {
           updateOne: vi.fn().mockImplementation((_f: Doc, u: Doc) => {
@@ -119,6 +127,46 @@ describe("resolveHeadOfStateAppointmentVote", () => {
       expect.anything()
     );
   });
+
+  it.each([
+    [{}, "sovietPresident", ["unionCongressDeputy"]],
+    [{ ruSovietSuccessionSinceTurn: 24 }, "chairmanOfSupremeSoviet", ["congressDeputy"]],
+  ])(
+    "resolves the effective legislative head of state for %j",
+    async (markers, officeType, electorate) => {
+      await setTally(10, 3);
+      const vote = makeVote();
+      const { db, officialInserts } = makeDb(vote, "1991-default", markers);
+      await resolveHeadOfStateAppointmentVote(db as never, "RU", vote._id as ObjectId, new Date());
+      expect(officialInserts[0]).toMatchObject({ officeType });
+      const { computeParliamentaryGovernmentTally } =
+        await import("@/lib/congress/governmentVoteBreakdown");
+      expect(computeParliamentaryGovernmentTally).toHaveBeenCalledWith(
+        db,
+        "RU",
+        electorate,
+        vote.votes
+      );
+    }
+  );
+
+  it.each([
+    { ruSovietSuccessionSinceTurn: 24, ruPresidencySinceTurn: 30 },
+    { ruPresidencySinceTurn: 25, ruFederalAssemblySinceTurn: 30 },
+  ])(
+    "cancels legislative head-of-state votes under an effective elected presidency %j",
+    async (markers) => {
+      await setTally(10, 3);
+      const vote = makeVote();
+      const { db, voteUpdates, officialInserts } = makeDb(vote, "1991-default", markers);
+      await resolveHeadOfStateAppointmentVote(db as never, "RU", vote._id as ObjectId, new Date());
+      expect(voteUpdates[0]).toMatchObject({ $set: { status: "cancelled" } });
+      expect(officialInserts).toHaveLength(0);
+      const { computeParliamentaryGovernmentTally } =
+        await import("@/lib/congress/governmentVoteBreakdown");
+      expect(computeParliamentaryGovernmentTally).not.toHaveBeenCalled();
+    }
+  );
 
   it("pass: seats an NPP nominee with npp officials and hosNppId stamped", async () => {
     await setTally(10, 3);

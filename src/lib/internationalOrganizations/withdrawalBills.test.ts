@@ -312,3 +312,27 @@ describe("billRequiresExecutiveAction — war declarations", () => {
     ).toBe(true);
   });
 });
+
+describe("runtime presidential assent", () => {
+  it("requires assent for a separately established Russian president", async () => {
+    const { billRequiresExecutiveAction } = await import("./withdrawalBills");
+    const bill = { countryId: "RU" as const, provisions: [] };
+    expect(billRequiresExecutiveAction(bill)).toBe(false);
+    expect(billRequiresExecutiveAction(bill, true)).toBe(true);
+    expect(billRequiresExecutiveAction(bill, false)).toBe(false);
+  });
+  it.each(["international_organization", "declare_war", "join_conflict"] as const)(
+    "keeps %s exempt with a runtime president",
+    async (type) => {
+      const { billRequiresExecutiveAction } = await import("./withdrawalBills");
+      expect(
+        billRequiresExecutiveAction(
+          { countryId: "RU", provisions: [{ type }] } as Parameters<
+            typeof billRequiresExecutiveAction
+          >[0],
+          true
+        )
+      ).toBe(false);
+    }
+  );
+});

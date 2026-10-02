@@ -1,6 +1,30 @@
+/**
+ * Completed elections resolve through their country's counting rules.
+ * resolveGeneralElections certifies bound Duma cohorts together and defers
+ * partial cohorts, preserving Congress until a separate chamber handover.
+ */
+import { bindHu1991Campaigns } from "@/lib/countries/hu/assemblyCampaignBinding1991";
+import {
+  certifyHu1991FirstCount,
+  HU_1991_COUNTS_COLLECTION,
+  type Hu1991AssemblyRecord,
+} from "@/lib/countries/hu/assemblyCount1991";
+import { openHu1991Runoff, certifyHu1991Runoff } from "@/lib/countries/hu/assemblyRunoff1991";
+import { seatHu1991Assembly } from "@/lib/countries/hu/assemblySeating1991";
 import { getDb } from "@/lib/mongodb";
-import type { ObjectId } from "mongodb";
-import type { Election, ElectionVoteTally, GameState } from "@/lib/db/types";
+import { ObjectId } from "mongodb";
+import {
+  readyRussianDumaCohorts,
+  readyRussianDumaRepeats,
+} from "@/lib/countries/ru/rules/assemblyDispatch";
+import { resolveRussianCouncilGenerations } from "@/lib/countries/ru/councilResolution";
+import { certifyRussianDumaRepeat } from "@/lib/countries/ru/dumaRepeatResult";
+import {
+  RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION,
+  type RussianDumaRepeatOpeningRecord,
+} from "@/lib/countries/ru/dumaRepeatOpening";
+import { certifyRussianDumaElection } from "@/lib/countries/ru/dumaElectionResult";
+import type { Election, ElectionVoteTally, GameState, State } from "@/lib/db/types";
 import { generateElectionNews } from "@/lib/news";
 import { HOUSE_SEATS, UK_COMMONS_SEATS } from "@/lib/constants";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
@@ -14,7 +38,17 @@ import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
+import {
+  BG_ORDINARY_PLANS_COLLECTION,
+  readBgOrdinaryElectionPlan,
+  type BgOrdinaryPlanRecord,
+} from "@/lib/turn/election/bgOrdinaryEligibility";
+import { seatBgOrdinaryAssembly } from "@/lib/countries/bg/ordinaryAssemblySeating";
+import type { BgOrdinaryElectionPlan } from "@/lib/countries/bg/rules/ordinaryElectionPlan";
+import { readHuMixedElectionPlan } from "@/lib/countries/hu/readMixedElectionPlan";
+import type { HuMixedPlan } from "@/lib/countries/hu/rules/mixedElectionPlan";
 import { captureElectionResolved } from "@/lib/analytics/electionAnalytics";
+import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -54,23 +88,82 @@ export async function resolveGeneralElections(
   if (completedElections.length === 0) return 0;
 
   const electionIds = completedElections.map((e) => e._id);
+  const genericElectionIds = completedElections
+    .filter((e) => !isNativeRussianAssemblyElection(e))
+    .map((e) => e._id);
   const [tallies, completedCandidates, gameStateDoc] = await Promise.all([
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
       .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_LATEST_SNAPSHOT_ONLY })
       .toArray(),
-    db
-      .collection("electionCandidates")
-      .find(
-        { electionId: { $in: electionIds }, status: "active" },
-        { projection: { electionId: 1, isNPP: 1 } }
-      )
-      .toArray()
-      .catch(() => []),
+    genericElectionIds.length
+      ? db
+          .collection("electionCandidates")
+          .find(
+            { electionId: { $in: genericElectionIds }, status: "active" },
+            { projection: { electionId: 1, isNPP: 1 } }
+          )
+          .toArray()
+          .catch(() => [])
+      : Promise.resolve([]),
     db.collection<GameState>("gameState").findOne({ _id: "current" }),
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
   const tallyMap = new Map(tallies.map((t) => [t.electionId.toString(), t]));
+  const bgOrdinaryRaces =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (e) => e.countryId === "BG" && e.electionType === "nationalAssembly" && e.cycle >= 1
+        )
+      : [];
+  const bgPlans = new Map<number, BgOrdinaryElectionPlan | null>();
+  for (const cycle of new Set(bgOrdinaryRaces.map((row) => row.cycle))) {
+    bgPlans.set(cycle, await readBgOrdinaryElectionPlan(db, cycle, now));
+  }
+  const hu1991Races =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (row) =>
+            row.countryId === "HU" &&
+            row.electionType === "nationalAssembly" &&
+            row.cycle >= 1 &&
+            (row.electionYear ?? 1991) < 2014
+        )
+      : [];
+  const hu1991Cycles = new Set(hu1991Races.map((row) => row.cycle));
+  if (onlyElectionIds && hu1991Cycles.size) {
+    const selected = new Set(onlyElectionIds.map((id) => id.toHexString()));
+    const cohort = await db
+      .collection<Election>("elections")
+      .find(
+        {
+          countryId: "HU",
+          electionType: "nationalAssembly",
+          cycle: { $in: [...hu1991Cycles] },
+        },
+        { projection: { cycle: 1 } }
+      )
+      .toArray();
+    for (const row of cohort)
+      if (!selected.has(row._id.toHexString())) hu1991Cycles.delete(row.cycle);
+  }
+  if (hu1991Cycles.size) await bindHu1991Campaigns(db, now, [...hu1991Cycles]);
+  const huMixedCycles = new Set(
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections
+          .filter(
+            (e) =>
+              e.countryId === "HU" &&
+              e.electionType === "nationalAssembly" &&
+              (e.electionYear ?? 0) >= 2014
+          )
+          .map((e) => e.cycle)
+      : []
+  );
+  const huMixedPlans = new Map<number, HuMixedPlan | null>();
+  for (const cycle of huMixedCycles) {
+    huMixedPlans.set(cycle, await readHuMixedElectionPlan(db, cycle));
+  }
   const candidatesByElection = new Map<string, typeof completedCandidates>();
   for (const candidate of completedCandidates) {
     const key = candidate.electionId.toString();
@@ -79,9 +172,180 @@ export async function resolveGeneralElections(
     candidatesByElection.set(key, list);
   }
 
-  let resolved = 0;
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
   const resolvedElections: Election[] = [];
+  let resolved = 0;
+  for (const [cycle, plan] of bgPlans) {
+    if (!plan) continue;
+    try {
+      if (await seatBgOrdinaryAssembly(db, cycle, currentTurn, now)) {
+        resolved += 5;
+        resolvedElections.push(...bgOrdinaryRaces.filter((row) => row.cycle === cycle));
+        const receipt = await db
+          .collection<BgOrdinaryPlanRecord>(BG_ORDINARY_PLANS_COLLECTION)
+          .findOne({ _id: `BG:ordinary:${cycle}` });
+        if (!receipt?.settledCandidateSeats)
+          throw new Error("Committed Bulgarian seating receipt is missing");
+        for (const election of bgOrdinaryRaces.filter((row) => row.cycle === cycle)) {
+          const allocation = receipt.settledCandidateSeats[election._id.toHexString()];
+          const tally = tallyMap.get(election._id.toHexString());
+          if (tally) tally.seatsEstimate = allocation;
+          for (const [candidateId, seats] of Object.entries(allocation)) {
+            if (seats <= 0) continue;
+            const nominee = receipt.nominees.find((row) => row.id === candidateId)!;
+            allNewsOutcomes.push({
+              electionType: "nationalAssembly",
+              state: election.state,
+              countryId: "BG",
+              winnerName: nominee.name,
+              winnerParty: nominee.party,
+              isPlayer: !nominee.isNpc,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error("Turn", `Bulgarian ordinary cycle ${cycle} remains unseated`, error);
+    }
+  }
+  for (const cycle of hu1991Cycles) {
+    try {
+      const receipt = await certifyHu1991FirstCount(db, cycle, currentTurn, now);
+      if (!receipt) continue;
+      if (receipt.count.kind === "pending") {
+        await openHu1991Runoff(db, cycle, currentTurn, now);
+        await certifyHu1991Runoff(db, cycle, currentTurn, now);
+      }
+      if (await seatHu1991Assembly(db, cycle, currentTurn, now)) {
+        const settled = await db
+          .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
+          .findOne({ _id: receipt._id });
+        if (!settled?.settled) throw new Error("Hungarian committed handover receipt is missing");
+        resolved += settled.electionIds.length + (settled.runoffElectionIds?.length ?? 0);
+        resolvedElections.push(...hu1991Races.filter((row) => row.cycle === cycle));
+        for (const [candidateId, seats] of Object.entries(settled.settled.candidateSeats)) {
+          if (seats <= 0) continue;
+          const nominee = settled.nominees.find((row) => row.id === candidateId)!;
+          allNewsOutcomes.push({
+            electionType: "nationalAssembly",
+            state: nominee.regionId,
+            countryId: "HU",
+            winnerName: nominee.name,
+            winnerParty: nominee.party,
+            isPlayer: !nominee.isNpc,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error("Turn", `Hungarian mixed cycle ${cycle} remains unseated`, error);
+    }
+  }
+  if (gameStateDoc?.preset === "1991-default") {
+    resolved += await resolveRussianCouncilGenerations(db, completedElections, currentTurn, now);
+    const cohorts = readyRussianDumaCohorts(
+      completedElections.map((row) => ({
+        id: row._id.toHexString(),
+        countryId: row.countryId,
+        electionType: row.electionType,
+        status: row.status,
+        endTurn: row.endTurn,
+        seatId: row.seatId,
+        totalSeats: row.totalSeats,
+        binding: row.russianDumaRound
+          ? {
+              ...row.russianDumaRound,
+              cohortId: row.russianDumaRound.cohortId.toHexString(),
+              rootCohortId: row.russianDumaRound.rootCohortId?.toHexString(),
+            }
+          : undefined,
+      })),
+      currentTurn
+    );
+    for (const cohortId of cohorts) {
+      try {
+        await certifyRussianDumaElection({
+          db,
+          cohortId: new ObjectId(cohortId),
+          turn: currentTurn,
+          now,
+        });
+        resolved += 226;
+      } catch (error) {
+        logger.error("Turn", `Failed to certify Duma cohort ${cohortId}`, error);
+      }
+    }
+    const repeatRows = completedElections.filter(
+      (row) =>
+        row.countryId === "RU" &&
+        row.electionType === "dumaDeputy" &&
+        row.russianDumaRound?.rootCohortId &&
+        Number.isSafeInteger(row.russianDumaRound.generation) &&
+        row.russianDumaRound.generation! > 0
+    );
+    if (repeatRows.length) {
+      const openingIds = [
+        ...new Set(
+          repeatRows.map(
+            (row) =>
+              `${row.russianDumaRound!.rootCohortId!.toHexString()}:repeat:${row.russianDumaRound!.generation}`
+          )
+        ),
+      ];
+      const openings = await db
+        .collection<RussianDumaRepeatOpeningRecord>(RUSSIAN_DUMA_REPEAT_OPENINGS_COLLECTION)
+        .find(
+          { _id: { $in: openingIds } },
+          {
+            projection: {
+              rootCohortId: 1,
+              cohortId: 1,
+              generation: 1,
+              mandateSinceTurn: 1,
+              electionIds: 1,
+              seatIds: 1,
+            },
+          }
+        )
+        .toArray();
+      const ready = readyRussianDumaRepeats(
+        repeatRows.map((row) => ({
+          id: row._id.toHexString(),
+          countryId: row.countryId,
+          electionType: row.electionType,
+          status: row.status,
+          endTurn: row.endTurn,
+          seatId: row.seatId,
+          totalSeats: row.totalSeats,
+          binding: {
+            ...row.russianDumaRound!,
+            cohortId: row.russianDumaRound!.cohortId.toHexString(),
+            rootCohortId: row.russianDumaRound!.rootCohortId!.toHexString(),
+          },
+        })),
+        openings.map((row) => ({
+          ...row,
+          rootCohortId: row.rootCohortId.toHexString(),
+          cohortId: row.cohortId.toHexString(),
+          electionIds: row.electionIds.map((id) => id.toHexString()),
+        })),
+        currentTurn
+      );
+      for (const opening of ready) {
+        try {
+          await certifyRussianDumaRepeat({
+            db,
+            rootCohortId: new ObjectId(opening.rootCohortId),
+            generation: opening.generation,
+            turn: currentTurn,
+            now,
+          });
+          resolved += opening.electionIds.length;
+        } catch (error) {
+          logger.error("Turn", `Failed to certify Duma repeat ${opening.cohortId}`, error);
+        }
+      }
+    }
+  }
   // Forensics/alt-detection audit spine (plan §3.1, T2.7): one entry per
   // resolved election, flushed with ONE `recordAuditBulk` call after all
   // groups finish (never a per-election DB round trip — resolveGeneralElections
@@ -104,6 +368,12 @@ export async function resolveGeneralElections(
   // the same order form each group.
   const orderGroups: Election[][] = [];
   for (const election of completedElections) {
+    if (
+      election.countryId === "RU" &&
+      ((election.electionType === "dumaDeputy" && election.russianDumaRound) ||
+        (election.electionType === "federationCouncilMember" && election.russianCouncilRound))
+    )
+      continue;
     const order = generalElectionResolutionOrder(election);
     const lastGroup = orderGroups[orderGroups.length - 1];
     if (lastGroup && generalElectionResolutionOrder(lastGroup[0]) === order) {
@@ -119,8 +389,39 @@ export async function resolveGeneralElections(
       const chunkResults = await Promise.all(
         chunk.map(async (election) => {
           try {
+            if (bgOrdinaryRaces.includes(election) || hu1991Races.includes(election)) {
+              return { election, result: null };
+            }
+            const huPlan = huMixedPlans.get(election.cycle);
+            const isHuMixed =
+              huMixedCycles.has(election.cycle) &&
+              election.countryId === "HU" &&
+              election.electionType === "nationalAssembly";
+            if (isHuMixed && !huPlan) return { election, result: null };
+            if (isHuMixed && huPlan) {
+              const capacity = huPlan.regionCapacity[election.state];
+              if (!(capacity > 0))
+                throw new Error("Hungary mixed race has no regional seat capacity");
+              if (election.totalSeats !== capacity) {
+                await db
+                  .collection<Election>("elections")
+                  .updateOne(
+                    { _id: election._id, status: "completed" },
+                    { $set: { totalSeats: capacity, updatedAt: now } }
+                  );
+                election.totalSeats = capacity;
+              }
+            }
             const tally = tallyMap.get(election._id.toString());
-            const result = await resolveOneGeneralElection(db, election, tally, currentTurn, now);
+            const result = await resolveOneGeneralElection(
+              db,
+              election,
+              tally,
+              currentTurn,
+              now,
+              null,
+              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined
+            );
             return { election, result };
           } catch (err) {
             console.error(
@@ -140,6 +441,27 @@ export async function resolveGeneralElections(
         allNewsOutcomes.push(...result.newsOutcomes);
       }
     }
+  }
+
+  // Regional capacity can change when national list mandates move between
+  // regions. Reconcile only after every race in the cycle has resolved.
+  for (const [cycle, plan] of huMixedPlans) {
+    if (!plan) continue;
+    const pending = await db.collection<Election>("elections").countDocuments({
+      countryId: "HU",
+      electionType: "nationalAssembly",
+      cycle,
+      status: { $ne: "resolved" },
+    });
+    if (pending > 0) continue;
+    await db.collection<State>("states").bulkWrite(
+      Object.entries(plan.regionCapacity).map(([regionId, houseDistricts]) => ({
+        updateOne: {
+          filter: { _id: regionId, countryId: "HU" as const },
+          update: { $set: { houseDistricts } },
+        },
+      }))
+    );
   }
 
   const resolvedPresidentIds = resolvedElections

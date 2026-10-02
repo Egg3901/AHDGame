@@ -858,11 +858,11 @@ export async function seedHistoricalOfficials(
   // seedHistoricalOfficials seam every orchestrator/contract test already
   // mocks — so both the bootstrap and seed-only paths get the linkage.
   // Dynamic narrow import keeps the admin seeder graph out of this module's
-  // static dependencies. No-op when the preset seeds no RU regions; in
-  // "priors" founding mode the executives are unseeded, so the formation
-  // degrades to "pending" and the founding elections form it properly.
+  // static dependencies. In 1991 the RSFSR Congress has regions but no
+  // historical executive roster, so the formation is neutral and pending.
+  // "Priors" founding mode also leaves the Cold War formation pending.
   const { seedRUGovernmentFormation } = await import("@/lib/admin/seed/seedRU");
-  await seedRUGovernmentFormation(db, () => {});
+  await seedRUGovernmentFormation(db, () => {}, presetId);
 
   // Same for BR: when the preset seeds a presidential incumbent (1953 PTB
   // ticket), stamp governmentFormations as FORMED with presidentNppId. Early

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getNationalBudgetSeedConfigsForPreset } from "./budgets";
+import { TRANSITION_1991_BUDGET_COUNTRIES } from "./rules/budgetBaselineMode";
 
 const PRESETS = [
   "1953-default",
@@ -13,8 +14,8 @@ const PRESETS = [
 
 describe("national budget preset coverage", () => {
   it("does not lose countries between adjacent modern presets", () => {
-    // 1991 intentionally retires Soviet-era sovereign entities. From that
-    // era onward, newer authored bundles may override but never drop a country.
+    // The seven transition rows are authored only for 1991. Later presets
+    // require a later authored budget before adding those countries again.
     for (let index = 3; index < PRESETS.length; index += 1) {
       const prior = new Set(
         getNationalBudgetSeedConfigsForPreset(PRESETS[index - 1]).map((config) => config.countryId)
@@ -22,10 +23,14 @@ describe("national budget preset coverage", () => {
       const current = new Set(
         getNationalBudgetSeedConfigsForPreset(PRESETS[index]).map((config) => config.countryId)
       );
-      expect(
-        [...prior].filter((countryId) => !current.has(countryId)),
-        PRESETS[index]
-      ).toEqual([]);
+      const removed = [...prior].filter((countryId) => !current.has(countryId));
+      expect(removed, PRESETS[index]).toEqual(
+        PRESETS[index] === "1999-default"
+          ? TRANSITION_1991_BUDGET_COUNTRIES
+          : PRESETS[index] === "2023-default"
+            ? ["RU", "PL", "HU", "RO", "BG"]
+            : []
+      );
     }
   });
 

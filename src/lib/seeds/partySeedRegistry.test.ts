@@ -38,4 +38,39 @@ describe("party seed registry", () => {
       }
     }
   });
+
+  it("starts the January 1991 successor roster with organizations that already existed", () => {
+    const russian = partySeedsForPreset("RU", "1991-default");
+    const yugoslav = partySeedsForPreset("YU", "1991-default");
+    expect(russian.map((party) => party.name)).toContain("Democratic Party of Russia");
+    expect(russian.map((party) => party.name)).not.toContain(
+      "Liberal Democratic Party of the Soviet Union"
+    );
+    expect(yugoslav.find((party) => party.regimeStatus === "ruling")?.name).toBe(
+      "Alliance of Reform Forces of Yugoslavia"
+    );
+    expect(yugoslav.map((party) => party.name)).toContain("League of Communists of Montenegro");
+    expect(yugoslav.map((party) => party.name)).not.toContain(
+      "Democratic Party of Socialists of Montenegro"
+    );
+  });
+
+  it("keeps the five 2019 transition countries out of Soviet and later rosters", () => {
+    for (const countryId of ["RU", "PL", "HU", "RO", "BG"] as const) {
+      const parties = partySeedsForPreset(countryId, "2019-default");
+      expect(parties.length, countryId).toBeGreaterThan(0);
+      expect(parties.every((party) => party.validForPresets?.includes("2019-default"))).toBe(true);
+      expect(parties.every((party) => party.regimeStatus !== "ruling")).toBe(true);
+      expect(parties.every((party) => party.isDefault && party.memberCount === 0)).toBe(true);
+    }
+    expect(partySeedsForPreset("RU", "2019-default").map((party) => party.abbreviation)).toContain(
+      "ER"
+    );
+    expect(
+      partySeedsForPreset("RU", "2019-default").map((party) => party.abbreviation)
+    ).not.toContain("CPSU");
+    expect(
+      partySeedsForPreset("PL", "2019-default").map((party) => party.abbreviation)
+    ).not.toContain("TD");
+  });
 });

@@ -208,7 +208,12 @@ export function hydrateExperimentReport(
   const fields: TimelineField[] =
     manifest.version === 2
       ? manifest.fields!.map((entry) => entry.path)
-      : [...EXPERIMENT_TIMELINE_FIELDS];
+      : [
+          ...new Set<TimelineField>([
+            ...EXPERIMENT_TIMELINE_FIELDS,
+            ...chunks.map((chunk) => chunk.field),
+          ]),
+        ];
   if (new Set(fields).size !== fields.length) throw new Error("Duplicate report field manifest");
   for (const chunk of chunks) {
     if (

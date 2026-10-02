@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { computeAutoPaymentInternal } from "./locMath";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
 
 vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(true),
@@ -116,5 +117,46 @@ describe("buildLocSnapshot", () => {
     expect(snapshot!.netWorthLimitInternal).toBe(500);
     expect(snapshot!.perPlayerLimitInternal).toBe(500);
     expect(snapshot!.perPlayerAvailableInternal).toBe(400);
+  });
+
+  it("selects the euro bank pool for a 2027 French borrower", async () => {
+    const { computePlayerGrossNetLocInternal, loadExchangeRatesMap } = await import("./netWorth");
+    const { estimatePerTurnCurrencyIncomeHomeFace } = await import("./currencyIncomeEstimate");
+    db.collection("gameState");
+    db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 2,
+      preset: "2027-default",
+    });
+    vi.mocked(loadExchangeRatesMap).mockResolvedValue({ EUR: 1.2 } as never);
+    vi.mocked(computePlayerGrossNetLocInternal).mockResolvedValue({
+      grossInternal: 10_000,
+      locDebtInternal: 0,
+      netInternal: 10_000,
+    });
+    vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(100);
+
+    const { buildLocSnapshot } = await import("./buildSnapshot");
+    const snapshot = await buildLocSnapshot(
+      db as unknown as Db,
+      {
+        _id: new ObjectId(),
+        countryId: "FR",
+        lineOfCredit: { balances: {}, arrears: {}, accountsOpened: {}, drawFrozen: false },
+      } as never
+    );
+
+    expect(snapshot).not.toBeNull();
+    expect(getHomeCurrency).toHaveBeenCalledWith(
+      expect.objectContaining({ countryId: "FR" }),
+      "2027-default"
+    );
+    expect(db.collectionMocks["centralBanks"]!.findOne).toHaveBeenCalledWith({ _id: "ECB" });
+    expect(estimatePerTurnCurrencyIncomeHomeFace).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ countryId: "FR" }),
+      expect.objectContaining({ EUR: 1.2 }),
+      expect.objectContaining({ preset: "2027-default" })
+    );
   });
 });

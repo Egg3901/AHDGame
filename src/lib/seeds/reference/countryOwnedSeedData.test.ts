@@ -65,9 +65,17 @@ describe("generateCountryOwnedSeedData", () => {
       expect(sectorTypes.has("manufacturing")).toBe(true);
     });
 
-    it("does not emit an RU corp when no RU states are supplied", () => {
-      const data = generateCountryOwnedSeedData(ukStates, "2019-default");
+    it("does not emit a Soviet RU corp when no RU states are supplied", () => {
+      const data = generateCountryOwnedSeedData(ukStates, "1991-default");
       expect(data.some((e) => e.corporation.countryOwnerId === "RU")).toBe(false);
+    });
+
+    it("emits a financial RU issuer without Soviet sectors in 2019", () => {
+      const data = generateCountryOwnedSeedData(ukStates, "2019-default");
+      const ru = data.find((entry) => entry.corporation.countryOwnerId === "RU");
+      expect(ru?.corporation.type).toBe("financial");
+      expect(ru?.corporation.liquidCurrencyCode).toBe("RUB");
+      expect(ru?.sectors).toHaveLength(0);
     });
   });
 

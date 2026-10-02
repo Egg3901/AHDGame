@@ -100,12 +100,46 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
           CI: "true"
 
+  federation-transactions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Start isolated Mongo replica set
+        run: |
+          docker run --detach --name federation-mongo --publish 27991:27017 mongo:8.0 --replSet federationQualification --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec federation-mongo mongosh --quiet --eval 'quit(db.adminCommand({ping: 1}).ok ? 0 : 1)'; then break; fi
+            sleep 1
+          done
+          docker exec federation-mongo mongosh --quiet --eval 'rs.initiate({_id: "federationQualification", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
+          federation_ready=0
+          for attempt in $(seq 1 30); do
+            if docker exec federation-mongo mongosh --quiet --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)'; then federation_ready=1; break; fi
+            sleep 1
+          done
+          test "$federation_ready" = 1
+      - name: Qualify federation transactions
+        run: npx vitest run src/lib/turn/federationSettlements.mongo.integration.test.ts src/lib/countries/ru/dumaElections.mongo.integration.test.ts src/lib/countries/ru/assemblySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyVacancySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyCampaigns.mongo.integration.test.ts src/lib/countries/ru/dumaConvocations.mongo.integration.test.ts src/lib/countries/ru/councilComposition.mongo.integration.test.ts src/lib/countries/bg/ordinaryAssemblySeating.mongo.integration.test.ts src/lib/countries/hu/assembly1991.mongo.integration.test.ts src/lib/admin/seed/indexes/boundedNpcCandidates.mongo.integration.test.ts --maxWorkers=1
+        env:
+          FEDERATION_TEST_MONGO_URI: mongodb://127.0.0.1:27991/?replicaSet=federationQualification&directConnection=true
+      - name: Stop isolated Mongo
+        if: always()
+        run: |
+          docker logs federation-mongo || true
+          docker rm --force federation-mongo || true
+
   # Branch protection requires the stable `verify` context. Keep that single
   # public gate, but do not report it successful until every correctness gate
   # above has completed successfully.
   verify:
     if: always()
-    needs: [lint, format, typecheck, test, build]
+    needs: [lint, format, typecheck, test, build, federation-transactions]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -116,15 +150,18 @@ jobs:
           TYPECHECK_RESULT: ${{ needs.typecheck.result }}
           TEST_RESULT: ${{ needs.test.result }}
           BUILD_RESULT: ${{ needs.build.result }}
+          FEDERATION_RESULT: ${{ needs['federation-transactions'].result }}
         run: |
           printf 'lint=%s format=%s typecheck=%s test=%s build=%s\n' \
             "$LINT_RESULT" "$FORMAT_RESULT" "$TYPECHECK_RESULT" \
             "$TEST_RESULT" "$BUILD_RESULT"
+          printf 'federation-transactions=%s\n' "$FEDERATION_RESULT"
 
           if [[ "$LINT_RESULT" != "success" || \
                 "$FORMAT_RESULT" != "success" || \
                 "$TYPECHECK_RESULT" != "success" || \
                 "$TEST_RESULT" != "success" || \
-                "$BUILD_RESULT" != "success" ]]; then
+                "$BUILD_RESULT" != "success" || \
+                "$FEDERATION_RESULT" != "success" ]]; then
             exit 1
           fi
