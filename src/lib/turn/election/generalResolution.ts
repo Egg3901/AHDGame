@@ -109,18 +109,10 @@ export async function resolveOneGeneralElection(
   currentTurn: number,
   now: Date,
   bgEligibleParties: ReadonlySet<string> | null = null,
-  huMixedCandidateSeats?: Readonly<Record<string, number>>
+  huMixedCandidateSeats?: Readonly<Record<string, number>>,
+  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
   if (isNativeRussianAssemblyElection(election)) return { resolved: false, newsOutcomes: [] };
-  if (
-    election.countryId === "BG" &&
-    election.electionType === "nationalAssembly" &&
-    election.cycle === 1 &&
-    election.electionYear === 1991 &&
-    !bgEligibleParties
-  ) {
-    throw new Error("Bulgaria 1991 Assembly requires the nationwide party threshold");
-  }
   const newsOutcomes: ElectionNewsOutcome[] = [];
 
   // Atomic claim: prevent concurrent resolution from corrupting office data.
@@ -157,6 +149,16 @@ export async function resolveOneGeneralElection(
       electionMethod !== "pr_hareQuota"
     ) {
       throw new Error("Bulgaria 2027 Assembly requires parliamentary proportional representation");
+    }
+    if (
+      election.countryId === "BG" &&
+      election.electionType === "nationalAssembly" &&
+      election.cycle >= 1 &&
+      bgPreset === "1991-default" &&
+      !tally?.finalized &&
+      !bgOrdinaryCandidateSeats
+    ) {
+      throw new Error("Bulgarian ordinary Assembly requires its frozen national allocation");
     }
     // Phase 4: Sainte-Laguë chambers (DE Landtag) use proportional allocation
     // (5% Land-level threshold) instead of FPTP. Dispatch on the configured
@@ -283,6 +285,14 @@ export async function resolveOneGeneralElection(
       return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
     }
 
+    // Closed lists can seat a registered replacement with zero personal votes.
+    // Preserve that nominee in the candidate load and saved result, rather than
+    // discarding their national mandate because they had no tally key.
+    if (bgOrdinaryCandidateSeats)
+      effectiveVotes = {
+        ...Object.fromEntries(Object.keys(bgOrdinaryCandidateSeats).map((id) => [id, 0])),
+        ...effectiveVotes,
+      };
     const candidateIds = Object.keys(effectiveVotes);
     const candidates = await db
       .collection<ElectionCandidate>("electionCandidates")
@@ -437,7 +447,18 @@ export async function resolveOneGeneralElection(
     if (candidateCharIds.length > 0) {
       const existingChars = await db
         .collection<Character>("characters")
-        .find({ _id: { $in: candidateCharIds } }, { projection: { _id: 1 } })
+        .find(
+          {
+            _id: { $in: candidateCharIds },
+            ...(bgOrdinaryCandidateSeats
+              ? {
+                  countryId: "BG",
+                  federationPendingResidenceId: { $exists: false },
+                }
+              : {}),
+          },
+          { projection: { _id: 1 } }
+        )
         .toArray();
       const existingCharIds = new Set(existingChars.map((c) => c._id.toString()));
       for (const c of candidates) {
@@ -566,6 +587,35 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
+    const bgOrdinaryAllocation = bgOrdinaryCandidateSeats
+      ? (() => {
+          const seatsEstimate: Record<string, number> = { ...bgOrdinaryCandidateSeats };
+          const eligibleIds = new Set(ranked.map((row) => row.id));
+          for (const [id, seats] of Object.entries(seatsEstimate)) {
+            const candidate = candidateMap.get(id);
+            if (
+              !Number.isSafeInteger(seats) ||
+              seats < 0 ||
+              (seats > 0 && (!eligibleIds.has(id) || !candidate || (!candidate.isNPP && seats > 1)))
+            )
+              throw new Error("Bulgarian frozen allocation has an unavailable or invalid holder");
+          }
+          if (Object.values(seatsEstimate).reduce((sum, seats) => sum + seats, 0) !== totalSeats)
+            throw new Error("Bulgarian frozen allocation does not fill the regional capacity");
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
     const bgAllocation =
       bgEligibleParties &&
       election.countryId === "BG" &&
@@ -644,6 +694,7 @@ export async function resolveOneGeneralElection(
       : null;
     const { isMultiSeat, seatsEstimate, winners, losers } =
       districted ??
+      bgOrdinaryAllocation ??
       bgAllocation ??
       huAllocation ??
       allocateSeats(
@@ -1320,17 +1371,19 @@ export async function resolveOneGeneralElection(
             };
           }),
           resolvedTotalSeats: winners.reduce((sum, [, seats]) => sum + seats, 0),
-          resolutionPath: districted
-            ? "districted_house"
-            : runtimeBlocQuota
-              ? "bloc_list"
-              : election.countryId === "DE" &&
-                  (election.electionType === "bundestag" ||
-                    election.electionType === "snap_bundestag")
-                ? "ams_direct"
-                : isMultiSeat
-                  ? "hare_quota"
-                  : "single_winner",
+          resolutionPath: bgOrdinaryAllocation
+            ? "bg_ordinary_national"
+            : districted
+              ? "districted_house"
+              : runtimeBlocQuota
+                ? "bloc_list"
+                : election.countryId === "DE" &&
+                    (election.electionType === "bundestag" ||
+                      election.electionType === "snap_bundestag")
+                  ? "ams_direct"
+                  : isMultiSeat
+                    ? "hare_quota"
+                    : "single_winner",
         },
       }
     );

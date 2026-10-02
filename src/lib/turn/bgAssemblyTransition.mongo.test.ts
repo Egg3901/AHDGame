@@ -123,6 +123,7 @@ it.skipIf(!runRealMongo)(
         await db.collection("npps").insertMany(
           candidates.map((candidate) => ({
             _id: candidate.nppId,
+            countryId: "BG",
             party: candidate.party,
             retiredAt: null,
             currentOffice: null,
@@ -179,8 +180,9 @@ it.skipIf(!runRealMongo)(
       ).toBe(400);
       expect(await chamber.getLiveLowerChamberSeats(db, "BG")).toBe(400);
 
-      const eligible = await eligibility.readBgOrdinaryEligibleParties(db);
-      expect([...eligible!].sort()).toEqual(["A", "B"]);
+      const plan = await eligibility.readBgOrdinaryElectionPlan(db, 1, now);
+      expect(plan?.partySeats.A).toBeGreaterThan(0);
+      expect(plan?.partySeats.B).toBeGreaterThan(0);
       for (const row of await db.collection("elections").find({ countryId: "BG" }).toArray()) {
         const tally = await db.collection("electionVoteTallies").findOne({ electionId: row._id });
         const result = await resolution.resolveOneGeneralElection(
@@ -189,7 +191,9 @@ it.skipIf(!runRealMongo)(
           tally as unknown as ElectionVoteTally,
           40,
           now,
-          eligible
+          null,
+          undefined,
+          plan!.candidateSeatsByElection[row._id.toHexString()]
         );
         expect(result.resolved).toBe(true);
       }

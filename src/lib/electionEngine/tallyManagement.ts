@@ -444,6 +444,11 @@ export async function accumulateVoteTurn(
   // surge could still carry the race past the registered electorate. Ballots
   // already on the board plus this slice may never exceed it. Bound Duma
   // ballots also retain votes cast before a nominee withdrew.
+  const isBgOrdinary =
+    preset === "1991-default" &&
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    election.cycle >= 1;
   const isBoundDuma =
     election.countryId === "RU" &&
     election.electionType === "dumaDeputy" &&
@@ -782,6 +787,10 @@ export async function accumulateVoteTurn(
         (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
   }
 
+  if (isBgOrdinary)
+    for (const [id, votes] of Object.entries(tally.totalVotes)) {
+      if (!activeCandidateIds.has(id)) newTotals[id] = votes;
+    }
   if (isBoundDuma) {
     newTotals = russianDumaVoteTotals({
       registeredVoters: election.russianDumaRound!.registeredVoters,
@@ -837,6 +846,7 @@ export async function accumulateVoteTurn(
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
+    if (isBgOrdinary) return undefined;
     if (councilTotals) {
       const result = resolveRussianCouncilBallot({
         ...councilTotals.ballot,
@@ -956,7 +966,7 @@ export async function accumulateVoteTurn(
   const cleanedNames = { ...tally.candidateNames };
   const cleanedParties = { ...tally.candidateParties };
   for (const key of Object.keys(tally.totalVotes)) {
-    if (!activeCandidateIds.has(key) && !isBoundDuma && !isBoundCouncil) {
+    if (!activeCandidateIds.has(key) && !isBoundDuma && !isBoundCouncil && !isBgOrdinary) {
       delete cleanedNames[key];
       delete cleanedParties[key];
     }
@@ -969,7 +979,9 @@ export async function accumulateVoteTurn(
   }
 
   const tallyUpdate = {
+    ...(isBgOrdinary ? { $unset: { seatsEstimate: "" as const } } : {}),
     $set: {
+      ...(isBgOrdinary ? { bgOrdinaryBallot: true as const } : {}),
       totalVotes: newTotals,
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,

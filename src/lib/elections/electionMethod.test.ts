@@ -182,3 +182,12 @@ describe("every configured position holds a valid method", () => {
     }
   });
 });
+
+it("routes every1991-world ordinary Bulgarian cycle to national D'Hondt while preserving founding and other eras", () => {
+  expect(getElectionMethod("BG", "nationalAssembly", "1991-default", 0)).toBe("ams");
+  for (const cycle of [1, 2, 7])
+    expect(getElectionMethod("BG", "nationalAssembly", "1991-default", cycle)).toBe("pr_dhondt");
+  expect(getElectionMethod("BG", "nationalAssembly", "2027-default", 1)).toBe("pr_hareQuota");
+  expect(isMultiSeatMethod("pr_dhondt")).toBe(true);
+  expect(isListTierMethod("pr_dhondt")).toBe(false);
+});

@@ -310,3 +310,33 @@ describe("buildBlendClock", () => {
     expect(rows.at(-1)).toMatchObject({ label: "Turnout", value: "63.0%" });
   });
 });
+
+it("describes Bulgarian regional mandates as a national count without inventing a regional Hare quota", () => {
+  const input = houseInput({
+    countryId: "BG",
+    electionType: "nationalAssembly",
+    preset: "1991-default",
+    cycle: 2,
+    isEnded: true,
+  });
+  const view = buildBlendDetail(input);
+  expect(detailQuota(input)).toBeNull();
+  expect(view.standfirst).toContain("national D'Hondt");
+  expect(view.standfirst).toContain("4% nationwide");
+  expect(view.rows.some((row) => row.math.some((entry) => entry.key === "Quota"))).toBe(false);
+});
+
+it("shows pending national allocation instead of a fabricated zero-seat result", () => {
+  const view = buildBlendDetail(
+    houseInput({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      preset: "1991-default",
+      cycle: 1,
+      seatsEstimate: null,
+    })
+  );
+  expect(view.headline).toContain("National count pending");
+  expect(view.isSeatRace).toBe(false);
+  expect(view.rows.every((row) => row.seatsCell === "Pending")).toBe(true);
+});

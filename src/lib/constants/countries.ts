@@ -18,6 +18,7 @@ import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { JP_ERAS } from "@/lib/countries/jp/eras";
 import { AT_ERAS } from "@/lib/countries/at/eras";
 import { BAL_ERAS } from "@/lib/countries/bal/eras";
+import { bg1991OrdinaryAssemblyConfig } from "@/lib/countries/bg/runtimeInstitutions";
 import { BG_ERAS } from "@/lib/countries/bg/eras";
 import { BLR_ERAS } from "@/lib/countries/blr/eras";
 import { BR_ERAS } from "@/lib/countries/br/eras";
@@ -242,6 +243,7 @@ export interface OfficeTypeConfig {
 export type ElectionMethod =
   | "fptp" // single-seat plurality
   | "pr_hareQuota" // multi-seat Largest Remainder (Hare quota)
+  | "pr_dhondt" // national highest-averages party allocation
   | "pr_sainteLague" // odd-divisor proportional (DE Landtag)
   | "ams" // additional-member system (DE Bundestag)
   | "electoralCollege" // per-unit FPTP aggregated to a majority (US President)
@@ -1306,6 +1308,7 @@ export function getCountryConfigForRuntime(
   id: CountryId,
   preset: string | undefined,
   countryState?: {
+    bgOrdinaryAssemblySinceTurn?: number;
     ruSovietSuccessionSinceTurn?: number;
     ruProvisionalCongressSeats?: number;
     ruPresidencySinceTurn?: number;
@@ -1316,6 +1319,8 @@ export function getCountryConfigForRuntime(
   } | null
 ): CountryConfig {
   const config = getCountryConfig(id, preset);
+  if (id === "BG" && preset === "1991-default" && countryState?.bgOrdinaryAssemblySinceTurn != null)
+    return bg1991OrdinaryAssemblyConfig(config);
   if (id !== "RU" || preset !== "1991-default") return config;
   // Existing saves may already carry a later Russian office marker from the
   // old scheduler. Preserve that alternate history even without the newer

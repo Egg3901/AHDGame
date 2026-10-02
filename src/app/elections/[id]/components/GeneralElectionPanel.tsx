@@ -39,6 +39,7 @@ import {
 } from "@/lib/campaigns/campaignStrength";
 import { campaignLocalRate, getCampaignCurrency } from "@/lib/campaigns/campaignCurrency";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
+import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 /** ×1, one of the batch steps, or "as many as I can pay for right now". */
@@ -50,6 +51,7 @@ export function GeneralElectionPanel({
   isEnded,
   totalSeats,
   electionType = "governor",
+  cycle,
   electionId,
   myCharId,
   myEndorsedCandidateId: initialEndorsedId,
@@ -70,10 +72,11 @@ export function GeneralElectionPanel({
   totalSeats: number | null;
   electionType?:
     "senate" | "house" | "stateSenate" | "governor" | "president" | "commons" | (string & {});
+  cycle?: number;
   electionId?: string;
   myCharId?: string | null;
   myEndorsedCandidateId?: string | null;
-  countryId?: "US" | "UK" | "DE" | "RU";
+  countryId?: CountryId;
   /** Rendered between the tally and the trend charts (non-presidential). */
   afterTally?: React.ReactNode;
   /** Blend detail chrome — region, country and year for the verdict hero. */
@@ -685,6 +688,7 @@ export function GeneralElectionPanel({
       lineSeries={lineSeries}
       countryId={countryId}
       electionType={electionType}
+      cycle={cycle}
       regionName={regionName ?? ""}
       countryName={countryName ?? ""}
       year={year ?? null}

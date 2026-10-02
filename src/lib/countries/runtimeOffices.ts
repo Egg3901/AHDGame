@@ -17,12 +17,13 @@ export async function loadRuntimeCountryOffices(
 ) {
   const activePreset = preset ?? (await getGameStatePreset(db));
   const country =
-    countryId === "RU" && activePreset === "1991-default"
+    (countryId === "RU" || countryId === "BG") && activePreset === "1991-default"
       ? await db.collection<CountryGameState>("countryGameStates").findOne(
-          { _id: "RU" },
+          { _id: countryId },
           {
             session,
             projection: {
+              bgOrdinaryAssemblySinceTurn: 1,
               ruSovietSuccessionSinceTurn: 1,
               ruProvisionalCongressSeats: 1,
               ruPresidencySinceTurn: 1,

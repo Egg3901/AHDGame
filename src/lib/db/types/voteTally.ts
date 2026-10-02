@@ -66,11 +66,14 @@ export interface ElectionVoteTally {
     outcome?: "elected" | "repeat";
     certifiedCohortId?: ObjectId;
   };
+  /** Counted Bulgarian list votes survive withdrawals; seats require a national count. */
+  bgOrdinaryBallot?: true;
   seatsEstimate?: Record<string, number>;
   /** Actual non-presidential resolver receipt. Absent on historical tallies. */
   resolutionPath?:
     | "single_winner"
     | "hare_quota"
+    | "bg_ordinary_national"
     | "districted_house"
     | "bloc_list"
     | "sainte_lague"
