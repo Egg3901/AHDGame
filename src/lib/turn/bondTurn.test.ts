@@ -34,7 +34,10 @@ vi.mock("@/lib/bonds/sovereign", () => ({
   getBondCountryId: vi.fn().mockReturnValue("US"),
   isCorporateBond: vi.fn((b: { isCorporate?: boolean }) => !!b.isCorporate),
   issueScheduledSovereignBondSeries: vi.fn().mockResolvedValue(undefined),
-  settleSovereignBondMaturity: vi.fn().mockResolvedValue(undefined),
+  settleSovereignBondMaturity: vi.fn(async (_db, _bond, repaymentLocal: number) => ({
+    amountLocal: repaymentLocal,
+    currencyCode: "USD",
+  })),
 }));
 vi.mock("@/lib/constants/bonds", () => ({
   BOND_DEFAULT_CREDIT_PENALTY_TURNS: 100,
