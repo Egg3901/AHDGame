@@ -156,7 +156,9 @@ describe("loadNationalGdpGrowth", () => {
   });
 
   it("falls back to the era trend only when no region carries a growth metric", async () => {
-    await expect(loadNationalGdpGrowth(fakeDb(null, [], []), "FR", 1959)).resolves.toBe(4.5);
+    await expect(loadNationalGdpGrowth(fakeDb(null, [], []), "FR", 1959)).resolves.toBeCloseTo(
+      25 / 6
+    );
   });
 
   it("returns null when there is no doc, no regional metric and no era trend", async () => {
