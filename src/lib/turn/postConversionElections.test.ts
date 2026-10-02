@@ -57,6 +57,45 @@ describe("processPostConversionElections", () => {
     });
   });
 
+  it("carries the conversion's terms for the former ruling party onto the snap", async () => {
+    const { db } = dbWith([
+      {
+        _id: "DD",
+        pendingPostConversionElection: {
+          atTurn: 100,
+          legacyReservation: 20,
+          formerRulingPartyId: 1,
+          path: "voluntary",
+        },
+      },
+      {
+        _id: "CN",
+        pendingPostConversionElection: {
+          atTurn: 90,
+          legacyReservation: 5,
+          formerRulingPartyId: 7,
+          forcedVoteSharePenalty: -0.2,
+          path: "forced",
+        },
+      },
+    ]);
+    await processPostConversionElections(db, 100, now);
+    expect(triggerSnapElection).toHaveBeenCalledWith(expect.anything(), "DD", now, {
+      reason: "regime-change",
+      bypassLimits: true,
+      conversionTerms: { formerRulingPartyId: "1", legacyReservationPct: 20 },
+    });
+    expect(triggerSnapElection).toHaveBeenCalledWith(expect.anything(), "CN", now, {
+      reason: "regime-change",
+      bypassLimits: true,
+      conversionTerms: {
+        formerRulingPartyId: "7",
+        legacyReservationPct: 5,
+        voteSharePenalty: -0.2,
+      },
+    });
+  });
+
   it("clears the marker so it cannot fire twice", async () => {
     const { db } = dbWith([{ _id: "DD", pendingPostConversionElection: { atTurn: 100 } }]);
     await processPostConversionElections(db, 100, now);

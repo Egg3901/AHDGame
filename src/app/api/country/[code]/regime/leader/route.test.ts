@@ -141,6 +141,24 @@ describe("GET /api/country/[code]/regime/leader", () => {
     expect(json.scalars.confidenceBand).toBe("watchful");
   });
 
+  it("tells the draft form exactly what this country's convention accepts", async () => {
+    for (const [code, targets] of [
+      ["CN", ["parliamentaryRepublic", "presidential"]],
+      // No allowlist on DD: its single collapse target is the only option.
+      ["DD", ["parliamentaryRepublic"]],
+    ] as const) {
+      const res = await GET(request(), { params: Promise.resolve({ code }) });
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as { conventionDraftOptions: unknown };
+      expect(json.conventionDraftOptions).toEqual({
+        targets,
+        electionDelays: [12, 24, 48],
+        legacyReservationMax: 35,
+        defaults: { legacyReservation: 20, electionDelayTurns: 24 },
+      });
+    }
+  });
+
   it("attaches the active decision's registered options when a handler exists", async () => {
     const decisionId = new ObjectId();
     mockRegimeFindOne.mockResolvedValue({
