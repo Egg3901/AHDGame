@@ -16,7 +16,9 @@ import { UKR_2027 } from "./2027";
  * asserted against the roster in `contract.test.ts` rather than a literal, so a
  * new preset fails loudly here instead of silently leaving UKR without an era.
  *
- * ⚠ UKR HAS NO CONFIG OVERRIDE IN ANY ERA. Every preset uses the base config.
+ * ⚠ UKR HAS ONE CONFIG OVERRIDE: 1953 GDP is authored in Soviet rubles and
+ * needs the Soviet-ruble anchor normalizer. Every other preset uses the base
+ * config.
  */
 export const UKR_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
   "1953-default": UKR_1953,
