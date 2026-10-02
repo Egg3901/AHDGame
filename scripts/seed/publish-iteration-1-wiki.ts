@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   const force = process.argv.includes("--force");
   validateSeedRegistration();
 
-  const client = new MongoClient(uri);
+  const client = new MongoClient(uri, { directConnection: true });
   await client.connect();
 
   try {

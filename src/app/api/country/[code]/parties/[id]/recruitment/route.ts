@@ -16,6 +16,7 @@ import type { NPP } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
+import { activePartyNppFilter } from "@/lib/npp/recruitmentScope";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   recruitmentCooldownRemainingTurns,
@@ -57,7 +58,7 @@ export async function GET(
     // Count party NPPs
     const partyNPPCount = await db
       .collection<NPP>("npps")
-      .countDocuments({ party: String(party.sequentialId), retiredAt: null });
+      .countDocuments(activePartyNppFilter(countryId, String(party.sequentialId)));
 
     const now = new Date();
     // Turn-first cooldown remaining (+ Date fallback in helper); read currentTurn
