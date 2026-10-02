@@ -71,6 +71,7 @@ import {
   useBroadcastGlobeLayers,
 } from "@/components/landing/broadcastGlobe";
 import type { BroadcastLanderConfig } from "@/components/landing/eraThemes";
+import { createGlobeFrame } from "@/components/landing/globeFastPaths";
 
 type LandingCountryAccess = Partial<
   Record<string, { enabledForPlayers: boolean; economyPreview: boolean; status: CountryStatus }>
@@ -243,7 +244,7 @@ export function LandingGlobe({
   /**
    * The broadcast globe (the 1991 hero, see `components/landing/broadcastGlobe`):
    * lit ocean, a dissolved state's borders, and satellites beaming down to the
-   * crawl's datelines. Absent keeps the plain or CRT look, which
+   * year's datelines. Absent keeps the plain or CRT look, which
    * `wireframeColor` decides. Pass a stable reference; the era config is one.
    */
   broadcast?: Pick<
@@ -252,7 +253,7 @@ export function LandingGlobe({
   >;
   /**
    * Skip the bare-mode tier key in the corner, for a hero that draws its own
-   * (the broadcast lander's ticker owns that corner). Default false.
+   * (the broadcast lander sets its key above the drawer). Default false.
    */
   hideTierLegend?: boolean;
   /**
@@ -450,6 +451,26 @@ export function LandingGlobe({
   const markerListRef = useRef(markerList);
   markerListRef.current = markerList;
 
+  // Rects read by the per-frame chip and card placement. Reading one right
+  // after a frame's path writes forces a synchronous layout every frame, so
+  // they are measured once and dropped on resize, scroll or new chip content.
+  const layoutCacheRef = useRef<{
+    svg?: DOMRect;
+    overlay?: DOMRect;
+    chip?: { width: number; height: number };
+    card?: { index: number; width: number; height: number };
+  }>({});
+  const invalidateLayout = useCallback(() => {
+    layoutCacheRef.current = {};
+  }, []);
+  const readRects = useCallback((svg: SVGSVGElement, overlay: HTMLDivElement) => {
+    const cache = layoutCacheRef.current;
+    cache.svg ??= svg.getBoundingClientRect();
+    cache.overlay ??= overlay.getBoundingClientRect();
+    return { sr: cache.svg, mr: cache.overlay };
+  }, []);
+  useEffect(invalidateLayout, [markerList, invalidateLayout]);
+
   const updateMarkers = useCallback(() => {
     const d3 = d3Ref.current;
     const overlay = markersOverlayRef.current;
@@ -466,8 +487,7 @@ export function LandingGlobe({
       .rotate(rot)
       .clipAngle(90 + 1e-6);
 
-    const sr = svg.getBoundingClientRect();
-    const mr = overlay.getBoundingClientRect();
+    const { sr, mr } = readRects(svg, overlay);
     if (leadersSvgRef.current) {
       leadersSvgRef.current.setAttribute("viewBox", `0 0 ${mr.width} ${mr.height}`);
     }
@@ -511,10 +531,14 @@ export function LandingGlobe({
 
     let cw = 112;
     let ch = 30;
-    const r0 = vis[0].chip.getBoundingClientRect();
-    if (r0.width) {
-      cw = r0.width;
-      ch = r0.height;
+    let chipSize = layoutCacheRef.current.chip;
+    if (!chipSize) {
+      const r0 = vis[0].chip.getBoundingClientRect();
+      if (r0.width) chipSize = layoutCacheRef.current.chip = { width: r0.width, height: r0.height };
+    }
+    if (chipSize) {
+      cw = chipSize.width;
+      ch = chipSize.height;
     }
     const vpLeft = cw / 2 + 6;
     const vpRight = window.innerWidth - cw / 2 - 6;
@@ -573,7 +597,7 @@ export function LandingGlobe({
         dot.style.opacity = String(v.op);
       }
     }
-  }, []);
+  }, [readRects]);
 
   // Historical-crisis showcase card: attached to its country like the
   // player-count chips above, via the same projection + leader line into
@@ -600,8 +624,7 @@ export function LandingGlobe({
       .rotate(rot)
       .clipAngle(90 + 1e-6);
 
-    const sr = svg.getBoundingClientRect();
-    const mr = overlay.getBoundingClientRect();
+    const { sr, mr } = readRects(svg, overlay);
     // Belt-and-suspenders: updateMarkers() usually owns this, but it no-ops
     // when there are no player-count chips, which would otherwise leave this
     // unset on a markerless page.
@@ -625,9 +648,19 @@ export function LandingGlobe({
 
     const card = showcaseCardRef.current;
     if (!card) return;
-    const rect = card.getBoundingClientRect();
-    const cw = rect.width || 320;
-    const ch = rect.height || 170;
+    let cardSize = layoutCacheRef.current.card;
+    if (cardSize?.index !== motion.index) {
+      const rect = card.getBoundingClientRect();
+      cardSize = rect.width
+        ? (layoutCacheRef.current.card = {
+            index: motion.index,
+            width: rect.width,
+            height: rect.height,
+          })
+        : undefined;
+    }
+    const cw = cardSize?.width || 320;
+    const ch = cardSize?.height || 170;
     const gap = 24;
     const navClearance = 76;
     const above = py - gap - ch >= navClearance;
@@ -643,7 +676,7 @@ export function LandingGlobe({
       line.setAttribute("x2", String(px - mr.left));
       line.setAttribute("y2", String(py - mr.top));
     }
-  }, [showcase]);
+  }, [readRects, showcase]);
 
   const updateEnhancedOverlay = useCallback(() => {
     const d3 = d3Ref.current;
@@ -696,6 +729,8 @@ export function LandingGlobe({
       .clipAngle(90 + 1e-6);
 
     const pathGen = d3.geoPath(proj);
+    const rotate = d3.geoRotation(rotationRef.current);
+    const frame = createGlobeFrame(rotate, LANDING_ORTHO_SCALE * z, LANDING_TRANSLATE, pathGen);
     const lookup = tierLookupRef.current;
     // Background Nations are accumulated into ONE `d` string per layer (the
     // macro-simulated ones and the rest) and written once, instead of ~150
@@ -706,7 +741,7 @@ export function LandingGlobe({
       const id = String(feature.id);
       const isBackground = lookup ? !isTierInteractive(lookup.get(id) ?? "background") : false;
       if (isBackground) {
-        const d = pathGen(feature);
+        const d = frame.feature(feature);
         if (!d) continue;
         if (backgroundMacroSet?.has(id)) macroD += d;
         else backgroundD += d;
@@ -714,7 +749,7 @@ export function LandingGlobe({
       }
       const el = pathRefsMap.current.get(id);
       if (!el) continue;
-      const d = pathGen(feature);
+      const d = frame.feature(feature);
       if (d) {
         el.setAttribute("d", d);
         el.style.opacity = "1";
@@ -737,8 +772,7 @@ export function LandingGlobe({
     }
 
     if (graticuleRef.current && graticuleDataRef.current) {
-      const gd = pathGen(graticuleDataRef.current);
-      if (gd) graticuleRef.current.setAttribute("d", gd);
+      graticuleRef.current.setAttribute("d", frame.lines(graticuleDataRef.current));
     }
 
     if (sphereRef.current) {
@@ -746,7 +780,7 @@ export function LandingGlobe({
     }
 
     if (warBorderPathRef.current && warBorderFeatureRef.current) {
-      const wd = pathGen(warBorderFeatureRef.current);
+      const wd = frame.feature(warBorderFeatureRef.current);
       if (wd) {
         warBorderPathRef.current.setAttribute("d", wd);
         warBorderPathRef.current.style.opacity = "1";
@@ -757,12 +791,12 @@ export function LandingGlobe({
 
     if (isBroadcast) {
       renderBroadcast({
-        rotate: d3.geoRotation(rotationRef.current),
+        rotate,
         zoom: z,
         now: performance.now(),
         animate: !prefersReducedMotionRef.current,
         beams: !showcaseMotionRef.current,
-        pathGen,
+        lines: frame.lines,
       });
     }
     if (enhancedRef.current) updateEnhancedOverlay();
@@ -790,13 +824,15 @@ export function LandingGlobe({
       .clipAngle(90 + 1e-6);
 
     const pathGen = d3.geoPath(proj);
+    const rotate = d3.geoRotation(rotationRef.current);
+    const frame = createGlobeFrame(rotate, LANDING_ORTHO_SCALE * z, LANDING_TRANSLATE, pathGen);
     const newPaths = new Map<string, string | null>();
     for (const feature of featuresRef.current) {
-      newPaths.set(String(feature.id), pathGen(feature));
+      newPaths.set(String(feature.id), frame.feature(feature));
     }
 
     if (graticuleRef.current && graticuleDataRef.current) {
-      graticuleRef.current.setAttribute("d", pathGen(graticuleDataRef.current) || "");
+      graticuleRef.current.setAttribute("d", frame.lines(graticuleDataRef.current));
       graticuleRef.current.style.opacity = "0.3";
     }
     if (sphereRef.current) {
@@ -808,7 +844,7 @@ export function LandingGlobe({
     }
 
     if (warBorderPathRef.current && warBorderFeatureRef.current) {
-      const d = pathGen(warBorderFeatureRef.current);
+      const d = frame.feature(warBorderFeatureRef.current);
       if (d) {
         warBorderPathRef.current.setAttribute("d", d);
         warBorderPathRef.current.style.opacity = "1";
@@ -819,12 +855,12 @@ export function LandingGlobe({
 
     if (isBroadcast) {
       renderBroadcast({
-        rotate: d3.geoRotation(rotationRef.current),
+        rotate,
         zoom: z,
         now: performance.now(),
         animate: !prefersReducedMotionRef.current,
         beams: !showcaseMotionRef.current,
-        pathGen,
+        lines: frame.lines,
       });
     }
     if (enhancedRef.current) updateEnhancedOverlay();
@@ -1112,15 +1148,19 @@ export function LandingGlobe({
       updateShowcaseCard();
     });
     const onResize = () => {
+      invalidateLayout();
       updateMarkers();
       updateShowcaseCard();
     };
     window.addEventListener("resize", onResize);
+    // Any scroll can move a globe that is not fixed, so its rects go stale.
+    window.addEventListener("scroll", invalidateLayout, { capture: true, passive: true });
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", invalidateLayout, { capture: true });
     };
-  }, [isLoaded, markerList, updateMarkers, updateShowcaseCard]);
+  }, [isLoaded, markerList, invalidateLayout, updateMarkers, updateShowcaseCard]);
 
   useEffect(() => {
     const el = cardRef.current;

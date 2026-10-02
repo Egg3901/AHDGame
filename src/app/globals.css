@@ -1219,16 +1219,6 @@ html[data-high-contrast="true"] :focus-visible {
   }
 }
 
-@keyframes ahd-bc-ghost-pulse {
-  0%,
-  100% {
-    opacity: 0.9;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
 /* The global `h1` rule is unlayered, so a Tailwind font utility cannot beat it;
    this class can. The broadcast headline is set in the sans, not the serif. */
 .ahd-bc-headline {
@@ -1237,9 +1227,9 @@ html[data-high-contrast="true"] :focus-visible {
 
 .ahd-bc-ghost {
   stroke-dasharray: 2.4 2.8;
-  animation:
-    ahd-bc-ghost-break 2.4s ease-in-out 0.8s both,
-    ahd-bc-ghost-pulse 6s ease-in-out 3.2s infinite;
+  /* The slow pulse after the break is written by the globe's frame loop: an
+     infinite CSS animation here would repaint the whole globe at 60fps. */
+  animation: ahd-bc-ghost-break 2.4s ease-in-out 0.8s both;
 }
 
 /* Headline year odometer: each digit is a 0 to 9 strip in a one-line window,
@@ -1298,46 +1288,8 @@ html[data-high-contrast="true"] :focus-visible {
   animation: none;
 }
 
-/* Lower-third crawl: the track holds two identical runs and slides by one. */
-@keyframes ahd-bc-crawl {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-.ahd-bc-crawl {
-  animation: ahd-bc-crawl var(--ahd-bc-crawl-dur, 90s) linear infinite;
-  will-change: transform;
-}
-
-.ahd-bc-crawl-window {
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent,
-    #000 1.5rem,
-    #000 calc(100% - 2.5rem),
-    transparent
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent,
-    #000 1.5rem,
-    #000 calc(100% - 2.5rem),
-    transparent
-  );
-}
-
-.ahd-bc-ticker:hover .ahd-bc-crawl,
-.ahd-bc-ticker:focus-within .ahd-bc-crawl {
-  animation-play-state: paused;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .ahd-bc-ghost,
-  .ahd-bc-crawl {
+  .ahd-bc-ghost {
     animation: none;
   }
 
@@ -1347,14 +1299,6 @@ html[data-high-contrast="true"] :focus-visible {
 
   .ahd-wordmark-cursor {
     animation: none;
-  }
-
-  /* A stopped crawl still has to be readable to the end, from its first
-     dateline: no fade on the leading edge. */
-  .ahd-bc-crawl-window {
-    overflow-x: auto;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
   }
 }
 
