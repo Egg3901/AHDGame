@@ -3,6 +3,7 @@ import { blockadeClosureByCountry } from "@/lib/navair/blockade";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import type { NavairUnit } from "@/lib/navair/types";
+import { FIGHTING_CONFLICT_STATUSES } from "@/lib/military/conflictLifecycle";
 
 /**
  * Blockade closure per country for this turn.
@@ -16,7 +17,10 @@ export async function loadBlockadeClosure(db: Db): Promise<Map<string, number>> 
   // Projection passed as a find option rather than via the cursor's .project(), which is
   // this codebase's house style and does not require a cursor implementation of it.
   const conflicts = (await getConflictsCollection(db)
-    .find({ status: "active" }, { projection: { "sideA.countries": 1, "sideB.countries": 1 } })
+    .find(
+      { status: { $in: [...FIGHTING_CONFLICT_STATUSES] } },
+      { projection: { "sideA.countries": 1, "sideB.countries": 1 } }
+    )
     .toArray()) as unknown as Array<{
     sideA?: { countries?: string[] };
     sideB?: { countries?: string[] };

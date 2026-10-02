@@ -1,5 +1,12 @@
 import type { ConflictDoc, ConflictStatus } from "@/lib/db/types/conflict";
 
+/** Statuses whose belligerents are still fighting and receive combat effects. */
+export const FIGHTING_CONFLICT_STATUSES = [
+  "active",
+  "escalating",
+  "winding_down",
+] as const satisfies readonly ConflictStatus[];
+
 /**
  * Is the FIGHTING over at this conflict?
  *

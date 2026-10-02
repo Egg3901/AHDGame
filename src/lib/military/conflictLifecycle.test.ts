@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { ConflictStatus } from "@/lib/db/types/conflict";
 import {
   CONFLICT_ARCHIVE_DELAY_TURNS,
+  FIGHTING_CONFLICT_STATUSES,
   archiveOpensTurn,
   isArchiveOpen,
   isConflictConcluded,
@@ -17,9 +18,17 @@ describe("isConflictConcluded", () => {
   });
 
   it("is false for every status where the fighting can still continue", () => {
-    for (const status of ["active", "escalating", "winding_down"] as ConflictStatus[]) {
+    for (const status of FIGHTING_CONFLICT_STATUSES) {
       expect(isConflictConcluded(status)).toBe(false);
     }
+  });
+
+  it("names every status that combat systems must keep processing", () => {
+    expect([...FIGHTING_CONFLICT_STATUSES]).toEqual([
+      "active",
+      "escalating",
+      "winding_down",
+    ] satisfies ConflictStatus[]);
   });
 
   it("is false for an absent status, so a malformed document is not read as finished", () => {

@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { ClientSession, Collection, Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FederalBudget } from "@/lib/db/types";
 import { convertLocal } from "@/lib/internationalOrganizations/organizationFund";
@@ -15,6 +15,8 @@ import {
 } from "@/lib/onePartyState/systemConversion";
 import type { PeaceTerm } from "./peaceTerm";
 import { reunifyByPeaceTerm } from "@/lib/settlement/reunifyByPeaceTerm";
+import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
+import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 
 export interface ApplyTermContext {
   /** The country imposing or offering. Receives an indemnity it is not paying. */
@@ -23,6 +25,8 @@ export interface ApplyTermContext {
   target: CountryId;
   conflictId: string;
   currentTurn: number;
+  /** Negotiated acceptance receipt; omitted by the separate imposed-terms road. */
+  peaceOfferId?: ObjectId;
 }
 
 /**
@@ -33,8 +37,10 @@ export interface ApplyTermContext {
  * Winning outright and negotiating do the same thing to the world, so they are the
  * same code, and the two cannot drift on what a term means.
  *
- * NOT REPLAYABLE. Every caller must claim its document before entering, exactly as
- * `acceptPeace` claims the offer on `status: "pending"` before moving any money.
+ * Negotiated indemnities are replay-safe: replica sets commit both treasury writes
+ * and the offer marker in one transaction, while standalone Mongo uses an atomic
+ * per-treasury offer receipt so an interrupted transfer can resume either leg once.
+ * The imposed-terms road still owns its separate claim before entering this function.
  *
  * Spec: docs/superpowers/specs/2026-08-27-peace-terms-design.md
  */
@@ -180,14 +186,39 @@ async function moveIndemnity(
   const credited = convertLocal(payer, recipient, amount, preset);
   const now = new Date();
 
-  // Both non-upserting `updateOne`s below match by countryId. If either party has
+  // The non-upserting treasury writes below match by countryId. If either party has
   // no federalBudget doc (the partial-seed gap `ensureFederalBudget` exists to
   // close), its write matches zero documents and the indemnity silently vanishes
-  // on that side. Heal both first so both writes land.
-  await ensureFederalBudget(db, payer, preset);
-  await ensureFederalBudget(db, recipient, preset);
+  // on that side. Heal both first and fail closed if the preset cannot supply one.
+  const payerBudget = await ensureFederalBudget(db, payer, preset);
+  const recipientBudget = await ensureFederalBudget(db, recipient, preset);
+  if (!payerBudget || !recipientBudget) {
+    throw new Error(`Cannot apply indemnity: missing federal budget for ${payer} or ${recipient}`);
+  }
 
   const budgets = db.collection<FederalBudget>("federalBudget");
+  if (ctx.peaceOfferId) {
+    const receiptId = String(ctx.peaceOfferId);
+    const applyNegotiatedIndemnity = async (session?: ClientSession) => {
+      await applyIndemnityLeg(budgets, payer, -amount, receiptId, now, session);
+      await applyIndemnityLeg(budgets, recipient, credited, receiptId, now, session);
+      await getPeaceOffersCollection(db).updateOne(
+        {
+          _id: ctx.peaceOfferId,
+          status: "accepted",
+          "application.phase": "claimed",
+        },
+        { $set: { "application.phase": "term_applied" } },
+        session ? { session } : undefined
+      );
+    };
+    await runWithOptionalTransaction(
+      (session) => applyNegotiatedIndemnity(session),
+      () => applyNegotiatedIndemnity()
+    );
+    return;
+  }
+
   await budgets.updateOne(
     { countryId: payer },
     { $inc: { treasuryBalance: -amount }, $set: { updatedAt: now } }
@@ -195,5 +226,25 @@ async function moveIndemnity(
   await budgets.updateOne(
     { countryId: recipient },
     { $inc: { treasuryBalance: credited }, $set: { updatedAt: now } }
+  );
+}
+
+/** Apply one treasury leg at most once, even without multi-document transactions. */
+async function applyIndemnityLeg(
+  budgets: Collection<FederalBudget>,
+  countryId: CountryId,
+  delta: number,
+  receiptId: string,
+  now: Date,
+  session?: ClientSession
+): Promise<void> {
+  await budgets.updateOne(
+    { countryId, appliedPeaceIndemnityOfferIds: { $ne: receiptId } },
+    {
+      $inc: { treasuryBalance: delta },
+      $set: { updatedAt: now },
+      $addToSet: { appliedPeaceIndemnityOfferIds: receiptId },
+    },
+    session ? { session } : undefined
   );
 }
