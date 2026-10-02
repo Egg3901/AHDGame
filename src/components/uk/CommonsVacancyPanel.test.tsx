@@ -60,6 +60,7 @@ describe("CommonsVacancyPanel", () => {
               scheduledTurn: 492,
               priorCharacterName: "Gone MP",
               priorParty: "1",
+              byElection: null,
             },
           ],
           petitions: [
@@ -105,6 +106,42 @@ describe("CommonsVacancyPanel", () => {
     expect(screen.getByText(/hopeful/i)).toBeTruthy();
     expect(screen.getByText(/3 of 5 signatures/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /sign recall petition/i })).toBeTruthy();
+  });
+
+  it("says what happens next for each open vacancy instead of a blanket promise", async () => {
+    const open = (id: string, state: string, byElection: unknown) => ({
+      id,
+      state,
+      constituency: null,
+      seats: 6,
+      reason: "removal",
+      status: "open",
+      vacatedTurn: 470,
+      electionId: null,
+      scheduledTurn: null,
+      priorCharacterName: null,
+      priorParty: null,
+      byElection,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      okJson(
+        statusPayload({
+          vacancies: [
+            open("v1", "EAE", { kind: "spawn" }),
+            open("v2", "WMI", { kind: "general_fills", endTurn: 530 }),
+            open("v3", "LON", { kind: "cooldown", retryTurn: 520 }),
+            open("v4", "SCO", { kind: "special_live" }),
+          ] as CommonsVacancyStatus["vacancies"],
+        })
+      )
+    );
+    render(<CommonsVacancyPanel countryId="UK" />);
+
+    expect(await screen.findByText(/a by-election opens next turn/i)).toBeTruthy();
+    expect(screen.getByText(/general election closing on turn 530 fills this seat/i)).toBeTruthy();
+    expect(screen.getByText(/next by-election here can open on turn 520/i)).toBeTruthy();
+    expect(screen.getByText(/by-election already running in this region/i)).toBeTruthy();
+    expect(screen.queryByText(/spawns automatically/i)).toBeNull();
   });
 
   it("signs a petition, posts the id, and surfaces the server message", async () => {

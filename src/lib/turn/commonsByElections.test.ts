@@ -137,9 +137,17 @@ describe("commons watcher spawn", () => {
     }
   });
 
-  it("does not spawn while a live special or regular race covers the region", async () => {
-    const { processCommonsByElectionWatcher } = await import("./commonsByElections");
-    for (const electionType of ["special_commons", "commons"]) {
+  it("does not spawn while a live special or an imminent general covers the region", async () => {
+    const { processCommonsByElectionWatcher, COMMONS_BY_ELECTION_TOTAL_TURNS } =
+      await import("./commonsByElections");
+    const covering = [
+      { electionType: "special_commons", endTurn: TURN + 40 },
+      { electionType: "commons", endTurn: TURN + COMMONS_BY_ELECTION_TOTAL_TURNS },
+      { electionType: "snap_commons", endTurn: TURN + 10 },
+      // No schedule on record: stay conservative.
+      { electionType: "commons" },
+    ];
+    for (const race of covering) {
       const fake = createFakeCommonsDb();
       fake.seed("ukCommonsVacancies", [openVacancy()]);
       fake.seed("elections", [
@@ -147,8 +155,8 @@ describe("commons watcher spawn", () => {
           _id: new ObjectId(),
           countryId: "UK",
           state: "LON",
-          electionType,
           status: "active",
+          ...race,
         },
       ]);
       const result = await processCommonsByElectionWatcher(fake.db, TURN, NOW);
@@ -156,6 +164,38 @@ describe("commons watcher spawn", () => {
       expect(fake.read("elections")).toHaveLength(1);
       expect(fake.read<Record<string, unknown>>("ukCommonsVacancies")[0].status).toBe("open");
     }
+  });
+
+  it("spawns while the region's general is still far off (#1379)", async () => {
+    const { processCommonsByElectionWatcher, COMMONS_BY_ELECTION_TOTAL_TURNS } =
+      await import("./commonsByElections");
+    // Live shape: the regular race is `active` for its whole term, so a seat
+    // vacated early in the term must not wait for it.
+    const fake = createFakeCommonsDb();
+    fake.seed("ukCommonsVacancies", [openVacancy({ seats: 12, reason: "removal" })]);
+    fake.seed("elections", [
+      {
+        _id: new ObjectId(),
+        countryId: "UK",
+        state: "LON",
+        electionType: "commons",
+        status: "active",
+        startTurn: TURN - 75,
+        primaryEndTurn: TURN + 141,
+        endTurn: TURN + 165,
+      },
+    ]);
+    expect(165).toBeGreaterThan(COMMONS_BY_ELECTION_TOTAL_TURNS);
+
+    const result = await processCommonsByElectionWatcher(fake.db, TURN, NOW);
+    expect(result.spawned).toBe(1);
+    const special = fake
+      .read<Record<string, unknown>>("elections")
+      .find((e) => e.electionType === "special_commons");
+    expect(special).toMatchObject({ state: "LON", totalSeats: 12, status: "active" });
+    // The by-election resolves before the general that would replace it.
+    expect(special!.endTurn as number).toBeLessThan(TURN + 165);
+    expect(fake.read<Record<string, unknown>>("ukCommonsVacancies")[0].status).toBe("scheduled");
   });
 
   it("honors the retry cooldown after a finished special, then spawns again", async () => {
@@ -327,5 +367,39 @@ describe("commons watcher recall pipeline", () => {
     expect(petitions).toHaveLength(1);
     expect(petitions[0].status).toBe("open");
     expect(petitions[0].trigger).toBe("lowApproval");
+  });
+});
+
+describe("commonsByElectionGate", () => {
+  it("names the reason a region waits, and spawns otherwise", async () => {
+    const { commonsByElectionGate, COMMONS_BY_ELECTION_TOTAL_TURNS } =
+      await import("./commonsByElections");
+    const gate = (
+      liveRaces: { electionType: string; endTurn?: number }[],
+      lastSpecialEndTurn?: number
+    ) =>
+      commonsByElectionGate({
+        liveRaces: liveRaces as never,
+        lastSpecialEndTurn,
+        currentTurn: TURN,
+      });
+
+    expect(gate([])).toEqual({ kind: "spawn" });
+    expect(gate([{ electionType: "commons", endTurn: TURN + 165 }])).toEqual({ kind: "spawn" });
+    expect(gate([{ electionType: "special_commons", endTurn: TURN + 30 }])).toEqual({
+      kind: "special_live",
+    });
+    expect(
+      gate([
+        { electionType: "commons", endTurn: TURN + 200 },
+        { electionType: "snap_commons", endTurn: TURN + COMMONS_BY_ELECTION_TOTAL_TURNS },
+      ])
+    ).toEqual({ kind: "general_fills", endTurn: TURN + COMMONS_BY_ELECTION_TOTAL_TURNS });
+    expect(gate([{ electionType: "commons" }])).toEqual({ kind: "general_fills", endTurn: null });
+    expect(gate([], TURN - 1)).toEqual({
+      kind: "cooldown",
+      retryTurn: TURN - 1 + COMMONS_BY_ELECTION_RETRY_COOLDOWN_TURNS,
+    });
+    expect(gate([], TURN - COMMONS_BY_ELECTION_RETRY_COOLDOWN_TURNS)).toEqual({ kind: "spawn" });
   });
 });

@@ -3,7 +3,8 @@
  * the turn-phase auto-snap watcher.
  *
  * A snap election:
- *   1. Cancels active/upcoming regular lower-chamber elections for the country.
+ *   1. Cancels active/upcoming regular lower-chamber elections for the country,
+ *      plus live by-elections for that chamber (dissolution lapses them).
  *   2. Fails in-progress bills whose `currentChamber` is the country's lower
  *      chamber (via `failInProgressBills`). Upper-chamber bills, JP cabinet
  *      review, and enrolled bills are preserved — those chambers are not
@@ -49,6 +50,7 @@ import {
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorContext";
+import { byElectionTypesFor } from "@/lib/utils/electionLabels";
 import type {
   Character,
   ElectedOfficial,
@@ -230,12 +232,16 @@ export async function triggerSnapElection(
   //    rows attached to them — leaving them `active` orphans the rows and
   //    blocks the same characters from being slated/entered into the snap race
   //    (see slate invitations / findBlockingActiveCandidacy guards).
+  //    Live by-elections for the chamber go too: the members they would seat
+  //    are dissolved below, and a by-election resolving after the snap would
+  //    seat on top of the full delegation the snap elects. The by-election
+  //    watcher reopens their vacancies, which the snap result then subsumes.
   const electionsToCancel = await db
     .collection<Election>("elections")
     .find(
       {
         countryId,
-        electionType: lowerChamberKey,
+        electionType: { $in: [lowerChamberKey, ...byElectionTypesFor(lowerChamberKey)] },
         status: { $in: ["active", "upcoming"] as ElectionStatus[] },
       },
       { projection: { _id: 1 } }

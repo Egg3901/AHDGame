@@ -17,7 +17,11 @@ import {
   getUkRecallPetitionsCollection,
 } from "@/lib/db/collections/ukByElection";
 import { RECALL_SIGNATURES_REQUIRED } from "@/lib/uk/elections/commonsRecallRules";
-import { SPECIAL_COMMONS_ELECTION_TYPE } from "@/lib/turn/commonsByElections";
+import {
+  SPECIAL_COMMONS_ELECTION_TYPE,
+  commonsByElectionGate,
+  type CommonsByElectionGate,
+} from "@/lib/turn/commonsByElections";
 
 export interface CommonsVacancyDto {
   id: string;
@@ -31,6 +35,8 @@ export interface CommonsVacancyDto {
   scheduledTurn: number | null;
   priorCharacterName: string | null;
   priorParty: string | null;
+  /** Watcher decision for an open vacancy (null once a race claims it). */
+  byElection: CommonsByElectionGate | null;
 }
 
 export interface RecallPetitionDto {
@@ -104,6 +110,41 @@ export async function loadCommonsVacancyStatus(
           })
           .toArray()
       : [];
+  // Live general races decide whether an open vacancy waits for the general
+  // or gets its own by-election (same gate the watcher spawns on).
+  const openStates = [...new Set(vacancies.filter((v) => v.status === "open").map((v) => v.state))];
+  const liveGenerals =
+    openStates.length > 0
+      ? await db
+          .collection<Election>("elections")
+          .find(
+            {
+              countryId: "UK",
+              electionType: { $in: ["commons", "snap_commons"] },
+              state: { $in: openStates },
+              status: { $in: ["active", "upcoming"] },
+            },
+            { projection: { _id: 1, state: 1, electionType: 1, endTurn: 1 } }
+          )
+          .toArray()
+      : [];
+  const gateByState = new Map<string, CommonsByElectionGate>();
+  for (const state of openStates) {
+    const specials = elections.filter((e) => e.state === state);
+    const isLive = (e: Election) => e.status === "active" || e.status === "upcoming";
+    const finishedEnds = specials
+      .filter((e) => !isLive(e) && typeof e.endTurn === "number")
+      .map((e) => e.endTurn as number);
+    gateByState.set(
+      state,
+      commonsByElectionGate({
+        liveRaces: [...specials.filter(isLive), ...liveGenerals.filter((e) => e.state === state)],
+        lastSpecialEndTurn: finishedEnds.length > 0 ? Math.max(...finishedEnds) : undefined,
+        currentTurn,
+      })
+    );
+  }
+
   const electionIds = elections.map((e) => e._id);
   const candidates =
     electionIds.length > 0
@@ -149,6 +190,7 @@ export async function loadCommonsVacancyStatus(
       scheduledTurn: v.scheduledTurn ?? null,
       priorCharacterName: v.priorCharacterName ?? null,
       priorParty: v.priorParty ?? null,
+      byElection: v.status === "open" ? (gateByState.get(v.state) ?? null) : null,
     })),
     petitions: petitions.map((p) => ({
       id: p._id.toString(),

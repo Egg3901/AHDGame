@@ -281,6 +281,13 @@ const SPECIAL_TO_REGULAR: Readonly<Record<string, string>> = {
   special_commons: "commons",
 };
 
+/** By-election types that fill seats of `regularType` (e.g. `commons`). */
+export function byElectionTypesFor(regularType: string): string[] {
+  return Object.entries(SPECIAL_TO_REGULAR)
+    .filter(([, regular]) => regular === regularType)
+    .map(([special]) => special);
+}
+
 /**
  * Beta-parliament chamber keys → default (modern) office-type keys.
  *
