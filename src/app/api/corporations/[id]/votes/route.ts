@@ -19,6 +19,7 @@ import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Character } from "@/lib/db/types";
+import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import {
   SUPERSHARE_MIN_MULTIPLIER,
   SUPERSHARE_MAX_MULTIPLIER,
@@ -139,6 +140,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
       if (body.newTicker === corporation.tickerSymbol) {
         return NextResponse.json({ error: "That is already your ticker symbol" }, { status: 400 });
+      }
+    }
+
+    if (body.type === "relocation") {
+      const commandEconomyBlock = await commandEconomyRelocationBlock(
+        db,
+        corporation,
+        corporation.countryId,
+        body.destinationCountryId
+      );
+      if (commandEconomyBlock) {
+        return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
       }
     }
 
