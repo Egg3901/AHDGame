@@ -27,6 +27,7 @@ import { isWithdrawing, repairedIntegrity } from "./repair";
 import type { NavairUnit, RegionChannels, EngagementOutcome } from "./types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { RegionCode } from "@/lib/military/types";
+import { FIGHTING_CONFLICT_STATUSES } from "@/lib/military/conflictLifecycle";
 
 /**
  * The naval and air pass, run once per turn for the whole world.
@@ -76,7 +77,7 @@ async function buildWarContext(db: Db): Promise<WarContext> {
   // this codebase's house style and does not require a cursor implementation of it.
   const conflicts = (await getConflictsCollection(db)
     .find(
-      { status: "active" },
+      { status: { $in: [...FIGHTING_CONFLICT_STATUSES] } },
       { projection: { "sideA.countries": 1, "sideB.countries": 1, region: 1, extendedRegions: 1 } }
     )
     .toArray()) as unknown as Array<{

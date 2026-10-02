@@ -4,6 +4,13 @@ import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import type { Character, State } from "@/lib/db/types";
 
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/analytics/serverPosthog", () => ({
+  flushServerPosthog: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/time/gameTime", () => ({
   getGameTime: vi.fn().mockResolvedValue({
@@ -52,6 +59,7 @@ vi.mock("@/lib/military/severFromChainOfCommand", () => ({
   severFromChainOfCommand: vi.fn().mockResolvedValue({ led: [], changed: false }),
 }));
 
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { performRelocation } from "./performRelocation";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
 import { severFromChainOfCommand } from "@/lib/military/severFromChainOfCommand";
@@ -269,6 +277,15 @@ describe("performRelocation", () => {
     const outcome = await performRelocation(db as unknown as Db, character, target);
 
     expect(outcome.resignedFromOffice).toBe("house (CA)");
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "house",
+        transitionType: "left",
+        selectionMethod: "resignation",
+        nationId: "US",
+        turn: 100,
+      })
+    );
     expect(db.collectionMocks.electedOfficials!.updateOne).toHaveBeenCalled();
   });
 

@@ -1,3 +1,4 @@
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 /**
  * Mid-game party ban / unban side effects.
  *
@@ -65,6 +66,15 @@ export async function processBanPartyEffects(
           },
         }
       );
+      await captureOfficeTransition({
+        db,
+        officeType: official.officeType,
+        transitionType: "lost",
+        partyId: String(partySeqId),
+        selectionMethod: "removal",
+        nationId: countryId,
+        turn: currentTurn,
+      });
     }
     if (official.nppId) {
       await db

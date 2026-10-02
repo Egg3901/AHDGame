@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -155,6 +160,43 @@ describe("resolveDELandtagElection — proportional allocation", () => {
   let db: MockDb;
   beforeEach(() => {
     db = createMockDb();
+    vi.mocked(captureOfficeTransition).mockClear();
+  });
+
+  it("captures loss when a non-running former Landtag holder is cleared", async () => {
+    const election = mkElection("BW", 100);
+    const candidateId = new ObjectId();
+    db.collection("electionVoteTallies").findOne = vi.fn().mockResolvedValue({
+      _id: new ObjectId(),
+      electionId: election._id,
+      totalVotes: { [candidateId.toString()]: 100 },
+    });
+    db.collection("electionCandidates").find = vi.fn().mockReturnValue({
+      toArray: async () => [
+        {
+          _id: candidateId,
+          party: "spd",
+          isNPP: true,
+          characterName: "NPP",
+          nppId: new ObjectId(),
+        },
+      ],
+    });
+    db.collection("characters").find = vi.fn().mockReturnValue({
+      toArray: async () => [{ _id: new ObjectId(), party: "cdu", countryId: "DE" }],
+    });
+    await resolveDELandtagElection(db as never, election as never, new Date(), 42);
+    expect(captureOfficeTransition).toHaveBeenCalledTimes(1);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "landtag",
+        transitionType: "lost",
+        partyId: "cdu",
+        selectionMethod: "election",
+        nationId: "DE",
+        turn: 42,
+      })
+    );
   });
 
   it("stores allocated party seats on Landtag winner rows", async () => {

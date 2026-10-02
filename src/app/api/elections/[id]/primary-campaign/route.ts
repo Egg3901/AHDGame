@@ -218,6 +218,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       message: `Now campaigning in ${stateId} during the primary`,
       primaryCampaignState: stateId,
       actionsCost: actionCost,
+      electionType: election.electionType,
+      phase: "primary",
     });
   } catch (error) {
     return handleRouteError(error);

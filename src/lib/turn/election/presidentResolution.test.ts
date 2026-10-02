@@ -6,6 +6,11 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 
+const officeCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: officeCapture,
+}));
+
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
   createNotifications: vi.fn().mockResolvedValue(undefined),
@@ -94,6 +99,11 @@ describe("resolvePresidentElection", () => {
   it("handles missing totalVotesByUnit by finalizing and withdrawing", async () => {
     const election = { _id: electionId, electionType: "president" };
     const tally = { electionId, totalVotesByUnit: null };
+    db.collectionMocks.characters.find.mockReturnValue(
+      makeCursor([
+        { _id: winnerId, party: "1", currentOffice: { type: "president" }, careerHistory: [] },
+      ])
+    );
 
     const { resolvePresidentElection } = await import("./presidentResolution");
     const result = await resolvePresidentElection(
@@ -106,6 +116,14 @@ describe("resolvePresidentElection", () => {
     expect(result).toBe(true);
     expect(db.collectionMocks["electionVoteTallies"]!.updateOne).toHaveBeenCalled();
     expect(db.collectionMocks["electionCandidates"]!.updateMany).toHaveBeenCalled();
+    expect(officeCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "president",
+        transitionType: "lost",
+        selectionMethod: "election",
+        nationId: "US",
+      })
+    );
   });
 
   it("recovers totalVotesByUnit from unitTurnSnapshots when running totals are empty", async () => {

@@ -1,3 +1,5 @@
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import type { Db, ObjectId } from "mongodb";
 import type {
   Character,
@@ -341,6 +343,25 @@ export async function performRelocation(
       ...(countryChanged ? { $unset: { partyJoinedTurn: "", foundedPartyId: "" } } : {}),
     }
   );
+
+  const departedOfficeTypes = [
+    ...(resignedFromOffice && character.currentOffice ? [character.currentOffice.type] : []),
+    ...(ceoResignedFrom ? ["ceo"] : []),
+    ...(chairResignedFrom ? ["centralBankChair"] : []),
+  ];
+  for (const officeType of departedOfficeTypes) {
+    await captureOfficeTransition({
+      db,
+      officeType,
+      transitionType: "left",
+      selectionMethod: "resignation",
+      partyId: character.party,
+      nationId: oldCountryId,
+      turn: gameTime.currentTurn,
+      careerStage: (character.careerHistory?.length ?? 0) + 1,
+    });
+  }
+  if (departedOfficeTypes.length) await flushServerPosthog();
 
   // 9. Update party presence in the old and new states. Runs AFTER the
   //     character update so the headcount reflects the new homeState.

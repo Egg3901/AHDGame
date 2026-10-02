@@ -18,6 +18,11 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { processBanPartyEffects, processUnbanPartyEffects } from "@/lib/onePartyState/banFlow";
 
+const officeCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: officeCapture,
+}));
+
 function makeCursor(docs: unknown[]) {
   return { toArray: vi.fn().mockResolvedValue(docs) };
 }
@@ -42,6 +47,7 @@ describe("processBanPartyEffects", () => {
     const officialA = {
       _id: new ObjectId(),
       characterId: charId,
+      officeType: "senate",
       party: "2",
       seatsHeld: 1,
       countryId: "CN",
@@ -66,6 +72,16 @@ describe("processBanPartyEffects", () => {
 
     expect(result.officialsVacated).toBe(2);
     expect(result.seatsVacated).toBe(4);
+    expect(officeCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "senate",
+        transitionType: "lost",
+        partyId: "2",
+        selectionMethod: "removal",
+        nationId: "CN",
+        turn: 100,
+      })
+    );
 
     const partyUpdate = db.collectionMocks.politicalParties.updateOne.mock.calls.find(
       (c: unknown[]) => (c[0] as { _id?: ObjectId })._id?.equals?.(partyId)

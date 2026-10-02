@@ -18,6 +18,8 @@ interface RouteParams {
  */
 type BondTxType = Extract<FinancialTxLogEntry["type"], `bond_${string}`>;
 const BOND_TX_TYPES = [
+  "bond_pool_inflow",
+  "bond_pool_sweep",
   "bond_coupon",
   "bond_maturity",
   "bond_purchase",

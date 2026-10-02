@@ -25,6 +25,7 @@ import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
   Election,
+  ElectionCandidate,
   ElectedOfficial,
   ElectionVoteTally,
   Landesliste,
@@ -39,6 +40,7 @@ import {
 } from "@/lib/turn/election/ticketSplitCrossover";
 import { buildDEPartySlugToSeqId } from "@/lib/seeds/de/deStatePartyOrgCalculations";
 import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 import { reconcileBundestagHolderOffices } from "./bundestagHolderOffices";
 
 const VOTE_THRESHOLD = 0.05;
@@ -534,7 +536,13 @@ export async function maybeReconcileBundestag(
 
   const result = await allocateBundestag(db, cycle);
   await persistBundestagResult(db, result, now);
-  const holders = await reconcileBundestagHolderOffices(db, now);
+  const telemetryActors = new Map<string, Pick<Character, "userId" | "currentOffice">>();
+  const holders = await reconcileBundestagHolderOffices(
+    db,
+    now,
+    gs?.currentTurn ?? 0,
+    telemetryActors
+  );
   const elections = await db
     .collection<Election>("elections")
     .find(
@@ -544,7 +552,7 @@ export async function maybeReconcileBundestag(
         cycle,
         status: "resolved",
       },
-      { projection: { _id: 1, state: 1 } }
+      { projection: { _id: 1, state: 1, electionType: 1 } }
     )
     .toArray();
   if (elections.length)
@@ -581,5 +589,101 @@ export async function maybeReconcileBundestag(
       { _id: "current" },
       { $set: { lastBundestagReconciledCycle: cycle, updatedAt: now } }
     );
+  await captureBundestagElectionWinners(db, elections, holders, telemetryActors, gs);
   return result;
+}
+
+/** Emit final player outcomes after both mandates and cycle marker are persisted. */
+export async function captureBundestagElectionWinners(
+  db: Db,
+  elections: Pick<Election, "_id" | "state" | "electionType">[],
+  holders: ElectedOfficial[],
+  telemetryActors: Map<string, Pick<Character, "userId" | "currentOffice">>,
+  gs: Pick<GameState, "currentTurn" | "iteration"> | null
+): Promise<void> {
+  // Outcomes use reconciled direct + list mandates, including list-only holders.
+  // Account metadata comes from the existing batched holder read; election inputs
+  // are projected once for the full cycle, never fetched per player.
+  try {
+    const electionIds = elections.map((election) => election._id);
+    const [candidates, tallies] = await Promise.all([
+      db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find(
+          { electionId: { $in: electionIds } },
+          { projection: { _id: 1, electionId: 1, characterId: 1, isNPP: 1 } }
+        )
+        .toArray(),
+      db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .find(
+          { electionId: { $in: electionIds } },
+          { projection: { electionId: 1, totalVotes: 1 } }
+        )
+        .toArray(),
+    ]);
+    const talliesByElection = new Map(tallies.map((tally) => [tally.electionId.toString(), tally]));
+    await Promise.all(
+      elections.map(async (election) => {
+        const playerHolders = new Map<string, { partyId: string; seats: number }>();
+        for (const holder of holders) {
+          if (holder.state !== election.state || !holder.characterId || holder.isNPP) continue;
+          const identity = holder.characterId.toString();
+          const previous = playerHolders.get(identity);
+          playerHolders.set(identity, {
+            partyId: holder.party ?? "unknown",
+            seats: (previous?.seats ?? 0) + (holder.seatsHeld ?? 0),
+          });
+        }
+        const tally = talliesByElection.get(election._id.toString());
+        const totalVotes = Object.values(tally?.totalVotes ?? {}).reduce(
+          (sum, votes) => sum + votes,
+          0
+        );
+        await Promise.all(
+          [...playerHolders]
+            .filter(([, holder]) => holder.seats > 0)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([characterId, holder], winnerOrdinal) => {
+              const candidate = candidates.find(
+                (candidate) =>
+                  !candidate.isNPP &&
+                  candidate.characterId?.toString() === characterId &&
+                  candidate.electionId.toString() === election._id.toString()
+              );
+              const votes = candidate ? tally?.totalVotes?.[candidate._id.toString()] : undefined;
+              const runnerVotes = candidate
+                ? Math.max(
+                    0,
+                    ...Object.entries(tally?.totalVotes ?? {})
+                      .filter(([id]) => id !== candidate._id.toString())
+                      .map(([, votes]) => votes)
+                  )
+                : 0;
+              return captureElectionWon({
+                db,
+                accountId: telemetryActors.get(characterId)?.userId?.toString(),
+                electionId: election._id.toString(),
+                electionType: election.electionType,
+                partyId: holder.partyId,
+                seatCount: holder.seats,
+                voteSharePct:
+                  votes !== undefined && totalVotes > 0 ? (votes / totalVotes) * 100 : "unknown",
+                marginPct:
+                  votes !== undefined && totalVotes > 0
+                    ? ((votes - runnerVotes) / totalVotes) * 100
+                    : "unknown",
+                incumbent: "unknown",
+                winnerOrdinal,
+                nationId: "DE",
+                turn: gs?.currentTurn ?? 0,
+                iteration: gs?.iteration,
+              });
+            })
+        );
+      })
+    );
+  } catch {
+    // A missing/failed telemetry read cannot change election reconciliation.
+  }
 }

@@ -42,6 +42,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         db,
         vote,
         totalEligibleShares: totalVotingPower(corporation),
+        nationId: corporation.countryId,
+        flushTelemetry: true,
         currentTurn,
       });
       // Side effects only fire on the caller that won the atomic status flip,

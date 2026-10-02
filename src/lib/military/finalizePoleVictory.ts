@@ -37,7 +37,7 @@ export async function finalizePoleVictory(
   if (!imposer || !target) {
     const claim = await conflicts.updateOne(liveAtPole, { $set: { status: "resolved" } });
     if (claim.modifiedCount === 0) return null;
-    await resolveConflict(db, conflict, victor, currentTurn);
+    await resolveConflict(db, conflict, victor, currentTurn, { endingType: "victory" });
     return "resolved";
   }
 

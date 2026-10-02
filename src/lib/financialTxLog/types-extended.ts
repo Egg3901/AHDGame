@@ -13,6 +13,9 @@ import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
  */
 export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   // ── Character / imperial cash ──────────────────────────────────────────
+  "corp_sector_founding",
+  "org_cash",
+  "org_tribute_mint",
   "fund_credit", // legacy mixed source — still emitted by older paths
   "fund_debit",
   "office_income",
@@ -25,6 +28,8 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   // ── Bonds ──────────────────────────────────────────────────────────────
   "bond_purchase",
   "bond_sell",
+  "bond_pool_inflow",
+  "bond_pool_sweep",
   "bond_coupon",
   "bond_maturity",
   "bond_default",
@@ -140,6 +145,9 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
 ] as const;
 
 export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
+  corp_sector_founding: "Corporation Sector Founding",
+  org_cash: "Organization Cash Settlement",
+  org_tribute_mint: "Unmodeled Organization Tribute",
   fund_credit: "Fund Credit (legacy)",
   fund_debit: "Fund Debit (legacy)",
   office_income: "Office Income",
@@ -151,6 +159,8 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
 
   bond_purchase: "Bond Purchase",
   bond_sell: "Bond Sell",
+  bond_pool_inflow: "Bond Pool Liquidity Inflow",
+  bond_pool_sweep: "Bond Pool Liquidity Sweep",
   bond_coupon: "Bond Coupon",
   bond_maturity: "Bond Maturity",
   bond_default: "Bond Default",

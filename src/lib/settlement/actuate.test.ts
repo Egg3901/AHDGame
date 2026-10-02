@@ -3,6 +3,10 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockCollection, type MockDb } from "@/lib/test-utils/mockDb";
 import type { SettlementCrisisDoc } from "@/lib/db/types/settlementCrisis";
 import { SETTLEMENT_REOPEN_COOLDOWN_TURNS } from "@/lib/constants/settlementCrisis";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({ recordCountryEvent: vi.fn() }));
@@ -515,6 +519,56 @@ describe("actuateSettlementOutcome", () => {
     );
     expect(cleared).toBeDefined();
     expect(cleared![1].$set.currentOffice).toBeNull();
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "chancellor",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: "DE",
+        turn: 470,
+      })
+    );
+  });
+
+  it("records remapped seats as departures and succession gains without counting empty offices", async () => {
+    prime(db, "electedOfficials").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: new ObjectId(), officeType: "bundestag", characterId: new ObjectId(), party: "7" },
+        { _id: new ObjectId(), officeType: "president", nppId: new ObjectId() },
+        { _id: new ObjectId(), officeType: "president", characterId: null },
+      ]),
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    expect(
+      vi
+        .mocked(captureOfficeTransition)
+        .mock.calls.map(([event]) => [event.officeType, event.transitionType, event.nationId])
+    ).toEqual([
+      ["bundestag", "left", "DE"],
+      ["volkskammerDeputy", "gained", "DD"],
+      ["president", "lost", "DE"],
+    ]);
+  });
+
+  it("records a cabinet removal with existing appointment tenure", async () => {
+    prime(db, "cabinetMembers").find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ characterId: new ObjectId(), party: "7", appointedTurn: 450 }]),
+    });
+    const { actuateSettlementOutcome } = await import("./actuate");
+    await actuateSettlementOutcome(db as unknown as Db, crisis({ outcome: "challenger" }), 470);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "parliamentaryCabinet",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: "DE",
+        turn: 470,
+        tenureTurns: 20,
+      })
+    );
   });
 
   it("leaves the winner's own government in place rather than installing the loser's", async () => {

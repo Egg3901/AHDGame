@@ -23,6 +23,7 @@ function normalizeRedirectTarget(target: string): string {
 
 describe("wiki navigation integrity", () => {
   const seededSlugs = new Set(WIKI_SEED_PAGES.map((page) => page.slug));
+  const seededTitles = new Set(WIKI_SEED_PAGES.map((page) => page.title.toLowerCase()));
 
   it("keeps seeded slugs unique", () => {
     expect(seededSlugs.size).toBe(WIKI_SEED_PAGES.length);
@@ -67,6 +68,18 @@ describe("wiki navigation integrity", () => {
           `${page.slug} uses redirect alias ${target}`
         ).toBeUndefined();
         expect(seededSlugs.has(target), `${page.slug} -> ${target}`).toBe(true);
+      }
+    }
+  });
+
+  it("resolves wiki-style links inside iteration articles", () => {
+    for (const page of WIKI_SEED_PAGES.filter((candidate) => candidate.category === "iterations")) {
+      const targets = [...page.content.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)].map((match) =>
+        match[1].trim().toLowerCase()
+      );
+
+      for (const target of targets) {
+        expect(seededTitles.has(target), `${page.slug} -> ${target}`).toBe(true);
       }
     }
   });

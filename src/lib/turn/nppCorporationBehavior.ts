@@ -1,3 +1,7 @@
+import {
+  buildNppDecisionCashWrites,
+  type NppFoundingCashWitness,
+} from "@/lib/turn/npp/foundingCashLedger";
 import type { Db, ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -70,7 +74,6 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
-import { buildNppCorpUpdateOp } from "@/lib/turn/npp/nppCashWrite";
 import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
 import {
   CAPACITY_BUILD_TURNS,
@@ -115,11 +118,10 @@ import {
   reinvestPoolHeadroomUnits,
   type ReinvestCandidate,
 } from "@/lib/turn/npp/reinvestCandidatePool";
+import type { NppCorpUpdateOp } from "./npp/nppCashWrite";
+import type { NppReinvestmentCashWitness } from "./npp/reinvestmentCashLedger";
 import { pushNppWageUpdates } from "@/lib/turn/npp/nppWagePolicy";
 import {
-  appendNppReinvestCapexRows,
-  buildNppFoundedSectorInserts,
-  depleteUnownedPoolsForDraws,
   drawFoundedCapacityFromPools,
   flushNppCapacityWriteback,
 } from "@/lib/turn/npp/capacityWriteback";
@@ -203,14 +205,7 @@ export async function processNppCorporationDecisions(
   techTreesEnabled: boolean = false,
   preloaded?: NppCorporationDecisionPreload
 ): Promise<{
-  corpUpdates: Array<{
-    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
-    update: {
-      $set?: Record<string, unknown>;
-      $inc?: Record<string, number>;
-      $addToSet?: { unlockedTechNodeIds: string };
-    };
-  }>;
+  corpUpdates: NppCorpUpdateOp[];
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -218,6 +213,8 @@ export async function processNppCorporationDecisions(
   newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }>;
   divestedSectorIds: ObjectId[];
   techLedger: TechUnlockLedgerInput[];
+  foundingCashWitnesses?: NppFoundingCashWitness[];
+  reinvestmentCashWitnesses?: NppReinvestmentCashWitness[];
 }> {
   const nppCorps = preloaded
     ? preloaded.corporations.filter((corp) => corp.ceoType === "npp" && corp.suspended !== true)
@@ -226,14 +223,7 @@ export async function processNppCorporationDecisions(
         .find({ ceoType: "npp", suspended: { $ne: true } })
         .toArray();
 
-  const corpUpdates: Array<{
-    filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
-    update: {
-      $set?: Record<string, unknown>;
-      $inc?: Record<string, number>;
-      $addToSet?: { unlockedTechNodeIds: string };
-    };
-  }> = [];
+  const corpUpdates: NppCorpUpdateOp[] = [];
   const allSectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
@@ -241,6 +231,8 @@ export async function processNppCorporationDecisions(
   const newSectors: Array<Omit<CorporateSector, "_id"> & { _id: ObjectId }> = [];
   const allDivestedSectorIds: ObjectId[] = [];
   const techLedger: TechUnlockLedgerInput[] = [];
+  const foundingCashWitnesses: NppFoundingCashWitness[] = [];
+  const decisionCashOps: NppCorpUpdateOp[] = [];
   const operatorObservations: NppOperatorObservation[] = [];
 
   if (nppCorps.length === 0)
@@ -441,7 +433,7 @@ export async function processNppCorporationDecisions(
     strategyGate?.frontierEntryExperimentEnabled
   );
 
-  const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
+  const { labourMode, retailExpansionPaused, ledgerShadow } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
 
   for (const corp of nppCorps) {
@@ -516,27 +508,29 @@ export async function processNppCorporationDecisions(
       decision.entryDiagnostic?.reason
     );
     if (decision.operatorObservation) operatorObservations.push(decision.operatorObservation);
-    if (decision.reinvestments && corpCurrency) {
-      appendNppReinvestCapexRows(capexRows, {
-        corp,
-        corpCurrency,
-        reinvestments: decision.reinvestments,
-        turn,
-        now,
-      });
+    const {
+      founded,
+      update: corpUpdateOp,
+      witness,
+    } = buildNppDecisionCashWrites({
+      decision,
+      corporation: corp,
+      capexRows,
+      unownedDraws,
+      unownedIndex,
+      eraUnitScale: plants?.eraUnitScale ?? 1,
+      currencyCode: corpCurrency,
+      rate: corpFxRate,
+      shadowEnabled: ledgerShadow,
+      blocked,
+      turn,
+      now,
+    });
+    if (corpUpdateOp) {
+      corpUpdates.push(corpUpdateOp);
+      decisionCashOps.push(corpUpdateOp);
     }
-
-    if (decision.unownedDraws) {
-      unownedDraws.push(...decision.unownedDraws);
-      // Deplete the shared snapshot in lockstep so later corps see what is left.
-      depleteUnownedPoolsForDraws(unownedIndex, decision.unownedDraws, plants?.eraUnitScale ?? 1);
-    }
-
-    // Gated inside the builder, not on `updates` alone: the cash leg no longer
-    // lives in `updates`, so a decision whose only effect is a spend would be
-    // dropped by an `Object.keys(updates).length > 0` check (ticket #1260).
-    const corpUpdateOp = buildNppCorpUpdateOp(decision);
-    if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
+    if (witness) foundingCashWitnesses.push(witness);
 
     // Budget tech from post-decision cash and preserve the same safety floor.
     if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
@@ -566,17 +560,7 @@ export async function processNppCorporationDecisions(
 
     allSectorUpdates.push(...decision.sectorUpdates);
 
-    if (decision.newSectors) {
-      newSectors.push(
-        ...buildNppFoundedSectorInserts({
-          corporationId: corp._id,
-          newSectors: decision.newSectors,
-          blocked,
-          turn,
-          now,
-        })
-      );
-    }
+    newSectors.push(...founded);
 
     if (decision.divestedSectorIds) {
       allDivestedSectorIds.push(...decision.divestedSectorIds);
@@ -587,11 +571,13 @@ export async function processNppCorporationDecisions(
     eraUnitScale: plants?.eraUnitScale ?? 1,
     now,
   });
-  await flushNppCapacityWriteback(db, {
+  const reinvestmentCashWitnesses = await flushNppCapacityWriteback(db, {
     turn,
     now,
     entryDiagnostics,
     capexRows,
+    cashOperations: decisionCashOps,
+    shadowEnabled: ledgerShadow,
     capacityObservations,
     operatorObservations,
   });
@@ -602,6 +588,8 @@ export async function processNppCorporationDecisions(
     newSectors,
     divestedSectorIds: allDivestedSectorIds,
     techLedger,
+    ...(foundingCashWitnesses.length ? { foundingCashWitnesses } : {}),
+    ...(reinvestmentCashWitnesses.length ? { reinvestmentCashWitnesses } : {}),
   };
 }
 
@@ -626,6 +614,7 @@ export function makeNppCorpDecision(
   const liquidCapital = corp.liquidCapital ?? 0;
   const passive = ctx.caretakerMandate === "passive";
   let cashLocal = liquidCapital;
+  let foundingCashLocal: number | undefined;
   const numSectors = sectors.length;
 
   const corpCurrencyCode = resolveCorpLiquidCurrencyCode(corp);
@@ -1408,6 +1397,7 @@ export function makeNppCorpDecision(
           countryId: foundingTarget.countryId,
         });
         cashLocal = entryCapital - foundingCost;
+        foundingCashLocal = foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else {
         if (foundingOutcome.creditPath) {
@@ -1456,6 +1446,7 @@ export function makeNppCorpDecision(
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
+        foundingCashLocal = foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
       } else {
         if (foundingOutcome.creditPath) {
@@ -1969,6 +1960,7 @@ export function makeNppCorpDecision(
     // up, a founding cost or growth capex down — so this one subtraction is the
     // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
+    ...(foundingCashLocal === undefined ? {} : { foundingCashLocal }),
     cashFloorLocal: effectiveCashFloor,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,

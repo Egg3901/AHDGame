@@ -1,3 +1,7 @@
+import {
+  withServerTurnAnalytics,
+  markServerTurnAnalyticsCommitted,
+} from "@/lib/analytics/serverPosthog";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
@@ -218,7 +222,11 @@ interface CrashedTurnRecovery {
   appliedPhases: Set<string>;
 }
 
-export async function processTurn(
+export function processTurn(options: Parameters<typeof processTurnImpl>[0] = {}) {
+  return withServerTurnAnalytics(() => processTurnImpl(options));
+}
+
+async function processTurnImpl(
   options: {
     /** Sandbox tooling hook. Production callers omit it. */
     onPhaseCompleted?: (phase: CompletedTurnPhaseObservation) => Promise<void>;
@@ -620,6 +628,7 @@ export async function processTurn(
       }
     );
     localTurnLockHeld = false;
+    markServerTurnAnalyticsCommitted({ emit: !localSingleplayer && config?.simSandbox !== true });
 
     invalidateGameTimeCache();
     invalidateGameStateCache();
@@ -716,6 +725,7 @@ export async function processTurn(
         void captureTurnPosthog({
           db,
           turn: context.newTurn,
+          iteration: activeIteration,
           durationMs,
           phaseStatuses,
           errorCount: lastHealth?.errorCount ?? 0,

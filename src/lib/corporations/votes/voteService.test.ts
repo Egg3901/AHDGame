@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
   computeVoteOutcome,
@@ -8,6 +8,9 @@ import {
 } from "./voteService";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { createMockDb } from "@/lib/test-utils/mockDb";
+
+const capture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/serverPosthog", () => ({ captureServerGameEvent: capture }));
 
 describe("computeVoteOutcome", () => {
   it("passes when yesShares meets threshold of all shares", () => {
@@ -131,5 +134,15 @@ describe("resolveCorporationVoteIfReady", () => {
     });
 
     expect(result).toEqual({ outcome: "cancelled", claimed: true });
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "corporation_vote_resolved",
+        turn: 262,
+        properties: expect.objectContaining({
+          outcome: "cancelled",
+          failure_code: "voting_structure_changed",
+        }),
+      })
+    );
   });
 });

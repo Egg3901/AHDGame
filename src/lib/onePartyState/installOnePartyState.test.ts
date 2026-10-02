@@ -14,6 +14,11 @@ vi.mock("@/lib/countryState", () => ({
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({ recordCountryEvent }));
 vi.mock("@/lib/turn/regimeEscalationTurn", () => ({ ensureInitialEscalationState }));
 
+const officeCapture = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: officeCapture,
+}));
+
 import { installOnePartyState } from "./installOnePartyState";
 
 interface Party {
@@ -249,7 +254,13 @@ describe("installOnePartyState", () => {
   });
 
   it("empties the banned benches and lets their holders go", async () => {
-    const banned = { _id: "row1", party: "1", characterId: "char1", nppId: null };
+    const banned = {
+      _id: "row1",
+      officeType: "bundestag",
+      party: "1",
+      characterId: "char1",
+      nppId: null,
+    };
     const bannedNpp = { _id: "row2", party: "1", characterId: null, nppId: "npp1" };
     const { db, deletes, writes } = mockDb({
       parties: PARTIES,
@@ -258,6 +269,15 @@ describe("installOnePartyState", () => {
     });
 
     await installOnePartyState(db, "DE", 470, { rulingPartyId: 2, vacateBannedSeats: true });
+    expect(officeCapture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        officeType: "bundestag",
+        transitionType: "lost",
+        selectionMethod: "removal",
+        nationId: "DE",
+        turn: 470,
+      })
+    );
 
     // The rows go.
     const removed = deletes.find((d) => d.coll === "electedOfficials");
@@ -279,7 +299,13 @@ describe("installOnePartyState", () => {
   });
 
   it("leaves the office pointer alone for a holder who still has a seat", async () => {
-    const banned = { _id: "row1", party: "1", characterId: "char1", nppId: null };
+    const banned = {
+      _id: "row1",
+      officeType: "bundestag",
+      party: "1",
+      characterId: "char1",
+      nppId: null,
+    };
     const { db, writes } = mockDb({
       parties: PARTIES,
       governingPartyId: 1,

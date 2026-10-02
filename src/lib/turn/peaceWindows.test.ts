@@ -45,7 +45,9 @@ describe("resolvePeaceWindows", () => {
   it("white-peaces a lapsed window for the side that won the ground", async () => {
     const { db } = mockDb({ lapsed: [lapsedWar] });
     expect(await resolvePeaceWindows(db, 100)).toEqual({ resolved: 1 });
-    expect(resolveConflict).toHaveBeenCalledWith(expect.anything(), lapsedWar, "B", 100);
+    expect(resolveConflict).toHaveBeenCalledWith(expect.anything(), lapsedWar, "B", 100, {
+      endingType: "expiry",
+    });
   });
 
   it("claims on status, so two overlapping turn runs resolve it once", async () => {

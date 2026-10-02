@@ -191,6 +191,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       message: `Now campaigning in ${stateId}`,
       travelState: stateId,
       actionsCost: actionCost,
+      electionType: election.electionType,
+      phase: "general",
     });
   } catch (error) {
     return handleRouteError(error);

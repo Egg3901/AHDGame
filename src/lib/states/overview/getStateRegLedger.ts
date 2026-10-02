@@ -39,12 +39,15 @@ export async function getStateRegLedger(
   const { countryId, stateId } = args;
   const lookback = args.lookbackTurns ?? REG_LEDGER_LOOKBACK_TURNS;
 
-  const rows = await db
-    .collection<StatePartyOrg>("statePartyOrg")
-    .find({ countryId, stateId })
-    .toArray();
+  const [rows, parties] = await Promise.all([
+    db.collection<StatePartyOrg>("statePartyOrg").find({ countryId, stateId }).toArray(),
+    db.collection<PoliticalParty>("politicalParties").find({ countryId }).toArray(),
+  ]);
 
-  const seededRows = rows.filter((r) => typeof r.registration === "number");
+  const partyBySeq = new Map(parties.map((p) => [String(p.sequentialId), p]));
+  const seededRows = rows.filter(
+    (r) => partyBySeq.get(r.partyId)?.isDefunct !== true && typeof r.registration === "number"
+  );
   if (seededRows.length === 0) {
     return { seeded: false, headline: null, movement: [] };
   }
@@ -54,11 +57,6 @@ export async function getStateRegLedger(
     (r.registration ?? 0) > (best.registration ?? 0) ? r : best
   );
 
-  const parties = await db
-    .collection<PoliticalParty>("politicalParties")
-    .find({ countryId })
-    .toArray();
-  const partyBySeq = new Map(parties.map((p) => [String(p.sequentialId), p]));
   const topParty = partyBySeq.get(top.partyId);
 
   const headline = {

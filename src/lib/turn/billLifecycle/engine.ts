@@ -51,6 +51,7 @@ import type {
   SponsorNotifier,
   VoteTotals,
 } from "./types";
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 
 export interface BillLifecycleResult {
   billsProcessed: number;
@@ -63,11 +64,23 @@ export interface BillLifecycleResult {
   transitionedTo: Record<string, number>;
 }
 
+type BillStatusTransition = { bill: Bill; fromStatus: string; toStatus: string; turn: number };
+const billStatusTransitions = new WeakMap<BillLifecycleResult, BillStatusTransition[]>();
+
 const HOUR_MS = 60 * 60 * 1000;
 
 /** Record a successful transition into `status` (for dispatcher-derived counters). */
-function recordTransition(result: BillLifecycleResult, status: string): void {
+function recordTransition(
+  result: BillLifecycleResult,
+  status: string,
+  bill?: Bill,
+  fromStatus?: string,
+  turn?: number
+): void {
   result.transitionedTo[status] = (result.transitionedTo[status] ?? 0) + 1;
+  if (bill && fromStatus && Number.isInteger(turn)) {
+    billStatusTransitions.get(result)?.push({ bill, fromStatus, toStatus: status, turn: turn! });
+  }
 }
 
 /** Resolve the sponsor notifier for a config (per-country override or the US default). */
@@ -136,6 +149,7 @@ export async function runBillLifecycle(
     enactedCategories: [],
     transitionedTo: {},
   };
+  billStatusTransitions.set(result, []);
   // Legislation freeze: skip the whole phase while this country's government is
   // still forming (e.g. UK S#17 — no bills resolve during a pending government).
   if (config.skipWhenGovPending) {
@@ -173,7 +187,7 @@ export async function runBillLifecycle(
         }
       );
       await notifyChambersVoteOpen(db, { ...bill, currentChamber: chamberType }, chamberType);
-      recordTransition(result, "active");
+      recordTransition(result, "active", bill, "proposed", currentTurn);
       result.billsProcessed++;
     }
   }
@@ -216,6 +230,22 @@ export async function runBillLifecycle(
     }
   }
 
+  for (const transition of billStatusTransitions.get(result) ?? []) {
+    await captureBillStatusChanged({
+      db,
+      billId: transition.bill._id.toString(),
+      fromStatus: transition.fromStatus,
+      toStatus: transition.toStatus,
+      scope: "national",
+      chamber: transition.bill.currentChamber ?? transition.bill.originChamber,
+      category: transition.bill.category,
+      provisionFamily: transition.bill.provisions?.[0]?.type,
+      voteMargin: transition.bill.votesFor - transition.bill.votesAgainst,
+      nationId: transition.bill.countryId ?? config.country,
+      turn: transition.turn,
+    });
+  }
+  billStatusTransitions.delete(result);
   return result;
 }
 
@@ -307,7 +337,7 @@ async function closeOverrideStage(
         await awardLawmakerAchievementForSponsor(bill);
         await resolveNotifier(config)(db, bill, "signed");
         if (bill.category) result.enactedCategories.push(bill.category);
-        recordTransition(result, "signed");
+        recordTransition(result, "signed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsPassed++;
       }
@@ -339,7 +369,7 @@ async function closeOverrideStage(
           outcome: "ok",
         });
         await resolveNotifier(config)(db, bill, "failed");
-        recordTransition(result, "override_failed");
+        recordTransition(result, "override_failed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsFailed++;
       }
@@ -397,7 +427,7 @@ async function closeExecutiveStage(
     await resolveNotifier(config)(db, bill, "signed");
     await awardLawmakerAchievementForSponsor(bill);
     if (bill.category) result.enactedCategories.push(bill.category);
-    recordTransition(result, "signed");
+    recordTransition(result, "signed", bill, stage.status, currentTurn);
     result.billsProcessed++;
     result.billsPassed++;
   }
@@ -487,7 +517,7 @@ async function closeChamberVoteStage(
           outcome: "ok",
         });
         await resolveNotifier(config)(db, bill, "failed");
-        recordTransition(result, "failed");
+        recordTransition(result, "failed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsFailed++;
       }
@@ -669,7 +699,7 @@ async function enterChamberVoteStage(
     await notifyChambersVoteOpen(db, { ...bill, currentChamber: nextChamber }, nextChamber);
     // A config status string is always a real bill status.
     await resolveNotifier(config)(db, bill, targetStage.status as Bill["status"]);
-    recordTransition(result, targetStage.status);
+    recordTransition(result, targetStage.status, bill, passingStage.status, currentTurn);
     result.billsProcessed++;
     result.billsPassed++;
   }
@@ -713,7 +743,7 @@ async function enterLordsRevisionHold(
   if (!claimed) return;
 
   await resolveNotifier(config)(db, bill, "enrolled");
-  recordTransition(result, "enrolled");
+  recordTransition(result, "enrolled", bill, bill.status, currentTurn);
   result.billsProcessed++;
   result.billsPassed++;
 
@@ -817,7 +847,7 @@ async function closeConcurrentVoteStage(
       );
       if (claimed) {
         await resolveNotifier(config)(db, bill, "failed");
-        recordTransition(result, "failed");
+        recordTransition(result, "failed", bill, stage.status, currentTurn);
         result.billsProcessed++;
         result.billsFailed++;
       }
@@ -884,7 +914,7 @@ async function enterExecutive(
     // notifier applies. Parliamentary countries enact via enterSigned instead.
     await defaultNotifySponsor(db, bill, "enrolled");
     await notifyPresidentBillAwaitingSignature(db, bill);
-    recordTransition(result, "enrolled");
+    recordTransition(result, "enrolled", bill, bill.status, currentTurn);
     result.billsProcessed++;
     result.billsPassed++;
   }
@@ -921,7 +951,7 @@ async function enterSigned(
   await resolveNotifier(config)(db, bill, "signed");
   await awardLawmakerAchievementForSponsor(bill);
   if (bill.category) result.enactedCategories.push(bill.category);
-  recordTransition(result, "signed");
+  recordTransition(result, "signed", bill, fromStatus, currentTurn);
   result.billsProcessed++;
   result.billsPassed++;
 }

@@ -26,6 +26,19 @@ const DECL_ID = {
   nppAutoJoin: "aaaaaaaaaaaaaaaaaaaa0007",
 };
 
+let transactionSession: object | undefined;
+const transactionSpy = vi.fn(async (body: (session: object | undefined) => Promise<unknown>) =>
+  body(transactionSession)
+);
+
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: (
+    runInTransaction: (session: object | undefined) => Promise<unknown>,
+    runWithoutTransaction: () => Promise<unknown>
+  ) =>
+    transactionSession === undefined ? runWithoutTransaction() : transactionSpy(runInTransaction),
+}));
+
 // The era's bloc roll is an INPUT to resolution, not something it decides, so it is
 // stubbed rather than assembled from organisation-membership fixtures. Its own
 // derivation is covered by `blocMembership` / `bloc.test.ts`.
@@ -118,6 +131,7 @@ describe("resolveBattleDeclarations", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    transactionSession = undefined;
     db = createMockDb();
     db.collection("militaryUnits");
     db.collection("militaryFormations");
@@ -145,6 +159,30 @@ describe("resolveBattleDeclarations", () => {
     expect(db.collectionMocks.battleDeclarations.updateOne).toHaveBeenCalledWith(
       { _id: pending._id },
       { $set: { status: "resolved", resolvedTurn: 41 } }
+    );
+  });
+
+  it("commits battle writes through the transaction session when available", async () => {
+    const session = { id: "battle-session" };
+    transactionSession = session;
+    db.collectionMocks.battleDeclarations.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([pending]),
+    });
+    wireUnits(db, [unit({ countryId: "US" })], [unit({ countryId: "CN" })]);
+
+    await resolveBattleDeclarations(db as unknown as Db, 41);
+
+    expect(transactionSpy).toHaveBeenCalledOnce();
+    expect(db.collectionMocks.militaryUnits.bulkWrite).toHaveBeenCalledWith(expect.any(Array), {
+      session,
+    });
+    expect(db.collectionMocks.battleReports.insertOne).toHaveBeenCalledWith(expect.any(Object), {
+      session,
+    });
+    expect(db.collectionMocks.battleDeclarations.updateOne).toHaveBeenCalledWith(
+      { _id: pending._id },
+      { $set: { status: "resolved", resolvedTurn: 41 } },
+      { session }
     );
   });
 
@@ -407,7 +445,7 @@ describe("resolveBattleDeclarations — occupation", () => {
       ...warConflict,
       type: "interstate",
       startTurn: 40,
-      control: 1,
+      control: 0.1,
     });
     wireWalkover();
 

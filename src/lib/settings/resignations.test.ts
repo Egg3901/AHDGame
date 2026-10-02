@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { ObjectId, type Db } from "mongodb";
 import { createAsyncIterableCursor, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type {
@@ -12,6 +13,10 @@ import type {
 } from "@/lib/db/types";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { getResignablePositions, resignAllPositions, resignPosition } from "./resignations";
+
+vi.mock("@/lib/analytics/officeTransitionAnalytics", () => ({
+  captureOfficeTransition: vi.fn().mockResolvedValue(undefined),
+}));
 
 const characterId = new ObjectId("507f1f77bcf86cd799439011");
 const partyId = new ObjectId("507f1f77bcf86cd799439012");
@@ -30,6 +35,7 @@ function setFind(collectionName: string, documents: unknown[]): void {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   db = createMockDb();
   db.collection("characters").findOne.mockResolvedValue(character);
   for (const collectionName of [
@@ -123,6 +129,71 @@ describe("getResignablePositions", () => {
 });
 
 describe("resignPosition", () => {
+  it("captures a successful ordinary office resignation after its holder is removed", async () => {
+    const official = {
+      _id: new ObjectId(),
+      countryId: "US",
+      officeType: "house",
+      characterId,
+    } as ElectedOfficial;
+    setFind("electedOfficials", [official]);
+    db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 42 });
+
+    await resignPosition(db as unknown as Db, character, `official:${official._id}`);
+
+    expect(captureOfficeTransition).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        officeType: "house",
+        transitionType: "left",
+        selectionMethod: "resignation",
+        nationId: "US",
+        turn: 42,
+      })
+    );
+    expect(db.collection("electedOfficials").deleteOne.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(captureOfficeTransition).mock.invocationCallOrder[0]!
+    );
+  });
+
+  it("does not capture a resignation when the holder deletion loses its race", async () => {
+    const official = { _id: new ObjectId(), officeType: "house", characterId } as ElectedOfficial;
+    setFind("electedOfficials", [official]);
+    db.collection("electedOfficials").deleteOne.mockResolvedValue({ deletedCount: 0 });
+
+    const result = await resignPosition(db as unknown as Db, character, `official:${official._id}`);
+
+    expect(result.ok).toBe(false);
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
+  });
+
+  it("contains telemetry failure after a successful cabinet resignation", async () => {
+    const member = {
+      _id: new ObjectId(),
+      countryId: "US",
+      positionId: "secretary_of_state",
+      characterId,
+    } as CabinetMember;
+    setFind("cabinetMembers", [member]);
+    vi.mocked(captureOfficeTransition).mockRejectedValueOnce(new Error("Telemetry unavailable"));
+
+    const result = await resignPosition(db as unknown as Db, character, `cabinet:${member._id}`);
+
+    expect(result.ok).toBe(true);
+    expect(captureOfficeTransition).toHaveBeenCalledWith(
+      expect.objectContaining({ officeType: "usCabinet", transitionType: "left" })
+    );
+  });
+
+  it("does not capture a stale fallback current office that was not changed", async () => {
+    const holder = { ...character, currentOffice: { type: "senate" } } as Character;
+    db.collection("characters").findOne.mockResolvedValue(holder);
+    db.collection("characters").updateOne.mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
+
+    await resignPosition(db as unknown as Db, holder, "current-office");
+
+    expect(captureOfficeTransition).not.toHaveBeenCalled();
+  });
+
   it("resigns one national party leadership role without touching other positions", async () => {
     const party = {
       _id: partyId,

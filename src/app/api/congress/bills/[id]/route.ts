@@ -1,3 +1,4 @@
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 /**
  * GET   /api/congress/bills/[id] — full bill detail.
  * POST  /api/congress/bills/[id] — bill actions.
@@ -98,6 +99,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       input: parsed.data,
     });
 
+    await flushServerPosthog();
     logRequest("POST", path, result.status, Date.now() - start);
     return NextResponse.json(result.body, { status: result.status });
   } catch (error) {

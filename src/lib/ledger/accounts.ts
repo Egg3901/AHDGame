@@ -58,11 +58,10 @@ export type LedgerAccountKind =
  * rescaling) report as honest amber findings with a lifecycle hint, not as
  * hidden backlog — see the StockVsFlowFinding lifecycleHint.
  *
- * `org` stays listed but uncovered: no FinancialSubjectType, no counterparty
- * mapping, and no stored treasury field produce `org:` accounts anywhere, so
- * it contributes zero findings. It is dead but harmless, kept so a future
- * org-funds feature has a defined kind to back. See
- * docs/plans/2026-07-05-shadow-ledger-plan.md §3.
+ * `org` is backed by organizationFunds.balanceLocal, keyed by organizationId
+ * and the stored/founding country currency. Dues, aid, spending and refunds
+ * publish direct primary witnesses; financialTxLog subjects still need no org
+ * mapping because these cash writers own their ledger entries.
  */
 export const REAL_ACCOUNT_KINDS: readonly LedgerAccountKind[] = [
   "character",

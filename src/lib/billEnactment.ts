@@ -92,6 +92,7 @@ import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
 import { applyInternationalWithdrawalMeasure } from "@/lib/internationalOrganizations/withdrawalBills";
+import { captureBillPassed } from "@/lib/analytics/billStatusAnalytics";
 import {
   applySeparationBill,
   isBankingSeparationLegislationType,
@@ -482,6 +483,16 @@ export async function onBillEnacted(
     refs: { billId: bill._id },
     meta: { stateId, isNationalBill },
     outcome: "ok",
+  });
+
+  const stateCountryPrefix = stateId.includes("_") ? stateId.split("_", 1)[0] : undefined;
+  await captureBillPassed({
+    db,
+    billId: bill._id.toString(),
+    scope: isNationalBill ? "national" : "regional",
+    nationId:
+      bill.countryId ?? (isNationalBill ? inferCountryIdFromStateId(stateId) : stateCountryPrefix),
+    turn: currentTurn,
   });
 
   await applyInternationalWithdrawalMeasure(db, bill as Bill, currentTurn);

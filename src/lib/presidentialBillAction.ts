@@ -15,6 +15,7 @@ import { generateBillSignedNews, generateBillVetoedNews } from "@/lib/news";
 import { sendCountryGameEvent, buildBillVetoedDiscordEmbed } from "@/lib/discordWebhooks";
 import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { claimStatusTransition } from "@/lib/turn/atomicClaim";
+import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
 
 const OVERRIDE_WINDOW_HOURS = 24;
 const OVERRIDE_WINDOW_MS = OVERRIDE_WINDOW_HOURS * 60 * 60 * 1000;
@@ -90,6 +91,22 @@ export async function executePresidentialBillAction(
     // Call bill enactment hook (applies tax rate changes, policy updates, etc.)
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     const currentTurn = gameState?.currentTurn ?? 1;
+    await captureBillStatusChanged({
+      db,
+      billId: bill._id.toString(),
+      fromStatus: "enrolled",
+      toStatus: "signed",
+      scope: "national",
+      chamber: bill.currentChamber ?? bill.originChamber,
+      category: bill.category,
+      provisionFamily: bill.provisions?.[0]?.type,
+      voteMargin:
+        typeof bill.votesFor === "number" && typeof bill.votesAgainst === "number"
+          ? Math.abs(bill.votesFor - bill.votesAgainst)
+          : undefined,
+      nationId: bill.countryId ?? "US",
+      turn: currentTurn,
+    });
     await onBillEnacted(db, bill, currentTurn).catch((err) =>
       console.error("Bill enactment hook failed (president sign):", err)
     );
@@ -169,6 +186,18 @@ export async function executePresidentialBillAction(
         error: "This bill is not awaiting presidential action.",
       };
     }
+    await captureBillStatusChanged({
+      db,
+      billId: bill._id.toString(),
+      fromStatus: "enrolled",
+      toStatus: "veto_override",
+      scope: "national",
+      chamber: bill.currentChamber ?? bill.originChamber,
+      category: bill.category,
+      provisionFamily: bill.provisions?.[0]?.type,
+      nationId: bill.countryId ?? "US",
+      turn: vetoTurn,
+    });
 
     // Passage whips belong to the completed House/Senate ballots. The veto
     // starts a distinct vote in both chambers, so every party and caucus gets
