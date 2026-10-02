@@ -347,7 +347,7 @@ export async function materializeRussianCouncilCompositionSeating(input: {
       };
       const update = {
         $set: { currentOffice: null, updatedAt: now },
-        ...(isNpc ? { $unset: { seatsHeld: "" } } : {}),
+        ...(isNpc ? { $unset: { seatsHeld: "" as const } } : {}),
       };
       if (isNpc) await db.collection<NPP>("npps").updateMany(filter, update, { session });
       else await db.collection<Character>("characters").updateMany(filter, update, { session });

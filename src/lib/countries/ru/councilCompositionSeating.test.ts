@@ -1,8 +1,14 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { councilFormationRuntimeScenario as enacted } from "./testing/councilFormationRuntimeScenario";
-import { materializeRussianRegionalAuthorities as settle } from "./regionalCouncilAuthorities";
-import { materializeRussianCouncilCompositionSeating as seat } from "./councilCompositionSeating";
+import {
+  type RussianRegionalAuthorityRecord,
+  materializeRussianRegionalAuthorities as settle,
+} from "./regionalCouncilAuthorities";
+import {
+  type RussianCouncilCompositionSeating,
+  materializeRussianCouncilCompositionSeating as seat,
+} from "./councilCompositionSeating";
 import {
   materializeRussianCouncilFormationProposal as propose,
   authorizeRussianCouncilFormation as authorize,
@@ -107,22 +113,17 @@ describe("actual regional Council composition handover", () => {
       .docs.find((row) => String(row._id) === String(proposal.billId))!;
     Object.assign(bill, { status: "signed", enactedAt: input.now });
     expect(await authorize({ ...later, proposalId: proposal._id })).toBe(true);
-    expect(mem.collection("countryGameStates").docs[0].ruCouncilComposition.mode).toBe(
-      "regionalHeads"
-    );
+    expect(mem.collection("countryGameStates").docs[0]).toMatchObject({
+      ruCouncilComposition: { mode: "regionalHeads" },
+    });
     await settle(later);
     expect(await seat(later)).toBe(true);
-    const latest = mem.collection("russianCouncilCompositionSeatings").docs.at(-1)!;
+    const latest = mem
+      .collection("russianCouncilCompositionSeatings")
+      .docs.at(-1)! as unknown as RussianCouncilCompositionSeating;
     expect(latest.mode).toBe("regionalDelegates");
-    expect(latest.seats.every((row: { termEndTurn: number }) => row.termEndTurn === 621)).toBe(
-      true
-    );
-    expect(
-      latest.seats.every(
-        (row: { personId: string; authorityPersonId: string }) =>
-          row.personId !== row.authorityPersonId
-      )
-    ).toBe(true);
+    expect(latest.seats.every((row) => row.termEndTurn === 621)).toBe(true);
+    expect(latest.seats.every((row) => row.personId !== row.authorityPersonId)).toBe(true);
   });
   it("refuses a modified physical incumbent instead of retiring an unproven office", async () => {
     const { mem, input } = await enacted();
@@ -136,7 +137,8 @@ describe("actual regional Council composition handover", () => {
   it("preserves a player's existing regional executive office and protected residence choice", async () => {
     const { mem, input } = await enacted();
     await settle(input);
-    const regional = mem.collection("russianRegionalAuthorities").docs[0],
+    const regional = mem.collection("russianRegionalAuthorities")
+        .docs[0] as unknown as RussianRegionalAuthorityRecord,
       playerId = new ObjectId();
     // An explicit regional authority settlement exists before the ex-officio handover.
     regional.head = {
@@ -171,7 +173,7 @@ describe("actual regional Council composition handover", () => {
     player.federationPendingResidenceId = "protected-choice";
     expect(await seat({ ...input, turn: 238 })).toBe(true);
     expect(player.federationPendingResidenceId).toBe("protected-choice");
-    expect(player.currentOffice.type).toBe("governor");
+    expect(player.currentOffice).toMatchObject({ type: "governor" });
     expect(
       mem
         .collection("electedOfficials")

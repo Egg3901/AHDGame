@@ -11,6 +11,9 @@ import {
 import { materializeRussianRegionalAuthorities as settle } from "./regionalCouncilAuthorities";
 import { materializeRussianCouncilCompositionSeating as seat } from "./councilCompositionSeating";
 import { processRussianCouncilComposition as phase } from "./councilCompositionTurn";
+import type { CountryGameState } from "@/lib/db/types";
+import type { RussianDumaResultRecord } from "./dumaElectionResult";
+import type { RussianCouncilResultRecord } from "./councilElectionResult";
 const uri = process.env.FEDERATION_TEST_MONGO_URI;
 const collections = [
   "gameState",
@@ -46,7 +49,12 @@ describe.skipIf(!uri)("Regional Council transactions on isolated Mongo", () => {
     client = new MongoClient(uri!, { monitorCommands: true, serverSelectionTimeoutMS: 5000 });
     client.on("commandStarted", () => commands++);
     client.on("commandSucceeded", (event) => {
-      const rows = event.reply?.cursor?.firstBatch ?? event.reply?.cursor?.nextBatch;
+      const reply = event.reply;
+      if (!reply || typeof reply !== "object" || !("cursor" in reply)) return;
+      const cursor = reply.cursor;
+      if (!cursor || typeof cursor !== "object") return;
+      const rows =
+        "firstBatch" in cursor ? cursor.firstBatch : "nextBatch" in cursor ? cursor.nextBatch : [];
       if (Array.isArray(rows))
         for (const row of rows) {
           docsRead++;
@@ -70,12 +78,16 @@ describe.skipIf(!uri)("Regional Council transactions on isolated Mongo", () => {
   async function fixture() {
     const f = russianAssemblySeatingRuntimeScenario();
     const db = client.db(`ahd_test_council_composition_${new ObjectId().toHexString()}`);
-    const nominees = [
-      ...f.mem.collection("russianDumaElectionResults").docs[0].nominees,
-      ...f.mem.collection("russianCouncilElectionResults").docs[0].nominees,
-    ] as Array<{ ownerId: ObjectId; name: string; party: string }>;
+    const duma = f.mem.collection("russianDumaElectionResults")
+      .docs[0] as unknown as RussianDumaResultRecord;
+    const council = f.mem.collection("russianCouncilElectionResults")
+      .docs[0] as unknown as RussianCouncilResultRecord;
+    const nominees = [...duma.nominees, ...council.nominees];
     for (const profile of f.mem.collection("npps").docs) {
-      const nomination = nominees.find((row) => row.ownerId.equals(profile._id));
+      const ownerId = profile._id;
+      if (!(ownerId instanceof ObjectId))
+        throw new Error("Fixture financial owner needs its actual ObjectId");
+      const nomination = nominees.find((row) => row.ownerId.equals(ownerId));
       if (!nomination) throw new Error("Fixture profile needs its actual nomination");
       profile.name = nomination.name;
       profile.party = nomination.party;
@@ -185,7 +197,9 @@ describe.skipIf(!uri)("Regional Council transactions on isolated Mongo", () => {
           .sort({ _id: 1 })
           .toArray()
       ).toEqual(finances);
-      expect(await input.db.collection("countryGameStates").findOne({ _id: "RU" })).toMatchObject({
+      expect(
+        await input.db.collection<CountryGameState>("countryGameStates").findOne({ _id: "RU" })
+      ).toMatchObject({
         ruFederalAssemblySinceTurn: 145,
         ruCouncilComposition: { mode: "regionalDelegates" },
       });
