@@ -87,8 +87,10 @@ describe("CommonsVacancyPanel", () => {
           elections: [
             {
               id: "race1",
+              seatId: "UK-special_commons-LON",
               state: "LON",
               status: "active",
+              primaryEndTurn: 520,
               endTurn: 540,
               totalSeats: 1,
               carve: 1 / 75,
@@ -102,10 +104,61 @@ describe("CommonsVacancyPanel", () => {
     render(<CommonsVacancyPanel countryId="UK" />);
 
     expect(await screen.findByText(/open vacancies/i)).toBeTruthy();
-    expect(screen.getByText(/by-election running, closes turn 540/i)).toBeTruthy();
+    // Entry closes before the vote, so the card leads with the entry deadline
+    // and links to the race itself (ticket 1379: "how do we see where they are?").
+    expect(screen.getByText(/entries close turn 520, voting closes turn 540/i)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /go to the by-election/i });
+    expect(link.getAttribute("href")).toBe("/elections/UK-special_commons-LON");
     expect(screen.getByText(/hopeful/i)).toBeTruthy();
     expect(screen.getByText(/3 of 5 signatures/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /sign recall petition/i })).toBeTruthy();
+  });
+
+  it("drops the entry deadline once entries have closed", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      okJson(
+        statusPayload({
+          currentTurn: 530,
+          vacancies: [
+            {
+              id: "vac1",
+              state: "WMI",
+              constituency: null,
+              seats: 6,
+              reason: "removal",
+              status: "scheduled",
+              vacatedTurn: 490,
+              electionId: "race1",
+              scheduledTurn: 504,
+              priorCharacterName: null,
+              priorParty: null,
+              byElection: null,
+            },
+          ],
+          elections: [
+            {
+              id: "race1",
+              seatId: null,
+              state: "WMI",
+              status: "active",
+              primaryEndTurn: 528,
+              endTurn: 552,
+              totalSeats: 6,
+              carve: null,
+              vacancyIds: ["vac1"],
+              candidates: [],
+            },
+          ],
+        })
+      )
+    );
+    render(<CommonsVacancyPanel countryId="UK" />);
+
+    expect(await screen.findByText(/by-election running, closes turn 552/i)).toBeTruthy();
+    expect(screen.queryByText(/entries close/i)).toBeNull();
+    // No seatId: the page is still reachable by the race id.
+    const link = screen.getByRole("link", { name: /go to the by-election/i });
+    expect(link.getAttribute("href")).toBe("/elections/race1");
   });
 
   it("says what happens next for each open vacancy instead of a blanket promise", async () => {

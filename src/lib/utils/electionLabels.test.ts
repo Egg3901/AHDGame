@@ -5,6 +5,7 @@ import {
   MULTI_SEAT_TYPES,
   formatElectionTypeLabel,
   isCommonsGeneralElection,
+  isByElectionType,
 } from "./electionLabels";
 
 describe("formatElectionTypeLabel", () => {
@@ -141,5 +142,15 @@ describe("DD Volkskammer multi-seat coverage (issue #3896)", () => {
     // founding cycle's six races summed to 500 configured seats but only
     // seated 6 deputies total).
     expect(MULTI_SEAT_TYPES.has("volkskammerDeputy")).toBe(true);
+  });
+});
+
+describe("isByElectionType", () => {
+  it("is true for the mid-term vacancy races and nothing else", () => {
+    expect(isByElectionType("special_commons")).toBe(true);
+    expect(isByElectionType("special_governor")).toBe(true);
+    expect(isByElectionType("commons")).toBe(false);
+    expect(isByElectionType("snap_commons")).toBe(false);
+    expect(isByElectionType("governor")).toBe(false);
   });
 });
