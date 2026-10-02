@@ -751,12 +751,10 @@ describe.skipIf(!uri)(
         expect(
           await db.collection("electedOfficials").countDocuments({ officeType: "assemblyDelegate" })
         ).toBe(386);
-        const replacement = await db
-          .collection("electedOfficials")
-          .findOne({
-            constituencyId: seat!.constituencyId,
-            "hungarianAssemblyMandate.tier": "constituency",
-          });
+        const replacement = await db.collection("electedOfficials").findOne({
+          constituencyId: seat!.constituencyId,
+          "hungarianAssemblyMandate.tier": "constituency",
+        });
         expect(replacement!.termEnds).toEqual(seat!.termEnds);
         expect(
           await db
@@ -830,6 +828,250 @@ describe.skipIf(!uri)(
           await db.collection("elections").findOne({ _id: new ObjectId(again[0]) })
         ).toMatchObject({ status: "cancelled" });
         expect(await openHu1991ByElections(db, 294, now)).toEqual([]);
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+    it("certifies genuine by-election second rounds and records only awarded constituency seats", async () => {
+      const { db } = await fixture();
+      try {
+        await bind(db);
+        await certifyHu1991FirstCount(db, 1, 101, now);
+        await seatHu1991Assembly(db, 1, 101, now);
+        const seat = await db
+          .collection("electedOfficials")
+          .findOne({ "hungarianAssemblyMandate.tier": "constituency", isNPP: true });
+        await db
+          .collection("electedOfficials")
+          .updateOne({ _id: seat!._id }, { $set: { characterId: null, nppId: null } });
+        // The next ordinary campaign already runs all term, as it does in
+        // the real scheduler. It must not suppress this constituency vacancy.
+        const regularId = new ObjectId();
+        await db.collection("elections").insertOne({
+          _id: regularId,
+          countryId: "HU",
+          electionType: "nationalAssembly",
+          cycle: 2,
+          status: "active",
+          endTurn: 293,
+        });
+        expect(await openHu1991ByElections(db, 288, now)).toEqual([]);
+        const openingStart = commands;
+        const ids = await openHu1991ByElections(db, 102, now);
+        const openingCommands = commands - openingStart;
+        const firstId = new ObjectId(ids[0]);
+        const firstPoll = await db.collection("elections").findOne({ _id: firstId });
+        const firstCandidates = await db
+          .collection("electionCandidates")
+          .find({ electionId: firstId })
+          .toArray();
+        await db.collection("electionVoteTallies").updateOne(
+          { electionId: firstId },
+          {
+            $set: {
+              totalVotes: Object.fromEntries(
+                firstCandidates.map((row) => [row._id.toHexString(), 3000])
+              ),
+              candidateParties: Object.fromEntries(
+                firstCandidates.map((row) => [row._id.toHexString(), row.party])
+              ),
+            },
+          }
+        );
+        await db
+          .collection("elections")
+          .updateOne({ _id: firstId }, { $set: { status: "completed" } });
+        expect(
+          await resolveHu1991ByElection(db, firstPoll!.hungarianAssemblyRound.receiptId, 106, now)
+        ).toBe(0);
+        const job = await db
+          .collection<import("./constituencyByElections1991").Hu1991ByElectionRecord>(
+            HU_1991_BY_ELECTIONS_COLLECTION
+          )
+          .findOne({ _id: firstPoll!.hungarianAssemblyRound.receiptId });
+        const secondId = new ObjectId(job!.activeElectionIds[0]);
+        const secondCandidates = await db
+          .collection("electionCandidates")
+          .find({ electionId: secondId })
+          .toArray();
+        await db.collection("electionVoteTallies").updateOne(
+          { electionId: secondId },
+          {
+            $set: {
+              totalVotes: Object.fromEntries(
+                secondCandidates.map((row) => [
+                  row._id.toHexString(),
+                  row.party === "B" ? 4000 : 2000,
+                ])
+              ),
+              candidateParties: Object.fromEntries(
+                secondCandidates.map((row) => [row._id.toHexString(), row.party])
+              ),
+            },
+          }
+        );
+        await db
+          .collection("elections")
+          .updateOne({ _id: secondId }, { $set: { status: "completed" } });
+        const seatingStart = commands;
+        expect(await resolveHu1991ByElection(db, job!._id, 108, now)).toBe(2);
+        const seatingCommands = commands - seatingStart;
+        process.stdout.write(
+          JSON.stringify({ fixture: "hu-1991-by-election", openingCommands, seatingCommands }) +
+            "\n"
+        );
+        expect(openingCommands).toBeLessThanOrEqual(25);
+        expect(seatingCommands).toBeLessThanOrEqual(25);
+        const winner = await db.collection("electedOfficials").findOne({
+          constituencyId: seat!.constituencyId,
+          "hungarianAssemblyMandate.tier": "constituency",
+        });
+        expect(winner!.party).toBe("B");
+        expect(
+          await db.collection("electedOfficials").countDocuments({
+            constituencyId: seat!.constituencyId,
+            "hungarianAssemblyMandate.tier": "constituency",
+          })
+        ).toBe(1);
+        expect(
+          await db
+            .collection("hu1991AssemblyOfficeArchives")
+            .countDocuments({ "official._id": seat!._id })
+        ).toBe(1);
+        expect(winner!.termEnds).toEqual(seat!.termEnds);
+        const secondTally = await db
+          .collection("electionVoteTallies")
+          .findOne({ electionId: secondId });
+        expect(secondTally!.resolvedTotalSeats).toBe(1);
+        expect(
+          Object.values(secondTally!.seatsEstimate).reduce(
+            (sum: number, value) => sum + Number(value),
+            0
+          )
+        ).toBe(1);
+        expect(secondTally!.resolvedSeatHolders).toHaveLength(1);
+        expect(job!.ballots![0].first.candidates[0].votes).toBeGreaterThan(0);
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+    it("cancels old by-election custody after a newer Assembly takes office", async () => {
+      const { db } = await fixture();
+      try {
+        await bind(db);
+        await certifyHu1991FirstCount(db, 1, 101, now);
+        await seatHu1991Assembly(db, 1, 101, now);
+        const seat = await db
+          .collection("electedOfficials")
+          .findOne({ "hungarianAssemblyMandate.tier": "constituency", isNPP: true });
+        await db.collection("electedOfficials").deleteOne({ _id: seat!._id });
+        const ids = await openHu1991ByElections(db, 102, now);
+        const poll = await db.collection("elections").findOne({ _id: new ObjectId(ids[0]) });
+        const original = await db
+          .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
+          .findOne({ _id: "HU:mixed1989:1" });
+        await db
+          .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
+          .insertOne({ ...original!, _id: "HU:mixed1989:2", cycle: 2, seatedAtTurn: 103 });
+        const held = await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray();
+        expect(
+          await resolveHu1991ByElection(db, poll!.hungarianAssemblyRound.receiptId, 104, now)
+        ).toBe(1);
+        expect(await db.collection("elections").findOne({ _id: poll!._id })).toMatchObject({
+          status: "cancelled",
+        });
+        expect(await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray()).toEqual(
+          held
+        );
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+    it("files a new independent player in a vacant seat and delivers one win notice through normal turn resolution", async () => {
+      const { db } = await fixture();
+      try {
+        await bind(db);
+        await certifyHu1991FirstCount(db, 1, 101, now);
+        await seatHu1991Assembly(db, 1, 101, now);
+        const seat = await db
+          .collection("electedOfficials")
+          .findOne({ "hungarianAssemblyMandate.tier": "constituency", isNPP: true });
+        await db.collection("electedOfficials").deleteOne({ _id: seat!._id });
+        const ids = await openHu1991ByElections(db, 102, now);
+        const electionId = new ObjectId(ids[0]);
+        const poll = await db.collection("elections").findOne({ _id: electionId });
+        const player = new ObjectId(),
+          userId = new ObjectId();
+        await db.collection("characters").insertOne({
+          _id: player,
+          userId,
+          countryId: "HU",
+          homeState: poll!.state,
+          party: "independent",
+          currentOffice: null,
+          careerHistory: [],
+          balance: 5000,
+        });
+        const filed = await registerHu1991PlayerFiling({
+          db,
+          electionId,
+          requestedDistrictId: seat!.constituencyId,
+          candidate: {
+            electionId,
+            characterId: player,
+            characterName: "Synthetic by-election player",
+            countryId: "HU",
+            party: "independent",
+            status: "active",
+            isNPP: false,
+            enteredAt: now,
+          },
+          turn: 103,
+          now,
+        });
+        expect(filed.allowed).toBe(true);
+        const candidates = await db.collection("electionCandidates").find({ electionId }).toArray();
+        await db.collection("electionVoteTallies").updateOne(
+          { electionId },
+          {
+            $set: {
+              totalVotes: Object.fromEntries(
+                candidates.map((row) => [row._id.toHexString(), row.isNPP ? 200 : 9000])
+              ),
+              candidateParties: Object.fromEntries(
+                candidates.map((row) => [row._id.toHexString(), row.party])
+              ),
+            },
+          }
+        );
+        await db
+          .collection("elections")
+          .updateOne({ _id: electionId }, { $set: { status: "completed" } });
+        await db
+          .collection<StringRecord>("gameState")
+          .updateOne({ _id: "current" }, { $set: { currentTurn: 106 } });
+        expect(await resolveGeneralElections(now)).toBe(1);
+        expect(
+          await db
+            .collection("electedOfficials")
+            .countDocuments({ characterId: player, officeType: "assemblyDelegate" })
+        ).toBe(1);
+        expect(
+          await db.collection("notifications").countDocuments({ userId, type: "general_win" })
+        ).toBe(1);
+        expect(await db.collection("characters").findOne({ _id: player })).toMatchObject({
+          balance: 5000,
+          currentOffice: { type: "assemblyDelegate", seatsHeld: 1 },
+          careerHistory: [
+            { type: "elected", officeLabel: "National Assembly Deputy", partyCountryId: "HU" },
+          ],
+        });
+        const before = await snapshot(db);
+        expect(await resolveGeneralElections(now)).toBe(0);
+        expect(
+          await db.collection("notifications").countDocuments({ userId, type: "general_win" })
+        ).toBe(1);
+        expect(await snapshot(db)).toEqual(before);
       } finally {
         await db.dropDatabase();
       }

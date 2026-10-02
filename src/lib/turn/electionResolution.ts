@@ -16,6 +16,7 @@ import {
   type Hu1991ByElectionRecord,
 } from "@/lib/countries/hu/constituencyByElections1991";
 import { seatHu1991Assembly } from "@/lib/countries/hu/assemblySeating1991";
+import type { ElectedOfficial } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import {
@@ -236,10 +237,32 @@ export async function resolveGeneralElections(
       }
       const completed = await resolveHu1991ByElection(db, receiptId, currentTurn, now);
       resolved += completed;
-      if (completed)
+      if (completed) {
         resolvedElections.push(
           ...huByElectionRaces.filter((row) => row.hungarianAssemblyRound!.receiptId === receiptId)
         );
+        const job = await db
+          .collection<Hu1991ByElectionRecord>(HU_1991_BY_ELECTIONS_COLLECTION)
+          .findOne({ _id: receiptId }, { projection: { officialIds: 1 } });
+        if (job?.officialIds?.length) {
+          const winners = await db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find(
+              { _id: { $in: job.officialIds } },
+              { projection: { state: 1, characterName: 1, party: 1, isNPP: 1 } }
+            )
+            .toArray();
+          for (const winner of winners)
+            allNewsOutcomes.push({
+              electionType: "nationalAssembly",
+              state: winner.state!,
+              countryId: "HU",
+              winnerName: winner.characterName ?? "Assembly Deputy",
+              winnerParty: winner.party!,
+              isPlayer: !winner.isNPP,
+            });
+        }
+      }
     } catch (error) {
       logger.error("Turn", `Hungarian by-election ${receiptId} remains unseated`, error);
     }

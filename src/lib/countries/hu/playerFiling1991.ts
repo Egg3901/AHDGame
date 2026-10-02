@@ -156,6 +156,29 @@ export async function materializeHu1991PlayerFiling(input: {
     (byElection && byElection.parentReceiptId !== `HU:mixed1989:${election.cycle}`)
   )
     return reject("invalid-ballot");
+  if (byElection) {
+    const job = await db
+      .collection<import("./constituencyByElections1991").Hu1991ByElectionRecord>(
+        "hu1991ConstituencyByElections"
+      )
+      .findOne({ _id: receiptId }, { session });
+    const parent = await db
+      .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>("hu1991AssemblyCounts")
+      .findOne(
+        { seatedAtTurn: { $exists: true } },
+        { session, sort: { seatedAtTurn: -1 }, projection: { _id: 1 } }
+      );
+    if (
+      !job ||
+      job.round !== 1 ||
+      job.completedAtTurn != null ||
+      !job.activeElectionIds.includes(electionId.toHexString()) ||
+      job.parentReceiptId !== parent?._id ||
+      Math.max(turn, game.currentTurn) >= job.termEndTurn ||
+      JSON.stringify(job.districtIds) !== JSON.stringify(byElection.districtIds)
+    )
+      return reject("invalid-ballot");
+  }
   const locks = db.collection<FilingLock>(HU_1991_FILING_LOCKS_COLLECTION);
   const ownerId = candidate.characterId.toHexString();
   const ownerKey = `${receiptId}:player:${ownerId}`;

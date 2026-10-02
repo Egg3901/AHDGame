@@ -31,4 +31,19 @@ describe("Hungarian constituency filing selector", () => {
     expect(screen.queryByRole("option", { name: "Budapest, constituency 1" })).toBeNull();
     expect(screen.getByRole("option", { name: "Heves, constituency 6" })).toBeTruthy();
   });
+  it("offers only vacant constituencies during a by-election", () => {
+    render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+        <Hu1991ConstituencyPicker
+          regionId="HU_BUD"
+          value=""
+          onChange={() => {}}
+          allowedDistrictIds={["HU-constituency-01-12", "HU-constituency-01-20"]}
+        />
+      </NextIntlClientProvider>
+    );
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    expect(screen.queryByRole("option", { name: "Budapest, constituency 1" })).toBeNull();
+    expect(screen.getByRole("option", { name: "Budapest, constituency 12" })).toBeTruthy();
+  });
 });

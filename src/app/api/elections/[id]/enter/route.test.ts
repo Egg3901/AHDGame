@@ -941,6 +941,75 @@ describe("Hungarian 1991 constituency filing route", () => {
     db.collection("hu1991AssemblyFilingLocks").find.mockReturnValue(emptyFindCursor());
     return { db, election };
   }
+  async function setupHungarianByElection() {
+    const { db, election } = await setupHungary();
+    const receiptId = "HU:mixed1989:1:by-election:1";
+    const poll = {
+      ...election,
+      hungarianAssemblyRound: {
+        ...election.hungarianAssemblyRound,
+        receiptId,
+        byElection: {
+          parentReceiptId: "HU:mixed1989:1",
+          generation: 1,
+          districtIds: ["HU-constituency-01-12"],
+        },
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election: poll } as never);
+    db.collection("elections").findOne.mockResolvedValue(poll);
+    db.collection("hu1991ConstituencyByElections").findOne.mockResolvedValue({
+      _id: receiptId,
+      parentReceiptId: "HU:mixed1989:1",
+      round: 1,
+      termEndTurn: 200,
+      activeElectionIds: [electionOid.toHexString()],
+      districtIds: ["HU-constituency-01-12"],
+    });
+    db.collection("hu1991AssemblyCounts").findOne.mockResolvedValue({ _id: "HU:mixed1989:1" });
+    db.collection("electedOfficials").findOne.mockResolvedValue(null);
+    return { db, poll };
+  }
+  it("files only the vacant constituency in a journal-bound by-election", async () => {
+    const { db } = await setupHungarianByElection();
+    const response = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ constituencyId: "HU-constituency-01-12" }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    expect(db.collection("electionCandidates").insertOne).toHaveBeenCalledTimes(1);
+  });
+  it("refuses to file an occupied constituency during a by-election", async () => {
+    const { db } = await setupHungarianByElection();
+    const response = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ constituencyId: "HU-constituency-01-13" }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+    expect(response.status).toBe(403);
+    expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+  });
+  it("refuses a second mandate and refuses a superseded by-election journal", async () => {
+    const { db } = await setupHungarianByElection();
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      characterId: characterOid,
+    });
+    expect(
+      (await POST(makeReq(), { params: Promise.resolve({ id: electionOid.toHexString() }) })).status
+    ).toBe(403);
+    db.collection("electedOfficials").findOne.mockResolvedValue(null);
+    db.collection("hu1991AssemblyCounts").findOne.mockResolvedValue({ _id: "HU:mixed1989:2" });
+    expect(
+      (await POST(makeReq(), { params: Promise.resolve({ id: electionOid.toHexString() }) })).status
+    ).toBe(403);
+    expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+  });
   it("files the selected constituency in the atomic candidate writer", async () => {
     const { db } = await setupHungary();
     const request = new Request("http://test/route", {
