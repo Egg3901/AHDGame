@@ -647,6 +647,35 @@ describe("regime-change snaps", () => {
     expect(inserted[0].imposedSnap).toBe(true);
   });
 
+  it("stamps a conversion's terms on every race it spawns, and only then", async () => {
+    await setupFor(
+      "US",
+      [{ _id: "CA" }, { _id: "TX" }],
+      [
+        { state: "CA", totalSeats: 52 },
+        { state: "TX", totalSeats: 38 },
+      ]
+    );
+    const conversionTerms = { formerRulingPartyId: "1", legacyReservationPct: 20 };
+    await triggerSnapElection(db as unknown as Db, "US", new Date(), {
+      reason: "regime-change",
+      bypassLimits: true,
+      conversionTerms,
+    });
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0] as {
+      conversionTerms?: unknown;
+    }[];
+    expect(inserted).toHaveLength(2);
+    for (const doc of inserted) expect(doc.conversionTerms).toEqual(conversionTerms);
+
+    await setupFor("UK", [{ _id: "ENG" }], [{ state: "ENG", totalSeats: 500 }]);
+    await triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason: "pm-trigger" });
+    const plain = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0] as {
+      conversionTerms?: unknown;
+    }[];
+    expect(plain[0].conversionTerms).toBeUndefined();
+  });
+
   it("does not stamp imposedSnap on a PM-triggered snap", async () => {
     await setupFor("UK", [{ _id: "ENG" }], [{ state: "ENG", totalSeats: 500 }]);
     await triggerSnapElection(db as unknown as Db, "UK", new Date(), { reason: "pm-trigger" });
