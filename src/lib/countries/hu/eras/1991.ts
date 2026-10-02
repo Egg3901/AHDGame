@@ -8,9 +8,10 @@ import type { CountryEraOverride } from "../../contract";
  * https://static.valasztas.hu/v98stat/1990pmand.htm
  * https://www.parlament.hu/documents/125505/138476/The+Constitution/9101ae2d-02d7-4864-b1c4-6d5bdfd2d33c
  *
- * `ams` approximates the historical mixed electoral formula until the game
- * models its separate regional and compensation lists. The region seed already
- * apportions all 386 seats across the six game macroregions.
+ * The founding seed records the 1990 result. Later ordinary elections use
+ * the native 176-constituency, 152-territorial and 58-compensation rules,
+ * including territorial seats transferred into the compensation tier.
+ * The `ams` key remains the generic display family for this mixed system.
  */
 export const HU_1991: CountryEraOverride = {
   preset: "1991-default",

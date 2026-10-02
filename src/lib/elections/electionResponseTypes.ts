@@ -108,6 +108,7 @@ export interface ElectionResponse {
   electionType: string;
   state: string;
   countryId: string;
+  hungarianAssemblyRound?: { ruleVersion: "mixed-1989-v1"; round: 1 | 2 };
   russianDumaRound?: { cohortId: string; mandateSinceTurn: number; tier: "constituency" | "list" };
   senateClass: number | null;
   chamberClass: number | null;

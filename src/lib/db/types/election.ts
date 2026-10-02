@@ -107,6 +107,8 @@ export interface Election {
     registeredVoters: number;
     districtNumber: number;
   };
+  /** Native 1991 Hungarian campaigns freeze a whole-country count and round. */
+  hungarianAssemblyRound?: import("../../countries/hu/rules/assemblyCampaign1991").Hu1991CampaignBinding;
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**
@@ -161,6 +163,8 @@ export interface ElectionCandidate {
     nominationOrder: number;
     capacity: number;
   };
+  /** One chosen 1991 Hungarian constituency; renewed rounds retain the root campaign actor. */
+  hungarianAssemblyNomination?: { constituencyId?: string; rootCandidateId?: string };
   /** Frozen individual Council nomination order. */
   russianCouncilNomination?: { registrationOrder: number };
   /** Server-created nominee identity for an NPC profile representing a bounded slate. */

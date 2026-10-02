@@ -1,5 +1,6 @@
 "use client";
 
+import { Hu1991ConstituencyPicker } from "./Hu1991ConstituencyPicker";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
@@ -254,12 +255,21 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     };
   }, [fetchElection, fetchWire]);
 
+  const [huDistrictId, setHuDistrictId] = useState("");
   const handleEnter = async () => {
     if (!election) return;
     if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/elections/${id}/enter`, { method: "POST" });
+      const res = await fetch(`/api/elections/${id}/enter`, {
+        method: "POST",
+        ...(election.hungarianAssemblyRound?.round === 1 && huDistrictId
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ constituencyId: huDistrictId }),
+            }
+          : {}),
+      });
       const data = await res.json();
       if (res.ok) {
         showToast(data.message ?? "Entered race", "success");
@@ -439,6 +449,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="The full map, the trends, and your campaign operations."
         >
+          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+            <Hu1991ConstituencyPicker
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -512,6 +529,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="Filing, the state map, and your campaign operations."
         >
+          {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+            <Hu1991ConstituencyPicker
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -572,6 +596,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         <ElectionNavigation election={election} />
 
+        {canEnter && election.hungarianAssemblyRound?.round === 1 && (
+          <Hu1991ConstituencyPicker
+            regionId={election.state}
+            value={huDistrictId}
+            onChange={setHuDistrictId}
+          />
+        )}
         <ElectionHeader
           election={election}
           electionYear={electionYear}

@@ -3,6 +3,14 @@
  * resolveGeneralElections certifies bound Duma cohorts together and defers
  * partial cohorts, preserving Congress until a separate chamber handover.
  */
+import { bindHu1991Campaigns } from "@/lib/countries/hu/assemblyCampaignBinding1991";
+import {
+  certifyHu1991FirstCount,
+  HU_1991_COUNTS_COLLECTION,
+  type Hu1991AssemblyRecord,
+} from "@/lib/countries/hu/assemblyCount1991";
+import { openHu1991Runoff, certifyHu1991Runoff } from "@/lib/countries/hu/assemblyRunoff1991";
+import { seatHu1991Assembly } from "@/lib/countries/hu/assemblySeating1991";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import {
@@ -112,6 +120,34 @@ export async function resolveGeneralElections(
   for (const cycle of new Set(bgOrdinaryRaces.map((row) => row.cycle))) {
     bgPlans.set(cycle, await readBgOrdinaryElectionPlan(db, cycle, now));
   }
+  const hu1991Races =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (row) =>
+            row.countryId === "HU" &&
+            row.electionType === "nationalAssembly" &&
+            row.cycle >= 1 &&
+            (row.electionYear ?? 1991) < 2014
+        )
+      : [];
+  const hu1991Cycles = new Set(hu1991Races.map((row) => row.cycle));
+  if (onlyElectionIds && hu1991Cycles.size) {
+    const selected = new Set(onlyElectionIds.map((id) => id.toHexString()));
+    const cohort = await db
+      .collection<Election>("elections")
+      .find(
+        {
+          countryId: "HU",
+          electionType: "nationalAssembly",
+          cycle: { $in: [...hu1991Cycles] },
+        },
+        { projection: { cycle: 1 } }
+      )
+      .toArray();
+    for (const row of cohort)
+      if (!selected.has(row._id.toHexString())) hu1991Cycles.delete(row.cycle);
+  }
+  if (hu1991Cycles.size) await bindHu1991Campaigns(db, now, [...hu1991Cycles]);
   const huMixedCycles = new Set(
     gameStateDoc?.preset === "1991-default"
       ? completedElections
@@ -170,6 +206,38 @@ export async function resolveGeneralElections(
       }
     } catch (error) {
       logger.error("Turn", `Bulgarian ordinary cycle ${cycle} remains unseated`, error);
+    }
+  }
+  for (const cycle of hu1991Cycles) {
+    try {
+      const receipt = await certifyHu1991FirstCount(db, cycle, currentTurn, now);
+      if (!receipt) continue;
+      if (receipt.count.kind === "pending") {
+        await openHu1991Runoff(db, cycle, currentTurn, now);
+        await certifyHu1991Runoff(db, cycle, currentTurn, now);
+      }
+      if (await seatHu1991Assembly(db, cycle, currentTurn, now)) {
+        const settled = await db
+          .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
+          .findOne({ _id: receipt._id });
+        if (!settled?.settled) throw new Error("Hungarian committed handover receipt is missing");
+        resolved += settled.electionIds.length + (settled.runoffElectionIds?.length ?? 0);
+        resolvedElections.push(...hu1991Races.filter((row) => row.cycle === cycle));
+        for (const [candidateId, seats] of Object.entries(settled.settled.candidateSeats)) {
+          if (seats <= 0) continue;
+          const nominee = settled.nominees.find((row) => row.id === candidateId)!;
+          allNewsOutcomes.push({
+            electionType: "nationalAssembly",
+            state: nominee.regionId,
+            countryId: "HU",
+            winnerName: nominee.name,
+            winnerParty: nominee.party,
+            isPlayer: !nominee.isNpc,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error("Turn", `Hungarian mixed cycle ${cycle} remains unseated`, error);
     }
   }
   if (gameStateDoc?.preset === "1991-default") {
@@ -321,7 +389,7 @@ export async function resolveGeneralElections(
       const chunkResults = await Promise.all(
         chunk.map(async (election) => {
           try {
-            if (bgOrdinaryRaces.includes(election)) {
+            if (bgOrdinaryRaces.includes(election) || hu1991Races.includes(election)) {
               return { election, result: null };
             }
             const huPlan = huMixedPlans.get(election.cycle);

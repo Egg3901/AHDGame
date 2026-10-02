@@ -29,6 +29,7 @@ export async function removeWithdrawnCandidateFromTally(
   // stamp the ledger; older native tallies are identified with one projected read.
   let preserveCastVotes =
     tally.bgOrdinaryBallot === true ||
+    tally.hungarianAssemblyBallot === true ||
     tally.russianDumaBallot !== undefined ||
     tally.russianCouncilBallot !== undefined;
   if (

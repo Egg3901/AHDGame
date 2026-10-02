@@ -3,6 +3,7 @@
  * _enrichElection retains Russian national list nominees together and uses the
  * same primary advance limit as the resolver.
  */
+import { hu1991PrimaryAdvanceLimit } from "@/lib/countries/hu/rules/assemblyCampaign1991";
 import { russianAssemblyPrimaryAdvanceLimit } from "@/lib/countries/ru/assemblyPrimaryProgression";
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
 /**
@@ -624,6 +625,7 @@ export async function _enrichElection(
   // governor/president races are always 1. Resolved once here and returned as
   // `primaryAdvanceCount` so client surfaces read it instead of recomputing it.
   const primaryAdvanceCount =
+    hu1991PrimaryAdvanceLimit(election, enrichedWithYou.length) ??
     russianAssemblyPrimaryAdvanceLimit(election, enrichedWithYou.length) ??
     getPrimaryWinnersForElection(countryId as CountryId, election.electionType);
 
@@ -745,9 +747,13 @@ export async function _enrichElection(
     election.countryId === "BG" &&
     election.electionType === "nationalAssembly" &&
     election.cycle >= 1;
+  const isHu1991Pending =
+    election.countryId === "HU" &&
+    election.electionType === "nationalAssembly" &&
+    election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1";
   let seatsEstimate =
     seatedAllocation ??
-    (isBgOrdinary
+    (isBgOrdinary || isHu1991Pending
       ? null
       : computeSeatEstimates(
           election.electionType,
@@ -1090,18 +1096,19 @@ export async function _enrichElection(
             t.seatsEstimate && Object.keys(t.seatsEstimate).length > 0
               ? t.seatsEstimate
               : undefined;
-          const seatsEstimateSnapshot = isBgOrdinary
-            ? undefined
-            : (persisted ??
-              seatEstimateForVoteTotals(
-                election.electionType,
-                election.state,
-                election.totalSeats,
-                t.cumulativeVotes,
-                houseSeats,
-                fullCandidateParties,
-                election.countryId ?? "US"
-              ));
+          const seatsEstimateSnapshot =
+            isBgOrdinary || isHu1991Pending
+              ? undefined
+              : (persisted ??
+                seatEstimateForVoteTotals(
+                  election.electionType,
+                  election.state,
+                  election.totalSeats,
+                  t.cumulativeVotes,
+                  houseSeats,
+                  fullCandidateParties,
+                  election.countryId ?? "US"
+                ));
           return {
             turn: t.turn,
             recordedAt: t.recordedAt,
@@ -1387,6 +1394,14 @@ export async function _enrichElection(
     electionType: election.electionType,
     state: election.state,
     countryId,
+    ...(election.hungarianAssemblyRound
+      ? {
+          hungarianAssemblyRound: {
+            ruleVersion: election.hungarianAssemblyRound.ruleVersion,
+            round: election.hungarianAssemblyRound.round,
+          },
+        }
+      : {}),
     ...(election.russianDumaRound
       ? {
           russianDumaRound: {
