@@ -82,6 +82,8 @@ export interface TriggerSnapOptions {
   bypassLimits?: boolean;
   /** Human-friendly name for Discord embed. Defaults to country config label. */
   actorName?: string;
+  /** Post-conversion terms stamped on every race this snap opens. */
+  conversionTerms?: Election["conversionTerms"];
 }
 
 export interface TriggerSnapResult {
@@ -323,6 +325,7 @@ export async function triggerSnapElection(
       // chamber is the settlement's business and rescheduling every future
       // election is not.
       ...(imposed && { imposedSnap: true }),
+      ...(opts.conversionTerms && { conversionTerms: opts.conversionTerms }),
       totalSeats: seatsByRegion.get(regionId) ?? 1,
       startTime: now,
       primaryEndTime: new Date(now.getTime() + snapDur.primaryDurationHours * 3_600_000),
