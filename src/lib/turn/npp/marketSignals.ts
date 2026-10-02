@@ -101,6 +101,8 @@ export type CommodityPriceRatioFn = (commodity: CommodityType, countryId: string
  * without the data (tests, hasEnterableHeadroom) degrade to country scope.
  */
 export interface PlacementSignals {
+  /** Finite calibrated gross local demand; absent observations stay unknown. */
+  stateDemandOf?: (commodity: CommodityType, stateId: string) => number | null;
   /** currentPrice/basePrice for a commodity in a STATE; null falls back to the
    *  country-scope ratio for that commodity. */
   statePriceRatioOf?: (commodity: CommodityType, stateId: string) => number | null;

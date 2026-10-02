@@ -330,6 +330,15 @@ export function isCommonsGeneralElection(electionType: string): boolean {
 }
 
 /**
+ * A by-election: a mid-term race for seats left vacant (`special_commons`,
+ * `special_governor`). Lists that show it beside the region's regular race need
+ * this to tell the two apart, since both carry the same office and region.
+ */
+export function isByElectionType(electionType: string): boolean {
+  return electionType.startsWith("special_");
+}
+
+/**
  * True for Commons by-election races (#860). These resolve ADDITIVELY: they
  * fill only the vacated seats they claim and must never run the regional
  * delegation sweep that regular multi-seat races use.

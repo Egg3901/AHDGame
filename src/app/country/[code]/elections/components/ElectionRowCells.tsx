@@ -15,11 +15,16 @@ import { getTimerUrgencyStyle } from "@/lib/utils/formatters";
 import type { ElectionDisplay } from "@/lib/db/types";
 import { ELECTION_STATE_NAMES, isCompetitiveElection } from "@/app/elections/electionsHelpers";
 import type { EntryAction } from "@/lib/elections/entryEligibility";
+import { isByElectionType } from "@/lib/utils/electionLabels";
 import { relevantDeadlineTurn } from "../electionsSelectors";
 
 const CLASS_ROMAN: Record<number, string> = { 1: "I", 2: "II", 3: "III" };
 
-/** Region plus any class/seat qualifier, e.g. "Connecticut · Class I". */
+/**
+ * Region plus any class/seat qualifier, e.g. "Connecticut · Class I". A
+ * by-election shares its office section and region with the regular race, so it
+ * is tagged; otherwise only the seat count told the two rows apart (ticket 1379).
+ */
 export function RegionCell({ election }: { election: ElectionDisplay }) {
   const regionName = ELECTION_STATE_NAMES[election.state] ?? election.state;
   const cls = election.senateClass ?? election.chamberClass ?? null;
@@ -28,6 +33,11 @@ export function RegionCell({ election }: { election: ElectionDisplay }) {
   return (
     <div className="min-w-0">
       <span className="font-medium text-foreground">{regionName}</span>
+      {isByElectionType(election.electionType) && (
+        <span className="ml-2">
+          <Chip tone="info">By-election</Chip>
+        </span>
+      )}
       {cls != null && (
         <span className="ml-2 text-xs text-muted">Class {CLASS_ROMAN[cls] ?? cls}</span>
       )}
