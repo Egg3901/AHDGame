@@ -38,6 +38,7 @@ import {
   type ConvertCorpCurrencySuccess,
 } from "@/lib/corporations/convertCorpCurrency";
 import { findActiveResidentCeoCorporation } from "@/lib/corporations/ceoResidency";
+import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import {
   getRelocationCooldownStatus,
   RELOCATION_COOLDOWN_TURNS,
@@ -139,6 +140,18 @@ export async function POST(request: Request) {
         { error: "You are not a CEO — use /api/character/relocate instead." },
         { status: 400 }
       );
+    }
+
+    // The CEO may still move alone; taking a private corporation along would
+    // found private enterprise inside a command economy.
+    const commandEconomyBlock = await commandEconomyRelocationBlock(
+      db,
+      corp,
+      corp.countryId,
+      targetState.countryId
+    );
+    if (commandEconomyBlock) {
+      return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
     }
 
     const isImperial = corp.ceoType === "imperial";
