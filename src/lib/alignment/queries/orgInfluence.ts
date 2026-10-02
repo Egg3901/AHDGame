@@ -38,7 +38,7 @@ import { resolveGameYear } from "@/lib/era/era";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { loadGdpUsdMillionsByEntity } from "@/lib/internationalOrganizations/entityGdp";
 import { getOrganizationFund } from "@/lib/internationalOrganizations/organizationFund";
-import { POINT_COST_GDP_SHARE } from "../influence";
+import { PLAY_MAX_POINTS, POINT_COST_GDP_SHARE } from "../influence";
 import { NON_ALIGNED_RESISTANCE } from "../drift";
 import { isIntOrgAlignmentEnabled } from "../featureFlag";
 import type { AlignmentStatus } from "../project";
@@ -78,8 +78,22 @@ export interface InfluenceTarget {
    * the contested nations — the ones actually worth courting — by 2x.
    */
   pointCostLocal: number | null;
-  /** What moving it as far as a turn allows costs, at the delivered price. */
+  /**
+   * What moving it as far as a turn allows costs, at the delivered price. Uses
+   * the raised flashpoint limit while one is open on this nation.
+   */
   turnCapCostLocal: number | null;
+  /**
+   * Most one play can deliver here, in the same delivered points as
+   * `pointCostLocal`. A play is capped at PLAY_MAX_POINTS of list price, so a
+   * nation resisting at half strength takes half of that.
+   */
+  playMaxPoints: number;
+  /**
+   * The spend that reaches `playMaxPoints`. One play buys nothing past it, rival
+   * or no rival; a second play in the same turn carries its own cap.
+   */
+  playCapCostLocal: number | null;
   /** True when this target resists at half strength (lead within the band). */
   resistsAtHalfStrength: boolean;
   shares: Partial<Record<AlignmentPoleId, number>>;
@@ -397,6 +411,9 @@ export async function loadOrgInfluence(
         ? Math.round(grossPointCost / (resistsAtHalfStrength ? NON_ALIGNED_RESISTANCE : 1))
         : null;
 
+    const crisis = crisisByTarget.get(standing.entityId) ?? null;
+    const playMaxPoints = PLAY_MAX_POINTS * (resistsAtHalfStrength ? NON_ALIGNED_RESISTANCE : 1);
+
     const ourShare = standing.shares[channelDef.poleId] ?? 0;
     const previousOurShare = standing.previousShares?.[channelDef.poleId];
     const pointsToGate = Math.max(0, JOIN_SHARE - ourShare);
@@ -424,7 +441,12 @@ export async function loadOrgInfluence(
       ourShare,
       resistsAtHalfStrength,
       pointCostLocal,
-      turnCapCostLocal: pointCostLocal === null ? null : pointCostLocal * PER_NATION_TURN_CAP,
+      turnCapCostLocal:
+        pointCostLocal === null
+          ? null
+          : pointCostLocal * (crisis?.movementCap ?? PER_NATION_TURN_CAP),
+      playMaxPoints,
+      playCapCostLocal: pointCostLocal === null ? null : Math.round(pointCostLocal * playMaxPoints),
       // Null, not zero: a nation already past the gate has nothing left to buy,
       // and a zero would sort it to the top of "cheapest to flip".
       costToGate:
@@ -433,7 +455,7 @@ export async function loadOrgInfluence(
           : Math.round(pointCostLocal * pointsToGate),
       ourShareTrend:
         previousOurShare === undefined ? null : roundToShareGrid(ourShare - previousOurShare),
-      crisis: crisisByTarget.get(standing.entityId) ?? null,
+      crisis,
       sanctionedBy: sanctionsByTarget.get(standing.entityId) ?? [],
       isMember: memberIds.has(standing.entityId),
       joinCountdown,
@@ -450,8 +472,8 @@ export async function loadOrgInfluence(
     .limit(RECENT_LIMIT)
     .toArray();
 
-  // One grouped read for every target rather than a fetch per dossier. Plays
-  // are rare — at most one per org per turn — so this set stays small.
+  // One grouped read for every target rather than a fetch per dossier. Only
+  // plays resolved inside the intel window are read, so this set stays small.
   const intelDocs = await plays
     .find({
       organizationId: { $ne: organizationId },

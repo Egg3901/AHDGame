@@ -38,11 +38,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
 
   const modifiers: string[] = [];
   if (target.resistsAtHalfStrength) {
-    modifiers.push("Genuinely uncommitted — it absorbs pushes at half strength.");
+    modifiers.push("Genuinely uncommitted, so it absorbs pushes at half strength.");
   }
   if (target.crisis) {
     modifiers.push(
-      `Flashpoint open for ${target.crisis.turnsRemaining} more turns — the movement ceiling here is raised to ${target.crisis.movementCap}.`
+      `Flashpoint open for ${target.crisis.turnsRemaining} more turns. The movement ceiling here is raised to ${target.crisis.movementCap}.`
     );
   }
   for (const org of target.sanctionedBy) {
@@ -55,6 +55,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
 
   const intel = view.rivalIntel[target.entityId] ?? [];
   const canAct = viewerCountryId != null && target.pointCostLocal != null;
+  const turnCap = turnCapFor(target);
 
   return (
     <section
@@ -87,8 +88,8 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
         <p className="text-body-xs text-muted">
           {view.channel?.poleLabel} is yours here, at {formatShare(target.ourShare)}
           {pointsToGate > 0
-            ? ` — ${formatShare(pointsToGate)} short of the ${view.joinShare} it takes to join.`
-            : ` — already past the ${view.joinShare} it takes to join.`}{" "}
+            ? `, ${formatShare(pointsToGate)} short of the ${view.joinShare} it takes to join.`
+            : `, already past the ${view.joinShare} it takes to join.`}{" "}
           A member that falls to {view.leaveShare} and stays there leaves the bloc.
         </p>
         {/* Over the gate is only the first step. The turn engine makes a nation
@@ -113,7 +114,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             ) : (
               <>
                 It has held above the {view.joinShare} for the full {view.sustainTurns} turns and is
-                applying to join — the members&rsquo; vote now decides.
+                applying to join. The members&rsquo; vote now decides.
               </>
             )}
           </p>
@@ -166,11 +167,17 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
           {target.resistsAtHalfStrength
             ? "That is twice the usual tenth of a percent of its economy, because of the resistance noted above."
             : "That is a tenth of a percent of its economy."}{" "}
-          Moving it as far as a turn allows costs{" "}
+          Moving it the full {turnCap} points a turn allows costs{" "}
           <span className="font-mono tabular-nums text-foreground">
             {fundAmount(target.turnCapCostLocal ?? 0)}
+          </span>{" "}
+          when nobody pushes back. A rival&rsquo;s push cancels yours point for point before that
+          limit applies, so against a rival you need their points plus {turnCap}. One play lands at
+          most {target.playMaxPoints} points, which costs{" "}
+          <span className="font-mono tabular-nums text-foreground">
+            {fundAmount(target.playCapCostLocal ?? 0)}
           </span>
-          ; beyond that the money buys nothing more this turn unless a rival is pushing back.
+          . Spending more on one play buys nothing, but a second play in the same turn adds its own.
         </p>
       )}
 
@@ -185,6 +192,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
       )}
     </section>
   );
+}
+
+/** The most this nation can move in one turn: raised while a flashpoint is open. */
+function turnCapFor(target: InfluenceTarget): number {
+  return target.crisis?.movementCap ?? PER_NATION_TURN_CAP;
 }
 
 /**
@@ -222,18 +234,22 @@ function CommitPlayForm({
   const pointCost = target.pointCostLocal ?? 0;
   const hasPreview = typed > 0 && pointCost > 0;
   // pointCostLocal already carries the non-aligned resistance, so this is points
-  // actually landed, not list price. The per-nation cap bounds the whole nation's
-  // turn, so anything past it is the ceiling talking, not this play.
+  // actually landed, not list price. One play is capped before anything else, so
+  // past playMaxPoints the money buys nothing even against a rival (ticket #1371).
+  // The turn limit is different: it bounds what is left after opposing pushes
+  // cancel, so points past it still count when a rival pushes back.
   const rawPoints = hasPreview ? typed / pointCost : 0;
-  const cappedPoints = Math.min(rawPoints, PER_NATION_TURN_CAP);
-  const overCap = rawPoints > PER_NATION_TURN_CAP;
+  const playPoints = Math.min(rawPoints, target.playMaxPoints);
+  const overPlayCap = rawPoints > target.playMaxPoints;
+  const turnCap = turnCapFor(target);
+  const overTurnCap = !overPlayCap && playPoints > turnCap;
   const overBalance = typed > view.fundBalanceLocal;
   // The smallest spend that lands a storable movement — one grid step (0.01),
   // priced at this nation's per-point cost. A play below it resolves to zero and
   // is refunded, so the commit path refuses it and this is what the player must
   // reach instead (ticket #1213).
   const minSpendLocal = pointCost > 0 ? Math.ceil(pointCost * MIN_PLAY_POINTS) : 0;
-  const buysNothing = hasPreview && roundToShareGrid(cappedPoints) < MIN_PLAY_POINTS;
+  const buysNothing = hasPreview && roundToShareGrid(playPoints) < MIN_PLAY_POINTS;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -314,14 +330,18 @@ function CommitPlayForm({
         <p className={`text-body-xs ${buysNothing ? "text-warning" : "text-muted"}`}>
           Buys{" "}
           <span className="font-mono tabular-nums text-foreground">
-            {formatShare(roundToShareGrid(cappedPoints))}
+            {formatShare(roundToShareGrid(playPoints))}
           </span>{" "}
           points at {inFundCurrency(pointCost)} each.{" "}
           {buysNothing
-            ? `That is too little to move ${target.name} at all — spend at least ${inFundCurrency(minSpendLocal)} to shift it by ${formatShare(MIN_PLAY_POINTS)}.`
-            : overCap
-              ? `Past the ${PER_NATION_TURN_CAP}-point ceiling for one turn — the rest buys nothing unless a rival pushes back.`
-              : "One point is one share of this nation's alignment."}
+            ? `That is too little to move ${target.name} at all. Spend at least ${inFundCurrency(minSpendLocal)} to shift it by ${formatShare(MIN_PLAY_POINTS)}.`
+            : overPlayCap
+              ? `One play lands at most ${target.playMaxPoints} points here, so anything over ${inFundCurrency(target.playCapCostLocal ?? 0)} is wasted. To push harder, commit a second play this turn.`
+              : overTurnCap
+                ? `That is past the ${turnCap} point limit for one turn. The extra only counts if a rival pushes back this turn, because opposing pushes cancel before the limit applies.`
+                : target.nonAligned > 0
+                  ? "One point is one share of this nation's alignment."
+                  : `None of ${target.name} is uncommitted, so a gain is shared out across every side and each point raises your share by less than one.`}
         </p>
       )}
 
