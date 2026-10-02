@@ -82,6 +82,36 @@ describe("getStateRegLedger", () => {
     expect(result.movement.map((m) => m.regPct)).toEqual([48.5, 49]);
   });
 
+  it("does not select a merged-away party as the registration headline", async () => {
+    coll("statePartyOrg").find.mockReturnValue(
+      cursor([
+        { _id: "SCO_1", partyId: "1", organization: 58.5, registration: 71.1 },
+        { _id: "SCO_6", partyId: "6", organization: 6.4, registration: 90 },
+      ])
+    );
+    coll("politicalParties").find.mockReturnValue(
+      cursor([
+        { sequentialId: 1, abbreviation: "LAB", color: "#dc143c" },
+        { sequentialId: 6, abbreviation: "LIB", color: "#fbbf24", isDefunct: true },
+      ])
+    );
+    coll("orgRegLedger").find.mockReturnValue(cursor([]));
+
+    const { getStateRegLedger } = await import("./getStateRegLedger");
+    const result = await getStateRegLedger(db as unknown as Db, {
+      countryId: "UK",
+      stateId: "SCO",
+    });
+
+    expect(coll("politicalParties").find).toHaveBeenCalledWith({ countryId: "UK" });
+    expect(result.headline).toEqual({
+      partyId: "1",
+      abbr: "LAB",
+      color: "#dc143c",
+      regPct: 71.1,
+    });
+  });
+
   it("collapses several same-turn rows to the last-written value per turn", async () => {
     // A party can get more than one `reg` row per turn (drift sourced from
     // its surplus, then decay). The sparkline is one point per turn, and the
@@ -115,7 +145,9 @@ describe("getStateRegLedger", () => {
     coll("statePartyOrg").find.mockReturnValue(
       cursor([{ _id: "GA_1", partyId: "1", organization: 13.5, registration: 70 }])
     );
-    coll("politicalParties").find.mockReturnValue(cursor([]));
+    coll("politicalParties").find.mockReturnValue(
+      cursor([{ sequentialId: 1, abbreviation: "DEM", color: "#3b82f6" }])
+    );
     const rows: unknown[] = [];
     for (let turn = 120; turn >= 1; turn--) {
       const hex = (n: number) => n.toString(16).padStart(24, "0");
@@ -157,7 +189,9 @@ describe("getStateRegLedger", () => {
     coll("statePartyOrg").find.mockReturnValue(
       cursor([{ _id: "GA_1", partyId: "1", organization: 13.5, registration: 70 }])
     );
-    coll("politicalParties").find.mockReturnValue(cursor([]));
+    coll("politicalParties").find.mockReturnValue(
+      cursor([{ sequentialId: 1, abbreviation: "DEM", color: "#3b82f6" }])
+    );
     const rows: unknown[] = [];
     const hex = (n: number) => n.toString(16).padStart(24, "0");
     for (let turn = 120; turn >= 1; turn--) {

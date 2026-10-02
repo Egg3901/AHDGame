@@ -29,6 +29,7 @@ import { defect as vfBankRestitution } from "./defects/AHD-1267-vf-bank-restitut
 import { defect as mergedStateExtraction } from "./defects/AHD-1271-merged-state-extraction";
 import { defect as poolCountryAttribution } from "./defects/AHD-1271-pool-country-attribution";
 import { defect as natCorpSplitSectorType } from "./defects/AHD-1271-natcorp-split-sector-type";
+import { defect as mergedPartyOrg } from "./defects/AHD-1372-merged-party-org";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -69,6 +70,10 @@ export const DEFECTS: Defect[] = [
   // Same ticket, third shape: split-off National Corporations inherited the
   // sovereign issuer's `type: "financial"` instead of the sector they operate.
   natCorpSplitSectorType,
+  // Ticket #1372: older party mergers left their regional Org/Reg rows live.
+  // Modern mergers delete them; this releases the legacy Reg shares and
+  // removes the stale regional organizations.
+  mergedPartyOrg,
 ];
 
 export function getDefect(id: string): Defect | undefined {
