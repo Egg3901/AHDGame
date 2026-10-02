@@ -62,30 +62,7 @@ export function isFrontierEntryRelaxableReason(
   return (FRONTIER_ENTRY_RELAXABLE_REASONS as readonly string[]).includes(reason);
 }
 
-/**
- * An uncovered positive-use market may use the experiment's bounded slot
- * outside the ordinary eight-turn corporate stagger. This is a pacing
- * override only: profit and margin must already pass, and unknown demand or
- * existing supply cannot qualify. Pricing, finance and policy remain binding.
- */
-export function frontierPacingOpportunity(args: {
-  reason: string;
-  uncoveredMarket: boolean;
-  positiveLocalUse: boolean;
-  profitable: boolean;
-  marginPct: number;
-  marginFloorPct: number;
-}): boolean {
-  return (
-    args.reason === "cohort_ineligible" &&
-    args.uncoveredMarket === true &&
-    args.positiveLocalUse === true &&
-    args.profitable === true &&
-    Number.isFinite(args.marginPct) &&
-    Number.isFinite(args.marginFloorPct) &&
-    args.marginPct >= args.marginFloorPct
-  );
-}
+export { frontierPacingOpportunity } from "./frontierEntryExperiment/rules";
 
 /** Absent or non-true resolves to disabled. Fail-closed like the flag. */
 export function frontierEntryExperimentEnabledFrom(value: unknown): boolean {
