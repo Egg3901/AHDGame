@@ -263,11 +263,19 @@ describe("loadOrgInfluence", () => {
     expect(yu.resistsAtHalfStrength).toBe(false);
     expect(yu.pointCostLocal).toBe(30_000_000);
     expect(yu.turnCapCostLocal).toBe(30_000_000 * 5);
+    // One play caps at 10 points of list price, so past 300m a single play
+    // buys nothing more (ticket #1371).
+    expect(yu.playMaxPoints).toBe(10);
+    expect(yu.playCapCostLocal).toBe(30_000_000 * 10);
     // SE leads by exactly 20 — inside the band, so it resists at half strength.
     // Ten times the economy, and then doubled again for the resistance: this is
     // the DELIVERED price, which is the only one a player can budget against.
     expect(se.resistsAtHalfStrength).toBe(true);
     expect(se.pointCostLocal).toBe(300_000_000 * 2);
+    // The cap is on list price, so it is the same spend but half the delivered
+    // points.
+    expect(se.playMaxPoints).toBe(5);
+    expect(se.playCapCostLocal).toBe(300_000_000 * 10);
   });
 
   it("quotes no price for a target whose economy is not on record", async () => {
@@ -281,6 +289,7 @@ describe("loadOrgInfluence", () => {
 
     expect(v.targets[0]!.pointCostLocal).toBeNull();
     expect(v.targets[0]!.turnCapCostLocal).toBeNull();
+    expect(v.targets[0]!.playCapCostLocal).toBeNull();
   });
 
   it("marks a member that cannot vote", async () => {
@@ -362,10 +371,13 @@ describe("loadOrgInfluence", () => {
 
     const { loadOrgInfluence } = await import("./orgInfluence");
     const v = await loadOrgInfluence(db as unknown as Db, "NATO");
-    expect(v.targets.find((t) => t.entityId === "YU")!.crisis).toEqual({
+    const yu = v.targets.find((t) => t.entityId === "YU")!;
+    expect(yu.crisis).toEqual({
       turnsRemaining: 12,
       movementCap: 7.5,
     });
+    // The full turn costs the raised limit, not the usual 5.
+    expect(yu.turnCapCostLocal).toBe(30_000_000 * 7.5);
   });
 
   it("names the orgs sanctioning a nation", async () => {
