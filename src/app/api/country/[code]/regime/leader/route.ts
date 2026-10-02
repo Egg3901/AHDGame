@@ -51,6 +51,12 @@ import { getDecisionHandler } from "@/lib/onePartyState/decisionEvents/registry"
 // just the kind string and no buttons.
 import "@/lib/onePartyState/decisionEvents";
 import { isActionAvailable, type ReformActionId } from "@/lib/onePartyState/reformCooldowns";
+import {
+  CONVENTION_ELECTION_DELAYS,
+  CONVENTION_LEGACY_RESERVATION_MAX,
+  conventionDraftDefaults,
+  conventionTargetAllowlist,
+} from "@/lib/onePartyState/conventionRules";
 import { COUNTRY_CONFIGS as COUNTRY_CFGS_FOR_MOOD } from "@/lib/constants/countries";
 import { computePopularTurnDrift } from "@/lib/turn/popularLegitimacyTurn";
 import { collectEconomicSignalsForCountry } from "@/lib/turn/popularLegitimacyDriverCollectors";
@@ -321,6 +327,14 @@ export async function GET(request: Request, { params }: RouteParams) {
       activeDecision,
       convention: esc?.convention ?? null,
       conventionInProgress: esc?.conventionInProgress ?? false,
+      // What the draft form may offer, straight from the rules the draft
+      // route enforces.
+      conventionDraftOptions: {
+        targets: conventionTargetAllowlist(countryId),
+        electionDelays: [...CONVENTION_ELECTION_DELAYS],
+        legacyReservationMax: CONVENTION_LEGACY_RESERVATION_MAX,
+        defaults: conventionDraftDefaults(countryId),
+      },
       conversionPendingAtTurn: esc?.conversionPendingAtTurn ?? null,
       stage4Delay: esc?.stage4Delay ?? null,
       transitionHistory: (esc?.transitionHistory ?? []).slice(0, 10),

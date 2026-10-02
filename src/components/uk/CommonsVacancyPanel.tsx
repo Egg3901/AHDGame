@@ -39,6 +39,25 @@ function electionForVacancy(vacancy: CommonsVacancyDto, elections: CommonsElecti
   return elections.find((e) => e.id === vacancy.electionId) ?? null;
 }
 
+/** What happens next for a vacancy no by-election has claimed yet. */
+function pendingByElectionText(vacancy: CommonsVacancyDto): string {
+  const gate = vacancy.byElection;
+  switch (gate?.kind) {
+    case "spawn":
+      return "A by-election opens next turn.";
+    case "special_live":
+      return "Waits for the by-election already running in this region to close.";
+    case "general_fills":
+      return gate.endTurn != null
+        ? `The general election closing on turn ${gate.endTurn} fills this seat.`
+        : "The general election already under way fills this seat.";
+    case "cooldown":
+      return `The next by-election here can open on turn ${gate.retryTurn}.`;
+    default:
+      return "No by-election scheduled yet.";
+  }
+}
+
 async function postJson(
   url: string,
   body: unknown
@@ -113,9 +132,7 @@ function VacancyCard({
           )}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted">
-          No by-election scheduled yet. One spawns automatically.
-        </p>
+        <p className="mt-2 text-xs text-muted">{pendingByElectionText(vacancy)}</p>
       )}
     </li>
   );

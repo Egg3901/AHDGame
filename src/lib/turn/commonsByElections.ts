@@ -14,7 +14,10 @@
  * Non-interference mirrors `byElections.ts`: `special_commons` lands in its
  * own group in `cleanupDuplicateElections`, is invisible to the perpetual
  * spawner (which keys off `commons`), seats winners as plain `commons`, and
- * resolves additively (sitting MPs keep their rows).
+ * resolves additively (sitting MPs keep their rows). A by-election only runs
+ * when it resolves before the region's next general, and a snap dissolution
+ * cancels any that are live, so a special never seats into a delegation a
+ * general has already replaced.
  */
 
 import { ObjectId } from "mongodb";
@@ -33,6 +36,7 @@ import {
   COMMONS_BY_ELECTION_RETRY_COOLDOWN_TURNS,
 } from "@/lib/uk/elections/commonsRecallRules";
 import { computeByElectionCarveFraction } from "@/lib/uk/elections/byElectionCarve";
+import { regularRaceFillsSeatFirst } from "@/lib/turn/byElections";
 import {
   claimVacanciesForElection,
   createCommonsVacancy,
@@ -57,6 +61,56 @@ const LIVE_ELECTION_STATUSES: readonly Election["status"][] = ["active", "upcomi
 
 /** Election statuses that count as a finished race for reconciliation. */
 const FINISHED_ELECTION_STATUSES: readonly Election["status"][] = ["completed", "resolved"];
+
+/** Turns a by-election takes from spawn to result. */
+export const COMMONS_BY_ELECTION_TOTAL_TURNS =
+  COMMONS_BY_ELECTION_FILING_TURNS + COMMONS_BY_ELECTION_GENERAL_TURNS;
+
+/** Why a region with open vacancies does or does not get a by-election now. */
+export type CommonsByElectionGate =
+  | { kind: "spawn" }
+  | { kind: "special_live" }
+  | { kind: "general_fills"; endTurn: number | null }
+  | { kind: "cooldown"; retryTurn: number };
+
+/**
+ * Spawn decision for one region, shared by the watcher and the vacancy read
+ * model so the panel never promises a by-election the watcher will not run.
+ *
+ * - A live special is already filling the region's seats.
+ * - A live general (regular or snap) suppresses only when it resolves before
+ *   a by-election could. Regular races are `active` for their whole term, so
+ *   counting any live general as cover blocked every by-election (#1379).
+ * - After a finished special the region waits out the retry cooldown, so an
+ *   uncontested vacancy does not respawn a race every turn.
+ */
+export function commonsByElectionGate(input: {
+  liveRaces: ReadonlyArray<Pick<Election, "electionType" | "endTurn">>;
+  lastSpecialEndTurn: number | undefined;
+  currentTurn: number;
+}): CommonsByElectionGate {
+  const { liveRaces, lastSpecialEndTurn, currentTurn } = input;
+  if (liveRaces.some((e) => e.electionType === SPECIAL_COMMONS_ELECTION_TYPE)) {
+    return { kind: "special_live" };
+  }
+  const filling = liveRaces.filter((e) =>
+    regularRaceFillsSeatFirst(e, currentTurn, COMMONS_BY_ELECTION_TOTAL_TURNS)
+  );
+  if (filling.length > 0) {
+    const ends = filling.map((e) => e.endTurn).filter((t): t is number => typeof t === "number");
+    return { kind: "general_fills", endTurn: ends.length > 0 ? Math.min(...ends) : null };
+  }
+  if (
+    typeof lastSpecialEndTurn === "number" &&
+    lastSpecialEndTurn > currentTurn - COMMONS_BY_ELECTION_RETRY_COOLDOWN_TURNS
+  ) {
+    return {
+      kind: "cooldown",
+      retryTurn: lastSpecialEndTurn + COMMONS_BY_ELECTION_RETRY_COOLDOWN_TURNS,
+    };
+  }
+  return { kind: "spawn" };
+}
 
 export interface SpawnSpecialCommonsInput {
   state: string;
@@ -340,17 +394,12 @@ export async function processCommonsByElectionWatcher(
       if (prev === undefined || e.endTurn > prev) cooldownEndByState.set(e.state, e.endTurn);
     }
     for (const [state, claims] of openByState) {
-      const live = liveByState.get(state) ?? [];
-      // A live regular race fills the seat on schedule; a live special is
-      // already filling it. Either way there is nothing to spawn.
-      if (live.length > 0) continue;
-      const lastEnd = cooldownEndByState.get(state);
-      if (
-        typeof lastEnd === "number" &&
-        lastEnd > currentTurn - COMMONS_BY_ELECTION_RETRY_COOLDOWN_TURNS
-      ) {
-        continue;
-      }
+      const gate = commonsByElectionGate({
+        liveRaces: liveByState.get(state) ?? [],
+        lastSpecialEndTurn: cooldownEndByState.get(state),
+        currentTurn,
+      });
+      if (gate.kind !== "spawn") continue;
       const seats = claims.reduce((n, v) => n + Math.max(1, v.seats), 0);
       await spawnSpecialCommons(db, {
         state,

@@ -62,6 +62,7 @@ import {
 } from "./generalResolutionHelpers";
 import { logger } from "../../observability/logger";
 import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
+import { applyConversionVotePenalty, applyLegacySeatFloor } from "./conversionTerms";
 import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
@@ -366,6 +367,18 @@ export async function resolveOneGeneralElection(
       );
     }
 
+    // First election after a forced one-party-state conversion: the former
+    // ruling party's votes take the conversion's penalty before ranking.
+    const penalizedVotes = applyConversionVotePenalty(
+      effectiveVotes,
+      (id) => candidateMap.get(id)?.party,
+      election.conversionTerms
+    );
+    if (penalizedVotes) {
+      effectiveVotes = penalizedVotes;
+      totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
+    }
+
     // ── Defense-in-depth: never seat a hard-deleted character ────────────────
     // Account deletion (and admin force-delete) hard-removes the character doc
     // but can leave a dangling active candidacy behind. If such a candidacy
@@ -510,22 +523,27 @@ export async function resolveOneGeneralElection(
           (await getCountryState(db, election.countryId)).governmentType
         )
       : null;
-    const { isMultiSeat, seatsEstimate, winners, losers } =
+    // A post-conversion race also lifts the former ruling party to the seat
+    // share the conversion reserved for it.
+    const { isMultiSeat, seatsEstimate, winners, losers } = applyLegacySeatFloor(
       districted ??
-      allocateSeats(
-        election.electionType,
-        election.state,
-        totalSeats,
-        ranked,
-        totalVotesCast,
-        houseSeats,
-        // National Front chambers: the quota decides the party split, not the
-        // vote. Undefined for every non-bloc-list country, so their allocation
-        // is byte-identical.
-        runtimeBlocQuota?.shares,
-        commonsSeats,
-        election.countryId ?? "US"
-      );
+        allocateSeats(
+          election.electionType,
+          election.state,
+          totalSeats,
+          ranked,
+          totalVotesCast,
+          houseSeats,
+          // National Front chambers: the quota decides the party split, not the
+          // vote. Undefined for every non-bloc-list country, so their allocation
+          // is byte-identical.
+          runtimeBlocQuota?.shares,
+          commonsSeats,
+          election.countryId ?? "US"
+        ),
+      ranked,
+      election.conversionTerms
+    );
 
     if (isMultiSeat) {
       if (isSpecialCommonsElection(election.electionType)) {
