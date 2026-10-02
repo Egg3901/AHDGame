@@ -71,6 +71,7 @@ describe("chargeOrganizationTribute", () => {
     const { chargeOrganizationTribute } = await import("./tribute");
     const result = await chargeOrganizationTribute(db as unknown as Db, "NATO");
 
+    expect(loadGdpUsdMillionsByEntity).toHaveBeenCalledWith(db, ["TR"], "1953-default");
     const usd = perTurnUsd(ONE_TRILLION_IN_USD_MILLIONS);
     const debitLocal = Math.round(usd / rateOf("TR"));
     expect(result.payers).toBe(1);
