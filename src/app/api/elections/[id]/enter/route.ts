@@ -1,3 +1,9 @@
+import { z } from "zod";
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
+import {
+  registerHu1991PlayerFiling,
+  hu1991FilingMessages,
+} from "@/lib/countries/hu/playerFiling1991";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
@@ -32,6 +38,7 @@ import {
   registerRussianCouncilPlayerCandidate,
 } from "@/lib/countries/ru/councilPlayerFiling";
 
+const hu1991EntryBody = z.object({ constituencyId: z.string().min(1).max(80).optional() }).strict();
 const councilFilingErrors = {
   "already-filed": "You are already entered in this Council race.",
   "association-full": "Your association already has two player nominees in this subject.",
@@ -100,6 +107,29 @@ export async function POST(request: Request, { params }: RouteParams) {
     const election = resolved.election;
     const electionObjectId = election._id;
 
+    const hu1991 = isHu1991AssemblyCampaign(election);
+    let huDistrictId: string | undefined;
+    if (hu1991) {
+      if (election.hungarianAssemblyRound?.round !== 1)
+        return NextResponse.json({ error: hu1991FilingMessages["filing-closed"] }, { status: 403 });
+      const text = await request.text();
+      let body: unknown = {};
+      try {
+        if (text.trim()) body = JSON.parse(text);
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid constituency filing request." },
+          { status: 400 }
+        );
+      }
+      const parsed = hu1991EntryBody.safeParse(body);
+      if (!parsed.success)
+        return NextResponse.json(
+          { error: "Invalid constituency filing request." },
+          { status: 400 }
+        );
+      huDistrictId = parsed.data.constituencyId;
+    }
     // Check if election is open for entry
     if (election.status !== "upcoming" && election.status !== "active") {
       logRequest("POST", path, 400, Date.now() - start);
@@ -345,6 +375,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
 
+    if (
+      hu1991 &&
+      existingCandidate?.party !== undefined &&
+      existingCandidate.party !== character.party
+    )
+      return NextResponse.json({ error: hu1991FilingMessages["party-changed"] }, { status: 403 });
     if (existingCandidate) {
       // If they have an active candidacy under a different party, withdraw it first
       if (existingCandidate.party !== character.party && !councilFiling) {
@@ -447,6 +483,18 @@ export async function POST(request: Request, { params }: RouteParams) {
           logRequest("POST", path, 403, Date.now() - start);
           return NextResponse.json({ error: councilFilingErrors[filed.reason] }, { status: 403 });
         }
+        result = { insertedId: filed.insertedId };
+      } else if (hu1991) {
+        const filed = await registerHu1991PlayerFiling({
+          db,
+          electionId: electionObjectId,
+          candidate: candidateDoc,
+          requestedDistrictId: huDistrictId,
+          turn: currentTurn,
+          now,
+        });
+        if (!filed.allowed)
+          return NextResponse.json({ error: hu1991FilingMessages[filed.reason] }, { status: 403 });
         result = { insertedId: filed.insertedId };
       } else {
         result = await db.collection("electionCandidates").insertOne(candidateDoc);

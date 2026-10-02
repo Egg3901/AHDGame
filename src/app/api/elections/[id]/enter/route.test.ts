@@ -877,3 +877,121 @@ describe("Bound first-Council player filing", () => {
     }
   );
 });
+
+describe("Hungarian 1991 constituency filing route", () => {
+  async function setupHungary(round: 1 | 2 = 1) {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const election = {
+      _id: electionOid,
+      countryId: "HU",
+      electionType: "nationalAssembly",
+      state: "HU_BUD",
+      cycle: 1,
+      status: "active",
+      primaryEndTurn: 90,
+      primaryEndTime: new Date("2026-04-02T00:00:00Z"),
+      hungarianAssemblyRound: {
+        ruleVersion: "mixed-1989-v1",
+        receiptId: "HU:mixed1989:1",
+        round,
+        registeredVoters: 10000,
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    const character = {
+      _id: characterOid,
+      countryId: "HU",
+      name: "Synthetic Hungarian player",
+      homeState: "HU_BUD",
+      party: "1",
+      currentOffice: null,
+      careerHistory: [],
+    };
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "synthetic-player", character },
+    } as never);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date("2026-04-01T00:00:00Z"),
+      currentTurn: 50,
+    } as never);
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      currentTurn: 50,
+    });
+    db.collection("countryState").findOne.mockResolvedValue({
+      _id: "HU",
+      governmentType: "parliamentaryRepublic",
+    });
+    db.collection("elections").findOne.mockResolvedValue(election);
+    db.collection("characters").findOne.mockResolvedValue(character);
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      sequentialId: 1,
+      countryId: "HU",
+      regimeStatus: "legal",
+    });
+    db.collection("hu1991AssemblyFilingLocks").findOne.mockResolvedValue(null);
+    db.collection("hu1991AssemblyFilingLocks").find.mockReturnValue(emptyFindCursor());
+    return { db, election };
+  }
+  it("files the selected constituency in the atomic candidate writer", async () => {
+    const { db } = await setupHungary();
+    const request = new Request("http://test/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ constituencyId: "HU-constituency-01-12" }),
+    });
+    const result = await POST(request, {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(result.status, JSON.stringify(await result.clone().json())).toBe(200);
+    expect(db.collection("electionCandidates").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hungarianAssemblyNomination: { constituencyId: "HU-constituency-01-12" },
+      }),
+      expect.objectContaining({ session: expect.anything() })
+    );
+    expect(db.collection("hu1991AssemblyFilingLocks").insertOne).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    "{broken",
+    JSON.stringify({ constituencyId: 12 }),
+    JSON.stringify({ constituencyId: "", unexpected: true }),
+  ])("rejects malformed constituency bodies before any filing write", async (body) => {
+    const { db } = await setupHungary();
+    const result = await POST(new Request("http://test/route", { method: "POST", body }), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(result.status).toBe(400);
+    expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+    expect(db.collection("hu1991AssemblyFilingLocks").insertOne).not.toHaveBeenCalled();
+  });
+  it("refuses entrants to a qualified second round", async () => {
+    const { db } = await setupHungary(2);
+    const result = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toHexString() }),
+    });
+    expect(result.status).toBe(403);
+    expect((await result.json()).error).toContain("qualified nominees");
+    expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+  });
+  it("refuses a district outside the player's home region", async () => {
+    const { db } = await setupHungary();
+    const result = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ constituencyId: "HU-constituency-02-01" }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+    expect(result.status).toBe(403);
+    expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+  });
+});

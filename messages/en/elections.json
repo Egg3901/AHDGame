@@ -379,6 +379,12 @@
       "withdrawEndorsement": "Withdraw endorsement",
       "supportCampaign": "Support campaign",
       "runningMate": "Vice-presidential nominee: {name}"
+    },
+    "hu1991": {
+      "constituencyLabel": "Your constituency",
+      "automatic": "Assign an available constituency in my region",
+      "constituency": "{county}, constituency {number}",
+      "filingNote": "You can win one seat. Constituency winners leave the territorial and national lists."
     }
   }
 }

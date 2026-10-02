@@ -68,12 +68,15 @@ export interface ElectionVoteTally {
   };
   /** Counted Bulgarian list votes survive withdrawals; seats require a national count. */
   bgOrdinaryBallot?: true;
+  /** Native Hungarian marks survive withdrawal while statutory counts remain pending. */
+  hungarianAssemblyBallot?: true;
   seatsEstimate?: Record<string, number>;
   /** Actual non-presidential resolver receipt. Absent on historical tallies. */
   resolutionPath?:
     | "single_winner"
     | "hare_quota"
     | "bg_ordinary_national"
+    | "hu_statutory_mixed"
     | "districted_house"
     | "bloc_list"
     | "sainte_lague"

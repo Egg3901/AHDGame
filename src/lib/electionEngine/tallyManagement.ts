@@ -2,6 +2,7 @@
  * Election vote tally accumulation and initialization.
  */
 
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
 import { russianDumaVoteTotals } from "@/lib/countries/ru/rules/assemblyVoteIncrement";
 import { russianCouncilVoteTotals } from "@/lib/countries/ru/rules/councilVoteTotals";
 import { resolveRussianCouncilBallot } from "@/lib/countries/ru/rules/councilResult";
@@ -449,6 +450,7 @@ export async function accumulateVoteTurn(
     election.countryId === "BG" &&
     election.electionType === "nationalAssembly" &&
     election.cycle >= 1;
+  const isHu1991 = isHu1991AssemblyCampaign(election);
   const isBoundDuma =
     election.countryId === "RU" &&
     election.electionType === "dumaDeputy" &&
@@ -462,11 +464,15 @@ export async function accumulateVoteTurn(
     : isBoundDuma
       ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
         (tally.russianDumaBallot?.againstAllVotes ?? 0)
-      : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
+      : isHu1991
+        ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0)
+        : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
-    scalePoolToRegistered(electorate, registrationPool?.unregistered)
+    isHu1991
+      ? election.hungarianAssemblyRound!.registeredVoters
+      : scalePoolToRegistered(electorate, registrationPool?.unregistered)
   );
   // Determine if we are in the general election phase (after primary end).
   // Turn-first (drift-immune, freezes on pause); falls back to the Date for
@@ -787,7 +793,7 @@ export async function accumulateVoteTurn(
         (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
   }
 
-  if (isBgOrdinary)
+  if (isBgOrdinary || isHu1991)
     for (const [id, votes] of Object.entries(tally.totalVotes)) {
       if (!activeCandidateIds.has(id)) newTotals[id] = votes;
     }
@@ -805,6 +811,20 @@ export async function accumulateVoteTurn(
     });
   }
 
+  if (isHu1991) {
+    // The shared vote-ledger arithmetic preserves historical cast marks and
+    // clamps only the new slice to the frozen registered electorate.
+    newTotals = russianDumaVoteTotals({
+      registeredVoters: election.hungarianAssemblyRound!.registeredVoters,
+      priorVotes: tally.totalVotes,
+      rawVotes: Object.fromEntries(
+        enriched.map((candidate) => [
+          candidate.candidateId,
+          newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0),
+        ])
+      ),
+    });
+  }
   let councilTotals: ReturnType<typeof russianCouncilVoteTotals> | null = null;
   if (isBoundCouncil) {
     const rawVotes = Object.fromEntries(
@@ -846,7 +866,7 @@ export async function accumulateVoteTurn(
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
-    if (isBgOrdinary) return undefined;
+    if (isBgOrdinary || isHu1991) return undefined;
     if (councilTotals) {
       const result = resolveRussianCouncilBallot({
         ...councilTotals.ballot,
@@ -966,7 +986,13 @@ export async function accumulateVoteTurn(
   const cleanedNames = { ...tally.candidateNames };
   const cleanedParties = { ...tally.candidateParties };
   for (const key of Object.keys(tally.totalVotes)) {
-    if (!activeCandidateIds.has(key) && !isBoundDuma && !isBoundCouncil && !isBgOrdinary) {
+    if (
+      !activeCandidateIds.has(key) &&
+      !isBoundDuma &&
+      !isBoundCouncil &&
+      !isBgOrdinary &&
+      !isHu1991
+    ) {
       delete cleanedNames[key];
       delete cleanedParties[key];
     }
@@ -979,9 +1005,10 @@ export async function accumulateVoteTurn(
   }
 
   const tallyUpdate = {
-    ...(isBgOrdinary ? { $unset: { seatsEstimate: "" as const } } : {}),
+    ...(isBgOrdinary || isHu1991 ? { $unset: { seatsEstimate: "" as const } } : {}),
     $set: {
       ...(isBgOrdinary ? { bgOrdinaryBallot: true as const } : {}),
+      ...(isHu1991 ? { hungarianAssemblyBallot: true as const } : {}),
       totalVotes: newTotals,
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,

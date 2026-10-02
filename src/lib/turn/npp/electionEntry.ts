@@ -26,6 +26,7 @@
  *    (npp.countryId === election.countryId). US NPPs can't enter UK races.
  */
 
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
 import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import { ObjectId } from "mongodb";
 import type { Election, ElectionCandidate, NPP } from "@/lib/db/types";
@@ -116,7 +117,11 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
   const openPrimaries = ctx.openPrimaries.filter((p) => {
     if (isElectionTypeEntryBlocked(p.electionType)) return false;
     // Bound Assembly families use their atomic slate shells.
-    if (isNativeRussianAssemblyElection(p)) return false;
+    if (
+      isNativeRussianAssemblyElection(p) ||
+      (isHu1991AssemblyCampaign(p) && p.hungarianAssemblyRound?.round === 2)
+    )
+      return false;
     if (p.electionType === "president") {
       return (
         (p.countryId === "RU" && p.russianPresidentialRound?.round === 1) ||

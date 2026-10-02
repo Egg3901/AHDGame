@@ -32,6 +32,7 @@ export interface Hu1991MixedBallots {
     id: string;
     first: Hu1991TerritorialRound;
     second?: Hu1991TerritorialRound;
+    repeats?: readonly { first: Hu1991TerritorialRound; second?: Hu1991TerritorialRound }[];
   }[];
   nationalLists: readonly { partyId: string; ballotOrder: number }[];
 }
@@ -41,6 +42,7 @@ export type Hu1991MixedCount =
       reason: "runoff-required";
       constituencyRunoffs: Record<string, string[]>;
       territorialRunoffs: string[];
+      territorialRepeats?: string[];
     }
   | {
       kind: "counted";
@@ -148,6 +150,7 @@ export function countHuMixed1991(ballots: Hu1991MixedBallots): Hu1991MixedCount 
     }
   }
   const territorialRunoffs: string[] = [];
+  const territorialRepeats: string[] = [];
   const selected = new Map<string, Hu1991TerritorialRound>();
   for (const ballot of ballots.territorial) {
     const county = HU_1991_TERRITORIAL_DISTRICTS.find((row) => row.id === ballot.id)!;
@@ -157,30 +160,49 @@ export function countHuMixed1991(ballots: Hu1991MixedBallots): Hu1991MixedCount 
           "Hungarian territorial list lacks its statutory filed constituency nominees"
         );
     }
-    const firstValid = validTerritorialRound(ballot.first, false);
-    if (firstValid) {
-      if (ballot.second)
-        throw new Error("Valid Hungarian territorial ballot cannot be counted a second time");
-      selected.set(ballot.id, ballot.first);
-      continue;
-    }
-    if (!ballot.second) {
-      territorialRunoffs.push(ballot.id);
-      continue;
-    }
-    if (ballot.second.registeredVoters !== ballot.first.registeredVoters)
-      throw new Error("Hungarian territorial runoff changes its frozen electorate");
     const originals = new Map(ballot.first.lists.map((r) => [r.partyId, r.ballotOrder]));
-    if (ballot.second.lists.some((r) => originals.get(r.partyId) !== r.ballotOrder))
-      throw new Error("Hungarian territorial runoff introduces a new list");
-    if (!validTerritorialRound(ballot.second, true))
-      throw new Error(
-        "Hungarian territorial repeat requires a by-election before national counting"
-      );
-    selected.set(ballot.id, ballot.second);
+    const generations = [{ first: ballot.first, second: ballot.second }, ...(ballot.repeats ?? [])];
+    for (const [index, generation] of generations.entries()) {
+      for (const round of [generation.first, generation.second]) {
+        if (!round) continue;
+        if (round.registeredVoters !== ballot.first.registeredVoters)
+          throw new Error("Hungarian territorial runoff changes its frozen electorate");
+        if (round.lists.some((r) => originals.get(r.partyId) !== r.ballotOrder))
+          throw new Error("Hungarian territorial runoff introduces a new list");
+      }
+      const last = index === generations.length - 1;
+      if (validTerritorialRound(generation.first, false)) {
+        if (generation.second || !last)
+          throw new Error("Valid Hungarian territorial ballot cannot be counted a second time");
+        selected.set(ballot.id, generation.first);
+        break;
+      }
+      if (!generation.second) {
+        if (!last) throw new Error("Hungarian territorial repeat skips an unfinished round");
+        territorialRunoffs.push(ballot.id);
+        break;
+      }
+      if (validTerritorialRound(generation.second, true)) {
+        if (!last)
+          throw new Error("Valid Hungarian territorial ballot cannot be counted a second time");
+        selected.set(ballot.id, generation.second);
+        break;
+      }
+      if (last) territorialRepeats.push(ballot.id);
+    }
   }
-  if (Object.keys(constituencyRunoffs).length || territorialRunoffs.length)
-    return { kind: "pending", reason: "runoff-required", constituencyRunoffs, territorialRunoffs };
+  if (
+    Object.keys(constituencyRunoffs).length ||
+    territorialRunoffs.length ||
+    territorialRepeats.length
+  )
+    return {
+      kind: "pending",
+      reason: "runoff-required",
+      constituencyRunoffs,
+      territorialRunoffs,
+      ...(territorialRepeats.length ? { territorialRepeats } : {}),
+    };
   const totals: Record<string, number> = {};
   for (const round of selected.values())
     for (const row of round.lists) totals[row.partyId] = (totals[row.partyId] ?? 0) + row.votes;

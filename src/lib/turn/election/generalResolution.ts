@@ -3,6 +3,7 @@
  * resolveOneGeneralElection leaves bound Assembly ballots to cohort certification,
  * which prevents a district from replacing Congress before chamber handover.
  */
+import { isHu1991AssemblyCampaign } from "@/lib/countries/hu/rules/assemblyCampaign1991";
 import { isNativeRussianAssemblyElection } from "@/lib/countries/ru/rules/assemblyElection";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
@@ -112,7 +113,8 @@ export async function resolveOneGeneralElection(
   huMixedCandidateSeats?: Readonly<Record<string, number>>,
   bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
 ): Promise<OneElectionResult> {
-  if (isNativeRussianAssemblyElection(election)) return { resolved: false, newsOutcomes: [] };
+  if (isNativeRussianAssemblyElection(election) || isHu1991AssemblyCampaign(election))
+    return { resolved: false, newsOutcomes: [] };
   const newsOutcomes: ElectionNewsOutcome[] = [];
 
   // Atomic claim: prevent concurrent resolution from corrupting office data.

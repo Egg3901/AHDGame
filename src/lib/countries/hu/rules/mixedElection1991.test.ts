@@ -126,6 +126,46 @@ describe("Hungarian 1991 whole mixed count", () => {
     };
     expect(countHuMixed1991(input).kind).toBe("counted");
   });
+  it("retains failed territorial rounds and requires genuine new turnout in repeat ballots", () => {
+    const input = ballots();
+    const county = input.territorial[0];
+    const invalid = {
+      registeredVoters: 1000,
+      ballotsCast: 250,
+      lists: county.first.lists.map((list) => ({ ...list, votes: 100 })),
+    };
+    county.first = invalid;
+    county.second = invalid;
+    expect(countHuMixed1991(input)).toMatchObject({
+      kind: "pending",
+      territorialRepeats: [county.id],
+      territorialRunoffs: [],
+    });
+    county.repeats = [{ first: invalid }];
+    expect(countHuMixed1991(input)).toMatchObject({
+      kind: "pending",
+      territorialRunoffs: [county.id],
+    });
+    county.repeats = [{ first: invalid, second: invalid }];
+    expect(countHuMixed1991(input)).toMatchObject({
+      kind: "pending",
+      territorialRepeats: [county.id],
+    });
+    county.repeats = [
+      ...county.repeats,
+      {
+        first: {
+          ...invalid,
+          ballotsCast: 600,
+          lists: invalid.lists.map((list) => ({ ...list, votes: 300 })),
+        },
+      },
+    ];
+    expect(countHuMixed1991(input).kind).toBe("counted");
+    expect(county.second).toEqual(invalid);
+    county.repeats = [...county.repeats, { first: invalid }];
+    expect(() => countHuMixed1991(input)).toThrow(/counted a second time/);
+  });
   it("rejects incomplete coverage and a person contesting multiple constituencies", () => {
     const input = ballots();
     input.constituencies = input.constituencies.slice(1);
