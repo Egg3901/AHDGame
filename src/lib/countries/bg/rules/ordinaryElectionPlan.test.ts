@@ -9,14 +9,14 @@ import { BG_1991_ELECTORAL_DISTRICTS } from "../data/electoralDistricts1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
 
 function races(): BgOrdinaryRace[] {
-  return Object.keys(BG_1991_MACROREGION_POPULATION).map((regionId) => ({
+  return Object.entries(BG_1991_MACROREGION_POPULATION).map(([regionId, population]) => ({
     regionId,
     electionId: `${regionId}:1991`,
     candidates: ["A", "B"].map((party, order) => ({
       id: `${regionId}:${party}`,
       ownerId: `${regionId}:${party}:profile`,
       party,
-      votes: Math.round(BG_1991_MACROREGION_POPULATION[regionId] * (order === 0 ? 0.55 : 0.45)),
+      votes: Math.round(population * (order === 0 ? 0.55 : 0.45)),
       listOrder: order,
       isNpc: true,
       eligible: true,
@@ -132,7 +132,9 @@ describe("Bulgarian frozen mandates at handover", () => {
     ];
     const plan = buildBgOrdinaryElectionPlan(input);
     if (plan.kind !== "allocated") throw new Error("Fixture has full lists");
-    input[0].candidates[0] = { ...input[0].candidates[0], eligible: false };
+    input[0].candidates = input[0].candidates.map((row, index) =>
+      index === 0 ? { ...row, eligible: false } : row
+    );
     const settled = settleBgOrdinaryListHolders(plan, input);
     expect(settled.kind).toBe("allocated");
     if (settled.kind !== "allocated") throw new Error("Existing party slate can fill the mandate");
@@ -150,7 +152,9 @@ describe("Bulgarian frozen mandates at handover", () => {
     const input = races();
     const plan = buildBgOrdinaryElectionPlan(input);
     if (plan.kind !== "allocated") throw new Error("Fixture has full lists");
-    input[0].candidates[0] = { ...input[0].candidates[0], eligible: false };
+    input[0].candidates = input[0].candidates.map((row, index) =>
+      index === 0 ? { ...row, eligible: false } : row
+    );
     expect(settleBgOrdinaryListHolders(plan, input)).toEqual({
       kind: "deferred",
       reason: "insufficient-viable-list-capacity",

@@ -26,6 +26,14 @@ import { calendarTurn } from "@/lib/utils/gameDate";
 import { settleBgOrdinaryListHolders } from "./rules/ordinaryElectionPlan";
 import { BG_ORDINARY_ASSEMBLY_START_TURN } from "./rules/assemblyTransition";
 
+interface BgAssemblyOfficeArchive {
+  _id: string;
+  countryId: "BG";
+  receiptId: string;
+  turn: number;
+  official: ElectedOfficial;
+}
+
 export const BG_ASSEMBLY_ARCHIVES_COLLECTION = "bgAssemblyOfficeArchives";
 function stableId(key: string): ObjectId {
   return new ObjectId(createHash("sha256").update(key).digest("hex").slice(0, 24));
@@ -156,6 +164,7 @@ export async function materializeBgOrdinaryAssembly(input: {
             ...row,
             votes: 0,
             eligible:
+              !!candidate &&
               !!owner &&
               owner.party === row.party &&
               (candidate?.status === "active" ||
@@ -210,13 +219,15 @@ export async function materializeBgOrdinaryAssembly(input: {
       officeType: "assemblyDeputy",
       state: election.state,
       characterId: candidate.isNPP ? null : candidate.characterId,
-      nppId: candidate.isNPP ? candidate.nppId : null,
+      nppId: candidate.isNPP ? (candidate.nppId ?? null) : null,
       characterName: candidate.characterName,
       party: candidate.party,
       isNPP: !!candidate.isNPP,
       seatsHeld: row.seats,
       seatSource: candidate.party === "independent" ? "direct" : "list",
       electedAt: now,
+      createdAt: now,
+      updatedAt: now,
     });
   }
   const incumbents = await db
@@ -224,10 +235,10 @@ export async function materializeBgOrdinaryAssembly(input: {
     .find({ countryId: "BG", officeType: "assemblyDeputy" }, { session })
     .toArray();
   if (incumbents.length)
-    await db.collection(BG_ASSEMBLY_ARCHIVES_COLLECTION).insertMany(
+    await db.collection<BgAssemblyOfficeArchive>(BG_ASSEMBLY_ARCHIVES_COLLECTION).insertMany(
       incumbents.map((official) => ({
         _id: `${receipt._id}:${official._id.toHexString()}`,
-        countryId: "BG",
+        countryId: "BG" as const,
         receiptId: receipt._id,
         turn,
         official,

@@ -30,7 +30,7 @@ export function bgNationalOrdinaryQuotas(input: {
   )
     throw new Error("Invalid Bulgarian national allocation capacity or vote total");
   const parties = Object.entries(partyVotes).sort(([a], [b]) => a.localeCompare(b));
-  let accountedVotes = 0n;
+  let accountedVotes = BigInt(0);
   for (const [party, votes] of parties) {
     if (!party || party === "independent" || !Number.isSafeInteger(votes) || votes < 0)
       throw new Error("Invalid Bulgarian party vote total");
@@ -38,7 +38,9 @@ export function bgNationalOrdinaryQuotas(input: {
   }
   if (accountedVotes > BigInt(totalValidVotes))
     throw new Error("Bulgarian party votes exceed all valid votes");
-  const eligible = parties.filter(([, votes]) => BigInt(votes) * 25n >= BigInt(totalValidVotes));
+  const eligible = parties.filter(
+    ([, votes]) => BigInt(votes) * BigInt(25) >= BigInt(totalValidVotes)
+  );
   const partySeats = Object.fromEntries(parties.map(([party]) => [party, 0]));
   const remaining = totalSeats - independentSeats;
   if (eligible.length === 0)
@@ -48,7 +50,8 @@ export function bgNationalOrdinaryQuotas(input: {
     let best = counts[0];
     for (const row of counts.slice(1)) {
       const comparison = row.votes * BigInt(best.seats + 1) - best.votes * BigInt(row.seats + 1);
-      if (comparison > 0n || (comparison === 0n && row.votes > best.votes)) best = row;
+      if (comparison > BigInt(0) || (comparison === BigInt(0) && row.votes > best.votes))
+        best = row;
     }
     best.seats++;
   }

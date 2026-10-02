@@ -1,5 +1,6 @@
 import { BSON, MongoClient, ObjectId, type Db } from "mongodb";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { State } from "@/lib/db/types";
 import { bgRegions1991 } from "./data/bgRegions1991";
 import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
 import {
@@ -65,7 +66,7 @@ describe.skipIf(!uri)(
       await db
         .collection("governmentFormations")
         .insertOne({ _id: "BG", totalSeats: 400, majorityThreshold: 201 } as never);
-      await db.collection("states").insertMany(bgRegions1991);
+      await db.collection<State>("states").insertMany(bgRegions1991);
       const player = new ObjectId(),
         executive = new ObjectId();
       await db.collection("characters").insertOne({

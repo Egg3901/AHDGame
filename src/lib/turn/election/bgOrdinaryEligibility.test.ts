@@ -79,10 +79,15 @@ describe("Bulgarian immutable ordinary national count", () => {
     const journal = db.collection(BG_ORDINARY_PLANS_COLLECTION);
     let receipt: BgOrdinaryPlanRecord | null = null;
     journal.findOne.mockImplementation(async () => receipt);
-    journal.updateOne.mockImplementation(async (filter, update) => {
-      receipt ??= { _id: filter._id, ...update.$setOnInsert };
-      return { matchedCount: 1, modifiedCount: 1 };
-    });
+    journal.updateOne.mockImplementation(
+      async (
+        filter: { _id: string },
+        update: { $setOnInsert: Omit<BgOrdinaryPlanRecord, "_id"> }
+      ) => {
+        receipt ??= { _id: filter._id, ...update.$setOnInsert };
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
     return { db, elections, nominees, tallies, journal };
   }
 
