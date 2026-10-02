@@ -42,6 +42,6 @@ export const iterationsPages: readonly WikiSeedPage[] = [
     difficulty: "beginner",
     contentType: "reference",
     estimatedReadTime: 18,
-    lastUpdated: "2026-10-01",
+    lastUpdated: "2026-10-02",
   },
 ];
