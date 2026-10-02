@@ -220,3 +220,47 @@ export function buildBgOrdinaryElectionPlan(
     candidateDistricts,
   };
 }
+
+/**
+ * At handover, unavailable list nominees yield to the next existing list member.
+ * National party quotas and all district mandates stay frozen. An unavailable
+ * independent cannot donate their personal mandate to a party or another person.
+ */
+export function settleBgOrdinaryListHolders(
+  plan: BgOrdinaryElectionPlan,
+  races: readonly BgOrdinaryRace[]
+):
+  | { kind: "allocated"; candidateSeatsByElection: Record<string, Record<string, number>> }
+  | { kind: "deferred"; reason: "unavailable-independent" | "insufficient-viable-list-capacity" } {
+  const result: Record<string, Record<string, number>> = {};
+  for (const [electionId, allocation] of Object.entries(plan.candidateSeatsByElection)) {
+    const race = races.find((row) => row.electionId === electionId);
+    if (!race) throw new Error("Bulgarian handover ballot is missing");
+    const candidates = new Map(race.candidates.map((row) => [row.id, row]));
+    result[electionId] = Object.fromEntries(Object.keys(allocation).map((id) => [id, 0]));
+    const partySeats: Record<string, number> = {};
+    for (const [id, seats] of Object.entries(allocation)) {
+      const nominee = candidates.get(id);
+      if (!nominee) throw new Error("Frozen Bulgarian nominee identity is missing");
+      if (nominee.party === "independent") {
+        if (seats > 0 && !nominee.eligible)
+          return { kind: "deferred", reason: "unavailable-independent" };
+        result[electionId][id] = seats;
+      } else partySeats[nominee.party] = (partySeats[nominee.party] ?? 0) + seats;
+    }
+    for (const [party, quota] of Object.entries(partySeats)) {
+      let remaining = quota;
+      const list = race.candidates
+        .filter((row) => row.party === party && row.eligible && row.id in allocation)
+        .sort((a, b) => a.listOrder - b.listOrder || a.id.localeCompare(b.id));
+      for (const nominee of list) {
+        const seats = nominee.isNpc ? remaining : Math.min(1, remaining);
+        result[electionId][nominee.id] = seats;
+        remaining -= seats;
+        if (remaining === 0) break;
+      }
+      if (remaining > 0) return { kind: "deferred", reason: "insufficient-viable-list-capacity" };
+    }
+  }
+  return { kind: "allocated", candidateSeatsByElection: result };
+}

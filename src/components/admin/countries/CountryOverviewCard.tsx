@@ -38,6 +38,7 @@ const STATUS_COLORS: Record<CountryStatus, string> = {
 
 const ELECTION_SYSTEM_LABELS: Record<string, string> = {
   fptp: "First Past the Post",
+  pr_dhondt: "Proportional (national D'Hondt)",
   pr_hareQuota: "Proportional (Hare quota)",
   pr_sainteLague: "Proportional (Sainte-Laguë)",
   ams: "Additional Member System",

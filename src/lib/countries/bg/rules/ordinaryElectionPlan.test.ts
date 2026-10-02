@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildBgOrdinaryElectionPlan, type BgOrdinaryRace } from "./ordinaryElectionPlan";
+import {
+  buildBgOrdinaryElectionPlan,
+  settleBgOrdinaryListHolders,
+  type BgOrdinaryRace,
+} from "./ordinaryElectionPlan";
 import { BG_1991_MACROREGION_POPULATION } from "../data/bgPopulation1991";
 import { BG_1991_ELECTORAL_DISTRICTS } from "../data/electoralDistricts1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
@@ -116,5 +120,40 @@ describe("Bulgarian31 district plan from bounded regional campaigns", () => {
       index === 0 ? { ...row, ownerId: input[0].candidates[0].ownerId } : row
     );
     expect(() => buildBgOrdinaryElectionPlan(input)).toThrow(/identity/);
+  });
+});
+
+describe("Bulgarian frozen mandates at handover", () => {
+  it("replaces an unavailable player with the next existing party list member without changing party quotas", () => {
+    const input = races();
+    input[0].candidates = [
+      { ...input[0].candidates[0], id: "human", ownerId: "human", isNpc: false, listOrder: -1 },
+      ...input[0].candidates,
+    ];
+    const plan = buildBgOrdinaryElectionPlan(input);
+    if (plan.kind !== "allocated") throw new Error("Fixture has full lists");
+    input[0].candidates[0] = { ...input[0].candidates[0], eligible: false };
+    const settled = settleBgOrdinaryListHolders(plan, input);
+    expect(settled.kind).toBe("allocated");
+    if (settled.kind !== "allocated") throw new Error("Existing party slate can fill the mandate");
+    expect(settled.candidateSeatsByElection[input[0].electionId].human).toBe(0);
+    expect(settled.candidateSeatsByElection[input[0].electionId][input[0].candidates[1].id]).toBe(
+      plan.candidateSeatsByElection[input[0].electionId][input[0].candidates[1].id] + 1
+    );
+    expect(
+      Object.values(settled.candidateSeatsByElection)
+        .flatMap(Object.values)
+        .reduce((sum, seats) => sum + seats, 0)
+    ).toBe(240);
+  });
+  it("defers an unavailable whole list rather than transfer its seats to another party", () => {
+    const input = races();
+    const plan = buildBgOrdinaryElectionPlan(input);
+    if (plan.kind !== "allocated") throw new Error("Fixture has full lists");
+    input[0].candidates[0] = { ...input[0].candidates[0], eligible: false };
+    expect(settleBgOrdinaryListHolders(plan, input)).toEqual({
+      kind: "deferred",
+      reason: "insufficient-viable-list-capacity",
+    });
   });
 });

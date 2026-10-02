@@ -21,7 +21,11 @@ describe("canonicalTurnsForCycle", () => {
     expect(
       canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 2, ctx })
         ?.endTurn
-    ).toBe(192);
+    ).toBe(230);
+    expect(
+      canonicalTurnsForCycle({ countryId: "BG", electionType: "nationalAssembly", cycle: 3, ctx })
+        ?.endTurn
+    ).toBe(422);
     expect(
       canonicalTurnsForCycle({
         countryId: "BG",

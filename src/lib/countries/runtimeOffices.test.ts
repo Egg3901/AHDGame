@@ -89,3 +89,23 @@ describe("world and constitution resolved parliamentary offices", () => {
     expect(read).not.toHaveBeenCalled();
   });
 });
+
+it("switches Bulgaria to 240 deputies and four-year list terms only after handover", async () => {
+  const mem = createInMemoryDb();
+  mem.seed("countryGameStates", [{ _id: "BG" }]);
+  const db = mem as unknown as Db;
+  const before = await loadRuntimeCountryOffices(db, "BG", "1991-default");
+  expect(before.config.legislature.name).toBe("Grand National Assembly");
+  expect(before.config.legislature.lowerChamber.seats).toBe(400);
+  mem.collection("countryGameStates").docs[0].bgOrdinaryAssemblySinceTurn = 41;
+  const after = await loadRuntimeCountryOffices(db, "BG", "1991-default");
+  expect(after.config.legislature.name).toBe("National Assembly");
+  expect(after.config.legislature.lowerChamber.seats).toBe(240);
+  expect(after.config.coalitionThreshold).toBe(121);
+  expect(after.config.electionSystems.lowerChamber).toBe("pr_dhondt");
+  expect(after.config.lowerElectionSystem?.termYears).toBe(4);
+  expect(after.config.officeTypes.find((row) => row.key === "assemblyDeputy")?.termYears).toBe(4);
+  expect(
+    (await loadRuntimeCountryOffices(db, "BG", "1979-default")).config.electionSystems.lowerChamber
+  ).not.toBe("pr_dhondt");
+});

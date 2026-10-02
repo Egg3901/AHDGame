@@ -109,12 +109,16 @@ describe("Bulgarian immutable ordinary national count", () => {
   });
 
   it("defers missing, live or previously settled legacy regional ballots without changing custody", async () => {
-    for (const status of ["active", "resolved"]) {
+    for (const status of ["active"]) {
       const { db, elections, journal } = ready();
       elections[0].status = status;
       expect(await readBgOrdinaryElectionPlan(db as unknown as Db, 2, now)).toBeNull();
       expect(journal.updateOne).not.toHaveBeenCalled();
     }
+    const settled = ready();
+    for (const row of settled.elections) row.status = "resolved";
+    expect(await readBgOrdinaryElectionPlan(settled.db as unknown as Db, 2, now)).toBeNull();
+    expect(settled.journal.updateOne).not.toHaveBeenCalled();
     const { db, tallies, journal } = ready();
     tallies.splice(0, 1);
     expect(await readBgOrdinaryElectionPlan(db as unknown as Db, 2, now)).toBeNull();

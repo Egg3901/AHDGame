@@ -740,15 +740,22 @@ export async function _enrichElection(
   // the districted branch's database round-trip is spared on a settled race.
   const seatedAllocation = resolvedSeatsEstimate(tally, null);
 
+  const isBgOrdinary =
+    gameState?.preset === "1991-default" &&
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    election.cycle >= 1;
   let seatsEstimate =
     seatedAllocation ??
-    computeSeatEstimates(
-      election.electionType,
-      election.totalSeats,
-      tally,
-      activeCandidateIdSet,
-      election.countryId ?? "US"
-    );
+    (isBgOrdinary
+      ? null
+      : computeSeatEstimates(
+          election.electionType,
+          election.totalSeats,
+          tally,
+          activeCandidateIdSet,
+          election.countryId ?? "US"
+        ));
 
   // US House with redistricting on: project seats district-by-district using the
   // SAME engine that decides the final result (districtedHouseResolution on the
@@ -1083,17 +1090,18 @@ export async function _enrichElection(
             t.seatsEstimate && Object.keys(t.seatsEstimate).length > 0
               ? t.seatsEstimate
               : undefined;
-          const seatsEstimateSnapshot =
-            persisted ??
-            seatEstimateForVoteTotals(
-              election.electionType,
-              election.state,
-              election.totalSeats,
-              t.cumulativeVotes,
-              houseSeats,
-              fullCandidateParties,
-              election.countryId ?? "US"
-            );
+          const seatsEstimateSnapshot = isBgOrdinary
+            ? undefined
+            : (persisted ??
+              seatEstimateForVoteTotals(
+                election.electionType,
+                election.state,
+                election.totalSeats,
+                t.cumulativeVotes,
+                houseSeats,
+                fullCandidateParties,
+                election.countryId ?? "US"
+              ));
           return {
             turn: t.turn,
             recordedAt: t.recordedAt,

@@ -301,13 +301,11 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
   const bgOrdinaryAssembly =
     ctx.preset === "1991-default" && countryId === "BG" && electionType === "nationalAssembly";
   if (bgOrdinaryAssembly) {
-    // 13 October 1991 is the second October game week. The next ordinary
-    // election was December 1994; later cycles use a four-year approximation.
+    // Ordinary terms last four years. The historical December 1994 election
+    // was early; it must follow a political dissolution, not a forced timer.
+    // https://data.ipu.org/election-summary/HTML/2045_94.htm
     const firstTurn = (1991 - ctx.startingYear) * 48 + 38 + (ctx.preIterationTurns ?? 0);
-    const endTurn =
-      cycle === 1
-        ? firstTurn
-        : (1994 - ctx.startingYear + 1) * 48 + (cycle - 2) * 192 + (ctx.preIterationTurns ?? 0);
+    const endTurn = firstTurn + (cycle - 1) * 192;
     return {
       endTurn,
       primaryEndTurn: endTurn - dur.generalDurationHours,

@@ -28,7 +28,9 @@ export async function removeWithdrawnCandidateFromTally(
   // Native Assembly ballots retain marks cast before a withdrawal. New accumulations
   // stamp the ledger; older native tallies are identified with one projected read.
   let preserveCastVotes =
-    tally.russianDumaBallot !== undefined || tally.russianCouncilBallot !== undefined;
+    tally.bgOrdinaryBallot === true ||
+    tally.russianDumaBallot !== undefined ||
+    tally.russianCouncilBallot !== undefined;
   if (
     !preserveCastVotes &&
     (tally.totalVotes[candidateId] ?? 0) > 0 &&

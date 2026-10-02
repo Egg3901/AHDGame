@@ -30,7 +30,12 @@ import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
-import { readBgOrdinaryElectionPlan } from "@/lib/turn/election/bgOrdinaryEligibility";
+import {
+  BG_ORDINARY_PLANS_COLLECTION,
+  readBgOrdinaryElectionPlan,
+  type BgOrdinaryPlanRecord,
+} from "@/lib/turn/election/bgOrdinaryEligibility";
+import { seatBgOrdinaryAssembly } from "@/lib/countries/bg/ordinaryAssemblySeating";
 import type { BgOrdinaryElectionPlan } from "@/lib/countries/bg/rules/ordinaryElectionPlan";
 import { readHuMixedElectionPlan } from "@/lib/countries/hu/readMixedElectionPlan";
 import type { HuMixedPlan } from "@/lib/countries/hu/rules/mixedElectionPlan";
@@ -131,7 +136,42 @@ export async function resolveGeneralElections(
     candidatesByElection.set(key, list);
   }
 
+  const allNewsOutcomes: ElectionNewsOutcome[] = [];
+  const resolvedElections: Election[] = [];
   let resolved = 0;
+  for (const [cycle, plan] of bgPlans) {
+    if (!plan) continue;
+    try {
+      if (await seatBgOrdinaryAssembly(db, cycle, currentTurn, now)) {
+        resolved += 5;
+        resolvedElections.push(...bgOrdinaryRaces.filter((row) => row.cycle === cycle));
+        const receipt = await db
+          .collection<BgOrdinaryPlanRecord>(BG_ORDINARY_PLANS_COLLECTION)
+          .findOne({ _id: `BG:ordinary:${cycle}` });
+        if (!receipt?.settledCandidateSeats)
+          throw new Error("Committed Bulgarian seating receipt is missing");
+        for (const election of bgOrdinaryRaces.filter((row) => row.cycle === cycle)) {
+          const allocation = receipt.settledCandidateSeats[election._id.toHexString()];
+          const tally = tallyMap.get(election._id.toHexString());
+          if (tally) tally.seatsEstimate = allocation;
+          for (const [candidateId, seats] of Object.entries(allocation)) {
+            if (seats <= 0) continue;
+            const nominee = receipt.nominees.find((row) => row.id === candidateId)!;
+            allNewsOutcomes.push({
+              electionType: "nationalAssembly",
+              state: election.state,
+              countryId: "BG",
+              winnerName: nominee.name,
+              winnerParty: nominee.party,
+              isPlayer: !nominee.isNpc,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error("Turn", `Bulgarian ordinary cycle ${cycle} remains unseated`, error);
+    }
+  }
   if (gameStateDoc?.preset === "1991-default") {
     resolved += await resolveRussianCouncilGenerations(db, completedElections, currentTurn, now);
     const cohorts = readyRussianDumaCohorts(
@@ -238,8 +278,6 @@ export async function resolveGeneralElections(
       }
     }
   }
-  const allNewsOutcomes: ElectionNewsOutcome[] = [];
-  const resolvedElections: Election[] = [];
   // Forensics/alt-detection audit spine (plan §3.1, T2.7): one entry per
   // resolved election, flushed with ONE `recordAuditBulk` call after all
   // groups finish (never a per-election DB round trip — resolveGeneralElections
@@ -283,23 +321,8 @@ export async function resolveGeneralElections(
       const chunkResults = await Promise.all(
         chunk.map(async (election) => {
           try {
-            if (bgOrdinaryRaces.includes(election) && !bgPlans.get(election.cycle)) {
+            if (bgOrdinaryRaces.includes(election)) {
               return { election, result: null };
-            }
-            const bgPlan = bgOrdinaryRaces.includes(election) ? bgPlans.get(election.cycle) : null;
-            if (bgPlan) {
-              const capacity = bgPlan.regionCapacity[election.state];
-              if (!(capacity > 0))
-                throw new Error("Bulgarian ordinary race has no regional capacity");
-              if (election.totalSeats !== capacity) {
-                await db
-                  .collection<Election>("elections")
-                  .updateOne(
-                    { _id: election._id, status: "completed" },
-                    { $set: { totalSeats: capacity, updatedAt: now } }
-                  );
-                election.totalSeats = capacity;
-              }
             }
             const huPlan = huMixedPlans.get(election.cycle);
             const isHuMixed =
@@ -329,8 +352,7 @@ export async function resolveGeneralElections(
               currentTurn,
               now,
               null,
-              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined,
-              bgPlan?.candidateSeatsByElection[election._id.toHexString()]
+              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined
             );
             return { election, result };
           } catch (err) {

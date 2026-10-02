@@ -50,8 +50,22 @@ export interface BgOrdinaryPlanRecord {
   countryId: "BG";
   cycle: number;
   electionIds: string[];
+  legacyResolvedElectionIds?: string[];
+  nominees: Array<{
+    id: string;
+    ownerId: string;
+    electionId: string;
+    isNpc: boolean;
+    party: string;
+    listOrder: number;
+    name: string;
+  }>;
+  settledCandidateSeats?: Record<string, Record<string, number>>;
   plan: BgOrdinaryElectionPlan;
   createdAt: Date;
+  seatedAtTurn?: number;
+  seatedAt?: Date;
+  officialIds?: import("mongodb").ObjectId[];
 }
 
 /**
@@ -82,9 +96,13 @@ export async function readBgOrdinaryElectionPlan(
     elections.some((row) => !["completed", "resolved"].includes(row.status))
   )
     return null;
-  // A settled legacy cycle keeps its existing result; never retrospectively
-  // apportion already seated holders under a new counting rule.
-  if (elections.some((row) => row.status === "resolved")) return null;
+  // Fully settled legacy cycles retain their result. A partly installed old
+  // cycle is reconciled together, with its previous offices archived, so its
+  // remaining regions cannot stall forever between two counting systems.
+  if (elections.every((row) => row.status === "resolved")) return null;
+  const legacyResolvedElectionIds = elections
+    .filter((row) => row.status === "resolved")
+    .map((row) => row._id.toHexString());
   const ids = elections.map((row) => row._id);
   const [tallies, candidates] = await Promise.all([
     db
@@ -104,6 +122,7 @@ export async function readBgOrdinaryElectionPlan(
             party: 1,
             status: 1,
             enteredAt: 1,
+            characterName: 1,
           },
         }
       )
@@ -141,7 +160,11 @@ export async function readBgOrdinaryElectionPlan(
   const races: BgOrdinaryRace[] = [];
   for (const election of elections) {
     const tally = tallyMap.get(election._id.toHexString());
-    if (!tally || tally.finalized) return null;
+    if (
+      !tally ||
+      (tally.finalized && !legacyResolvedElectionIds.includes(election._id.toHexString()))
+    )
+      return null;
     const votes = Object.keys(tally.totalVotes ?? {}).length
       ? tally.totalVotes
       : tally.turnSnapshots?.at(-1)?.cumulativeVotes;
@@ -162,7 +185,10 @@ export async function readBgOrdinaryElectionPlan(
           votes: votes[row._id.toHexString()] ?? 0,
           listOrder: row.enteredAt.getTime(),
           isNpc: !!row.isNPP,
-          eligible: row.status === "active" && (row.isNPP ? liveNpcs : livePlayers).has(ownerId),
+          eligible:
+            (row.status === "active" ||
+              legacyResolvedElectionIds.includes(election._id.toHexString())) &&
+            (row.isNPP ? liveNpcs : livePlayers).has(ownerId),
         };
       }),
     });
@@ -177,7 +203,17 @@ export async function readBgOrdinaryElectionPlan(
           countryId: "BG",
           cycle,
           electionIds: ids.map((id) => id.toHexString()),
+          legacyResolvedElectionIds,
           plan,
+          nominees: candidates.map((row) => ({
+            id: row._id.toHexString(),
+            ownerId: (row.isNPP ? row.nppId! : row.characterId).toHexString(),
+            electionId: row.electionId.toHexString(),
+            isNpc: !!row.isNPP,
+            party: row.party,
+            listOrder: row.enteredAt.getTime(),
+            name: row.characterName,
+          })),
           createdAt: now,
         },
       },

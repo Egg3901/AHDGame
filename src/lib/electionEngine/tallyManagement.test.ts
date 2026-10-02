@@ -995,6 +995,42 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     expect(newTotals[candidateId]).toBe(13_000);
   });
 
+  it("preserves counted Bulgarian withdrawals and suppresses regional seat projections", async () => {
+    const { accumulateVoteTurn } = await import("./tallyManagement");
+    const electionId = new ObjectId(),
+      withdrawn = new ObjectId().toHexString();
+    const candidate = makeCandidate({ electionId, countryId: "BG", party: "1" });
+    const election = makeElection({
+      _id: electionId,
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG_SOF",
+      cycle: 2,
+      totalSeats: 55,
+    });
+    await setupHappyPath({
+      electionId,
+      candidates: [candidate],
+      election,
+      existingTallyVotes: { [withdrawn]: 2000, [candidate._id.toHexString()]: 5000 },
+    });
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+    });
+    const prior = await db.collectionMocks.electionVoteTallies.findOne();
+    prior.candidateNames[withdrawn] = "Withdrawn list nominee";
+    prior.candidateParties[withdrawn] = "2";
+    await accumulateVoteTurn(electionId, 1, new Date("2026-01-01T00:00:00Z"));
+    const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
+    expect(update.$set.bgOrdinaryBallot).toBe(true);
+    expect(update.$set.totalVotes[withdrawn]).toBe(2000);
+    expect(update.$set.candidateParties[withdrawn]).toBe("2");
+    expect(update.$set.seatsEstimate).toBeUndefined();
+    expect(update.$unset).toEqual({ seatsEstimate: "" });
+    expect(update.$push.turnSnapshots.seatsEstimate).toBeUndefined();
+  });
+
   it("excludes withdrawn candidates from totalVotes", async () => {
     const { accumulateVoteTurn } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");

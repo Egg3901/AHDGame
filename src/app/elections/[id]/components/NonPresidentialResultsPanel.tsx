@@ -30,6 +30,7 @@ interface NonPresidentialResultsPanelProps {
   lineSeries: LineSeries[];
   countryId: CountryId;
   electionType: string;
+  cycle?: number;
   /** Region the race is fought in, as displayed. */
   regionName: string;
   countryName: string;
@@ -56,6 +57,7 @@ export function NonPresidentialResultsPanel({
   lineSeries,
   countryId,
   electionType,
+  cycle,
   regionName,
   countryName,
   year,
@@ -84,6 +86,7 @@ export function NonPresidentialResultsPanel({
         seatsEstimate: tally.seatsEstimate,
         totalSeats,
         electionType,
+        cycle,
         countryId,
         preset: activePreset,
         isEnded,
@@ -102,6 +105,7 @@ export function NonPresidentialResultsPanel({
       tally,
       totalSeats,
       electionType,
+      cycle,
       countryId,
       activePreset,
       isEnded,

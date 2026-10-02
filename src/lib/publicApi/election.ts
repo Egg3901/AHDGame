@@ -175,7 +175,12 @@ function toElectionResults(
   return {
     totalVotes,
     finalized: tally.finalized ?? false,
-    ...(isMultiSeat ? { seatsEstimate: tally.seatsEstimate ?? null } : {}),
+    ...(isMultiSeat
+      ? {
+          seatsEstimate:
+            tally.bgOrdinaryBallot && !tally.finalized ? null : (tally.seatsEstimate ?? null),
+        }
+      : {}),
     candidates,
   };
 }
@@ -555,7 +560,12 @@ export async function queryElectionDetail(db: Db, electionId: string) {
           totalVotes: Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0),
           finalized: hasResolvedResult(election.status),
           latestSnapshot: latestTallySnapshot,
-          ...(isMultiSeatRace(election) ? { seatsEstimate: tally.seatsEstimate ?? null } : {}),
+          ...(isMultiSeatRace(election)
+            ? {
+                seatsEstimate:
+                  tally.bgOrdinaryBallot && !tally.finalized ? null : (tally.seatsEstimate ?? null),
+              }
+            : {}),
         }
       : null,
   };
