@@ -79,6 +79,8 @@ interface BannedParty {
   sequentialId: number;
   name: string;
   abbreviation?: string;
+  /** Turn this party's own legalize cooldown ends, when it is still running. */
+  legalizeCooldownUntil?: number;
 }
 
 interface LeaderRegimeData {
@@ -200,7 +202,7 @@ interface ReformMeta {
 const REFORM_META: Record<string, ReformMeta> = {
   legalizeParty: {
     description:
-      "Flips a chosen banned party to approved. Intra-party hardliners read this as a major concession; the public sees a real opening. Cooldown is per-party — different banned parties have independent windows.",
+      "Flips a chosen banned party to approved. Intra-party hardliners read this as a major concession; the public sees a real opening. Each banned party has its own cooldown.",
     intraCost: -6,
     popularGain: 8,
     boostPerTurn: 0.2,
@@ -255,6 +257,8 @@ export function RegimeHealthTab({ countryCode }: Props) {
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
   /** Picker state for decision options that need a bannedPartyId payload. */
   const [selectedBannedParty, setSelectedBannedParty] = useState<number | "">("");
+  /** Banned party picked for the legalize reform. */
+  const [legalizePartyId, setLegalizePartyId] = useState<number | "">("");
 
   const refresh = useCallback(async () => {
     try {
@@ -306,7 +310,8 @@ export function RegimeHealthTab({ countryCode }: Props) {
     }
   }
 
-  async function triggerReform(action: string, body?: Record<string, unknown>): Promise<void> {
+  /** Resolves true when the reform went through. */
+  async function triggerReform(action: string, body?: Record<string, unknown>): Promise<boolean> {
     setBusy(`reform:${action}`);
     setErr(null);
     try {
@@ -318,9 +323,10 @@ export function RegimeHealthTab({ countryCode }: Props) {
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
         setErr(errBody.error ?? `Reform action failed (${res.status})`);
-      } else {
-        await refresh();
+        return false;
       }
+      await refresh();
+      return true;
     } finally {
       setBusy(null);
     }
@@ -589,6 +595,12 @@ export function RegimeHealthTab({ countryCode }: Props) {
             const isPerParty = action === "legalizeParty";
             const isExpanded = expandedAction === action;
             const meta = REFORM_META[action];
+            const legalizeTarget = isPerParty
+              ? data.bannedParties.find((p) => p.sequentialId === legalizePartyId)
+              : undefined;
+            const perPartyReady =
+              !isPerParty ||
+              (legalizeTarget !== undefined && legalizeTarget.legalizeCooldownUntil === undefined);
             return (
               <div key={action} className="rounded border border-card-border/60 bg-background/30">
                 <div className="flex items-center justify-between gap-3 p-2">
@@ -620,8 +632,19 @@ export function RegimeHealthTab({ countryCode }: Props) {
                       <span className="text-xs text-muted">{avail.note}</span>
                     )}
                     <button
-                      disabled={!avail?.available || busy !== null || isPerParty}
-                      onClick={() => void triggerReform(action)}
+                      disabled={!avail?.available || busy !== null || !perPartyReady}
+                      onClick={() => {
+                        if (isPerParty) {
+                          if (!legalizeTarget) return;
+                          void triggerReform(action, {
+                            partyId: legalizeTarget.sequentialId,
+                          }).then((ok) => {
+                            if (ok) setLegalizePartyId("");
+                          });
+                        } else {
+                          void triggerReform(action);
+                        }
+                      }}
                       className="rounded border border-card-border bg-card px-3 py-1 text-xs hover:bg-card/80 disabled:opacity-40 disabled:cursor-not-allowed"
                       data-testid={`regime-reform-${action}`}
                     >
@@ -629,6 +652,41 @@ export function RegimeHealthTab({ countryCode }: Props) {
                     </button>
                   </div>
                 </div>
+                {isPerParty && (
+                  <div className="px-2 pb-2 text-xs">
+                    {data.bannedParties.length > 0 ? (
+                      <label className="flex flex-wrap items-center gap-2">
+                        <span className="text-muted">Party to legalize</span>
+                        <select
+                          value={legalizePartyId}
+                          onChange={(e) =>
+                            setLegalizePartyId(e.target.value === "" ? "" : Number(e.target.value))
+                          }
+                          disabled={busy !== null}
+                          className="min-w-0 flex-1 rounded border border-card-border bg-background px-2 py-1 text-sm text-foreground"
+                          data-testid="regime-legalize-party-picker"
+                        >
+                          <option value="">Pick a banned party…</option>
+                          {data.bannedParties.map((p) => (
+                            <option
+                              key={p.sequentialId}
+                              value={p.sequentialId}
+                              disabled={p.legalizeCooldownUntil !== undefined}
+                            >
+                              {p.name}
+                              {p.abbreviation ? ` (${p.abbreviation})` : ""}
+                              {p.legalizeCooldownUntil !== undefined
+                                ? `, cooldown until turn ${p.legalizeCooldownUntil}`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <p className="text-muted">No party is banned right now.</p>
+                    )}
+                  </div>
+                )}
                 {isExpanded && meta && (
                   <div
                     className="border-t border-card-border/40 bg-card/40 p-3 text-xs"
@@ -672,12 +730,6 @@ export function RegimeHealthTab({ countryCode }: Props) {
                         </p>
                       )}
                     {meta.notes && <p className="mt-2 text-muted">{meta.notes}</p>}
-                    {isPerParty && (
-                      <p className="mt-2 text-muted">
-                        Per-party cooldown — pick a banned party first (party-management page wiring
-                        is a follow-up).
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
