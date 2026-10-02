@@ -288,9 +288,10 @@ export async function processNppCorporationDecisions(
       priceByCommodity.set(doc.commodity, doc);
     }
   }
-  const { priceRatioOf, statePriceRatioOf } = buildNppPriceSignals(priceByCommodity);
+  const { priceRatioOf, statePriceRatioOf, stateDemandOf } = buildNppPriceSignals(priceByCommodity);
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
+  placementSignals.stateDemandOf = stateDemandOf;
 
   const { open: openUnowned, blocked } = await partitionOpenMarkets(db, unownedSectors);
 
@@ -1224,6 +1225,7 @@ export function makeNppCorpDecision(
     corp,
     candidate: entryCandidate,
     diagnostic: entryDiagnostic,
+    placementSignals,
     gates: {
       allowExpansion: levers.allowExpansion,
       hasLogisticsCapacity,
