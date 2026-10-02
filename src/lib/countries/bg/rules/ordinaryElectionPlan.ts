@@ -5,6 +5,7 @@
  */
 import { BG_1991_ELECTORAL_DISTRICTS } from "../data/electoralDistricts1991";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
+import { BG_ORDINARY_DISTRICT_SEATS } from "./assemblyTransition";
 import { bgNationalOrdinaryQuotas } from "./nationalOrdinaryAllocation";
 import { bgBalancedDistrictLists } from "./districtListAllocation";
 
@@ -70,10 +71,7 @@ export function buildBgOrdinaryElectionPlan(
   )
     throw new Error("Bulgarian ordinary ballot coverage is incomplete");
   const byRegion = new Map(races.map((row) => [row.regionId, row]));
-  const capacities = apportionSeats(
-    240,
-    Object.fromEntries(districts.map((row) => [row.id, row.population]))
-  );
+  const capacities = BG_ORDINARY_DISTRICT_SEATS;
   const districtVotes: Record<string, Record<string, number>> = Object.fromEntries(
     districts.map((row) => [row.id, {}])
   );

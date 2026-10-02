@@ -68,7 +68,7 @@ export async function processBgAssemblyTransition(
     regionIds.map((id) => ({
       updateOne: {
         filter: { _id: id, countryId: "BG" },
-        update: { $set: { houseDistricts: BG_ORDINARY_ASSEMBLY_SEATS[id] } },
+        update: { $set: { houseDistricts: resolvedSeats[id] } },
       },
     }))
   );

@@ -71,6 +71,7 @@ export interface ElectionVoteTally {
   resolutionPath?:
     | "single_winner"
     | "hare_quota"
+    | "bg_ordinary_national"
     | "districted_house"
     | "bloc_list"
     | "sainte_lague"

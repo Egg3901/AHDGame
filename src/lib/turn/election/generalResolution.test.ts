@@ -187,59 +187,72 @@ describe("resolveOneGeneralElection", () => {
     ).toEqual({ resolved: false, newsOutcomes: [] });
     expect(db.collectionMocks.elections!.updateOne).not.toHaveBeenCalled();
   });
-  it("seats the 1991 Bulgarian regional list by D'Hondt", async () => {
-    const election = makeElection({
-      countryId: "BG",
-      electionType: "nationalAssembly",
-      state: "BG_SOF",
-      cycle: 1,
-      electionYear: 1991,
-      totalSeats: 5,
-      status: "completed",
-    });
-    const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
-    const votes = [100, 80, 30];
-    const parties = ["A", "B", "C"];
-    const candidates = ids.map((id, index) => {
-      const candidate = makeCandidate(election._id, { characterId: id, party: parties[index] });
-      candidate._id = id;
-      return candidate;
-    });
-    const tally = makeTally(
-      election._id,
-      Object.fromEntries(ids.map((id, index) => [id.toString(), votes[index]]))
-    );
-    db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
-    db.collectionMocks.characters!.find.mockReturnValue(
-      makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
-    );
-    db.collection("countryState");
-    db.collection("gameState");
-    db.collectionMocks.gameState!.findOne.mockResolvedValue({
-      _id: "current",
-      preset: "1991-default",
-    });
-    db.collectionMocks.countryState!.findOne.mockResolvedValue({
-      _id: "BG",
-      governmentType: "parliamentaryRepublic",
-    });
+  it.each([1, 2])(
+    "seats the frozen Bulgarian national allocation in ordinary cycle %s",
+    async (cycle) => {
+      const election = makeElection({
+        countryId: "BG",
+        electionType: "nationalAssembly",
+        state: "BG_SOF",
+        cycle,
+        electionYear: cycle === 1 ? 1991 : 1995,
+        totalSeats: 5,
+        status: "completed",
+      });
+      const ids = [new ObjectId(), new ObjectId(), new ObjectId()];
+      const votes = [100, 80, 30];
+      const parties = ["A", "B", "C"];
+      const candidates = ids.map((id, index) => {
+        const candidate = makeCandidate(election._id, {
+          characterId: id,
+          party: parties[index],
+          isNPP: index > 0,
+          nppId: index > 0 ? id : undefined,
+        });
+        candidate._id = id;
+        return candidate;
+      });
+      const tally = makeTally(
+        election._id,
+        Object.fromEntries(ids.map((id, index) => [id.toString(), votes[index]]))
+      );
+      db.collectionMocks.electionCandidates!.find.mockReturnValue(makeCursor(candidates));
+      db.collectionMocks.characters!.find.mockReturnValue(
+        makeCursor(ids.map((id) => ({ _id: id, userId: new ObjectId() })))
+      );
+      db.collectionMocks.npps!.find.mockReturnValue(
+        makeCursor(ids.slice(1).map((id) => ({ _id: id, retiredAt: null })))
+      );
+      db.collection("countryState");
+      db.collection("gameState");
+      db.collectionMocks.gameState!.findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1991-default",
+      });
+      db.collectionMocks.countryState!.findOne.mockResolvedValue({
+        _id: "BG",
+        governmentType: "parliamentaryRepublic",
+      });
 
-    await resolveBulgarianElection(
-      db as unknown as Db,
-      election,
-      tally,
-      CURRENT_TURN,
-      NOW,
-      new Set(["A", "B", "C"])
-    );
-    const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
-      (call) => call[0] as { party: string; seatsHeld: number }
-    );
-    expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
-      ["A", 3],
-      ["B", 2],
-    ]);
-  });
+      await resolveBulgarianElection(
+        db as unknown as Db,
+        election,
+        tally,
+        CURRENT_TURN,
+        NOW,
+        null,
+        undefined,
+        { [ids[0].toHexString()]: 1, [ids[1].toHexString()]: 4, [ids[2].toHexString()]: 0 }
+      );
+      const officials = db.collectionMocks.electedOfficials!.insertOne.mock.calls.map(
+        (call) => call[0] as { party: string; seatsHeld: number }
+      );
+      expect(officials.map(({ party, seatsHeld }) => [party, seatsHeld])).toEqual([
+        ["A", 1],
+        ["B", 4],
+      ]);
+    }
+  );
 
   it("seats a 2027 Bulgarian regional race by proportional Hare allocation", async () => {
     const election = makeElection({

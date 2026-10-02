@@ -30,7 +30,8 @@ import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
-import { readBgOrdinaryEligibleParties } from "@/lib/turn/election/bgOrdinaryEligibility";
+import { readBgOrdinaryElectionPlan } from "@/lib/turn/election/bgOrdinaryEligibility";
+import type { BgOrdinaryElectionPlan } from "@/lib/countries/bg/rules/ordinaryElectionPlan";
 import { readHuMixedElectionPlan } from "@/lib/countries/hu/readMixedElectionPlan";
 import type { HuMixedPlan } from "@/lib/countries/hu/rules/mixedElectionPlan";
 import { captureElectionResolved } from "@/lib/analytics/electionAnalytics";
@@ -99,17 +100,12 @@ export async function resolveGeneralElections(
   const bgOrdinaryRaces =
     gameStateDoc?.preset === "1991-default"
       ? completedElections.filter(
-          (e) => e.countryId === "BG" && e.electionType === "nationalAssembly" && e.cycle === 1
+          (e) => e.countryId === "BG" && e.electionType === "nationalAssembly" && e.cycle >= 1
         )
       : [];
-  let bgEligibleParties: ReadonlySet<string> | null = null;
-  if (bgOrdinaryRaces.length > 0) {
-    bgEligibleParties = await readBgOrdinaryEligibleParties(db);
-    if (!bgEligibleParties) {
-      console.warn(
-        "[Turn] Deferring Bulgaria 1991 Assembly resolution until all regional tallies are valid"
-      );
-    }
+  const bgPlans = new Map<number, BgOrdinaryElectionPlan | null>();
+  for (const cycle of new Set(bgOrdinaryRaces.map((row) => row.cycle))) {
+    bgPlans.set(cycle, await readBgOrdinaryElectionPlan(db, cycle, now));
   }
   const huMixedCycles = new Set(
     gameStateDoc?.preset === "1991-default"
@@ -287,8 +283,23 @@ export async function resolveGeneralElections(
       const chunkResults = await Promise.all(
         chunk.map(async (election) => {
           try {
-            if (bgOrdinaryRaces.includes(election) && !bgEligibleParties) {
+            if (bgOrdinaryRaces.includes(election) && !bgPlans.get(election.cycle)) {
               return { election, result: null };
+            }
+            const bgPlan = bgOrdinaryRaces.includes(election) ? bgPlans.get(election.cycle) : null;
+            if (bgPlan) {
+              const capacity = bgPlan.regionCapacity[election.state];
+              if (!(capacity > 0))
+                throw new Error("Bulgarian ordinary race has no regional capacity");
+              if (election.totalSeats !== capacity) {
+                await db
+                  .collection<Election>("elections")
+                  .updateOne(
+                    { _id: election._id, status: "completed" },
+                    { $set: { totalSeats: capacity, updatedAt: now } }
+                  );
+                election.totalSeats = capacity;
+              }
             }
             const huPlan = huMixedPlans.get(election.cycle);
             const isHuMixed =
@@ -317,8 +328,9 @@ export async function resolveGeneralElections(
               tally,
               currentTurn,
               now,
-              bgOrdinaryRaces.includes(election) ? bgEligibleParties : null,
-              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined
+              null,
+              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined,
+              bgPlan?.candidateSeatsByElection[election._id.toHexString()]
             );
             return { election, result };
           } catch (err) {
