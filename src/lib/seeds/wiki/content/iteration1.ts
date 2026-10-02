@@ -10,7 +10,7 @@ export const iteration1Content = `**Iterations:** *Alpha 1 (not documented)*  ·
 
 **Iteration 1** began on **2026-08-08** with an in-game starting year of **1953**. It opened four countries to players: the **United States**, **United Kingdom**, **East Germany**, and the **Soviet Union**. Twenty-one other nations run elections, pass laws, trade, and react through autonomous governments, turning what began as a four-capital Cold War into a genuinely crowded international system.
 
-By turn **1,302**, the calendar had reached **1979**. The world had produced six distinct American presidents and its first presidential conviction, five successful no-confidence votes, a German reunification decided by war, a Soviet reversal from East Germany's indispensable ally to its defeated invader, six player-founded international organizations, and a private American fortune larger than every public exchange combined.
+By turn **1,302**, the calendar had reached **1979**. The world had produced seven distinct American presidents and its first presidential conviction, five successful no-confidence votes, a German reunification decided by war, a Soviet reversal from East Germany's indispensable ally to its defeated invader, six player-founded international organizations, and a private American fortune larger than every public exchange combined.
 
 This is a snapshot of a running world. It is not a complete transcript of 1,302 turns. The Wire, election archive, country histories, battle reports, and market ledgers are much larger than any one article, so what follows is the story they tell most clearly.
 
@@ -47,7 +47,7 @@ This is a snapshot of a running world. It is not a complete transcript of 1,302 
 
 America spent its first quarter-century under Democratic dominance, fought and lost the largest war of the iteration, and then broke sharply right in 1976. The most revealing fact is not that six people reached the White House. It is that the electoral map kept changing beneath them.
 
-### Seven elections, six presidents
+### Seven elections, seven presidents
 
 | Year | Winner | Party | Popular vote | Electoral vote | Main rival |
 | --- | --- | --- | --- | --- | --- |
@@ -59,7 +59,7 @@ America spent its first quarter-century under Democratic dominance, fought and l
 | 1972 | **Sean Oppenheimer** | Democratic | 50.6% | 286 | Deprince, Farmer-Labor |
 | 1976 | **Ariane Yeong** | Republican | 39.7% | 481 | Sean Oppenheimer, Democratic |
 
-Hochburger won the founding election and a second term by large margins. Johnson followed with the closest thing this world has seen to an electoral coronation: **530 electoral votes** in 1960. The system then fragmented. Todoroki won two four-way contests with pluralities, Oppenheimer survived a 1972 race separated by only 1.6 percentage points, and **Ariane Yeong** turned 39.7% of the popular vote into 481 electoral votes in 1976. The table records the seven elections; **Egg** became the sixth president by constitutional succession after Yeong's removal.
+Hochburger won the founding election and a second term by large margins. Johnson followed with the closest thing this world has seen to an electoral coronation: **530 electoral votes** in 1960. The system then fragmented. Todoroki won two four-way contests with pluralities, Oppenheimer survived a 1972 race separated by only 1.6 percentage points, and **Ariane Yeong** turned 39.7% of the popular vote into 481 electoral votes in 1976. The table records the seven elections; **Egg** became the sixth president by constitutional succession after Yeong's removal, and Speaker **Richard Nixon** became the seventh after Egg resigned.
 
 The party membership ledger makes that victory stranger. The Democrats remain the largest organization with **512 members**, followed by Farmer-Labor with **447**. Yeong's Republican Party has only **62**, behind the Constitutional Union Party's 89. Iteration 1 produced a Republican presidency before it produced a Republican mass party.
 
@@ -69,7 +69,7 @@ Yeong governed through a cabinet drawn from four parties. Former President **Ren
 
 The administration looked less like a party government than a peace conference among the country's political survivors. It also linked government directly to the corporate economy: Todoroki runs one of the world's most valuable public companies, McCarthy runs Dubois Mining, and Agriculture Secretary **Winston LS Churchill** controls the iteration's largest private firm and its largest personal fortune.
 
-Speaker **Richard Nixon** filed articles of impeachment at turn 1,282. The House advanced them 213 to 97, with 90 abstentions. At turn **1,294**, the Senate convicted Yeong by **85 to 0**, with eight abstentions, and removed her from office. Vice President **Egg** succeeded her immediately. Nixon then filed against Egg on the same turn, but that second case was dismissed in the House at turn 1,300. Egg resigned shortly afterward. At the turn 1,302 snapshot, the presidency is vacant.
+Speaker **Richard Nixon** filed articles of impeachment at turn 1,282. The House advanced them 213 to 97, with 90 abstentions. At turn **1,294**, the Senate convicted Yeong by **85 to 0**, with eight abstentions, and removed her from office. Vice President **Egg** succeeded her immediately. Nixon then filed against Egg on the same turn, but that second case was dismissed in the House at turn 1,300. Egg resigned shortly afterward. Following a brief vacancy at turn **1,302**, Speaker Nixon was appointed President under the line of succession.
 
 The political-business overlap became concrete during Yeong's final hours. The national Wire recorded Defense Secretary **Ren Todoroki** awarding his own Todoroki Systems 15 defense lots worth about **3.77 billion**. The award sits on the public order book, turning the administration's network into a matter of public record.
 
@@ -328,7 +328,7 @@ All ten are American. The first non-American is **Viktoriya Streibl** of the Uni
 
 At turn 1,302, Iteration 1 has already delivered:
 
-- Six distinct American presidents, including a Republican elected with 481 electoral votes on 39.7% of the popular vote, removed by an 85 to 0 Senate conviction, and succeeded by a vice president who soon resigned.
+- Seven distinct American presidents, including a Republican elected with 481 electoral votes on 39.7% of the popular vote, removed by an 85 to 0 Senate conviction, succeeded by a vice president who soon resigned, and followed by Speaker Richard Nixon.
 - Three removals of Sarah Spencer, followed by the fall of Anastas Mikoyan and a still-pending challenge to Callum MacLeod.
 - An American-led war for German regime change that ended in East German victory and reunification after 85 battles.
 - A Soviet Union that saved East Germany, invaded it twice, lost the second war, and was ordered into a parliamentary republic.
@@ -338,7 +338,7 @@ At turn 1,302, Iteration 1 has already delivered:
 - A wealth leaderboard whose top ten are all American, led by one ₳441 billion outlier.
 - A crisis system that has made air-raid shelters, panic buying, bank runs, pandemics, energy shocks, and supply disruption part of ordinary government.
 
-All three recorded wars are now resolved, and the latest supply-chain disruption has ended. The American presidency is vacant, the British government still faces a confidence vote, Russia has only begun the transition imposed by its defeat, and the social and financial crises generated by wartime tension remain active. This article stops because the snapshot does, not because the story has reached a conclusion.
+All three recorded wars are now resolved, and the latest supply-chain disruption has ended. Richard Nixon now holds the American presidency, the British government still faces a confidence vote, Russia has only begun the transition imposed by its defeat, and the social and financial crises generated by wartime tension remain active. This article stops because the snapshot does, not because the story has reached a conclusion.
 
 ---
 
