@@ -576,6 +576,14 @@ export async function processMergeProposal(
   const countryId = proposingParty.countryId;
   const now = new Date();
 
+  // Captured before step 1 re-points them: their live candidacies move in 4d.
+  const absorbedCharacterIds = (
+    await db
+      .collection("characters")
+      .find({ party: proposingStrId, countryId }, { projection: { _id: 1 } })
+      .toArray()
+  ).map((c) => c._id as ObjectId);
+
   // 1. Transfer characters — move party membership, halve partyInfluence
   await db.collection("characters").updateMany({ party: proposingStrId, countryId }, [
     {
@@ -736,6 +744,33 @@ export async function processMergeProposal(
     }
     await db.collection("electionCandidates").deleteMany({ nppId: { $in: cullIds } });
     await db.collection<NPP>("npps").deleteMany({ _id: { $in: cullIds } });
+  }
+
+  // 4d. Live candidacies follow their candidates. A candidacy keeps the party
+  //     it was filed under, so one left on the absorbed party seats its winner
+  //     back into the dead party when the race resolves (ticket 1376). NPP
+  //     candidacies carry the NPP's id as `characterId`. Selected by member
+  //     rather than by country because legacy candidacies have no countryId.
+  const cullIdSet = new Set(cullIds.map((id) => id.toString()));
+  const movedCandidateIds = [
+    ...absorbedCharacterIds,
+    ...proposingActiveNpps.map((n) => n._id).filter((id) => !cullIdSet.has(id.toString())),
+  ];
+  if (movedCandidateIds.length > 0) {
+    await db
+      .collection("electionCandidates")
+      .updateMany(
+        { party: proposingStrId, status: "active", characterId: { $in: movedCandidateIds } },
+        { $set: { party: targetStrId } }
+      );
+    await db.collection("campaigns").updateMany(
+      {
+        party: proposingStrId,
+        candidateId: { $in: movedCandidateIds },
+        status: { $ne: "archived" },
+      },
+      { $set: { party: targetStrId, updatedAt: now } }
+    );
   }
 
   // 5. Transfer elected seats — re-point all of the absorbed party's elected
