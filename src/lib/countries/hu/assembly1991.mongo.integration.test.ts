@@ -16,6 +16,11 @@ import {
   HU_1991_BY_ELECTIONS_COLLECTION,
 } from "./constituencyByElections1991";
 import { HU_1991_CONSTITUENCIES } from "./data/electoralDistricts1991";
+import {
+  loadHu1991ListVacancies,
+  designateHu1991ListDeputy,
+  HU_1991_LIST_REPLACEMENTS_COLLECTION,
+} from "./listVacancies1991";
 vi.mock("@/lib/news", () => ({ generateElectionNews: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/turn/election/electionNotifications", () => ({
   sendBatchedElectionResults: vi.fn().mockResolvedValue(undefined),
@@ -43,6 +48,7 @@ const names = [
   "politicalParties",
   HU_1991_FILING_LOCKS_COLLECTION,
   HU_1991_BY_ELECTIONS_COLLECTION,
+  HU_1991_LIST_REPLACEMENTS_COLLECTION,
 ];
 type StringRecord = { _id: string; [key: string]: unknown };
 
@@ -1072,6 +1078,122 @@ describe.skipIf(!uri)(
           await db.collection("notifications").countDocuments({ userId, type: "general_win" })
         ).toBe(1);
         expect(await snapshot(db)).toEqual(before);
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+    it("designates a certified list replacement atomically, preserving quotas, terms and departed history", async () => {
+      const { db } = await fixture();
+      try {
+        await bind(db);
+        await certifyHu1991FirstCount(db, 1, 101, now);
+        await seatHu1991Assembly(db, 1, 101, now);
+        const original = await db
+          .collection("electedOfficials")
+          .findOne({ "hungarianAssemblyMandate.tier": "territorial", isNPP: true });
+        await db
+          .collection("electedOfficials")
+          .updateOne({ _id: original!._id }, { $set: { characterId: null, nppId: null } });
+        const choices = await loadHu1991ListVacancies(db, 102);
+        expect(choices).toHaveLength(1);
+        expect(choices[0].candidates.length).toBeGreaterThan(1);
+        const choice = choices[0];
+        const candidate = choice.candidates.find((row) => row.isNpc)!;
+        const input = {
+          db,
+          turn: 102,
+          now,
+          receiptId: choice.receiptId,
+          slotPersonId: choice.slotPersonId,
+          personId: candidate.personId,
+          actor: { characterId: null, isAdmin: true },
+        };
+        const parentBefore = await db
+          .collection<StringRecord>(HU_1991_COUNTS_COLLECTION)
+          .findOne({ _id: choice.receiptId });
+        const finances = await db
+          .collection("npps")
+          .find({}, { projection: { balance: 1 } })
+          .sort({ _id: 1 })
+          .toArray();
+        const before = await snapshot(db);
+        const failing = new Proxy(db, {
+          get(target, key) {
+            if (key !== "collection") {
+              const value = Reflect.get(target, key);
+              return typeof value === "function" ? value.bind(target) : value;
+            }
+            return (name: string) => {
+              const collection = target.collection(name);
+              if (name !== HU_1991_LIST_REPLACEMENTS_COLLECTION) return collection;
+              return new Proxy(collection, {
+                get(inner, property) {
+                  if (property === "insertOne")
+                    return async () => {
+                      throw new Error("injected list receipt failure");
+                    };
+                  const value = Reflect.get(inner, property);
+                  return typeof value === "function" ? value.bind(inner) : value;
+                },
+              });
+            };
+          },
+        });
+        await expect(designateHu1991ListDeputy({ ...input, db: failing })).rejects.toThrow(
+          /injected/
+        );
+        expect(await snapshot(db)).toEqual(before);
+        const results = await Promise.all([
+          designateHu1991ListDeputy(input),
+          designateHu1991ListDeputy(input),
+        ]);
+        expect(results.sort()).toEqual([false, true]);
+        expect(
+          await db.collection("electedOfficials").countDocuments({ officeType: "assemblyDelegate" })
+        ).toBe(386);
+        const installed = await db.collection("electedOfficials").findOne({ _id: original!._id });
+        expect(installed!.hungarianAssemblyMandate.personId).toBe(candidate.personId);
+        expect(installed!.termEnds).toEqual(original!.termEnds);
+        expect(installed!.party).toBe(original!.party);
+        expect(installed!.constituencyId).toBe(original!.constituencyId);
+        expect(
+          await db
+            .collection("hu1991AssemblyOfficeArchives")
+            .countDocuments({ "official._id": original!._id })
+        ).toBe(1);
+        expect(
+          await db
+            .collection("npps")
+            .find({}, { projection: { balance: 1 } })
+            .sort({ _id: 1 })
+            .toArray()
+        ).toEqual(finances);
+        const parentAfter = await db
+          .collection<StringRecord>(HU_1991_COUNTS_COLLECTION)
+          .findOne({ _id: choice.receiptId });
+        expect(parentAfter!.count).toEqual(parentBefore!.count);
+        expect(parentAfter!.settled).toEqual(parentBefore!.settled);
+        expect(await loadHu1991ListVacancies(db, 102)).toEqual([]);
+        const completed = await snapshot(db);
+        expect(await designateHu1991ListDeputy(input)).toBe(false);
+        expect(await snapshot(db)).toEqual(completed);
+        // A second departure in the same turn uses journal generation, not
+        // lexical nominee IDs, to identify the last holder of this physical seat.
+        await db
+          .collection("electedOfficials")
+          .updateOne({ _id: original!._id }, { $set: { characterId: null, nppId: null } });
+        const again = (await loadHu1991ListVacancies(db, 102))[0];
+        expect(again.candidates.map((row) => row.personId)).not.toContain(candidate.personId);
+        expect(again.candidates.map((row) => row.personId)).not.toContain(choice.slotPersonId);
+        const next = again.candidates.find((row) => row.isNpc)!;
+        expect(await designateHu1991ListDeputy({ ...input, personId: next.personId })).toBe(true);
+        expect(await loadHu1991ListVacancies(db, 102)).toEqual([]);
+        expect(
+          await db
+            .collection(HU_1991_LIST_REPLACEMENTS_COLLECTION)
+            .countDocuments({ parentReceiptId: choice.receiptId })
+        ).toBe(2);
+        expect(await designateHu1991ListDeputy({ ...input, turn: 293 })).toBe(false);
       } finally {
         await db.dropDatabase();
       }

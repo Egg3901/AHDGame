@@ -44,6 +44,7 @@ export interface Hu1991AssemblyRecord {
   runoffOpenedAtTurn?: number;
   runoffGeneration?: number;
   byElectionGeneration?: number;
+  listReplacementGeneration?: number;
   activeRunoffElectionIds?: string[] | null;
   second?: Hu1991MixedBallots;
   seatedAtTurn?: number;

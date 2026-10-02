@@ -388,6 +388,10 @@ export async function materializeHu1991ByElectionResolution(input: {
   const journal = db.collection<Hu1991ByElectionRecord>(HU_1991_BY_ELECTIONS_COLLECTION);
   const job = await journal.findOne({ _id: receiptId }, { session });
   if (!job || job.completedAtTurn != null) return 0;
+  const chamberLock = await db
+    .collection<{ _id: string; hu1991MandateGeneration?: number }>("governmentFormations")
+    .updateOne({ _id: "HU" }, { $inc: { hu1991MandateGeneration: 1 } }, { session });
+  if (chamberLock.matchedCount !== 1) throw new Error("Hungarian chamber authority is missing");
   const parent = await db
     .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
     .findOne({ _id: job.parentReceiptId }, { session });
