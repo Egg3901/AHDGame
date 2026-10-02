@@ -140,9 +140,17 @@ describe("ConflictRecord", () => {
     const { container } = render(<ConflictRecord conflict={base} />);
     expect(screen.getByText("PLA is well ahead in CN.")).toBeTruthy();
     // Side A holds the remainder — the split is stated as two numbers, not one.
-    expect(screen.getByText("30")).toBeTruthy();
-    expect(screen.getByText("70")).toBeTruthy();
+    expect(screen.getByText("30.00")).toBeTruthy();
+    expect(screen.getByText("70.00")).toBeTruthy();
     expect(container.textContent).toMatch(/of CN/);
+  });
+
+  it("shows two decimal places when control is near the victory threshold", () => {
+    render(<ConflictRecord conflict={{ ...base, control: 99.6306 }} />);
+
+    expect(screen.getByText("0.37")).toBeTruthy();
+    expect(screen.getByText("99.63")).toBeTruthy();
+    expect(screen.queryByText("100.00")).toBeNull();
   });
 
   it("reports cumulative casualties and engagements as headline totals", () => {

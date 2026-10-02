@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ClassificationStrip } from "../_coldwar/ClassificationStrip";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
+import { controlSplitDisplay } from "../controlDisplay";
 import {
   COUNTRY_COMMAND_FLAVOR,
   DEFAULT_COMMAND_FLAVOR,
@@ -342,8 +343,7 @@ export function SituationBoardClient({
               {conflicts.map((conflict) => {
                 const committedPower = state.committed[conflict.id] ?? 0;
                 const maxCommitment = Math.max(0, total - (deployed - committedPower));
-                const sideBControl = Math.max(0, Math.min(100, Math.round(conflict.control)));
-                const sideAControl = 100 - sideBControl;
+                const controlDisplay = controlSplitDisplay(conflict.control);
 
                 return (
                   <section
@@ -377,7 +377,8 @@ export function SituationBoardClient({
                             color: MIL_COLOR.textMuted,
                           }}
                         >
-                          {conflict.sideA} {sideAControl}% / {conflict.sideB} {sideBControl}%
+                          {conflict.sideA} {controlDisplay.sideA}% / {conflict.sideB}{" "}
+                          {controlDisplay.sideB}%
                         </div>
                       </div>
                       <span

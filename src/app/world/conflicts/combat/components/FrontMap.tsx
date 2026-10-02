@@ -7,6 +7,7 @@ import { useStaticHostGeometry } from "@/lib/maps/proxyHostGeometry";
 import { orderFeatures, occupiedCodes } from "@/lib/maps/frontGeometry";
 import { anchorOf } from "@/lib/maps/countryAnchors";
 import { MIL_COLOR, MIL_FONT } from "../../military/theme";
+import { controlSplitDisplay } from "../../controlDisplay";
 import type { ConflictView } from "../useCombatState";
 
 const mono = MIL_FONT.mono;
@@ -74,8 +75,9 @@ export function FrontMap({ conflict }: { conflict: ConflictView }) {
     [hostRegionCodes, staticHost.codes]
   );
 
-  const pctB = Math.round(conflict.control);
+  const pctB = Math.max(0, Math.min(100, conflict.control));
   const pctA = 100 - pctB;
+  const controlDisplay = controlSplitDisplay(conflict.control);
   const occupiedPct = conflict.occupier === "A" ? pctA : conflict.occupier === "B" ? pctB : null;
   const occupierLabel =
     conflict.occupier === "A"
@@ -139,8 +141,10 @@ export function FrontMap({ conflict }: { conflict: ConflictView }) {
 
       <div style={{ font: `500 11px ${mono}`, color: MIL_COLOR.text, marginBottom: 6 }}>
         {occupiedPct !== null && occupierLabel
-          ? `${occupierLabel} occupies ${occupiedPct}% of ${conflict.hostCountry}`
-          : `Contested — ${conflict.sideALabel} ${pctA}% / ${conflict.sideBLabel} ${pctB}%`}
+          ? `${occupierLabel} occupies ${
+              conflict.occupier === "A" ? controlDisplay.sideA : controlDisplay.sideB
+            }% of ${conflict.hostCountry}`
+          : `Contested — ${conflict.sideALabel} ${controlDisplay.sideA}% / ${conflict.sideBLabel} ${controlDisplay.sideB}%`}
       </div>
 
       <div

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, cleanup, waitFor } from "@testing-library/react";
+import { render, cleanup, screen, waitFor } from "@testing-library/react";
 import { FrontLineMap } from "../FrontLineMap";
 
 /**
@@ -78,6 +78,9 @@ describe("FrontLineMap conflict zone", () => {
   it("projects every host in the zone, not just the anchor", async () => {
     const { container } = render(<FrontLineMap {...props} hostEntities={["SAAR", "FTT"]} />);
     await waitFor(() => expect(container.querySelector("svg")).not.toBeNull());
+    expect(
+      screen.getByRole("img", { name: /Allies holds 50\.00%, Pact holds 50\.00%/ })
+    ).toBeTruthy();
     // Both halves are on the map. Before this, the anchor's own silhouette was the
     // whole picture and the other host was simply absent.
     await waitFor(() => expect(drawnRegions(container)).toBeGreaterThan(1));
