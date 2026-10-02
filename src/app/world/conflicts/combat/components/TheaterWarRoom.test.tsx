@@ -227,7 +227,7 @@ describe("TheaterWarRoom territory", () => {
 
   it("surfaces who holds how much of the host", async () => {
     render(<TheaterWarRoom state={state} natMods={natMods({})} dispatch={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText(/NATO occupies 25% of CN/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/NATO occupies 25\.00% of CN/)).toBeTruthy());
   });
 });
 

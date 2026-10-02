@@ -124,7 +124,7 @@ describe("toConflictView", () => {
 
   it("reports who holds the host", () => {
     const v = toConflictView(doc({ hostCountry: "CN", sideA: west, sideB: east }), opts);
-    expect(v.status).toBe("NATO holds 30% of CN");
+    expect(v.status).toBe("NATO holds 30.00% of CN");
   });
 
   it("reports a split when the host is on neither side", () => {
@@ -132,8 +132,17 @@ describe("toConflictView", () => {
       doc({ hostCountry: "TR", sideA: west, sideB: east, control: 40 }),
       opts
     );
-    expect(v.status).toContain("NATO 60%");
-    expect(v.status).toContain("PLA 40%");
+    expect(v.status).toContain("NATO 60.00%");
+    expect(v.status).toContain("PLA 40.00%");
+  });
+
+  it("reports fractional control without implying a pole victory", () => {
+    const v = toConflictView(
+      doc({ hostCountry: "CN", sideA: west, sideB: east, control: 99.6306 }),
+      opts
+    );
+
+    expect(v.status).toBe("NATO holds 0.37% of CN");
   });
 
   it("formats cumulative casualties", () => {

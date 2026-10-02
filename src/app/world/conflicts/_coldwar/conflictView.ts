@@ -5,6 +5,7 @@ import { getRegion } from "@/lib/military/regions";
 import { yearOfTurn, type CalendarClock } from "@/lib/utils/gameDate";
 import { projectLonLat } from "./regionOverlayBridge";
 import type { Conflict, Severity } from "./conflicts";
+import { controlSplitDisplay } from "../controlDisplay";
 
 /**
  * A live conflict document as the Global Conflicts board renders it.
@@ -49,6 +50,7 @@ export interface ConflictViewOptions {
 
 export function toConflictView(doc: ConflictDoc, opts: ConflictViewOptions): Conflict {
   const occ = occupationOf(doc);
+  const controlDisplay = controlSplitDisplay(doc.control);
 
   // Sides, ordered so the board's blue/red treatment lands on the right one. With no
   // backer at all there is no west or east: document order is kept and the board
@@ -86,12 +88,14 @@ export function toConflictView(doc: ConflictDoc, opts: ConflictViewOptions): Con
 
   const occupier = occ.occupier === "A" ? doc.sideA : occ.occupier === "B" ? doc.sideB : null;
   // The raw id is deliberate here and pinned by a test: the hub board's cards are a
-  // code-first surface ("NATO holds 30% of CN"), unlike the conflict RECORD page, whose
+  // code-first surface ("NATO holds 30.00% of CN"), unlike the conflict RECORD page, whose
   // prose resolves the host through `entityName`. A proxy host reads as SVN, which is
   // the same idiom every other card uses.
   const status = occupier
-    ? `${occupier.label} holds ${occ.occupier === "A" ? occ.pctA : occ.pctB}% of ${doc.hostCountry}`
-    : `Contested — ${doc.sideA.label} ${occ.pctA}% / ${doc.sideB.label} ${occ.pctB}%`;
+    ? `${occupier.label} holds ${
+        occ.occupier === "A" ? controlDisplay.sideA : controlDisplay.sideB
+      }% of ${doc.hostCountry}`
+    : `Contested — ${doc.sideA.label} ${controlDisplay.sideA}% / ${doc.sideB.label} ${controlDisplay.sideB}%`;
 
   return {
     id: doc._id,

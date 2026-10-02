@@ -64,7 +64,17 @@ describe("FrontMap", () => {
   it("shows the occupied percentage of the host", () => {
     render(<FrontMap conflict={conflict} />);
     // Side A occupies 25% — control 75 is side B's share.
-    expect(screen.getByText(/25%/)).toBeTruthy();
+    expect(screen.getByText(/25\.00%/)).toBeTruthy();
+  });
+
+  it("shows fractional control without rounding the front to a pole", () => {
+    const { container } = render(<FrontMap conflict={{ ...conflict, control: 99.6306 }} />);
+
+    expect(screen.getByText(/NATO occupies 0\.37%/)).toBeTruthy();
+    const meterShare = Array.from(container.querySelectorAll<HTMLElement>("div")).find((element) =>
+      element.style.width.endsWith("%")
+    );
+    expect(Number.parseFloat(meterShare?.style.width ?? "NaN")).toBeCloseTo(0.3694);
   });
 
   it("names the occupier and the host", () => {
@@ -103,7 +113,7 @@ describe("FrontMap", () => {
   it("renders the meter alone when the host has no mapped geometry", () => {
     geometry = { features: [] };
     render(<FrontMap conflict={{ ...conflict, hostRegionCodes: [] }} />);
-    expect(screen.getByText(/25%/)).toBeTruthy();
+    expect(screen.getByText(/25\.00%/)).toBeTruthy();
     expect(screen.getByText(/no mapped territory/i)).toBeTruthy();
     expect(screen.queryByTestId("regional-geo-map")).toBeNull();
   });

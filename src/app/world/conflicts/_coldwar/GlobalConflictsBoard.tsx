@@ -8,6 +8,7 @@ import { CW_ROUTES } from "./routes";
 import { ClassificationStrip } from "./ClassificationStrip";
 import { WorldBlocMap } from "./WorldBlocMap";
 import { ColdWarHelp } from "./TensionHeader";
+import { controlSplitDisplay } from "../controlDisplay";
 
 const mono = "'IBM Plex Mono',monospace";
 const serif = "Lora,Georgia,serif";
@@ -592,7 +593,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
                     {c.lean != null && (
                       <div
                         data-lean-bar
-                        title={`Bloc balance: ${Math.round(c.lean)}% toward the eastern-backed side. This is derived from territorial control, not world tension.`}
+                        title={`Bloc balance: ${controlSplitDisplay(c.lean).sideB}% toward the eastern-backed side. This is derived from territorial control, not world tension.`}
                         style={{
                           position: "relative",
                           height: 9,
