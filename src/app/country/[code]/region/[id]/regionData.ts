@@ -205,7 +205,7 @@ export async function getRegionPartyOrg(stateId: string, countryId: CountryId) {
     const db = await getDb();
     const partyOrg = await db
       .collection<StatePartyOrg>("statePartyOrg")
-      .find({ stateId })
+      .find({ countryId, stateId })
       .toArray();
 
     const partyIds = [...new Set(partyOrg.map((po) => po.partyId))];
@@ -213,7 +213,14 @@ export async function getRegionPartyOrg(stateId: string, countryId: CountryId) {
     const parties = partySeqIds.length
       ? await db
           .collection<PoliticalParty>("politicalParties")
-          .find({ sequentialId: { $in: partySeqIds }, countryId })
+          .find({
+            sequentialId: { $in: partySeqIds },
+            countryId,
+            // A merge keeps the absorbed party as a tombstone for history.
+            // Legacy worlds can still carry its pre-cleanup state rows, but
+            // those rows are not an active regional party organization.
+            isDefunct: { $ne: true },
+          })
           .toArray()
       : [];
     const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
