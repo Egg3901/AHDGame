@@ -99,7 +99,7 @@ async function main() {
             currencyCode: "USD",
             faceValue: 1000,
             couponRate: 5.127,
-            totalIssued: 3,
+            totalIssued: 3000,
             publicFloat: 0,
             centralBankHoldings: 0,
             holders: actors.map((actor) => ({ nppId: actor._id, units: 1 })),
