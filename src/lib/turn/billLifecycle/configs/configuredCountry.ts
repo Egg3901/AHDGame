@@ -5,7 +5,10 @@ import {
   type CountryId,
   type CountryConfig,
 } from "@/lib/constants/countries";
-import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
+import {
+  getVotingUpperChamberKey,
+  resolveCountryOfficeLayout,
+} from "@/lib/countries/rules/officeLayout";
 import {
   getOfficeTypeForChamber,
   getUpperChamberOfficeType,
@@ -38,11 +41,7 @@ export function buildConfiguredCountryBillLifecycle(
     ? offices.upperOfficeType
     : getUpperChamberOfficeType(countryId, preset);
   const upperChamber = upperOfficeType ? country.legislature.upperChamber?.key : undefined;
-  const hasVotingUpperChamber = Boolean(
-    upperChamber &&
-    (country.upperElectionSystem ||
-      country.legislature.upperChamber?.participatesInOrdinaryBills === true)
-  );
+  const hasVotingUpperChamber = Boolean(upperChamber && getVotingUpperChamberKey(country));
   const hasPresidentialAction =
     isPresidentialGovernmentType(country.governmentType) ||
     (runtimeCountry !== undefined &&

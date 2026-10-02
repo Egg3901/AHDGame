@@ -1,10 +1,12 @@
+import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
+import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 // src/app/api/parties/[id]/whippable-bills/route.ts
 import { NextResponse } from "next/server";
 import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
-import { getCountryConfig, COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { resolveWhipIssuerRole } from "@/lib/congress/billWhipPanelData";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameState } from "@/lib/gameState";
@@ -95,10 +97,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       ],
     });
 
-    const countryLowerKey = getCountryConfig(countryId).legislature.lowerChamber.key;
-    const countryUpperKey = getCountryConfig(countryId).upperElectionSystem
-      ? (getCountryConfig(countryId).legislature.upperChamber?.key ?? null)
-      : null;
+    const { config } = await loadRuntimeCountryOffices(db, countryId, gameStateForBills?.preset);
+    const countryLowerKey = config.legislature.lowerChamber.key;
+    const countryUpperKey = getVotingUpperChamberKey(config);
     const countryChambers = countryUpperKey
       ? [countryLowerKey, countryUpperKey]
       : [countryLowerKey];
@@ -143,10 +144,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       })
       .toArray();
 
-    const config = getCountryConfig(countryId);
-    const upperKey = config.upperElectionSystem
-      ? (config.legislature.upperChamber?.key ?? null)
-      : null;
+    const upperKey = getVotingUpperChamberKey(config);
     const lowerKey = config.legislature.lowerChamber.key;
     const chamberKeys = upperKey ? [upperKey, lowerKey] : [lowerKey];
 
@@ -155,7 +153,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // raw chamber key found zero CN delegates, so the CN whip panel showed no
     // bills at all.
     const officeTypeByChamberKey = new Map(
-      chamberKeys.map((key) => [key, getOfficeTypeForChamber(countryId, key)])
+      chamberKeys.map((key) => [key, getOfficeTypeForChamber(countryId, key, undefined, config)])
     );
 
     // Union of NPP and character officials so we surface bills for either audience.
@@ -205,7 +203,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     for (const bill of activeBills) {
       const activeChambers: string[] = [];
-      if (bill.status === "veto_override") {
+      if (bill.status === "veto_override" || bill.status === "active_both") {
         activeChambers.push(...chamberKeys);
       } else if (bill.currentChamber && chamberKeys.includes(bill.currentChamber)) {
         activeChambers.push(bill.currentChamber);

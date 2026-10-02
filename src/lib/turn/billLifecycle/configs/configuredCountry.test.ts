@@ -48,6 +48,16 @@ describe("buildConfiguredCountryBillLifecycle", () => {
       const votes = lifecycle.stages.filter((stage) => stage.kind === "chamberVote");
       expect(votes.map((stage) => stage.status)).toEqual(["active", "active_other"]);
       expect(lifecycle.stages.some((stage) => stage.kind === "executiveAction")).toBe(true);
+      const concurrent = lifecycle.stages.find((stage) => stage.kind === "concurrentVote");
+      expect(concurrent?.chambersFor({ currentChamber: "stateDuma" })).toEqual([
+        "dumaDeputy",
+        "federationCouncilMember",
+      ]);
+      expect(
+        concurrent?.voteFieldFor({ currentChamber: "stateDuma" }, "federationCouncilMember")
+      ).toBe("otherChamberVotes");
+      const override = lifecycle.stages.find((stage) => stage.kind === "override");
+      expect(override?.chambers).toEqual(["dumaDeputy", "federationCouncilMember"]);
     }
   );
 

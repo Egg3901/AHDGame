@@ -1255,6 +1255,16 @@ describe("Russian NPC bill votes use the active constitution", () => {
     [{ ruSovietSuccessionSinceTurn: 24 }, "congressOfPeoplesDeputies", "congressDeputy"],
     [{ ruFederalAssemblySinceTurn: 40 }, "stateDuma", "dumaDeputy"],
     [{ ruFederalAssemblySinceTurn: 40 }, "federationCouncil", "federationCouncilMember"],
+    [
+      { ruFederalAssemblySinceTurn: 40, ruCouncilComposition: { mode: "regionalHeads" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
+    [
+      { ruFederalAssemblySinceTurn: 40, ruCouncilComposition: { mode: "regionalDelegates" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
   ])("casts only votes from active national deputies: %s", async (markers, chamber, officeType) => {
     const npp = makeNPP({ countryId: "RU" });
     const foreign = makeNPP();
@@ -1289,9 +1299,13 @@ describe("Russian NPC bill votes use the active constitution", () => {
     expect(db.collection).not.toHaveBeenCalledWith("countryGameStates");
   });
 
-  it.each(["active_both", "veto_override"] as const)(
-    "routes both Assembly chamber votes correctly for %s",
-    async (status) => {
+  it.each(
+    (["active_both", "veto_override"] as const).flatMap((status) =>
+      ([undefined, "regionalHeads", "regionalDelegates"] as const).map((mode) => ({ status, mode }))
+    )
+  )(
+    "routes both appointed Assembly chamber votes correctly for $status/$mode",
+    async ({ status, mode }) => {
       const lower = makeNPP({ countryId: "RU" });
       const upper = makeNPP({ countryId: "RU" });
       const db = makeMockDb();
@@ -1303,7 +1317,10 @@ describe("Russian NPC bill votes use the active constitution", () => {
         otherChamberVotingEndsOnTurn: 1,
       });
       const layout = resolveCountryOfficeLayout(
-        getCountryConfigForRuntime("RU", "1991-default", { ruFederalAssemblySinceTurn: 40 })
+        getCountryConfigForRuntime("RU", "1991-default", {
+          ruFederalAssemblySinceTurn: 40,
+          ...(mode ? { ruCouncilComposition: { mode } } : {}),
+        })
       );
       const { processBillVoting } = await import("./billVoting");
       expect(

@@ -25,3 +25,6 @@ areas: [engine, backend, frontend]
   defections. Ended mandates are not recreated under the same appointment identity.
 - The Duma, government, private accounts and original election roots survive
   Council handovers. Players are never assigned regional authorities automatically.
+- Player ballots, co-sponsorship eligibility, discussions, vote displays and whip
+  panels follow the installed Council's voting authority. Concurrent votes and
+  presidential veto overrides still require both chambers.
