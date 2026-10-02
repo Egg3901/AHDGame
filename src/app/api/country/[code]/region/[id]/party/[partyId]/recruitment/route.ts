@@ -26,6 +26,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
+import { activePartyNppFilter } from "@/lib/npp/recruitmentScope";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   recruitmentCooldownRemainingTurns,
@@ -91,11 +92,11 @@ export async function GET(
     // Count party NPPs
     const partyNPPCount = await db
       .collection<NPP>("npps")
-      .countDocuments({ party: partyIdStr, retiredAt: null });
+      .countDocuments(activePartyNppFilter(countryId, partyIdStr));
 
     const stateNPPCount = await db
       .collection<NPP>("npps")
-      .countDocuments({ party: partyIdStr, homeState: stateId, retiredAt: null });
+      .countDocuments(activePartyNppFilter(countryId, partyIdStr, stateId));
 
     const now = new Date();
     // Recruitment cooldown is measured in turns, so compare against the game
@@ -261,10 +262,10 @@ export async function POST(
     const stateOrg = statePartyOrg?.organization ?? 0;
     const stateNPPCount = await db
       .collection<NPP>("npps")
-      .countDocuments({ party: partyIdStr, homeState: stateId, retiredAt: null });
+      .countDocuments(activePartyNppFilter(countryId, partyIdStr, stateId));
     const partyNPPCount = await db
       .collection<NPP>("npps")
-      .countDocuments({ party: partyIdStr, retiredAt: null });
+      .countDocuments(activePartyNppFilter(countryId, partyIdStr));
     const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
     const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
     if (capacityError) {
