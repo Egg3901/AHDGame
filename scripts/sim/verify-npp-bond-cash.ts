@@ -55,7 +55,7 @@ async function main() {
       try {
         resetLedgerShadowFlagCache();
         await db
-          .collection<Document>("gameConfig")
+          .collection<Document & { _id: string }>("gameConfig")
           .insertOne({ _id: "default", ledgerShadow: mode !== "shadow_off", forexEnabled: true });
         created = true;
         await db.collection<Document & { _id: string }>("gameState").insertOne({
