@@ -1265,39 +1265,45 @@ describe("Russian NPC bill votes use the active constitution", () => {
       "federationCouncil",
       "federationCouncilMember",
     ],
-  ])("casts only votes from active national deputies: %s", async (markers, chamber, officeType) => {
-    const npp = makeNPP({ countryId: "RU" });
-    const foreign = makeNPP();
-    const obsolete = makeNPP({ countryId: "RU" });
-    const db = makeMockDb();
-    const bill = makeBill({ countryId: "RU", currentChamber: chamber });
-    const layout = resolveCountryOfficeLayout(
-      getCountryConfigForRuntime("RU", "1991-default", markers)
-    );
-    const ctx = makeCtx(db, {
-      preset: "1991-default",
-      runtimeCountryOffices: new Map([["RU", layout]]),
-      activeBills: [bill],
-      nppMap: new Map([npp, foreign, obsolete].map((n) => [n._id.toString(), n])),
-      nppOfficials: [
-        makeOfficial(npp._id, "house", { countryId: "RU", officeType, seatsHeld: 3 }),
-        makeOfficial(foreign._id, "house", { officeType }),
-        makeOfficial(obsolete._id, "house", { countryId: "RU", officeType: "supremeSovietDeputy" }),
-      ],
-    });
-    const { processBillVoting } = await import("./billVoting");
-    expect(await processBillVoting(ctx)).toBe(1);
-    expect(db._calls.bills).toHaveLength(1);
-    const update = db._calls.bills[0][1] as {
-      $set: Record<string, unknown>;
-      $inc: Record<string, number>;
-    };
-    expect(Object.keys(update.$set)).toContain(`votes.npp_${npp._id}`);
-    expect(Object.keys(update.$set)).not.toContain(`votes.npp_${foreign._id}`);
-    expect(Object.keys(update.$set)).not.toContain(`votes.npp_${obsolete._id}`);
-    expect(Object.values(update.$inc).reduce((sum, value) => sum + value, 0)).toBe(3);
-    expect(db.collection).not.toHaveBeenCalledWith("countryGameStates");
-  });
+  ] as const)(
+    "casts only votes from active national deputies: %s",
+    async (markers, chamber, officeType) => {
+      const npp = makeNPP({ countryId: "RU" });
+      const foreign = makeNPP();
+      const obsolete = makeNPP({ countryId: "RU" });
+      const db = makeMockDb();
+      const bill = makeBill({ countryId: "RU", currentChamber: chamber });
+      const layout = resolveCountryOfficeLayout(
+        getCountryConfigForRuntime("RU", "1991-default", markers)
+      );
+      const ctx = makeCtx(db, {
+        preset: "1991-default",
+        runtimeCountryOffices: new Map([["RU", layout]]),
+        activeBills: [bill],
+        nppMap: new Map([npp, foreign, obsolete].map((n) => [n._id.toString(), n])),
+        nppOfficials: [
+          makeOfficial(npp._id, "house", { countryId: "RU", officeType, seatsHeld: 3 }),
+          makeOfficial(foreign._id, "house", { officeType }),
+          makeOfficial(obsolete._id, "house", {
+            countryId: "RU",
+            officeType: "supremeSovietDeputy",
+          }),
+        ],
+      });
+      const { processBillVoting } = await import("./billVoting");
+      expect(await processBillVoting(ctx)).toBe(1);
+      expect(db._calls.bills).toHaveLength(1);
+      const update = db._calls.bills[0][1] as {
+        $set: Record<string, unknown>;
+        $inc: Record<string, number>;
+      };
+      expect(Object.keys(update.$set)).toContain(`votes.npp_${npp._id}`);
+      expect(Object.keys(update.$set)).not.toContain(`votes.npp_${foreign._id}`);
+      expect(Object.keys(update.$set)).not.toContain(`votes.npp_${obsolete._id}`);
+      expect(Object.values(update.$inc).reduce((sum, value) => sum + value, 0)).toBe(3);
+      expect(db.collection).not.toHaveBeenCalledWith("countryGameStates");
+    }
+  );
 
   it.each(
     (["active_both", "veto_override"] as const).flatMap((status) =>
