@@ -451,6 +451,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         >
           {canEnter && election.hungarianAssemblyRound?.round === 1 && (
             <Hu1991ConstituencyPicker
+              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
               regionId={election.state}
               value={huDistrictId}
               onChange={setHuDistrictId}
@@ -531,6 +532,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         >
           {canEnter && election.hungarianAssemblyRound?.round === 1 && (
             <Hu1991ConstituencyPicker
+              allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
               regionId={election.state}
               value={huDistrictId}
               onChange={setHuDistrictId}
@@ -598,6 +600,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
         {canEnter && election.hungarianAssemblyRound?.round === 1 && (
           <Hu1991ConstituencyPicker
+            allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
             regionId={election.state}
             value={huDistrictId}
             onChange={setHuDistrictId}

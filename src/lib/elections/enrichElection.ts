@@ -1399,6 +1399,9 @@ export async function _enrichElection(
           hungarianAssemblyRound: {
             ruleVersion: election.hungarianAssemblyRound.ruleVersion,
             round: election.hungarianAssemblyRound.round,
+            ...(election.hungarianAssemblyRound.byElection
+              ? { vacancyDistrictIds: election.hungarianAssemblyRound.byElection.districtIds }
+              : {}),
           },
         }
       : {}),

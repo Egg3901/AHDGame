@@ -118,6 +118,18 @@ export async function materializeHu1991PlayerFiling(input: {
     !["assemblyDelegate", "assemblyDeputy", "primeMinister"].includes(character.currentOffice.type)
   )
     return reject("incompatible-office");
+  if (
+    election.hungarianAssemblyRound!.byElection &&
+    (await db.collection("electedOfficials").findOne(
+      {
+        countryId: "HU",
+        officeType: { $in: ["assemblyDelegate", "assemblyDeputy"] },
+        characterId: candidate.characterId,
+      },
+      { session, projection: { _id: 1 } }
+    ))
+  )
+    return reject("incompatible-office");
   if (candidate.party !== "independent") {
     const sequence = Number(candidate.party);
     if (!Number.isSafeInteger(sequence) || sequence < 1 || String(sequence) !== candidate.party)
@@ -135,7 +147,15 @@ export async function materializeHu1991PlayerFiling(input: {
     if (!party || party.regimeStatus === "banned") return reject("unregistered-party");
   }
   const receiptId = election.hungarianAssemblyRound!.receiptId;
-  if (receiptId !== `HU:mixed1989:${election.cycle}`) return reject("invalid-ballot");
+  const byElection = election.hungarianAssemblyRound!.byElection;
+  const expectedReceipt = byElection
+    ? `${byElection.parentReceiptId}:by-election:${byElection.generation}`
+    : `HU:mixed1989:${election.cycle}`;
+  if (
+    receiptId !== expectedReceipt ||
+    (byElection && byElection.parentReceiptId !== `HU:mixed1989:${election.cycle}`)
+  )
+    return reject("invalid-ballot");
   const locks = db.collection<FilingLock>(HU_1991_FILING_LOCKS_COLLECTION);
   const ownerId = candidate.characterId.toHexString();
   const ownerKey = `${receiptId}:player:${ownerId}`;
@@ -191,6 +211,7 @@ export async function materializeHu1991PlayerFiling(input: {
     regionId: election.state,
     partyId: candidate.party,
     requestedId: prior?.hungarianAssemblyNomination?.constituencyId ?? requestedDistrictId,
+    allowedDistrictIds: byElection?.districtIds,
     otherFilings: peers.map((row) => ({
       personId: row.ownerId,
       partyId: row.party,
