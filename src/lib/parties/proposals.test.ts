@@ -852,6 +852,46 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     merge: { targetPartyId: targetId },
   } as unknown as CommitteeProposal;
 
+  it("moves the absorbed party's live candidacies and campaigns to the target (ticket 1376)", async () => {
+    const db = setup({ govDoc: null, orgRows: [{ stateId: "D", organization: 100 }] });
+    const memberId = new ObjectId();
+    const nppId = new ObjectId();
+    const rows = (docs: unknown[]) => ({
+      toArray: vi.fn().mockResolvedValue(docs),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+    db.collection("characters");
+    db.collectionMocks.characters!.find.mockImplementation((filter: { party?: string }) =>
+      rows(filter.party === "1" ? [{ _id: memberId }] : [])
+    );
+    db.collection("npps");
+    db.collectionMocks.npps!.find.mockImplementation((filter: { party?: string }) =>
+      rows(
+        filter.party === "1"
+          ? [{ _id: nppId, homeState: "D", party: "1", favorability: 50, retiredAt: null }]
+          : []
+      )
+    );
+
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+
+    const candidacies = db.collection("electionCandidates").updateMany.mock.calls;
+    expect(candidacies).toContainEqual([
+      { party: "1", status: "active", characterId: { $in: [memberId, nppId] } },
+      { $set: { party: "3" } },
+    ]);
+    const campaigns = db.collection("campaigns").updateMany.mock.calls[0];
+    expect(campaigns?.[0]).toEqual({
+      party: "1",
+      candidateId: { $in: [memberId, nppId] },
+      status: { $ne: "archived" },
+    });
+    expect((campaigns?.[1] as { $set: { party: string } }).$set.party).toBe("3");
+  });
+
   it("re-points the absorbed party's elected officials to the target (country-scoped)", async () => {
     const db = setup({ govDoc: null });
     await processMergeProposal(db as unknown as Db, proposal, 120);

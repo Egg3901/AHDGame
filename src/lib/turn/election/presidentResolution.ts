@@ -40,6 +40,7 @@ import { captureElectionResultSnapshot } from "@/lib/elections/liveResults/captu
 import { logger } from "../../observability/logger";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
+import { loadSurvivingPartyResolver } from "@/lib/parties/survivingParty";
 
 function recoverUnitVotesFromSnapshots(
   unitTurnSnapshots: ElectionVoteTally["unitTurnSnapshots"],
@@ -402,6 +403,10 @@ export async function resolvePresidentElection(
       ...(seatingRetryOnly ? {} : { status: "active" }),
     })
     .toArray();
+  // A candidacy filed under a party that has since merged away seats into the
+  // party that absorbed it (ticket 1376).
+  const survivingParty = await loadSurvivingPartyResolver(db, election.countryId ?? "US");
+  for (const c of candidates) c.party = survivingParty(c.party) ?? c.party;
   const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
 
   let winnerId: string;
