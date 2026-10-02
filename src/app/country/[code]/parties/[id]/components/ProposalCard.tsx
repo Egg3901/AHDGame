@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import type { ProposalView } from "@/lib/parties/dto/partyView";
+import { MergerNppWarning } from "./MergerNppWarning";
 
 function VoteBar({ yes, no, notVoted }: { yes: number; no: number; notVoted: number }) {
   const total = yes + no + notVoted;
@@ -197,6 +198,8 @@ export function ProposalCard({
         {isOpen && ` · expires turn ${proposal.expiresAtTurn}`}
         {!isOpen && proposal.resolvedAtTurn && ` · resolved turn ${proposal.resolvedAtTurn}`}
       </div>
+
+      {isOpen && proposal.type === "merge" && <MergerNppWarning />}
 
       {/* Vote summaries */}
       <div className="space-y-2">
