@@ -105,6 +105,7 @@ describe("reformActions", () => {
   // ── legalizePartyAction ──────────────────────────────────────────────────
 
   it("legalizeParty: applies cost+gain, flips party banned→approved, sets boost+cooldown", async () => {
+    db.collectionMocks.politicalParties.findOne.mockResolvedValue({ _id: new ObjectId() });
     await legalizePartyAction(makeContext(db), 7);
 
     // Confidence + popular adjusted on leader-state
@@ -124,6 +125,18 @@ describe("reformActions", () => {
       return cc.legalizeParty?.perPartyId?.[7] === 268;
     });
     expect(cd).toBeDefined();
+  });
+
+  it("legalizeParty: refuses a party that is not banned here, charging nothing", async () => {
+    db.collectionMocks.politicalParties.findOne.mockResolvedValue(null);
+    await expect(legalizePartyAction(makeContext(db), 7)).rejects.toThrow(/is not banned/);
+    expect(db.collectionMocks.politicalParties.findOne).toHaveBeenCalledWith(
+      { sequentialId: 7, countryId: "CN", regimeStatus: "banned" },
+      expect.anything()
+    );
+    expect(db.collectionMocks.countryLeaderStates.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(db.collectionMocks.politicalParties.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.countryState.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it("legalizeParty: throws when partyId is already on cooldown", async () => {

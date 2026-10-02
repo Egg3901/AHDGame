@@ -228,7 +228,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Wrapped in try/catch so MockDb-shaped tests that don't stub the
     // politicalParties collection still get the rest of the diagnostic
     // surface back instead of a 500.
-    let bannedParties: { sequentialId: number; name: string; abbreviation?: string }[] = [];
+    let bannedParties: {
+      sequentialId: number;
+      name: string;
+      abbreviation?: string;
+      /** Turn this party's own legalize cooldown ends, when it is still running. */
+      legalizeCooldownUntil?: number;
+    }[] = [];
     try {
       bannedParties = await db
         .collection<{ sequentialId: number; name: string; abbreviation?: string }>(
@@ -243,6 +249,14 @@ export async function GET(request: Request, { params }: RouteParams) {
         })
         .sort({ sequentialId: 1 })
         .toArray();
+      // legalizeParty cools down per party: mark the ones the picker must hold.
+      const legalizeUntil = runtime.reformCooldowns?.legalizeParty?.perPartyId ?? {};
+      bannedParties = bannedParties.map((p) => {
+        const until = legalizeUntil[p.sequentialId];
+        return typeof until === "number" && until > currentTurn
+          ? { ...p, legalizeCooldownUntil: until }
+          : p;
+      });
     } catch (err) {
       console.warn(`${countryId} banned-parties lookup skipped:`, err);
     }
