@@ -9,7 +9,7 @@ import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
-import type { Bond, Corporation, CentralBank, Character, NPP } from "@/lib/db/types";
+import type { Bond, Corporation, CentralBank, Character } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -64,6 +64,7 @@ import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "@/lib/bonds/
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
 import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
+import { payNppBondReturns, type NppBondReturns } from "./nppBondCash";
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -246,11 +247,21 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // v3 autonomous NPP bondholders: coupon/maturity are INVESTMENT returns, so
   // they accumulate in ₳ (anchor) and credit the personal forex account
   // (`nppInvestmentCashAnchor`) — NOT the campaign war chest. No LoC garnish /
-  // tx-log / national accounting (mirrors the NPP investment-account isolation).
+  // national accounting (mirrors the NPP investment-account isolation).
   const nppPaymentsAnchor = new Map<string, number>(); // nppId -> coupon/maturity (₳)
-  function addNppPayment(nppIdStr: string, amountAnchor: number, _bondCurrency: CurrencyCode) {
+  const nppReturnKinds = new Map<string, NppBondReturns>();
+  function addNppPayment(
+    nppIdStr: string,
+    amountAnchor: number,
+    _bondCurrency: CurrencyCode,
+    kind: "coupon" | "maturity"
+  ) {
     if (amountAnchor <= 0) return;
     nppPaymentsAnchor.set(nppIdStr, (nppPaymentsAnchor.get(nppIdStr) ?? 0) + amountAnchor);
+    const returns = nppReturnKinds.get(nppIdStr) ?? { total: 0, coupon: 0, maturity: 0 };
+    returns.total = nppPaymentsAnchor.get(nppIdStr)!;
+    returns[kind] += amountAnchor;
+    nppReturnKinds.set(nppIdStr, returns);
   }
   const corpPayments = new Map<string, number>(); // corporationId (holder) -> coupon amount (₳)
   const corpCouponCosts = new Map<string, number>(); // corporationId (issuer) -> total coupon cost (₳)
@@ -494,8 +505,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
           },
         });
       } else if (holder.nppId) {
-        // v3 autonomous NPP bondholder coupon (home-currency only, no tx-log).
-        addNppPayment(holder.nppId.toString(), paymentAnchor, bondCcy);
+        // v3 autonomous NPP bondholder coupon to its separate investment account.
+        addNppPayment(holder.nppId.toString(), paymentAnchor, bondCcy, "coupon");
       }
 
       totalCouponsPaid += paymentAnchor;
@@ -1088,7 +1099,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         });
       } else if (holder.nppId) {
         // v3 autonomous NPP bondholder maturity face-value return.
-        addNppPayment(holder.nppId.toString(), faceValueReturnAnchor, bondCcy);
+        addNppPayment(holder.nppId.toString(), faceValueReturnAnchor, bondCcy, "maturity");
       }
     }
 
@@ -1218,16 +1229,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // NOT campaign funds. Isolated bulkWrite — no LoC garnish / national
   // accounting (mirrors the NPP investment-account isolation).
   if (nppPaymentsAnchor.size > 0) {
-    const nppOps = [...nppPaymentsAnchor.entries()].map(([nppIdStr, amountAnchor]) => ({
-      updateOne: {
-        filter: { _id: new ObjectId(nppIdStr) },
-        update: {
-          $inc: { nppInvestmentCashAnchor: Math.round(amountAnchor * 100) / 100 },
-          $set: { updatedAt: now },
-        },
-      },
-    }));
-    if (nppOps.length > 0) await db.collection<NPP>("npps").bulkWrite(nppOps);
+    await payNppBondReturns(db, nppReturnKinds, turn, now);
   }
 
   // Pay character coupon income (in the bond's issuing country currency).
