@@ -57,7 +57,8 @@ describe.skipIf(!uri)(
         commandBytes += BSON.calculateObjectSize(event.command);
       });
       client.on("commandSucceeded", (event) => {
-        replyBytes += BSON.calculateObjectSize(event.reply);
+        // BSON wrapper adds five document bytes plus the type and "reply" key.
+        replyBytes += BSON.calculateObjectSize({ reply: event.reply }) - 12;
       });
       await client.connect();
       const hello = await client.db("admin").command({ hello: 1 });
