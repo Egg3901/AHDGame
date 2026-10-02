@@ -92,7 +92,7 @@ async function main() {
           });
           await db.collection("bonds").insertOne({
             _id: new ObjectId("000000000000000000000991"),
-            issuerType: "corporate",
+            issuerType: "corporation",
             countryId: "US",
             corporationId: issuerId,
             issuerName: "Synthetic issuer",
@@ -103,7 +103,7 @@ async function main() {
             publicFloat: 0,
             centralBankHoldings: 0,
             holders: actors.map((actor) => ({ nppId: actor._id, units: 1 })),
-            issuedTurn: 1,
+            issuedAtTurn: 1,
             maturityTurns: 96,
             maturityTurn: mode === "processor_maturity" ? 49 : 97,
             matured: false,
