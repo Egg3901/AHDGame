@@ -48,6 +48,8 @@ const TARGET = {
   sanctionedBy: [],
   pointCostLocal: 76_000_000,
   turnCapCostLocal: 380_000_000,
+  playMaxPoints: 10,
+  playCapCostLocal: 760_000_000,
   costToGate: 2_888_000_000,
   resistsAtHalfStrength: false,
   joinCountdown: null,
@@ -85,7 +87,7 @@ describe("NationDossier", () => {
       sanctionedBy: ["WARSAW_PACT"],
     });
     expect(screen.getByText(/half strength/i)).toBeTruthy();
-    expect(screen.getByText(/7\.5/)).toBeTruthy();
+    expect(screen.getByText(/movement ceiling here is raised to 7\.5/)).toBeTruthy();
     expect(screen.getByText(/WARSAW_PACT/)).toBeTruthy();
   });
 
@@ -317,8 +319,79 @@ describe("NationDossier costs and the display-currency preference", () => {
         onCommitted={() => {}}
       />
     );
-    // 76m a point, so the 5-point ceiling is 380m; 500m is past it.
+    // 76m a point, so the 5-point ceiling is 380m; 500m is past it but still
+    // inside one play's 10-point cap, so the extra counts against a rival.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "500000000" } });
-    expect(screen.getByText(/past the 5-point ceiling/i)).toBeTruthy();
+    expect(screen.getByText(/past the 5 point limit for one turn/i)).toBeTruthy();
+    expect(screen.getByText(/only counts if a rival pushes back/i)).toBeTruthy();
+  });
+});
+
+describe("NationDossier per-play cap (ticket #1371)", () => {
+  const renderForm = (over: Partial<InfluenceTarget> = {}) =>
+    render(
+      <NationDossier
+        view={{ ...VIEW, fundBalanceLocal: 5_000_000_000 } as OrgInfluenceView}
+        target={{ ...TARGET, ...over } as InfluenceTarget}
+        orgId="NATO"
+        viewerCountryId="US"
+        onCommitted={() => {}}
+      />
+    );
+  const previewLine = () =>
+    screen.getByText((_, el) => {
+      const t = el?.textContent ?? "";
+      return el?.tagName === "P" && t.startsWith("Buys");
+    });
+
+  it("caps the preview at one play's maximum and says the rest is wasted", () => {
+    // The old line read "buys nothing unless a rival pushes back", so players
+    // kept paying past the play cap. Past it the money buys nothing even
+    // against a rival.
+    renderForm();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "1b" } });
+    expect(previewLine().textContent).toContain("10.00");
+    expect(previewLine().textContent).toMatch(/one play lands at most 10 points here/i);
+    expect(previewLine().textContent).toContain("$760.0M");
+    expect(previewLine().textContent).toMatch(/second play this turn/i);
+    expect(previewLine().textContent).not.toMatch(/rival pushes back/i);
+  });
+
+  it("halves the play cap on a nation resisting at half strength", () => {
+    renderForm({ resistsAtHalfStrength: true, pointCostLocal: 152_000_000, playMaxPoints: 5 });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "1b" } });
+    expect(previewLine().textContent).toContain("5.00");
+    expect(previewLine().textContent).toMatch(/at most 5 points here/i);
+  });
+
+  it("uses the raised flashpoint limit for the turn ceiling", () => {
+    // 600m at 76m a point is 7.89 points: past the flashpoint's 7.5 and still
+    // inside one play's 10-point cap.
+    renderForm({ crisis: { turnsRemaining: 4, movementCap: 7.5 } });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "600m" } });
+    expect(previewLine().textContent).toMatch(/past the 7\.5 point limit/i);
+
+    // 500m is 6.58 points: past 5, but inside the flashpoint's 7.5.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "500m" } });
+    expect(previewLine().textContent).not.toMatch(/point limit/i);
+  });
+
+  it("says a point moves less than one share once nothing is uncommitted", () => {
+    renderForm({ shares: { WEST: 26, EAST: 74 }, nonAligned: 0 });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "76m" } });
+    expect(previewLine().textContent).toMatch(/none of Yugoslavia is uncommitted/i);
+  });
+
+  it("explains cancelling and stacking next to the price", () => {
+    renderForm({ crisis: { turnsRemaining: 4, movementCap: 7.5 }, turnCapCostLocal: 570_000_000 });
+    const price = screen.getByText((_, el) => {
+      const t = el?.textContent ?? "";
+      return el?.tagName === "P" && t.startsWith("Yugoslavia costs");
+    });
+    expect(price.textContent).toMatch(/the full 7\.5 points a turn allows/i);
+    expect(price.textContent).toMatch(/cancels yours point for point/i);
+    expect(price.textContent).toMatch(/at most 10 points/i);
+    expect(price.textContent).toMatch(/second play in the same turn adds its own/i);
+    expect(price.textContent).not.toMatch(/[\u2013\u2014]/);
   });
 });
