@@ -34,14 +34,14 @@ export const iterationsPages: readonly WikiSeedPage[] = [
     slug: "iteration-1",
     title: "Iteration 1",
     description:
-      "The current 1953-start world: German reunification by war, five American presidents, a fractured Cold War, and private fortunes larger than public exchanges.",
+      "The current 1953-start world: German reunification by war, seven American presidents, a fractured Cold War, and private fortunes larger than public exchanges.",
     content: iteration1Content,
     category: "iterations",
     extraTags: ["history", "iteration", "cold-war", "live-world"],
     featured: false,
     difficulty: "beginner",
     contentType: "reference",
-    estimatedReadTime: 18,
-    lastUpdated: "2026-10-01",
+    estimatedReadTime: 27,
+    lastUpdated: "2026-10-02",
   },
 ];
