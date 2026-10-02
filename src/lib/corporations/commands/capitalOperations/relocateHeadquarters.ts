@@ -12,6 +12,7 @@ import type { Corporation, State } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import type { CountryId } from "@/lib/constants/countries";
+import { commandEconomyRelocationBlock } from "@/lib/corporations/relocationCommandEconomyGate";
 import {
   COUNTRY_CURRENCY_MAP,
   SECTOR_FX_SPREAD,
@@ -152,6 +153,16 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         { error: "Corporation has no resolvable home country" },
         { status: 400 }
       );
+    }
+
+    const commandEconomyBlock = await commandEconomyRelocationBlock(
+      db,
+      corporation,
+      corpCountryId,
+      targetState.countryId
+    );
+    if (commandEconomyBlock) {
+      return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
     }
 
     // Load FX rates once — used for cost math and any currency conversion.
