@@ -22,6 +22,7 @@ import {
   CASUALTY_RATE_SCALE,
   FRONT_SUPPLY,
 } from "./config";
+import { applyReserveOdds, battleEffectiveRatio } from "./rules/battleFortune";
 import { readinessBaselineOf } from "./readinessDrift";
 import { EQUIPMENT_TRACK_MAX } from "./arsenal";
 import {
@@ -783,11 +784,7 @@ export function forecast(ctx: BattleContext, frontId: string, seed: number): For
   const sup = P.sup;
   const ownStr = P.combatMass * P.supportBuff * P.flankBuff * P.tcBuff * am.total * sup.effMult;
   const enemyStr = B.mass * bm.total * front.terr * (1 - deepDegrade) * P.genEnemyMin;
-  let ratio = ownStr / Math.max(1, ownStr + enemyStr);
-  ratio = Math.max(
-    0.02,
-    Math.min(0.98, ratio + P.reserveRes * 0.1 * (1 - Math.abs(ratio - 0.5) * 2))
-  );
+  const ratio = applyReserveOdds(ownStr / Math.max(1, ownStr + enemyStr), P.reserveRes, 0);
   return {
     front,
     enemy,
@@ -835,6 +832,20 @@ export interface UnitResult {
   materiel: number;
   xp: number;
   promo: boolean;
+}
+
+/** Scale every form of battle wear when a formation breaks contact early. */
+export function softenRetreatUnit(
+  result: UnitResult,
+  openingReadiness: number,
+  multiplier = ATTRITION.retreatCasualtyMult
+): UnitResult {
+  return {
+    ...result,
+    casualties: Math.round(result.casualties * multiplier),
+    readiness: Math.round(openingReadiness - (openingReadiness - result.readiness) * multiplier),
+    materiel: Math.round(result.materiel * multiplier),
+  };
 }
 export interface BattleResult {
   frontId: string;
@@ -1237,10 +1248,10 @@ export function battleForecast(
     front.terr *
     (1 - aDeep) *
     PA.genEnemyMin;
-  let ratio = attStr / Math.max(1, attStr + defStr);
-  ratio = Math.max(
-    0.02,
-    Math.min(0.98, ratio + PA.reserveRes * 0.1 * (1 - Math.abs(ratio - 0.5) * 2))
+  const ratio = applyReserveOdds(
+    attStr / Math.max(1, attStr + defStr),
+    PA.reserveRes,
+    PD.reserveRes
   );
   return {
     front,
@@ -1322,18 +1333,11 @@ export function resolvePvpBattle(
    * the casualty split too: the side that had the good day must not also be billed
    * for the bleeding its own luck spared it.
    *
-   * Bounded because three separate terms downstream read it as roughly 0..1 and go
-   * wrong in different ways past that: the round loop's damage multipliers
-   * (`0.5 + effRatio`, `1.5 - effRatio`) would go negative and start HEALING a side,
-   * `unitOutcomes`' readiness drop would invert, and its xp award `16 + ratio * 20`
-   * would go negative below -0.8. At -0.5..1.5 all three stay the right way up, and
-   * a side's xp bottoms out at 6 rather than going negative.
-   *
-   * At the tuned spread the clamp is slack — `ratio` is already held to 0.02..0.98, so
-   * the widest draw lands at -0.48 — but it keeps a future retune from silently
-   * inverting a battle instead of merely making it swingier.
+   * The fortune draw still spans the full calibration window, but the ratio fed into
+   * damage is capped around parity. Luck decides which side has the better day; it no
+   * longer turns nearly half of even battles into a decisive victory or rout.
    */
-  const effRatio = Math.max(-0.5, Math.min(1.5, ratio + (r() - 0.5) * 2 * fortuneSpread));
+  const effRatio = battleEffectiveRatio(ratio, r(), fortuneSpread, ATTRITION.battleSeveritySpread);
   let f = 100,
     h = 100;
   let retreat: PvpBattleResult["retreat"] = null;
@@ -1424,17 +1428,20 @@ export function resolvePvpBattle(
   // casualties it would have fighting the engagement out.
   const softenIfRetreated = (
     outcome: { unitResults: UnitResult[]; loss: number },
-    forSide: "attacker" | "defender"
+    forSide: "attacker" | "defender",
+    sides: BattleSide[]
   ) => {
     if (retreat?.side !== forSide) return outcome;
-    const unitResults = outcome.unitResults.map((u) => ({
-      ...u,
-      casualties: Math.round(u.casualties * ATTRITION.retreatCasualtyMult),
-    }));
+    const openingReadiness = new Map(
+      sides.flatMap((side) => side.units.map((unit) => [String(unit._id), unit.readiness] as const))
+    );
+    const unitResults = outcome.unitResults.map((u) =>
+      softenRetreatUnit(u, openingReadiness.get(u.id) ?? u.readiness)
+    );
     return { unitResults, loss: unitResults.reduce((a, u) => a + u.casualties, 0) };
   };
-  const attFinal = softenIfRetreated(attOut, "attacker");
-  const defFinal = softenIfRetreated(defOut, "defender");
+  const attFinal = softenIfRetreated(attOut, "attacker", attackers);
+  const defFinal = softenIfRetreated(defOut, "defender", defenders);
 
   return {
     theaterId,

@@ -13,6 +13,7 @@ export const TURN_STATUS_PROJECTION = {
   preIterationTurns: 1,
   "preIteration.active": 1,
   preset: 1,
+  iteration: 1,
   isActive: 1,
   isProcessing: 1,
   lastTurnProcessed: 1,

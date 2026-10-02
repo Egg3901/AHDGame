@@ -11,6 +11,8 @@ const resolveSpy = vi.fn();
 const budgetSpy = vi.fn();
 const conflictUpdateSpy = vi.fn();
 const offerUpdateSpy = vi.fn();
+const transactionSession = { id: "peace-transaction" };
+let transactionsAvailable = true;
 /** modifiedCount the offer-claim write returns; 0 means someone else accepted first. */
 let claimResult = 1;
 
@@ -52,11 +54,17 @@ vi.mock("@/lib/db/collections/peaceOffers", () => ({
     },
   }),
 }));
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: (
+    body: (session: unknown) => Promise<unknown>,
+    fallback: () => Promise<unknown>
+  ) => (transactionsAvailable ? body(transactionSession) : fallback()),
+}));
 // Budget self-heal is orthogonal to what these tests assert (the indemnity
 // $inc pair still fires via the db mock's updateOne). Stub it so it does not
 // need a findOne on the minimal db mock.
 vi.mock("@/lib/turn/ensureFederalBudget", () => ({
-  ensureFederalBudget: vi.fn().mockResolvedValue(null),
+  ensureFederalBudget: vi.fn().mockResolvedValue({}),
 }));
 
 const db = {
@@ -111,6 +119,7 @@ function budgetInc(country: string): number | undefined {
 beforeEach(() => {
   vi.clearAllMocks();
   claimResult = 1;
+  transactionsAvailable = true;
   convertSpy.mockImplementation((_f, _t, amount) => amount);
 });
 
@@ -160,6 +169,28 @@ describe("the indemnity", () => {
     for (const call of budgetSpy.mock.calls) {
       expect(JSON.stringify(call)).not.toMatch(/principal/);
     }
+  });
+
+  it("guards each negotiated treasury leg with its durable offer receipt", async () => {
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const treasuryCalls = budgetSpy.mock.calls.filter((call) => call[1]?.$inc?.treasuryBalance);
+
+    expect(treasuryCalls).toHaveLength(2);
+    for (const [filter, update, options] of treasuryCalls) {
+      expect(filter.appliedPeaceIndemnityOfferIds).toEqual({ $ne: "o1" });
+      expect(update.$addToSet.appliedPeaceIndemnityOfferIds).toBe("o1");
+      expect(options).toEqual({ session: transactionSession });
+    }
+  });
+
+  it("keeps indemnities functional and replay-safe on standalone Mongo", async () => {
+    transactionsAvailable = false;
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const treasuryCalls = budgetSpy.mock.calls.filter((call) => call[1]?.$inc?.treasuryBalance);
+
+    expect(treasuryCalls).toHaveLength(2);
+    expect(treasuryCalls.every((call) => call[2] === undefined)).toBe(true);
+    expect(treasuryCalls.every((call) => call[1].$addToSet != null)).toBe(true);
   });
 
   it("pays into debt rather than refusing", async () => {
@@ -212,8 +243,11 @@ describe("leaving the war", () => {
   it("marks the offer accepted, with who and when", async () => {
     await acceptPeace(db, offer(), makeConflict(), 40, "c1");
     const [, update] = offerUpdateSpy.mock.calls[0];
-    expect(update).toEqual({
-      $set: { status: "accepted", resolvedBy: "c1", resolvedTurn: 40 },
+    expect(update.$set).toMatchObject({
+      status: "accepted",
+      resolvedBy: "c1",
+      resolvedTurn: 40,
+      application: { phase: "completed", acceptedBy: "c1", acceptedTurn: 40 },
     });
   });
 
@@ -245,7 +279,13 @@ describe("when the leaver was the last of its side", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "A",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("names side B the winner when side A is the one that empties", async () => {
@@ -253,7 +293,13 @@ describe("when the leaver was the last of its side", () => {
     duel.sideA.countries = ["UK"];
     const r = await acceptPeace(db, offer(), duel, 40, "c1");
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("removes the leaver from the roster BEFORE resolving", async () => {
@@ -283,6 +329,69 @@ describe("a double accept", () => {
   it("reports applied on the accept that wins", async () => {
     const r = await acceptPeace(db, offer(), makeConflict(), 40, "c1");
     expect(r.applied).toBe(true);
+  });
+
+  it("fails closed on a malformed durable phase instead of skipping the term", async () => {
+    const malformed = offer({
+      status: "accepted",
+      application: {
+        phase: "unknown",
+        acceptedBy: "c1",
+        acceptedTurn: 40,
+        leavers: [],
+        trucePairs: [],
+        resolutionWinner: null,
+        attackerNation: "US",
+        defenderNation: "CN",
+      } as never,
+    });
+
+    await expect(acceptPeace(db, malformed, makeConflict(), 40, "c1")).rejects.toThrow(
+      /invalid application phase/
+    );
+    expect(budgetSpy).not.toHaveBeenCalled();
+  });
+
+  it("resumes cleanup from the frozen plan after the roster was partly edited", async () => {
+    const interrupted = offer({
+      status: "accepted",
+      application: {
+        phase: "term_applied",
+        acceptedBy: "c1",
+        acceptedTurn: 40,
+        leavers: [{ countryId: "UK", side: "A" }],
+        trucePairs: [{ first: "UK", second: "CN" }],
+        resolutionWinner: null,
+        attackerNation: "US",
+        defenderNation: "CN",
+      },
+    });
+    const partlyEdited = makeConflict();
+    partlyEdited.sideA.countries = ["US"];
+
+    const result = await acceptPeace(db, interrupted, partlyEdited, 41, "c1");
+
+    expect(result).toEqual({ applied: true, resolved: false });
+    expect(budgetSpy).not.toHaveBeenCalled();
+    expect(standDownSpy).toHaveBeenCalledWith(expect.anything(), partlyEdited, "UK");
+    expect(recordTruceSpy).toHaveBeenCalledWith(expect.anything(), "UK", "CN", 40);
+  });
+});
+
+describe("the durable term receipt", () => {
+  it("commits both indemnity writes with the same transaction session", async () => {
+    await acceptPeace(db, offer(), makeConflict(), 40, "c1");
+    const treasuryWrites = budgetSpy.mock.calls.filter((call) => call[1]?.$inc?.treasuryBalance);
+    expect(treasuryWrites).toHaveLength(2);
+    expect(treasuryWrites.every((call) => call[2]?.session === transactionSession)).toBe(true);
+    expect(
+      offerUpdateSpy.mock.calls.some(
+        (call) =>
+          call[0]?.["application.phase"] === "claimed" &&
+          call[1]?.$set?.["application.phase"] === "term_applied" &&
+          call[2]?.session === transactionSession
+      )
+    ).toBe(true);
   });
 });
 
@@ -322,7 +431,13 @@ describe("treaty release", () => {
 
   it("resolves the war when the principal and its allies were the whole side", async () => {
     const res = await acceptPeace(db, ddLeaves(), pactConflict(), 100, "c1");
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 100);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "A",
+      100,
+      expect.objectContaining({ endingType: "peace" })
+    );
     expect(res.resolved).toBe(true);
   });
 
@@ -467,7 +582,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("names the same victor when the offer ran the other way", async () => {
@@ -485,7 +606,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "B", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "B",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("hands the war to side A when the side B principal is the one leaving", async () => {
@@ -502,7 +629,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "A", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "A",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("ends the war with NO victor on a white peace", async () => {
@@ -521,7 +654,13 @@ describe("a principal-to-principal peace", () => {
       "c1"
     );
     expect(r.resolved).toBe(true);
-    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), expect.anything(), "stalemate", 40);
+    expect(resolveSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "stalemate",
+      40,
+      expect.objectContaining({ endingType: "peace" })
+    );
   });
 
   it("leaves the war running when the other party is only a guest", async () => {

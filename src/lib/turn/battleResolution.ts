@@ -5,7 +5,7 @@
 // The winner then pushes the conflict's front line toward the loser's pole; a front
 // driven all the way ends the war. An unopposed offensive walks forward unopposed.
 // Deterministic — seeded by declaration id + turn.
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getCharacterGeneralsCollection } from "@/lib/db/collections/characterGenerals";
 import { levelGeneral } from "@/lib/military/generals";
@@ -52,6 +52,15 @@ import { nextControlSample } from "@/lib/military/warApproval";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
 import { eligiblePoleVictor } from "@/lib/military/rules/warResolution";
 import { finalizePoleVictory } from "@/lib/military/finalizePoleVictory";
+import { compareBattleUnits } from "@/lib/military/rules/battleOrder";
+import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+
+function persistBattleResult<T>(body: (session?: ClientSession) => Promise<T>): Promise<T> {
+  return runWithOptionalTransaction(
+    (session) => body(session),
+    () => body()
+  );
+}
 
 /**
  * Apply a side's outcome to its live units + the generals who led them.
@@ -86,7 +95,8 @@ async function persistSide(
   db: Db,
   side: BattleSide,
   outcome: SideOutcome,
-  sideWon: boolean
+  sideWon: boolean,
+  session?: ClientSession
 ): Promise<BattleSide["units"]> {
   const ctx: BattleContext = {
     units: side.units,
@@ -127,7 +137,9 @@ async function persistSide(
         },
       },
     }));
-  if (ops.length) await getMilitaryUnitsCollection(db).bulkWrite(ops);
+  if (ops.length) {
+    await getMilitaryUnitsCollection(db).bulkWrite(ops, session ? { session } : undefined);
+  }
 
   // Generals level on their own profile (characterGenerals), the single source of
   // truth for their stats. Generals who led units at this front earn, and so does the
@@ -144,7 +156,9 @@ async function persistSide(
       };
     })
     .filter((op): op is NonNullable<typeof op> => op !== null);
-  if (genOps.length) await getCharacterGeneralsCollection(db).bulkWrite(genOps);
+  if (genOps.length) {
+    await getCharacterGeneralsCollection(db).bulkWrite(genOps, session ? { session } : undefined);
+  }
   return units;
 }
 
@@ -152,12 +166,14 @@ async function mark(
   db: Db,
   decl: BattleDeclarationDoc,
   status: "resolved" | "fizzled",
-  resolvedTurn: number
+  resolvedTurn: number,
+  session?: ClientSession
 ) {
-  await getBattleDeclarationsCollection(db).updateOne(
-    { _id: decl._id },
-    { $set: { status, resolvedTurn } }
-  );
+  const declarations = getBattleDeclarationsCollection(db);
+  const filter = { _id: decl._id };
+  const update = { $set: { status, resolvedTurn } };
+  if (session) await declarations.updateOne(filter, update, { session });
+  else await declarations.updateOne(filter, update);
 }
 
 /** Enrol a country on the side it fought for, so later turns resolve by roster. */
@@ -187,8 +203,9 @@ async function applyOccupation(
   winner: Side,
   margin: number,
   loserRetreated: boolean,
-  currentTurn: number
-): Promise<{ control: number; standDown: boolean }> {
+  currentTurn: number,
+  session?: ClientSession
+): Promise<{ control: number; poleVictor: Side | null }> {
   const control = occupationShift({
     control: conflict.control,
     winner,
@@ -207,11 +224,12 @@ async function applyOccupation(
     conflict.controlSample = sample;
     await getConflictsCollection(db).updateOne(
       { _id: conflict._id },
-      { $set: { controlSample: sample } }
+      { $set: { controlSample: sample } },
+      session ? { session } : undefined
     );
   }
 
-  if (control === conflict.control) return { control: conflict.control, standDown: false };
+  if (control === conflict.control) return { control: conflict.control, poleVictor: null };
 
   // Pin the front's starting line and supply baselines on the first write. A conflict
   // document predating these fields would otherwise re-derive supply off its own
@@ -259,7 +277,8 @@ async function applyOccupation(
         ...(tracksDepth && { status }),
         ...poleFields,
       },
-    }
+    },
+    session ? { session } : undefined
   );
 
   // Carry the write back onto the in-memory document. `controlStart` and the supply
@@ -282,14 +301,29 @@ async function applyOccupation(
   // early arrival remains live and the turn sweep will finish it at turn 24 if the
   // side still holds the pole. Proxy wars retain their separate three-turn hold.
   const victor = eligiblePoleVictor({ ...conflict, currentTurn });
-  if (victor) {
-    const finalStatus = await finalizePoleVictory(db, conflict, victor, currentTurn);
-    if (finalStatus) conflict.status = finalStatus;
-    // A lost claim means another turn runner already finalized the same pole. Stop
-    // this runner's remaining offensives too; the war is over in either case.
-    return { control, standDown: true };
-  }
-  return { control, standDown: false };
+  return { control, poleVictor: victor };
+}
+
+function transactionConflict(conflict: ConflictDoc): ConflictDoc {
+  return {
+    ...conflict,
+    sideA: { ...conflict.sideA, countries: [...conflict.sideA.countries] },
+    sideB: { ...conflict.sideB, countries: [...conflict.sideB.countries] },
+  };
+}
+
+async function finalizeCommittedPole(
+  db: Db,
+  conflict: ConflictDoc,
+  victor: Side | null,
+  currentTurn: number
+): Promise<boolean> {
+  if (!victor) return false;
+  const finalStatus = await finalizePoleVictory(db, conflict, victor, currentTurn);
+  if (finalStatus) conflict.status = finalStatus;
+  // A lost claim means another turn runner already finalized the same pole. Stop
+  // this runner's remaining offensives too; the war is over in either case.
+  return true;
 }
 
 export async function resolveBattleDeclarations(
@@ -364,9 +398,9 @@ export async function resolveBattleDeclarations(
     const unitsCol = getMilitaryUnitsCollection(db);
     // One query for the whole front. Every belligerent's units are here, and both
     // coalitions are cut from it — a query per contingent would scale with allies.
-    const atFront = (await unitsCol.find({ theaterId }).toArray()).filter(
-      (u) => u.readyAtTurn == null || u.readyAtTurn <= currentTurn
-    );
+    const atFront = (await unitsCol.find({ theaterId }).toArray())
+      .filter((u) => u.readyAtTurn == null || u.readyAtTurn <= currentTurn)
+      .sort(compareBattleUnits);
     // Two views of the same force, and they diverge once the first offensive of the
     // tick is fought. `atFront` stays the opening ROSTER — who was here, which is all
     // `resolveDefendingSides` asks of it, and `countryId`/`theaterId` do not change in
@@ -451,34 +485,71 @@ export async function resolveBattleDeclarations(
         let walkoverAfter = walkoverBefore;
         if (off.side) {
           for (const c of off.attackers) await joinSide(db, conflict, c, off.side, currentTurn);
-          const occupied = await applyOccupation(
+          const committed = await persistBattleResult(async (session) => {
+            const workingConflict = transactionConflict(conflict);
+            const occupied = await applyOccupation(
+              db,
+              workingConflict,
+              off.side!,
+              OCCUPATION.decisiveMargin,
+              false,
+              currentTurn,
+              session
+            );
+            const advanced = occupied.control !== walkoverBefore;
+            await getBattleReportsCollection(db).insertOne(
+              {
+                theaterId,
+                declarerCountry: principal.declarerCountry,
+                targetCountry: principal.targetCountry,
+                attackers: off.attackers,
+                defenders: [],
+                turn: currentTurn,
+                result: null,
+                noContact: true,
+                unopposedAdvance: advanced,
+                controlBefore: walkoverBefore,
+                controlAfter: occupied.control,
+              } as never,
+              { session }
+            );
+            for (const d of off.declarations) {
+              await mark(db, d, advanced ? "resolved" : "fizzled", currentTurn, session);
+            }
+            return { workingConflict, occupied };
+          });
+          Object.assign(conflict, committed.workingConflict);
+          walkoverAfter = committed.occupied.control;
+          standDown = await finalizeCommittedPole(
             db,
             conflict,
-            off.side,
-            OCCUPATION.decisiveMargin,
-            false,
+            committed.occupied.poleVictor,
             currentTurn
           );
-          walkoverAfter = occupied.control;
-          standDown = occupied.standDown;
+        } else {
+          await persistBattleResult(async (session) => {
+            await getBattleReportsCollection(db).insertOne(
+              {
+                theaterId,
+                declarerCountry: principal.declarerCountry,
+                targetCountry: principal.targetCountry,
+                attackers: off.attackers,
+                defenders: [],
+                turn: currentTurn,
+                result: null,
+                noContact: true,
+                unopposedAdvance: false,
+                controlBefore: walkoverBefore,
+                controlAfter: walkoverBefore,
+              } as never,
+              { session }
+            );
+            for (const d of off.declarations) {
+              await mark(db, d, "fizzled", currentTurn, session);
+            }
+          });
         }
         const advanced = walkoverAfter !== walkoverBefore;
-        await getBattleReportsCollection(db).insertOne({
-          theaterId,
-          declarerCountry: principal.declarerCountry,
-          targetCountry: principal.targetCountry,
-          attackers: off.attackers,
-          defenders: [],
-          turn: currentTurn,
-          result: null,
-          noContact: true,
-          unopposedAdvance: advanced,
-          controlBefore: walkoverBefore,
-          controlAfter: walkoverAfter,
-        } as never);
-        for (const d of off.declarations) {
-          await mark(db, d, advanced ? "resolved" : "fizzled", currentTurn);
-        }
         if (advanced) resolved++;
         else fizzled++;
         continue;
@@ -554,64 +625,10 @@ export async function resolveBattleDeclarations(
         supportD
       );
 
-      // Persist per contingent: `persistSide` scopes its unit filter to that
-      // contingent's country and credits only its own generals, so each nation
-      // bleeds its own troops and earns its own experience.
-      //
-      // The survivors go back into `unitsByCountry`, which is the pool every later
-      // offensive in this tick builds its sides from. A nation that attacks and is
-      // then counter-attacked fights the second engagement with the army the first
-      // one left it, and its losses accumulate instead of the later write undoing
-      // the earlier one.
-      for (const c of attackerSides) {
-        unitsByCountry.set(c.country, await persistSide(db, c, result.attacker, result.win));
-      }
-      for (const c of defenderSides) {
-        // The synthetic side has no `militaryUnits` rows and no generals — persisting
-        // it would bulk-write against a countryId that owns nothing. Its casualties go
-        // onto the conflict's `tokenStrength` below instead.
-        if (factionSide && c.country === factionSide.country) continue;
-        unitsByCountry.set(c.country, await persistSide(db, c, result.defender, !result.win));
-      }
-
-      // ⚠️ Deliberately its own write, NOT folded into `applyOccupation`'s `$set`:
-      // that function early-returns when `control` does not move, which is every
-      // battle once the front is pinned at a pole — exactly the state the three-turn
-      // hold is about. A stalemated front would grind the token force every turn and
-      // record none of it, which is the immortal wall this mechanism removes.
-      if (factionSide && factionSide.units.length > 0) {
-        const lost = factionLoss(result.defender, factionSide.country);
-        if (lost > 0) {
-          const key = defending.factionDefends === "A" ? "sideA" : "sideB";
-          const before =
-            (defending.factionDefends === "A"
-              ? conflict.sideA.tokenStrength
-              : conflict.sideB.tokenStrength) ?? 0;
-          const after = Math.max(0, before - lost);
-          await getConflictsCollection(db).updateOne(
-            { _id: conflict._id },
-            { $set: { [`${key}.tokenStrength`]: after } }
-          );
-          // In memory too, like every other write this tick makes: `buildFactionSide`
-          // fields the token force from this number, so a later offensive would
-          // otherwise re-mint the men just killed.
-          conflict[key].tokenStrength = after;
-        }
-      }
-
       // Territory: the winner pushes the front toward the loser's pole. A side that
       // broke off yields ground more cheaply than one broken in place. A matchup that
       // could not be placed fights, but moves nothing.
-      //
-      // `occupationShift` is pure and is exactly what `applyOccupation` will write, so
-      // the report can name the ground BEFORE the territorial write happens. Computing
-      // it rather than reordering the writes is deliberate: `persistSide` has already
-      // bled the units, and nothing here is transactional, so the report and the
-      // `mark` must land first. Writing them after `applyOccupation` would mean a
-      // throw there left the declarations unresolved, and next turn would fight the
-      // same battle again and take the casualties twice.
       const controlBefore = conflict.control;
-      let controlAfter = controlBefore;
       let winner: Side | null = null;
       let loserRetreated = false;
       if (off.side && off.enemySide) {
@@ -620,39 +637,89 @@ export async function resolveBattleDeclarations(
         // the higher track wins — so a retreat is always the loser's.
         loserRetreated =
           result.retreat !== null && (result.retreat.side === "attacker") !== result.win;
-        controlAfter = occupationShift({
-          control: controlBefore,
-          winner,
-          margin: result.margin,
-          loserRetreated,
-          turnsElapsed: currentTurn - conflict.startTurn,
-        });
       }
 
-      await getBattleReportsCollection(db).insertOne({
-        theaterId,
-        declarerCountry: principal.declarerCountry,
-        targetCountry: principal.targetCountry,
-        attackers: off.attackers,
-        defenders,
-        turn: currentTurn,
-        result,
-        controlBefore,
-        controlAfter,
-      } as never);
-      for (const d of off.declarations) await mark(db, d, "resolved", currentTurn);
+      // Casualties, equipment, general XP, token strength, the report, declarations,
+      // and front movement are one result. Replica-set deployments commit all of them
+      // together. Standalone local worlds use the established sequential fallback so
+      // combat remains available on their unsupported topology.
+      const committed = await persistBattleResult(async (session) => {
+        const workingConflict = transactionConflict(conflict);
+        const survivors: Array<[string, BattleSide["units"]]> = [];
 
-      if (winner) {
-        const occupied = await applyOccupation(
-          db,
-          conflict,
-          winner,
-          result.margin,
-          loserRetreated,
-          currentTurn
+        for (const c of attackerSides) {
+          survivors.push([
+            c.country,
+            await persistSide(db, c, result.attacker, result.win, session),
+          ]);
+        }
+        for (const c of defenderSides) {
+          // The synthetic side has no `militaryUnits` rows and no generals. Its
+          // casualties land on the conflict's token strength below instead.
+          if (factionSide && c.country === factionSide.country) continue;
+          survivors.push([
+            c.country,
+            await persistSide(db, c, result.defender, !result.win, session),
+          ]);
+        }
+
+        if (factionSide && factionSide.units.length > 0) {
+          const lost = factionLoss(result.defender, factionSide.country);
+          if (lost > 0) {
+            const key = defending.factionDefends === "A" ? "sideA" : "sideB";
+            const before = workingConflict[key].tokenStrength ?? 0;
+            const after = Math.max(0, before - lost);
+            await getConflictsCollection(db).updateOne(
+              { _id: workingConflict._id },
+              { $set: { [`${key}.tokenStrength`]: after } },
+              { session }
+            );
+            workingConflict[key].tokenStrength = after;
+          }
+        }
+
+        const occupied = winner
+          ? await applyOccupation(
+              db,
+              workingConflict,
+              winner,
+              result.margin,
+              loserRetreated,
+              currentTurn,
+              session
+            )
+          : { control: controlBefore, poleVictor: null };
+
+        await getBattleReportsCollection(db).insertOne(
+          {
+            theaterId,
+            declarerCountry: principal.declarerCountry,
+            targetCountry: principal.targetCountry,
+            attackers: off.attackers,
+            defenders,
+            turn: currentTurn,
+            result,
+            controlBefore,
+            controlAfter: occupied.control,
+          } as never,
+          { session }
         );
-        standDown = occupied.standDown;
+        for (const d of off.declarations) {
+          await mark(db, d, "resolved", currentTurn, session);
+        }
+        return { workingConflict, survivors, occupied };
+      });
+
+      for (const [country, units] of committed.survivors) {
+        unitsByCountry.set(country, units);
       }
+      Object.assign(conflict, committed.workingConflict);
+      standDown = await finalizeCommittedPole(
+        db,
+        conflict,
+        committed.occupied.poleVictor,
+        currentTurn
+      );
       resolved++;
     }
   }

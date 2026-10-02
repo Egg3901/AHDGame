@@ -1,3 +1,5 @@
+import { organizationFundCountry } from "@/lib/internationalOrganizations/cashLedger";
+import type { CountryId } from "@/lib/constants/countries";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import * as Sentry from "@sentry/nextjs";
@@ -114,6 +116,41 @@ async function collectBalanceState(db: Db): Promise<{
         }
       }
     }
+  }
+
+  // Organization funds use balanceLocal, the same authoritative native cash
+  // field as M2. balanceUsd remains a legacy UI fallback, never copied/minted here.
+  const customFounders = new Map(
+    (
+      await db
+        .collection<{ id: string; foundingMembers?: CountryId[] }>(
+          "customInternationalOrganizations"
+        )
+        .find({}, { projection: { id: 1, foundingMembers: 1 } })
+        .toArray()
+    ).map((row) => [row.id, row.foundingMembers?.[0] ?? "US"])
+  );
+  const organizationFunds = db.collection<{
+    organizationId: string;
+    currencyCountryId?: CountryId;
+    balanceLocal?: number;
+  }>("organizationFunds");
+  for await (const fund of organizationFunds.find(
+    {},
+    { projection: { organizationId: 1, currencyCountryId: 1, balanceLocal: 1 } }
+  )) {
+    if (typeof fund.balanceLocal !== "number") continue;
+    const country = organizationFundCountry(
+      fund.organizationId,
+      fund.currencyCountryId,
+      customFounders
+    );
+    const currency = countryCurrency(country);
+    add(
+      balances,
+      accountId("org", fund.organizationId, currency),
+      toAnchor(fund.balanceLocal, currency, rates)
+    );
   }
 
   // --- Corporations: liquidCapital -------------------------------------------

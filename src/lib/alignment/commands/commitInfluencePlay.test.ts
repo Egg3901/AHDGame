@@ -3,6 +3,9 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+// Load the real command during module setup so cold imports are not charged to
+// individual action assertions.
+const { commitInfluencePlay } = await import("./commitInfluencePlay");
 
 describe("commitInfluencePlay", () => {
   let db: MockDb;
@@ -51,7 +54,6 @@ describe("commitInfluencePlay", () => {
     db.collection("macroCountries").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
     });
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base });
 
     expect(r).toEqual({ ok: false, reason: "unknown-target-economy" });
@@ -61,7 +63,6 @@ describe("commitInfluencePlay", () => {
   });
 
   it("debits the fund and queues the play", async () => {
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base });
 
     expect(r.ok).toBe(true);
@@ -95,7 +96,6 @@ describe("commitInfluencePlay", () => {
     };
     db.collection("customInternationalOrganizations").find.mockReturnValue(cursor);
 
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({
       db: db as unknown as Db,
       ...base,
@@ -118,7 +118,6 @@ describe("commitInfluencePlay", () => {
       shares: { WEST: 2, EAST: 90 }, // lead 88, past the locked gate
       nonAligned: 8,
     });
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base, targetEntityId: "PL" });
 
     expect(r).toEqual({ ok: false, reason: "target-locked" });
@@ -132,7 +131,6 @@ describe("commitInfluencePlay", () => {
       currentYear: 1953,
       intOrgAlignmentEnabled: false,
     });
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base });
 
     expect(r).toEqual({ ok: false, reason: "gate-off" });
@@ -140,7 +138,6 @@ describe("commitInfluencePlay", () => {
   });
 
   it("refuses an org with no channel in this era", async () => {
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     // The EU carries influence only from 1991; it has no 1953 channel.
     const r = await commitInfluencePlay({
       db: db as unknown as Db,
@@ -154,7 +151,6 @@ describe("commitInfluencePlay", () => {
 
   it("refuses an unknown target", async () => {
     db.collection("countryAlignments").findOne.mockResolvedValue(null);
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base });
 
     expect(r).toEqual({ ok: false, reason: "unknown-target" });
@@ -165,7 +161,6 @@ describe("commitInfluencePlay", () => {
     // disburseFromOrganizationFund guards with balanceLocal: { $gte: amount },
     // so a short fund shows up as modifiedCount 0 — never as a stale read.
     db.collection("organizationFunds").updateOne.mockResolvedValue({ modifiedCount: 0 });
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base });
 
     expect(r).toEqual({ ok: false, reason: "insufficient-funds" });
@@ -173,7 +168,6 @@ describe("commitInfluencePlay", () => {
   });
 
   it("refuses a non-positive amount without touching the fund", async () => {
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base, amountLocal: 0 });
 
     expect(r).toEqual({ ok: false, reason: "insufficient-funds" });
@@ -186,7 +180,6 @@ describe("commitInfluencePlay", () => {
     // queue, resolve to zero applied points and refund a turn later — a no-op
     // round trip that read as "the button does nothing". Now it is refused up
     // front so the panel can say how much is actually needed.
-    const { commitInfluencePlay } = await import("./commitInfluencePlay");
     const r = await commitInfluencePlay({ db: db as unknown as Db, ...base, amountLocal: 10 });
 
     expect(r).toEqual({ ok: false, reason: "below-min-points" });

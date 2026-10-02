@@ -8,6 +8,7 @@
  * deleted, so the vacancy shell and the additive resolver keep their anchor.
  */
 
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type { Character, ElectedOfficial, ElectionCandidate } from "@/lib/db/types";
@@ -68,6 +69,16 @@ export async function resignCommonsSeat(
     return { ok: false, status: 409, error: "That seat changed. Refresh and try again." };
   }
   await clearCommonsCurrentOffice(db, character, now);
+  await captureOfficeTransition({
+    db,
+    officeType: "commons",
+    transitionType: "left",
+    partyId: official.party ?? character.party ?? undefined,
+    selectionMethod: "resignation",
+    nationId: "UK",
+    turn: currentTurn,
+    flush: true,
+  });
   return {
     ok: true,
     officialId: official._id,
@@ -112,6 +123,16 @@ export async function defectCommonsSeat(
     return { ok: false, status: 409, error: "That seat changed. Refresh and try again." };
   }
   await clearCommonsCurrentOffice(db, character, now);
+  await captureOfficeTransition({
+    db,
+    officeType: "commons",
+    transitionType: "left",
+    partyId: official.party ?? character.party ?? undefined,
+    selectionMethod: "resignation",
+    nationId: "UK",
+    turn: currentTurn,
+    flush: true,
+  });
   return {
     ok: true,
     officialId: official._id,

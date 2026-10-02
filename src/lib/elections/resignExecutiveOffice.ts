@@ -6,6 +6,8 @@ import {
   type ExecutiveOfficeType,
 } from "@/lib/elections/executiveOfficeFilters";
 import { getOfficeLabel } from "@/lib/utils/politics";
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import type { GameState } from "@/lib/db/types";
 
 /** Vacate a US executive slot when the seated player resigns. */
 export async function resignExecutiveOffice(
@@ -55,4 +57,22 @@ export async function resignExecutiveOffice(
       $push: { careerHistory: careerEvent },
     }
   );
+
+  const gameState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+    .catch(() => null);
+  await captureOfficeTransition({
+    db,
+    officeType,
+    transitionType: "left",
+    partyId: character.party,
+    selectionMethod: "resignation",
+    tenureTurns: 0,
+    careerStage: character.careerHistory?.length ?? 0,
+    nationId: countryId,
+    turn: gameState?.currentTurn ?? 0,
+    iteration: gameState?.iteration,
+    flush: true,
+  });
 }

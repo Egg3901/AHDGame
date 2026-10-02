@@ -239,7 +239,7 @@ function txTypeToAuditAction(type: FinancialTxType): string {
  * `"system"` because this helper runs for both API-triggered and turn-phase
  * emissions and the tx-log row itself doesn't carry which one it was.
  */
-function buildAuditEnvelope(doc: FinancialTxLogEntry): ActionAuditInput {
+export function buildAuditEnvelope(doc: FinancialTxLogEntry): ActionAuditInput {
   const subject: ActionAuditSubject = {
     type: doc.subjectType,
     id: doc.subjectId ?? doc.countryId,

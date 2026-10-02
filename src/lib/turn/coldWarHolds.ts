@@ -91,7 +91,7 @@ export async function resolveColdWarHolds(
     );
     if (claim.modifiedCount !== 1) continue;
 
-    await resolveConflict(db, conflict, conflict.poleSide, currentTurn);
+    await resolveConflict(db, conflict, conflict.poleSide, currentTurn, { endingType: "victory" });
     await admitHostsToWinningBloc(db, conflict, conflict.poleSide, currentTurn, preset);
 
     // The alignment shift is gated SEPARATELY. `intOrgAlignmentEnabled` governs the

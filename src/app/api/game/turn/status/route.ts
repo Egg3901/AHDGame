@@ -5,6 +5,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getTurnStatusSnapshot } from "@/lib/turn/turnStatusSnapshot";
 import { getProcessingLockState } from "@/lib/turn/processingLock";
 import { computeTurnProcessingProgress, formatTurnPhaseLabel } from "@/lib/turn/turnProgress";
+import { gameIterationId } from "@/lib/analytics/gameEventEnvelope";
 
 // GET /api/game/turn/status — Returns the current game turn, year, active status, and next scheduled turn time.
 // Auth: public
@@ -49,6 +50,7 @@ export async function GET(request: Request) {
     const payload = {
       singleplayer,
       currentTurn: gameState.currentTurn,
+      iterationId: gameIterationId(gameState.iteration),
       currentYear: gameState.currentYear,
       startingYear: gameState.startingYear,
       // Pre-iteration calendar offset so client date renders honor the founding

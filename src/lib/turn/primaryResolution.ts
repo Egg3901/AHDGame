@@ -116,6 +116,7 @@ import { isMidtermOppositionBoostEligible } from "@/lib/electionEngine/midtermOp
 import { finaliseManifestosAtElectionCall } from "@/lib/uk/manifesto/manifestoLifecycle";
 import { getStandingPlatformsForCountry } from "@/lib/uk/conference/conferenceCommands";
 import { hydrateVoteTurnMemo } from "@/lib/turn/voteAccumulationPreload";
+import { capturePrimaryOutcome } from "@/lib/analytics/electionAnalytics";
 
 /**
  * Optional restriction of a turn sweep to specific elections. Absent (the
@@ -772,6 +773,8 @@ export async function resolvePrimariesIfNeeded(
         primaryResults
       );
     }
+
+    await capturePrimaryOutcome(db, election, candidates, primaryResultsByParty, currentTurn);
   }
 
   if (totalEliminated > 0)

@@ -167,6 +167,7 @@ export async function processVoteAutoResolve(
         db,
         vote,
         totalEligibleShares: totalVotingPower(corp),
+        nationId: corp.countryId,
         currentTurn,
       });
       if (!claimed || outcome === "open") return;

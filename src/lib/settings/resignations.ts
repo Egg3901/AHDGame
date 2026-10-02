@@ -1,3 +1,5 @@
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import type { GameState } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
 import {
   COUNTRY_CONFIGS,
@@ -180,8 +182,8 @@ async function clearCurrentOfficeForOffice(
   characterId: ObjectId,
   office: Character["currentOffice"],
   now: Date
-): Promise<void> {
-  if (!office) return;
+): Promise<boolean> {
+  if (!office) return false;
 
   const officeRecord = office as unknown as Record<string, unknown>;
   const filter: Record<string, unknown> = {
@@ -195,9 +197,10 @@ async function clearCurrentOfficeForOffice(
     filter["currentOffice.positionId"] = officeRecord.positionId;
   }
 
-  await db
+  const result = await db
     .collection<Character>("characters")
     .updateOne(filter, { $set: { currentOffice: null, updatedAt: now } });
+  return result.modifiedCount > 0;
 }
 
 async function discoverPositions(db: Db, character: Character): Promise<PositionRecord[]> {
@@ -595,29 +598,73 @@ async function applyPosition(
   character: Character,
   position: PositionRecord,
   now: Date,
-  options?: { preserveOfficialRecords?: boolean }
+  options?: { preserveOfficialRecords?: boolean; telemetryState?: GameState | null }
 ): Promise<boolean> {
-  switch (position.kind) {
-    case "official":
-      return resignOfficial(db, character, position.official, now, {
-        preserveSeatRecord: options?.preserveOfficialRecords,
-      });
-    case "prime-minister":
-      return resignPrimeMinister(db, character, position.countryId, now);
-    case "cabinet":
-      return resignCabinet(db, character, position.member, now);
-    case "national-party":
-      return resignNationalPartyRole(db, character, position.party, position.field, now);
-    case "state-party":
-      return resignStatePartyRole(db, character, position.organization, position.field, now);
-    case "congress":
-      return resignCongressLeadership(db, character, position.leader, now);
-    case "central-bank":
-      return resignCentralBankChair(db, character, position.bank, now);
-    case "current-office":
-      await clearCurrentOfficeForOffice(db, character._id, position.office, now);
-      return true;
+  let officeChanged = true;
+  const changed = await (async () => {
+    switch (position.kind) {
+      case "official":
+        return resignOfficial(db, character, position.official, now, {
+          preserveSeatRecord: options?.preserveOfficialRecords,
+        });
+      case "prime-minister":
+        return resignPrimeMinister(db, character, position.countryId, now);
+      case "cabinet":
+        return resignCabinet(db, character, position.member, now);
+      case "national-party":
+        return resignNationalPartyRole(db, character, position.party, position.field, now);
+      case "state-party":
+        return resignStatePartyRole(db, character, position.organization, position.field, now);
+      case "congress":
+        return resignCongressLeadership(db, character, position.leader, now);
+      case "central-bank":
+        return resignCentralBankChair(db, character, position.bank, now);
+      case "current-office":
+        officeChanged = await clearCurrentOfficeForOffice(db, character._id, position.office, now);
+        return true;
+    }
+  })();
+  if (changed && officeChanged) {
+    const officeType =
+      position.kind === "official" &&
+      !["president", "vicePresident"].includes(position.official.officeType)
+        ? position.official.officeType
+        : position.kind === "cabinet"
+          ? position.member.countryId === "US"
+            ? "usCabinet"
+            : position.member.countryId === "UK"
+              ? "ukCabinet"
+              : position.member.countryId === "DE"
+                ? "deCabinet"
+                : "parliamentaryCabinet"
+          : position.kind === "central-bank"
+            ? "centralBankChair"
+            : position.kind === "current-office"
+              ? position.office?.type
+              : undefined;
+    if (officeType) {
+      const nationId =
+        position.kind === "official"
+          ? (position.official.countryId ?? character.countryId)
+          : position.kind === "cabinet"
+            ? position.member.countryId
+            : position.kind === "central-bank"
+              ? position.bank.countryId
+              : character.countryId;
+      await captureOfficeTransition({
+        db,
+        officeType,
+        transitionType: "left",
+        selectionMethod: "resignation",
+        partyId: character.party,
+        careerStage: character.careerHistory?.length ?? 0,
+        nationId,
+        turn: options?.telemetryState?.currentTurn ?? 0,
+        iteration: options?.telemetryState?.iteration,
+      }).catch(() => undefined);
+    }
   }
+  return changed;
 }
 
 export async function resignPosition(
@@ -653,7 +700,13 @@ export async function resignPosition(
     }
   }
 
-  const resigned = await applyPosition(db, freshCharacter, position, new Date());
+  const telemetryState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+    .catch(() => null);
+  const resigned = await applyPosition(db, freshCharacter, position, new Date(), {
+    telemetryState,
+  });
   if (!resigned) {
     return { ok: false, status: 409, error: "That position changed. Refresh and try again." };
   }
@@ -701,6 +754,10 @@ export async function resignAllPositions(db: Db, character: Character): Promise<
   const positions = await discoverPositions(db, freshCharacter);
   const now = new Date();
   const resigned: string[] = [];
+  const telemetryState = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+    .catch(() => null);
 
   const orderedPositions = [...positions].sort((a, b) => {
     const priority = (position: PositionRecord) =>
@@ -708,7 +765,12 @@ export async function resignAllPositions(db: Db, character: Character): Promise<
     return priority(a) - priority(b);
   });
   for (const position of orderedPositions) {
-    if (await applyPosition(db, freshCharacter, position, now, { preserveOfficialRecords: true })) {
+    if (
+      await applyPosition(db, freshCharacter, position, now, {
+        preserveOfficialRecords: true,
+        telemetryState,
+      })
+    ) {
       resigned.push(position.label);
     }
   }
@@ -770,7 +832,19 @@ export async function resignAllPositions(db: Db, character: Character): Promise<
   if (cabinetResult.deletedCount > 0) resigned.push("Cabinet position");
 
   for (const bank of bankRows) {
-    await resignCentralBankChair(db, freshCharacter, bank, now);
+    await applyPosition(
+      db,
+      freshCharacter,
+      {
+        kind: "central-bank",
+        bank,
+        id: `central-bank:${bank._id}`,
+        label: "Central bank chair",
+        category: "central-bank",
+      },
+      now,
+      { telemetryState }
+    );
   }
   if (bankRows.length > 0) resigned.push("Central bank chair");
 

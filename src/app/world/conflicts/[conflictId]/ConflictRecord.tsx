@@ -3,6 +3,7 @@ import { NavalAirPanel } from "./NavalAirPanel";
 import type { NavalAirPanel as NavalAirPanelData } from "./conflictRecordView";
 import type { ReactNode } from "react";
 import { FrontLineMap } from "../combat/components/FrontLineMap";
+import { controlSplitDisplay } from "../controlDisplay";
 import type { ConflictTier } from "@/lib/military/conflictVisibility";
 import type { ForceRow, RecordBattleRow, SideForce } from "./conflictRecordView";
 import { ConflictActions } from "./ConflictActions";
@@ -315,8 +316,9 @@ function settlementTermText(term: PeaceTerm, rulingPartyName?: string | null): s
 
 export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }) {
   const statusColor = STATUS_COLOR[c.status] ?? "#8a8a9a";
-  const pctB = Math.round(c.control);
+  const pctB = Math.max(0, Math.min(100, c.control));
   const pctA = 100 - pctB;
+  const controlDisplay = controlSplitDisplay(c.control);
   const publicOnly = c.tier === "public";
   // "Nothing opposes you here" is a claim about a LIVE front seen from a side. A
   // concluded war has returned every unit to reserve, so both sides read as zero,
@@ -591,7 +593,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginTop: 2 }}>
                   <span style={{ font: `600 34px ${mono}`, color: MIL_COLOR.blue, lineHeight: 1 }}>
-                    {pctA}
+                    {controlDisplay.sideA}
                   </span>
                   <span style={{ font: `600 13px ${mono}`, color: MIL_COLOR.blue }}>%</span>
                 </div>
@@ -629,7 +631,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                   }}
                 >
                   <span style={{ font: `600 34px ${mono}`, color: MIL_COLOR.red, lineHeight: 1 }}>
-                    {pctB}
+                    {controlDisplay.sideB}
                   </span>
                   <span style={{ font: `600 13px ${mono}`, color: MIL_COLOR.red }}>%</span>
                 </div>

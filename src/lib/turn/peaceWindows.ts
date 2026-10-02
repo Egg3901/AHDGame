@@ -76,7 +76,7 @@ export async function resolvePeaceWindows(
       }
     );
 
-    await resolveConflict(db, conflict, victor, currentTurn);
+    await resolveConflict(db, conflict, victor, currentTurn, { endingType: "expiry" });
     resolved++;
   }
 

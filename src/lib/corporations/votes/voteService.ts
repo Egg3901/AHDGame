@@ -1,3 +1,4 @@
+import { captureServerGameEvent } from "@/lib/analytics/serverPosthog";
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
@@ -224,6 +225,8 @@ export async function resolveCorporationVoteIfReady(opts: {
   vote: CorporationVote;
   totalEligibleShares: number;
   currentTurn: number;
+  nationId?: string;
+  flushTelemetry?: boolean;
 }): Promise<{ outcome: VoteOutcome; claimed: boolean }> {
   const { db, vote, totalEligibleShares, currentTurn } = opts;
 
@@ -244,6 +247,24 @@ export async function resolveCorporationVoteIfReady(opts: {
         },
       }
     );
+    if (claim.matchedCount > 0) {
+      await captureServerGameEvent({
+        db,
+        turn: currentTurn,
+        event: "corporation_vote_resolved",
+        distinctId: "system:turn-processor",
+        insertId: `corporation-vote:${vote._id}`,
+        nationId: opts.nationId,
+        flush: opts.flushTelemetry,
+        properties: {
+          corporation_id: vote.corporationId.toString(),
+          vote_id: vote._id.toString(),
+          vote_type: vote.type,
+          outcome: "cancelled",
+          failure_code: "voting_structure_changed",
+        },
+      });
+    }
     return { outcome: "cancelled", claimed: claim.matchedCount > 0 };
   }
 
@@ -298,5 +319,24 @@ export async function resolveCorporationVoteIfReady(opts: {
       { _id: vote._id, status: "open" },
       { $set: { status: outcome, resolvedAt: now, updatedAt: now } }
     );
+  if (claim.matchedCount > 0) {
+    await captureServerGameEvent({
+      db,
+      turn: currentTurn,
+      event: "corporation_vote_resolved",
+      distinctId: "system:turn-processor",
+      insertId: `corporation-vote:${vote._id}`,
+      nationId: opts.nationId,
+      flush: opts.flushTelemetry,
+      properties: {
+        corporation_id: vote.corporationId.toString(),
+        vote_id: vote._id.toString(),
+        vote_type: vote.type,
+        outcome,
+        yes_share_pct: (yesShares / eligibleShares) * 100,
+        no_share_pct: (noShares / eligibleShares) * 100,
+      },
+    });
+  }
   return { outcome, claimed: claim.matchedCount > 0 };
 }

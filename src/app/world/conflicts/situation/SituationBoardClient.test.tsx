@@ -74,7 +74,7 @@ describe("SituationBoardClient (smoke render)", () => {
 
     expect(screen.getByText("ACTIVE FRONTS · 1")).toBeTruthy();
     expect(screen.getByText("Nicaraguan Civil War")).toBeTruthy();
-    expect(screen.getByText("Government 65% / Insurgents 35%")).toBeTruthy();
+    expect(screen.getByText("Government 65.00% / Insurgents 35.00%")).toBeTruthy();
 
     const slider = screen.getByRole("slider", {
       name: "Commit combat power to Nicaraguan Civil War",

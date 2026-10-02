@@ -1,3 +1,8 @@
+import { captureServerGameEvent } from "@/lib/analytics/serverPosthog";
+import {
+  loadOrganizationCashContext,
+  type OrganizationCashContext,
+} from "@/lib/internationalOrganizations/cashLedger";
 import {
   ensureEuropeanIntegrationState,
   reconcileEuropeanTreatyLive,
@@ -206,20 +211,25 @@ export async function processInternationalOrganizationsTurn(
   // Auto-found orgs whose founding year has arrived BEFORE any vote/proposal
   // handling, so a newly founded org exists for this turn's steps.
   const organizationsFounded = await foundDueOrganizations(db, currentTurn);
+  const cashContext = await loadOrganizationCashContext(db, currentTurn);
   // SP4: cast cooperative votes for autonomy-active member countries BEFORE
   // resolution, so disabled/econ-only members participate in unanimity/majority
   // instead of silently vetoing every membership proposal and FTA. No-op when
   // the autonomy flag is off or no member is autonomy-active.
   const autonomousVotesCast = await castAutonomousOrgVotes(db, currentTurn);
   const proposalsResolved = await resolveExpiredMembershipProposals(db, currentTurn);
-  const legislationResolved = await resolveExpiredOrganizationLegislation(db, currentTurn);
+  const legislationResolved = await resolveExpiredOrganizationLegislation(
+    db,
+    currentTurn,
+    cashContext
+  );
   await reconcileAutonomousWarEntryBills(db);
   const electionsResolved = await resolveExpiredLeadershipElections(db, currentTurn);
   const sanctionsExpired = await expireActiveSanctions(db, currentTurn);
   const directivesExpired = await expireActiveDirectives(db, currentTurn);
   const jointStatementsExpired = await expireActiveJointStatements(db, currentTurn);
   const agencyFundingExpired = await expireActiveAgencyFunding(db, currentTurn);
-  const { duesCharged, tributeCharged } = await chargeAllOrganizationContributions(db);
+  const { duesCharged, tributeCharged } = await chargeAllOrganizationContributions(db, cashContext);
   return {
     organizationsFounded,
     proposalsResolved,
@@ -310,7 +320,8 @@ export async function foundDueOrganizations(db: Db, currentTurn: number): Promis
  * turn.
  */
 async function chargeAllOrganizationContributions(
-  db: Db
+  db: Db,
+  cashContext: OrganizationCashContext | null
 ): Promise<{ duesCharged: number; tributeCharged: number }> {
   const membershipsCol = await getOrganizationMembershipsCollection(db);
   const memberships = await membershipsCol.find({}).toArray();
@@ -369,9 +380,11 @@ async function chargeAllOrganizationContributions(
       gdpUsd: (gdpByCountry.get(c) ?? 0) * GDP_MILLIONS_TO_USD,
     }));
     const dues =
-      memberGdpUsd.length > 0 ? await chargeOrganizationDues(db, orgId, memberGdpUsd) : 0;
+      memberGdpUsd.length > 0
+        ? await chargeOrganizationDues(db, orgId, memberGdpUsd, { context: cashContext })
+        : 0;
     if (dues > 0) duesCharged++;
-    const tribute = await chargeOrganizationTribute(db, orgId, access);
+    const tribute = await chargeOrganizationTribute(db, orgId, access, { context: cashContext });
     if (tribute.collectedLocal > 0) tributeCharged++;
   }
   return { duesCharged, tributeCharged };
@@ -391,6 +404,7 @@ async function expireActiveSanctions(db: Db, currentTurn: number): Promise<numbe
   for (const r of expired) {
     await liftOrganizationSanctions(db, r._id);
     await col.updateOne({ _id: r._id }, { $set: { status: "terminated", terminatedAt: now } });
+    await captureDiplomaticExpiry(db, currentTurn, r);
   }
   return expired.length;
 }
@@ -411,6 +425,7 @@ async function expireActiveDirectives(db: Db, currentTurn: number): Promise<numb
     { _id: { $in: expired.map((r) => r._id) } },
     { $set: { status: "terminated", terminatedAt: new Date() } }
   );
+  for (const item of expired) await captureDiplomaticExpiry(db, currentTurn, item);
   return expired.length;
 }
 
@@ -434,6 +449,7 @@ async function expireActiveJointStatements(db: Db, currentTurn: number): Promise
     { _id: { $in: expired.map((r) => r._id) } },
     { $set: { status: "terminated", terminatedAt: new Date() } }
   );
+  for (const item of expired) await captureDiplomaticExpiry(db, currentTurn, item);
   return expired.length;
 }
 
@@ -452,6 +468,7 @@ async function expireActiveAgencyFunding(db: Db, currentTurn: number): Promise<n
     { _id: { $in: expired.map((r) => r._id) } },
     { $set: { status: "terminated", terminatedAt: new Date() } }
   );
+  for (const item of expired) await captureDiplomaticExpiry(db, currentTurn, item);
   return expired.length;
 }
 
@@ -586,7 +603,11 @@ async function resolveExpiredMembershipProposals(db: Db, currentTurn: number): P
   return resolved;
 }
 
-async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number): Promise<number> {
+async function resolveExpiredOrganizationLegislation(
+  db: Db,
+  currentTurn: number,
+  cashContext: OrganizationCashContext | null
+): Promise<number> {
   const col = await getOrganizationLegislationCollection(db);
   const expired = await col
     .find({ status: "pending", closesOnTurn: { $lte: currentTurn } })
@@ -683,7 +704,8 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
         currentTurn,
         sanctionsExpiresOnTurn,
         legislating,
-        foundingContext
+        foundingContext,
+        cashContext
       );
       if (item.type === "free_trade_agreement") {
         const partyNames = parties
@@ -713,6 +735,20 @@ async function resolveExpiredOrganizationLegislation(db: Db, currentTurn: number
           },
         }
       );
+      await captureServerGameEvent({
+        db,
+        turn: currentTurn,
+        event: "diplomacy_resolved",
+        distinctId: "system:turn-processor",
+        insertId: `diplomacy_resolved:${item._id}:${currentTurn}`,
+        nationId: item.proposingCountryId,
+        properties: {
+          proposal_id: item._id.toString(),
+          organization_id: item.organizationId,
+          action_type: item.type,
+          outcome: "rejected",
+        },
+      });
       // A resolution that fails leaves the pending list without explanation
       // otherwise, and under a roll-based threshold failing is ordinary. The
       // proposer is the one country guaranteed to have a page to log it on.
@@ -863,7 +899,8 @@ async function applyResolutionEffect(
    * which for those coincides with this roll.
    */
   votingMemberIds: CountryId[] = [],
-  foundingContext: Pick<OrgFoundingContext, "europeanIntegration"> = {}
+  foundingContext: Pick<OrgFoundingContext, "europeanIntegration"> = {},
+  cashContext: OrganizationCashContext | null = null
 ): Promise<void> {
   switch (resolution.type) {
     case "free_trade_agreement":
@@ -887,7 +924,9 @@ async function applyResolutionEffect(
       const recipient = resolution.aidRecipientCountryId;
       const amount = resolution.aidAmount;
       if (!recipient || !amount) return;
-      const paid = await payOrganizationAid(db, resolution.organizationId, recipient, amount);
+      const paid = await payOrganizationAid(db, resolution.organizationId, recipient, amount, {
+        context: cashContext,
+      });
       if (paid) {
         // The political half of the bargain: a bloc that pays its clients keeps
         // them. Queued as a pull so it lands through the same cap, resistance
@@ -1186,7 +1225,9 @@ async function applyResolutionEffect(
       const fundCountry = await resolveOrgFundCurrencyCountry(db, resolution.organizationId);
       const fundRate = getGdpAnchorRate(fundCountry, await loadWorldPreset(db));
       const costFund = Math.round(def.costUsd / fundRate);
-      const funded = await disburseFromOrganizationFund(db, resolution.organizationId, costFund);
+      const funded = await disburseFromOrganizationFund(db, resolution.organizationId, costFund, {
+        context: cashContext,
+      });
       if (!funded) {
         const col = await getOrganizationLegislationCollection(db);
         await col.updateOne(
@@ -1228,4 +1269,27 @@ async function applyResolutionEffect(
       return;
     }
   }
+}
+
+async function captureDiplomaticExpiry(
+  db: Db,
+  turn: number,
+  item: OrganizationLegislation
+): Promise<void> {
+  await captureServerGameEvent({
+    db,
+    turn,
+    event: "diplomacy_status_changed",
+    distinctId: "system:turn-processor",
+    insertId: `diplomacy-expired:${item._id}`,
+    nationId: item.proposingCountryId,
+    properties: {
+      proposal_id: item._id.toString(),
+      organization_id: item.organizationId,
+      action_type: item.type,
+      from_status: "active",
+      to_status: "terminated",
+      transition_type: "expiry",
+    },
+  });
 }

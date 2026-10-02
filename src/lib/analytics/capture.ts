@@ -3,7 +3,73 @@
 import { getStoredConsent } from "@/components/CookieConsent";
 import { captureAmplitudeEvent, stopAmplitudeCapture } from "./amplitudeClient";
 import { capturePostHogEvent, stopPostHogCapture } from "./posthogClient";
-import { ACCOUNT_CREATED_KEY, FIRST_TURN_KEY } from "./storageKeys";
+import { ACCOUNT_CREATED_KEY, FIRST_MEANINGFUL_ACTION_KEY, FIRST_TURN_KEY } from "./storageKeys";
+
+interface ProductEventContext {
+  iteration_id: string;
+  turn_number: number;
+  nation_id?: string;
+}
+
+let productEventContext: ProductEventContext = {
+  iteration_id: "unknown",
+  turn_number: 0,
+};
+let productEventContextExpiresAt = 0;
+let productEventContextRequest: Promise<ProductEventContext> | null = null;
+
+/** Update the browser's shared game envelope from already loaded game state. */
+export function setProductEventContext(
+  context: Omit<Partial<ProductEventContext>, "nation_id"> & { nation_id?: string | null }
+): void {
+  const { nation_id, ...rest } = context;
+  productEventContext = { ...productEventContext, ...rest };
+  if (nation_id === null) {
+    delete productEventContext.nation_id;
+  } else if (nation_id !== undefined && /^[A-Z]{2,3}$/.test(nation_id)) {
+    productEventContext.nation_id = nation_id;
+  } else if (nation_id !== undefined) {
+    delete productEventContext.nation_id;
+  }
+  if (
+    typeof context.iteration_id === "string" &&
+    typeof context.turn_number === "number" &&
+    Number.isInteger(context.turn_number) &&
+    context.turn_number >= 0
+  ) {
+    productEventContextExpiresAt = Date.now() + 15_000;
+  }
+}
+
+async function getProductEventContext(): Promise<ProductEventContext> {
+  if (productEventContextExpiresAt > Date.now()) return productEventContext;
+  if (productEventContextRequest) return productEventContextRequest;
+  productEventContextRequest = (async () => {
+    try {
+      const response = await fetch("/api/game/turn/status", { cache: "no-store" });
+      if (!response.ok) return productEventContext;
+      const status = (await response.json()) as {
+        iterationId?: unknown;
+        currentTurn?: unknown;
+      };
+      if (typeof status.iterationId === "string") {
+        productEventContext.iteration_id = status.iterationId;
+      }
+      if (typeof status.currentTurn === "number" && Number.isInteger(status.currentTurn)) {
+        productEventContext.turn_number = status.currentTurn;
+      }
+    } catch {
+      // A missing game clock must never block an analytics event or game action.
+    }
+    productEventContextExpiresAt = Date.now() + 15_000;
+    return productEventContext;
+  })();
+  try {
+    return await productEventContextRequest;
+  } finally {
+    productEventContextRequest = null;
+  }
+}
 
 /**
  * The single analytics choke point.
@@ -28,11 +94,39 @@ export async function captureProductEvent(
   event: string,
   properties?: Record<string, string | number | boolean>
 ): Promise<void> {
+  const context = getStoredConsent() === "accepted" ? await getProductEventContext() : null;
+  const eventProperties = properties ? { ...properties } : undefined;
+  const eventNationId = eventProperties?.nation_id;
+  const safeEventNationId =
+    typeof eventNationId === "string" && /^[A-Z]{2,3}$/.test(eventNationId)
+      ? eventNationId
+      : undefined;
+  if (eventProperties && eventNationId !== undefined && !safeEventNationId) {
+    delete eventProperties.nation_id;
+  }
+  const suppliedContextIsValid =
+    typeof eventProperties?.iteration_id === "string" &&
+    /^(?:unknown|(?:alpha|beta|iteration)-[1-9][0-9]*)$/.test(eventProperties.iteration_id) &&
+    typeof eventProperties.turn_number === "number" &&
+    Number.isInteger(eventProperties.turn_number) &&
+    eventProperties.turn_number >= 0;
+  const enrichedProperties = context
+    ? {
+        ...eventProperties,
+        iteration_id: suppliedContextIsValid ? eventProperties!.iteration_id : context.iteration_id,
+        turn_number: suppliedContextIsValid ? eventProperties!.turn_number : context.turn_number,
+        ...(safeEventNationId
+          ? { nation_id: safeEventNationId }
+          : context.nation_id
+            ? { nation_id: context.nation_id }
+            : {}),
+      }
+    : eventProperties;
   // allSettled, not all: one destination being down or misconfigured must never
   // suppress the other, and analytics must never reject into a caller's flow.
   await Promise.allSettled([
-    capturePostHogEvent(event, properties),
-    captureAmplitudeEvent(event, properties),
+    capturePostHogEvent(event, enrichedProperties),
+    captureAmplitudeEvent(event, enrichedProperties),
   ]);
 }
 
@@ -44,6 +138,46 @@ export async function stopAnalyticsCapture(): Promise<void> {
 let accountCaptureInFlight = false;
 const characterCaptureInFlight = new Set<string>();
 const firstTurnCaptureInFlight = new Set<string>();
+const firstMeaningfulActionInFlight = new Set<string>();
+const firstMeaningfulActionChecked = new Set<string>();
+
+type FirstMeaningfulActionAnchor = {
+  characterId: string;
+  createdTurn: number;
+  startingNationId?: string;
+  creationPath?: string;
+  characterCount?: number;
+  captured: boolean;
+};
+
+function isFirstMeaningfulActionAnchor(value: unknown): value is FirstMeaningfulActionAnchor {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.characterId === "string" &&
+    typeof record.createdTurn === "number" &&
+    typeof record.captured === "boolean"
+  );
+}
+
+function readFirstMeaningfulActionAnchors(): Record<string, FirstMeaningfulActionAnchor> {
+  try {
+    const stored = window.localStorage.getItem(FIRST_MEANINGFUL_ACTION_KEY);
+    if (!stored) return {};
+    const parsed: unknown = JSON.parse(stored);
+    if (isFirstMeaningfulActionAnchor(parsed)) {
+      return { [parsed.characterId]: parsed };
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const anchors: Record<string, FirstMeaningfulActionAnchor> = {};
+    for (const [characterId, value] of Object.entries(parsed)) {
+      if (isFirstMeaningfulActionAnchor(value)) anchors[characterId] = value;
+    }
+    return anchors;
+  } catch {
+    return {};
+  }
+}
 
 /** Carry a successful signup across the mandatory full-page login navigation. */
 export function rememberAccountCreated(): void {
@@ -71,15 +205,81 @@ export async function capturePendingAccountCreated(): Promise<void> {
 }
 
 /** Local anchor for a new character; older characters never enter this funnel. */
-export function rememberNewCharacter(characterId: string, createdTurn: number): void {
+export function rememberNewCharacter(
+  characterId: string,
+  createdTurn: number,
+  metadata: { startingNationId?: string; creationPath?: string; characterCount?: number } = {}
+): void {
   if (getStoredConsent() !== "accepted" || !Number.isInteger(createdTurn)) return;
+  firstMeaningfulActionChecked.delete(characterId);
   try {
+    const anchor = { characterId, createdTurn, ...metadata };
     window.localStorage.setItem(
       FIRST_TURN_KEY,
-      JSON.stringify({ characterId, createdTurn, creationCaptured: false })
+      JSON.stringify({ ...anchor, creationCaptured: false })
     );
+    const anchors = readFirstMeaningfulActionAnchors();
+    anchors[characterId] = { ...anchor, captured: false };
+    window.localStorage.setItem(FIRST_MEANINGFUL_ACTION_KEY, JSON.stringify(anchors));
   } catch {
     // Analytics storage is optional.
+  }
+}
+
+/** Capture the first successful player action after character creation once. */
+export async function captureFirstMeaningfulAction(
+  characterId: string,
+  action: { action_domain: string; action_type: string }
+): Promise<void> {
+  if (
+    getStoredConsent() !== "accepted" ||
+    !characterId ||
+    firstMeaningfulActionChecked.has(characterId) ||
+    firstMeaningfulActionInFlight.has(characterId)
+  )
+    return;
+  firstMeaningfulActionInFlight.add(characterId);
+  try {
+    const anchors = readFirstMeaningfulActionAnchors();
+    if (anchors[characterId]?.captured) return;
+    const response = await fetch("/api/analytics/first-meaningful-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ characterId, consent: true }),
+    });
+    if (!response.ok || getStoredConsent() !== "accepted") return;
+    const result = (await response.json()) as { activation?: Record<string, unknown> | null };
+    const activation = result.activation;
+    firstMeaningfulActionChecked.add(characterId);
+    if (!activation || typeof activation.turns_since_character_creation !== "number") return;
+    if (anchors[characterId]) {
+      anchors[characterId] = { ...anchors[characterId], captured: true };
+      try {
+        window.localStorage.setItem(FIRST_MEANINGFUL_ACTION_KEY, JSON.stringify(anchors));
+      } catch {
+        // The durable claim already owns this event; optional storage cannot suppress it.
+      }
+    }
+    await captureProductEvent("first_meaningful_action", {
+      ...action,
+      iteration_id:
+        typeof activation.iteration_id === "string" ? activation.iteration_id : "unknown",
+      turn_number: typeof activation.turn_number === "number" ? activation.turn_number : 0,
+      turns_since_character_creation: activation.turns_since_character_creation,
+      starting_nation_id:
+        typeof activation.starting_nation_id === "string" &&
+        /^[A-Z]{2,3}$/.test(activation.starting_nation_id)
+          ? activation.starting_nation_id
+          : "unknown",
+      creation_path:
+        activation.creation_path === "character_creator" ? "character_creator" : "unknown",
+      character_count:
+        typeof activation.character_count === "number" ? activation.character_count : 1,
+    });
+  } catch {
+    // Analytics storage is optional.
+  } finally {
+    firstMeaningfulActionInFlight.delete(characterId);
   }
 }
 

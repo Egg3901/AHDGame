@@ -13,7 +13,7 @@ import {
   getTreeMaintenanceCost,
   getCampaignFamilyScalar,
 } from "@/lib/campaigns/upgradeCosts";
-import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
+import { computeElectionPhase, isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   SUPPORT_RALLY_FULL_VALUE,
@@ -307,6 +307,21 @@ export async function getCampaignDetail(
   // accept it. SSOT shared with the gate — see isCampaignUpgradeGeneralPhase.
   const gameTime = await getGameTime();
   const isGeneralPhase = isCampaignUpgradeGeneralPhase(election, gameTime.currentTurn, gameTime);
+  if (base.electionInfo && election) {
+    const phase = computeElectionPhase(
+      election.startTime ?? null,
+      election.primaryEndTime ?? null,
+      election.endTime ?? null,
+      election.status,
+      gameTime,
+      {
+        startTurn: election.startTurn,
+        primaryEndTurn: election.primaryEndTurn,
+        endTurn: election.endTurn,
+      }
+    );
+    base.electionInfo.phase = phase.inPrimary ? "primary" : phase.inGeneral ? "general" : "unknown";
+  }
   const income = calculateCampaignIncome(campaign, electionType);
   const maintenance = calculateMaintenanceCosts(campaign, electionType);
   // Budget-panel split. Strategic Operations v2: read the tree's per-lever

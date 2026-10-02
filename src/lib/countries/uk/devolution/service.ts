@@ -3,6 +3,8 @@
  * election anchors. Abolition vacates regional executives and cancels their
  * unfinished races without deleting historical election records.
  */
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
+import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { Db, Filter } from "mongodb";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
@@ -147,9 +149,15 @@ export async function vacateUKRegionalExecutives(
     const officials = await db
       .collection<ElectedOfficial>("electedOfficials")
       .find(filter, {
-        projection: { characterId: 1, nppId: 1, _id: 0 },
+        projection: { characterId: 1, nppId: 1, party: 1, _id: 0 },
       })
       .toArray();
+    const telemetryState = officials.some((official) => official.characterId)
+      ? await db
+          .collection<GameState>("gameState")
+          .findOne({ _id: "current" }, { projection: { currentTurn: 1, iteration: 1 } })
+          .catch(() => null)
+      : null;
     const characters = officials.flatMap((official) =>
       official.characterId ? [official.characterId] : []
     );
@@ -197,5 +205,25 @@ export async function vacateUKRegionalExecutives(
         $unset: { devolutionPolicy: "" },
       }
     );
+    const departingPlayers = new Map(
+      officials
+        .filter((official) => official.characterId)
+        .map((official) => [official.characterId!.toString(), official])
+    );
+    await Promise.all(
+      [...departingPlayers.values()].map((official) =>
+        captureOfficeTransition({
+          db,
+          officeType: "governor",
+          transitionType: "lost",
+          partyId: official.party ?? undefined,
+          selectionMethod: "removal",
+          nationId: "UK",
+          turn: telemetryState?.currentTurn ?? 0,
+          iteration: telemetryState?.iteration,
+        })
+      )
+    );
+    await flushServerPosthog();
   }
 }

@@ -6,6 +6,9 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 vi.mock("@/lib/military/blocLookup", () => ({
   loadMilitaryBlocs: vi.fn().mockResolvedValue({ US: "west", RU: "east" }),
 }));
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: (body: (session: object) => Promise<unknown>) => body({}),
+}));
 
 const resolveConflict = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/military/resolveConflict", () => ({

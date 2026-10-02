@@ -18,7 +18,7 @@ const {
   // A deliberately non-identity rate, so a test asserting the credited figure
   // fails if the conversion is skipped or applied twice.
   convertLocal: vi.fn((_from: string, _to: string, amount: number) => amount * 2),
-  ensureFederalBudget: vi.fn(async () => {}),
+  ensureFederalBudget: vi.fn(async () => ({}) as never),
   loadWorldPreset: vi.fn(async () => "1953-default"),
   reunifyByPeaceTerm: vi.fn(async (..._a: unknown[]) => ({ actuated: true })),
 }));
@@ -62,6 +62,7 @@ const ctx: ApplyTermContext = {
 beforeEach(() => {
   convertLocal.mockClear();
   ensureFederalBudget.mockClear();
+  ensureFederalBudget.mockResolvedValue({} as never);
   recordProcurementRestriction.mockClear();
   installOnePartyState.mockClear();
   triggerSystemConversion.mockClear();
@@ -100,6 +101,16 @@ describe("applyPeaceTerm: indemnity", () => {
     const { db } = mockDb();
     await applyPeaceTerm(db, { kind: "indemnity", payer: "TR", amount: 100 }, ctx);
     expect(ensureFederalBudget).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed when a missing budget cannot be healed", async () => {
+    ensureFederalBudget.mockResolvedValueOnce(null as never);
+    const { db, updates } = mockDb();
+
+    await expect(
+      applyPeaceTerm(db, { kind: "indemnity", payer: "TR", amount: 100 }, ctx)
+    ).rejects.toThrow(/missing federal budget/);
+    expect(updates).toHaveLength(0);
   });
 
   it("moves nothing on a white peace", async () => {

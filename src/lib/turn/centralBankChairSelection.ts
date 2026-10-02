@@ -1,3 +1,4 @@
+import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 /**
  * Central Bank Chair Selection Phase
  *
@@ -435,6 +436,7 @@ export async function processCentralBankChairSelection(
         result.vacanciesRemaining++;
         await persistVacancy(db, bank._id, gameNow);
       }
+      await captureOutgoingCentralBankChair(db, bank, countryId, currentTurn);
       continue;
     }
 
@@ -451,6 +453,7 @@ export async function processCentralBankChairSelection(
     };
 
     await persistPendingProposal(db, bank, proposal, gameNow, countryId, scope.intorgId);
+    await captureOutgoingCentralBankChair(db, bank, countryId, currentTurn);
 
     console.log(
       `[CentralBankChairSelection] ${countryId}: pending ${picked.candidate.characterName} (nomination pool)`
@@ -565,6 +568,21 @@ export async function acceptCentralBankChairSelection(
   );
   if (!claimed) {
     return { ok: false, error: "No pending chair appointment" };
+  }
+
+  if (!bank.chairCharacterId?.equals(acceptingCharacterId)) {
+    await captureOutgoingCentralBankChair(db, bank, countryId, currentTurn);
+    await captureOfficeTransition({
+      db,
+      officeType: "centralBankChair",
+      transitionType: "gained",
+      partyId: character.party,
+      selectionMethod: "appointment",
+      careerStage: character.careerHistory?.length ?? 0,
+      nationId: countryId,
+      turn: currentTurn,
+      flush: true,
+    });
   }
 
   await createNotifications([
@@ -810,4 +828,25 @@ export async function declineCentralBankChairSelection(
   );
 
   return { ok: outcome.ok, vacancy: outcome.vacancy, error: outcome.error };
+}
+
+async function captureOutgoingCentralBankChair(
+  db: Db,
+  bank: CentralBank,
+  countryId: CountryId,
+  turn: number
+): Promise<void> {
+  if (!bank.chairCharacterId) return;
+  const appointedTurn = bank.fomcBoard?.find(
+    (seat) => seat.isChair && seat.characterId?.equals(bank.chairCharacterId!)
+  )?.appointedAtTurn;
+  await captureOfficeTransition({
+    db,
+    officeType: "centralBankChair",
+    transitionType: "lost",
+    selectionMethod: "appointment",
+    nationId: countryId,
+    turn,
+    tenureTurns: appointedTurn != null ? Math.max(0, turn - appointedTurn) : undefined,
+  });
 }

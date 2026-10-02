@@ -6,6 +6,9 @@ import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: (body: (session: object) => Promise<unknown>) => body({}),
+}));
 
 function cursorReturning(docs: unknown[]) {
   return {

@@ -353,10 +353,17 @@ export async function initializeCronJobs() {
           }); allowing processTurn to take over.`
         );
         try {
-          void captureServerProductEvent("turn_lock_stuck", {
-            lock_age_ms: Number.isFinite(lockAgeMs) ? lockAgeMs : -1,
-            phase: currentState.processingPhase ?? "unknown",
-          });
+          void captureServerProductEvent(
+            "turn_lock_stuck",
+            {
+              lock_age_ms: Number.isFinite(lockAgeMs) ? lockAgeMs : -1,
+              phase: currentState.processingPhase ?? "unknown",
+            },
+            {
+              iteration: currentState.iteration,
+              turn: currentState.processingTargetTurn ?? currentState.currentTurn,
+            }
+          );
         } catch {
           // Telemetry cannot prevent turn recovery.
         }

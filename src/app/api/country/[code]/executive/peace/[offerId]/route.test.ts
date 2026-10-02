@@ -146,6 +146,58 @@ describe("accepting", () => {
     const { POST } = await import("./route");
     expect((await POST(req("accept"), params())).status).toBe(409);
   });
+
+  it("resumes an interrupted accepted offer without revalidating its partial roster", async () => {
+    db.collectionMocks.peaceOffers.findOne.mockResolvedValue({
+      ...baseOffer,
+      status: "accepted",
+      expiresTurn: 10,
+      application: {
+        phase: "term_applied",
+        acceptedBy: ACTOR.toString(),
+        acceptedTurn: 39,
+        leavers: [{ countryId: "CN", side: "B" }],
+        trucePairs: [{ first: "CN", second: "UK" }],
+        resolutionWinner: "A",
+        attackerNation: "US",
+        defenderNation: "CN",
+      },
+    });
+    db.collectionMocks.conflicts.findOne.mockResolvedValue({
+      ...conflict,
+      sideB: { ...conflict.sideB, countries: [] },
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(req("accept"), params());
+
+    expect(response.status).toBe(200);
+    expect(acceptSpy).toHaveBeenCalled();
+  });
+
+  it("returns the committed result when an acceptance response is retried", async () => {
+    db.collectionMocks.peaceOffers.findOne.mockResolvedValue({
+      ...baseOffer,
+      status: "accepted",
+      application: {
+        phase: "completed",
+        acceptedBy: ACTOR.toString(),
+        acceptedTurn: 39,
+        leavers: [{ countryId: "CN", side: "B" }],
+        trucePairs: [{ first: "CN", second: "UK" }],
+        resolutionWinner: "A",
+        attackerNation: "US",
+        defenderNation: "CN",
+      },
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(req("accept"), params());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ warResolved: true });
+    expect(acceptSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("accepting a reunification", () => {

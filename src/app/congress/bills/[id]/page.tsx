@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { captureProductEvent } from "@/lib/analytics/capture";
-import { getStoredConsent } from "@/components/CookieConsent";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -75,24 +74,6 @@ function BillDetailContent() {
   useEffect(() => {
     fetchBill();
   }, [fetchBill]);
-
-  useEffect(() => {
-    if (
-      !bill ||
-      bill.status !== "signed" ||
-      bill.sponsorId !== user?.character?.id ||
-      getStoredConsent() !== "accepted"
-    )
-      return;
-    const key = `ahd:bill-passed:${bill.id}`;
-    try {
-      if (window.localStorage.getItem(key)) return;
-      window.localStorage.setItem(key, "1");
-      void captureProductEvent("bill_passed", { bill_id: bill.id });
-    } catch {
-      // Analytics storage is optional.
-    }
-  }, [bill, user?.character?.id]);
 
   if (!id) {
     // Params not resolved yet — show the same skeleton as the data fetch.
