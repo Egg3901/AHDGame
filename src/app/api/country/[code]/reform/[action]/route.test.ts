@@ -133,6 +133,16 @@ describe("POST /api/country/[code]/reform/[action]", () => {
     expect(res.status).toBe(409);
   });
 
+  it("returns 409 when the party to legalize is not banned", async () => {
+    mockLegalizeParty.mockRejectedValue(
+      new Error("legalizePartyAction: party 7 is not banned in CN")
+    );
+    const res = await POST(request("legalizeParty", { partyId: 7 }), {
+      params: Promise.resolve({ code: "CN", action: "legalizeParty" }),
+    });
+    expect(res.status).toBe(409);
+  });
+
   it("returns 409 when constitutional amendment is already used", async () => {
     mockConstitutionalAmendment.mockRejectedValue(
       new Error("constitutionalAmendmentAction: already used")

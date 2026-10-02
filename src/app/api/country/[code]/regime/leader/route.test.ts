@@ -159,6 +159,36 @@ describe("GET /api/country/[code]/regime/leader", () => {
     }
   });
 
+  it("marks banned parties still inside their own legalize cooldown", async () => {
+    const chain = {
+      project: vi.fn().mockReturnThis(),
+      sort: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        { sequentialId: 2, name: "Sozialdemokratische Partei", abbreviation: "SPD" },
+        { sequentialId: 4, name: "Freie Demokratische Partei", abbreviation: "FDP" },
+      ]),
+    };
+    mockGetDb.mockResolvedValue({ collection: vi.fn(() => ({ find: vi.fn(() => chain) })) });
+    mockGetCountryState.mockResolvedValue({
+      countryId: "CN",
+      governmentType: "onePartyState",
+      rulingPartyId: 1,
+      reformCooldowns: { legalizeParty: { perPartyId: { 2: 520, 4: 400 } } },
+    });
+    const res = await GET(request(), { params: Promise.resolve({ code: "CN" }) });
+    const json = (await res.json()) as { bannedParties: unknown };
+    // Turn 500: party 2 is cooling until 520, party 4's window has passed.
+    expect(json.bannedParties).toEqual([
+      {
+        sequentialId: 2,
+        name: "Sozialdemokratische Partei",
+        abbreviation: "SPD",
+        legalizeCooldownUntil: 520,
+      },
+      { sequentialId: 4, name: "Freie Demokratische Partei", abbreviation: "FDP" },
+    ]);
+  });
+
   it("attaches the active decision's registered options when a handler exists", async () => {
     const decisionId = new ObjectId();
     mockRegimeFindOne.mockResolvedValue({
