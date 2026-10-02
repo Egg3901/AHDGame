@@ -63,6 +63,7 @@ import {
 import { logger } from "../../observability/logger";
 import { finishFinalizedElectionCleanup } from "./finalizedElectionCleanup";
 import { applyConversionVotePenalty, applyLegacySeatFloor } from "./conversionTerms";
+import { loadSurvivingPartyResolver } from "@/lib/parties/survivingParty";
 import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
@@ -236,6 +237,11 @@ export async function resolveOneGeneralElection(
         status: "active",
       })
       .toArray();
+
+    // A candidacy filed under a party that has since merged away counts for,
+    // and seats into, the party that absorbed it (ticket 1376).
+    const survivingParty = await loadSurvivingPartyResolver(db, election.countryId ?? "US");
+    for (const c of candidates) c.party = survivingParty(c.party) ?? c.party;
 
     const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
 
