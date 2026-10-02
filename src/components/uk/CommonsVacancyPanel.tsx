@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import type { CountryId } from "@/lib/constants/countries";
+import { buildElectionHref } from "@/components/elections/electionHelpers";
 import type {
   CommonsElectionDto,
   CommonsVacancyDto,
@@ -37,6 +39,23 @@ const PETITION_STATUS_LABELS: Record<string, string> = {
 function electionForVacancy(vacancy: CommonsVacancyDto, elections: CommonsElectionDto[]) {
   if (!vacancy.electionId) return null;
   return elections.find((e) => e.id === vacancy.electionId) ?? null;
+}
+
+/**
+ * Where a claimed vacancy's race stands. Entry closes well before the vote, so a
+ * player deciding whether to stand needs the entry deadline, not only the end.
+ */
+function byElectionProgressText(election: CommonsElectionDto, currentTurn: number): string {
+  const end = election.endTurn ?? "unknown";
+  if (election.status === "active" || election.status === "upcoming") {
+    return election.primaryEndTurn != null && currentTurn < election.primaryEndTurn
+      ? `By-election running. Entries close turn ${election.primaryEndTurn}, voting closes turn ${end}`
+      : `By-election running, closes turn ${end}`;
+  }
+  if (election.status === "cancelled") {
+    return "By-election cancelled, a new race will be scheduled";
+  }
+  return `By-election ${election.status}, closed turn ${end}`;
 }
 
 /** What happens next for a vacancy no by-election has claimed yet. */
@@ -80,9 +99,11 @@ async function postJson(
 function VacancyCard({
   vacancy,
   elections,
+  currentTurn,
 }: {
   vacancy: CommonsVacancyDto;
   elections: CommonsElectionDto[];
+  currentTurn: number;
 }) {
   const election = electionForVacancy(vacancy, elections);
   return (
@@ -105,15 +126,17 @@ function VacancyCard({
       {election ? (
         <div className="mt-2 rounded-lg bg-background/60 px-3 py-2 text-xs">
           <p className="text-muted">
-            {election.status === "active" || election.status === "upcoming"
-              ? `By-election running, closes turn ${election.endTurn ?? "unknown"}`
-              : election.status === "cancelled"
-                ? "By-election cancelled, a new race will be scheduled"
-                : `By-election ${election.status}, closed turn ${election.endTurn ?? "unknown"}`}
+            {byElectionProgressText(election, currentTurn)}
             {typeof election.carve === "number"
               ? ` · electorate ${(election.carve * 100).toFixed(1)}% of the region`
               : ""}
           </p>
+          <Link
+            href={buildElectionHref({ id: election.id, seatId: election.seatId ?? undefined })}
+            className="mt-1 inline-block font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Go to the by-election
+          </Link>
           {election.candidates.length > 0 ? (
             <ul className="mt-1 space-y-0.5">
               {election.candidates.map((c) => (
@@ -399,7 +422,12 @@ export function CommonsVacancyPanel({ countryId }: { countryId: CountryId }) {
           <h3 className="mb-2 text-sm font-semibold text-foreground">Open vacancies</h3>
           <ul className="mb-4 space-y-2">
             {status?.vacancies.map((v) => (
-              <VacancyCard key={v.id} vacancy={v} elections={status?.elections ?? []} />
+              <VacancyCard
+                key={v.id}
+                vacancy={v}
+                elections={status?.elections ?? []}
+                currentTurn={status?.currentTurn ?? 0}
+              />
             ))}
           </ul>
         </>

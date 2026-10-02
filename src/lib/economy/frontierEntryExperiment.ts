@@ -20,11 +20,13 @@
  *   per controlling entity per turn
  * - real financing and real founding costs: eligibility requires a priced
  *   founding quote covered by capital or an approved credit line
- * - the experiment relaxes only expectational gates
- *   (FRONTIER_ENTRY_RELAXABLE_REASONS): profitability, margin floor, and the
+ * - expectational relaxations use
+ *   FRONTIER_ENTRY_RELAXABLE_REASONS: profitability, margin floor, and the
  *   nominal pre-pricing cash floor. Policy, physical, and accounting gates
- *   (state control, logistics, cohort stagger, retail pause, glut, per-turn
+ *   (state control, logistics, retail pause, glut, per-turn
  *   cap, real founding-cost affordability, facility size) stay binding
+ * - ordinary cohort staggering may be replaced only for profitable uncovered
+ *   positive-use cells by the experiment's state-country/controller caps
  * - no guaranteed survival: exits (including failures) are recorded, never
  *   prevented; rollback triggers only on guardrail breach, not on entrant
  *   failure
@@ -59,6 +61,8 @@ export function isFrontierEntryRelaxableReason(
 ): reason is FrontierEntryRelaxableReason {
   return (FRONTIER_ENTRY_RELAXABLE_REASONS as readonly string[]).includes(reason);
 }
+
+export { frontierPacingOpportunity } from "./frontierEntryExperiment/rules";
 
 /** Absent or non-true resolves to disabled. Fail-closed like the flag. */
 export function frontierEntryExperimentEnabledFrom(value: unknown): boolean {

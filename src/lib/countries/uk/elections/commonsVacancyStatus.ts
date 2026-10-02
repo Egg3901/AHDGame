@@ -61,8 +61,12 @@ export interface RecallPetitionDto {
 
 export interface CommonsElectionDto {
   id: string;
+  /** Public race key the election page is addressed by, when the race has one. */
+  seatId: string | null;
   state: string;
   status: string;
+  /** Last turn a candidate can enter. */
+  primaryEndTurn: number | null;
   endTurn: number | null;
   totalSeats: number | null;
   carve: number | null;
@@ -216,8 +220,10 @@ export async function loadCommonsVacancyStatus(
     })),
     elections: elections.map((e) => ({
       id: e._id.toString(),
+      seatId: e.seatId ?? null,
       state: e.state,
       status: e.status,
+      primaryEndTurn: e.primaryEndTurn ?? null,
       endTurn: e.endTurn ?? null,
       totalSeats: e.totalSeats ?? null,
       carve: e.byElectionCarve ?? null,
