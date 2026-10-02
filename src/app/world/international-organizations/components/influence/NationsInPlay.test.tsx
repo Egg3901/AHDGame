@@ -24,6 +24,8 @@ const target = (over: Partial<InfluenceTarget>): InfluenceTarget =>
     isMember: false,
     pointCostLocal: 100,
     turnCapCostLocal: 500,
+    playMaxPoints: 10,
+    playCapCostLocal: 1_000,
     costToGate: 3_000,
     resistsAtHalfStrength: false,
     joinCountdown: null,
