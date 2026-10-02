@@ -29,7 +29,7 @@ import { iterationsPages } from "./pages/iterations";
  *   Resources & Contracts (4 pages)
  *   Commodities (one page per CommodityType, auto-generated)
  *   Conflicts & Military (14 pages)
- *   Iterations (2 pages)
+ *   Iterations (3 pages)
  *
  * Wiki goes public when an admin flips `wikiDisabled = false` in the admin panel.
  */

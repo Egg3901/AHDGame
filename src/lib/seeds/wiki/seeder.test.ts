@@ -145,6 +145,24 @@ describe("seedWikiPages", () => {
     vi.clearAllMocks();
   });
 
+  it("reports inserts and updates without writing in dry-run mode", async () => {
+    db.collectionMocks.wikiPages = db.collection("wikiPages");
+    db.collectionMocks.wikiPages.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existingPage({ slug: "existing-page" }));
+
+    const result = await seedWikiPages(db as unknown as Db, ADMIN_ID, {
+      dryRun: true,
+      pages: [seedPage, { ...seedPage, slug: "existing-page" }],
+    });
+
+    expect(result.inserted).toEqual([seedPage.slug]);
+    expect(result.updated).toEqual(["existing-page"]);
+    expect(result.skipped).toEqual([]);
+    expect(db.collectionMocks.wikiPages.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.wikiPages.updateOne).not.toHaveBeenCalled();
+  });
+
   it("resolves a lastUpdated date (YYYY-MM-DD) for every seed page", async () => {
     const { WIKI_SEED_PAGES } = await import("./pages");
     const { WIKI_LAST_UPDATED } = await import("./lastUpdated.generated");
