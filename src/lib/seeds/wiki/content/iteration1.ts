@@ -45,9 +45,9 @@ This is a snapshot of a running world. It is not a complete transcript of 1,302 
 
 ## 🇺🇸 United States
 
-America spent its first quarter-century under Democratic dominance, fought and lost the largest war of the iteration, and then broke sharply right in 1976. The most revealing fact is not that six people reached the White House. It is that the electoral map kept changing beneath them.
+America spent its first quarter-century under Democratic dominance, fought and lost the largest war of the iteration, rebuilt through a long postwar recovery, and then broke sharply right in 1976. Seven people reached the White House, but they did not inherit the same America. Each presidency changed the terms on which the next one had to govern.
 
-### Seven elections, seven presidents
+### Seven elections and seven presidents
 
 | Year | Winner | Party | Popular vote | Electoral vote | Main rival |
 | --- | --- | --- | --- | --- | --- |
@@ -59,11 +59,43 @@ America spent its first quarter-century under Democratic dominance, fought and l
 | 1972 | **Sean Oppenheimer** | Democratic | 50.6% | 286 | Deprince, Farmer-Labor |
 | 1976 | **Ariane Yeong** | Republican | 39.7% | 481 | Sean Oppenheimer, Democratic |
 
-Hochburger won the founding election and a second term by large margins. Johnson followed with the closest thing this world has seen to an electoral coronation: **530 electoral votes** in 1960. The system then fragmented. Todoroki won two four-way contests with pluralities, Oppenheimer survived a 1972 race separated by only 1.6 percentage points, and **Ariane Yeong** turned 39.7% of the popular vote into 481 electoral votes in 1976. The table records the seven elections; **Egg** became the sixth president by constitutional succession after Yeong's removal, and Speaker **Richard Nixon** became the seventh after Egg resigned.
+Hochburger won the founding election and a second term by large margins. Johnson followed with the closest thing this world has seen to an electoral coronation: **530 electoral votes** in 1960. The system then fragmented. Todoroki won two four-way contests with pluralities, Oppenheimer survived a 1972 race separated by only 1.6 percentage points, and **Ariane Yeong** turned 39.7% of the popular vote into 481 electoral votes in 1976. The table records seven elections, not seven direct mandates: **Egg** became the sixth president by constitutional succession after Yeong's removal, and Speaker **Richard Nixon** became the seventh after Egg resigned.
 
 The party membership ledger makes that victory stranger. The Democrats remain the largest organization with **512 members**, followed by Farmer-Labor with **447**. Yeong's Republican Party has only **62**, behind the Constitutional Union Party's 89. Iteration 1 produced a Republican presidency before it produced a Republican mass party.
 
-### A cabinet of rivals, then impeachment
+### Lukas Hochburger: building the federal state
+
+**Lukas Hochburger**, in office from turns 49 through 431, did more than win twice. His era built much of the federal state that later presidents inherited. Its enacted program included industrial revival, public schools, child investment, housing, infrastructure, vocational and veterans training, anti-corruption rules, voting administration, defense production, and repeated attempts to stabilize the budget. His government also imposed a federal sales and excise tax and raised several existing rates to finance the larger state.
+
+The founding expansion was extraordinary. The NYSE grew from about **116.6 million** at his inauguration to **64.2 billion** near the end of his presidency. The fiscal record was less simple. At the 1955 snapshot, GDP was **431.9 billion**, the federal deficit was **35.4 billion**, debt stood at **73.2% of GDP**, and the country held an **AAA** rating. By the 1962 snapshot, GDP had reached **525.0 billion**, but the deficit was still **31.6 billion** and debt had climbed to **78.2% of GDP**, even as AAA survived. Hochburger built capacity and prosperity, but he also built the mobilized state that took America into war. The declaration against East Germany arrived at turn 415, in his final months.
+
+### Lyndon B. Johnson: inheriting the war
+
+**Lyndon B. Johnson** governed from turns 432 through 623. His 530-vote victory looked overwhelming, but his presidency inherited a conflict that electoral arithmetic could not control. Johnson's domestic record was restrained: *Budget Stabilization Act III*, the *Safeguard American Voter Eligibility Act*, and the *Cut Spending Act* entered the statute book, while he vetoed both a wartime spending package and an international-assistance measure.
+
+The War for Germany ended in defeat on his watch. By the 1966 budget, GDP was **564.9 billion**, the annual deficit **46.8 billion**, and federal debt **137.6% of GDP**. The credit rating fell from AAA before the war to **A**. Over the same presidential window, NYSE capitalization fell from about **64.9 billion** to **8.1 billion**, while total public-market capitalization fell from **74.2 billion** to **19.3 billion**. Johnson tried to restrain spending inside a war economy, but the period ended with military defeat, a much weaker balance sheet, and a shattered market.
+
+### Ren Todoroki: the strong-center recovery
+
+**Ren Todoroki** won in 1964 with 42.8% and again in 1968 with only 39.8%, making his presidency a long exercise in governing without a popular majority. From turns 624 through 1,007, his program favored central authority and reconstruction: the *Central Intelligence Appropriations Act*, *Streamlined Command: Executive Organization Act*, *Strong Center: Federal Supremacy and Enforcement Act*, *Patriotic Economic Tax Act*, *American Business Initiative*, and a fourth budget-stabilization package all entered the record. An international-assistance bill also became law after Johnson had vetoed an earlier version.
+
+The recovery was visible but incomplete. NYSE value rose from roughly **8.0 billion** at Todoroki's inauguration to **27.0 billion** at his departure, and global public markets rose from **19.1 billion** to **50.2 billion**. Federal debt fell from **145.1% of GDP** in the 1967 snapshot to **122.9%** in 1973. Yet the credit rating slipped from A to **BB**, and deficits remained above 57 billion by the end of the period. Todoroki restored scale and confidence, but not fiscal normality.
+
+### Sean Oppenheimer: rights, records, and social investment
+
+**Sean Oppenheimer**, president from turns 1,008 through 1,199, redirected the postwar state toward civil institutions. He signed the *Public Records and Information Act* and the *Civil Rights Act*. His term also produced *Healthcare Expansion Act Pt1* and an industrial-modernization law, while *Roe v. Wade* entered the constitutional record. Unlike the three elected presidents before him, Oppenheimer recorded no veto.
+
+His economy grew without producing another market boom. Between the 1974 and 1977 fiscal snapshots, GDP rose from **686.9 billion** to **767.2 billion**, the deficit narrowed from **55.8 billion** to **42.4 billion**, and debt fell from **118.7%** to **107.6% of GDP**. Inflation peaked at **12.55%** in the 1975 snapshot before easing to **4.76%** in 1977. The NYSE moved only from about **26.9 billion** to **28.1 billion**, while global public-market value contracted. Oppenheimer's legacy was less a speculative expansion than a more transparent and rights-conscious state with a slowly improving fiscal ratio.
+
+### Ariane Yeong: a broader record than the coalition
+
+**Ariane Yeong** became president at turn 1,200, ending twenty-three in-game years of Democratic control. Her four-party cabinet was historically unusual, but it was not her only accomplishment. *Healthcare Expansion Act Pt2*, the *Professional Service: Foreign Service and Negotiations Act*, and the *Poverty Reduction Act* entered law during her presidency. Through executive action, her administration established a federal role in election standards and statistics, created a Women's Bureau, replaced industrial modernization with a national investment drive, and streamlined federal land-development permits. She also vetoed the *Connecting America Act* and a wage-support bill, giving the program a distinctly pro-investment, limited-support balance.
+
+The aggregate economy improved during most of her presidency. From the first available macro snapshot of her term at turn 1,208 to the last before removal at turn 1,293, poverty fell from **5.88% to 4.03%**, unemployment from **13.79% to 12.92%**, measured GDP growth rose from **3.67% to 9.59%**, small-business formation from **59.8 to 62.9**, consumer confidence from **30.1 to 32.4**, and investor confidence reached **100**. The NYSE rose about **39%**, from **27.8 billion** to **38.6 billion**, and global public markets gained about **30%**, even as the dollar's local-per-reference rate rose from **1.069 to 1.185**, meaning the currency weakened. The 1979 budget still showed a **40.9 billion deficit**, but debt had declined to **103.6% of GDP**, its lowest level since 1962. The rating remained BBB and inflation was 9.08%, so this was improvement, not resolution. National government approval, which measures the administration as a whole rather than the president alone, rose from **49.8%** at turn 1,284 to **51.5%** on Yeong's final complete turn despite a dip between those points.
+
+These are national outcomes, not a personal presidential score. War recovery, Congress, private investment, Federal Reserve policy, and inherited conditions all contributed. Even so, they show that Yeong's presidency was not merely a cabinet arrangement followed by impeachment. It enacted a recognizable social and diplomatic program while presiding over lower poverty, stronger markets, better confidence, and a falling debt burden.
+
+### Coalition, impeachment, and two successors
 
 Yeong governed through a cabinet drawn from four parties. Former President **Ren Todoroki** served as Secretary of Defense. **Richard Nixon** was Treasury Secretary and Speaker of the House. **Joseph McCarthy** was Energy Secretary and House Majority Leader. Constitutional Union senator **James Estes Kefauver** was Attorney General, while Farmer-Labor figures **Deprince** and **Low Thia Khiang** held Commerce and Housing.
 
@@ -72,6 +104,8 @@ The administration looked less like a party government than a peace conference a
 Speaker **Richard Nixon** filed articles of impeachment at turn 1,282. The House advanced them 213 to 97, with 90 abstentions. At turn **1,294**, the Senate convicted Yeong by **85 to 0**, with eight abstentions, and removed her from office. Vice President **Egg** succeeded her immediately. Nixon then filed against Egg on the same turn, but that second case was dismissed in the House at turn 1,300. Egg resigned shortly afterward. Following a brief vacancy at turn **1,302**, Speaker Nixon was appointed President under the line of succession.
 
 The political-business overlap became concrete during Yeong's final hours. The national Wire recorded Defense Secretary **Ren Todoroki** awarding his own Todoroki Systems 15 defense lots worth about **3.77 billion**. The award sits on the public order book, turning the administration's network into a matter of public record.
+
+**Egg's presidency lasted only from turn 1,294 into turn 1,302.** It was a caretaker interlude dominated by his own failed impeachment and resignation, with no enacted law or veto attached to it. **Richard Nixon**, who had already been Speaker, Treasury Secretary, and the author of both impeachment drives, then took office by appointment rather than election. National government approval stood at **52.5%** at turn 1,302. Nixon's first address put the economy and education at the center of the new administration, but at this snapshot his presidential record had only just begun.
 
 ### The latest national returns
 
@@ -83,11 +117,11 @@ The United States entered the German conflict at turn **415** seeking regime cha
 
 The Wire became a second front. Supporters called it *The Great War Of Freedom* and declared that NATO was winning. Opponents answered with *STOP THE WAR - OH, BEHAVE!* and *STALEMATE AT THE FRONT, BLOODBATH AT HOME!* At turn 539 the East German and Soviet coalition won a decisive final engagement. The conflict closed at turn 545 with East Germany in control of both German states and the American regime-change project defeated.
 
-The political system survived, but the war followed every later election. The 1976 result finally ended twenty-three in-game years of Democratic presidents.
+The political system survived, but the war followed every later election. Todoroki's centralization, Oppenheimer's civil reforms, and Yeong's Republican breakthrough were three different answers to the same postwar question: what should replace the mobilized Democratic state that had lost Germany?
 
 ### Laws, courts, and a changing republic
 
-The American statute book moved between social reform, military mobilization, and repeated fiscal repair:
+Across all seven presidencies, the American statute book moved between social reform, military mobilization, centralization, civil rights, and repeated fiscal repair:
 
 - *Full Mobilization Base: Defense Production and Research Act*
 - *The Anti-Corruption Act*
@@ -104,49 +138,61 @@ The Supreme Court also wrote itself into the timeline. *Watkins v. United States
 
 ## 🇬🇧 United Kingdom
 
-Britain's story is the story of confidence. Governments rose, fell, returned, and fell again, while the country moved from helping the United States in Germany to defending the reunited East German state against the Soviet Union.
+Britain's story is the story of confidence in both meanings of the word. Governments rose, fell, returned, and fell again. Investors built an enormous exchange and then watched much of it contract. The state reduced its debt burden while moving from helping the United States attack East Germany to helping East Germany defeat the Soviet Union.
 
-### The Spencer governments
+### Sarah Spencer: the state builder who kept returning
 
 **Sarah Spencer** first entered Downing Street at turn 71. She was removed by no confidence at turn 217, returned, was removed again at turn 686, returned again, and finally lost a third successful challenge at turn 917. Two other challenges failed. Spencer's repeated premierships made her both the most durable and the most frequently dismissed British leader of the iteration.
 
-**Anastas Mikoyan** succeeded her, then fell to a 384 to 241 no-confidence vote at turn 1,155. **Callum MacLeod** took office at turn 1,162 and was reconfirmed after later elections at turns 1,204 and 1,251.
+Her governments built the basic postwar settlement. Rail nationalization, public health and vaccination, national service, housing, postsecondary education, civil-service reform, industrial investment, public order, and the *Open Society Act 1960* all belong to the Spencer era. The same Parliament repealed the union ban, repeatedly rewrote budgets, and entered the War for Germany through NATO.
 
-MacLeod now leads a **Labour minority government with 304 of 625 seats**. The Conservatives hold 166, the Liberal Democrats 111, and the Workers' Party of Great Britain 26. An active challenge opened at turn 1,281; at this snapshot it stands at 154 votes for removal and 424 against, with the vote not yet formally closed. Unless the balance changes before turn 1,305, MacLeod will survive it comfortably.
+The fiscal transformation outlasted the confidence votes. Near the opening, the 1954 budget showed GDP of **14.7 billion**, a **309.7 million deficit**, and debt equal to **179.0% of GDP**. By the 1972 snapshot, taken shortly before Spencer's final removal, GDP was **25.1 billion**, the budget ran a **577.7 million surplus**, and the debt ratio had fallen to **122.2%**. The credit rating nevertheless fell from AAA to BB as borrowing costs and political risk changed. Across her first appointment to final exit, the FTSE ledger grew from about **110 million** to **25.3 billion**. Spencer's Britain was unstable in office but expansive in institutions, fiscal capacity, and capital formation.
 
-### Government by coalition, even without one
+### Anastas Mikoyan: social reform amid market contraction
 
-The formal government is Labour, but its cabinet is broader. **Aether P. Strickler** is Deputy Prime Minister and Foreign Secretary as well as NATO Secretary-General. **David Brown** is Chancellor. Liberal Democrats hold Agriculture, Home, Justice, Transport, and the Chief Whip's office. **Reinhard Horvath** of the Workers' Party serves as Work Secretary and runs Aurivia Group, the largest British corporation by normalized value.
+**Anastas Mikoyan** took over after Spencer's final fall and governed from roughly turn 917 until a 384 to 241 no-confidence vote removed him at turn 1,155. His period produced the *NHS For All Act 1971*, civil-service equal pay, renewed education and patient-protection measures, court-capacity legislation, and another Whitehall reform. Parliament also passed fiscal restructuring and the 1971 budget.
 
-That mixture is a practical answer to a chamber in which no party commands 313 seats. It is also why British governments can look stable on paper and still live one confidence motion at a time.
+The balance sheet improved while prices and markets sent the opposite signal. Between the 1973 and 1976 fiscal snapshots, GDP rose from **26.5 billion** to **29.7 billion**, debt fell from **115.8% to 96.0% of GDP**, and the credit rating recovered from BBB to A. Inflation, however, rose from **9.60% to 12.94%**. Over the wider Mikoyan window, raw FTSE capitalization fell from about **25.3 billion** to **7.1 billion**. The record therefore looks less like simple decline than a state repairing its public finances while its listed-company universe contracted sharply.
+
+### Callum MacLeod: minority government and wartime reversal
+
+**Callum MacLeod** took office at turn 1,162 and was reconfirmed after later elections at turns 1,204 and 1,251. He now leads a **Labour minority government with 304 of 625 seats**. The Conservatives hold 166, the Liberal Democrats 111, and the Workers' Party of Great Britain 26. An active challenge opened at turn 1,281; at this snapshot it stands at 154 votes for removal and 424 against, with the vote not yet formally closed. Unless the balance changes before turn 1,305, MacLeod will survive it comfortably.
+
+The formal government is Labour, but its cabinet is broader. **Aether P. Strickler** is Deputy Prime Minister and Foreign Secretary as well as NATO Secretary-General. **David Brown** is Chancellor. Liberal Democrats hold Agriculture, Home, Justice, Transport, and the Chief Whip's office. **Reinhard Horvath** of the Workers' Party serves as Work Secretary and runs Aurivia Group, the largest British corporation by normalized value. That mixture is the practical answer to a chamber in which no party commands 313 seats.
+
+MacLeod's enacted program joined the Commonwealth Defense Pact, reformed defense, broadened national assistance, expanded the NHS again, passed the 1978 budget, and authorized war against the Soviet Union. From the 1977 to 1979 fiscal snapshots, debt fell from **92.1% to 82.0% of GDP** and the A rating held, but the annual surplus narrowed from **509.9 million** to only **29.3 million** while inflation remained above 11%. From turn 1,208 to 1,302, unemployment eased from **13.28% to 12.78%** and investor confidence rose from **65.0 to 80.5**, but poverty and consumer confidence were essentially unchanged. Government approval fell from **60.2%** at turn 1,284 to **51.0%** at turn 1,302 as war exhaustion and international condemnations offset the victory message.
 
 ### From NATO's war to Germany's defense
 
 Britain joined the War for Germany at turn **465** through NATO. Thirteen in-game years later, the alignment had inverted. East Germany had left the Warsaw Pact, built new organizations around itself, and faced invasion by its former Soviet ally. Britain entered the Russia-East Germany War on East Germany's side at turn **1,261**.
 
-The *War against the USSR Act* made the choice explicit. British and East German forces won four of the last five battles, reached the decisive pole at turn 1,297, and ended the war two turns later. Britain had entered to defend Germany; East Germany used the victory to impose a parliamentary republic on Russia.
+The *War against the USSR Act* made the choice explicit. British and East German forces won four of the last five battles, reached the decisive pole at turn 1,297, and ended the war two turns later. The FTSE fell from **3.95 billion** shortly before entry to **3.51 billion** at turn 1,261, then recovered to **4.81 billion** by victory at turn 1,299. Britain had entered to defend Germany; East Germany used the victory to impose a parliamentary republic on Russia.
 
 ### The British legislative personality
 
-Britain signed **73 bills**, ranging from state-building to pure Westminster theatre. The consequential list includes the *British Railway Act 1955*, *National Service Establishment*, *Open Society Act 1960*, *Repeal Union Ban Act 1962*, *NHS For All Act 1971*, and the 1978 defense reforms. The unforgettable list includes the *Answer Your Phone Act 1953*, *POON CHOI EAT THE RICH ACT*, *LORD HALIFAX (IMPRISONMENT) ACT*, and a budget bill titled simply *tax*.
+Britain signed **73 bills** by the snapshot, ranging from state-building to pure Westminster theatre. The consequential list includes the *British Railway Act 1955*, *National Service Establishment*, *Open Society Act 1960*, *Repeal Union Ban Act 1962*, *NHS For All Act 1971*, and the 1978 defense reforms. The unforgettable list includes the *Answer Your Phone Act 1953*, *POON CHOI EAT THE RICH ACT*, *LORD HALIFAX (IMPRISONMENT) ACT*, and a budget bill titled simply *tax*.
 
-The country also turned company-building into policy. The FTSE grew from about **90 million** at turn 2 to **4.80 billion** at turn 1,302, while Aurivia Group alone reached roughly **₳2.70 billion** in normalized value.
+The country also turned company-building into policy. The FTSE grew from about **90 million** at turn 2 to **4.80 billion** at turn 1,302, while Aurivia Group alone reached roughly **₳2.70 billion** in normalized value. The endpoint still represents growth of more than fifty times, but the leadership chronology matters: the exchange peaked above 29 billion near the Spencer-Mikoyan transition before contracting to its current level.
 
 ---
 
 ## 🇩🇪 East Germany and the German settlement
 
-East Germany began as the smaller German state and became the country around which the entire iteration turned.
+East Germany began as the smaller German state and became the country around which the entire iteration turned. Its political continuity is the opposite of Britain's churn: **Ivanka Trump** became General Secretary at turn 73 and has remained in command through state-building, reunification, diplomatic realignment, and two wars with the Soviet Union.
 
-### Ivankaism
+### Ivankaism and the first socialist settlement
 
-**Ivanka Trump** became General Secretary at turn 73 and has remained the defining figure of the German Democratic Republic. Early Wire dispatches announced *Ivankaism* as state doctrine and demanded Western withdrawal from Berlin. The government paired ideological spectacle with an extensive domestic program: housing construction, price subsidies, defense mobilization, state banking controls, nationalization, pensions, education reform, and industrial planning.
+Early Wire dispatches announced *Ivankaism* as state doctrine and demanded Western withdrawal from Berlin. The first domestic settlement was comprehensive. State-bank controls, a control commission, housing construction, a universal price shield, land transformation, health inspection, education reform, defense-industry direction, public-order law, tariffs, pensions, nationalization, and repeated infrastructure programs all entered the statute book. The government did not merely defend an existing East German system. It wrote one in real time.
 
 The governing formation records **599 of 693 Volkskammer seats** behind the SED-led government. Yet the political directory contains eleven parties, including eastern bloc parties and western German parties inherited through reunification. The result is a one-party state governing a newly enlarged and unexpectedly plural institutional shell.
+
+Before the war, the plan showed strain beneath its social ambition. East German GDP rose from **50.0 billion** at the opening to **63.3 billion** in the 1962 snapshot, but the budget moved from a **2.16 billion surplus** to a **153.7 million deficit**. Debt climbed from **6.0% to 29.4% of GDP**, and the rating fell from A to CCC. The shortage index reached **13.27** and the black-market premium **25.4%** on the eve of the conflict.
 
 ### Victory and reunification
 
 The War for Germany was the gamble that paid off. East Germany survived the American offensive, drew in the Soviet Union and the Warsaw Pact, reversed the front, and dictated a reunification settlement at turn 539. The final record states that East Germany took full control of both **DD and DE**.
+
+Reunification transformed the balance sheet as dramatically as the map. By the 1966 fiscal snapshot, combined GDP was **290.5 billion**, the budget showed an **11.7 billion surplus**, federal debt was zero, and the rating was AAA. By 1973, GDP had reached **376.2 billion** and the surplus **16.4 billion**. Debt had returned at 27.2% of GDP, but the state still held AAA. These figures describe the reunited government's larger tax base and inherited western economy, not organic East German growth alone.
 
 The victory changed the diplomatic map more than the territorial one. East Germany later withdrew from the **Warsaw Pact** and **COMECON**, joined the **Commonwealth**, and became the center of a new network:
 
@@ -162,35 +208,39 @@ The Soviet Union first saved East Germany, then attacked it. A war opened at tur
 
 Its closing sequence settled the argument. The German-British coalition won decisive or costly victories at turns 1,288 and 1,289, absorbed a Russian success at turn 1,291, routed the next Russian attack, and won again at turn 1,297. At turn **1,299**, East Germany dictated regime change: Russia's government collapsed and the settlement ordered a parliamentary republic. The conflict was not a replay of the first German war. It was a civil war inside the old winning coalition, won by the state that coalition had once saved.
 
-### A planned economy with a market scoreboard
+### A strong state with a strained household economy
 
-East Germany's currency remains fixed at **4.2 marks per reference unit**. Its VVB exchange and broader operating-company base each carry about **₳595 million**. The government still runs Gosplan and state banks, but it does so inside a world where every plan is measured against a live global market.
+The 1979 budget still looked formidable: GDP of **474.6 billion**, a **3.43 billion surplus**, debt at **19.6% of GDP**, and an AAA rating. The VVB exchange grew from roughly **45.7 million** after reunification to **594.8 million** at turn 1,302. The mark remains fixed at **4.2 per reference unit**.
+
+Household indicators tell the cost of the final war more clearly. From turn 1,208 to 1,302, unemployment rose from **1.22% to 5.08%**, poverty from **19.82% to 21.72%**, consumer confidence fell from **70.6 to 59.8**, and measured GDP growth moved from 2.63% to negative 0.53%. The planned-economy shortage index improved from its 1977 peak but remained **15.61** in the 1979 fiscal snapshot, with a black-market premium of **28.6%** and a physical demand-supply gap above 200%. Government approval also fell from **58.7%** at turn 1,284 to **54.8%** at turn 1,302 despite military victory. Warsaw Pact and Communist International condemnations account for six negative points in the live modifier ledger. East Germany won the geopolitical argument while its domestic economy absorbed the shock.
 
 ---
 
 ## ☭ Soviet Union
 
-The Soviet Union has been the iteration's great military guarantor, its most disciplined legislature, and now the defeated author of the war that undid its old political order.
+The Soviet Union has been the iteration's great military guarantor, its most disciplined legislature, and now the defeated author of the war that undid its old political order. Its two premiers represent different phases of the same one-party system.
 
-### From MacInnis to Makarov, then forced transition
+### Cassius MacInnis: construction, discipline, and early reform
 
-**Кассиус Макиннис** became the founding Premier at turn 72. After a succession of parliamentary appointment votes and a successful no-confidence motion, **Vladimir Makarov** took office at turn 414. The prewar government formation gave the Communist Party all **526 recorded supporting seats**.
+**Кассиус Макиннис** became the founding Premier at turn 72. His period established state-bank controls, election security, housing reform, rail maintenance, worker protection, military readiness, and a major science program. It also opened the first cracks in orthodox planning: *Market Liberalism I*, licensed producer cooperatives, and SSR financial autonomy all entered law before the leadership handoff.
 
-Makarov's cabinet includes **Beria** at Defence, **Iosif Bidenko** at Finance, **Petar Vilson** at Foreign Affairs, **Georgy Malenkov** as First Deputy Premier, and **Comrade Boris** as chairman of Gosplan. Soviet votes frequently pass with no opposition at all. Its 55 signed national bills include several unanimous measures.
+The founding fiscal record was strong. From 1953 to the final full snapshot before MacInnis left office in 1961, Soviet GDP rose from **1.029 trillion** to **1.267 trillion**, the annual surplus from **17.1 billion** to **95.6 billion**, and federal debt fell from 15 billion to zero. The rating rose from AA to AAA. At the same time, the 1961 shortage index was **10.66** and the black-market premium **20.4%**, early evidence that a solvent treasury did not mean a fully supplied household economy.
 
-### Reform inside the plan
+### Vladimir Makarov: reform, military power, and overreach
 
-The legislation is less monolithic than the voting totals suggest. The same system enacted *State Bank Controls*, *National Housing Reform*, and *Soviet Military Readiness*, then passed *Market Liberalism I*, *Market Liberalism II*, *Economic Reform III*, producer cooperatives, SSR financial autonomy, and a personal-property program.
+After a succession of parliamentary appointment votes and a successful no-confidence motion, **Vladimir Makarov** took office at turn 414. The government formation gave the Communist Party all **526 recorded supporting seats**. Makarov's cabinet includes **Beria** at Defence, **Iosif Bidenko** at Finance, **Petar Vilson** at Foreign Affairs, **Georgy Malenkov** as First Deputy Premier, and **Comrade Boris** as chairman of Gosplan.
 
-Iteration 1's Soviet economy is not a straight line from plan to market. It is a long argument between the two, conducted through unanimous votes.
+The 55-bill Soviet record is less monolithic than its frequent unanimous votes suggest. Under Makarov, *Market Liberalism II* and *Economic Reform III* sat beside state security, military appropriations, tariff reduction, environmental restructuring, anti-corruption law, resource security, budget reorganization, and a personal-property program. The plan did not move in a straight line toward markets. It alternated controlled openings with new instruments of state power.
 
-The Soviet ruble remains fixed at **9 per reference unit**. Gosplan's public market ledger stands near **272 million**, with about **₳273 million** across operating corporations. That is tiny beside the American private sector, but the Soviet system's real economic leverage has run through state ownership, bloc trade, and military supply rather than listed equity.
+Headline growth continued. Between the 1961 and 1979 snapshots, GDP rose from **1.267 trillion** to **2.353 trillion**. The 1979 budget still posted a **1.72 billion surplus**, debt remained below 1% of GDP, and the AAA rating held. Gosplan's public market ledger grew from only **2.5 million** near Makarov's accession to about **271.7 million** at turn 1,302. Yet shortages worsened: the shortage index rose to **15.15**, the black-market premium to **27.3%**, and the physical demand-supply gap to roughly **280%**. The ruble remained fixed at **9 per reference unit**. Soviet power accumulated in the treasury, plan, and military more reliably than on store shelves.
 
 ### From victory to rupture
 
 Soviet forces were decisive in the War for Germany. They helped turn an American offensive into an East German victory, funded the Warsaw Pact, and carried much of the coalition's military weight. By 1978, Moscow had declared war on the state it helped reunify, made peace immediately, and declared war again.
 
-The second war ended at turn 1,299 with a forced conversion recorded in Russia's national history: *Russia regime collapses into a parliamentary republic*. Makarov and the old 526-seat formation still appear in the live administrative record while the transition moves toward elections, so the settlement is historically decisive but institutionally unfinished.
+The second war ended at turn 1,299 with a forced conversion recorded in Russia's national history: *Russia regime collapses into a parliamentary republic*. Government approval fell from **54.3%** at the settlement to **49.7%** one turn later and stood at **49.8%** at turn 1,302; the live ledger assigns a 4.9-point penalty to the recent defeat. Late economic measures were more favorable, with unemployment falling from **11.00% to 6.62%** and poverty from **29.92% to 27.29%** between turns 1,208 and 1,302, but they did not prevent the political collapse.
+
+Makarov and the old 526-seat formation still appear in the live administrative record while the transition moves toward elections. The settlement is historically decisive but institutionally unfinished.
 
 That reversal is the clearest summary of the iteration's international politics: the Cold War blocs grew large enough to win, fractured under the weight of the victory, and finally let a former client dictate the political system of its former patron.
 
