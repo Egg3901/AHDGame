@@ -1,6 +1,6 @@
 {
   "issue": 2223,
-  "source": "a0dfaa5e0701fb1f277897b27c05c747a3185f40",
+  "source": "0b02d33be561485db154332ea4d7fdc5bf6ac001",
   "deliveredQueuedPayoutComponent": {
     "pr": 2956,
     "merge": "0538f4264354eeb837dc1b0b47639e74591fca17"
@@ -21,11 +21,12 @@
     "unattributedMovement": 0,
     "repeatedRecoveryStable": true,
     "transactionAbortRestoresOpening": true,
-    "multiHoldingUndoRestoresOpening": true
+    "multiHoldingUndoRestoresOpening": true,
+    "scopedSemanticTypecheckFiles": 14
   },
   "componentPerformance": {
     "baseline": "0538f4264354eeb837dc1b0b47639e74591fca17",
-    "source": "a0dfaa5e0701fb1f277897b27c05c747a3185f40",
+    "source": "0b02d33be561485db154332ea4d7fdc5bf6ac001",
     "measurements": [
       {
         "trades": 0,

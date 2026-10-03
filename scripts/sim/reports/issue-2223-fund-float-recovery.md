@@ -1,6 +1,6 @@
 # Fund float settlement recovery qualification
 
-Issue: #2223. Clean executed runtime: `a0dfaa5e0701fb1f277897b27c05c747a3185f40`.
+Issue: #2223. Clean executed runtime: `0b02d33be561485db154332ea4d7fdc5bf6ac001`.
 
 The queued payout component was delivered by #2956 at
 `0538f4264354eeb837dc1b0b47639e74591fca17`. This change completes the actual
@@ -29,6 +29,10 @@ an unknown acknowledgement resumes the original operation.
   is not added to the ledger's existing balance snapshot coverage.
 - Old helper-stub purchase and sale tests were replaced with stateful tests of
   the actual handlers. Planner, rebalance and bid policy assertions remain.
+- Scoped semantic diagnostics pass for all 14 changed TypeScript files.
+- System cash witnesses use the documented financial subject type with their
+  original cash path in metadata. Existing records require no rewrite and ledger
+  snapshot coverage is unchanged.
 - Scoped lint and the architecture blocking checks pass. Hosted delivery gates
   are still required before merge and issue closure.
 
@@ -47,7 +51,7 @@ setup and subsequent inspection. Monetary and custody outcomes are identical.
 | 8         |                66 |               419 |                         7895 |                       625242 |
 
 Original source: `0538f4264354eeb837dc1b0b47639e74591fca17`.
-Repaired source: `a0dfaa5e0701fb1f277897b27c05c747a3185f40`.
+Repaired source: `0b02d33be561485db154332ea4d7fdc5bf6ac001`.
 Original stock-witness divergence is 1 and 8 respectively; repaired divergence
 is zero, with a balanced trial and no unattributed movement. Repeated repaired
 recovery preserves the closing cash and original receipts.
