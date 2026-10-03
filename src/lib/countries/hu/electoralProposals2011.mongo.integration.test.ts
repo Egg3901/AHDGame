@@ -247,8 +247,8 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       await db.dropDatabase();
     }
   });
-  it.each(["elected", "paired", "withdrawn", "expired", "superseded", "tied"])(
-    "counts and seats all199 modern mandates and protects constituency custody (%s)",
+  it.each(["elected", "paired", "withdrawn", "expired", "superseded", "tied", "empty"])(
+    "counts and seats the modern Assembly and protects constituency custody (%s)",
     async (kind) => {
       const { db, yes, no } = await fixture();
       try {
@@ -334,6 +334,25 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
             .insertOne({ electionId, totalVotes: {}, candidateParties: {}, finalized: false });
         }
         let initialVacancies = 0;
+        if (kind === "empty") {
+          for (const id of Object.keys(cast[1].totalVotes)) cast[1].totalVotes[id] = 0;
+          const plan = buildHuMixedPlan(
+            huRegions1991.map((row) => ({ id: String(row._id), population: row.population })),
+            cast.map((row, index) => ({
+              electionId: row.electionId.toHexString(),
+              regionId: String(huRegions1991[index]._id),
+              candidates: Object.entries(row.totalVotes).map(([candidateId, votes]) => ({
+                candidateId,
+                partyId: row.candidateParties[candidateId],
+                votes,
+              })),
+            }))
+          );
+          initialVacancies = Object.values(plan.result.constituencyWinners).filter(
+            (row) => row === null
+          ).length;
+          expect(initialVacancies).toBeGreaterThan(0);
+        }
         if (kind === "tied") {
           for (let votes = 40; votes <= 200 && initialVacancies === 0; votes++) {
             const target = cast[1];
@@ -450,7 +469,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         ).toBe(2014);
         expect(await db.collection("notifications").countDocuments()).toBe(1);
         expect(await seatHu2011Assembly(db, 6, 1121, NOW)).toBe(false);
-        if (kind === "tied") {
+        if (kind === "tied" || kind === "empty") {
           const stored = await db
             .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
             .findOne({ _id: receipt!._id });
