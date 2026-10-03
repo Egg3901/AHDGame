@@ -148,6 +148,25 @@ export interface SectorRowContext {
   tariffLookups: { blendPresenceKeys: Set<string>; ftaCoverage: FtaCoverage };
   stateCtx: StateViewContext;
   marketCtx: MarketViewContext;
+  /**
+   * The viewer is this corporation's CEO. Gates the sector levers only the
+   * CEO can set (posted-price posture, wage level): a rival reading them off
+   * the payload would see a competitor's pricing and pay stance for free.
+   */
+  viewerIsCeo?: boolean;
+}
+
+/**
+ * The sector levers only the CEO can set, for the CEO Office operations table.
+ * Empty for every other viewer: a rival reading them off the payload would see
+ * a competitor's posted-price posture and pay stance for free.
+ */
+export function ceoSectorLevers(
+  sector: Pick<CorporateSector, "pricingPosture" | "wageLevel">,
+  viewerIsCeo: boolean
+): { pricingPosture?: number | null; wageLevel?: number } {
+  if (!viewerIsCeo) return {};
+  return { pricingPosture: sector.pricingPosture ?? null, wageLevel: sector.wageLevel ?? 1 };
 }
 
 export interface SectorFinancialTotals {
@@ -190,6 +209,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     tariffLookups,
     stateCtx,
     marketCtx,
+    viewerIsCeo = false,
   } = ctx;
   const { allTariffs, activeFtaPairs, activeSubsidies } = tariffs;
   const { blendPresenceKeys, ftaCoverage } = tariffLookups;
@@ -691,6 +711,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       isReversing: sector.isReversing ?? false,
       productionPolicy: sector.productionPolicy ?? 0,
       productionPolicyLevel: sector.productionPolicyLevel ?? 0,
+      ...ceoSectorLevers(sector, viewerIsCeo),
       forSale: sector.forSale
         ? {
             listedAt: sector.forSale.listedAt,

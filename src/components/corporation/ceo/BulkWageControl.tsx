@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { WAGE_LEVEL_MIN, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
-import type { BulkOperationsFn, BulkOperationsResult } from "./CeoProductionSubtab";
+import type { BulkOperationsFn, BulkOperationsResult } from "./CeoOperationsTable";
+import { SmallButton } from "../dense/DenseKit";
 
 export function BulkWageControl({
   country,
@@ -47,36 +48,37 @@ export function BulkWageControl({
     }
   }
   return (
-    <div className="mt-4 space-y-2 border-t border-card-border pt-3">
-      <label className="flex flex-wrap items-center gap-2 text-sm">
-        {t("label")}
-        <input
-          aria-label={t("label")}
-          type="number"
-          min={WAGE_LEVEL_MIN}
-          max={WAGE_LEVEL_MAX}
-          step="0.05"
-          value={wage}
-          disabled={busy}
-          onChange={(e) => {
-            setWage(Number(e.target.value));
-            setPreview(null);
-          }}
-          className="w-24 rounded border border-card-border bg-background p-2"
-        />
-      </label>
-      <p className="text-xs text-muted">{t("hint")}</p>
-      <button
-        type="button"
-        disabled={busy || !Number.isFinite(wage) || wage < WAGE_LEVEL_MIN || wage > WAGE_LEVEL_MAX}
-        onClick={() => void submit(false)}
-        className="rounded border border-card-border px-3 py-2 text-sm disabled:opacity-50"
-      >
-        {t("preview")}
-      </button>
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5" title={t("hint")}>
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          {t("label")}
+          <input
+            aria-label={t("label")}
+            type="number"
+            min={WAGE_LEVEL_MIN}
+            max={WAGE_LEVEL_MAX}
+            step="0.05"
+            value={wage}
+            disabled={busy}
+            onChange={(e) => {
+              setWage(Number(e.target.value));
+              setPreview(null);
+            }}
+            className="h-7 w-20 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none"
+          />
+        </label>
+        <SmallButton
+          disabled={
+            busy || !Number.isFinite(wage) || wage < WAGE_LEVEL_MIN || wage > WAGE_LEVEL_MAX
+          }
+          onClick={() => void submit(false)}
+        >
+          {t("preview")}
+        </SmallButton>
+      </div>
       {preview?.wages && (
-        <div className="space-y-2 text-sm" role="status">
-          <p>
+        <div className="space-y-1 text-xs" role="status">
+          <p className="text-foreground">
             {t("cost", {
               count: preview.matchedCount ?? 0,
               current: fmtMoney(preview.wages.currentTotalCostPerTurn),
@@ -84,25 +86,20 @@ export function BulkWageControl({
               delta: fmtMoney(preview.wages.costDeltaPerTurn),
             })}
           </p>
-          <p className="text-xs text-muted">{t("estimate")}</p>
+          <p className="text-muted">{t("estimate")}</p>
           {preview.wages.protectedCount > 0 && (
-            <p>{t("protected", { count: preview.wages.protectedCount })}</p>
+            <p className="text-muted">{t("protected", { count: preview.wages.protectedCount })}</p>
           )}
           {preview.wages.missingCostCount > 0 && (
-            <p>{t("missing", { count: preview.wages.missingCostCount })}</p>
+            <p className="text-muted">{t("missing", { count: preview.wages.missingCostCount })}</p>
           )}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void submit(true)}
-            className="rounded bg-primary px-3 py-2 text-white disabled:opacity-50"
-          >
+          <SmallButton tone="primary" disabled={busy} onClick={() => void submit(true)}>
             {t("confirm")}
-          </button>
+          </SmallButton>
         </div>
       )}
       {message && (
-        <p role="status" className="text-sm">
+        <p role="status" className="text-xs text-muted">
           {message}
         </p>
       )}

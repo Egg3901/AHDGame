@@ -11,7 +11,7 @@ export type ProductionTone = "success" | "error" | "neutral";
 
 /**
  * Positive output levels read as success, negative as error — the same
- * encoding the CEO production surface (`CeoProductionSubtab`) already uses.
+ * encoding the CEO operations table (`CeoOperationsTable`) already uses.
  * Negative levels also accrue the sustained-negative-production margin
  * penalty (`getSustainedNegativeProductionPenalty`). Never color-only — the
  * signed value always accompanies the tone.
