@@ -367,7 +367,8 @@ function buildMetric(
       };
     }
     case "growthTarget": {
-      if (!sectors.length) return { label: "Growth target", value: "n/a", sub: "average", help: "" };
+      if (!sectors.length)
+        return { label: "Growth target", value: "n/a", sub: "average", help: "" };
       const avg = sectors.reduce((acc, s) => acc + s.targetGrowthRate, 0) / sectors.length;
       return {
         label: "Growth target",
