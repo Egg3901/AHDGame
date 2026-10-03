@@ -18,7 +18,7 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   loadTxThresholds: vi.fn().mockResolvedValue({}),
   emitTxBulk: vi.fn(),
 }));
-vi.mock("@/lib/treasury/emit", () => ({ emitTreasuryTransaction: vi.fn() }));
+vi.mock("@/lib/treasury/emit", () => ({ emitTreasuryTransactionsBulk: vi.fn() }));
 
 interface CapturedOp {
   updateOne?: { filter: Record<string, unknown>; update: Record<string, unknown> };
