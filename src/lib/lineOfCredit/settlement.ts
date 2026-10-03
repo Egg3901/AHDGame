@@ -14,6 +14,7 @@ import { buildTxDocs, loadAnchorRateMap, loadTxThresholds } from "@/lib/financia
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { checkBalancedTransfer, type ValueLeg } from "@/lib/banking/rules/invariants";
 import { publishLocTarget } from "./targetPublication";
 import { prepareServiceEffect } from "./serviceSettlement";
@@ -88,13 +89,14 @@ async function recordsFor(db: Db, key: string, plan: LocPlan) {
     ...entry,
     createdAt: plan.createdAt,
   }));
-  const [thresholds, cadence, rates, config] = await Promise.all([
+  const [thresholds, cadence, rates, config, ledgerTurn] = await Promise.all([
     loadTxThresholds(db),
     loadTurnLengthMinutes(db),
     loadAnchorRateMap(db, entries),
     db
       .collection("gameConfig")
       .findOne({ _id: "default" as never }, { projection: { ledgerShadow: 1 } }),
+    resolveLedgerTurn(db),
   ]);
   const tx = buildTxDocs(entries, thresholds, cadence, rates).map((entry, i) => ({
     ...entry,
@@ -103,7 +105,9 @@ async function recordsFor(db: Db, key: string, plan: LocPlan) {
   const ledger =
     config?.ledgerShadow === true
       ? deriveLedgerEntries(tx, "lineOfCredit/settlement").map((entry, i) => ({
-          ...finalizeLedgerEntry(entry),
+          // A route stamps its rows with the clock; the ledger entry belongs to
+          // the turn whose closing snapshot holds this cash (#3022).
+          ...finalizeLedgerEntry({ ...entry, turn: ledgerTurn ?? entry.turn }),
           _id: locReceiptId(key, `shadow:${i}`),
         }))
       : [];
