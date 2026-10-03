@@ -380,6 +380,39 @@ export const VOLUME_PRESSURE_CAP = 0.05; // ±5% max rate impact
 export const VOLUME_DIRECTION_WEIGHT = 0.2;
 export const VOLUME_LOOKBACK_TURNS = 24; // ~6 game months
 
+// ── Organic (traded) volume pressure ─────────────────────────────────────────
+// Trade flow used to saturate the push at ₳500 of net volume and apply it every
+// turn, so one holder who moved a whole fortune into a currency pushed it about
+// 1% a turn for the full lookback, sold at the top and repeated (the 2026-10 FX
+// loop). Traded flow now builds toward the cap only as net volume grows large,
+// moves the rate a quarter as fast, and needs several traders behind it to act
+// at full strength. Central-bank intervention keeps the original channel
+// (VOLUME_PRESSURE_SENSITIVITY / VOLUME_DIRECTION_WEIGHT), so it still beats
+// organic flow.
+/** Net ₳ traded over the lookback that produces half of VOLUME_PRESSURE_CAP. */
+export const ORGANIC_VOLUME_HALF_PRESSURE_ANCHOR = 1_000_000_000;
+/** Organic share of the per-turn push (was VOLUME_DIRECTION_WEIGHT, 0.2). */
+export const ORGANIC_VOLUME_DIRECTION_WEIGHT = 0.05;
+/** Effective number of traders behind a net flow needed for its full push. */
+export const ORGANIC_FULL_BREADTH_TRADERS = 5;
+
+// ── Player trade fees ────────────────────────────────────────────────────────
+// A player's own conversions pay more as they get larger and as the currencies
+// get quieter. Size is measured across everything the trader converted in the
+// lookback, so splitting one large trade into many small ones costs the same.
+/** Extra fee rate a very large trade approaches. */
+export const FOREX_SIZE_FEE_MAX = 0.2;
+/** Trader volume (₳, over the lookback) at which the size fee is half its maximum. */
+export const FOREX_SIZE_FEE_HALF_ANCHOR = 10_000_000_000;
+/** Gross ₳ traded in a currency over the lookback that earns a neutral (1x) fee. */
+export const FOREX_LIQUIDITY_REFERENCE_VOLUME = 100_000_000;
+/** Fee multiplier in a busy market (more volume than the reference). */
+export const FOREX_LIQUIDITY_FEE_MIN = 0.5;
+/** Fee multiplier in a quiet market. */
+export const FOREX_LIQUIDITY_FEE_MAX = 1.5;
+/** Ceiling on a player trade's total fee rate. */
+export const FOREX_MAX_TRADE_FEE = 0.3;
+
 // ── Order expiry ─────────────────────────────────────────────────────────────
 export const DIRECT_TRADE_EXPIRY_TURNS = 24;
 

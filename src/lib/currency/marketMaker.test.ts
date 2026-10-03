@@ -212,6 +212,108 @@ describe("executeMarketMakerTrade", () => {
     expect(result.spreadCharged).toBe(15); // 1.5× the base 10
   });
 
+  describe("player size and liquidity fee (FX loop, ticket 1364)", () => {
+    const setup = (opts: { usdVolume?: number; jpyVolume?: number; prior?: unknown[] } = {}) => {
+      const typedDb = db as unknown as Db;
+      typedDb.collection("exchangeRates");
+      typedDb.collection("characters");
+      typedDb.collection("tradeHistory");
+      typedDb.collection("centralBanks");
+      db.collectionMocks.centralBanks.updateOne.mockResolvedValue({ modifiedCount: 1 });
+      db.collectionMocks.characters.findOne.mockResolvedValue({
+        currencyBalances: { personal: { USD: 1e13 } },
+      });
+      db.collectionMocks.characters.updateOne.mockResolvedValue({ modifiedCount: 1 });
+      db.collectionMocks.tradeHistory.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+      db.collectionMocks.tradeHistory.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(opts.prior ?? []),
+      });
+      db.collectionMocks.exchangeRates.findOne
+        .mockResolvedValueOnce({
+          _id: "US",
+          countryId: "US",
+          currencyCode: "USD",
+          rate: 1.0,
+          buyVolume24: opts.usdVolume ?? 1_000_000,
+          sellVolume24: 0,
+        })
+        .mockResolvedValueOnce({
+          _id: "JP",
+          countryId: "JP",
+          currencyCode: "JPY",
+          rate: 106.0,
+          buyVolume24: opts.jpyVolume ?? 1_000_000,
+          sellVolume24: 0,
+        });
+      return typedDb;
+    };
+
+    it("charges a fortune-sized manual trade for its size and the quiet market", async () => {
+      const typedDb = setup();
+      const { executeMarketMakerTrade } = await import("./marketMaker");
+      const result = await executeMarketMakerTrade(typedDb, {
+        characterId: new ObjectId(),
+        countryId: "US",
+        fromCurrency: "USD",
+        toCurrency: "JPY",
+        amount: 400_000_000_000,
+        turn: 100,
+        source: "manual",
+      });
+      expect(result.success).toBe(true);
+      const feeRate = result.spreadCharged / 400_000_000_000;
+      expect(feeRate).toBeGreaterThan(0.28);
+      expect(feeRate).toBeLessThanOrEqual(0.3);
+      // The trade's ₳ size is recorded so later trades in the lookback see it.
+      expect(db.collectionMocks.tradeHistory.insertOne).toHaveBeenCalledWith(
+        expect.objectContaining({ anchorAmount: 400_000_000_000 })
+      );
+    });
+
+    it("keeps the plain spread for a conversion the game makes on a player's behalf", async () => {
+      const typedDb = setup();
+      const { executeMarketMakerTrade } = await import("./marketMaker");
+      const result = await executeMarketMakerTrade(typedDb, {
+        characterId: new ObjectId(),
+        countryId: "US",
+        fromCurrency: "USD",
+        toCurrency: "JPY",
+        amount: 400_000_000_000,
+        turn: 100,
+        source: "auto_dividend",
+      });
+      expect(result.success).toBe(true);
+      expect(result.spreadCharged).toBe(4_000_000_000);
+    });
+
+    it("prices a trade after the trader's earlier conversions in the lookback", async () => {
+      const fresh = setup();
+      const { executeMarketMakerTrade } = await import("./marketMaker");
+      const first = await executeMarketMakerTrade(fresh, {
+        characterId: new ObjectId(),
+        countryId: "US",
+        fromCurrency: "USD",
+        toCurrency: "JPY",
+        amount: 1_000_000_000,
+        turn: 100,
+        source: "manual",
+      });
+      const afterSplits = setup({
+        prior: [{ amount: 1, anchorAmount: 50_000_000_000, fromCurrency: "USD" }],
+      });
+      const second = await executeMarketMakerTrade(afterSplits, {
+        characterId: new ObjectId(),
+        countryId: "US",
+        fromCurrency: "USD",
+        toCurrency: "JPY",
+        amount: 1_000_000_000,
+        turn: 100,
+        source: "manual",
+      });
+      expect(second.spreadCharged).toBeGreaterThan(first.spreadCharged);
+    });
+  });
+
   it("returns failure when source exchange rate not found", async () => {
     const typedDb = db as unknown as Db;
     typedDb.collection("exchangeRates");

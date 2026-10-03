@@ -58,16 +58,18 @@ A country running well above its target inflation also takes a direct hit on top
 
 If the US central bank raises its prime rate from 3.0% to 5%, the USD macro target strengthens by 0.04 (2.0% excess × 0.02 sensitivity). The USD rate then drifts toward that stronger target over many turns.
 
-### 2. Player volume pressure
+### 2. Trading volume pressure
 
-Net buy/sell volume from the past 24 turns creates a short-term rate offset:
+Net buying or selling over the past 24 turns nudges the rate each turn:
 
 \`\`\`
-volumePressure = clamp(netVolume × sensitivity, −5%, +5%)
-finalRate = macroRate × (1 − volumePressure × 0.2)
+traded = 5% × net / (|net| + ₳1B) × breadth
+finalRate = macroRate × (1 − traded × 0.05 − intervention × 0.2)
 \`\`\`
 
-Volume pressure accounts for **20%** of rate direction; macro fundamentals drive the other 80%. The ±5% cap prevents whale trades from causing extreme swings.
+Everyday trading barely registers. The push from traded volume reaches half of its 5% cap only at ₳1B of net buying or selling, and it counts for 5% of the rate's direction, so macro fundamentals do almost all of the work. **Breadth** is how many traders stand behind the flow: it takes about five for the full push, and one trader alone gets a fifth of it, so a single fortune cannot move a currency by itself.
+
+Central-bank intervention keeps the stronger original channel (up to a 1% push a turn), so a bank can lean against a large traded flow.
 
 ### 3. Random noise
 
@@ -91,7 +93,9 @@ Rates are capped at ±50% from their base rate. A currency cannot hyperinflate o
 | 2 | Public limit order | 0.64% | When market rate meets your limit |
 | 3 | Direct player trade | 0.36% | When target player accepts |
 
-**Tier 1 (Market Maker):** Instant fill at the current rate ± 1% spread. Used automatically for auto-convert purchases. Volume pressure still applies.
+**Tier 1 (Market Maker):** Instant fill at the current rate with a 1% base fee. Used automatically for auto-convert purchases. Volume pressure still applies.
+
+**Size and market fee:** Your own trades (market maker and limit orders) also pay a size fee that rises toward 20% on very large conversions. It counts everything you converted in the last 24 turns, so splitting a big trade into small ones costs the same. The whole fee is then scaled by how busy the two currencies are: 0.5x in a busy market, up to 1.5x in a quiet one. The total never passes 30%. Conversions the game makes for you (dividends, coupons, purchase shortfalls) pay only the base fee.
 
 **Tier 2 (Limit Orders):** Post a public order at a target rate. The order auto-fills when the market price crosses your limit (0.64% spread). Other players can manually fill it early for a direct player trade fee instead. Set an optional expiry in turns.
 
