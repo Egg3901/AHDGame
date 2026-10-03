@@ -1,4 +1,4 @@
-import { BSON, MongoClient, ObjectId, type Db, type ClientSession } from "mongodb";
+import { BSON, MongoClient, ObjectId, type Db } from "mongodb";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
