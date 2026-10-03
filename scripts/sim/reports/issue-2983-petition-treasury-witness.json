@@ -1,0 +1,34 @@
+{
+  "issue": 2983,
+  "part": 4,
+  "runtimeSource": "9fe29bfb9105e437b45b13ff683df17c9338db20",
+  "flow": "index_listing_lobbying treasury branch",
+  "defects": [
+    "corporation row contra sank as unattributed (government counterparty has no account id)",
+    "treasury row booked the anchor figure in the corporation's currency, not the treasury's received amount"
+  ],
+  "qualification": {
+    "integrationCases": 2,
+    "nativeCases": 2,
+    "redWithBaseService": "treasury branch fails; holder branch passes",
+    "nativeOnHeadIncludingEarlierParts": {
+      "passed": 27,
+      "native": 14
+    },
+    "focusedSuites": {
+      "files": 163,
+      "passed": 1523,
+      "skipped": 84,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 5,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "foundNotChanged": [
+    "The petition debits the anchor contribution as corporation-currency units; amounts left for an owner decision."
+  ],
+  "limits": ["No production database was reset or repaired."]
+}
