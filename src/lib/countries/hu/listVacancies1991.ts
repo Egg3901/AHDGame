@@ -28,6 +28,7 @@ interface ReplacementReceipt {
   officialId: ObjectId;
   createdAt: Date;
 }
+type Owner = Pick<Character | NPP, "_id" | "party" | "currentOffice"> & { userId?: ObjectId };
 function stableId(key: string): ObjectId {
   return new ObjectId(createHash("sha256").update(key).digest("hex").slice(0, 24));
 }
@@ -39,7 +40,22 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
   if (game?.preset !== "1991-default") return null;
   const parent = await db
     .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
-    .findOne({ seatedAtTurn: { $exists: true } }, { session, sort: { seatedAtTurn: -1 } });
+    .findOne(
+      { seatedAtTurn: { $exists: true } },
+      {
+        session,
+        sort: { seatedAtTurn: -1 },
+        projection: {
+          nominations: 1,
+          settled: 1,
+          nominees: 1,
+          seatedAt: 1,
+          seatedAtTurn: 1,
+          cycle: 1,
+          listReplacementGeneration: 1,
+        },
+      }
+    );
   if (!parent?.settled || parent.seatedAtTurn == null || turn >= parent.seatedAtTurn + 192)
     return null;
   const held = await db
@@ -56,7 +72,7 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
     .collection<ReplacementReceipt>(HU_1991_LIST_REPLACEMENTS_COLLECTION)
     .find(
       { parentReceiptId: parent._id },
-      { session, projection: { replacement: 1, generation: 1 } }
+      { session, projection: { replacement: 1, generation: 1, reason: 1, turn: 1 } }
     )
     .sort({ generation: 1, _id: 1 })
     .toArray();
@@ -83,7 +99,7 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
       held,
       history,
       vacancies: preliminary,
-      owners: new Map<string, Pick<Character | NPP, "_id" | "party" | "currentOffice">>(),
+      owners: new Map<string, Owner>(),
     };
   const eligible = new Set(preliminary.flatMap((row) => row.eligiblePersonIds));
   const people = parent.nominations.people.filter((row) => eligible.has(row.id));
@@ -106,10 +122,12 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
         countryId: "HU",
         federationPendingResidenceId: { $exists: false },
       },
-      { session, projection: { party: 1, currentOffice: 1 } }
+      { session, projection: { party: 1, currentOffice: 1, userId: 1 } }
     )
     .toArray();
-  const owners = new Map([...npcs, ...players].map((row) => [row._id.toHexString(), row]));
+  const owners = new Map<string, Owner>(
+    [...npcs, ...players].map((row) => [row._id.toHexString(), row])
+  );
   for (const person of people) {
     const owner = owners.get(person.ownerId);
     if (
@@ -138,6 +156,15 @@ export async function loadHu1991ListVacancies(db: Db, turn: number) {
         return {
           personId: id,
           isNpc: person.isNpc,
+          listPosition:
+            (row.mandate.tier === "national"
+              ? context.parent.nominations.national.find(
+                  (list) => list.partyId === row.mandate.partyId
+                )!
+              : context.parent.nominations.territorial
+                  .find((list) => list.id === row.mandate.districtId)!
+                  .lists.find((list) => list.partyId === row.mandate.partyId)!
+            ).candidateIds.indexOf(id) + 1,
           name:
             context.parent.nominees.find((nominee) => nominee.id === person.candidateId)?.name ??
             "Filed deputy",
@@ -173,7 +200,15 @@ export async function designateHu1991ListDeputy(input: {
       { session, projection: { chairId: 1 } }
     );
     if (input.actor === "autonomous") {
-      if (!party || party.chairId || input.personId !== vacancy.eligiblePersonIds[0]) return false;
+      if (
+        !party ||
+        party.chairId ||
+        input.personId !== vacancy.eligiblePersonIds[0] ||
+        context.history.some(
+          (row) => row.reason === "autonomous_original_list_order" && row.turn === turn
+        )
+      )
+        return false;
     } else if (
       !input.actor.isAdmin &&
       (!party?.chairId ||
@@ -214,7 +249,13 @@ export async function designateHu1991ListDeputy(input: {
       throw new Error("Hungarian list vacancy is occupied");
     if (original) {
       await db
-        .collection("hu1991AssemblyOfficeArchives")
+        .collection<{
+          _id: string;
+          countryId: "HU";
+          receiptId: string;
+          turn: number;
+          official: ElectedOfficial;
+        }>("hu1991AssemblyOfficeArchives")
         .insertOne(
           { _id: `${id}:departed`, countryId: "HU", receiptId: id, turn, official: original },
           { session }
@@ -294,6 +335,21 @@ export async function designateHu1991ListDeputy(input: {
         },
         { session }
       );
+    if (!mandate.isNpc && owner.userId)
+      await db.collection("notifications").insertOne(
+        {
+          _id: stableId(`${id}:notice:${mandate.ownerId}`),
+          userId: owner.userId,
+          type: "general_win",
+          title: "National Assembly List Mandate",
+          message:
+            "Your party designated you to fill its vacant Hungarian Assembly list mandate for the remainder of this term.",
+          metadata: { receiptId: id, countryId: "HU", cycle: context.parent.cycle },
+          read: false,
+          createdAt: now,
+        },
+        { session }
+      );
     await db.collection<ReplacementReceipt>(HU_1991_LIST_REPLACEMENTS_COLLECTION).insertOne(
       {
         _id: id,
@@ -312,4 +368,67 @@ export async function designateHu1991ListDeputy(input: {
     );
     return true;
   });
+}
+
+/** One bounded autonomous designation per turn; human chairs retain their choice. */
+export async function advanceHu1991ListVacancy(db: Db, turn: number, now: Date): Promise<boolean> {
+  const context = await readContext(db, turn);
+  if (
+    !context?.vacancies.length ||
+    context.history.some(
+      (row) => row.reason === "autonomous_original_list_order" && row.turn === turn
+    )
+  )
+    return false;
+  const parties = await db
+    .collection<PoliticalParty>("politicalParties")
+    .find(
+      {
+        countryId: "HU",
+        chairId: null,
+        $expr: {
+          $in: [
+            { $toString: "$sequentialId" },
+            context.vacancies.map((row) => row.mandate.partyId),
+          ],
+        },
+      },
+      { projection: { sequentialId: 1 } }
+    )
+    .toArray();
+  const autonomous = new Set(parties.map((row) => String(row.sequentialId)));
+  const vacancy = context.vacancies.find(
+    (row) => autonomous.has(row.mandate.partyId) && row.eligiblePersonIds.length
+  );
+  if (!vacancy) return false;
+  return designateHu1991ListDeputy({
+    db,
+    turn,
+    now,
+    receiptId: context.parent._id,
+    slotPersonId: vacancy.slotPersonId,
+    personId: vacancy.eligiblePersonIds[0],
+    actor: "autonomous",
+  });
+}
+
+export async function loadHu1991ListReplacementHistory(db: Db) {
+  return db
+    .collection<ReplacementReceipt>(HU_1991_LIST_REPLACEMENTS_COLLECTION)
+    .find(
+      {},
+      {
+        projection: {
+          _id: 1,
+          parentReceiptId: 1,
+          turn: 1,
+          generation: 1,
+          reason: 1,
+          replacement: 1,
+        },
+      }
+    )
+    .sort({ createdAt: -1, generation: -1 })
+    .limit(50)
+    .toArray();
 }

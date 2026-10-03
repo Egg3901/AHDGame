@@ -385,6 +385,21 @@
       "automatic": "Assign an available constituency in my region",
       "constituency": "{county}, constituency {number}",
       "filingNote": "You can win one seat. Constituency winners leave the territorial and national lists."
+    },
+    "huListVacancies": {
+      "title": "Vacant Assembly list seats",
+      "description": "Choose a replacement from your party’s original list. The seat keeps its party, district and remaining term.",
+      "choose": "Choose a filed nominee",
+      "designate": "Designate deputy",
+      "loading": "Loading list vacancies…",
+      "empty": "Your party has no vacant list seats.",
+      "exhausted": "No available nominee remains on this original list.",
+      "success": "Replacement deputy seated.",
+      "error": "Could not update the list mandate.",
+      "seat": "{tier} list: {district}",
+      "territorial": "Territorial",
+      "national": "National",
+      "nominee": "{name} (list position {position})"
     }
   }
 }

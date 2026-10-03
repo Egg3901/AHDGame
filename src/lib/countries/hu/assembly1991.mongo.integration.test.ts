@@ -20,6 +20,7 @@ import {
   loadHu1991ListVacancies,
   designateHu1991ListDeputy,
   HU_1991_LIST_REPLACEMENTS_COLLECTION,
+  advanceHu1991ListVacancy,
 } from "./listVacancies1991";
 vi.mock("@/lib/news", () => ({ generateElectionNews: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/turn/election/electionNotifications", () => ({
@@ -232,6 +233,32 @@ describe.skipIf(!uri)(
         .insertOne({ _id: new ObjectId(), ownerId: human, balance: 12345 });
       vi.mocked(getDb).mockResolvedValue(db);
       return { db, human, president, primeMinister: primeMinister! };
+    }
+    async function numericFixtureParties(db: Db) {
+      for (const name of ["npps", "characters", "electionCandidates"])
+        for (const [before, after] of [
+          ["A", "1"],
+          ["B", "2"],
+        ])
+          await db.collection(name).updateMany({ party: before }, { $set: { party: after } });
+      const tallies = await db.collection("electionVoteTallies").find({}).toArray();
+      await db.collection("electionVoteTallies").bulkWrite(
+        tallies.map((row) => ({
+          updateOne: {
+            filter: { _id: row._id },
+            update: {
+              $set: {
+                candidateParties: Object.fromEntries(
+                  Object.entries(row.candidateParties).map(([id, party]) => [
+                    id,
+                    party === "A" ? "1" : "2",
+                  ])
+                ),
+              },
+            },
+          },
+        }))
+      );
     }
     async function snapshot(db: Db) {
       const result: Record<string, string> = {};
@@ -1186,7 +1213,20 @@ describe.skipIf(!uri)(
         expect(again.candidates.map((row) => row.personId)).not.toContain(candidate.personId);
         expect(again.candidates.map((row) => row.personId)).not.toContain(choice.slotPersonId);
         const next = again.candidates.find((row) => row.isNpc)!;
+        const replacementStart = commands;
+        const replacementCommandBytes = commandBytes;
+        const replacementReplyBytes = replyBytes;
         expect(await designateHu1991ListDeputy({ ...input, personId: next.personId })).toBe(true);
+        const replacementCommands = commands - replacementStart;
+        process.stdout.write(
+          JSON.stringify({
+            fixture: "hu-1991-list-replacement",
+            commands: replacementCommands,
+            commandBytes: commandBytes - replacementCommandBytes,
+            replyBytes: replyBytes - replacementReplyBytes,
+          }) + "\n"
+        );
+        expect(replacementCommands).toBeLessThanOrEqual(25);
         expect(await loadHu1991ListVacancies(db, 102)).toEqual([]);
         expect(
           await db
@@ -1194,6 +1234,121 @@ describe.skipIf(!uri)(
             .countDocuments({ parentReceiptId: choice.receiptId })
         ).toBe(2);
         expect(await designateHu1991ListDeputy({ ...input, turn: 293 })).toBe(false);
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+    it("respects a human chair's choice, seats its filed player once and preserves the private account", async () => {
+      const { db, human } = await fixture();
+      try {
+        await numericFixtureParties(db);
+        const chair = new ObjectId();
+        await db
+          .collection("politicalParties")
+          .insertOne({ _id: new ObjectId(), sequentialId: 1, countryId: "HU", chairId: chair });
+        await db
+          .collection("characters")
+          .updateOne(
+            { _id: human },
+            { $set: { federationPendingResidenceId: "qualification-pending" } }
+          );
+        await bind(db);
+        await certifyHu1991FirstCount(db, 1, 101, now);
+        await seatHu1991Assembly(db, 1, 101, now);
+        await db
+          .collection("characters")
+          .updateOne({ _id: human }, { $unset: { federationPendingResidenceId: "" } });
+        const original = await db.collection("electedOfficials").findOne({
+          "hungarianAssemblyMandate.tier": "territorial",
+          party: "1",
+          state: "HU_BUD",
+          isNPP: true,
+        });
+        await db.collection("electedOfficials").deleteOne({ _id: original!._id });
+        const choice = (await loadHu1991ListVacancies(db, 102)).find(
+          (row) => row.slotPersonId === original!.hungarianAssemblyMandate.personId
+        )!;
+        const player = choice.candidates.find((row) => !row.isNpc)!;
+        expect(player).toBeDefined();
+        const input = {
+          db,
+          turn: 102,
+          now,
+          receiptId: choice.receiptId,
+          slotPersonId: choice.slotPersonId,
+          personId: player.personId,
+          actor: { characterId: chair, isAdmin: false },
+        };
+        const before = await snapshot(db);
+        await expect(
+          designateHu1991ListDeputy({
+            ...input,
+            actor: { characterId: new ObjectId(), isAdmin: false },
+          })
+        ).rejects.toThrow(/chair/);
+        expect(await snapshot(db)).toEqual(before);
+        expect(await advanceHu1991ListVacancy(db, 102, now)).toBe(false);
+        expect(await designateHu1991ListDeputy(input)).toBe(true);
+        expect(
+          await db
+            .collection("electedOfficials")
+            .countDocuments({ characterId: human, officeType: "assemblyDelegate" })
+        ).toBe(1);
+        const character = await db.collection("characters").findOne({ _id: human });
+        expect(character!.careerHistory).toHaveLength(1);
+        expect(
+          await db
+            .collection("notifications")
+            .countDocuments({ userId: character!.userId, type: "general_win" })
+        ).toBe(1);
+        expect((await db.collection("bankAccounts").findOne({ ownerId: human }))!.balance).toBe(
+          12345
+        );
+        const complete = await snapshot(db);
+        expect(await designateHu1991ListDeputy(input)).toBe(false);
+        expect(await snapshot(db)).toEqual(complete);
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+    it("autonomously designates one original-list nominee per turn with visible reason and replay protection", async () => {
+      const { db } = await fixture();
+      try {
+        await numericFixtureParties(db);
+        await db
+          .collection("politicalParties")
+          .insertOne({ _id: new ObjectId(), sequentialId: 1, countryId: "HU", chairId: null });
+        await bind(db);
+        await certifyHu1991FirstCount(db, 1, 101, now);
+        await seatHu1991Assembly(db, 1, 101, now);
+        const originals = await db
+          .collection("electedOfficials")
+          .find({ "hungarianAssemblyMandate.tier": "territorial", party: "1", isNPP: true })
+          .limit(2)
+          .toArray();
+        await db
+          .collection("electedOfficials")
+          .deleteMany({ _id: { $in: originals.map((row) => row._id) } });
+        expect((await loadHu1991ListVacancies(db, 102)).length).toBe(2);
+        const results = await Promise.all([
+          advanceHu1991ListVacancy(db, 102, now),
+          advanceHu1991ListVacancy(db, 102, now),
+        ]);
+        expect(results.sort()).toEqual([false, true]);
+        expect((await loadHu1991ListVacancies(db, 102)).length).toBe(1);
+        expect(await advanceHu1991ListVacancy(db, 102, now)).toBe(false);
+        expect(await advanceHu1991ListVacancy(db, 103, now)).toBe(true);
+        expect(await loadHu1991ListVacancies(db, 103)).toEqual([]);
+        const receipts = await db
+          .collection(HU_1991_LIST_REPLACEMENTS_COLLECTION)
+          .find({})
+          .sort({ generation: 1 })
+          .toArray();
+        expect(receipts.map((row) => row.reason)).toEqual([
+          "autonomous_original_list_order",
+          "autonomous_original_list_order",
+        ]);
+        expect(receipts.map((row) => row.generation)).toEqual([1, 2]);
       } finally {
         await db.dropDatabase();
       }

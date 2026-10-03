@@ -368,6 +368,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "hu1991AssemblyOfficeArchives", category: "runtime" },
   { name: "hu1991ConstituencyByElections", category: "runtime" },
   { name: "hu1991AssemblyFilingLocks", category: "runtime" },
+  { name: "hu1991ListReplacements", category: "runtime" },
   { name: "electionVoteTallies", category: "runtime" },
   {
     name: "electionResultSnapshots",

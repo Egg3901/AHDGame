@@ -11,6 +11,7 @@ import {
   designateHu1991ListDeputy,
   Hu1991ListVacancyConflict,
   loadHu1991ListVacancies,
+  loadHu1991ListReplacementHistory,
 } from "@/lib/countries/hu/listVacancies1991";
 
 type Context = { params: Promise<{ code: string }> };
@@ -32,6 +33,7 @@ export async function GET(_request: Request, { params }: Context) {
     const game = await getGameState(db);
     return NextResponse.json(
       {
+        history: game?.preset === "1991-default" ? await loadHu1991ListReplacementHistory(db) : [],
         vacancies:
           game?.preset === "1991-default"
             ? await loadHu1991ListVacancies(db, game.currentTurn)

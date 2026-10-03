@@ -1,3 +1,4 @@
+import { advanceHu1991ListVacancy } from "./listVacancies1991";
 import { getDb } from "@/lib/mongodb";
 import type { Election, GameState } from "@/lib/db/types";
 import { openHu1991ByElections } from "./constituencyByElections1991";
@@ -16,6 +17,8 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1, currentTurn: 1 } });
   if (game?.preset === "1991-default") {
+    const turn = inFlightTurn ?? game.currentTurn;
+    if (Number.isSafeInteger(turn) && turn > 0) await advanceHu1991ListVacancy(db, turn, now);
     // Completed first rounds and their second rounds still belong to the same
     // mandate. Wait for whole-Assembly handover before scheduling a new term.
     const pending = await db.collection<Election>("elections").findOne(
