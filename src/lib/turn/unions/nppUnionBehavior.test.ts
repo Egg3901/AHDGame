@@ -567,7 +567,15 @@ describe("processNppUnionBehavior", () => {
     const result = await processNppUnionBehavior(db, 3);
 
     expect(result.disputesEscalated).toBe(1);
-    expect(persistUnionBargainingEscalation).toHaveBeenCalledWith(db, ledUnion, campaign, 3);
+    // The phase's read cache is shared with escalation, so a country's macro
+    // inputs and a state set's cost of living are read once per phase.
+    expect(persistUnionBargainingEscalation).toHaveBeenCalledWith(
+      db,
+      ledUnion,
+      campaign,
+      3,
+      expect.any(Map)
+    );
   });
 
   it("vacates a retired NPP leader instead of leaving the union inert", async () => {
