@@ -34,6 +34,8 @@ import {
  * that differed between the previously-duplicated spawners.
  */
 export interface RegionalDelegateSpec {
+  /** Frozen ballots retain their capacity; the country owns any law transition. */
+  preserveLiveSeatCounts?: boolean;
   countryId: CountryId;
   /** electionType === officeType key (the CN convention). */
   electionType: string;
@@ -187,7 +189,9 @@ export async function ensureRegionalDelegateElections(
   // Carry a resize onto the race that is already running, before deciding what
   // to spawn — a region present in `liveStates` gets no new doc, so without this
   // its correction would wait a whole cycle.
-  const healOps = buildDelegateSeatHealOps(liveElections, seatMap, now);
+  const healOps = spec.preserveLiveSeatCounts
+    ? []
+    : buildDelegateSeatHealOps(liveElections, seatMap, now);
   if (healOps.length > 0) {
     await db.collection<Election>("elections").bulkWrite(healOps);
     console.log(

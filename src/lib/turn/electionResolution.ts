@@ -3,6 +3,12 @@
  * resolveGeneralElections certifies bound Duma cohorts together and defers
  * partial cohorts, preserving Congress until a separate chamber handover.
  */
+import {
+  certifyHu2011Count,
+  HU_2011_COUNTS_COLLECTION,
+  type Hu2011AssemblyRecord,
+} from "@/lib/countries/hu/assemblyCount2011";
+import { seatHu2011Assembly } from "@/lib/countries/hu/assemblySeating2011";
 import { bindHu1991Campaigns } from "@/lib/countries/hu/assemblyCampaignBinding1991";
 import {
   certifyHu1991FirstCount,
@@ -165,6 +171,28 @@ export async function resolveGeneralElections(
       if (!selected.has(row._id.toHexString())) hu1991Cycles.delete(row.cycle);
   }
   if (hu1991Cycles.size) await bindHu1991Campaigns(db, now, [...hu1991Cycles]);
+  const hu2011Races =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (row) =>
+            row.countryId === "HU" &&
+            row.electionType === "nationalAssembly" &&
+            row.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1"
+        )
+      : [];
+  const hu2011Cycles = new Set(hu2011Races.map((row) => row.cycle));
+  if (onlyElectionIds && hu2011Cycles.size) {
+    const selected = new Set(onlyElectionIds.map((id) => id.toHexString()));
+    const peers = await db
+      .collection<Election>("elections")
+      .find(
+        { countryId: "HU", electionType: "nationalAssembly", cycle: { $in: [...hu2011Cycles] } },
+        { projection: { cycle: 1 } }
+      )
+      .toArray();
+    for (const row of peers)
+      if (!selected.has(row._id.toHexString())) hu2011Cycles.delete(row.cycle);
+  }
   const huMixedCycles = new Set(
     gameStateDoc?.preset === "1991-default"
       ? completedElections
@@ -172,8 +200,9 @@ export async function resolveGeneralElections(
             (e) =>
               e.countryId === "HU" &&
               e.electionType === "nationalAssembly" &&
-              (e.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1" ||
-                (gameStateDoc.huAssemblyReformedAtYear != null && !e.hungarianAssemblyRound))
+              e.hungarianModernAssembly == null &&
+              gameStateDoc.huAssemblyReformedAtYear != null &&
+              !e.hungarianAssemblyRound
           )
           .map((e) => e.cycle)
       : []
@@ -267,6 +296,31 @@ export async function resolveGeneralElections(
       }
     } catch (error) {
       logger.error("Turn", `Hungarian by-election ${receiptId} remains unseated`, error);
+    }
+  }
+  for (const cycle of hu2011Cycles) {
+    try {
+      const receipt = await certifyHu2011Count(db, cycle, currentTurn, now);
+      if (!receipt || !(await seatHu2011Assembly(db, cycle, currentTurn, now))) continue;
+      const committed = await db
+        .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
+        .findOne({ _id: receipt._id });
+      if (!committed?.settled) throw new Error("Hungarian modern handover receipt is missing");
+      resolved += committed.electionIds.length;
+      resolvedElections.push(...hu2011Races.filter((row) => row.cycle === cycle));
+      for (const nominee of committed.nominees) {
+        if ((committed.settled.candidateSeats[nominee.id] ?? 0) <= 0) continue;
+        allNewsOutcomes.push({
+          electionType: "nationalAssembly",
+          state: nominee.regionId,
+          countryId: "HU",
+          winnerName: nominee.name,
+          winnerParty: nominee.party,
+          isPlayer: !nominee.isNpc,
+        });
+      }
+    } catch (error) {
+      logger.error("Turn", `Hungarian modern cycle ${cycle} remains unseated`, error);
     }
   }
   for (const cycle of hu1991Cycles) {
@@ -453,6 +507,7 @@ export async function resolveGeneralElections(
             if (
               bgOrdinaryRaces.includes(election) ||
               hu1991Races.includes(election) ||
+              hu2011Races.includes(election) ||
               huByElectionRaces.includes(election)
             ) {
               return { election, result: null };

@@ -4,10 +4,17 @@
  * by-elections, second rounds and certified old counts retain their earlier law.
  */
 import type { ClientSession, Db } from "mongodb";
-import type { CountryGameState, Election, ElectionVoteTally, GameState } from "@/lib/db/types";
+import type {
+  CountryGameState,
+  Election,
+  ElectionVoteTally,
+  GameState,
+  State,
+} from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
+import { hu2014RegionSeats } from "@/lib/turn/huAssemblyReform";
 import { huAssemblyElectionSystem } from "./rules/electoralTransition2011";
 
 export async function bindHu2011Campaigns(db: Db, game: GameState, turn: number, now: Date) {
@@ -157,23 +164,35 @@ async function materializeHu2011PrimaryCohorts(
     { $set: { updatedAt: now } },
     { session }
   );
-  const changed = await db.collection<Election>("elections").updateMany(
-    {
-      _id: { $in: eligible.map((row) => row._id) },
-      status: { $in: ["active", "upcoming"] },
-      "hungarianAssemblyRound.round": { $ne: 2 },
-    },
-    {
-      $set: {
-        hungarianModernAssembly: {
-          ruleVersion: "mixed-2011-v1",
-          ...(authorizedOnTurn != null ? { authorizedOnTurn } : {}),
-          reason: authorizedOnTurn != null ? "parliamentary_decision" : "legacy_settlement",
+  const regions = await db
+    .collection<State>("states")
+    .find({ countryId: "HU" }, { session, projection: { _id: 1, population: 1 } })
+    .toArray();
+  const capacities = hu2014RegionSeats(regions);
+  if (Object.keys(capacities).length !== 6)
+    throw new Error("Modern Hungarian binding needs six regions");
+  const changed = await db.collection<Election>("elections").bulkWrite(
+    eligible.map((row) => ({
+      updateOne: {
+        filter: {
+          _id: row._id,
+          status: { $in: ["active", "upcoming"] },
+          "hungarianAssemblyRound.round": { $ne: 2 },
         },
-        updatedAt: now,
+        update: {
+          $set: {
+            totalSeats: capacities[row.state],
+            hungarianModernAssembly: {
+              ruleVersion: "mixed-2011-v1",
+              ...(authorizedOnTurn != null ? { authorizedOnTurn } : {}),
+              reason: authorizedOnTurn != null ? "parliamentary_decision" : "legacy_settlement",
+            },
+            updatedAt: now,
+          },
+          $unset: { hungarianAssemblyRound: "" },
+        },
       },
-      $unset: { hungarianAssemblyRound: "" },
-    },
+    })),
     { session }
   );
   if (changed.matchedCount !== eligible.length)

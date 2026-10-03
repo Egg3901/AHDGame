@@ -9,9 +9,18 @@ import {
   openHu2011ElectoralProposal,
   processHu2011ElectoralMandate,
 } from "./electoralProposals2011";
+import { certifyHu2011Count, HU_2011_COUNTS_COLLECTION } from "./assemblyCount2011";
+import { resolveGeneralElections } from "@/lib/turn/electionResolution";
+import { seatHu2011Assembly } from "./assemblySeating2011";
+import { huRegions1991 } from "./data/huRegions1991";
 import { bindHu2011Campaigns } from "./assemblyCampaignBinding2011";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
 
+vi.mock("@/lib/news", () => ({ generateElectionNews: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/turn/election/electionNotifications", () => ({
+  sendBatchedElectionResults: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/audit/recordAudit", () => ({ recordAuditBulk: vi.fn(), recordAudit: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(), getMongoClient: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
@@ -157,6 +166,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
   it("authorizes from an actual quorate bill without resizing the sitting Assembly", async () => {
     const { db, yes, no } = await fixture();
     try {
+      await db.collection("states").insertMany(huRegions1991.map((row) => ({ ...row })));
       await primary(db, 6);
       await primary(db, 7, true);
       const proposal = await vote(db, yes, no);
@@ -211,6 +221,183 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         (await db.collection<StringRecord>("countryGameStates").findOne({ _id: "HU" }))
           ?.huElectoralSystem2011SinceTurn
       ).toBeUndefined();
+    } finally {
+      await db.dropDatabase();
+    }
+  });
+  it("counts and seats all199 modern mandates together while preserving players and financial owners", async () => {
+    const { db, yes, no } = await fixture();
+    try {
+      await vote(db, yes, no);
+      expect(await processHu2011ElectoralMandate(db, GAME, 1006, NOW)).toBe(true);
+      await db.collection("states").insertMany(huRegions1991.map((row) => ({ ...row })));
+      const playerId = new ObjectId();
+      await db.collection("characters").insertOne({
+        _id: playerId,
+        countryId: "HU",
+        party: "1",
+        name: "Synthetic Deputy",
+        balance: 777,
+        currentOffice: null,
+        careerHistory: [],
+        userId: new ObjectId(),
+      });
+      const cast: Array<{
+        electionId: ObjectId;
+        totalVotes: Record<string, number>;
+        candidateParties: Record<string, string>;
+      }> = [];
+      for (const [index, region] of huRegions1991.entries()) {
+        const electionId = new ObjectId();
+        await db.collection("elections").insertOne({
+          _id: electionId,
+          countryId: "HU",
+          electionType: "nationalAssembly",
+          state: String(region._id),
+          cycle: 6,
+          electionYear: 2014,
+          status: "active",
+          primaryEndTurn: 1110,
+          endTurn: 1120,
+        });
+        const totalVotes: Record<string, number> = {},
+          candidateParties: Record<string, string> = {};
+        for (const party of ["1", "2"]) {
+          const owner = new ObjectId(),
+            candidate = new ObjectId();
+          await db.collection("npps").insertOne({
+            _id: owner,
+            countryId: "HU",
+            party,
+            balance: 12345,
+            currentOffice: null,
+            retiredAt: null,
+          });
+          await db.collection("electionCandidates").insertOne({
+            _id: candidate,
+            electionId,
+            nppId: owner,
+            characterId: owner,
+            isNPP: true,
+            party,
+            characterName: `Synthetic ${region._id} ${party}`,
+            status: "active",
+            enteredAt: NOW,
+          });
+          totalVotes[candidate.toHexString()] = party === "1" ? 100000 : 50000;
+          candidateParties[candidate.toHexString()] = party;
+        }
+        if (index === 0) {
+          const candidate = new ObjectId();
+          await db.collection("electionCandidates").insertOne({
+            _id: candidate,
+            electionId,
+            characterId: playerId,
+            isNPP: false,
+            party: "1",
+            characterName: "Synthetic Deputy",
+            status: "active",
+            enteredAt: NOW,
+          });
+          totalVotes[candidate.toHexString()] = 999999;
+          candidateParties[candidate.toHexString()] = "1";
+        }
+        cast.push({ electionId, totalVotes, candidateParties });
+        await db
+          .collection("electionVoteTallies")
+          .insertOne({ electionId, totalVotes: {}, candidateParties: {}, finalized: false });
+      }
+      expect(await bindHu2011Campaigns(db, GAME as never, 1009, NOW)).toBe(true);
+      for (const row of cast)
+        await db
+          .collection("electionVoteTallies")
+          .updateOne(
+            { electionId: row.electionId },
+            { $set: { totalVotes: row.totalVotes, candidateParties: row.candidateParties } }
+          );
+      await db.collection("elections").updateMany({ cycle: 6 }, { $set: { status: "completed" } });
+      commands = commandBytes = replyBytes = 0;
+      const receipt = await certifyHu2011Count(db, 6, 1120, NOW);
+      expect(receipt?.installed.mandates).toHaveLength(199);
+      expect(receipt?.installed.mandates.filter((row) => !row.isNpc)).toHaveLength(1);
+      const fail = new Proxy(db, {
+        get(target, key) {
+          if (key !== "collection") {
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          }
+          return (name: string) => {
+            const collection = target.collection(name);
+            if (name !== HU_2011_COUNTS_COLLECTION) return collection;
+            return new Proxy(collection, {
+              get(inner, property) {
+                if (property === "updateOne")
+                  return async () => {
+                    throw new Error("injected modern handover failure");
+                  };
+                const value = Reflect.get(inner, property);
+                return typeof value === "function" ? value.bind(inner) : value;
+              },
+            });
+          };
+        },
+      });
+      await expect(seatHu2011Assembly(fail, 6, 1120, NOW)).rejects.toThrow(
+        "injected modern handover failure"
+      );
+      expect(await db.collection("electedOfficials").countDocuments()).toBe(386);
+      expect(
+        (await db.collection<StringRecord>("gameState").findOne({ _id: "current" }))
+          ?.huAssemblyReformedAtYear
+      ).toBeUndefined();
+      expect(await db.collection("notifications").countDocuments()).toBe(0);
+      await db
+        .collection<StringRecord>("gameState")
+        .updateOne({ _id: "current" }, { $set: { currentTurn: 1120 } });
+      commands = commandBytes = replyBytes = 0;
+      expect(await resolveGeneralElections(NOW, [cast[0].electionId])).toBe(0);
+      expect(await db.collection("electedOfficials").countDocuments()).toBe(386);
+      expect(await resolveGeneralElections(NOW)).toBe(6);
+      console.info({
+        fixture: "hu-2011-native-count-and-handover",
+        commands,
+        commandBytes,
+        replyBytes,
+      });
+      expect(
+        await db
+          .collection("electedOfficials")
+          .countDocuments({ countryId: "HU", officeType: "assemblyDelegate" })
+      ).toBe(199);
+      expect(
+        await db.collection("electedOfficials").countDocuments({ characterId: playerId })
+      ).toBe(1);
+      expect(await db.collection("electedOfficials").countDocuments({ seatSource: "direct" })).toBe(
+        106
+      );
+      expect(await db.collection("electedOfficials").countDocuments({ seatSource: "list" })).toBe(
+        93
+      );
+      expect(await db.collection("npps").countDocuments()).toBe(12);
+      expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
+      expect((await db.collection("characters").findOne({ _id: playerId }))?.balance).toBe(777);
+      expect(
+        (await db.collection<StringRecord>("governmentFormations").findOne({ _id: "HU" }))
+          ?.totalSeats
+      ).toBe(199);
+      expect(
+        (await db.collection<StringRecord>("gameState").findOne({ _id: "current" }))
+          ?.huAssemblyReformedAtYear
+      ).toBe(2014);
+      expect(await db.collection("notifications").countDocuments()).toBe(1);
+      expect(await seatHu2011Assembly(db, 6, 1121, NOW)).toBe(false);
+      expect(
+        (
+          await db
+            .collection<StringRecord>(HU_2011_COUNTS_COLLECTION)
+            .findOne({ _id: receipt!._id })
+        )?.seatedAtTurn
+      ).toBe(1120);
     } finally {
       await db.dropDatabase();
     }

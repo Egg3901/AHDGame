@@ -58,7 +58,9 @@ function setup(options: { approved?: boolean; preset?: string; settled?: boolean
   return { db, capacities };
 }
 function unchanged(db: ReturnType<typeof createInMemoryDb>) {
-  expect(db.collection("states").docs.reduce((sum, row) => sum + row.houseDistricts, 0)).toBe(386);
+  expect(
+    db.collection("states").docs.reduce((sum, row) => sum + Number(row.houseDistricts), 0)
+  ).toBe(386);
   expect(db.collection("governmentFormations").docs[0].totalSeats).toBe(386);
   expect(db.collection("gameState").docs[0]).not.toHaveProperty("huAssemblyReformedAtYear");
 }
@@ -81,9 +83,9 @@ describe("Authorized modern Hungarian Assembly completion", () => {
         .docs.map((row) => ({ state: row.state, seatsHeld: row.seatsHeld }))
     );
     expect(await runHuAssemblyReform(db as unknown as Db, 2018, now)).toBe(true);
-    expect(db.collection("states").docs.reduce((sum, row) => sum + row.houseDistricts, 0)).toBe(
-      199
-    );
+    expect(
+      db.collection("states").docs.reduce((sum, row) => sum + Number(row.houseDistricts), 0)
+    ).toBe(199);
     expect(db.collection("governmentFormations").docs[0]).toMatchObject({
       totalSeats: 199,
       majorityThreshold: 100,
@@ -104,8 +106,10 @@ describe("Authorized modern Hungarian Assembly completion", () => {
       if (kind === "partial") elections[0].status = "completed";
       if (kind === "mixed-cycle") elections[0].cycle = 7;
       if (kind === "missing-marker") delete elections[0].hungarianModernAssembly;
-      if (kind === "wrong-capacity") elections[0].totalSeats++;
-      if (kind === "unseated") db.collection("electedOfficials").docs[0].seatsHeld--;
+      if (kind === "wrong-capacity") elections[0].totalSeats = Number(elections[0].totalSeats) + 1;
+      if (kind === "unseated")
+        db.collection("electedOfficials").docs[0].seatsHeld =
+          Number(db.collection("electedOfficials").docs[0].seatsHeld) - 1;
       expect(await runHuAssemblyReform(db as unknown as Db, 2014, now)).toBe(false);
       unchanged(db);
     }

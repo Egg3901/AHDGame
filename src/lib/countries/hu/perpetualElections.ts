@@ -17,20 +17,18 @@ import { calendarTurn } from "@/lib/utils/gameDate";
 /** Hungary National Assembly. */
 export async function ensureHUElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
-  const game = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      {
-        projection: {
-          preset: 1,
-          currentTurn: 1,
-          huAssemblyReformedAtYear: 1,
-          preIteration: 1,
-          preIterationTurns: 1,
-        },
-      }
-    );
+  const game = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        preset: 1,
+        currentTurn: 1,
+        huAssemblyReformedAtYear: 1,
+        preIteration: 1,
+        preIterationTurns: 1,
+      },
+    }
+  );
   const country =
     game?.preset === "1991-default"
       ? await db
@@ -92,6 +90,7 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
     {
       countryId: "HU",
       electionType: "nationalAssembly",
+      preserveLiveSeatCounts: game?.preset === "1991-default",
       seatsForRegions: (regions, preset) =>
         preset === "1991-default" &&
         modern &&
