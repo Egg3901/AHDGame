@@ -30,13 +30,16 @@ export function bgAssemblyName(
     : "National Assembly";
 }
 
-/** The founding vote re-seats the 400-member Grand Assembly; regular votes elect 240. */
+/** An adopted constitution authorizes ordinary240-seat campaigns after the founding vote. */
 export function bgElectionSeatsForPreset(
   currentRegionSeats: Readonly<Record<string, number>>,
   preset: string | undefined,
-  founding: boolean
+  founding: boolean,
+  authorized: boolean = false
 ): Readonly<Record<string, number>> {
-  return preset === "1991-default" && !founding ? BG_ORDINARY_ASSEMBLY_SEATS : currentRegionSeats;
+  return preset === "1991-default" && !founding && authorized
+    ? BG_ORDINARY_ASSEMBLY_SEATS
+    : currentRegionSeats;
 }
 
 export function canOpenBgOrdinaryAssembly(
@@ -49,6 +52,16 @@ export function canOpenBgOrdinaryAssembly(
     Object.keys(resolvedRegionalSeats).length === expectedIds.length &&
     [BG_ORDINARY_ASSEMBLY_SEATS, BG_LEGACY_ORDINARY_ASSEMBLY_SEATS].some((capacities) =>
       expectedIds.every((id) => resolvedRegionalSeats[id] === capacities[id])
+    )
+  );
+}
+
+/** Frozen founding400-seat races must remain outside the native ordinary count. */
+export function isBgOrdinaryCapacity(state: string, totalSeats: number | undefined): boolean {
+  return (
+    totalSeats != null &&
+    [BG_ORDINARY_ASSEMBLY_SEATS, BG_LEGACY_ORDINARY_ASSEMBLY_SEATS].some(
+      (map) => map[state] != null && map[state] === totalSeats
     )
   );
 }

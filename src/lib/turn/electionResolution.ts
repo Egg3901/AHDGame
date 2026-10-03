@@ -3,6 +3,7 @@
  * resolveGeneralElections certifies bound Duma cohorts together and defers
  * partial cohorts, preserving Congress until a separate chamber handover.
  */
+import { isBgOrdinaryCapacity } from "@/lib/countries/bg/rules/assemblyTransition";
 import {
   certifyHu2011Count,
   HU_2011_COUNTS_COLLECTION,
@@ -130,7 +131,11 @@ export async function resolveGeneralElections(
   const bgOrdinaryRaces =
     gameStateDoc?.preset === "1991-default"
       ? completedElections.filter(
-          (e) => e.countryId === "BG" && e.electionType === "nationalAssembly" && e.cycle >= 1
+          (e) =>
+            e.countryId === "BG" &&
+            e.electionType === "nationalAssembly" &&
+            e.cycle >= 1 &&
+            isBgOrdinaryCapacity(e.state, e.totalSeats)
         )
       : [];
   const bgPlans = new Map<number, BgOrdinaryElectionPlan | null>();

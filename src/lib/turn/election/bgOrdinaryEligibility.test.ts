@@ -47,6 +47,7 @@ describe("Bulgarian immutable ordinary national count", () => {
     const elections = Object.keys(BG_ORDINARY_ASSEMBLY_SEATS).map((state) => ({
       _id: new ObjectId(),
       state,
+      totalSeats: BG_ORDINARY_ASSEMBLY_SEATS[state],
       status: "completed",
       cycle: 2,
     }));
@@ -91,6 +92,14 @@ describe("Bulgarian immutable ordinary national count", () => {
     return { db, elections, nominees, tallies, journal };
   }
 
+  it("leaves rejected founding-capacity cohorts to their original count", async () => {
+    const { db, elections, journal } = ready();
+    elections.forEach((row) => {
+      row.totalSeats = 80;
+    });
+    expect(await readBgOrdinaryElectionPlan(db as unknown as Db, 2, now)).toBeNull();
+    expect(journal.updateOne).not.toHaveBeenCalled();
+  });
   it("freezes all31 district and240 national mandates, then replays without ballot reads", async () => {
     const { db, journal, elections } = ready();
     const plan = await readBgOrdinaryElectionPlan(db as unknown as Db, 2, now);
