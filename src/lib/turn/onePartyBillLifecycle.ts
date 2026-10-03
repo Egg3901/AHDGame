@@ -52,6 +52,11 @@ import { runBillLifecycle } from "@/lib/turn/billLifecycle/engine";
 import { buildOnePartyBillConfig } from "@/lib/turn/billLifecycle/configs/oneParty";
 import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
 import type { CountryGameState } from "@/lib/db/types/gameState";
+import { passesHuElectoralAmendment } from "@/lib/countries/hu/rules/electoralLaw";
+import {
+  HU_1994_PROPOSALS_COLLECTION,
+  type Hu1994ElectoralProposal,
+} from "@/lib/countries/hu/electoralProposals1994";
 
 const DEMOCRATIC_1991_COUNTRIES: readonly CountryId[] = ["PL", "CS", "HU", "RO", "BG", "YU"];
 
@@ -83,12 +88,30 @@ export async function processOnePartyBillLifecycleForCountry(
         .collection<CountryGameState>("countryGameStates")
         .findOne({ _id: countryId }, { projection: { dissolvedTurn: 1 } });
       if (state?.dissolvedTurn != null) return { enacted: 0, failed: 0 };
-      const result = await runBillLifecycle(
-        db,
-        buildConfiguredCountryBillLifecycle(countryId, preset),
-        now,
-        currentTurn
-      );
+      const lifecycle = buildConfiguredCountryBillLifecycle(countryId, preset);
+      if (countryId === "HU") {
+        const proposal = await db
+          .collection<Hu1994ElectoralProposal>(HU_1994_PROPOSALS_COLLECTION)
+          .findOne(
+            { _id: "1991-default:hu-electoral:threshold1994", status: "open" },
+            { projection: { billId: 1, revision: 1 } }
+          );
+        for (const stage of lifecycle.stages) {
+          if (stage.kind !== "chamberVote") continue;
+          stage.passCheck = (bill, totals) =>
+            bill.hungarianElectoralMandate
+              ? Boolean(
+                  proposal &&
+                  proposal.billId.equals(bill._id) &&
+                  bill.hungarianElectoralMandate.proposalId === proposal._id &&
+                  bill.hungarianElectoralMandate.revision === proposal.revision &&
+                  bill.hungarianElectoralMandate.kind === "threshold1994" &&
+                  passesHuElectoralAmendment(totals, 386)
+                )
+              : undefined;
+        }
+      }
+      const result = await runBillLifecycle(db, lifecycle, now, currentTurn);
       return {
         enacted: result.transitionedTo.signed ?? 0,
         failed: result.transitionedTo.failed ?? 0,

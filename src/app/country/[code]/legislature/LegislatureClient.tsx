@@ -7,6 +7,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
 import FederationDecisionPanel from "./FederationDecisionPanel";
 import RussianConstitutionalDecisionPanel from "./RussianConstitutionalDecisionPanel";
+import HungarianElectoralDecisionPanel from "./HungarianElectoralDecisionPanel";
 
 const LegislatureFallback = (_props: { name?: string }) => <LegislatureSkeleton />;
 
@@ -94,6 +95,7 @@ export default function LegislatureClient({ countryId, legislatureName, generic 
   }
 
   // Countries without a dedicated legislature component
+  if (countryId === "HU") return <HungarianElectoralDecisionPanel />;
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">

@@ -74,6 +74,24 @@
       "regionalHeadsHelp": "Let the executive head and legislative chair of each federal subject represent their region in the Council.",
       "regionalDelegatesHelp": "Let regional executive and legislative authorities appoint separate Council representatives, whose mandates follow the appointing authority.",
       "ordinaryThreshold": "Each chamber must approve by a majority of its full capacity. The lower chamber has {seats} seats. Ordinary enactment and veto rules still apply."
+    },
+    "hungarianElectoralReform": {
+      "title": "Hungarian 1994 electoral amendment",
+      "help": "Parliament may raise the list threshold from more than four percent to more than five percent, and allow three times the list seat capacity in filed nominees. The date opens the decision. Existing general ballots keep their rules.",
+      "threshold": "More than half the Assembly must attend; two-thirds of attending deputies must approve. Abstentions count as attendance.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Propose amendment",
+      "revise": "Propose revised amendment",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in January 1994.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "Parliament has authorized this amendment.",
+        "modern-law-in-force": "The modern Assembly already has its electoral settlement.",
+        "no-legislature": "The current political settlement has no eligible parliamentary Assembly."
+      }
     }
   }
 }

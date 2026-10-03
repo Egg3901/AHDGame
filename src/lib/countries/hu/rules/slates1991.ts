@@ -12,6 +12,7 @@ import {
   type Hu1991Nominations,
   type Hu1991Person,
 } from "./mandates1991";
+import { huMixedElectoralLaw, type HuMixedElectoralLaw } from "./electoralLaw";
 
 export interface Hu1991CampaignNominee {
   id: string;
@@ -33,7 +34,11 @@ function stableIndex(id: string, count: number): number {
   return value % count;
 }
 
-export function buildHu1991Slates(input: readonly Hu1991CampaignNominee[]): Hu1991FiledSlates {
+export function buildHu1991Slates(
+  input: readonly Hu1991CampaignNominee[],
+  law?: HuMixedElectoralLaw
+): Hu1991FiledSlates {
+  const { version, listMultiplier } = huMixedElectoralLaw(law);
   const ordered = [...input].sort(
     (a, b) => a.filingOrder - b.filingOrder || a.id.localeCompare(b.id)
   );
@@ -159,8 +164,13 @@ export function buildHu1991Slates(input: readonly Hu1991CampaignNominee[]): Hu19
             )
           : prioritized
       ).map((row) => row.id);
-      if (npc) while (list.length < 2 * county.territorialSeats) list.push(createPerson(npc).id);
-      lists.push({ partyId, candidateIds: list.slice(0, 2 * county.territorialSeats) });
+      if (npc)
+        while (list.length < listMultiplier * county.territorialSeats)
+          list.push(createPerson(npc).id);
+      lists.push({
+        partyId,
+        candidateIds: list.slice(0, listMultiplier * county.territorialSeats),
+      });
     }
     territorial.push({ id: county.id, lists });
   }
@@ -171,19 +181,25 @@ export function buildHu1991Slates(input: readonly Hu1991CampaignNominee[]): Hu19
     const list = ordered
       .filter((row) => !row.isNpc && row.partyId === partyId)
       .map((row) => createPerson(row).id);
-    if (list.length > 116)
+    if (list.length > listMultiplier * 58)
       throw new Error("Hungarian national player nominations exceed list capacity");
     const npcs = ordered.filter((row) => row.isNpc && row.partyId === partyId);
     // Additional national people are distinct from constituency and territorial
     // nominees. Players remain the same people on all three tiers. National
     // filing uses twice the initial statutory 58 mandates (Act XXXIV, section 5).
-    while (npcs.length && list.length < 116) {
+    while (npcs.length && list.length < listMultiplier * 58) {
       const npc = npcs[list.length % npcs.length];
       list.push(createPerson(npc).id);
     }
     national.push({ partyId, candidateIds: list });
   }
-  const nominations = { people, constituencies, territorial, national };
+  const nominations = {
+    people,
+    constituencies,
+    territorial,
+    national,
+    ...(version === "mixed-1994-v1" ? { electoralLaw: version } : {}),
+  };
   validateHu1991Nominations(nominations);
   return { nominations, playerConstituencies };
 }

@@ -569,6 +569,12 @@ export interface Bill {
   /** Action points spent to propose — refunded if bill passes */
   proposalActionCost?: number;
   internationalAction?: BillInternationalAction;
+  /** HU electoral law remains bound to its separately journaled parliamentary proposal. */
+  hungarianElectoralMandate?: {
+    proposalId: string;
+    revision: number;
+    kind: "threshold1994";
+  };
   /** Optional for older saves; bound to a separately recorded Russian decision. */
   russianConstitutionalMandate?: {
     proposalId: string;
