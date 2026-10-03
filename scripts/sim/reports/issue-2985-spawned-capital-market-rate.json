@@ -1,0 +1,38 @@
+{
+  "issue": 2985,
+  "runtimeSource": "4ccf63f1ec37069dc35345a65dd0718510b75a7f",
+  "runtimeFiles": ["src/lib/admin/spawnNppCorporation.ts"],
+  "reproduction": {
+    "worldSignature": "a 1991 Nigerian corporation founded on turn 4 received 3,125,000,000 NGN, about 290M anchor at the world's rate, against an intended 2M (#968)",
+    "oldMultipleRange": [0.002, 2604]
+  },
+  "decision": "new spawns only; treasuries of corporations already spawned are unchanged",
+  "qualification": {
+    "mispricedCases": 15,
+    "presets": ["1953-default", "1979-default", "1991-default", "2019-default", "2027-default"],
+    "overvaluedAndStarvedPerPreset": true,
+    "liveRateCase": "NGN 10.75 against a seeded 9.9",
+    "agreeingCountry": "2019-default US receives exactly 2,000,000",
+    "explicitCapitalLiteral": true,
+    "redWithOldFormula": "16 of 18 cases fail; the agreeing country and the explicit capital pass",
+    "focusedSuites": {
+      "files": 13,
+      "passed": 206,
+      "skipped": 4,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 3,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "cost": {
+    "perDefaultSpawn": "one exchange-rate read, plus one game-state read only when no live rate exists; an explicit capital adds none"
+  },
+  "limits": [
+    "Only future default grants change; no running world was rebalanced.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired."
+  ]
+}

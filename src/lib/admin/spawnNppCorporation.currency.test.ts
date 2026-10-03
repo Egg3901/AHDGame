@@ -18,6 +18,9 @@ import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { DEFAULT_SECTOR_STARTING_REVENUE } from "@/lib/constants/corporations";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
+// Load the spawn module graph at collection time. A cold import inside the
+// first test can outlast its budget under load.
+import { spawnNppCorporation } from "./spawnNppCorporation";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/npp/generator", () => ({
@@ -107,7 +110,6 @@ describe("spawnNppCorporation — sector revenue denomination", () => {
   }
 
   async function spawn(countryId: string, stateId: string) {
-    const { spawnNppCorporation } = await import("./spawnNppCorporation");
     const result = await spawnNppCorporation(db as unknown as Db, {
       name: "Spawnco",
       type: "manufacturing",
