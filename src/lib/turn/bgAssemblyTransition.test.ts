@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { bgRegions1991 } from "@/lib/countries/bg/data/bgRegions1991";
 import {
@@ -10,12 +10,27 @@ import {
 } from "@/lib/countries/bg/rules/assemblyTransition";
 import { processBgAssemblyTransition } from "./bgAssemblyTransition";
 
+vi.mock("@/lib/db/runRequiredTransaction", () => ({
+  runRequiredTransaction: (body: (session: ClientSession) => Promise<unknown>) =>
+    body({ inTransaction: () => true } as ClientSession),
+}));
 function cursorOf<T>(docs: T[]) {
-  return { toArray: vi.fn().mockResolvedValue(docs) };
+  return {
+    toArray: vi.fn().mockResolvedValue(docs),
+    sort: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+  };
 }
 
 function readyDb() {
   const db = createMockDb();
+  db.collection("gameState").findOne.mockResolvedValue({ _id: "current", preset: "1991-default" });
+  db.collection("electedOfficials").find.mockReturnValue(
+    cursorOf(
+      Object.entries(BG_ORDINARY_ASSEMBLY_SEATS).map(([state, seatsHeld]) => ({ state, seatsHeld }))
+    )
+  );
+  db.collection("states").bulkWrite.mockResolvedValue({ matchedCount: 5 });
   db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "BG" });
   db.collection("states").find.mockReturnValue(cursorOf(bgRegions1991));
   db.collection("elections").find.mockReturnValue(
@@ -23,6 +38,7 @@ function readyDb() {
       Object.entries(BG_ORDINARY_ASSEMBLY_SEATS).map(([state, totalSeats]) => ({
         state,
         totalSeats,
+        cycle: 1,
       }))
     )
   );
@@ -66,12 +82,15 @@ describe("1991 Bulgarian ordinary Assembly transition", () => {
     const writes: string[] = [];
     db.collection("states").bulkWrite.mockImplementation(async () => {
       writes.push("regions");
+      return { matchedCount: 5 };
     });
     db.collection("governmentFormations").updateOne.mockImplementation(async () => {
       writes.push("formation");
+      return { matchedCount: 1 };
     });
     db.collection("countryGameStates").updateOne.mockImplementation(async () => {
       writes.push("marker");
+      return { modifiedCount: 1 };
     });
     expect(
       await processBgAssemblyTransition(
@@ -149,6 +168,19 @@ describe("1991 Bulgarian ordinary Assembly transition", () => {
     expect(coldWar.collectionMocks.states.bulkWrite).not.toHaveBeenCalled();
   });
 
+  it("does not reopen a dissolved country", async () => {
+    const db = readyDb();
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "BG", dissolvedTurn: 40 });
+    expect(
+      await processBgAssemblyTransition(
+        db as unknown as Db,
+        { preset: "1991-default" },
+        41,
+        new Date()
+      )
+    ).toBe(false);
+    expect(db.collectionMocks.states.bulkWrite).not.toHaveBeenCalled();
+  });
   it("keeps the marker clear when an earlier seat write fails", async () => {
     const db = readyDb();
     db.collection("states").bulkWrite.mockRejectedValue(new Error("write failed"));
