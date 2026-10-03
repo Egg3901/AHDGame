@@ -5,6 +5,8 @@
  */
 import type { Hu1991Mandate, Hu1991Nominations } from "./mandates1991";
 
+export type HuListNominations = Pick<Hu1991Nominations, "people" | "national" | "territorial">;
+
 export interface Hu1991ListReplacement {
   slotPersonId: string;
   personId: string;
@@ -17,7 +19,7 @@ export interface Hu1991ListVacancy {
 }
 
 export function findHu1991ListVacancies(input: {
-  nominations: Hu1991Nominations;
+  nominations: HuListNominations;
   certifiedMandates: readonly Hu1991Mandate[];
   replacements: readonly Hu1991ListReplacement[];
   heldPersonIds: ReadonlySet<string>;
@@ -57,7 +59,7 @@ export function findHu1991ListVacancies(input: {
 /** Party choice is explicit. Exhaustion leaves the mandate vacant. */
 export function designateHu1991ListReplacement(
   vacancy: Hu1991ListVacancy,
-  nominations: Hu1991Nominations,
+  nominations: HuListNominations,
   personId: string
 ): Hu1991Mandate {
   if (!vacancy.eligiblePersonIds.includes(personId))
