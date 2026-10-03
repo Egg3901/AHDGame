@@ -265,7 +265,7 @@ export default function LoginPageClient({
             </span>
           </Link>
           {/* Era copy */}
-          <div className="relative z-10 max-w-lg border-l border-primary/40 pl-6">
+          <div className="relative z-10 max-w-lg">
             <p className="mb-3 font-mono text-body-xs uppercase tracking-widest text-primary">
               {eraLabel}
             </p>
@@ -319,7 +319,7 @@ export default function LoginPageClient({
             </span>
           </Link>
           {/* Era copy */}
-          <div className="relative z-10 max-w-lg border-l border-primary/40 pl-6">
+          <div className="relative z-10 max-w-lg">
             <p className="mb-3 text-body-xs font-semibold uppercase tracking-widest text-primary">
               {eraLabel}
             </p>

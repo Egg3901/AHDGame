@@ -49,7 +49,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
   return (
     <Link
       href={href}
-      className="group flex flex-col rounded-2xl border border-card-border bg-card shadow-lg overflow-hidden hover:border-primary/30 hover:shadow-panel hover:-translate-y-0.5 transition-all duration-200 border-l-4 border-l-warning/60"
+      className="group flex flex-col rounded-2xl border border-card-border bg-card shadow-lg overflow-hidden hover:border-primary/30 hover:shadow-panel hover:-translate-y-0.5 transition-all duration-200"
     >
       {/* Header */}
       <div className="px-5 pt-4 pb-3">

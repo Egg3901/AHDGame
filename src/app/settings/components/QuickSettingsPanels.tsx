@@ -12,9 +12,9 @@ import {
   Globe2,
   Languages,
   Music2,
+  Pause,
   RotateCcw,
   SlidersHorizontal,
-  Sparkles,
   Upload,
   Volume2,
   VolumeX,
@@ -55,9 +55,7 @@ function Surface({
       className={`rounded-2xl border border-card-border bg-background/45 p-4 md:p-5 ${className}`}
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-          {icon}
-        </span>
+        <span className="mt-0.5 shrink-0 text-muted">{icon}</span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">{title}</p>
           <p className="mt-0.5 text-xs leading-5 text-muted">{description}</p>
@@ -154,7 +152,7 @@ export function InterfaceQuickSettings() {
   return (
     <div className="grid gap-3 md:grid-cols-3">
       <Surface
-        icon={<Sparkles className="h-4 w-4" />}
+        icon={<Pause className="h-4 w-4" />}
         title={t("quick.interface.reducedMotion")}
         description={t("quick.interface.reducedMotionHint")}
       >

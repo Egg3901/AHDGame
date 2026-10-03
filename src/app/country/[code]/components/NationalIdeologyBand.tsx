@@ -100,7 +100,7 @@ export function NationalIdeologyBand({
   return (
     <section className="rounded-2xl border border-card-border bg-card p-5 shadow-card sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <SectionLabel>National Ideology</SectionLabel>
+        <SectionLabel>National ideology</SectionLabel>
         <span className="text-xs text-muted">
           {axes && axes.lawCount > 0 ? (
             <>

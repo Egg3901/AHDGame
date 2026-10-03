@@ -871,27 +871,11 @@ html {
   border: 1px solid var(--card-border);
 }
 
-/* Section label with left accent */
+/* Small sentence-case label above a section heading */
 .section-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: var(--text-body-xs);
+  font-size: 0.875rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
   color: var(--muted);
-}
-
-.section-label::before {
-  content: "";
-  display: block;
-  width: 2px;
-  height: 0.75rem;
-  background: var(--primary);
-  border-radius: 1px;
-  opacity: 0.8;
-  flex-shrink: 0;
 }
 
 /* Glow ring on interactive focus */

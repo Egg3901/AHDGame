@@ -74,17 +74,6 @@ function StatRow({ label, value, linkTab, linkLabel, onTabChange }: StatRowProps
   );
 }
 
-type SectionAccent = "primary" | "success" | "info";
-
-// Per-card accent for the icon tile — mirrors the design prototype's color
-// rhythm (Financials reads "up"/green, Credit reads "info"/blue, the rest
-// brand/primary). Static class strings so Tailwind keeps them in the build.
-const SECTION_ACCENT: Record<SectionAccent, string> = {
-  primary: "bg-primary/15 text-primary",
-  success: "bg-success/15 text-success",
-  info: "bg-info/15 text-info",
-};
-
 interface SectionCardProps {
   title: string;
   sub?: string;
@@ -93,28 +82,14 @@ interface SectionCardProps {
   onTabChange: (tab: CorpTabId) => void;
   children: React.ReactNode;
   fogBadge?: React.ReactNode;
-  accent?: SectionAccent;
 }
 
-function SectionCard({
-  title,
-  sub,
-  icon,
-  tab,
-  onTabChange,
-  children,
-  fogBadge,
-  accent = "primary",
-}: SectionCardProps) {
+function SectionCard({ title, sub, icon, tab, onTabChange, children, fogBadge }: SectionCardProps) {
   return (
     <div className="rounded-xl border bg-card border-card-border p-4 space-y-1">
       <div className="flex items-center justify-between gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <div
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${SECTION_ACCENT[accent]}`}
-          >
-            {icon}
-          </div>
+          <span className="shrink-0 text-muted">{icon}</span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-body font-semibold text-foreground truncate">{title}</span>
@@ -299,7 +274,6 @@ export default function OverviewTab({
           sub={financialFogOfWar ? "Estimated from the last report" : "Live earnings & cash"}
           tab="financials"
           onTabChange={onTabChange}
-          accent="success"
           fogBadge={
             financialFogOfWar ? (
               <span
@@ -475,11 +449,10 @@ export default function OverviewTab({
         {/* Credit & Debt card — hidden for national corps */}
         {!isNationalCorp && (
           <SectionCard
-            title="Credit & Debt"
+            title="Credit & debt"
             sub="Borrowing capacity"
             tab="credit"
             onTabChange={onTabChange}
-            accent="info"
             icon={
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path

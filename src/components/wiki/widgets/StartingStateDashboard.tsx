@@ -505,21 +505,21 @@ function CountrySection({ country }: { country: CountryStartingStateCopy }) {
           </nav>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="border-l border-primary/40 pl-3">
+            <div>
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
                 <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
                 System
               </div>
               <p className="mt-1 text-sm leading-relaxed text-foreground">{country.system}</p>
             </div>
-            <div className="border-l border-primary/40 pl-3">
+            <div>
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
                 <Vote className="h-3.5 w-3.5" aria-hidden="true" />
                 Legislature
               </div>
               <p className="mt-1 text-sm leading-relaxed text-foreground">{country.legislature}</p>
             </div>
-            <div className="border-l border-primary/40 pl-3">
+            <div>
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
                 <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
                 Party Entry
@@ -773,18 +773,16 @@ function UnseededCountrySection({
 function StartingStateDashboard1991() {
   return (
     <div className="space-y-8">
-      <div className="border-l-4 border-primary/60 pl-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-          1991 Starting Audit
-        </p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+      <div>
+        <p className="text-sm font-semibold text-muted">1991 starting audit</p>
+        <h2 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
           The early-90s opening board
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
           Seeded historical seat composition for seven countries. The underlying preset is wired
           into admin reset as &ldquo;1991 Start Date - Default Parties&rdquo;. Macro economics,
           treasuries, regional sector specialties, and resource capacity for 1991 are not yet
-          reworked — they currently fall back to the 2019 baseline at seed time.
+          reworked. They currently fall back to the 2019 baseline at seed time.
         </p>
       </div>
 
@@ -861,11 +859,9 @@ function StartingStateDashboard2019() {
 
   return (
     <div className="space-y-8">
-      <div className="border-l-4 border-primary/60 pl-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-          Starting Audit
-        </p>
-        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+      <div>
+        <p className="text-sm font-semibold text-muted">Starting audit</p>
+        <h2 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
           The opening board at a glance
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">

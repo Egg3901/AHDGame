@@ -121,21 +121,6 @@ export function BillCard({
       ));
   const isVotingOpen = isVoting && !votingDeadlinePassed;
 
-  const accent =
-    bill.status === "signed"
-      ? "var(--success)"
-      : bill.status === "failed" ||
-          bill.status === "vetoed" ||
-          bill.status === "override_failed" ||
-          bill.status === "withdrawn" ||
-          bill.status === "filibustered"
-        ? "var(--error)"
-        : isVotingOpen
-          ? "var(--warning)"
-          : votingDeadlinePassed
-            ? "var(--muted)"
-            : "var(--info)";
-
   // The Count rail uses current-chamber tally; for the active 2nd-chamber phase
   // show that chamber's tally instead. A concurrent bill has two live tallies and
   // the card has no viewer chamber to pick by, so it shows the lower house and
@@ -184,10 +169,7 @@ export function BillCard({
             : undefined;
 
   return (
-    <div
-      className="grid grid-cols-1 gap-5 p-4 sm:grid-cols-[1fr_180px] sm:gap-8 sm:p-5"
-      style={{ borderLeft: `3px solid ${accent}` }}
-    >
+    <div className="grid grid-cols-1 gap-5 p-4 sm:grid-cols-[1fr_180px] sm:gap-8 sm:p-5">
       {/* Left: dateline + headline + summary + sponsor + vote */}
       <div className="min-w-0">
         <Link href={href} className="group block">

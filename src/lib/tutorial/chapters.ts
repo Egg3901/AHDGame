@@ -52,7 +52,6 @@ export interface TutorialChapter {
   id: TutorialChapterId;
   /** Message key for the chapter title, under the "tutorial" namespace. */
   title: string;
-  icon: string;
   /** Message key: one line, shown on the selector card and the hub. */
   blurb: string;
   /** Rough reading/doing time, so the player can choose informed. */
@@ -473,7 +472,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   "whats-new": {
     id: "whats-new",
     title: "chapters.whatsNew.title",
-    icon: "🆕",
     blurb: "chapters.whatsNew.blurb",
     estimatedMinutes: 3,
     buildSteps: whatsNewSteps,
@@ -481,7 +479,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   core: {
     id: "core",
     title: "chapters.core.title",
-    icon: "🧭",
     blurb: "chapters.core.blurb",
     estimatedMinutes: 4,
     wikiPathSlug: "new-player",
@@ -490,7 +487,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   office: {
     id: "office",
     title: "chapters.office.title",
-    icon: "🗳️",
     blurb: "chapters.office.blurb",
     estimatedMinutes: 7,
     wikiPathSlug: "running-for-office",
@@ -499,7 +495,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   invest: {
     id: "invest",
     title: "chapters.invest.title",
-    icon: "💰",
     blurb: "chapters.invest.blurb",
     estimatedMinutes: 4,
     wikiPathSlug: "economy-operator",
@@ -508,7 +503,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   company: {
     id: "company",
     title: "chapters.company.title",
-    icon: "🏢",
     blurb: "chapters.company.blurb",
     estimatedMinutes: 6,
     wikiPathSlug: "economy-operator",
@@ -517,7 +511,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   union: {
     id: "union",
     title: "chapters.union.title",
-    icon: "✊",
     blurb: "chapters.union.blurb",
     estimatedMinutes: 5,
     buildSteps: unionSteps,
@@ -525,7 +518,6 @@ export const TUTORIAL_CHAPTERS: Record<TutorialChapterId, TutorialChapter> = {
   nation: {
     id: "nation",
     title: "chapters.nation.title",
-    icon: "🏛️",
     blurb: "chapters.nation.blurb",
     estimatedMinutes: 6,
     wikiPathSlug: "advanced-strategy",

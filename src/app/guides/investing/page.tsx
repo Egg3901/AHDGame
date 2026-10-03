@@ -7,6 +7,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import {
+  Callout,
+  FormulaBlock,
+  SectionHeader,
+  SubHeader,
+  TableOfContents,
+  Tag,
+} from "@/app/guides/_components/GuideBlocks";
+import {
   DIRECT_TRADE_SPREAD,
   LIMIT_ORDER_SPREAD,
   MARKET_MAKER_SPREAD,
@@ -21,82 +29,17 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/guides/investing",
 });
 
-function SectionHeader({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <h2
-      id={id}
-      className="scroll-mt-4 text-xl font-bold tracking-tight text-foreground border-l-4 border-primary/60 pl-3"
-    >
-      {children}
-    </h2>
-  );
-}
-
-function SubHeader({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-semibold text-foreground">{children}</h3>;
-}
-
-function Callout({
-  children,
-  variant = "info",
-}: {
-  children: React.ReactNode;
-  variant?: "info" | "warn" | "tip";
-}) {
-  const colors = {
-    info: "border-primary/40 bg-primary/5",
-    warn: "border-amber-500/40 bg-amber-500/5",
-    tip: "border-emerald-500/40 bg-emerald-500/5",
-  };
-  return (
-    <div
-      className={`rounded-r-lg border-l-4 px-4 py-3 text-sm text-muted leading-relaxed ${colors[variant]}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FormulaBlock({ children }: { children: React.ReactNode }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg border border-card-border bg-background px-4 py-3 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
-function Tag({
-  children,
-  variant,
-}: {
-  children: React.ReactNode;
-  variant: "positive" | "negative" | "neutral";
-}) {
-  const colors = {
-    positive: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    negative: "bg-red-500/10 text-red-400 border-red-500/20",
-    neutral: "bg-primary/10 text-primary border-primary/20",
-  };
-  return (
-    <span
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-xs font-semibold ${colors[variant]}`}
-    >
-      {children}
-    </span>
-  );
-}
-
 const TOC_ITEMS = [
-  { id: "overview", label: "How Markets Work" },
-  { id: "stocks", label: "Stocks & Shares" },
-  { id: "share-price", label: "How Share Price Is Calculated" },
-  { id: "dividends", label: "Dividends & Income" },
-  { id: "forex", label: "Currency Exchange (Forex)" },
-  { id: "forex-rates", label: "What Moves Exchange Rates" },
-  { id: "forex-trading", label: "Forex Trading Tiers" },
-  { id: "bonds", label: "Sovereign Bonds" },
-  { id: "interest-rates", label: "Interest Rates" },
-  { id: "strategy", label: "Putting It Together" },
+  { id: "overview", label: "How markets work" },
+  { id: "stocks", label: "Stocks & shares" },
+  { id: "share-price", label: "How share price is calculated" },
+  { id: "dividends", label: "Dividends & income" },
+  { id: "forex", label: "Currency exchange (forex)" },
+  { id: "forex-rates", label: "What moves exchange rates" },
+  { id: "forex-trading", label: "Forex trading tiers" },
+  { id: "bonds", label: "Sovereign bonds" },
+  { id: "interest-rates", label: "Interest rates" },
+  { id: "strategy", label: "Putting it together" },
 ];
 
 export default function InvestingGuidePage() {
@@ -121,23 +64,11 @@ export default function InvestingGuidePage() {
         </div>
 
         <div className="space-y-10">
-          {/* Table of Contents */}
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">Contents</p>
-            <ol className="grid gap-y-1 gap-x-4 text-sm sm:grid-cols-2">
-              {TOC_ITEMS.map((item, i) => (
-                <li key={item.id}>
-                  <a href={`#${item.id}`} className="text-primary hover:underline">
-                    {i + 1}. {item.label}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <TableOfContents items={TOC_ITEMS} />
 
           {/* ── 1. Overview ── */}
           <section className="space-y-4">
-            <SectionHeader id="overview">1. How Markets Work</SectionHeader>
+            <SectionHeader id="overview">1. How markets work</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               A House Divided has three investable asset classes: corporate{" "}
               <strong className="text-foreground">stocks</strong>, foreign{" "}
@@ -165,23 +96,22 @@ export default function InvestingGuidePage() {
                   key={title}
                   className="rounded-xl border border-card-border bg-card p-4 space-y-1.5"
                 >
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted">{title}</p>
+                  <p className="text-sm font-semibold text-foreground">{title}</p>
                   <p className="text-sm text-muted leading-relaxed">{body}</p>
                 </div>
               ))}
             </div>
-            <Callout variant="info">
-              <strong className="text-foreground">Your wallet is multi-currency.</strong> Personal
-              wealth can hold any currency. Campaign funds are locked to your home currency.
-              Dividends, bond coupons, and CEO salaries all pay out in the source country&apos;s
-              currency. Set your per-holding income preference on the stock market page to either
-              keep foreign currency or auto-convert it home.
+            <Callout label="Your wallet is multi-currency.">
+              Personal wealth can hold any currency. Campaign funds are locked to your home
+              currency. Dividends, bond coupons, and CEO salaries all pay out in the source
+              country&apos;s currency. Set your per-holding income preference on the stock market
+              page to either keep foreign currency or auto-convert it home.
             </Callout>
           </section>
 
           {/* ── 2. Stocks ── */}
           <section className="space-y-4">
-            <SectionHeader id="stocks">2. Stocks & Shares</SectionHeader>
+            <SectionHeader id="stocks">2. Stocks & shares</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Corporations are founded by players and traded on the stock market. Each corporation
               has a CEO who controls salary, dividend payout rate, sector focus, and expansion. As
@@ -229,7 +159,7 @@ export default function InvestingGuidePage() {
 
           {/* ── 3. Share Price ── */}
           <section className="space-y-4">
-            <SectionHeader id="share-price">3. How Share Price Is Calculated</SectionHeader>
+            <SectionHeader id="share-price">3. How share price is calculated</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Share price is a blended metric recalculated every turn:
             </p>
@@ -260,18 +190,17 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
               retain earnings and expand into profitable states will see equity per share rise
               steadily even if their current dividends are low.
             </p>
-            <Callout variant="tip">
-              <strong className="text-foreground">Interest rates affect growth costs.</strong> When
-              the central bank raises rates, the cost of corporate expansion rises. Corporations
-              operating in high-rate environments grow more slowly, which caps the equity growth
-              component of share price. This makes high-rate periods generally bad for stocks.
-              exactly as in real markets.
+            <Callout label="Interest rates affect growth costs.">
+              When the central bank raises rates, the cost of corporate expansion rises.
+              Corporations operating in high-rate environments grow more slowly, which caps the
+              equity growth component of share price. This makes high-rate periods generally bad for
+              stocks, as in real markets.
             </Callout>
           </section>
 
           {/* ── 4. Dividends ── */}
           <section className="space-y-4">
-            <SectionHeader id="dividends">4. Dividends & Income</SectionHeader>
+            <SectionHeader id="dividends">4. Dividends & income</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Dividends are paid every turn to all shareholders. The amount depends on the
               corporation&apos;s after-tax income and the CEO&apos;s chosen payout rate (0-100%).
@@ -279,9 +208,7 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Income play (high payout)
-                </p>
+                <p className="text-sm font-semibold text-foreground">Income play (high payout)</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Steady dividend income each turn</li>
                   <li>• Share price grows more slowly</li>
@@ -290,9 +217,7 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Growth play (low payout)
-                </p>
+                <p className="text-sm font-semibold text-foreground">Growth play (low payout)</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Little current income</li>
                   <li>• Retained earnings compound into equity</li>
@@ -301,9 +226,8 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
                 </ul>
               </div>
             </div>
-            <Callout variant="warn">
-              <strong className="text-foreground">The CEO controls all of this.</strong> As an
-              outside investor you cannot force a payout change. If a CEO slashes dividends or
+            <Callout label="The CEO controls all of this.">
+              As an outside investor you cannot force a payout change. If a CEO slashes dividends or
               raises their salary, your return profile changes overnight. Factor CEO behavior into
               your risk assessment.
             </Callout>
@@ -311,7 +235,7 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
 
           {/* ── 5. Forex ── */}
           <section className="space-y-4">
-            <SectionHeader id="forex">5. Currency Exchange (Forex)</SectionHeader>
+            <SectionHeader id="forex">5. Currency exchange (forex)</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each country has its own floating currency. Exchange rates move based on macroeconomic
               fundamentals, player trading volume, and a small random noise component. You can
@@ -329,7 +253,7 @@ Floor: $0.01 per share (hard minimum)`}</FormulaBlock>
 
           {/* ── 6. What Moves Rates ── */}
           <section className="space-y-4">
-            <SectionHeader id="forex-rates">6. What Moves Exchange Rates</SectionHeader>
+            <SectionHeader id="forex-rates">6. What moves exchange rates</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Rates update every turn through three components:
             </p>
@@ -405,7 +329,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
 
           {/* ── 7. Forex Trading Tiers ── */}
           <section className="space-y-4">
-            <SectionHeader id="forex-trading">7. Forex Trading Tiers</SectionHeader>
+            <SectionHeader id="forex-trading">7. Forex trading tiers</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Three execution methods are available, each with a different spread (cost):
             </p>
@@ -450,7 +374,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
                 </tbody>
               </table>
             </div>
-            <Callout variant="info">
+            <Callout>
               Your own trades add a little to volume pressure on the rate, but only broad buying or
               selling across many traders moves it much; one trader alone gets a fifth of the push.
               Large trades also pay a size fee that rises toward 20%, counted across everything you
@@ -461,7 +385,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
 
           {/* ── 8. Bonds ── */}
           <section className="space-y-4">
-            <SectionHeader id="bonds">8. Sovereign Bonds</SectionHeader>
+            <SectionHeader id="bonds">8. Sovereign bonds</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Governments issue bonds automatically every 12 turns (quarterly) when running a
               deficit. Each bond pays a fixed coupon, equal to the central bank&apos;s prime rate at
@@ -482,9 +406,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Income strategy
-                </p>
+                <p className="text-sm font-semibold text-foreground">Income strategy</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Hold to maturity for coupon income every turn</li>
                   <li>• Sovereign debt cannot default. Principal is guaranteed</li>
@@ -493,9 +415,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
                 </ul>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted">
-                  Capital gain strategy
-                </p>
+                <p className="text-sm font-semibold text-foreground">Capital gain strategy</p>
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• Buy when prime rates are high (bonds are cheap)</li>
                   <li>• Sell when rates fall (price appreciates)</li>
@@ -540,10 +460,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
                 </tbody>
               </table>
             </div>
-            <Callout variant="tip">
-              <strong className="text-foreground">
-                High national debt is a buying opportunity.
-              </strong>{" "}
+            <Callout label="High national debt is a buying opportunity.">
               A government with a poor credit rating must issue bonds at high coupon rates. If you
               believe a future government will cut spending and restore fiscal health (lowering
               rates), those locked-in high-coupon bonds become extremely valuable.
@@ -552,7 +469,7 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
 
           {/* ── 9. Interest Rates ── */}
           <section className="space-y-4">
-            <SectionHeader id="interest-rates">9. Interest Rates</SectionHeader>
+            <SectionHeader id="interest-rates">9. Interest rates</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               The central bank&apos;s prime rate is the single variable that connects all three
               asset classes. Understanding its direction is the foundation of any cross-asset
@@ -614,7 +531,7 @@ When prime rate FALLS:
 
           {/* ── 10. Strategy ── */}
           <section className="space-y-4">
-            <SectionHeader id="strategy">10. Putting It Together</SectionHeader>
+            <SectionHeader id="strategy">10. Putting it together</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               The most profitable positions are cross-asset plays that exploit the same macro signal
               from multiple angles simultaneously.
@@ -677,9 +594,8 @@ When prime rate FALLS:
                 </li>
               ))}
             </ul>
-            <Callout variant="tip">
-              <strong className="text-foreground">Currency exposure compounds everything.</strong> A
-              US bond paying 4% coupon in USD is worth more if the USD also strengthens 3% against
+            <Callout label="Currency exposure compounds everything.">
+              A US bond paying 4% coupon in USD is worth more if the USD also strengthens 3% against
               your home currency. Track the full-stack return: asset yield + currency move. The best
               trades in this game often come from correctly reading both at once.
             </Callout>

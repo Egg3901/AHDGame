@@ -141,7 +141,7 @@ export const PrimaryResultsSection = memo(function PrimaryResultsSection({
   return (
     <section className="mb-10 rounded-xl border border-card-border bg-card/40 p-6 shadow-panel">
       <div className="flex items-center justify-between mb-1">
-        <SectionLabel as="h3">Primary Results by Party</SectionLabel>
+        <SectionLabel as="h3">Primary results by party</SectionLabel>
         {hasTrend && (
           <button
             onClick={() => setShowTrend((v) => !v)}
