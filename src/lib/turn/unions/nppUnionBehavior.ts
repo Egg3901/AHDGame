@@ -484,7 +484,13 @@ export async function processNppUnionBehavior(
       );
       if (requested.ok) result.mediationsRequested++;
     } else if (disputeParty === "union") {
-      const escalated = await persistUnionBargainingEscalation(db, union, campaign, currentTurn);
+      const escalated = await persistUnionBargainingEscalation(
+        db,
+        union,
+        campaign,
+        currentTurn,
+        bargainingReads
+      );
       if (escalated.ok) result.disputesEscalated++;
     }
   }
