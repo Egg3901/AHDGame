@@ -93,41 +93,40 @@ export function OverviewView({
           what the series actually holds: snapshots land every
           `historyCadenceTurns`, so "since last turn" was never a question this
           data could answer. */}
-      <dl
-        aria-label="Summary"
-        className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-5"
-      >
-        <MovementFigure
-          label={`Change over the last ${data.historyCadenceTurns} turns`}
-          data={data}
-          stepsBack={0}
-        />
-        <MovementFigure
-          label="Change over the past year"
-          data={data}
-          stepsBack={yearStepsBack(data.historyCadenceTurns)}
-        />
-        <SummaryFigure
-          label="Critical metrics"
-          value={criticalCount}
-          note={`Score below ${CRITICAL_BELOW}`}
-          valueClass={criticalCount > 0 ? "text-error" : "text-foreground"}
-        />
-        {strongest && (
-          <SummaryFigure
-            label="Strongest category"
-            value={Math.round(strongest.score)}
-            note={strongest.displayName}
+      <section aria-label="Summary">
+        <dl className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+          <MovementFigure
+            label={`Change over the last ${data.historyCadenceTurns} turns`}
+            data={data}
+            stepsBack={0}
           />
-        )}
-        {weakest && (
-          <SummaryFigure
-            label="Weakest category"
-            value={Math.round(weakest.score)}
-            note={weakest.displayName}
+          <MovementFigure
+            label="Change over the past year"
+            data={data}
+            stepsBack={yearStepsBack(data.historyCadenceTurns)}
           />
-        )}
-      </dl>
+          <SummaryFigure
+            label="Critical metrics"
+            value={criticalCount}
+            note={`Score below ${CRITICAL_BELOW}`}
+            valueClass={criticalCount > 0 ? "text-error" : "text-foreground"}
+          />
+          {strongest && (
+            <SummaryFigure
+              label="Strongest category"
+              value={Math.round(strongest.score)}
+              note={strongest.displayName}
+            />
+          )}
+          {weakest && (
+            <SummaryFigure
+              label="Weakest category"
+              value={Math.round(weakest.score)}
+              note={weakest.displayName}
+            />
+          )}
+        </dl>
+      </section>
 
       {showGovernanceStyle && data.governanceStyle && (
         <GovernanceStyleCard score={data.governanceStyle} scopeNote={governanceScopeNote} />

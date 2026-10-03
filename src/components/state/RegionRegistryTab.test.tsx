@@ -128,7 +128,7 @@ describe("RegionRegistryTab", () => {
 
   it("captions the category subtitle with the REGION name", async () => {
     // `countryDisplayName` on the region payload is the country, and the shared
-    // views print it as their subtitle — passing it straight through captioned
+    // views print it as their subtitle. Passing it straight through captioned
     // every Georgia page "United States".
     mockFetch(payload());
     renderTab();
@@ -236,7 +236,7 @@ describe("RegionRegistryTab compare view", () => {
 
   it("scores the home column the same way as the peer columns", async () => {
     // Home used to read `category.score` (derived from unrounded metric values)
-    // while peers were averaged from the rounded values in `regions` — two
+    // while peers were averaged from the rounded values in `regions`: two
     // columns of one table doing different arithmetic.
     mockFetch(payload());
     renderTab();

@@ -5,7 +5,7 @@
  * governance-style score and a `nationalValue` alias, the other a per-metric
  * `national` comparison and a `nationalScore` per category). These types are
  * the intersection the shared views actually consume, so one set of components
- * serves both without an adapter that reassigns fields — which is exactly what
+ * serves both without an adapter that reassigns fields, which is exactly what
  * let the old regional board drift out of parity with the national one.
  */
 
