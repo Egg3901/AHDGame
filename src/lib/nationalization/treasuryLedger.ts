@@ -53,12 +53,6 @@ const FLOW_ACCOUNTING = {
     txType: "corp_dissolution_distribution",
     reason: "corporation_liquidation",
   },
-  // Shares a seized corporation held elsewhere move to the National Corporation,
-  // which is also credited their market value in cash with no payer.
-  nationalization_held_equity: {
-    txType: "nationalization_held_equity_credit",
-    reason: "nationalization_held_equity",
-  },
   // IPO float proceeds credit the treasury with no payer: a named mint.
   privatization_ipo: { txType: "privatization_ipo_proceeds", reason: "privatization_ipo" },
   // Auction bids leave the bidder into escrow; refunds and the winning amount

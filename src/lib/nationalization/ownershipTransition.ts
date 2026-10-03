@@ -618,6 +618,7 @@ export async function nationalizeWholeCorp(
   const [
     targetSectors,
     targetBonds,
+    heldStakes,
     centralBanks,
     fxByCurrency,
     targetFxRate,
@@ -626,6 +627,12 @@ export async function nationalizeWholeCorp(
   ] = await Promise.all([
     sectors.find({ corporationId: target._id }).toArray(),
     bonds.find({ corporationId: target._id, matured: false }).toArray(),
+    corps
+      .find(
+        { "shareholders.corporationId": target._id },
+        { projection: { shareholders: 1, sharePrice: 1, liquidCurrencyCode: 1, countryId: 1 } }
+      )
+      .toArray(),
     db.collection<CentralBank>("centralBanks").find({}).toArray(),
     loadFxRatesByCurrency(db),
     getCorpFxRate(db, target),
@@ -646,8 +653,11 @@ export async function nationalizeWholeCorp(
   const liquidCapitalAnchor = corpLiquidCapitalToAnchor(target.liquidCapital, target, targetFxRate);
   // Debt the state assumes — sum of the corp's issued, non-matured bond principal.
   const debtAnchor = sumBondPrincipalAnchor(targetBonds, fxByCurrency);
-  // Held bonds + cross-corp equity are not added to equity in Phase 1 (conservative
-  // under-valuation, never an over-pay); fold them in with the portfolio pass (P5+).
+  // Shares the seized corp holds in other corporations pass to the National
+  // Corporation (step 5b) as shares only, so the buyout pays the holders their
+  // market value, like cash (#3041). Held bonds are still left out (conservative
+  // under-valuation, never an over-pay) until the portfolio pass (P5+).
+  const heldEquityAnchor = heldStakeValueAnchor(heldStakes, target._id, fxByCurrency);
   const sharePriceAnchor = corpLiquidCapitalToAnchor(target.sharePrice, target, targetFxRate);
   // D11 — base and premium must move together. Under plants the sector leg is
   // replacement-cost book and carries the BOOK premium; cash is taken at par
@@ -660,7 +670,7 @@ export async function nationalizeWholeCorp(
   if (corpPlantsEnabled) {
     const comp = wholeCorpCompensationAnchor({
       sectorBookAnchor: sectorNpvAnchor,
-      nonSectorAssetsAnchor: liquidCapitalAnchor,
+      nonSectorAssetsAnchor: liquidCapitalAnchor + heldEquityAnchor,
       debtAnchor,
       tier: params.tier,
     });
@@ -670,7 +680,7 @@ export async function nationalizeWholeCorp(
     valuationAnchor = computeWholeCorpValuation({
       sharePrice: sharePriceAnchor,
       totalShares: target.totalShares,
-      balanceSheetEquity: liquidCapitalAnchor + sectorNpvAnchor,
+      balanceSheetEquity: liquidCapitalAnchor + sectorNpvAnchor + heldEquityAnchor,
       debt: debtAnchor,
     });
     payoutPoolAnchor = applyTier(valuationAnchor, params.tier);
@@ -814,7 +824,7 @@ export async function nationalizeWholeCorp(
   // ── 5b. Transfer shares owned by the seized corp in other corporations. ──
   // When a corporation owns shares in other corporations, those shares must be
   // transferred rather than silently destroyed during dissolution (Bug #0803).
-  await transferOwnedSharesToNatCorp(db, target, nationalCorp._id, fxByCurrency, now, ledger);
+  await transferOwnedSharesToNatCorp(db, target, nationalCorp._id, heldStakes, now);
 
   // ── 6. Dissolve the seized shell. ──
   await cleanupShareMarketActivityForCorporations(db, [target._id], now, forexEnabled);
@@ -1106,38 +1116,50 @@ function buyoutPayoutLeg(
   };
 }
 
+/** One corporation the seized corporation holds shares in, as read for the taking. */
+type HeldStake = Pick<
+  Corporation,
+  "_id" | "shareholders" | "sharePrice" | "liquidCurrencyCode" | "countryId"
+>;
+
+/** Market value, in ₳, of the shares the seized corporation holds in other corporations. */
+function heldStakeValueAnchor(
+  stakes: HeldStake[],
+  seizedCorpId: ObjectId,
+  fxByCurrency: ReadonlyMap<CurrencyCode, number>
+): number {
+  let total = 0;
+  for (const stake of stakes) {
+    const shares =
+      stake.shareholders?.find((sh) => sh.corporationId?.equals(seizedCorpId))?.shares ?? 0;
+    if (!(shares > 0)) continue;
+    total += corpLiquidCapitalToAnchor(
+      shares * (stake.sharePrice ?? 0),
+      stake,
+      fxByCurrency.get(stake.liquidCurrencyCode as CurrencyCode) ?? 1
+    );
+  }
+  return total;
+}
+
 /**
  * Transfer shares owned by the seized corporation in other corporations to the
  * National Corporation. When a corporation owns shares in other corporations,
  * those shares must be transferred rather than silently destroyed during
- * dissolution (Bug #0803).
- *
- * For each corporation where the seized corp holds shares, we transfer those
- * shares to the National Corporation at their current market value.
+ * dissolution (Bug #0803). They move as shares only: the buyout already paid
+ * the seized corporation's holders their market value (#3041), so crediting
+ * that value again as cash would create money.
  */
 async function transferOwnedSharesToNatCorp(
   db: Db,
   seizedCorp: Corporation,
   nationalCorpId: ObjectId,
-  fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date,
-  ledger?: TreasuryCashOptions
+  heldStakes: HeldStake[],
+  now: Date
 ): Promise<void> {
   const corps = db.collection<Corporation>("corporations");
 
-  // Find all corporations where the seized corp owns shares
-  const targetCorps = await corps
-    .find({
-      "shareholders.corporationId": seizedCorp._id,
-    })
-    .toArray();
-
-  if (targetCorps.length === 0) {
-    return; // No shares to transfer
-  }
-
-  // For each corporation where seizedCorp owns shares, transfer those shares to nationalCorp
-  for (const targetCorp of targetCorps) {
+  for (const targetCorp of heldStakes) {
     const shareholderEntry = targetCorp.shareholders?.find((sh) =>
       sh.corporationId?.equals(seizedCorp._id)
     );
@@ -1145,15 +1167,7 @@ async function transferOwnedSharesToNatCorp(
     if (!shareholderEntry || shareholderEntry.shares <= 0) {
       continue;
     }
-
-    // Calculate the value of the shares being transferred
     const shares = shareholderEntry.shares;
-    const sharePrice = targetCorp.sharePrice ?? 0;
-    const shareValueAnchor = corpLiquidCapitalToAnchor(
-      shares * sharePrice,
-      targetCorp,
-      fxByCurrency.get(targetCorp.liquidCurrencyCode as CurrencyCode) ?? 1
-    );
 
     // Remove the seized corp's shareholder entry
     await corps.updateOne(
@@ -1205,37 +1219,6 @@ async function transferOwnedSharesToNatCorp(
           $set: { updatedAt: now },
         }
       );
-    }
-
-    // Credit the national corp with the value of the shares
-    const nationalCorp = await corps.findOne({ _id: nationalCorpId });
-    if (nationalCorp) {
-      const nationalCorpFxRate =
-        fxByCurrency.get(nationalCorp.liquidCurrencyCode as CurrencyCode) ?? 1;
-      const valueInNatCorpCurrency = Math.round(
-        anchorToCorpLiquidCapital(shareValueAnchor, nationalCorp, nationalCorpFxRate)
-      );
-
-      const credited = await corps.updateOne(
-        { _id: nationalCorpId },
-        {
-          $inc: { liquidCapital: valueInNatCorpCurrency },
-          $set: { updatedAt: now },
-        }
-      );
-      if ((credited?.matchedCount ?? 0) > 0) {
-        await witnessTreasuryCash(db, ledger, {
-          flow: "nationalization_held_equity",
-          account: {
-            kind: "corporation",
-            corpId: nationalCorpId.toString(),
-            currency: snapshotCorporationCurrency(nationalCorp),
-          },
-          amount: valueInNatCorpCurrency,
-          now,
-          site: "ownershipTransition:heldEquity",
-        });
-      }
     }
   }
 }
