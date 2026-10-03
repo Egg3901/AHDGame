@@ -139,9 +139,9 @@ describe("journaled monetary commands", () => {
     expect(Number(bond.publicFloat) + Number(bond.centralBankHoldings)).toBe(110);
     expect(pool.cashLocal).toBe(type === "qe" ? 15000 : type === "qt" ? 5000 : 10000);
     expect(budget.treasuryBalance).toBe(type === "treasury_advance" ? -750 : -1000);
-    expect(memory.collection("ledgerEntries").docs).toHaveLength(
-      type === "treasury_advance" ? 1 : 0
-    );
+    // Every completed operation publishes its one cash witness exactly once,
+    // however many times recovery replays it.
+    expect(memory.collection("ledgerEntries").docs).toHaveLength(1);
   });
   it("refunds a funded QT refusal once even when completion stops after the refund", async () => {
     const memory = world(),

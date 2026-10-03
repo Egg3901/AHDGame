@@ -127,6 +127,8 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "gov_budget_transfer",
   "gov_defense_overdraft",
   "monetary_treasury_advance",
+  "monetary_qe",
+  "monetary_qt",
 
   // ── Crisis / events (deferred per Phase 3 commit — wired by the crisis
   //    system once it lands) ────────────────────────────────────────────
@@ -257,6 +259,8 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   gov_budget_transfer: "Govt Budget Transfer",
   gov_defense_overdraft: "Govt Defence Appropriation Overdraft",
   monetary_treasury_advance: "Central Bank Treasury Advance",
+  monetary_qe: "Central Bank Bond Purchase (QE)",
+  monetary_qt: "Central Bank Bond Sale (QT)",
 
   crisis_payout: "Crisis Payout",
   crisis_levy: "Crisis Levy",

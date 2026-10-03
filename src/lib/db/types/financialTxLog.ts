@@ -157,6 +157,8 @@ export type FinancialTxType =
   | "gov_budget_transfer"
   | "gov_defense_overdraft"
   | "monetary_treasury_advance"
+  | "monetary_qe" // central bank buys bonds from the market pool with new money
+  | "monetary_qt" // central bank sells bonds to the market pool, withdrawing money
 
   // Crisis / events
   | "crisis_payout"
