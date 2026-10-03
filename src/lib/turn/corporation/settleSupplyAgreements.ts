@@ -38,6 +38,7 @@
  * learn a new ledger row.
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -1128,6 +1129,7 @@ export async function settleSupplyAgreements(args: {
   deliveries: SupplyAgreementDelivery[];
   damages: SupplyAgreementDamages[];
 }> {
+  const step = substepMarker();
   const { db, lookups, agreements, contractSettlementByCorp, priceRatioByCommodity, turn, now } =
     args;
   if (agreements.length === 0)
@@ -1162,6 +1164,8 @@ export async function settleSupplyAgreements(args: {
       freshCapitalByCorpId.set(current._id.toString(), current.liquidCapital ?? 0);
     }
   }
+
+  step.mark("settle.balances");
 
   const {
     deltaByCorp,
@@ -1200,6 +1204,8 @@ export async function settleSupplyAgreements(args: {
     now,
   });
 
+  step.mark("settle.compute");
+
   if (deltaByCorp.size > 0) {
     const ops: AnyBulkWriteOperation<Corporation>[] = [];
     for (const [corpId, delta] of deltaByCorp) {
@@ -1217,6 +1223,7 @@ export async function settleSupplyAgreements(args: {
     }
     if (ops.length > 0) await db.collection<Corporation>("corporations").bulkWrite(ops);
   }
+  step.mark("settle.corpWrites");
   if (deliveries.length > 0) {
     const deliveryOps: AnyBulkWriteOperation<SupplyAgreement>[] = [];
     for (const delivery of deliveries) {
@@ -1285,8 +1292,11 @@ export async function settleSupplyAgreements(args: {
       await db.collection<SupplyAgreement>("supplyAgreements").bulkWrite(deliveryOps);
     }
   }
+  step.mark("settle.deliveryWrites");
   if (txEntries.length > 0) await emitTxBulk(db, txEntries, args.thresholds);
+  step.mark("settle.ledger");
   await notifySupplyAgreementDamages({ db, damages, agreements, lookups, turn });
+  step.mark("settle.notify");
 
   return { settledCount, totalPremiumAnchor, settledPremiums, deliveries, damages };
 }

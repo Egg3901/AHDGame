@@ -1,4 +1,19 @@
 /**
+ * The trade's equity pool, read once. It prices the quote and answers pool
+ * existence for the settlement legs, which would otherwise each read the same
+ * document again (a sell read it three times, a buy twice). No pool write
+ * happens between those uses, and pools are never deleted.
+ */
+async function loadTradePool(
+  db: Db,
+  corp: Parameters<typeof equityPoolCurrency>[0]
+): Promise<Map<CurrencyCode, EquityMarketPool>> {
+  const currency = equityPoolCurrency(corp);
+  const pool = await readEquityPool(db, currency);
+  return new Map(pool ? [[currency, pool]] : []);
+}
+
+/**
  * NPP stock-buy command core (V3 full-agency finance).
  *
  * Lets an autonomous NPP buy individual shares from a corporation's public
@@ -26,7 +41,9 @@ import type { Db, Filter, ObjectId } from "mongodb";
 import type { Corporation, NPP } from "@/lib/db/types";
 import { creditSharesToNpp, debitSharesFromNpp } from "@/lib/corporations/shareholderOps";
 import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
-import { loadEquityQuote } from "@/lib/equities/marketPool";
+import { equityPoolCurrency, loadEquityQuote, readEquityPool } from "@/lib/equities/marketPool";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { EquityMarketPool } from "@/lib/db/types";
 import {
   applyFloatBuyCredit,
   onFloatSellCommitted,
@@ -98,7 +115,8 @@ export async function nppBuyShares(
     return { ok: false, reason: "NPPs only buy shares in their home currency." };
   }
 
-  const executionPrice = (await loadEquityQuote(db, corp)).askPriceLocal;
+  const pools = await loadTradePool(db, corp);
+  const executionPrice = (await loadEquityQuote(db, corp, { pools })).askPriceLocal;
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares);
   const cost = Math.round(shares * executionPrice * 100) / 100;
   // Share price is LOCAL; the economic account is ₳ — convert at the FX boundary.
@@ -168,7 +186,7 @@ export async function nppBuyShares(
   // Treasury-backed market maker: the buyer's payment is injected into the
   // issuer's liquidCapital so a float buy conserves money instead of
   // vanishing, matching the player buy route.
-  await applyFloatBuyCredit(db, corp, shares * executionPrice, { sharesBought: shares });
+  await applyFloatBuyCredit(db, corp, shares * executionPrice, { sharesBought: shares, pools });
 
   return {
     ok: true,
@@ -260,7 +278,8 @@ export async function nppSellShares(
     return { ok: false, reason: `Only ${ownedShares} shares owned.` };
   }
 
-  const marketQuote = await loadEquityQuote(db, corp);
+  const pools = await loadTradePool(db, corp);
+  const marketQuote = await loadEquityQuote(db, corp, { pools });
   const executionPrice = marketQuote.bidPriceLocal;
   if (marketQuote.active && shares > marketQuote.bidDepthShares) {
     return {
@@ -299,7 +318,7 @@ export async function nppSellShares(
 
   // Issuer settles the buyback BEFORE the seller's shares are debited,
   // matching the player sell route's ordering.
-  const settled = await settleFloatSellDebit(db, corp, proceeds);
+  const settled = await settleFloatSellDebit(db, corp, proceeds, { pools });
   if (!settled.ok) {
     return { ok: false, reason: "The equity market does not have enough cash for this sale." };
   }
@@ -341,7 +360,7 @@ export async function nppSellShares(
       { returnDocument: "after" }
     );
 
-  void onFloatSellCommitted(db, corp, proceeds);
+  void onFloatSellCommitted(db, corp, proceeds, { pools });
 
   return {
     ok: true,
