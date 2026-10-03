@@ -1981,15 +1981,27 @@ export async function accumulateGeneralElectionVotes(
       }
     } catch (err) {
       logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);
+      if (tallyByElection.get(election._id.toString())?.countingMethod === "pr_stv") throw err;
     }
   }
   if (tallyWrites.length > 0) {
     try {
-      await db
+      const result = await db
         .collection<ElectionVoteTally>("electionVoteTallies")
         .bulkWrite(tallyWrites, { ordered: false });
+      const hasPrStv = orderedElections.some(
+        (e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv"
+      );
+      if (hasPrStv && result.matchedCount !== tallyWrites.length)
+        throw new Error("PR-STV ballot batch lost a tally revision; retry the turn");
     } catch (err) {
       logger.error("Turn", `Error writing ${tallyWrites.length} election vote tallies`, err);
+      if (
+        orderedElections.some(
+          (e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv"
+        )
+      )
+        throw err;
     }
   }
 }
