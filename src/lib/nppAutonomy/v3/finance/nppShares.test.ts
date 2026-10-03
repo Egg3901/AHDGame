@@ -322,7 +322,7 @@ describe("nppSellShares", () => {
     expect(nppFindOneAndUpdate).toHaveBeenCalledWith(
       { _id: nppId },
       expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_PROCEEDS } }),
-      { returnDocument: "after" }
+      { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
     );
     expect(onFloatSellCommitted).toHaveBeenCalledWith(
       db,

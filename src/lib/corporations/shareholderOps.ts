@@ -314,7 +314,8 @@ export async function debitShares(
       ...(extraUpdate?.$set ? { $set: extraUpdate.$set } : {}),
       ...(extraUpdate?.$unset ? { $unset: extraUpdate.$unset } : {}),
     },
-    { returnDocument: "after", ...mongoOptions(opts) }
+    // Only the shareholder list is read back, not the whole corporation.
+    { returnDocument: "after", projection: { shareholders: 1 }, ...mongoOptions(opts) }
   );
 
   if (!result) return opts?.requireSufficient ? -1 : 0;
@@ -369,7 +370,8 @@ export async function debitSharesFromImperial(
       ...(extraUpdate?.$set ? { $set: extraUpdate.$set } : {}),
       ...(extraUpdate?.$unset ? { $unset: extraUpdate.$unset } : {}),
     },
-    { returnDocument: "after", ...mongoOptions(opts) }
+    // Only the shareholder list is read back, not the whole corporation.
+    { returnDocument: "after", projection: { shareholders: 1 }, ...mongoOptions(opts) }
   );
 
   if (!result) return opts?.requireSufficient ? -1 : 0;
@@ -522,7 +524,8 @@ export async function debitSharesFromCorp(
       ...(extraUpdate?.$set ? { $set: extraUpdate.$set } : {}),
       ...(extraUpdate?.$unset ? { $unset: extraUpdate.$unset } : {}),
     },
-    { returnDocument: "after", ...mongoOptions(opts) }
+    // Only the shareholder list is read back, not the whole corporation.
+    { returnDocument: "after", projection: { shareholders: 1 }, ...mongoOptions(opts) }
   );
 
   if (!result) return opts?.requireSufficient ? -1 : 0;
@@ -803,7 +806,8 @@ export async function debitSharesFromNpp(
       ...(extraUpdate?.$set ? { $set: extraUpdate.$set } : {}),
       ...(extraUpdate?.$unset ? { $unset: extraUpdate.$unset } : {}),
     },
-    { returnDocument: "after", ...mongoOptions(opts) }
+    // Only the shareholder list is read back, not the whole corporation.
+    { returnDocument: "after", projection: { shareholders: 1 }, ...mongoOptions(opts) }
   );
 
   if (!result) return opts?.requireSufficient ? -1 : 0;
@@ -856,7 +860,8 @@ export async function debitSharesFromFund(
       ...(extraUpdate?.$set ? { $set: extraUpdate.$set } : {}),
       ...(extraUpdate?.$unset ? { $unset: extraUpdate.$unset } : {}),
     },
-    { returnDocument: "after", ...mongoOptions(opts) }
+    // Only the shareholder list is read back, not the whole corporation.
+    { returnDocument: "after", projection: { shareholders: 1 }, ...mongoOptions(opts) }
   );
 
   if (!result) return opts?.requireSufficient ? -1 : 0;

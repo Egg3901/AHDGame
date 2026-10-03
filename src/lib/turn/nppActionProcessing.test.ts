@@ -851,3 +851,15 @@ describe("nonPlayerCountryIds (v3 autonomy scope)", () => {
     expect(nonPlayerCountryIds({ BR: { enabledForPlayers: false } })).toEqual(["BR"]);
   });
 });
+
+describe("groupInOrder", () => {
+  it("keeps first-seen group order and each group's original item order", async () => {
+    const { groupInOrder } = await import("./nppActionProcessing");
+    const items = ["US:a", "DD:b", "US:c", "UK:d", "DD:e", "US:f"];
+    expect(groupInOrder(items, (item) => item.split(":")[0]!)).toEqual([
+      ["US:a", "US:c", "US:f"],
+      ["DD:b", "DD:e"],
+      ["UK:d"],
+    ]);
+  });
+});
