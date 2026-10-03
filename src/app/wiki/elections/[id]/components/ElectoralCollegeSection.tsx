@@ -115,7 +115,7 @@ export function ElectoralCollegeTable({ generalResults }: ElectoralCollegeTableP
 
   return (
     <section className="mb-10 rounded-xl border border-card-border bg-card/40 p-6 shadow-panel">
-      <SectionLabel as="h3">Electoral College Results</SectionLabel>
+      <SectionLabel as="h3">Electoral College results</SectionLabel>
       <p className="mb-4 text-sm text-muted">
         {isContingent
           ? "270 electoral votes needed for an outright win. This race was decided by a House contingent ballot after no candidate reached a majority."

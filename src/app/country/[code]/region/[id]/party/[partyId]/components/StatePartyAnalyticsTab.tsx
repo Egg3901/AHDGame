@@ -36,12 +36,10 @@ function getCaucusRiskBadgeColor(riskLabel: PartyAnalyticsCaucusRiskItem["exitRi
 }
 
 function SectionHeader({
-  eyebrow,
   title,
   description,
   link,
 }: {
-  eyebrow: string;
   title: string;
   description: string;
   link?: PartyAnalyticsLink;
@@ -49,10 +47,7 @@ function SectionHeader({
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted">
-          {eyebrow}
-        </p>
-        <h2 className="mt-1 text-heading-sm font-semibold text-foreground">{title}</h2>
+        <h2 className="text-heading-sm font-semibold text-foreground">{title}</h2>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">{description}</p>
       </div>
       {link ? (
@@ -292,16 +287,14 @@ export function StatePartyAnalyticsTab({
     <div className="space-y-8">
       <div className="rounded-xl border border-card-border bg-card p-6">
         <SectionHeader
-          eyebrow="Analytics"
-          title={`${data.scope.stateName} Command Center`}
+          title={`${data.scope.stateName} command center`}
           description="Track local organization growth, NPP discipline risk, and Slate coverage for this party in-state. Each card links into the local Treasury, Whip Room, NPP, Slate, or Elections tabs so leadership can act directly from the summary."
         />
       </div>
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Org & Growth"
-          title="Local Organization"
+          title="Local organization"
           description="This section shows the state party's current organization and the passive decay baseline. Growth itself is event-driven through Build Org (PS-spend), not a per-turn rate."
           link={data.links.treasury}
         />
@@ -333,8 +326,7 @@ export function StatePartyAnalyticsTab({
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Discipline & Compliance"
-          title="Local NPP Risk"
+          title="Local NPP risk"
           description="These summaries surface the same-party NPPs in this state who look most likely to resist party direction, plus active whip defiance and caucus-aligned NPPs drifting close to their chair-relationship exit threshold."
           link={data.links.whipRoom}
         />
@@ -451,8 +443,7 @@ export function StatePartyAnalyticsTab({
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Slate & Race Coverage"
-          title="Local Filing Readiness"
+          title="Local filing readiness"
           description="These cards show whether the party has local races covered, which assignments are still unresolved, and where likely declines could create filing gaps in this state."
           link={data.links.slate}
         />

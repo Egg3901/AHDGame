@@ -475,7 +475,7 @@ export function WikiEditorClient({
             const cat = getCategoryById(id);
             return (
               <option key={id} value={id}>
-                {cat ? `${cat.icon} ${cat.name}` : id}
+                {cat ? cat.name : id}
               </option>
             );
           })}

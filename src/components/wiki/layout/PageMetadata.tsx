@@ -23,10 +23,10 @@ const CONTENT_TYPE_LABELS: Record<WikiPageContentType, string> = {
   strategy: "Strategy",
 };
 
-const DIFFICULTY_LABELS: Record<WikiPageDifficulty, { label: string; className: string }> = {
-  beginner: { label: "Beginner", className: "text-success" },
-  intermediate: { label: "Intermediate", className: "text-warning" },
-  advanced: { label: "Advanced", className: "text-error" },
+const DIFFICULTY_LABELS: Record<WikiPageDifficulty, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
 };
 
 function ClockIcon() {
@@ -122,10 +122,8 @@ export function PageMetadata({
         ))}
 
       {difficulty && (
-        <span
-          className={`rounded-md border border-card-border bg-card/40 px-2.5 py-1 font-semibold uppercase tracking-[0.08em] ${DIFFICULTY_LABELS[difficulty].className}`}
-        >
-          {DIFFICULTY_LABELS[difficulty].label}
+        <span className="rounded-md border border-card-border bg-card/40 px-2.5 py-1 text-muted">
+          {DIFFICULTY_LABELS[difficulty]}
         </span>
       )}
 

@@ -27,12 +27,10 @@ import type { CorporationType } from "./corporations";
 /**
  * Type colour as raw hex.
  *
- * `CorporationHelpers.getTypeColor` already names the Tailwind palette for each
- * type, but it returns utility CLASSES, and the dossier needs the same colours
- * at arbitrary alpha in tints, gradients, chain bars and tab underlines.
- * Tailwind 4 cannot build `bg-${type}-500/15` from a runtime string, so the
- * values are written out here at the 400 (text) and 500 (surface) stops that
- * getTypeColor uses. Changing a colour means changing it in both places.
+ * The dossier needs these colours at arbitrary alpha in tints, gradients, chain
+ * bars and tab underlines. Tailwind 4 cannot build `bg-${type}-500/15` from a
+ * runtime string, so the values are written out here at the 400 (text) and 500
+ * (surface) stops. Sector type chips elsewhere are neutral and do not use them.
  */
 export interface SectorTypePalette {
   /** 400 stop: text, headings, chips. */

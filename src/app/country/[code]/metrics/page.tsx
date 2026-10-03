@@ -384,7 +384,7 @@ export default function MetricsPage() {
 
             {/* Approval over time */}
             <div className="rounded-xl border border-card-border bg-card p-5 shadow-card">
-              <SectionLabel>Government Approval Over Time</SectionLabel>
+              <SectionLabel>Government approval over time</SectionLabel>
               <ApprovalChart history={approvalHistory} />
             </div>
 

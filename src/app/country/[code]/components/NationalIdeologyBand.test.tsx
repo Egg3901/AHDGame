@@ -58,7 +58,7 @@ function makeData(partial?: Partial<NationalAxesData>): NationalAxesData {
 describe("NationalIdeologyBand", () => {
   it("renders both axes with bucket labels, provenance, and the movers feed", () => {
     render(<NationalIdeologyBand countryId="US" data={makeData()} loading={false} />);
-    expect(screen.getByText("National Ideology")).toBeTruthy();
+    expect(screen.getByText("National ideology")).toBeTruthy();
     expect(screen.getByText("Economic Axis")).toBeTruthy();
     expect(screen.getByText("Social Axis")).toBeTruthy();
     expect(screen.getByText(/23 implemented national laws/)).toBeTruthy();

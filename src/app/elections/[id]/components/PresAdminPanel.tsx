@@ -27,11 +27,7 @@ interface PlaceOptions {
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-500/70">
-      {children}
-    </p>
-  );
+  return <p className="mb-2 text-xs font-semibold text-muted">{children}</p>;
 }
 
 function AdminBtn({
@@ -219,7 +215,7 @@ export function PresAdminPanel({
       {/* ── Section: Phase Controls ───────────────────────────────────────── */}
       <div className="px-4 py-3 space-y-2.5">
         <div className="flex items-center justify-between">
-          <SectionLabel>Phase Controls</SectionLabel>
+          <SectionLabel>Phase controls</SectionLabel>
           <span className="flex items-center gap-1.5 text-[11px] text-muted">
             <span className={`h-1.5 w-1.5 rounded-full ${phaseDot}`} />
             {phaseLabel}
@@ -450,7 +446,7 @@ export function PresAdminPanel({
 
       {/* ── Section: Danger Zone ─────────────────────────────────────────── */}
       <div className="px-4 py-3 space-y-2.5">
-        <SectionLabel>⚠ Danger Zone</SectionLabel>
+        <SectionLabel>Danger zone</SectionLabel>
         <p className="text-[11px] text-muted">
           Full reinitialize wipes all candidates, vote tallies, and campaign data, then restarts the
           election from NOW with the correct LARP year.

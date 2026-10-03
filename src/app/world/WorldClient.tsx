@@ -22,7 +22,7 @@ import type { BlocMapData } from "@/lib/world/blocMembership";
 interface WorldClientProps {
   countryAccess: CountryAccessMap;
   nationSnapshots: Record<CountryId, NationWorldSnapshot>;
-  /** Gates the "Conflicts" hub card — mirrors the World navbar link. */
+  /** Gates the "Conflicts" hub card; mirrors the World navbar link. */
   conflictsEnabled: boolean;
   worldEntities: WorldEntityMapSnapshot;
   /** entityId → bloc, for the globe's Blocs mode. */
@@ -38,7 +38,7 @@ export default function WorldClient({
 }: WorldClientProps) {
   // `countryAccess` is keyed by the runtime registered set (getAllCountryAccess →
   // COUNTRY_ORDER ∪ active countryGameStates), so its keys are the SSOT for which
-  // countries to render here — an activated SCO/WAL enters without a redeploy.
+  // countries to render here, so an activated SCO/WAL enters without a redeploy.
   const registeredCountryIds = Object.keys(countryAccess) as CountryId[];
   const countryAvailability = Object.fromEntries(
     registeredCountryIds.map((id) => [id, resolveCountryAvailability(id, countryAccess[id])])
@@ -48,16 +48,13 @@ export default function WorldClient({
     <WorldMetricFilterProvider>
       <div className="min-h-screen bg-background pb-20">
         <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 space-y-12">
-          {/* Hero Section */}
-          <div className="text-center space-y-3 max-w-2xl mx-auto">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground">
-              Global Politics
-            </h1>
+          <header className="max-w-2xl space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">World</h1>
             <p className="text-base text-muted leading-relaxed">
-              Expand your political influence beyond borders. Navigate unique political systems and
-              legislative challenges across nations.
+              This page lists every nation in the game, with world events, trade, and the all-time
+              rankings below.
             </p>
-          </div>
+          </header>
 
           {/* Map Section */}
           <section className="space-y-4">
@@ -109,7 +106,7 @@ export default function WorldClient({
                   <section className="space-y-6">
                     <div className="flex items-center justify-between border-b border-card-border pb-4">
                       <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                        Select a Nation
+                        Select a nation
                       </h2>
                     </div>
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -129,7 +126,7 @@ export default function WorldClient({
                   <section className="space-y-6">
                     <div className="space-y-1 border-b border-card-border pb-4">
                       <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                        Econ-Only Nations
+                        Econ-only nations
                       </h2>
                       <p className="text-sm text-muted">
                         Open to browse, not to play. Read their politics, their legislature, and
@@ -153,7 +150,7 @@ export default function WorldClient({
                   <section className="space-y-6">
                     <div className="flex items-center gap-3 border-b border-card-border pb-4">
                       <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                        Planned Nations
+                        Planned nations
                       </h2>
                     </div>
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -184,12 +181,7 @@ export default function WorldClient({
           {/* Crises */}
           <section className="space-y-4">
             <div className="flex items-center justify-between border-b border-card-border pb-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">World Events</h2>
-                <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-bold uppercase tracking-wider border border-purple-500/20">
-                  Crises
-                </span>
-              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">World events</h2>
               <Link
                 href="/world/crises"
                 className="text-sm text-primary hover:underline font-medium"
@@ -201,24 +193,9 @@ export default function WorldClient({
               href="/world/crises"
               className="flex items-center gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card card-hover group"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-purple-500/20 bg-purple-500/10 text-purple-400">
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-                  />
-                </svg>
-              </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                  Global Crises
+                  Global crises
                 </p>
                 <p className="text-xs text-muted mt-0.5">
                   Active world events affecting nations, economies, and metrics.
@@ -240,18 +217,11 @@ export default function WorldClient({
             </Link>
           </section>
 
-          {/* Conflicts — gated behind the Conflicts subsystem flag */}
+          {/* Conflicts, gated behind the Conflicts subsystem flag */}
           {conflictsEnabled && (
             <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-card-border pb-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                    World Affairs
-                  </h2>
-                  <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-rose-400">
-                    Conflicts
-                  </span>
-                </div>
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">World affairs</h2>
                 <Link
                   href="/world/conflicts"
                   className="text-sm font-medium text-primary hover:underline"
@@ -263,21 +233,6 @@ export default function WorldClient({
                 href="/world/conflicts"
                 className="card-hover group flex items-center gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-rose-500/20 bg-rose-500/10 text-rose-400">
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z"
-                    />
-                  </svg>
-                </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">
                     Conflicts
@@ -306,12 +261,7 @@ export default function WorldClient({
           {/* World Trade */}
           <section className="space-y-4">
             <div className="flex items-center justify-between border-b border-card-border pb-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">World Trade</h2>
-                <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">
-                  Ledger
-                </span>
-              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">World trade</h2>
               <Link
                 href="/world/trade"
                 className="text-sm font-medium text-primary hover:underline"
@@ -323,27 +273,12 @@ export default function WorldClient({
               href="/world/trade"
               className="card-hover group flex items-center gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5"
-                  />
-                </svg>
-              </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">
-                  Balance of Trade
+                  Balance of trade
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  Surplus and deficit between nations — by country, commodity, and pair.
+                  Surplus and deficit between nations by country, commodity, and pair.
                 </p>
               </div>
               <svg
@@ -365,9 +300,7 @@ export default function WorldClient({
           {/* Hall of Fame */}
           <section className="space-y-4">
             <div className="flex items-center justify-between border-b border-card-border pb-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">Hall of Fame</h2>
-              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">Hall of fame</h2>
               <Link
                 href="/world/legacy"
                 className="text-sm font-medium text-primary hover:underline"
@@ -379,27 +312,12 @@ export default function WorldClient({
               href="/world/legacy"
               className="card-hover group flex items-center gap-4 rounded-xl border border-card-border bg-card p-5 shadow-card"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-warning/20 bg-warning/10 text-warning">
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                  />
-                </svg>
-              </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">
                   Every player, ranked
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  Legacy Score across every life you&apos;ve ever played — current iteration or all
+                  Legacy score across every life you have played, for the current iteration or all
                   time.
                 </p>
               </div>
