@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import type { Character, CentralBank, Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { FOREX_ACTIVE_CURRENCIES, getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -101,8 +102,27 @@ export async function processLineOfCreditTurn(
   let newlyUnfrozen = 0;
   let distressedAfterTurn = 0;
   const now = new Date();
+  // Which characters already have this turn's service record (a crashed or
+  // retried pass), in one read: the per-character check ran before the
+  // activity filter, so every credit-line holder paid a lookup that almost
+  // always found nothing. settleLocPlan still claims each key itself.
+  const startedKeys = new Set(
+    (
+      await db
+        .collection<{ _id: string; kind: string }>(MONEY_MOVE_COLLECTION)
+        .find(
+          {
+            _id: { $in: chars.map((char) => `loc:service:${turn}:${char._id}`) },
+            kind: "line_of_credit",
+          },
+          { projection: { _id: 1 } }
+        )
+        .toArray()
+    ).map((doc) => doc._id)
+  );
   for (const char of chars) {
-    const existing = await loadLocSettlement(db, `loc:service:${turn}:${char._id}`);
+    const serviceKey = `loc:service:${turn}:${char._id}`;
+    const existing = startedKeys.has(serviceKey) ? await loadLocSettlement(db, serviceKey) : null;
     if (existing) {
       const resumed = await resumeLocSettlement(db, existing._id);
       if (resumed.error) continue;

@@ -163,4 +163,24 @@ describe("line-of-credit payment overflowing into savings", () => {
     expect(account(db).balance).toBe(accountBefore);
     expect(pool(db)).toBe(poolBefore);
   });
+
+  it("resumes rather than re-charges when the same turn's pass runs again", async () => {
+    const db = world(["USD"]);
+    await run(db);
+    const after = {
+      savings: account(db).balance,
+      pool: pool(db),
+      debt: character(db).lineOfCredit.balances.USD,
+      records: db.collection("bankMoneyMoves").docs.length,
+    };
+
+    // A retried turn finds this turn's service record and resumes it.
+    const second = await run(db);
+
+    expect(second.charactersProcessed).toBeGreaterThan(0);
+    expect(account(db).balance).toBe(after.savings);
+    expect(pool(db)).toBe(after.pool);
+    expect(character(db).lineOfCredit.balances.USD).toBe(after.debt);
+    expect(db.collection("bankMoneyMoves").docs.length).toBe(after.records);
+  });
 });
