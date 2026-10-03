@@ -30,8 +30,8 @@ interface CampaignerPickerProps {
    * were seated or sent to the National Committee for confirmation.
    */
   onSave: (ids: string[]) => Promise<string | void> | string | void;
-  /** Display color for the save button. */
-  partyColor: string;
+  /** No longer drawn: the save button uses the standard primary style. */
+  partyColor?: string;
   /** Whether the viewer is allowed to assign (chair / admin). */
   canAssign: boolean;
 }
@@ -50,7 +50,6 @@ export function CampaignerPicker({
   members,
   filterStateId,
   onSave,
-  partyColor,
   canAssign,
 }: CampaignerPickerProps) {
   const max = mode === "triple" ? 3 : 1;
@@ -178,8 +177,7 @@ export function CampaignerPicker({
             type="button"
             onClick={handleSave}
             disabled={!dirty || saving}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
-            style={{ backgroundColor: partyColor }}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save"}
           </button>

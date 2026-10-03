@@ -142,7 +142,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
         <div>
           <h3 className="text-sm font-semibold">Treasury transaction log</h3>
           <p
-            className="mt-0.5 text-[11px] text-muted"
+            className="mt-0.5 text-body-sm text-muted"
             title="National treasury transactions only. State party and caucus treasury activity appears on their own pages."
           >
             Per-event audit trail of national party treasury inflows and outflows only. State party
@@ -206,7 +206,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    className={`rounded-full border px-2 py-0.5 text-body-sm font-semibold ${
                       row.direction === "credit"
                         ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
                         : "bg-red-500/15 border-red-500/40 text-red-300"
@@ -214,15 +214,15 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
                   >
                     {row.direction === "credit" ? "+" : "-"}
                   </span>
-                  <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">
+                  <span className="rounded-full border border-card-border px-2 py-0.5 text-body-sm text-muted">
                     {CATEGORY_LABEL[row.category] ?? row.category}
                   </span>
-                  <span className="rounded-full border border-card-border/60 px-2 py-0.5 text-[10px] text-muted">
+                  <span className="rounded-full border border-card-border/60 px-2 py-0.5 text-body-sm text-muted">
                     {HOLDER_LABEL[row.holderType] ?? row.holderType}
                   </span>
                   <span className="text-foreground font-medium truncate">{row.memo}</span>
                 </div>
-                <div className="text-[11px] text-muted mt-0.5 flex flex-wrap items-center gap-2">
+                <div className="text-body-sm text-muted mt-0.5 flex flex-wrap items-center gap-2">
                   <span>turn {row.turn}</span>
                   <span>|</span>
                   <span>

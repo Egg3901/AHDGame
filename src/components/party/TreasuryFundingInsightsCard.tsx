@@ -32,14 +32,14 @@ function MetricList({ title, description, items, currencyCode, valueLabel }: Met
             >
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-foreground">{item.stateName}</div>
-                <div className="mt-1 text-[11px] text-muted">
+                <div className="mt-1 text-body-sm text-muted">
                   Treasury {formatCurrency(item.treasury, currencyCode)} • Org{" "}
                   {item.organization.toFixed(1)}
                 </div>
               </div>
               <div className="shrink-0 text-right">
                 <div className="text-sm font-semibold text-foreground">{valueLabel(item)}</div>
-                <div className="mt-1 text-[11px] text-muted">
+                <div className="mt-1 text-body-sm text-muted">
                   Growth {item.growthPerTurn >= 0 ? "+" : ""}
                   {item.growthPerTurn.toFixed(1)}/turn
                 </div>
@@ -68,9 +68,7 @@ export function TreasuryFundingInsightsCard({
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-          State Funding Visibility
-        </div>
+        <div className="text-xs font-semibold text-muted">State funding visibility</div>
         <h3 className="mt-1 text-heading-sm font-bold text-foreground">
           Where Money Is Going and Where It Should Go
         </h3>

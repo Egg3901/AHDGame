@@ -385,7 +385,7 @@ export function PartyAnalyticsTab({
             empty="No state organization data on file."
           />
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Growth Watch</h3>
+            <h3 className="text-sm font-semibold text-foreground">Growth watch</h3>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div>
                 <p className="text-body-sm font-medium text-success">Growing</p>

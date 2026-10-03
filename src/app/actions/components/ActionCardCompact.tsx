@@ -10,7 +10,11 @@ import {
   convertCashConversion,
   isFundraiseEligible,
 } from "@/lib/actions";
-import { CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
+import { CATEGORY_LABELS } from "../actionsConstants";
+
+const FLIPFLOP_AXIS_LABELS = { economic: "Economic", social: "Social" } as const;
+const NEUTRAL_BUTTON =
+  "rounded-md border border-card-border bg-card-elevated text-foreground transition-colors hover:bg-card-muted";
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
 
@@ -120,7 +124,6 @@ const ActionCardCompact = memo(function ActionCardCompact({
   const isMaxed = isCampaign && campaignMaxed;
   const blocked =
     gdpCostsBlocked || isMaxed || noDonor || noCash || cantAffordFunds || cantAffordActions;
-  const accent = CATEGORY_ACCENTS[card.category] ?? CATEGORY_ACCENTS.influence;
 
   const isFlipflop = card.type === "flipflop";
 
@@ -136,60 +139,31 @@ const ActionCardCompact = memo(function ActionCardCompact({
   return (
     <div
       data-coach={`action-${card.type}`}
-      className={`group relative overflow-hidden rounded-lg border border-card-border transition-all duration-200 hover:border-primary/40
-        ${blocked ? "opacity-60" : ""}
-      `}
+      className={`rounded-lg border border-card-border bg-card ${blocked ? "opacity-60" : ""}`}
     >
-      {/* Color-only background (no photo — category accent, see CATEGORY_ACCENTS.row) */}
-      <div
-        className={`absolute inset-0 z-0 bg-gradient-to-r ${accent.row} transition-opacity duration-200 group-hover:opacity-95`}
-      />
-      <div className="absolute inset-0 z-0 bg-black/40 transition-colors duration-200 group-hover:bg-black/32" />
-
-      {/* Mobile layout: stacked rows */}
-      {/* Desktop layout: grid with fixed columns for consistent button alignment */}
-      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 sm:gap-4 px-3 py-3 sm:px-4 sm:py-3">
-        {/* Left column: badge + name + effect + costs */}
-        <div className="flex flex-col gap-1.5 min-w-0">
-          {/* Top sub-row: badge + name */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Category badge — mobile */}
-            <span className="inline-flex sm:hidden w-[56px] justify-center shrink-0 items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/70">
-              {CATEGORY_LABELS[card.category]}
-            </span>
-            {/* Category badge — desktop */}
-            <span className="hidden sm:inline-flex w-[72px] justify-center shrink-0 items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/70">
-              {CATEGORY_LABELS[card.category]}
-            </span>
-            <span className="font-semibold text-sm text-white">{card.label}</span>
+      {/* One column on phones; on wider screens the buttons sit in a fixed right column */}
+      <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-[1fr_auto] sm:gap-4 sm:px-4">
+        {/* Left column: name, category, effect and costs */}
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-body font-semibold text-foreground">{card.label}</span>
+            <span className="text-body-sm text-muted">{CATEGORY_LABELS[card.category]}</span>
             {warningText && (
-              <span className="text-[10px] font-medium text-red-400">{warningText}</span>
+              <span className="text-body-sm font-medium text-error">{warningText}</span>
             )}
           </div>
-          {/* Bottom sub-row: effect + costs */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-white/50">{card.effect}</span>
-            {/* Costs inline on mobile */}
-            <span className="sm:hidden text-[10px] text-white/60">
-              <span className={cantAffordActions ? "text-red-400" : ""}>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-body-sm">
+            <span className="text-muted">{card.effect}</span>
+            <span className="font-medium tabular-nums text-foreground">
+              <span className={cantAffordActions ? "text-error" : ""}>
                 {effectiveActionCost} AP
               </span>
-              <span className="text-white/30 mx-1">·</span>
-              <span className={cantAffordFunds ? "text-red-400" : ""}>{effectiveFundLabel}</span>
-            </span>
-          </div>
-          {/* Desktop costs — separate row for alignment */}
-          <div className="hidden sm:flex items-center gap-3 text-xs">
-            <span
-              className={`font-medium tabular-nums ${cantAffordActions ? "text-red-400" : "text-white/90"}`}
-            >
-              {effectiveActionCost} AP
-            </span>
-            <span className="text-white/30">/</span>
-            <span
-              className={`font-medium tabular-nums ${cantAffordFunds ? "text-red-400" : "text-white/90"}`}
-            >
-              {effectiveFundLabel}
+              <span className="mx-1 text-muted" aria-hidden>
+                ·
+              </span>
+              <span className={cantAffordFunds ? "text-error" : isFundraise ? "text-success" : ""}>
+                {effectiveFundLabel}
+              </span>
             </span>
           </div>
         </div>
@@ -200,14 +174,14 @@ const ActionCardCompact = memo(function ActionCardCompact({
             <button
               type="button"
               onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
-              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold hover:bg-primary/10"
+              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold transition-colors hover:bg-card-muted"
             >
               {card.label}
             </button>
           ) : card.href ? (
             <Link
               href={card.href}
-              className="inline-flex items-center justify-center gap-1 w-full sm:w-auto rounded-md border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 hover:border-white/30 transition-all"
+              className={`inline-flex w-full items-center justify-center gap-1 px-2.5 py-1.5 text-body-sm font-semibold sm:w-auto ${NEUTRAL_BUTTON}`}
             >
               View
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,9 +199,9 @@ const ActionCardCompact = memo(function ActionCardCompact({
                 <button
                   onClick={() => onFlipflopStepChange("axis")}
                   disabled={blocked || !!executing}
-                  className="rounded-md border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                  className={`w-full px-2.5 py-1.5 text-body-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${NEUTRAL_BUTTON}`}
                 >
-                  Flip-Flop
+                  Flip-flop
                 </button>
               )}
               {flipflopStep === "axis" && (
@@ -239,14 +213,15 @@ const ActionCardCompact = memo(function ActionCardCompact({
                         onFlipflopAxisChange(ax);
                         onFlipflopStepChange("direction");
                       }}
-                      className="rounded-md border border-white/15 bg-neutral-900 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-neutral-800 hover:border-white/30 transition-all flex-1 sm:flex-none"
+                      className={`flex-1 px-2 py-1.5 text-body-sm font-semibold sm:flex-none ${NEUTRAL_BUTTON}`}
                     >
-                      {ax.slice(0, 4)}
+                      {FLIPFLOP_AXIS_LABELS[ax]}
                     </button>
                   ))}
                   <button
                     onClick={() => onFlipflopStepChange(null)}
-                    className="text-[10px] text-white/50 hover:text-white px-1"
+                    aria-label="Cancel"
+                    className="px-1 text-body-sm text-muted hover:text-foreground"
                   >
                     X
                   </button>
@@ -256,17 +231,18 @@ const ActionCardCompact = memo(function ActionCardCompact({
                 <div className="flex items-center gap-1 animate-in slide-in-from-right-2 duration-200 flex-wrap sm:flex-nowrap">
                   {(
                     [
-                      [-1, "L"],
-                      [1, "R"],
+                      [-1, "Left"],
+                      [1, "Right"],
                     ] as const
                   ).map(([dir, label]) => (
                     <button
                       key={dir}
                       onClick={() => onFlipflopDirChange(dir)}
-                      className={`rounded-md border px-2 py-1.5 text-[10px] font-bold uppercase transition-all flex-1 sm:flex-none ${
+                      aria-pressed={flipflopDir === dir}
+                      className={`flex-1 rounded-md border px-2 py-1.5 text-body-sm font-semibold transition-colors sm:flex-none ${
                         flipflopDir === dir
-                          ? "bg-red-500/30 border-red-500 text-red-300"
-                          : "border-white/15 bg-neutral-900 hover:bg-neutral-800"
+                          ? "border-foreground/50 bg-card-muted text-foreground"
+                          : "border-card-border bg-card-elevated text-foreground hover:bg-card-muted"
                       }`}
                     >
                       {label}
@@ -276,14 +252,15 @@ const ActionCardCompact = memo(function ActionCardCompact({
                     <button
                       onClick={() => onFlipflop(flipflopAxis, flipflopDir)}
                       disabled={!!executing}
-                      className="rounded-md bg-red-600 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-red-500 transition-all disabled:opacity-50"
+                      className="rounded-md bg-error px-2 py-1.5 text-body-sm font-semibold text-white transition-colors hover:bg-error-muted disabled:opacity-50"
                     >
                       {executing === "flipflop" ? "..." : "Go"}
                     </button>
                   )}
                   <button
                     onClick={() => onFlipflopStepChange(null)}
-                    className="text-[10px] text-white/50 hover:text-white px-1"
+                    aria-label="Cancel"
+                    className="px-1 text-body-sm text-muted hover:text-foreground"
                   >
                     X
                   </button>
@@ -296,7 +273,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                 <button
                   onClick={() => onConvertCashOpenChange(true)}
                   disabled={blocked || !!executing}
-                  className="rounded-md border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                  className={`w-full px-2.5 py-1.5 text-body-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${NEUTRAL_BUTTON}`}
                 >
                   Donate
                 </button>
@@ -321,7 +298,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                   return (
                     <div className="flex items-center gap-1 animate-in slide-in-from-right-2 duration-200 flex-wrap sm:flex-nowrap">
                       <div className="relative flex-1 sm:flex-none">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-white/50">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-body-sm text-muted">
                           {inputSymbol}
                         </span>
                         <input
@@ -331,19 +308,20 @@ const ActionCardCompact = memo(function ActionCardCompact({
                           value={convertCashAmount}
                           onChange={(e) => onConvertCashAmountChange(e.target.value)}
                           placeholder="Amt"
-                          className="w-full sm:w-24 rounded-md border border-white/15 bg-neutral-900 pl-5 pr-2 py-1.5 text-[10px] font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/50"
+                          className="w-full rounded-md border border-card-border bg-card-elevated py-1.5 pl-5 pr-2 text-body-sm font-medium text-foreground placeholder:text-muted/60 focus:border-foreground/40 focus:outline-none sm:w-24"
                         />
                       </div>
                       {valid && (
-                        <span className="text-[10px] text-white/60 whitespace-nowrap">
-                          +{formatAmount(previewFunds)} / +{previewInfamy}% inf
+                        <span className="whitespace-nowrap text-body-sm text-muted">
+                          <span className="text-success">+{formatAmount(previewFunds)}</span> /{" "}
+                          <span className="text-error">+{previewInfamy}% inf</span>
                         </span>
                       )}
                       {valid && !convertConfirming && (
                         <button
                           onClick={() => setConvertConfirming(true)}
                           disabled={!!executing}
-                          className="rounded-md bg-amber-600 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-amber-500 transition-all disabled:opacity-50"
+                          className="rounded-md bg-primary px-2 py-1.5 text-body-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                         >
                           {executing === "convertCash" ? "..." : "Go"}
                         </button>
@@ -356,7 +334,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                           }}
                           disabled={!!executing}
                           title={`Self-funding raises Infamy by +${previewInfamy}%. Infamy decays 5% per turn.`}
-                          className="rounded-md bg-red-600 px-2 py-1.5 text-[10px] font-bold text-white hover:bg-red-500 transition-all disabled:opacity-50 whitespace-nowrap"
+                          className="whitespace-nowrap rounded-md bg-error px-2 py-1.5 text-body-sm font-semibold text-white transition-colors hover:bg-error-muted disabled:opacity-50"
                         >
                           {executing === "convertCash" ? "..." : `+${previewInfamy}% inf, sure?`}
                         </button>
@@ -366,7 +344,8 @@ const ActionCardCompact = memo(function ActionCardCompact({
                           setConvertConfirming(false);
                           onConvertCashOpenChange(false);
                         }}
-                        className="text-[10px] text-white/50 hover:text-white px-1"
+                        aria-label="Cancel"
+                        className="px-1 text-body-sm text-muted hover:text-foreground"
                       >
                         X
                       </button>

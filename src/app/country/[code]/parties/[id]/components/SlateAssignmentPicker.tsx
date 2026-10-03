@@ -120,7 +120,7 @@ export function AssignmentPicker({
         className="w-full rounded-md border border-card-border bg-card px-2 py-1 text-xs"
       />
       {assignment && (
-        <p className={`text-[11px] ${isFull ? "text-amber-300" : "text-muted"}`}>
+        <p className={`text-body-sm ${isFull ? "text-amber-300" : "text-muted"}`}>
           {formatSlateCapNote(assignment)}
         </p>
       )}
@@ -182,9 +182,7 @@ function CandidateAssignmentList({
 }) {
   return (
     <div className="rounded-lg border border-card-border bg-card p-2">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
-        {title}
-      </div>
+      <div className="mb-2 text-body-sm font-semibold text-muted">{title}</div>
       {rows.length === 0 ? (
         <p className="text-xs text-muted">{emptyLabel}</p>
       ) : (
@@ -194,14 +192,14 @@ function CandidateAssignmentList({
               <div className="min-w-0">
                 <div className="truncate text-xs">{row.name}</div>
                 {row.officeLabel && (
-                  <div className="text-[10px] text-muted">{formatSlateLabel(row.officeLabel)}</div>
+                  <div className="text-body-sm text-muted">{formatSlateLabel(row.officeLabel)}</div>
                 )}
               </div>
               <button
                 type="button"
                 disabled={disabled || pendingKey === row.key}
                 onClick={() => void onAssign(row.type, row.id)}
-                className="rounded-md border border-card-border bg-background px-2 py-1 text-[11px] text-muted hover:text-foreground disabled:opacity-50"
+                className="rounded-md border border-card-border bg-background px-2 py-1 text-body-sm text-muted hover:text-foreground disabled:opacity-50"
               >
                 {pendingKey === row.key ? "..." : "Assign"}
               </button>
