@@ -26,7 +26,7 @@ import {
   assemblePhysicalPnl,
   computeFinancialLegs,
   computeInputsCost,
-  otherOpexDriftFactor,
+  legacyAnchorPolicyCharge,
   solveOtherOpexPerUnit,
 } from "@/lib/corporations/physicalPnl";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
@@ -231,8 +231,9 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
   //    bonus shrank the credit and raised cost — live on 82% of prod sectors
   //    when found). A revenue leg is monotone in the modifier by construction.
   //    The residual anchor is now held at its policy-NEUTRAL basis and no
-  //    longer responds to the modifier stack; legacy anchors are rebased onto
-  //    that basis through the drift ratio itself (see `otherOpexDriftFactor`).
+  //    longer responds to the modifier stack; legacy anchors, solved with the
+  //    calibration-time stack inside them, have that stack charged back as an
+  //    amount (see `legacyAnchorPolicyCharge`).
   //  • dominance → already consolidated to the build price in P3a.
   //
   // KNOWN RESIDUALS (deliberate, documented, not silently dropped): the labor
@@ -327,13 +328,13 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
       ? // Exact by construction, whether or not the per-unit anchor could be
         // solved this turn.
         maintenance + plantsPolicyCredit - sectorLaborCost - inputsCost - financialLegs
-      : (otherOpexAnchorForPnl ?? 0) *
-        (producedUnits / retoolCapacityRatio) *
-        // One-time rebase of legacy anchors onto the neutral basis; 1 for
-        // anchors stamped after the policyCredit change. See the docblock on
-        // `otherOpexDriftFactor` for why this stopped tracking the live stack.
-        otherOpexDriftFactor({
-          currentMarginBasis: plantsPolicyNeutralBasis,
+      : (otherOpexAnchorForPnl ?? 0) * (producedUnits / retoolCapacityRatio) +
+        // Legacy anchors still hold the calibration-time policy stack, which
+        // `policyCredit` re-applies; charge it back so it counts once. 0 for
+        // anchors stamped at the neutral basis.
+        legacyAnchorPolicyCharge({
+          hourlyRevenue,
+          neutralBasis: plantsPolicyNeutralBasis,
           anchorMarginBasis: otherOpexAnchorMarginBasis,
         });
   const physicalPnl = plantsPhysicalEnabled
