@@ -11,6 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { initElectionVoteTally, accumulateVoteTurn } from "./tallyManagement";
+import { removeWithdrawnCandidateFromTally } from "./tallyCleaner";
 import { MongoClient, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
@@ -387,47 +388,73 @@ describe("accumulateVoteTurn — vote accumulation", () => {
    * Wires all the happy-path mocks required for accumulateVoteTurn to proceed
    * past guards and reach the updateOne call.
    */
-  it("caps modern Hungarian district increments and preserves withdrawn cast votes", async () => {
-    const electionId = new ObjectId();
-    const active = makeCandidate({ electionId, countryId: "HU" });
-    const withdrawn = new ObjectId().toHexString();
-    const election = makeElection({
-      _id: electionId,
-      countryId: "HU",
-      electionType: "nationalAssembly",
-      state: "HU_BUD",
-      totalSeats: 1,
-      hungarianModernByElection: {
-        receiptId: "HU:mixed2011:6:by-election:1",
-        parentReceiptId: "HU:mixed2011:6",
-        districtId: "HU_BUD:1",
-        registeredVoters: 100,
-      },
-    });
-    await setupHappyPath({
-      electionId,
-      election,
-      candidates: [active],
-      existingTallyVotes: { [withdrawn]: 60, [active._id.toHexString()]: 30 },
-      voteResult: { [active._id.toHexString()]: 100 },
-    });
-    db.collection("gameState").findOne.mockResolvedValue({
-      preset: "1991-default",
-      currentYear: 2014,
-      currentTurn: 1126,
-      startingYear: 1991,
-    });
-    const previous = await db.collectionMocks.electionVoteTallies.findOne();
-    previous.candidateNames[withdrawn] = "Withdrawn district nominee";
-    previous.candidateParties[withdrawn] = "2";
-    await accumulateVoteTurn(electionId, 1, new Date("2024-01-01T00:00:00Z"));
-    const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
-    expect(update.$set.totalVotes).toEqual({ [withdrawn]: 60, [active._id.toHexString()]: 40 });
-    expect(update.$set.candidateNames[withdrawn]).toBe("Withdrawn district nominee");
-    expect(update.$set.candidateParties[withdrawn]).toBe("2");
-    expect(update.$set.hungarianAssemblyBallot).toBe(true);
-    expect(update.$unset.seatsEstimate).toBe("");
-  });
+  it.each(["district", "assembly", "legacy-overrun"])(
+    "caps modern Hungarian %s increments and preserves withdrawn cast votes",
+    async (kind) => {
+      const electionId = new ObjectId();
+      const active = makeCandidate({ electionId, countryId: "HU" });
+      const withdrawn = new ObjectId().toHexString();
+      const election = makeElection({
+        _id: electionId,
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        state: "HU_BUD",
+        totalSeats: 1,
+        ...(kind === "district"
+          ? {
+              hungarianModernByElection: {
+                receiptId: "HU:mixed2011:6:by-election:1",
+                parentReceiptId: "HU:mixed2011:6",
+                districtId: "HU_BUD:1",
+                registeredVoters: 100,
+              },
+            }
+          : {
+              hungarianModernAssembly: {
+                ruleVersion: "mixed-2011-v1" as const,
+                reason: "parliamentary_decision" as const,
+                ...(kind === "legacy-overrun" ? {} : { registeredVoters: 100 }),
+                authorizedOnTurn: 1006,
+              },
+            }),
+      });
+      await setupHappyPath({
+        electionId,
+        election,
+        candidates: [active],
+        existingTallyVotes: {
+          [withdrawn]: kind === "legacy-overrun" ? 90 : 60,
+          [active._id.toHexString()]: 30,
+        },
+        voteResult: { [active._id.toHexString()]: 100 },
+      });
+      if (kind === "legacy-overrun")
+        db.collectionMocks.states.findOne.mockResolvedValue({
+          ...makeState(),
+          population: 100,
+          votingEligiblePopulation: 100,
+        });
+      db.collection("gameState").findOne.mockResolvedValue({
+        preset: "1991-default",
+        currentYear: 2014,
+        currentTurn: 1126,
+        startingYear: 1991,
+      });
+      const previous = await db.collectionMocks.electionVoteTallies.findOne();
+      previous.candidateNames[withdrawn] = "Withdrawn district nominee";
+      previous.candidateParties[withdrawn] = "2";
+      await accumulateVoteTurn(electionId, 1, new Date("2024-01-01T00:00:00Z"));
+      const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
+      expect(update.$set.totalVotes).toEqual({
+        [withdrawn]: kind === "legacy-overrun" ? 90 : 60,
+        [active._id.toHexString()]: kind === "legacy-overrun" ? 30 : 40,
+      });
+      expect(update.$set.candidateNames[withdrawn]).toBe("Withdrawn district nominee");
+      expect(update.$set.candidateParties[withdrawn]).toBe("2");
+      expect(update.$set.hungarianAssemblyBallot).toBe(true);
+      expect(update.$unset.seatsEstimate).toBe("");
+    }
+  );
   it("prices Russian campaign strength inside the frozen direct-voter ceiling", async () => {
     const electionId = new ObjectId();
     const a = makeCandidate({ electionId, countryId: "RU" });
@@ -1598,10 +1625,39 @@ describe("removeWithdrawnCandidateFromTally", () => {
             electionType: 1,
             russianDumaRound: 1,
             russianCouncilRound: 1,
+            hungarianAssemblyRound: 1,
+            hungarianModernAssembly: 1,
+            hungarianModernByElection: 1,
           },
         }
       );
       if (kind === "native")
+        expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
+      else
+        expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledWith(
+          { electionId },
+          expect.objectContaining({ $unset: expect.objectContaining({ "totalVotes.cand1": "" }) })
+        );
+    }
+  );
+  it.each(["modern", "earlier", "foreign", "unbound"])(
+    "checks a prior unmarked Hungarian tally for %s binding",
+    async (kind) => {
+      const electionId = new ObjectId();
+      db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
+        makeTally(electionId, { state: "HU_BUD", totalVotes: { cand1: 30 } })
+      );
+      db.collection("elections").findOne.mockResolvedValue({
+        countryId: kind === "foreign" ? "RO" : "HU",
+        electionType: "nationalAssembly",
+        ...(kind === "earlier"
+          ? { hungarianAssemblyRound: { ruleVersion: "mixed-1989-v1" } }
+          : kind === "unbound"
+            ? {}
+            : { hungarianModernAssembly: { ruleVersion: "mixed-2011-v1" } }),
+      });
+      await removeWithdrawnCandidateFromTally(db as unknown as Db, electionId, "cand1");
+      if (kind === "modern" || kind === "earlier")
         expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
       else
         expect(db.collectionMocks.electionVoteTallies.updateOne).toHaveBeenCalledWith(

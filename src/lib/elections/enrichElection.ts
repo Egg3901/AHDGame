@@ -751,7 +751,8 @@ export async function _enrichElection(
     election.countryId === "HU" &&
     election.electionType === "nationalAssembly" &&
     (election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1" ||
-      election.hungarianModernByElection != null);
+      election.hungarianModernByElection != null ||
+      election.hungarianModernAssembly != null);
   let seatsEstimate =
     seatedAllocation ??
     (isBgOrdinary || isHu1991Pending

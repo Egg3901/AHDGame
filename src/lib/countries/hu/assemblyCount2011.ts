@@ -135,17 +135,15 @@ export async function materializeHu2011Count(input: {
       };
     })
   );
-  const nominees = candidates
-    .filter((row) => row.status === "active")
-    .map((row) => ({
-      id: row._id.toHexString(),
-      ownerId: (row.isNPP ? row.nppId : row.characterId)?.toHexString() ?? "",
-      electionId: row.electionId.toHexString(),
-      isNpc: row.isNPP === true,
-      party: row.party ?? "independent",
-      name: row.characterName,
-      regionId: byPoll.get(row.electionId.toHexString())!.state,
-    }));
+  const nominees = candidates.map((row) => ({
+    id: row._id.toHexString(),
+    ownerId: (row.isNPP ? row.nppId : row.characterId)?.toHexString() ?? "",
+    electionId: row.electionId.toHexString(),
+    isNpc: row.isNPP === true,
+    party: row.party ?? "independent",
+    name: row.characterName,
+    regionId: byPoll.get(row.electionId.toHexString())!.state,
+  }));
   const assembly = buildHuModernAssembly(
     plan,
     nominees.map((row) => ({

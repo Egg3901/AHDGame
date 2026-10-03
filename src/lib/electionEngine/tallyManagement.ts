@@ -454,10 +454,15 @@ export async function accumulateVoteTurn(
     isHu1991AssemblyCampaign(election) ||
     (preset === "1991-default" &&
       election.countryId === "HU" &&
-      election.hungarianModernByElection != null);
+      (election.hungarianModernByElection != null || election.hungarianModernAssembly != null));
   const huRegisteredVoters =
     election.hungarianModernByElection?.registeredVoters ??
-    election.hungarianAssemblyRound?.registeredVoters;
+    election.hungarianModernAssembly?.registeredVoters ??
+    election.hungarianAssemblyRound?.registeredVoters ??
+    Math.max(
+      Math.floor(scalePoolToRegistered(electorate, registrationPool?.unregistered)),
+      Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0)
+    );
   const isBoundDuma =
     election.countryId === "RU" &&
     election.electionType === "dumaDeputy" &&
@@ -1070,7 +1075,7 @@ export async function initElectionVoteTally(
   // re-init silently erases the primary's entire count.
   const existing = await db
     .collection<ElectionVoteTally>("electionVoteTallies")
-    .findOne({ electionId }, { projection: { primaryVotes: 1 } });
+    .findOne({ electionId }, { projection: { primaryVotes: 1, hungarianAssemblyBallot: 1 } });
 
   const doc: ElectionVoteTally = {
     // Preserve the matched doc's _id: legacy tallies carry an auto-generated
@@ -1086,6 +1091,7 @@ export async function initElectionVoteTally(
     finalized: false,
     ...(primaryResults && { primaryResults }),
     ...(existing?.primaryVotes && { primaryVotes: existing.primaryVotes }),
+    ...(existing?.hungarianAssemblyBallot && { hungarianAssemblyBallot: true }),
     createdAt: now,
     updatedAt: now,
   };

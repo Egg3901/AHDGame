@@ -118,6 +118,8 @@ export interface Election {
   hungarianAssemblyRound?: import("../../countries/hu/rules/assemblyCampaign1991").Hu1991CampaignBinding;
   /** The authorized modern law freezes before general ballots exist. */
   hungarianModernAssembly?: {
+    /** Frozen regional register; absent only on earlier native saves. */
+    registeredVoters?: number;
     ruleVersion: "mixed-2011-v1";
     authorizedOnTurn?: number;
     reason: "parliamentary_decision" | "legacy_settlement";
