@@ -48,11 +48,7 @@ export function PolicyAlignmentCard({
       <div
         className={`mb-4 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between ${hideTitle ? "sm:justify-end" : ""}`}
       >
-        {!hideTitle && (
-          <h3 className="text-xs font-bold uppercase tracking-widest text-muted">
-            Policy alignment
-          </h3>
-        )}
+        {!hideTitle && <h3 className="text-sm font-bold text-muted">Policy alignment</h3>}
         <div
           className="inline-flex rounded-lg border border-card-border bg-card-muted/40 p-0.5"
           role="tablist"

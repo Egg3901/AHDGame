@@ -171,7 +171,7 @@ export function MailThreadView({ item, onArchive, onSent }: MailThreadViewProps)
 
       {/* Subject */}
       <div className="border-b border-card-border px-5 py-3">
-        <h2 className="font-serif text-base font-semibold text-foreground">{item.title}</h2>
+        <h2 className="text-base font-semibold text-foreground">{item.title}</h2>
       </div>
 
       {/* Message bubbles */}

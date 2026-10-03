@@ -408,7 +408,7 @@ export function StatePartyHQ({
 
       {/* Controls */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">State parties</h3>
+        <h3 className="text-sm font-semibold text-muted">State parties</h3>
         <div className="flex items-center gap-2">
           {view === "map" && (
             <div className="inline-flex rounded-lg border border-card-border p-0.5 text-xs">

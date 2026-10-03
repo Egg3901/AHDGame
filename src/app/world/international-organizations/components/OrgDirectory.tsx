@@ -21,7 +21,7 @@ export function OrgDirectory({
         if (inCategory.length === 0) return null;
         return (
           <section key={category} className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">
+            <h3 className="text-sm font-semibold text-muted">
               {ORGANIZATION_CATEGORY_META[category].label}
             </h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

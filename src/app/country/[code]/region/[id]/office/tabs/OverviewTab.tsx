@@ -248,7 +248,7 @@ function EndorsementsSummary({ activeEndorsements }: { activeEndorsements: Activ
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <h3 className="text-xs uppercase tracking-widest text-muted mb-2">{title}</h3>
+      <h3 className="text-sm text-muted mb-2">{title}</h3>
       {children}
     </div>
   );

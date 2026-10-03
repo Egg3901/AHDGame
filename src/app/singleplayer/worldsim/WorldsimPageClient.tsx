@@ -159,9 +159,7 @@ export function WorldsimPageClient() {
       </section>
 
       <section className="mt-6 rounded border border-card-border bg-card-muted p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-          Nations in this world
-        </h2>
+        <h2 className="text-sm font-semibold text-muted">Nations in this world</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[32rem] text-left text-sm">
             <caption className="sr-only">Playable nations and their government types</caption>

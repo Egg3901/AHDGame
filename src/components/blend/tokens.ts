@@ -60,16 +60,12 @@ export const BLEND = {
  * `src/app/layout.tsx` via `next/font/google` and exposed as CSS variables on
  * `<html>`, so these reference the variables rather than loading anything new.
  *
- * Headings and prose are sans like the rest of the app. `serif` is kept as an
- * alias of `sans` so existing call sites render in Geist until they are
- * renamed.
+ * Headings and prose are sans like the rest of the app; mono is for figures
+ * and labels.
  */
-const SANS_STACK = "var(--font-geist-sans), Geist, system-ui, sans-serif";
-
 export const FONT = {
-  serif: SANS_STACK,
   mono: "var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, monospace",
-  sans: SANS_STACK,
+  sans: "var(--font-geist-sans), Geist, system-ui, sans-serif",
 } as const;
 
 /**

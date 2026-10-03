@@ -123,9 +123,7 @@ export function CentralBankMoneySupplyTab({
       )}
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Monetary stock · turn {data.turn}
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">Monetary stock · turn {data.turn}</h2>
           <p className="mt-2 text-xs text-muted">{t("money.stockExplanation")}</p>
           <div className="mt-4 divide-y divide-card-border">
             {components.map(([label, amount]) => (
@@ -150,9 +148,7 @@ export function CentralBankMoneySupplyTab({
         </section>
 
         <section className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Bonds, reserves and issuance
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">Bonds, reserves and issuance</h2>
           <div className="mt-4 divide-y divide-card-border">
             <Row label="Sovereign bonds outstanding" value={fmt(data.sovereignBondsOutstanding)} />
             <Row label="Central-bank bond holdings" value={fmt(data.centralBankBondHoldings)} />
@@ -171,7 +167,7 @@ export function CentralBankMoneySupplyTab({
       {data.lastPolicyEvaluation && (
         <section className="rounded-xl border border-card-border bg-card p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
+            <h2 className="text-sm font-semibold text-muted">
               Monetary committee assessment · turn {data.lastPolicyEvaluation.turn}
             </h2>
             <span className="rounded-full border border-card-border px-2 py-1 text-xs font-semibold uppercase">
@@ -206,9 +202,7 @@ export function CentralBankMoneySupplyTab({
 
       {canOperate && (
         <form onSubmit={submit} className="rounded-xl border border-primary/30 bg-card p-5">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-primary">
-            Monetary operation
-          </h2>
+          <h2 className="text-sm font-semibold text-primary">Monetary operation</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-4">
             <select
               value={type}
@@ -263,9 +257,7 @@ export function CentralBankMoneySupplyTab({
       )}
 
       <section className="rounded-xl border border-card-border bg-card p-5">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Recent policy operations
-        </h2>
+        <h2 className="text-sm font-semibold text-muted">Recent policy operations</h2>
         <div className="mt-3 space-y-2">
           {[...data.operations]
             .reverse()

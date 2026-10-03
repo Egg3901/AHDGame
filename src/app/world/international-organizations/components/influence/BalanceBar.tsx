@@ -75,7 +75,7 @@ export function BalanceBar({ view }: { view: OrgInfluenceView }) {
       </div>
 
       {view.channel && (
-        <p className="text-body-xs text-muted">
+        <p className="text-body-sm text-muted">
           Plays through this channel pull a nation toward {view.channel.poleLabel}. Whatever no bloc
           persuades stays {view.remainderLabel.toLowerCase()}.
         </p>

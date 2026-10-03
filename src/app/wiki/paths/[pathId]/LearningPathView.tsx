@@ -62,7 +62,7 @@ export default function LearningPathView({ path, pathId }: LearningPathViewProps
           <p className="section-label">Learning path</p>
           {diff && <span className="text-xs font-medium text-muted">{diff}</span>}
         </div>
-        <h1 className="mb-2 font-serif text-3xl font-bold text-foreground">{path.title}</h1>
+        <h1 className="mb-2 text-3xl font-bold text-foreground">{path.title}</h1>
         <p className="mb-4 text-lg text-muted">{path.description}</p>
         <div className="flex items-center gap-4 font-mono text-sm text-muted">
           <span>{totalPages} pages</span>

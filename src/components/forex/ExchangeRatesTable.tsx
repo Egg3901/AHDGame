@@ -208,7 +208,7 @@ export function ExchangeRatesTable({
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-card-border">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Currencies</h2>
+          <h2 className="text-sm font-bold text-foreground">Currencies</h2>
           <p className="text-xs text-muted mt-0.5">
             {accordionRates.length > 0 ? "Player-enabled nations. " : null}
             Each rate is how many units of that currency you get for 1 ₳.{" "}
@@ -237,9 +237,7 @@ export function ExchangeRatesTable({
                 >
                   ▸
                 </span>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                  Other currencies
-                </h2>
+                <h2 className="text-sm font-bold text-foreground">Other currencies</h2>
                 <span className="rounded-full bg-card-elevated px-2 py-0.5 text-[10px] font-semibold text-muted tabular-nums">
                   {accordionRates.length}
                 </span>

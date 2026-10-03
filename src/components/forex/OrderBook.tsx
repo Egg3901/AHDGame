@@ -67,7 +67,7 @@ export function OrderBook({ orders, onFilled }: Props) {
       )}
       <div className="px-5 py-4 border-b border-card-border flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Order Book</h2>
+          <h2 className="text-sm font-bold text-foreground">Order book</h2>
           <p className="text-xs text-muted mt-0.5">Open limit orders from other players</p>
         </div>
         {pairs.length > 0 && (

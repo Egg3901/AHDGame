@@ -158,7 +158,7 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
         <span>{DIRECTION_GLYPH[modifiers.direction]}</span>
       </div>
       {modifiers.cabinetAtCap && (
-        <p className="mt-2 text-body-xs text-warning">
+        <p className="mt-2 text-body-sm text-warning">
           Every cabinet channel for this metric is effectively at its {modifiers.cabinetCap} point
           ceiling in most of the country. Orders, tier settings, estates, energy and infrastructure
           each carry their own ceiling, and all of them are effectively full, so more of any of them
@@ -166,7 +166,7 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
         </p>
       )}
       {modifiers.driftHalfLifeTurns > 0 && (
-        <p className="mt-2 text-body-xs text-muted">
+        <p className="mt-2 text-body-sm text-muted">
           The value moves toward the target slowly: about {modifiers.driftHalfLifeTurns} turns to
           close half the remaining gap.
         </p>
@@ -175,7 +175,7 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
           the engine also bends this target by how the economy and the funded
           services are actually doing, and those two terms are recomputed every
           turn instead of being stored, so a read path cannot show them. */}
-      <p className="mt-2 text-body-xs text-muted">
+      <p className="mt-2 text-body-sm text-muted">
         Laws and standing conditions set this target. Economic performance and service delivery bend
         it further each turn, and those are not included in the figure above.
       </p>

@@ -88,7 +88,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             {view.remainderLabel} {formatShare(target.nonAligned)}
           </span>
         </div>
-        <p className="text-body-xs text-muted">
+        <p className="text-body-sm text-muted">
           {view.channel?.poleLabel} is yours here, at {formatShare(target.ourShare)}
           {pointsToGate > 0
             ? `, ${formatShare(pointsToGate)} short of the ${view.joinShare} it takes to join.`
@@ -100,7 +100,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
             members vote — so a share past 60 that has not "joined" is working as
             designed, not stuck. This line is where a player sees the clock. */}
         {target.joinCountdown && (
-          <p className="text-body-xs text-muted">
+          <p className="text-body-sm text-muted">
             {target.joinCountdown.turnsToApply > 0 ? (
               <>
                 It has held above the {view.joinShare} for{" "}
@@ -325,12 +325,12 @@ function CommitPlayForm({
         </button>
       </div>
 
-      <p className="text-body-xs text-muted">
+      <p className="text-body-sm text-muted">
         Shorthand works here: 4.0M means 4,000,000, and the full number is fine too.
       </p>
 
       {hasPreview && (
-        <p className={`text-body-xs ${buysNothing ? "text-warning" : "text-muted"}`}>
+        <p className={`text-body-sm ${buysNothing ? "text-warning" : "text-muted"}`}>
           {t("preview", { points: formatShare(effectivePoints) })}{" "}
           {buysNothing
             ? t("minimumSpend", { spend: inFundCurrency(minSpendLocal) })
@@ -343,7 +343,7 @@ function CommitPlayForm({
       )}
 
       {overBalance && (
-        <p className="text-body-xs text-warning">
+        <p className="text-body-sm text-warning">
           That is more than the fund holds. The play will be refused.
         </p>
       )}

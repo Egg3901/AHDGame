@@ -245,9 +245,7 @@ function ReservePortfolioPanel({
     <div className="rounded-xl border border-card-border bg-card p-5">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-            Bank reserves
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">Bank reserves</h2>
           <p className="mt-1 max-w-md text-xs text-muted">
             Two separate pools. <span className="font-medium text-foreground/70">FX reserves</span>{" "}
             (spread fees collected from trades) are exchangeable below. The{" "}
@@ -347,9 +345,7 @@ function ReservePortfolioPanel({
           onSubmit={submitExchange}
           className="mt-5 rounded-lg border border-card-border bg-background/30 p-4"
         >
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-            Exchange reserve balances
-          </h3>
+          <h3 className="mb-3 text-sm font-semibold text-muted">Exchange reserve balances</h3>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
             <label className="text-xs font-medium text-muted">
               Sell
@@ -513,7 +509,7 @@ export function CentralBankFinancialsTab({
     <div className="space-y-6 pb-16">
       {bankFinancials && (
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+          <h2 className="mb-1 text-sm font-semibold text-muted">
             Income statement ({homeCurrency}) · all time
           </h2>
           <p className="mb-4 text-xs text-muted">
@@ -564,7 +560,7 @@ export function CentralBankFinancialsTab({
       />
 
       <div className="rounded-xl border border-card-border bg-card p-5">
-        <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
+        <h2 className="mb-1 text-sm font-semibold text-muted">
           Balance sheet · lending capacity ({homeCurrency})
         </h2>
         <p className="mb-4 text-xs text-muted">
@@ -643,9 +639,7 @@ export function CentralBankFinancialsTab({
             onSubmit={submitPoolTransfer}
             className="mt-5 rounded-lg border border-card-border bg-background/30 p-4"
           >
-            <h3 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-              Reallocate reserve pools
-            </h3>
+            <h3 className="mb-1 text-sm font-semibold text-muted">Reallocate reserve pools</h3>
             <p className="mb-3 text-xs text-muted">
               Once per day, move up to {maxFractionPct}% of forex spread revenue into lending
               reserves, which lets the bank lend more, or move it the other way. You cannot push the

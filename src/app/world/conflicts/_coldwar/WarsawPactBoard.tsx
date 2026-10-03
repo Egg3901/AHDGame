@@ -24,7 +24,7 @@ import {
 import { WP_BASE_COHESION, WP_MEMBERS, WP_TREATY_FLOOR } from "./warsawPact";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 const ACCENT = "#dc2626";
 
 /** Warsaw Pact Command (East) — STAVKA's unified-command force-commitment console. */
@@ -241,7 +241,7 @@ export function WarsawPactBoard() {
               <h1
                 style={{
                   margin: 0,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 28,
                   lineHeight: 1.05,
@@ -351,7 +351,7 @@ export function WarsawPactBoard() {
               <div style={{ minWidth: 150 }}>
                 <div
                   style={{
-                    fontFamily: serif,
+                    fontFamily: headingFont,
                     fontWeight: 700,
                     fontSize: 28,
                     color: "#f3f1ea",
@@ -552,7 +552,7 @@ export function WarsawPactBoard() {
                 </div>
                 <div
                   style={{
-                    fontFamily: serif,
+                    fontFamily: headingFont,
                     fontWeight: 700,
                     fontSize: 20,
                     color: "#f3f1ea",

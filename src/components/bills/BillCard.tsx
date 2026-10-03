@@ -182,7 +182,7 @@ export function BillCard({
             </span>
           </div>
           <h3
-            className="font-display m-0 text-foreground transition-colors group-hover:text-primary"
+            className="m-0 text-foreground transition-colors group-hover:text-primary"
             style={{ fontSize: 23, lineHeight: 1.15, fontWeight: 600, letterSpacing: "-0.005em" }}
           >
             {bill.title}

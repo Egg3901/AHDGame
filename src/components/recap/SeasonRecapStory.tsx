@@ -657,7 +657,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
 
               {slide.pillLabel && (
                 <div style={enter(340)} className="mx-auto mt-6 w-fit max-w-full">
-                  <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-black/20 px-4 py-2 backdrop-blur-sm">
+                  <div className="flex items-center gap-2.5 rounded-full border border-white/20 bg-black/70 px-4 py-2">
                     <span className="text-sm font-bold tracking-tight" style={{ color: GOLD }}>
                       {slide.pillLabel}
                     </span>

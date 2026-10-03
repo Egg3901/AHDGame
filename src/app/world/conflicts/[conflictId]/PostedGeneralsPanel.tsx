@@ -86,7 +86,7 @@ export function PostedGeneralsPanel({ generals }: { generals: PostedGeneralRow[]
               <div style={{ minWidth: 0 }}>
                 <div
                   style={{
-                    fontFamily: MIL_FONT.serif,
+                    fontFamily: MIL_FONT.heading,
                     fontSize: 13,
                     fontWeight: 600,
                     color: MIL_COLOR.text,

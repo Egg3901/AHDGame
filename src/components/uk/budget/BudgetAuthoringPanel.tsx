@@ -174,9 +174,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
   if (!data.canAuthor) {
     return (
       <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
-        <h3 className="text-caption font-semibold uppercase tracking-wider text-muted">
-          Budget {data.fiscalYear}
-        </h3>
+        <h3 className="text-caption font-semibold text-muted">Budget {data.fiscalYear}</h3>
         <p className="mt-2 text-body-sm text-muted">
           Only the Chancellor of the Exchequer can author the annual Budget. If the office is
           vacant, the Prime Minister may act until an appointment is made.
@@ -216,9 +214,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
     <div className="space-y-5 rounded-2xl border border-card-border bg-card p-6 shadow-card">
       <div className="flex items-baseline justify-between gap-4">
         <div>
-          <h3 className="text-caption font-semibold uppercase tracking-wider text-muted">
-            Budget {data.fiscalYear}
-          </h3>
+          <h3 className="text-caption font-semibold text-muted">Budget {data.fiscalYear}</h3>
           <p className="mt-1 text-body-sm text-muted">
             Bundle tax rates and statutory programme levels into one Commons confidence vote.
             Ordinary laws remain effective and whichever measure passes later controls.

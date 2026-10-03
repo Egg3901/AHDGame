@@ -273,7 +273,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
             {t("badge")}
           </div>
-          <h1 className="max-w-xl font-display text-display font-semibold tracking-tight text-foreground">
+          <h1 className="max-w-xl text-display font-semibold tracking-tight text-foreground">
             {t("heading")}
           </h1>
           <p className="mt-3 max-w-xl text-body text-muted sm:text-body-lg">{t("subheading")}</p>

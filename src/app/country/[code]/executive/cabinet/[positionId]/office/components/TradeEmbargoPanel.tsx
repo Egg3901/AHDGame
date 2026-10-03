@@ -177,7 +177,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
       {/* ── Active embargoes ── */}
       <div className="mb-5 space-y-4">
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          <h3 className="mb-2 text-sm font-semibold text-muted">
             Imposed by {resolveCountryName(countryId)}
           </h3>
           {loading ? (
@@ -242,7 +242,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
 
         {imposedOnUs.length > 0 && (
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+            <h3 className="mb-2 text-sm font-semibold text-muted">
               Imposed on {resolveCountryName(countryId)}
             </h3>
             <ul className="space-y-2">

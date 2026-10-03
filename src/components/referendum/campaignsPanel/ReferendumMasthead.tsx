@@ -110,9 +110,7 @@ export function ReferendumMasthead({
             </div>
           )}
           <div className="min-w-[200px] flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-              {registry}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{registry}</div>
             <h1 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight text-foreground">
               {title}
             </h1>
@@ -129,10 +127,10 @@ export function ReferendumMasthead({
           <div className="ml-auto flex items-center gap-3">
             {emblemSeal && (
               <div className="flex h-[72px] w-[72px] flex-none flex-col items-center justify-center rounded-full border-2 border-[var(--ref-yes)]/50 bg-background/40 px-1 text-center">
-                <span className="text-[8px] font-bold uppercase leading-tight tracking-wide text-[var(--ref-yes)]">
+                <span className="text-body-sm font-medium leading-tight text-[var(--ref-yes)]">
                   {emblemSeal.line1}
                 </span>
-                <span className="mt-0.5 text-[8px] font-bold uppercase leading-tight tracking-wide text-muted">
+                <span className="mt-0.5 text-body-sm font-medium leading-tight text-muted">
                   {emblemSeal.line2}
                 </span>
               </div>
@@ -147,9 +145,7 @@ export function ReferendumMasthead({
             key={t.label}
             className="flex min-w-0 flex-col gap-0.5 border-r border-t border-card-border px-4 py-3"
           >
-            <span className="truncate text-[10px] font-bold uppercase tracking-wider text-muted">
-              {t.label}
-            </span>
+            <span className="truncate text-body-sm font-medium text-muted">{t.label}</span>
             <span
               className={`truncate font-mono text-lg font-extrabold leading-tight ${
                 TILE_TONE[t.tone ?? "fg"]

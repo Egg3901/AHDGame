@@ -520,9 +520,7 @@ export function StateElections({
         {!isParliamentary && presidentialElections.length > 0 && (
           <div className="mt-4 pt-4 border-t border-card-border/60">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">
-                Presidential Race
-              </h3>
+              <h3 className="text-sm font-semibold text-muted">Presidential race</h3>
               {/* There is no per-county presidential breakdown until the
                   general, so the link would open a map of redistributed
                   national numbers. */}

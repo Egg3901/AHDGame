@@ -99,7 +99,7 @@ export default function NationalizationSurfacePage() {
                     {inDebt ? "national debt" : "surplus"}
                   </span>
                 </div>
-                <div className="text-body-xs text-muted">
+                <div className="text-body-sm text-muted">
                   The country&apos;s running cash position — it pays nationalization compensation,
                   funds CEO treasury draws, and receives privatization proceeds. A negative balance
                   is national debt.

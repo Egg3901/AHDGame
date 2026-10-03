@@ -69,18 +69,15 @@ export default function LedgerMasthead({ ledger }: { ledger: WorldTradeLedger })
               background: "linear-gradient(160deg,#2a2233,#1d1a26)",
             }}
           >
-            <span className="font-serif text-3xl font-bold" style={{ color: GOLD }}>
+            <span className="text-3xl font-bold" style={{ color: GOLD }}>
               ₳
             </span>
           </div>
           <div className="min-w-0 flex-1">
-            <div
-              className="text-[10px] font-bold uppercase tracking-[0.18em]"
-              style={{ color: GOLD_SOFT }}
-            >
+            <div className="text-body-sm font-medium" style={{ color: GOLD_SOFT }}>
               World Trade Organisation · Settlement &amp; Customs Registry
             </div>
-            <h1 className="mt-1 font-serif text-2xl font-bold text-white sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
               World Trade Ledger
               <span className="ml-2 align-middle text-sm font-semibold text-white/50">
                 balance of trade
@@ -114,9 +111,7 @@ export default function LedgerMasthead({ ledger }: { ledger: WorldTradeLedger })
           </div>
         </div>
         <div className="relative mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-            Reading
-          </span>
+          <span className="text-body-sm font-medium text-white/45">Reading</span>
           <span className="text-[11.5px] text-white/65">
             {h.largestSurplus && h.largestDeficit
               ? `${nameOf(ledger, h.largestSurplus.code)} runs the world's largest surplus against ${nameOf(
@@ -132,9 +127,7 @@ export default function LedgerMasthead({ ledger }: { ledger: WorldTradeLedger })
       <div className="grid grid-cols-2 divide-x divide-card-border border-t border-card-border bg-card-elevated sm:grid-cols-5">
         {cells.map((c) => (
           <div key={c.label} className="flex flex-col gap-1 px-4 py-3">
-            <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-              {c.label}
-            </span>
+            <span className="whitespace-nowrap text-body-sm font-medium text-muted">{c.label}</span>
             <span
               className={`font-mono text-base font-bold tabular-nums leading-tight ${c.tone ?? "text-foreground"}`}
             >

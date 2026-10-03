@@ -254,7 +254,7 @@ export function CampaignBlendClient({
           style={{
             padding: "10px 26px",
             borderBottom: `1px solid ${BLEND.hairlineStrong}`,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 14,
             color: BLEND.negative,
           }}
@@ -349,7 +349,7 @@ export function CampaignBlendClient({
               justifyContent: "space-between",
               paddingBottom: 9,
               borderBottom: `1px solid ${BLEND.hairline}`,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 10,
               letterSpacing: ".2em",
               textTransform: "uppercase",
@@ -364,7 +364,7 @@ export function CampaignBlendClient({
           <div
             style={{
               marginTop: 11,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 22,
               fontWeight: 600,
               letterSpacing: "-0.02em",
@@ -389,7 +389,7 @@ export function CampaignBlendClient({
             style={{
               padding: "10px 16px",
               borderBottom: `1px solid ${BLEND.hairlineStrong}`,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 14,
               color: BLEND.negative,
             }}
@@ -429,7 +429,7 @@ export function CampaignBlendClient({
             <div
               style={{
                 marginTop: 22,
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 20,
                 fontWeight: 600,
               }}
@@ -492,7 +492,7 @@ export function CampaignBlendClient({
               <span
                 style={{
                   flexShrink: 0,
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 14,
                   color: BLEND.muted,
                 }}
@@ -505,7 +505,7 @@ export function CampaignBlendClient({
             <p
               style={{
                 margin: "10px 0 14px",
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 13.5,
                 lineHeight: 1.5,
                 color: BLEND.muted,

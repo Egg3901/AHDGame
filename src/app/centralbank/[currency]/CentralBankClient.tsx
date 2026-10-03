@@ -718,9 +718,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               />
 
               <div className="rounded-xl border border-card-border bg-card p-5">
-                <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted">
-                  Economic Trends
-                </h2>
+                <h2 className="mb-4 text-sm font-semibold text-muted">Economic trends</h2>
                 <EconomicTrendsChart
                   interestRateHistory={data.interestRateHistory}
                   inflationHistory={data.inflationHistory}
@@ -730,9 +728,7 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               </div>
 
               <div className="rounded-xl border border-card-border bg-card p-5">
-                <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-muted">
-                  Credit Rating Scale
-                </h2>
+                <h2 className="mb-4 text-sm font-semibold text-muted">Credit rating scale</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>

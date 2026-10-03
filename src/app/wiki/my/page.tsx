@@ -22,7 +22,7 @@ export default async function MyWikiPage() {
   if (!user.character) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="mb-3 font-serif text-2xl font-bold text-foreground">My Wiki Pages</h1>
+        <h1 className="mb-3 text-2xl font-bold text-foreground">My Wiki Pages</h1>
         <p className="text-muted">
           You need an active character to create player-authored wiki pages.{" "}
           <Link href="/create-character" className="text-primary hover:underline">
@@ -68,9 +68,7 @@ export default async function MyWikiPage() {
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="mb-8">
         <p className="section-label mb-2">Player-authored pages</p>
-        <h1 className="mb-2 font-serif text-3xl font-bold tracking-tight text-foreground">
-          My Wiki Pages
-        </h1>
+        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">My Wiki Pages</h1>
         <p className="max-w-2xl text-muted">
           Claim dedicated wiki pages for your politician, your corporation, the party you lead, or a
           historical event. Use the in-app editor — full markdown, inline image uploads, wiki
@@ -115,9 +113,7 @@ export default async function MyWikiPage() {
 function LimitationsBlock() {
   return (
     <div className="mt-10 rounded-xl border border-card-border bg-card/40 p-6">
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted">
-        Rules &amp; limitations
-      </h2>
+      <h2 className="mb-2 text-sm font-semibold text-muted">Rules &amp; limitations</h2>
       <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
         <li>
           <strong>Moderator review.</strong> Every new page starts in &ldquo;pending review.&rdquo;
@@ -155,9 +151,7 @@ function EventCard() {
   return (
     <div className="flex flex-col rounded-xl border border-card-border bg-card p-6">
       <p className="section-label mb-1">Historical event</p>
-      <h2 className="mb-4 font-serif text-xl font-bold text-foreground">
-        Document a moment in history
-      </h2>
+      <h2 className="mb-4 text-xl font-bold text-foreground">Document a moment in history</h2>
       <p className="mb-4 text-sm text-muted">
         Market crashes, landmark elections, major scandals — anyone can draft an event page. Because
         the slug is your choice, use the general &ldquo;new article&rdquo; flow.
@@ -189,7 +183,7 @@ function PageCard({ kind, title, subtitle, page, slug, disabled, disabledMessage
   return (
     <div className="flex flex-col rounded-xl border border-card-border bg-card p-6">
       <p className="section-label mb-1">{subtitle}</p>
-      <h2 className="mb-4 font-serif text-xl font-bold text-foreground">{title}</h2>
+      <h2 className="mb-4 text-xl font-bold text-foreground">{title}</h2>
 
       {disabled ? (
         <p className="text-sm text-muted">{disabledMessage}</p>

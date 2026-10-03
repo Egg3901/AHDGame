@@ -68,15 +68,13 @@ function BranchCard({
       <div
         style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}
       >
-        <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600 }}>
-          {branch.label}
-        </span>
+        <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>{branch.label}</span>
         <span style={{ fontFamily: FONT.mono, fontSize: 14, color }}>{branch.level}</span>
       </div>
       <p
         style={{
           margin: "4px 0 10px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 13,
           lineHeight: 1.5,
           color: BLEND.muted,
@@ -116,7 +114,7 @@ function BranchCard({
               gap: 8,
             }}
           >
-            <span style={{ fontFamily: FONT.serif, fontSize: 13, color: BLEND.muted }}>
+            <span style={{ fontFamily: FONT.sans, fontSize: 13, color: BLEND.muted }}>
               {branch.effect}
             </span>
             <span
@@ -222,7 +220,7 @@ function Tree({
                 gap: 12,
               }}
             >
-              <span style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600, color }}>
+              <span style={{ fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, color }}>
                 Operation active
               </span>
               <span
@@ -239,7 +237,7 @@ function Tree({
             <p
               style={{
                 margin: "4px 0 0",
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 13.5,
                 color: BLEND.muted,
               }}
@@ -257,7 +255,7 @@ function Tree({
                 gap: 12,
               }}
             >
-              <span style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600, color }}>
+              <span style={{ fontFamily: FONT.sans, fontSize: 15, fontWeight: 600, color }}>
                 Unlock operation
               </span>
               <span style={{ fontFamily: FONT.mono, fontSize: 11, color: BLEND.muted }}>
@@ -267,7 +265,7 @@ function Tree({
             <p
               style={{
                 margin: "4px 0 10px",
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 13.5,
                 color: BLEND.muted,
               }}
@@ -333,7 +331,7 @@ function Tree({
             <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
               <span
                 style={{
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 15,
                   fontWeight: 600,
                   color: chosenTargetName ? BLEND.ink : BLEND.muted,
@@ -371,7 +369,7 @@ function Tree({
             <p
               style={{
                 margin: "6px 0 0",
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 12.5,
                 color: BLEND.mutedDim,
               }}
@@ -402,7 +400,7 @@ function Tree({
               <p
                 style={{
                   margin: "6px 0 0",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 12.5,
                   color: BLEND.mutedDim,
                 }}
@@ -475,7 +473,7 @@ export function BlendOpsSection({
       <h2
         style={{
           margin: mobile ? "0 0 12px" : "0 0 4px",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: mobile ? 20 : 23,
           fontWeight: 600,
         }}
@@ -486,7 +484,7 @@ export function BlendOpsSection({
         <p
           style={{
             margin: "0 0 18px",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 14.5,
             lineHeight: 1.55,
             color: BLEND.muted,
@@ -543,7 +541,7 @@ export function BlendOpsSection({
                     gap: 8,
                   }}
                 >
-                  <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600 }}>
+                  <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>
                     {row.label}
                   </span>
                   <span style={{ display: "flex", alignItems: "baseline", gap: 9 }}>
@@ -567,7 +565,7 @@ export function BlendOpsSection({
                 <div
                   style={{
                     marginTop: 7,
-                    fontFamily: FONT.serif,
+                    fontFamily: FONT.sans,
                     fontSize: 13,
                     color: BLEND.muted,
                   }}
@@ -593,7 +591,7 @@ export function BlendOpsSection({
                   <span
                     style={{
                       display: "block",
-                      fontFamily: FONT.serif,
+                      fontFamily: FONT.sans,
                       fontSize: 17,
                       fontWeight: 600,
                     }}
@@ -604,7 +602,7 @@ export function BlendOpsSection({
                     style={{
                       display: "block",
                       marginTop: 2,
-                      fontFamily: FONT.serif,
+                      fontFamily: FONT.sans,
                       fontSize: 13,
                       color: BLEND.mutedDim,
                     }}
@@ -617,7 +615,7 @@ export function BlendOpsSection({
                     <i key={i} style={s} />
                   ))}
                 </span>
-                <span style={{ fontFamily: FONT.serif, fontSize: 13, color: BLEND.muted }}>
+                <span style={{ fontFamily: FONT.sans, fontSize: 13, color: BLEND.muted }}>
                   {row.effect}
                   {row.nextStep ? (
                     <span

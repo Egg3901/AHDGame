@@ -110,9 +110,7 @@ export function OverviewSubtab({ detail }: { detail: CaucusDetail }) {
 
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="rounded-lg border border-card-border bg-card p-5">
-              <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted">
-                At-Risk NPP Members
-              </h3>
+              <h3 className="mb-3 text-sm font-semibold text-muted">At-risk NPP members</h3>
               {health.atRiskMembers.length === 0 ? (
                 <p className="text-sm italic text-muted">
                   No caucus NPPs are close to the chair-relationship exit threshold.
@@ -149,9 +147,7 @@ export function OverviewSubtab({ detail }: { detail: CaucusDetail }) {
             </div>
 
             <div className="rounded-lg border border-card-border bg-card p-5">
-              <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted">
-                Recent Churn
-              </h3>
+              <h3 className="mb-3 text-sm font-semibold text-muted">Recent churn</h3>
               {health.recentChurn.length === 0 ? (
                 <p className="text-sm italic text-muted">
                   No joins, leaves, or forced exits in the last 12 turns.
@@ -186,9 +182,7 @@ export function OverviewSubtab({ detail }: { detail: CaucusDetail }) {
       )}
 
       <div className="rounded-lg border border-card-border bg-card p-5">
-        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Key policy positions
-        </h3>
+        <h3 className="mb-3 text-sm font-semibold text-muted">Key policy positions</h3>
         {detail.positions.length === 0 ? (
           <p className="text-sm italic text-muted">No positions defined yet.</p>
         ) : (

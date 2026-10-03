@@ -189,9 +189,7 @@ export default function ImperialProfileClient({ id }: { id: string }) {
         {/* Bio */}
         {data.bio && (
           <div className="rounded-2xl border border-card-border bg-card p-4 sm:p-6">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-              Biography
-            </h2>
+            <h2 className="mb-2 text-sm font-semibold text-muted">Biography</h2>
             <p className="text-sm leading-relaxed text-foreground/80">{data.bio}</p>
           </div>
         )}
@@ -199,9 +197,7 @@ export default function ImperialProfileClient({ id }: { id: string }) {
         {/* Corporation Holdings */}
         {data.corporations.length > 0 && (
           <div className="rounded-2xl border border-card-border bg-card p-4 sm:p-6">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-              Royal Holdings
-            </h2>
+            <h2 className="mb-3 text-sm font-semibold text-muted">Royal holdings</h2>
             <div className="space-y-2">
               {data.corporations.map((corp) => (
                 <Link

@@ -222,26 +222,8 @@ export const CARD_PHOTO_SCRIM = "from-black/95 via-black/40 to-black/5";
  * in from the left over a near-black base, which keeps the white row text at
  * the contrast the previous per-card gradients gave it.
  */
-export const CATEGORY_ACCENTS: Record<
-  string,
-  { chip: string; border: string; bar: string; row: string }
-> = {
-  influence: {
-    chip: "border-primary/50 bg-primary/30 text-white",
-    border: "hover:border-primary/50",
-    bar: "bg-primary",
-    row: "from-primary/40 via-black/80 to-black/85",
-  },
-  money: {
-    chip: "border-success/50 bg-success/30 text-white",
-    border: "hover:border-success/50",
-    bar: "bg-success",
-    row: "from-success/40 via-black/80 to-black/85",
-  },
-  research: {
-    chip: "border-info/50 bg-info/30 text-white",
-    border: "hover:border-info/50",
-    bar: "bg-info",
-    row: "from-info/40 via-black/80 to-black/85",
-  },
+export const CATEGORY_ACCENTS: Record<string, { row: string }> = {
+  influence: { row: "from-primary/40 via-black/80 to-black/85" },
+  money: { row: "from-success/40 via-black/80 to-black/85" },
+  research: { row: "from-info/40 via-black/80 to-black/85" },
 };

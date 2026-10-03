@@ -112,7 +112,7 @@ function StaticCard({ card, index }: { card: FlavorCard; index: number }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
         <div className="absolute bottom-2 left-3 right-3">
-          <span className="rounded-full border border-card-border bg-card/80 px-2 py-0.5 text-body-xs font-medium text-muted backdrop-blur-sm">
+          <span className="rounded-full border border-card-border bg-card px-2 py-0.5 text-body-xs font-medium text-muted">
             {card.country}
           </span>
         </div>
@@ -155,7 +155,7 @@ function DynamicCardItem({ card, index }: { card: DynamicCard; index: number }) 
         <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />
         <div className="absolute bottom-2 left-3">
           <span
-            className={`rounded-full border px-2 py-0.5 text-body-xs font-medium backdrop-blur-sm ${TAG_CLASSES[card.type]}`}
+            className={`rounded-full border px-2 py-0.5 text-body-xs font-medium ${TAG_CLASSES[card.type]}`}
           >
             {card.tag}
           </span>
@@ -293,7 +293,7 @@ export function FlavorCardCarousel({
       {/* Navigation arrows */}
       <button
         onClick={goPrev}
-        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 rounded-full border border-card-border bg-card/90 p-2 text-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-card hover:scale-105 active:scale-95"
+        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 rounded-full border border-card-border bg-card p-2 text-foreground shadow-lg transition-all hover:bg-card hover:scale-105 active:scale-95"
         aria-label="Previous card"
       >
         <svg
@@ -309,7 +309,7 @@ export function FlavorCardCarousel({
       </button>
       <button
         onClick={goNext}
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 rounded-full border border-card-border bg-card/90 p-2 text-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-card hover:scale-105 active:scale-95"
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 rounded-full border border-card-border bg-card p-2 text-foreground shadow-lg transition-all hover:bg-card hover:scale-105 active:scale-95"
         aria-label="Next card"
       >
         <svg

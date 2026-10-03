@@ -192,9 +192,7 @@ export function NppCapitalPanel({ nppId, nppName }: { nppId: string; nppName: st
     <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
-            Direct interaction | {nppName}
-          </h2>
+          <h2 className="text-sm font-semibold text-zinc-500">Direct interaction | {nppName}</h2>
           <div className="mt-2 flex items-center gap-3">
             <div>
               <span className="text-xs text-zinc-500">Relationship</span>
@@ -284,7 +282,7 @@ export function NppCapitalPanel({ nppId, nppName }: { nppId: string; nppName: st
       {pickerOpen === "request_endorsement" && (
         <div className="space-y-3 rounded-lg border border-cyan-500/40 bg-cyan-500/5 p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-cyan-200">
+            <h3 className="text-sm font-semibold text-cyan-200">
               Choose a candidacy for {nppName} to endorse
             </h3>
             <button

@@ -7,7 +7,7 @@
 
 export const MIL_FONT = {
   mono: "'IBM Plex Mono',monospace",
-  serif: "var(--font-geist-sans),system-ui,sans-serif",
+  heading: "var(--font-geist-sans),system-ui,sans-serif",
   sans: "system-ui,-apple-system,sans-serif",
 } as const;
 

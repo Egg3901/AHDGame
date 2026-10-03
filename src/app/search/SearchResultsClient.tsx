@@ -92,7 +92,7 @@ export function SearchResultsClient({ initialQuery }: { initialQuery: string }) 
             <div className="mb-3 flex items-center gap-2 text-[length:var(--text-body-sm)] font-semibold uppercase tracking-[0.16em] text-primary">
               {t("search.eyebrow")}
             </div>
-            <h1 className="font-serif text-[length:var(--text-display)] font-bold tracking-tight text-foreground">
+            <h1 className="text-[length:var(--text-display)] font-bold tracking-tight text-foreground">
               {t("search.pageTitle")}
             </h1>
             <p className="mt-2 max-w-2xl text-[length:var(--text-body)] leading-relaxed text-muted sm:text-[length:var(--text-body-lg)]">

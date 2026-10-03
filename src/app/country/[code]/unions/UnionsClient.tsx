@@ -176,7 +176,7 @@ export function UnionsClient() {
             <div className="flex items-center justify-between gap-2">
               <BackButton iconOnly fallbackLabel="Back" fallbackHref={countryUrl(countryId)} />
               {eraYear && (
-                <span className="rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur">
+                <span className="rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white/90">
                   {eraYear} era
                 </span>
               )}
@@ -263,9 +263,7 @@ export function UnionsClient() {
 
       <section className="space-y-3">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            All Unions in {countryName}
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">All unions in {countryName}</h2>
           <div className="h-px flex-1 bg-card-border" />
           {!notEnabled && !isBannedHere && (
             <button

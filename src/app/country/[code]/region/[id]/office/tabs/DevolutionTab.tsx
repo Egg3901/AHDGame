@@ -123,7 +123,7 @@ export function DevolutionTab(props: Props) {
     <div className="space-y-6">
       {/* Metric card */}
       <div className="rounded-xl border border-card-border bg-card p-6">
-        <h2 className="text-sm uppercase tracking-widest text-muted">{metricLabel}</h2>
+        <h2 className="text-sm text-muted">{metricLabel}</h2>
         <div className="mt-2 flex items-end gap-3">
           {/* Show 2 decimals so the deliberately-slow drift (~0.05/turn) is visible —
               a floored integer only ticks once every ~20 turns and reads as "stuck".
@@ -150,7 +150,7 @@ export function DevolutionTab(props: Props) {
 
       {/* Driver breakdown */}
       <div className="rounded-xl border border-card-border bg-card p-6">
-        <h2 className="text-sm uppercase tracking-widest text-muted">Drift drivers (per turn)</h2>
+        <h2 className="text-sm text-muted">Drift drivers (per turn)</h2>
         <ul className="mt-3 space-y-2 text-sm">
           <DriverRow
             label={`Your "${getDevolutionPolicyLabel(props.stateId, props.currentPolicy)}" policy`}
@@ -182,7 +182,7 @@ export function DevolutionTab(props: Props) {
       {/* Pro-indy election bonus */}
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Election bonus</h2>
+          <h2 className="text-sm text-muted">Election bonus</h2>
           <div className="text-xs text-muted">
             Active at {PRO_INDY_BONUS_THRESHOLD}+ · steps every {PRO_INDY_BONUS_BAND_SIZE}pp ·
             capped at +{PRO_INDY_BONUS_MAX_PCT}%
@@ -235,7 +235,7 @@ export function DevolutionTab(props: Props) {
       {/* Policy selector */}
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-sm uppercase tracking-widest text-muted">Devolution Policy</h2>
+          <h2 className="text-sm text-muted">Devolution policy</h2>
           <div className="text-xs text-muted">
             {DEVOLUTION_POLICY_CHANGE_AP_COST} AP · {DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS}-turn
             cooldown

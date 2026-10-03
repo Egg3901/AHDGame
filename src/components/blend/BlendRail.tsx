@@ -24,7 +24,7 @@ export interface BlendRailProps {
   title: string;
   /** Design uses 19px on the campaign screen and 18px on the election screens. */
   titleSize?: number;
-  /** Italic serif line under the title (campaign screen). */
+  /** Muted line under the title (campaign screen). */
   subtitle?: string;
   /** Dotted status line under the title (election screens). */
   status?: BlendRailStatus;
@@ -33,7 +33,7 @@ export interface BlendRailProps {
   onSelect?: (id: string) => void;
   /** Extra rail content below the nav, e.g. the primary screen's party list. */
   children?: ReactNode;
-  /** Serif footnote pinned under a top rule. */
+  /** Footnote pinned under a top rule. */
   footnote?: string;
 }
 
@@ -109,7 +109,7 @@ export function BlendRail({
         <div
           style={{
             marginTop: 6,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: titleSize,
             fontWeight: 600,
             letterSpacing: "-0.01em",
@@ -121,8 +121,7 @@ export function BlendRail({
           <div
             style={{
               marginTop: 3,
-              fontFamily: FONT.serif,
-              fontStyle: "italic",
+              fontFamily: FONT.sans,
               fontSize: 13,
               color: BLEND.muted,
             }}
@@ -184,7 +183,7 @@ export function BlendRail({
             margin: "8px 18px 0",
             paddingTop: 14,
             borderTop: `1px solid ${BLEND.hairline}`,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 13,
             lineHeight: 1.55,
             color: BLEND.mutedDim,

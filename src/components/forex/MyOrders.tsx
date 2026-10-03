@@ -73,7 +73,7 @@ export function MyOrders({ orders, onOrderCancelled }: Props) {
         </div>
       )}
       <div className="px-5 py-4 border-b border-card-border">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">My Orders</h2>
+        <h2 className="text-sm font-bold text-foreground">My orders</h2>
         <p className="text-xs text-muted mt-0.5">Open and partially filled orders</p>
       </div>
 

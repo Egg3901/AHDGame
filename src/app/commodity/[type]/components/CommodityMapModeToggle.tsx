@@ -21,7 +21,7 @@ export default function CommodityMapModeToggle({
   showReachable = false,
 }: CommodityMapModeToggleProps) {
   return (
-    <div className="flex items-center gap-1 bg-card/90 backdrop-blur-md p-1 rounded-lg border border-card-border shadow-sm">
+    <div className="flex items-center gap-1 bg-card p-1 rounded-lg border border-card-border shadow-sm">
       <button
         onClick={() => onModeChange("supply")}
         className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md transition-all ${

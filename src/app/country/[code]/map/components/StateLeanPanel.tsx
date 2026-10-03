@@ -192,9 +192,7 @@ export function StateLeanPanel({
               key={cat.id}
               className="rounded-lg border border-card-border/60 bg-card-elevated/40 p-3"
             >
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                {cat.name}
-              </h3>
+              <h3 className="text-sm font-semibold text-muted">{cat.name}</h3>
               <table className="mt-2 w-full text-xs">
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wide text-muted">

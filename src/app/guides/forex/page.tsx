@@ -70,8 +70,8 @@ export default function ForexGuidePage() {
             <SectionHeader id="overview">1. How forex works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Countries use the currencies configured for their world and era; some share a
-              currency. Floating exchange rates move each turn based on economic conditions -
-              interest rates, inflation, GDP growth, and trade - plus the buying and selling
+              currency. Floating exchange rates move each turn based on economic conditions
+              (interest rates, inflation, GDP growth, and trade) plus the buying and selling
               pressure of players themselves. You can trade currencies directly for profit, and
               every cross-border investment you make (foreign stocks, bonds, corporations) settles
               in the currency of the asset&apos;s country, so exchange rates flow through your whole

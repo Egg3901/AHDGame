@@ -307,7 +307,7 @@ export default function LoginPageClient({
             <p className="mb-3 text-body-xs font-semibold uppercase tracking-widest text-primary">
               {eraLabel}
             </p>
-            <p className="font-display text-heading-lg font-semibold leading-snug tracking-tight text-foreground xl:text-display">
+            <p className="text-heading-lg font-semibold leading-snug tracking-tight text-foreground xl:text-display">
               {eraTagline}
             </p>
           </div>
@@ -353,7 +353,7 @@ export default function LoginPageClient({
 
             <div className="mb-7 border-b border-card-border pb-6">
               <SectionLabel as="p">{t("sectionLabel")}</SectionLabel>
-              <h1 className="mt-1 font-display text-display font-semibold tracking-tight text-foreground">
+              <h1 className="mt-1 text-display font-semibold tracking-tight text-foreground">
                 {t("heading")}
               </h1>
               <p className="mt-2 text-body text-muted">{t("subheading")}</p>

@@ -337,7 +337,6 @@ export function SeatLegend({
             <div
               key={`coalition-${group.coalitionId}`}
               className="inline-flex flex-col rounded-lg border border-card-border p-2.5 max-w-sm"
-              style={{ borderLeftWidth: 3, borderLeftColor: group.color }}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <span

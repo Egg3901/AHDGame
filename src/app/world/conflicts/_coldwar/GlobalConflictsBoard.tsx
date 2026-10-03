@@ -11,7 +11,7 @@ import { ColdWarHelp } from "./TensionHeader";
 import { controlSplitDisplay } from "../controlDisplay";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 /** Global Conflicts — "Conflicts of <in-game year>". Faithful port of the design page. */
 export function GlobalConflictsBoard({ year, conflicts }: { year: number; conflicts: Conflict[] }) {
@@ -73,7 +73,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
             <h1
               style={{
                 margin: 0,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 34,
                 lineHeight: 1,
@@ -124,7 +124,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 18,
                   lineHeight: 1.05,
@@ -157,7 +157,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 18,
                   lineHeight: 1.05,
@@ -193,7 +193,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -229,7 +229,7 @@ export function GlobalConflictsBoard({ year, conflicts }: { year: number; confli
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,

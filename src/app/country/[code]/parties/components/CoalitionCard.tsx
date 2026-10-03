@@ -33,7 +33,7 @@ export function CoalitionCard({ coalition, effectiveCountry }: CoalitionCardProp
               countryId={coalition.countryId}
             />
             <div className="min-w-0">
-              <h3 className="truncate text-heading-sm font-bold transition-colors group-hover:text-primary">
+              <h3 className="line-clamp-2 break-words text-heading-sm font-bold transition-colors group-hover:text-primary">
                 {coalition.name}
               </h3>
               <span className="text-body-sm font-bold" style={{ color: coalition.color }}>

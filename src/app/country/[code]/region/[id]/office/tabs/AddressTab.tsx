@@ -117,7 +117,7 @@ export function AddressTab(props: Props) {
 
       {props.mostRecentAddress && (
         <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-          <h3 className="text-xs uppercase tracking-widest text-muted">Most recent</h3>
+          <h3 className="text-sm text-muted">Most recent</h3>
           {props.mostRecentAddress.title && (
             <p className="text-base font-semibold">{props.mostRecentAddress.title}</p>
           )}

@@ -31,7 +31,7 @@ export function RelevantLegislationPanel({
       ) : (
         <div className="flex flex-col gap-2.5">
           {legislation.primary && (
-            <div className="border-l-2 border-primary pl-2.5">
+            <div>
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                 <span className="text-body-sm font-semibold text-foreground">
                   {legislation.primary.title}

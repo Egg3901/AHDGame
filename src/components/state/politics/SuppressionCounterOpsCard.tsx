@@ -33,9 +33,7 @@ export function SuppressionCounterOpsCard({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-        Suppression Counter-Ops
-      </h3>
+      <h3 className="text-sm font-semibold text-muted">Suppression counter-ops</h3>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-2xl font-bold tabular-nums">
           {budgetPercent != null ? `${budgetPercent.toFixed(1)}%` : "—"}

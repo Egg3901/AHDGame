@@ -649,7 +649,7 @@ export default function CommodityWorldMapView({
         </div>
 
         {/* Zoom */}
-        <div className="flex flex-col gap-1 bg-card/90 backdrop-blur-md p-1 rounded-lg border border-card-border shadow-sm pointer-events-auto">
+        <div className="flex flex-col gap-1 bg-card p-1 rounded-lg border border-card-border shadow-sm pointer-events-auto">
           <button
             onClick={zoomIn}
             className="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-card-elevated transition-colors"

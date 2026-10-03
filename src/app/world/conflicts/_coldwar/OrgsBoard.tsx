@@ -19,7 +19,7 @@ import { ORGS, ORG_ORDER } from "./orgs";
 import { OrgsForcesTab, type Reaction, type ViewerCommit } from "./OrgsForcesTab";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 const TABS: [string, string][] = [
   ["overview", "OVERVIEW"],
@@ -253,7 +253,7 @@ export function OrgsBoard() {
             <h2
               style={{
                 margin: "3px 0 0",
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 17,
                 color: "#f3f1ea",
@@ -395,7 +395,7 @@ export function OrgsBoard() {
                 <h1
                   style={{
                     margin: 0,
-                    fontFamily: serif,
+                    fontFamily: headingFont,
                     fontWeight: 700,
                     fontSize: 27,
                     lineHeight: 1.08,
@@ -472,7 +472,9 @@ export function OrgsBoard() {
                 <div style={{ font: `500 9px ${mono}`, letterSpacing: ".12em", color: "#6b6b7a" }}>
                   {s[0]}
                 </div>
-                <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 20, color: s[2] }}>
+                <div
+                  style={{ fontFamily: headingFont, fontWeight: 700, fontSize: 20, color: s[2] }}
+                >
                   {s[1]}
                 </div>
               </div>
@@ -541,7 +543,7 @@ export function OrgsBoard() {
                       </div>
                       <div
                         style={{
-                          fontFamily: serif,
+                          fontFamily: headingFont,
                           fontWeight: 700,
                           fontSize: 23,
                           color: "#f3f1ea",
@@ -767,7 +769,7 @@ export function OrgsBoard() {
                         <div style={{ textAlign: "right" }}>
                           <div
                             style={{
-                              fontFamily: serif,
+                              fontFamily: headingFont,
                               fontWeight: 700,
                               fontSize: 16,
                               color: org.hasMilitary ? commitColor(getCommit(m)) : "#7a7a8c",

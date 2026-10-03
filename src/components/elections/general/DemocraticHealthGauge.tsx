@@ -37,9 +37,7 @@ export function DemocraticHealthGauge({ data }: { data?: DemocraticHealthData | 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("democraticHealth.title")}
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">{t("democraticHealth.title")}</h3>
         <span className="tabular-nums text-sm font-bold" style={{ color }}>
           {value.toFixed(1)} / 100
         </span>

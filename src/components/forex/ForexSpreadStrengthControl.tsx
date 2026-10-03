@@ -62,7 +62,7 @@ export function ForexSpreadStrengthControl({
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
       <div className="mb-1 flex items-center justify-between gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">
+        <h3 className="text-sm font-semibold text-muted">
           Spread fee strength {currencyCode ? `· ${currencyCode}` : ""}
         </h3>
         <span className="font-mono text-lg font-bold tabular-nums text-foreground">{pct}%</span>
