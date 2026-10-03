@@ -142,7 +142,7 @@ const THEME_NOTES = {
   retro: "Warm dark amber/olive retro feel",
   solarized: "Solarized teal dark with warm gradient body",
   cloakroom: "Muted, stately parliamentary dark",
-  broadsheet: "Light newsprint — serif, ink-on-paper",
+  broadsheet: "Light newsprint, ink on paper",
   coldwar: "Stark cold-war dark — olive and red",
   "command-1953": "Phosphor-green command console with radar-era scanlines",
 };
