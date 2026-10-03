@@ -322,6 +322,55 @@ describe("runDemographicFlows", () => {
     expect(txMigration).toBeLessThan(0);
   });
 
+  it("moves matched EU migrants between real regional cohorts without creating people", async () => {
+    setDemos([
+      { _id: "PL_A", countryId: "PL", ages: vec(1_000_000) },
+      { _id: "DE_A", countryId: "DE", ages: vec(1_000_000) },
+    ]);
+    db.collectionMocks.states!.find = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "PL_A", countryId: "PL", population: 1_000_000 },
+        { _id: "DE_A", countryId: "DE", population: 1_000_000 },
+      ]),
+    });
+    db.collectionMocks.stateMetrics!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: "PL_A", population: { birthRate: { value: 50 }, migrationRate: { value: -1.5 } } },
+          { _id: "DE_A", population: { birthRate: { value: 50 }, migrationRate: { value: 1.5 } } },
+        ]),
+      }),
+    });
+    db.collection("organizationMemberships");
+    const memberships = db.collectionMocks.organizationMemberships!;
+    memberships.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { countryId: "PL", status: "active" },
+        { countryId: "DE", status: "active" },
+      ]),
+    });
+    const { runDemographicFlows } = await import("./phase");
+    await runDemographicFlows(db as unknown as Db, 1);
+    const liveWrites = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: string }; update: { $set: { population: number } } };
+    }>;
+    const live = Object.fromEntries(
+      liveWrites.map((op) => [op.updateOne.filter._id, op.updateOne.update.$set.population])
+    );
+    expect(memberships.find).toHaveBeenCalledWith({ organizationId: "EU" }, expect.anything());
+
+    db.collectionMocks.states!.bulkWrite.mockClear();
+    memberships.find.mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+    await runDemographicFlows(db as unknown as Db, 1);
+    const closedWrites = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as typeof liveWrites;
+    const closed = Object.fromEntries(
+      closedWrites.map((op) => [op.updateOne.filter._id, op.updateOne.update.$set.population])
+    );
+    expect(live.PL_A).toBeCloseTo(closed.PL_A, 3);
+    expect(live.DE_A).toBeGreaterThan(closed.DE_A);
+    expect(live.PL_A + live.DE_A).toBeGreaterThan(closed.PL_A + closed.DE_A);
+  });
+
   it("moves working-age population toward a state with persistent unfilled jobs", async () => {
     setDemos([
       { _id: "CA", countryId: "US", ages: vec(1_000_000) },
