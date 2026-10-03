@@ -87,6 +87,8 @@ const FLOW_ACCOUNTING = {
   },
   // A peace indemnity leaves one treasury for another, in each one's currency.
   peace_indemnity: { txType: "peace_indemnity", reason: "peace_indemnity" },
+  // An index listing petition paid to the treasury when nobody holds the seat.
+  index_listing_lobbying: { txType: "index_listing_lobbying", reason: "index_listing_lobbying" },
 } as const satisfies Record<string, { txType: FinancialTxType; reason: string }>;
 
 export type TreasuryCashFlow = keyof typeof FLOW_ACCOUNTING;
