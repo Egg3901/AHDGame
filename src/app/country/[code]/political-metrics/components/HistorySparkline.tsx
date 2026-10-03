@@ -1,11 +1,10 @@
 "use client";
 
 /**
- * SP2 §5, the metric detail's historical series: a dependency-free inline SVG
- * line over the trend snapshots. Deliberately minimal: the value band
- * auto-scales with headroom, the endpoints are labelled, and the line is the
- * neutral foreground colour, because a rising or falling line is not good or
- * bad by colour alone.
+ * SP2 §5 — the metric-detail Historical series chart: a dependency-free inline
+ * SVG line over the national trend snapshots. Deliberately minimal: the value
+ * band auto-scales with headroom, endpoints are labeled, and the series color
+ * rides the semantic primary token so all themes work.
  */
 
 export function HistorySparkline({ points }: { points: Array<{ turn: number; value: number }> }) {
@@ -29,10 +28,10 @@ export function HistorySparkline({ points }: { points: Array<{ turn: number; val
   const last = points[points.length - 1];
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-32 w-full text-foreground"
+        className="h-32 w-full"
         role="img"
         aria-label={`Trend from ${first.value} at turn ${first.turn} to ${last.value} at turn ${last.turn}`}
       >
@@ -47,21 +46,20 @@ export function HistorySparkline({ points }: { points: Array<{ turn: number; val
         <polyline
           points={path}
           fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.8"
+          stroke="var(--primary)"
           strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
         />
-        <circle cx={x(points.length - 1)} cy={y(last.value)} r="3" fill="currentColor" />
+        <circle cx={x(points.length - 1)} cy={y(last.value)} r="3" fill="var(--primary)" />
       </svg>
-      <div className="mt-1 flex justify-between text-body-sm tabular-nums text-muted">
+      <div className="mt-1 flex justify-between text-body-xs tabular-nums text-muted">
         <span>
           Turn {first.turn.toLocaleString("en-US")} · {first.value}
         </span>
         <span>
           Turn {last.turn.toLocaleString("en-US")} ·{" "}
-          <strong className="font-semibold text-foreground">{last.value}</strong>
+          <strong className="text-foreground">{last.value}</strong>
         </span>
       </div>
     </div>

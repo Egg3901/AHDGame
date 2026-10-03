@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * SP2 §6, the active-modifiers decomposition: each law contributing to the
+ * SP2 §6 — the Active-modifiers decomposition: each law contributing to the
  * metric's target, the structural-conditions residual, the standing cabinet
  * term, and the composed target with the current drift direction. Pure
- * presentation of the dynamics engine's own arithmetic: the rows sum
+ * presentation of the dynamics engine's own arithmetic — the rows sum
  * (pre-clamp) to the target.
  *
  * Ticket #1129: players reported that built estates did nothing. The cabinet
@@ -14,16 +14,13 @@
  * only fires when every channel is full.
  */
 
-import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { MetricModifiersInfo } from "@/lib/politicalMetrics/queries/countryPoliticalMetrics";
-
-const MINUS = "−";
 
 const DIRECTION_GLYPH: Record<MetricModifiersInfo["direction"], string> = {
   up: "▲ rising",
   down: "▼ falling",
-  flat: "steady",
+  flat: "— steady",
 };
 
 /**
@@ -40,144 +37,128 @@ const CABINET_SOURCE_LABEL: Record<string, string> = {
   legacy: "Older effects, fading",
 };
 
-/** "+4" or "−1.5", in one text node so it reads and searches as one figure. */
-function signed(value: number): string {
-  return `${value >= 0 ? "+" : MINUS}${Math.abs(value).toLocaleString("en-US")}`;
-}
-
-/** Gains green, losses red, nothing neutral. */
-function signTone(value: number): string {
-  if (value > 0) return "text-success";
-  if (value < 0) return "text-error";
-  return "text-foreground";
-}
-
-/** One contribution: what it is, and the signed points it adds to the target. */
-function SignedRow({
-  label,
-  value,
-  sub = false,
-}: {
-  label: ReactNode;
-  value: number;
-  /** A breakdown line under the row above it: indented and smaller. */
-  sub?: boolean;
-}) {
-  return (
-    <tr>
-      <th
-        scope="row"
-        className={`text-left font-normal ${sub ? "py-0.5 pl-4 text-body-sm text-muted" : "py-1.5 text-body text-muted"}`}
-      >
-        {label}
-      </th>
-      <td
-        className={`whitespace-nowrap pl-3 text-right font-mono tabular-nums ${sub ? "py-0.5 text-body-sm" : "py-1.5 text-body"} ${signTone(value)}`}
-      >
-        {signed(value)}
-      </td>
-    </tr>
-  );
-}
-
-function LawRow({ row }: { row: MetricModifiersInfo["laws"][number] }) {
-  return (
-    <tr>
-      <th scope="row" className="py-1.5 text-left text-body font-normal text-foreground">
-        {row.title}
-        <span className="text-body-sm text-muted"> · {row.levelName}</span>
-      </th>
-      <td className="whitespace-nowrap py-1.5 pl-3 text-right font-mono text-body tabular-nums text-success">
-        +{row.points.toLocaleString("en-US")}
-      </td>
-    </tr>
-  );
-}
-
 export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }) {
   return (
-    <section aria-labelledby="pm-metric-modifiers">
-      <h3 id="pm-metric-modifiers" className="text-heading-sm font-semibold text-foreground">
+    <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
+      <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
         Active modifiers
-      </h3>
-      <table
-        aria-labelledby="pm-metric-modifiers"
-        className="mt-3 w-full max-w-2xl border-collapse"
-      >
-        <tbody>
-          {modifiers.laws.map((row) => (
-            <LawRow key={row.lawId} row={row} />
-          ))}
-        </tbody>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {modifiers.laws.map((row) => (
+          <div key={row.lawId} className="flex items-baseline justify-between gap-3 text-body-sm">
+            <span className="text-foreground">
+              {row.title}
+              <span className="text-body-xs text-muted"> · {row.levelName}</span>
+            </span>
+            <span className="shrink-0 tabular-nums text-success">
+              +{row.points.toLocaleString("en-US")}
+            </span>
+          </div>
+        ))}
         {/* Region scope only: the region's own enacted laws, already halved so
             these rows add up to the target below rather than to the raw ladder. */}
         {modifiers.regionalLaws.length > 0 && (
-          <tbody>
-            <tr>
-              <th
-                colSpan={2}
-                scope="rowgroup"
-                className="pb-1 pt-4 text-left text-body-sm font-medium text-muted"
-              >
-                Regional programmes
-              </th>
-            </tr>
+          <>
+            <div className="border-t border-dashed border-card-border pt-1.5 font-mono text-body-xs uppercase tracking-wider text-muted">
+              Regional programmes
+            </div>
             {modifiers.regionalLaws.map((row) => (
-              <LawRow key={`regional-${row.lawId}`} row={row} />
+              <div
+                key={`regional-${row.lawId}`}
+                className="flex items-baseline justify-between gap-3 text-body-sm"
+              >
+                <span className="text-foreground">
+                  {row.title}
+                  <span className="text-body-xs text-muted"> · {row.levelName}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-success">
+                  +{row.points.toLocaleString("en-US")}
+                </span>
+              </div>
             ))}
-          </tbody>
+          </>
         )}
-        <tbody>
-          <SignedRow label="Structural conditions" value={modifiers.residual} />
-          {modifiers.cabinet !== 0 && (
-            <>
-              <SignedRow label="Cabinet, orders and estates" value={modifiers.cabinet} />
-              {/* Ticket #1142: one aggregate label could not answer "which cabinet
-                  action is doing this", and on the reporter's metric the answer was
-                  none of them: the energy channel alone. Name the channels. */}
-              {modifiers.cabinetBySource.map((row) => (
-                <SignedRow
-                  key={row.source}
-                  sub
-                  value={row.value}
-                  label={
-                    <>
+        <div className="flex items-baseline justify-between gap-3 border-t border-dashed border-card-border pt-1.5 text-body-sm">
+          <span className="text-muted">Structural conditions</span>
+          <span
+            className={`shrink-0 tabular-nums ${
+              modifiers.residual >= 0 ? "text-success" : "text-error"
+            }`}
+          >
+            {modifiers.residual >= 0 ? "+" : "−"}
+            {Math.abs(modifiers.residual).toLocaleString("en-US")}
+          </span>
+        </div>
+        {modifiers.cabinet !== 0 && (
+          <>
+            <div className="flex items-baseline justify-between gap-3 text-body-sm">
+              <span className="text-muted">Cabinet, orders and estates</span>
+              <span
+                className={`shrink-0 tabular-nums ${
+                  modifiers.cabinet >= 0 ? "text-success" : "text-error"
+                }`}
+              >
+                {modifiers.cabinet >= 0 ? "+" : "−"}
+                {Math.abs(modifiers.cabinet).toLocaleString("en-US")}
+              </span>
+            </div>
+            {/* Ticket #1142: one aggregate label could not answer "which cabinet
+                action is doing this", and on the reporter's metric the answer was
+                none of them: the energy channel alone. Name the channels. */}
+            {modifiers.cabinetBySource.length > 0 && (
+              <ul className="mt-0.5 space-y-0.5 pl-3">
+                {modifiers.cabinetBySource.map((row) => (
+                  <li
+                    key={row.source}
+                    className="flex items-baseline justify-between gap-3 text-body-xs text-muted"
+                  >
+                    <span>
                       {CABINET_SOURCE_LABEL[row.source]}
-                      {row.atCap && <span className="ml-1.5 text-warning">near ceiling</span>}
-                    </>
-                  }
-                />
-              ))}
-            </>
-          )}
-          {/* The strike and settlement channel. It moves every region's target,
-              and until now showed on no surface at all, so a strike wave shifted
-              politics with no traceable cause. */}
-          {(modifiers.livingConflict ?? 0) !== 0 && (
-            <ConflictModifier value={modifiers.livingConflict!} />
-          )}
-          {modifiers.labour !== 0 && (
-            <SignedRow label="Labour relations" value={modifiers.labour} />
-          )}
-        </tbody>
-        <tfoot>
-          <tr className="border-t border-card-border">
-            <th scope="row" className="pt-2 text-left text-body font-medium text-foreground">
-              Law and structure target
-            </th>
-            <td className="whitespace-nowrap pl-3 pt-2 text-right text-body">
-              <span className="font-mono font-semibold tabular-nums text-foreground">
-                {modifiers.target}
-              </span>
-              <span className="ml-2 text-body-sm text-muted">
-                {DIRECTION_GLYPH[modifiers.direction]}
-              </span>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+                      {row.atCap && <span className="ml-1 text-warning">near ceiling</span>}
+                    </span>
+                    <span
+                      className={`shrink-0 tabular-nums ${
+                        row.value >= 0 ? "text-success" : "text-error"
+                      }`}
+                    >
+                      {row.value >= 0 ? "+" : "−"}
+                      {Math.abs(row.value).toLocaleString("en-US")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+        {/* The strike and settlement channel. It moves every region's target,
+            and until now showed on no surface at all, so a strike wave shifted
+            politics with no traceable cause. */}
+        {(modifiers.livingConflict ?? 0) !== 0 && (
+          <ConflictModifier value={modifiers.livingConflict!} />
+        )}
+        {modifiers.labour !== 0 && (
+          <div className="flex items-baseline justify-between gap-3 text-body-sm">
+            <span className="text-muted">Labour relations</span>
+            <span
+              className={`shrink-0 tabular-nums ${
+                modifiers.labour >= 0 ? "text-success" : "text-error"
+              }`}
+            >
+              {modifiers.labour >= 0 ? "+" : "−"}
+              {Math.abs(modifiers.labour).toLocaleString("en-US")}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="mt-2.5 flex items-baseline justify-between border-t border-card-border pt-2 text-body-xs text-muted">
+        <span>
+          Law and structure target{" "}
+          <strong className="tabular-nums text-foreground">{modifiers.target}</strong>
+        </span>
+        <span>{DIRECTION_GLYPH[modifiers.direction]}</span>
+      </div>
       {modifiers.cabinetAtCap && (
-        <p className="mt-3 max-w-2xl text-body text-warning">
+        <p className="mt-2 text-body-sm text-warning">
           Every cabinet channel for this metric is effectively at its {modifiers.cabinetCap} point
           ceiling in most of the country. Orders, tier settings, estates, energy and infrastructure
           each carry their own ceiling, and all of them are effectively full, so more of any of them
@@ -185,7 +166,7 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
         </p>
       )}
       {modifiers.driftHalfLifeTurns > 0 && (
-        <p className="mt-3 max-w-2xl text-body text-muted">
+        <p className="mt-2 text-body-sm text-muted">
           The value moves toward the target slowly: about {modifiers.driftHalfLifeTurns} turns to
           close half the remaining gap.
         </p>
@@ -194,15 +175,23 @@ export function ModifiersPanel({ modifiers }: { modifiers: MetricModifiersInfo }
           the engine also bends this target by how the economy and the funded
           services are actually doing, and those two terms are recomputed every
           turn instead of being stored, so a read path cannot show them. */}
-      <p className="mt-2 max-w-2xl text-body text-muted">
+      <p className="mt-2 text-body-sm text-muted">
         Laws and standing conditions set this target. Economic performance and service delivery bend
         it further each turn, and those are not included in the figure above.
       </p>
-    </section>
+    </div>
   );
 }
 
 function ConflictModifier({ value }: { value: number }) {
   const t = useTranslations("worldConflicts.livingCrises");
-  return <SignedRow label={t("politicalEffect")} value={value} />;
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-body-sm">
+      <span className="text-muted">{t("politicalEffect")}</span>
+      <span className={`shrink-0 tabular-nums ${value >= 0 ? "text-success" : "text-error"}`}>
+        {value >= 0 ? "+" : "−"}
+        {Math.abs(value).toLocaleString("en-US")}
+      </span>
+    </div>
+  );
 }
