@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  DIRECT_TRADE_SPREAD,
+  FOREX_MAX_TRADE_FEE,
+  FOREX_SIZE_FEE_MAX,
+  LIMIT_ORDER_SPREAD,
+  MARKET_MAKER_SPREAD,
+} from "@/lib/constants/currencies";
+
+const pct = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Forex Guide | A House Divided",
@@ -240,19 +249,19 @@ export default function ForexGuidePage() {
                   <tr>
                     <td className={TD}>1</td>
                     <td className={TD}>Market maker</td>
-                    <td className={TD}>0.275%</td>
+                    <td className={TD}>{pct(MARKET_MAKER_SPREAD)}</td>
                     <td className={TD}>Instant, always available</td>
                   </tr>
                   <tr>
                     <td className={TD}>2</td>
                     <td className={TD}>Public limit order</td>
-                    <td className={TD}>0.175%</td>
+                    <td className={TD}>{pct(LIMIT_ORDER_SPREAD)}</td>
                     <td className={TD}>When the market crosses your limit</td>
                   </tr>
                   <tr>
                     <td className={TD}>3</td>
                     <td className={TD}>Direct player trade</td>
-                    <td className={TD}>0.10%</td>
+                    <td className={TD}>{pct(DIRECT_TRADE_SPREAD)}</td>
                     <td className={TD}>When the target player accepts</td>
                   </tr>
                 </tbody>
@@ -260,14 +269,23 @@ export default function ForexGuidePage() {
             </div>
             <p className="text-sm text-muted leading-relaxed">
               <strong className="text-foreground">Tier 1 (market maker)</strong> fills instantly at
-              the current rate plus a 0.275% spread. It is also what auto-convert uses when you buy
-              a foreign asset without holding that currency.{" "}
+              the current rate plus a {pct(MARKET_MAKER_SPREAD)} base fee. It is also what
+              auto-convert uses when you buy a foreign asset without holding that currency.{" "}
               <strong className="text-foreground">Tier 2 (limit orders)</strong> post publicly at
-              your target rate and auto-fill when the market crosses it, for a cheaper 0.175%
-              spread; you can set an expiry in turns, and other players can fill your order early as
-              a direct trade. <strong className="text-foreground">Tier 3 (direct trades)</strong>{" "}
-              send a specific offer to a named character at the lowest fee. They accept or decline,
-              no counter-offers, and offers expire after 24 turns by default.
+              your target rate and auto-fill when the market crosses it, for a cheaper{" "}
+              {pct(LIMIT_ORDER_SPREAD)} base fee; you can set an expiry in turns, and other players
+              can fill your order early as a direct trade.{" "}
+              <strong className="text-foreground">Tier 3 (direct trades)</strong> send a specific
+              offer to a named character at the lowest fee. They accept or decline, no
+              counter-offers, and offers expire after 24 turns by default.
+            </p>
+            <p className="text-sm text-muted leading-relaxed">
+              Your own market and limit trades also pay a size fee that rises toward{" "}
+              {pct(FOREX_SIZE_FEE_MAX)} on very large conversions. It counts everything you
+              converted in the last 24 turns, so splitting a big trade into small ones costs the
+              same. The whole fee is then scaled by how busy the two currencies are: half price in a
+              busy market, up to one and a half times in a quiet one, and never more than{" "}
+              {pct(FOREX_MAX_TRADE_FEE)} in total. Auto-convert pays only the base fee.
             </p>
             <Callout variant="tip">
               Spread fees don&apos;t vanish into nowhere: 50% is destroyed as a deflationary sink,
@@ -291,8 +309,8 @@ export default function ForexGuidePage() {
             <p className="text-sm text-muted leading-relaxed">
               When you make a personal purchase denominated in a foreign currency, the game spends
               your existing balance in that currency first (free, no spread), auto-converts any
-              shortfall from your home currency at the market-maker rate (0.275% spread), and
-              rejects the transaction if both together still fall short.
+              shortfall from your home currency at the market-maker rate ({pct(MARKET_MAKER_SPREAD)}{" "}
+              fee), and rejects the transaction if both together still fall short.
             </p>
           </section>
 

@@ -7,6 +7,7 @@
  * action cap are the throttle, not a per-action discount).
  */
 
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db, ObjectId } from "mongodb";
 import type { NPP, GameConfig, PoliticalParty, Bond, StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -232,6 +233,7 @@ export async function processNppActions(
   db: Db,
   currentTurn: number
 ): Promise<NppActionProcessingResult> {
+  const step = substepMarker();
   // Only process every 4 turns
   if (currentTurn % ACTION_PROCESSING_INTERVAL !== 0) {
     return zeroResult();
@@ -611,12 +613,18 @@ export async function processNppActions(
     }
   }
 
+  step.mark("actions");
   if (econActive) {
     await investNppBondSurplus(db, currentTurn, econScopeCountries);
+    step.mark("bondInvesting");
     await investNppStockSurplus(db, currentTurn, econScopeCountries);
+    step.mark("stockInvesting");
     await sellNppStockSurplus(db, currentTurn, econScopeCountries);
+    step.mark("stockSelling");
     await buildNppPartyOrgSurplus(db, currentTurn, econScopeCountries);
+    step.mark("partyOrgBuilding");
     await foundNppCorporationsSurplus(db, currentTurn, econScopeCountries);
+    step.mark("corporationFounding");
   }
 
   return result;

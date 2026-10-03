@@ -1,5 +1,12 @@
+import { ObjectId } from "mongodb";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import { describe, it, expect } from "vitest";
 import {
+  NPP_SUPPLY_AGREEMENT_PROJECTION,
+  NPP_SUPPLY_SECTOR_PROJECTION,
+  toExistingNppAgreement,
+  toParty,
   decideNppSupplyAgreements,
   nppContractPremium,
   NPP_CONTRACT_GLUT_PREMIUM,
@@ -428,5 +435,74 @@ describe("decideNppSupplyAgreements — media capacity parity", () => {
     for (const p of proposals) {
       expect(p.volumeCap).toBeLessThanOrEqual(capacity * CONTRACT_OVERCOMMIT_TOLERANCE + 1e-6);
     }
+  });
+});
+
+describe("NPP supply pass projections", () => {
+  // Keep only the projected keys, as the server does for an inclusion projection.
+  const project = <T extends Record<string, unknown>>(doc: T, projection: Record<string, 1>) =>
+    Object.fromEntries(
+      Object.entries(doc).filter(([key]) => key === "_id" || key in projection)
+    ) as unknown as T;
+
+  it("loads every sector field the matcher reads", () => {
+    const sector = {
+      _id: new ObjectId(),
+      corporationId: new ObjectId(),
+      sectorType: "steel_mill",
+      capitalStock: 1200,
+      producedUnits: { steel: 40 },
+      soldFraction: 0.8,
+      throughputFactor: 0.9,
+      mothballed: false,
+      strategyId: "volume",
+      transitionFromStrategyId: "premium",
+      retoolRescaleApplied: true,
+      transitionStartTurn: 9,
+      productionPolicyLevel: 2,
+      embargoSuspended: false,
+      embargoExportExposure: 0.1,
+      countryId: "US",
+      stateId: "US_PA",
+      plants: [{ id: "p1" }],
+      buildQueue: [{ id: "b1" }],
+      plantsPnl: { p1: 1 },
+      soldByCommodity: { steel: 30 },
+    } as unknown as CorporateSector;
+    const corp = { _id: new ObjectId(), countryId: "US", ceoType: "npp" } as unknown as Corporation;
+
+    expect(
+      toParty(corp, [
+        project(
+          sector as unknown as Record<string, unknown>,
+          NPP_SUPPLY_SECTOR_PROJECTION
+        ) as unknown as CorporateSector,
+      ])
+    ).toEqual(toParty(corp, [sector]));
+  });
+
+  it("loads every agreement field the matcher reads", () => {
+    const agreement = {
+      _id: new ObjectId(),
+      supplierCorpId: new ObjectId(),
+      buyerCorpId: new ObjectId(),
+      commodity: "steel",
+      stateId: "US_PA",
+      volumeCap: 50,
+      pricePremium: 0.05,
+      status: "active",
+      lastDeliveredUnits: 40,
+      lastShortfallUnits: 10,
+      createdAt: new Date(),
+    } as unknown as SupplyAgreement;
+
+    expect(
+      toExistingNppAgreement(
+        project(
+          agreement as unknown as Record<string, unknown>,
+          NPP_SUPPLY_AGREEMENT_PROJECTION
+        ) as unknown as SupplyAgreement
+      )
+    ).toEqual(toExistingNppAgreement(agreement));
   });
 });

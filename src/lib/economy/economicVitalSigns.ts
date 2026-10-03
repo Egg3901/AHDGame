@@ -1,3 +1,4 @@
+import { loadLedgerTurnover } from "./ledgerTurnoverCache";
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 import type { Db } from "mongodb";
@@ -730,23 +731,6 @@ function monetaryActivity(
  * Uses only $match/$unwind/$group/$abs, so it stays within the aggregation
  * surface the rest of the app relies on.
  */
-async function loadLedgerTurnover(
-  db: Db,
-  windowStart: number,
-  turn: number
-): Promise<LedgerTurnoverRow[]> {
-  const rows = await db
-    .collection<LedgerEntry>("ledgerEntries")
-    .aggregate<{ _id: string; turnover: number }>([
-      { $match: { turn: { $gte: windowStart, $lte: turn } } },
-      { $unwind: "$legs" },
-      { $match: { "legs.role": "primary" } },
-      { $group: { _id: "$legs.account", turnover: { $sum: { $abs: "$legs.anchorAmount" } } } },
-    ])
-    .toArray();
-  return rows.map((row) => ({ account: row._id, turnover: row.turnover }));
-}
-
 function fillByTurn(flows: CommodityFlow[]): Map<number, number> {
   const totals = new Map<number, { demand: number; cleared: number }>();
   for (const flow of flows) {

@@ -9,6 +9,7 @@ import {
   LIMIT_ORDER_SPREAD,
 } from "@/lib/constants/currencies";
 import { calculateSpreadFee } from "@/lib/currency/spreadFees";
+import { playerTradeFeeRate, recentVolumeAnchorOf } from "@/lib/currency/tradeFees";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { useDialogA11y } from "@/components/ui";
@@ -25,9 +26,11 @@ const METHOD_LABEL: Record<TradeMethod, string> = {
   limit: "Limit Order",
 };
 
+const percent = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+
 const METHOD_DESC: Record<TradeMethod, string> = {
-  market: "Instant execution at current rate. 0.275% spread.",
-  limit: "Executes when rate reaches your target. 0.175% spread.",
+  market: `Instant execution at the current rate. Base fee ${percent(MARKET_MAKER_SPREAD)}.`,
+  limit: `Executes when the rate reaches your target. Base fee ${percent(LIMIT_ORDER_SPREAD)}.`,
 };
 
 interface Props {
@@ -101,11 +104,21 @@ export function CurrencyTradeModal({
 
   if (!open) return null;
 
-  const fromRate = rates.find((r) => r.currencyCode === from)?.rate ?? 1;
-  const toRate = rates.find((r) => r.currencyCode === to)?.rate ?? 1;
+  const fromQuote = rates.find((r) => r.currencyCode === from);
+  const toQuote = rates.find((r) => r.currencyCode === to);
+  const fromRate = fromQuote?.rate ?? 1;
+  const toRate = toQuote?.rate ?? 1;
   const crossRate = toRate / fromRate;
   const amt = parseFloat(amount) || 0;
-  const spread = calculateSpreadFee(amt, SPREAD[method]);
+  // The same fee the server charges, except that it cannot see what you already
+  // converted in the last 24 turns, so a trader who has been busy pays more.
+  const feeRate = playerTradeFeeRate({
+    baseSpread: SPREAD[method],
+    tradeAnchor: fromRate > 0 ? amt / fromRate : 0,
+    fromVolumeAnchor: recentVolumeAnchorOf(fromQuote),
+    toVolumeAnchor: recentVolumeAnchorOf(toQuote),
+  });
+  const spread = calculateSpreadFee(amt, feeRate);
   const received = amt > 0 && method === "market" ? Math.round((amt - spread) * crossRate) : 0;
   const personalBalance = wallet?.personal?.[from] ?? 0;
 
@@ -336,7 +349,7 @@ export function CurrencyTradeModal({
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Spread ({(SPREAD[method] * 100).toFixed(3)}%)</span>
+                <span className="text-muted">Fee (about {percent(feeRate)})</span>
                 <span className="text-error tabular-nums">
                   −{formatCurrencyFaceAmount(spread, from)}
                 </span>
@@ -362,6 +375,10 @@ export function CurrencyTradeModal({
                   .
                 </div>
               )}
+              <p className="border-t border-card-border pt-1 text-muted">
+                Bigger trades and quieter currencies pay a higher fee. It counts everything you
+                converted in the last 24 turns, so it can come out higher than shown.
+              </p>
             </div>
           )}
 

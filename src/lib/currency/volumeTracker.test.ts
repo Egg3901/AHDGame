@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { planEuroSettlement } from "./euro/rules";
-import { computeCurrencyVolumes } from "./volumeTracker";
+import { computeCurrencyVolumes, effectiveTraderCount } from "./volumeTracker";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -127,7 +127,49 @@ it("consolidates post-accession external trades and excludes internal euro conve
     ]),
   });
   const result = await computeCurrencyVolumes(db as unknown as Db, 387, union);
-  expect(result.EUR).toEqual({ buyVolume24: 0, sellVolume24: 1000 });
-  expect(result.GBP).toEqual({ buyVolume24: 0, sellVolume24: 500 });
-  expect(result.USD).toEqual({ buyVolume24: 1500, sellVolume24: 0 });
+  // One (system) trader behind every flow, so each reads as a single trader.
+  expect(result.EUR).toEqual({ buyVolume24: 0, sellVolume24: 1000, effectiveTraders: 1 });
+  expect(result.GBP).toEqual({ buyVolume24: 0, sellVolume24: 500, effectiveTraders: 1 });
+  expect(result.USD).toEqual({ buyVolume24: 1500, sellVolume24: 0, effectiveTraders: 1 });
+});
+
+describe("effectiveTraderCount", () => {
+  it("is null when the net flow is zero", () => {
+    expect(effectiveTraderCount([])).toBeNull();
+    expect(effectiveTraderCount([100, -100])).toBeNull();
+  });
+
+  it("counts equal contributors in the net direction", () => {
+    expect(effectiveTraderCount([10, 10, 10, 10])).toBeCloseTo(4, 10);
+  });
+
+  it("reads one holder with crumbs alongside as about one trader", () => {
+    const n = effectiveTraderCount([400_000_000_000, 1_000, 2_000, 500]);
+    expect(n).toBeGreaterThan(1);
+    expect(n).toBeLessThan(1.001);
+  });
+
+  it("ignores contributions against the net direction", () => {
+    expect(effectiveTraderCount([10, 10, -5])).toBeCloseTo(2, 10);
+  });
+});
+
+it("tracks breadth per trader, so one large buyer reads as one trader", async () => {
+  const whale = "aaaaaaaaaaaaaaaaaaaaaaaa";
+  db.collection("tradeHistory").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([
+      { buyerCharacterId: whale, fromCurrency: "USD", toCurrency: "GBP", amount: 1e9, turn: 10 },
+      { buyerCharacterId: "b1", fromCurrency: "USD", toCurrency: "GBP", amount: 10, turn: 10 },
+      { buyerCharacterId: "b2", fromCurrency: "USD", toCurrency: "GBP", amount: 10, turn: 10 },
+    ]),
+  });
+  db.collection("exchangeRates").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([
+      { currencyCode: "USD", rate: 1 },
+      { currencyCode: "GBP", rate: 0.5 },
+    ]),
+  });
+  const result = await computeCurrencyVolumes(db as unknown as Db, 12);
+  expect(result.GBP.effectiveTraders).toBeGreaterThan(1);
+  expect(result.GBP.effectiveTraders).toBeLessThan(1.0001);
 });
