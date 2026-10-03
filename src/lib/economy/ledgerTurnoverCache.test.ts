@@ -5,7 +5,7 @@ import {
   LEDGER_TURNOVER_BY_TURN_COLLECTION,
   LEDGER_TURNOVER_LIVE_TURNS,
   loadLedgerTurnover,
-} from "./economicVitalSigns";
+} from "./ledgerTurnoverCache";
 
 const ACCOUNTS = ["corp:a:cash", "corp:b:cash", "treasury:US", "household:US"];
 
