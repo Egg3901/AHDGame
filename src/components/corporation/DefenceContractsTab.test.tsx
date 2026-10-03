@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
 import DefenceContractsTab from "./DefenceContractsTab";
 import type { CorporationContractView, CorporationDefenceView } from "./CorporationPageTypes";
 
@@ -51,10 +51,11 @@ function setup(over: Partial<React.ComponentProps<typeof DefenceContractsTab>> =
 describe("DefenceContractsTab", () => {
   it("summarises the order book a CEO acts on", () => {
     setup();
+    const summary = within(screen.getByLabelText("Procurement summary"));
     // 100 ordered - 40 delivered.
-    expect(screen.getByText("60")).toBeTruthy();
-    expect(screen.getByText("20")).toBeTruthy();
-    expect(screen.getByText("$40,000")).toBeTruthy();
+    expect(summary.getByText("60")).toBeTruthy();
+    expect(summary.getByText("20")).toBeTruthy();
+    expect(summary.getByText("$40,000")).toBeTruthy();
   });
 
   it("names the plant the order is on, so 4 lines are not read as 4 plants", () => {
@@ -80,7 +81,7 @@ describe("DefenceContractsTab", () => {
         contracts: [contract({ status: "cancelled", projectedLotsPerTurn: 0 })],
       }),
     });
-    expect(screen.getByText("terminated")).toBeTruthy();
+    expect(screen.getByText("Terminated")).toBeTruthy();
     expect(screen.queryByText(/will not advance until that changes/)).toBeNull();
   });
 

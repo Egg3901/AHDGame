@@ -116,19 +116,20 @@ export function SupplyOfferBoard({
       setVolume("");
     }
   }
-  const control = "w-full rounded border border-card-border bg-background p-2 text-sm";
+  const control =
+    "h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none";
   return (
-    <section className="space-y-4 rounded-xl border border-card-border bg-card p-4">
+    <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">{t("title")}</h3>
+          <h3 className="text-sm font-semibold text-foreground">{t("title")}</h3>
           <p className="mt-1 max-w-2xl text-xs text-muted">{t("intro")}</p>
         </div>
         <button
           type="button"
           disabled={loading || busy || !!error || own.length >= 10}
           onClick={() => setForm((v) => !v)}
-          className="rounded border border-primary/40 px-3 py-2 text-sm disabled:opacity-50"
+          className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated disabled:opacity-50"
         >
           {t(form ? "close" : "publish")}
         </button>
@@ -230,7 +231,7 @@ export function SupplyOfferBoard({
           <button
             type="submit"
             disabled={busy}
-            className="rounded bg-primary px-3 py-2 text-sm text-white disabled:opacity-50"
+            className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {t("submit")}
           </button>
@@ -252,7 +253,7 @@ export function SupplyOfferBoard({
                   type="button"
                   disabled={busy}
                   onClick={() => void mutate({ action: "withdraw", slot: row.slot })}
-                  className="rounded border border-card-border px-3 py-1"
+                  className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs text-foreground hover:bg-card-elevated"
                 >
                   {t("withdraw")}
                 </button>
@@ -284,13 +285,10 @@ export function SupplyOfferBoard({
       ) : (
         !error && (
           <>
-            {listings.length === 0 && <p className="text-sm text-muted">{t("empty")}</p>}
+            {listings.length === 0 && <p className="py-1 text-xs text-muted">{t("empty")}</p>}
             <div className="grid gap-3 md:grid-cols-2">
               {listings.map((row) => (
-                <article
-                  key={row.id}
-                  className="space-y-2 rounded-lg border border-card-border p-3"
-                >
+                <article key={row.id} className="space-y-2 border-b border-card-border/60 py-2">
                   <h4 className="font-medium">
                     {t(row.side)}: {COMMODITY_LABELS[row.commodity]}
                   </h4>
@@ -313,7 +311,7 @@ export function SupplyOfferBoard({
                     <button
                       type="button"
                       onClick={() => onRespond(row)}
-                      className="rounded border border-primary/40 px-3 py-2 text-sm text-primary"
+                      className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
                     >
                       {t("respond")}
                     </button>
@@ -326,7 +324,7 @@ export function SupplyOfferBoard({
                 type="button"
                 disabled={page === 0}
                 onClick={() => setPage((n) => n - 1)}
-                className="text-sm disabled:opacity-40"
+                className="text-xs text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground disabled:opacity-40 disabled:no-underline"
               >
                 {t("previous")}
               </button>
@@ -334,7 +332,7 @@ export function SupplyOfferBoard({
                 type="button"
                 disabled={!hasMore || page >= 100}
                 onClick={() => setPage((n) => n + 1)}
-                className="text-sm disabled:opacity-40"
+                className="text-xs text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground disabled:opacity-40 disabled:no-underline"
               >
                 {t("next")}
               </button>

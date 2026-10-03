@@ -5,7 +5,12 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
-import { fillBandSentence, fillBandShort, formatFillPercent } from "../plantsPresentation";
+import {
+  FILL_BAND_TEXT,
+  fillBandSentence,
+  fillBandShort,
+  formatFillPercent,
+} from "../plantsPresentation";
 
 /**
  * Shared building blocks for the corporation page's tabular layout.
@@ -149,6 +154,7 @@ export function Td({
   title,
   colSpan,
   numeric = align === "right",
+  wrap = false,
 }: {
   children?: ReactNode;
   align?: "left" | "right" | "center";
@@ -160,6 +166,8 @@ export function Td({
    * are figures unless they hold controls or words; pass false for those.
    */
   numeric?: boolean;
+  /** Let a cell of words or links wrap; figures stay on one line. */
+  wrap?: boolean;
 }) {
   const alignClass =
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
@@ -167,7 +175,7 @@ export function Td({
     <td
       title={title}
       colSpan={colSpan}
-      className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-[13px] tabular-nums ${numeric ? "font-mono" : ""} ${alignClass} ${className}`}
+      className={`${wrap ? "" : "whitespace-nowrap"} border-b border-card-border/60 px-2 py-1.5 text-[13px] tabular-nums ${numeric ? "font-mono" : ""} ${alignClass} ${className}`}
     >
       {children}
     </td>
@@ -248,9 +256,13 @@ export function StatementGroup({ children }: { children: ReactNode }) {
   );
 }
 
-/** Scroll wrapper so a wide table never widens the page on a phone. */
+/**
+ * Scroll wrapper so a wide table never widens the page on a phone. Positioned,
+ * so absolutely placed content inside (screen-reader-only labels) is clipped
+ * with the table instead of stretching the document.
+ */
 export function TableScroll({ children }: { children: ReactNode }) {
-  return <div className="-mx-2 overflow-x-auto px-2">{children}</div>;
+  return <div className="relative -mx-2 overflow-x-auto px-2">{children}</div>;
 }
 
 export function SmallButton({
@@ -363,12 +375,6 @@ export function signTone(value: number | null | undefined): string {
   return value > 0 ? "text-success" : "text-error";
 }
 
-const FILL_BAND_TEXT: Record<FillRateBand, string> = {
-  high: "text-success",
-  medium: "text-warning",
-  low: "text-error",
-};
-
 /**
  * Fill rate as table text. The band colour is the one thing a CEO scans a
  * long sector list for, so it is the only coloured cell in the row. Rivals
@@ -384,7 +390,7 @@ export function FillText({
   if (band == null) {
     return (
       <span className="text-muted" title="Produced nothing last turn, so there is no fill rate.">
-        —
+        n/a
       </span>
     );
   }
