@@ -24,10 +24,16 @@ export function isHu1991AssemblyCampaign(election: {
   );
 }
 export function hu1991PrimaryAdvanceLimit(
-  election: Parameters<typeof isHu1991AssemblyCampaign>[0],
+  election: Parameters<typeof isHu1991AssemblyCampaign>[0] & {
+    hungarianModernAssembly?: { ruleVersion: string };
+  },
   candidates: number
 ): number | null {
-  return isHu1991AssemblyCampaign(election) ? Math.max(1, candidates) : null;
+  const modern =
+    election.countryId === "HU" &&
+    election.electionType === "nationalAssembly" &&
+    election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1";
+  return isHu1991AssemblyCampaign(election) || modern ? Math.max(1, candidates) : null;
 }
 
 /** Select campaign actors with at least one unresolved qualified ballot. */

@@ -15,6 +15,7 @@ import {
   HU_2011_COUNTS_COLLECTION,
   type Hu2011AssemblyRecord,
 } from "./assemblyCount2011";
+import { resolvePrimariesIfNeeded } from "@/lib/turn/primaryResolution";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
 import { seatHu2011Assembly } from "./assemblySeating2011";
 import {
@@ -247,7 +248,17 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       await db.dropDatabase();
     }
   });
-  it.each(["elected", "paired", "withdrawn", "expired", "superseded", "tied", "empty"])(
+  it.each([
+    "elected",
+    "paired",
+    "withdrawn",
+    "expired",
+    "superseded",
+    "tied",
+    "empty",
+    "root-withdrawn",
+    "re-entry",
+  ])(
     "counts and seats the modern Assembly and protects constituency custody (%s)",
     async (kind) => {
       const { db, yes, no } = await fixture();
@@ -264,6 +275,9 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           party: "1",
           name: "Synthetic Deputy",
           balance: 777,
+          policies: { economic: 0, social: 0 },
+          favorability: 50,
+          politicalInfluence: 10,
           currentOffice: null,
           careerHistory: [],
           userId: new ObjectId(),
@@ -296,6 +310,9 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
               countryId: "HU",
               party,
               balance: 12345,
+              policies: { economic: 0, social: 0 },
+              favorability: 50,
+              politicalInfluence: 10,
               currentOffice: null,
               retiredAt: null,
             });
@@ -375,7 +392,57 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           }
           expect(initialVacancies).toBeGreaterThan(0);
         }
+        commands = commandBytes = replyBytes = 0;
         expect(await bindHu2011Campaigns(db, GAME as never, 1009, NOW)).toBe(true);
+        process.stdout.write(
+          JSON.stringify({
+            fixture: "hu-modern-campaign-register-binding",
+            commands,
+            commandBytes,
+            replyBytes,
+          }) + "\n"
+        );
+        const frozenPolls = await db.collection("elections").find({ cycle: 6 }).toArray();
+        expect(
+          frozenPolls.every(
+            (row) =>
+              Number.isSafeInteger(row.hungarianModernAssembly?.registeredVoters) &&
+              row.hungarianModernAssembly.registeredVoters > 0
+          )
+        ).toBe(true);
+        const beforePrimary = await db
+          .collection("electionCandidates")
+          .countDocuments({ status: "active" });
+        await resolvePrimariesIfNeeded(NOW, 1110);
+        expect(await db.collection("electionCandidates").countDocuments({ status: "active" })).toBe(
+          beforePrimary
+        );
+        const firstTally = await db
+          .collection("electionVoteTallies")
+          .findOne({ electionId: cast[0].electionId });
+        expect(firstTally?.hungarianAssemblyBallot).toBe(true);
+        expect(firstTally?.primaryResults).toBeDefined();
+        let reEntryAlias: { oldId: string; newId: string } | undefined;
+        if (kind === "re-entry") {
+          const previous = await db
+            .collection("electionCandidates")
+            .findOne({ characterId: playerId });
+          const newId = new ObjectId();
+          await db
+            .collection("electionCandidates")
+            .updateOne({ _id: previous!._id }, { $set: { status: "withdrawn" } });
+          await db.collection("electionCandidates").insertOne({
+            ...previous!,
+            _id: newId,
+            status: "active",
+            enteredAt: new Date(NOW.getTime() + 1),
+          });
+          const oldId = previous!._id.toHexString();
+          cast[0].totalVotes[oldId] = 600000;
+          cast[0].totalVotes[newId.toHexString()] = 399999;
+          cast[0].candidateParties[newId.toHexString()] = "1";
+          reEntryAlias = { oldId, newId: newId.toHexString() };
+        }
         for (const row of cast)
           await db
             .collection("electionVoteTallies")
@@ -386,14 +453,48 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         await db
           .collection("elections")
           .updateMany({ cycle: 6 }, { $set: { status: "completed" } });
+        if (kind === "root-withdrawn") {
+          const playerCandidate = await db
+            .collection("electionCandidates")
+            .findOne({ characterId: playerId });
+          await db
+            .collection("electionCandidates")
+            .updateOne({ _id: playerCandidate!._id }, { $set: { status: "withdrawn" } });
+          await removeWithdrawnCandidateFromTally(
+            db,
+            cast[0].electionId,
+            playerCandidate!._id.toHexString()
+          );
+          expect(
+            (await db.collection("electionVoteTallies").findOne({ electionId: cast[0].electionId }))
+              ?.totalVotes[playerCandidate!._id.toHexString()]
+          ).toBe(999999);
+        }
         commands = commandBytes = replyBytes = 0;
         const receipt = await certifyHu2011Count(db, 6, 1120, NOW);
         expect(receipt?.installed.mandates).toHaveLength(199 - initialVacancies);
+        if (reEntryAlias) {
+          expect(receipt?.campaignAliases).toEqual({ [reEntryAlias.oldId]: reEntryAlias.newId });
+          expect(
+            receipt?.nominations.people.some((row) => row.candidateId === reEntryAlias.oldId)
+          ).toBe(false);
+          const ledger = await db
+            .collection("electionVoteTallies")
+            .findOne({ electionId: cast[0].electionId });
+          expect(ledger?.totalVotes[reEntryAlias.oldId]).toBe(600000);
+          expect(ledger?.totalVotes[reEntryAlias.newId]).toBe(399999);
+        }
         expect(receipt?.installed.vacancies).toHaveLength(initialVacancies);
         expect(receipt?.constituencies).toHaveLength(106);
         expect(new Set(receipt?.constituencies?.map((row) => row.id)).size).toBe(106);
         expect(new Set(receipt?.constituencies?.map((row) => row.regionId)).size).toBe(6);
         expect(receipt?.installed.mandates.filter((row) => !row.isNpc)).toHaveLength(1);
+        const finalVacancies =
+          initialVacancies +
+          (kind === "root-withdrawn"
+            ? receipt!.installed.mandates.filter((row) => !row.isNpc && row.tier === "constituency")
+                .length
+            : 0);
         const fail = new Proxy(db, {
           get(target, key) {
             if (key !== "collection") {
@@ -446,13 +547,13 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           await db
             .collection("electedOfficials")
             .countDocuments({ countryId: "HU", officeType: "assemblyDelegate" })
-        ).toBe(199 - initialVacancies);
+        ).toBe(199 - finalVacancies);
         expect(
           await db.collection("electedOfficials").countDocuments({ characterId: playerId })
-        ).toBe(1);
+        ).toBe(kind === "root-withdrawn" ? 0 : 1);
         expect(
           await db.collection("electedOfficials").countDocuments({ seatSource: "direct" })
-        ).toBe(106 - initialVacancies);
+        ).toBe(106 - finalVacancies);
         expect(await db.collection("electedOfficials").countDocuments({ seatSource: "list" })).toBe(
           93
         );
@@ -467,8 +568,21 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           (await db.collection<StringRecord>("gameState").findOne({ _id: "current" }))
             ?.huAssemblyReformedAtYear
         ).toBe(2014);
-        expect(await db.collection("notifications").countDocuments()).toBe(1);
+        expect(await db.collection("notifications").countDocuments()).toBe(
+          kind === "root-withdrawn" ? 0 : 1
+        );
         expect(await seatHu2011Assembly(db, 6, 1121, NOW)).toBe(false);
+        if (kind === "root-withdrawn") {
+          const stored = await db
+            .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
+            .findOne({ _id: receipt!._id });
+          expect(stored?.settled?.vacancies).toHaveLength(finalVacancies);
+          expect(await openHuModernByElections(db, 1123, NOW)).toHaveLength(finalVacancies);
+          expect(
+            (await db.collection("characters").findOne({ _id: playerId }))?.currentOffice
+          ).toBeNull();
+          return;
+        }
         if (kind === "tied" || kind === "empty") {
           const stored = await db
             .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)

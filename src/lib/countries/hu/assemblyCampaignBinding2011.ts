@@ -10,8 +10,10 @@ import type {
   ElectionVoteTally,
   GameState,
   State,
+  StateRegistrationPool,
 } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
+import { scalePoolToRegistered } from "@/lib/electionEngine/rules/registration";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
 import { hu2014RegionSeats } from "@/lib/turn/huAssemblyReform";
@@ -40,6 +42,7 @@ export async function bindHu2011Campaigns(db: Db, game: GameState, turn: number,
       cycle: { $gte: 1 },
       status: { $in: ["active", "upcoming"] },
       hungarianModernAssembly: { $exists: false },
+      hungarianModernByElection: { $exists: false },
       "hungarianAssemblyRound.round": { $ne: 2 },
       "hungarianAssemblyRound.byElection": { $exists: false },
     },
@@ -79,6 +82,7 @@ async function materializeHu2011PrimaryCohorts(
         status: { $in: ["upcoming", "active"] },
         "hungarianAssemblyRound.round": { $ne: 2 },
         hungarianModernAssembly: { $exists: false },
+        hungarianModernByElection: { $exists: false },
         "hungarianAssemblyRound.byElection": { $exists: false },
       },
       {
@@ -161,13 +165,41 @@ async function materializeHu2011PrimaryCohorts(
     {
       electionId: { $in: eligible.map((row) => row._id) },
     },
-    { $set: { updatedAt: now } },
+    { $set: { updatedAt: now, hungarianAssemblyBallot: true } },
     { session }
   );
   const regions = await db
     .collection<State>("states")
-    .find({ countryId: "HU" }, { session, projection: { _id: 1, population: 1 } })
+    .find(
+      { countryId: "HU" },
+      { session, projection: { _id: 1, population: 1, votingEligiblePopulation: 1 } }
+    )
     .toArray();
+  const pools = await db
+    .collection<StateRegistrationPool>("stateRegistrationPool")
+    .find({ countryId: "HU" }, { session, projection: { stateId: 1, unregistered: 1 } })
+    .toArray();
+  if (new Set(pools.map((row) => row.stateId)).size !== pools.length)
+    throw new Error("Modern Hungarian registration has duplicate regional pools");
+  const poolByRegion = new Map(pools.map((row) => [row.stateId, row.unregistered]));
+  const registers = new Map(
+    regions.map((region) => {
+      const existing = eligible.find((row) => row.state === String(region._id))
+        ?.hungarianAssemblyRound?.registeredVoters;
+      const electorate = region.votingEligiblePopulation ?? region.population;
+      const registered =
+        existing ??
+        Math.floor(scalePoolToRegistered(electorate, poolByRegion.get(String(region._id))));
+      if (
+        !Number.isSafeInteger(electorate) ||
+        electorate < 1 ||
+        !Number.isSafeInteger(registered) ||
+        registered < 1
+      )
+        throw new Error("Modern Hungarian campaign has no registered electorate");
+      return [String(region._id), registered];
+    })
+  );
   const capacities = hu2014RegionSeats(regions);
   if (Object.keys(capacities).length !== 6)
     throw new Error("Modern Hungarian binding needs six regions");
@@ -184,6 +216,7 @@ async function materializeHu2011PrimaryCohorts(
             totalSeats: capacities[row.state],
             hungarianModernAssembly: {
               ruleVersion: "mixed-2011-v1",
+              registeredVoters: registers.get(row.state)!,
               ...(authorizedOnTurn != null ? { authorizedOnTurn } : {}),
               reason: authorizedOnTurn != null ? "parliamentary_decision" : "legacy_settlement",
             },

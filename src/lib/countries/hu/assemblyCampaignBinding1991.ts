@@ -42,6 +42,7 @@ export async function materializeHu1991CampaignBinding(input: {
         cycle,
         "hungarianAssemblyRound.round": { $ne: 2 },
         "hungarianAssemblyRound.byElection": { $exists: false },
+        hungarianModernByElection: { $exists: false },
       },
       {
         session,

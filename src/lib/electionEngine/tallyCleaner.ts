@@ -35,7 +35,8 @@ export async function removeWithdrawnCandidateFromTally(
   if (
     !preserveCastVotes &&
     (tally.totalVotes[candidateId] ?? 0) > 0 &&
-    (tally.state === "RU" ||
+    (tally.state.startsWith("HU_") ||
+      tally.state === "RU" ||
       Object.prototype.hasOwnProperty.call(RU_1991_ECONOMIC_REGION_POPULATION, tally.state))
   ) {
     const election = await db.collection<Election>("elections").findOne(
@@ -46,14 +47,22 @@ export async function removeWithdrawnCandidateFromTally(
           electionType: 1,
           russianDumaRound: 1,
           russianCouncilRound: 1,
+          hungarianAssemblyRound: 1,
+          hungarianModernAssembly: 1,
+          hungarianModernByElection: 1,
         },
       }
     );
     preserveCastVotes =
-      election?.countryId === "RU" &&
-      ((election.electionType === "dumaDeputy" && election.russianDumaRound !== undefined) ||
-        (election.electionType === "federationCouncilMember" &&
-          election.russianCouncilRound !== undefined));
+      (election?.countryId === "HU" &&
+        election.electionType === "nationalAssembly" &&
+        (election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1" ||
+          election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1" ||
+          election.hungarianModernByElection != null)) ||
+      (election?.countryId === "RU" &&
+        ((election.electionType === "dumaDeputy" && election.russianDumaRound !== undefined) ||
+          (election.electionType === "federationCouncilMember" &&
+            election.russianCouncilRound !== undefined)));
   }
 
   const unsetPaths: Record<string, ""> = preserveCastVotes
