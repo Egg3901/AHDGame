@@ -30,6 +30,9 @@ an unknown acknowledgement resumes the original operation.
 - Old helper-stub purchase and sale tests were replaced with stateful tests of
   the actual handlers. Planner, rebalance and bid policy assertions remain.
 - Scoped semantic diagnostics pass for all 14 changed TypeScript files.
+- Archived float plans are classified as runtime state and selected for reset
+  with their funds and corporations. The manifest and bootstrap contract tests
+  verify that recovery records cannot survive into a new world.
 - System cash witnesses use the documented financial subject type with their
   original cash path in metadata. Existing records require no rewrite and ledger
   snapshot coverage is unchanged.
