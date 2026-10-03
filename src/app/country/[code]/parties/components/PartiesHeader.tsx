@@ -71,8 +71,8 @@ export function PartiesHeader({
               Political Parties
             </h1>
             <p className="mt-2 text-body text-foreground/80 sm:text-body-lg">
-              Compare national strength, track momentum, and find the allies who can move the
-              country.
+              Every party in the country, ranked by membership, with its treasury, its chair and
+              last turn&apos;s change in members.
             </p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function PartiesHeader({
         <div className="min-w-0 px-4 py-3">
           <span className="block text-body-xs uppercase tracking-widest text-muted">Largest</span>
           <span className="block truncate text-heading font-bold">
-            {largestParty?.abbreviation ?? "—"}
+            {largestParty?.abbreviation ?? "None"}
           </span>
         </div>
         <div className="px-4 py-3">
