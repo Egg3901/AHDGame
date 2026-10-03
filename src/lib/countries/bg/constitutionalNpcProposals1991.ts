@@ -1,16 +1,15 @@
-/** An entirely NPC Bulgarian constituent majority can introduce a constitutional draft. */
+/** A formed NPC Bulgarian government can introduce a draft for the constituent vote. */
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import type { Db } from "mongodb";
 import type { ElectedOfficial, GameState, NPP } from "@/lib/db/types";
 import {
+  Bg1991ConstitutionalConflict,
   loadBg1991ConstitutionalDecision,
   openBg1991ConstitutionalProposal,
 } from "./constitutionalProposals1991";
 import { calendarTurn } from "@/lib/utils/gameDate";
-import {
-  passesBgConstitution1991,
-  bg1991DecisionAvailability,
-} from "./rules/constitutionalDecision1991";
+import { bg1991DecisionAvailability } from "./rules/constitutionalDecision1991";
+import { canBg1991NpcGovernmentIntroduce } from "./rules/constitutionalExecutive1991";
 export async function processBg1991ConstitutionalNpcProposal(
   db: Db,
   game: GameState,
@@ -40,7 +39,7 @@ export async function processBg1991ConstitutionalNpcProposal(
       .collection<ElectedOfficial>("electedOfficials")
       .find(
         { countryId: "BG", officeType: "assemblyDeputy" },
-        { projection: { officeType: 1, characterId: 1, party: 1, seatsHeld: 1 } }
+        { projection: { characterId: 1, nppId: 1, seatsHeld: 1 } }
       )
       .toArray(),
     db
@@ -48,21 +47,42 @@ export async function processBg1991ConstitutionalNpcProposal(
       .find({ countryId: "BG" }, { projection: { houseDistricts: 1 } })
       .toArray(),
   ]);
-  if (!leader || !officials.length || officials.some((row) => row.characterId)) return false;
-  const seats = regions.reduce((n, row) => n + (row.houseDistricts ?? 0), 0);
-  const support = officials
-    .filter((row) => row.party === leader.party)
-    .reduce((n, row) => n + (row.seatsHeld ?? 1), 0);
-  if (seats !== 400 || !passesBgConstitution1991({ for: support, against: 0, abstain: 0 }, seats))
+  if (!leader) return false;
+  const capacity = regions.reduce((n, row) => n + (row.houseDistricts ?? 0), 0);
+  if (
+    !canBg1991NpcGovernmentIntroduce({
+      formed: government.status === "formed",
+      playerPrimeMinister: Boolean(government.pmCharacterId),
+      npcPrimeMinister: Boolean(government.pmNppId && leader),
+      leaderParty: leader.party,
+      capacity,
+      mandates: officials
+        .filter((row) => row.seatsHeld !== 0)
+        .map((row) => ({
+          actor: row.characterId
+            ? `human:${row.characterId.toHexString()}`
+            : row.nppId
+              ? `npc:${row.nppId.toHexString()}`
+              : "",
+          seats: row.seatsHeld ?? 1,
+          human: Boolean(row.characterId),
+        })),
+    })
+  )
     return false;
-  await openBg1991ConstitutionalProposal({
-    db,
-    game,
-    turn,
-    now,
-    sponsor: null,
-    sponsorParty: leader.party,
-    reason: "npc_government_constituent_mandate",
-  });
+  try {
+    await openBg1991ConstitutionalProposal({
+      db,
+      game,
+      turn,
+      now,
+      sponsor: null,
+      sponsorParty: leader.party,
+      reason: "npc_government_constituent_mandate",
+    });
+  } catch (error) {
+    if (error instanceof Bg1991ConstitutionalConflict) return false;
+    throw error;
+  }
   return true;
 }

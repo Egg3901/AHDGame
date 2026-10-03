@@ -12,6 +12,7 @@ import type {
   Election,
   ElectionVoteTally,
 } from "@/lib/db/types";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
 import { calendarTurn, turnToGameMonth } from "@/lib/utils/gameDate";
@@ -189,6 +190,25 @@ export async function materializeBg1991ConstitutionalProposal(input: {
         "A seated constituent deputy must introduce the collective draft"
       );
     sponsorParty = typeof deputy.party === "string" ? deputy.party : undefined;
+  } else if (input.reason === "npc_government_constituent_mandate") {
+    const government = await db
+      .collection<GovernmentFormation>("governmentFormations")
+      .findOne({ _id: "BG" }, { session, projection: { status: 1, pmCharacterId: 1, pmNppId: 1 } });
+    if (
+      input.sponsor ||
+      government?.status !== "formed" ||
+      government.pmCharacterId ||
+      !government.pmNppId
+    )
+      throw new Bg1991ConstitutionalConflict(
+        "The current NPC government must introduce this draft"
+      );
+    const leader = await db
+      .collection<{ _id: ObjectId; party?: string }>("npps")
+      .findOne({ _id: government.pmNppId }, { session, projection: { party: 1 } });
+    if (!leader?.party || sponsorParty !== leader.party)
+      throw new Bg1991ConstitutionalConflict("The government sponsor changed before introduction");
+    sponsorParty = leader.party;
   } else if (input.sponsor) {
     const office = await db.collection("electedOfficials").findOne(
       {
