@@ -754,7 +754,10 @@ async function vietnamSupport(ctx: CrisisActionContext): Promise<void> {
     gdp > 0 ? computeAidOutcome(pctGdp, gdp) : { amountLocal: 0, senderEffects: [] };
 
   if (amountLocal > 0) {
-    await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, { resyncDerived: true });
+    await spendFromTreasury(db, ctx.countryId as CountryId, amountLocal, {
+      resyncDerived: true,
+      witness: { flow: "crisis_response", site: "crises/optionActions" },
+    });
   }
 
   const gameState = await getGameState(db);

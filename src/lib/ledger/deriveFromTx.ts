@@ -94,6 +94,9 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // bonus has no in-world payer, so it is an attributed mint rather than
   // Phase-3 `unattributed` backlog.
   onboarding_reward: "onboarding_reward",
+  // World event treasury and wallet payouts and charges have no in-world payer
+  // or recipient.
+  world_event_payout: "world_event",
   // Resource prospecting + extraction contracts. These are single-sided from
   // the payer's perspective — the survey cost / contract fee / royalty leaves
   // the corp (or government treasury) into the state/national budget, which is

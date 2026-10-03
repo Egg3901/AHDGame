@@ -405,7 +405,10 @@ async function respondWithNegotiation(
   const concession =
     gdp > 0 ? gdp * NEGOTIATION_ATTEMPT_COST_PCT_GDP * negotiationCostMultiplier(intensity) : 0;
   if (concession > 0) {
-    await spendFromTreasury(db, countryId, concession, { resyncDerived: true });
+    await spendFromTreasury(db, countryId, concession, {
+      resyncDerived: true,
+      witness: { flow: "crisis_response", site: "crises/unionBanStrike" },
+    });
   }
 
   if (settled) {
