@@ -2,7 +2,8 @@
 date: "2026-10-03"
 title: "Fill Hungary's modern constituency vacancies"
 badges: [minor]
-areas: [engine, politics]
+areas: [engine, frontend]
+tags: [politics]
 ---
 
 After an authorized modern Hungarian Assembly takes office, a departed constituency deputy opens a fresh single-seat election. Candidates compete by plurality in the original frozen district. National-list awards and the original Assembly term stay intact.
