@@ -8,11 +8,13 @@ import {
   HU_2011_PROPOSALS_COLLECTION,
   openHu2011ElectoralProposal,
   processHu2011ElectoralMandate,
+  type Hu2011ElectoralProposal,
 } from "./electoralProposals2011";
 import { certifyHu2011Count, HU_2011_COUNTS_COLLECTION } from "./assemblyCount2011";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
 import { seatHu2011Assembly } from "./assemblySeating2011";
 import { huRegions1991 } from "./data/huRegions1991";
+import { processHu2011ElectoralNpcProposal } from "./electoralNpcProposals2011";
 import { bindHu2011Campaigns } from "./assemblyCampaignBinding2011";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
 
@@ -166,7 +168,9 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
   it("authorizes from an actual quorate bill without resizing the sitting Assembly", async () => {
     const { db, yes, no } = await fixture();
     try {
-      await db.collection("states").insertMany(huRegions1991.map((row) => ({ ...row })));
+      await db
+        .collection<StringRecord>("states")
+        .insertMany(huRegions1991.map((row) => ({ ...row })));
       await primary(db, 6);
       await primary(db, 7, true);
       const proposal = await vote(db, yes, no);
@@ -230,7 +234,9 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
     try {
       await vote(db, yes, no);
       expect(await processHu2011ElectoralMandate(db, GAME, 1006, NOW)).toBe(true);
-      await db.collection("states").insertMany(huRegions1991.map((row) => ({ ...row })));
+      await db
+        .collection<StringRecord>("states")
+        .insertMany(huRegions1991.map((row) => ({ ...row })));
       const playerId = new ObjectId();
       await db.collection("characters").insertOne({
         _id: playerId,
@@ -398,6 +404,43 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
             .findOne({ _id: receipt!._id })
         )?.seatedAtTurn
       ).toBe(1120);
+    } finally {
+      await db.dropDatabase();
+    }
+  });
+  it("introduces a bounded NPC supermajority decision once and respects human or rejected choices", async () => {
+    const { db, yes } = await fixture(258, 128);
+    try {
+      await db.collection("npps").insertOne({
+        _id: yes,
+        countryId: "HU",
+        party: "1",
+        currentOffice: { type: "primeMinister" },
+      });
+      await db
+        .collection<StringRecord>("governmentFormations")
+        .updateOne({ _id: "HU" }, { $set: { pmNppId: yes } });
+      const human = new ObjectId();
+      await db.collection("electedOfficials").insertOne({
+        countryId: "HU",
+        officeType: "assemblyDelegate",
+        characterId: human,
+        party: "1",
+        seatsHeld: 1,
+      });
+      expect(await processHu2011ElectoralNpcProposal(db, GAME as never, 1005, NOW)).toBe(false);
+      await db.collection("electedOfficials").deleteOne({ characterId: human });
+      expect(await processHu2011ElectoralNpcProposal(db, GAME as never, 1005, NOW)).toBe(true);
+      expect(await processHu2011ElectoralNpcProposal(db, GAME as never, 1005, NOW)).toBe(false);
+      const proposal = await db
+        .collection<Hu2011ElectoralProposal>(HU_2011_PROPOSALS_COLLECTION)
+        .findOne({});
+      expect(proposal?.reason).toBe("npc_government_supermajority_mandate");
+      await db
+        .collection("bills")
+        .updateOne({ _id: proposal!.billId }, { $set: { status: "failed" } });
+      expect(await processHu2011ElectoralNpcProposal(db, GAME as never, 1006, NOW)).toBe(false);
+      expect(await db.collection("bills").countDocuments()).toBe(1);
     } finally {
       await db.dropDatabase();
     }
