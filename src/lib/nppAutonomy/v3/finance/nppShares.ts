@@ -146,13 +146,12 @@ export async function nppBuyShares(
 
   // Deduct from the personal forex account first (atomic guard), then credit
   // shares. NOT campaign `funds` — equity investing is real-economy.
-  const deducted = await db
-    .collection<NPP>("npps")
-    .findOneAndUpdate(
-      { _id: npp._id, nppInvestmentCashAnchor: { $gte: costAnchor } },
-      { $inc: { nppInvestmentCashAnchor: -costAnchor }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
-    );
+  const deducted = await db.collection<NPP>("npps").findOneAndUpdate(
+    { _id: npp._id, nppInvestmentCashAnchor: { $gte: costAnchor } },
+    { $inc: { nppInvestmentCashAnchor: -costAnchor }, $set: { updatedAt: now } },
+    // Only the balance is read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
+  );
   if (!deducted) {
     return { ok: false, reason: "Insufficient investment capital for share purchase." };
   }
@@ -352,13 +351,12 @@ export async function nppSellShares(
     return { ok: false, reason: "Shares no longer available; sale reversed." };
   }
 
-  const credited = await db
-    .collection<NPP>("npps")
-    .findOneAndUpdate(
-      { _id: npp._id },
-      { $inc: { nppInvestmentCashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
-    );
+  const credited = await db.collection<NPP>("npps").findOneAndUpdate(
+    { _id: npp._id },
+    { $inc: { nppInvestmentCashAnchor: proceedsAnchor }, $set: { updatedAt: now } },
+    // Only the balance is read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { nppInvestmentCashAnchor: 1 } }
+  );
 
   void onFloatSellCommitted(db, corp, proceeds, { pools });
 

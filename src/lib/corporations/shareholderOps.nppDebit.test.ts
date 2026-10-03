@@ -23,7 +23,7 @@ describe("debitSharesFromNpp", () => {
         shareholders: { $elemMatch: { nppId, shares: { $gte: 10 } } },
       },
       expect.anything(),
-      { returnDocument: "after" }
+      { returnDocument: "after", projection: { shareholders: 1 } }
     );
   });
 });
