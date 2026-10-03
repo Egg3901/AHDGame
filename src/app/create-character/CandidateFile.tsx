@@ -83,9 +83,7 @@ export function CandidateFile({
   return (
     <div className="overflow-hidden rounded-lg border border-card-border bg-card shadow-panel">
       <div className="flex items-center justify-between gap-2 border-b border-card-border px-4 py-2">
-        <span className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
-          Candidate file
-        </span>
+        <span className="text-body-sm font-medium text-muted">Candidate file</span>
         {countryFlagUrl && countryName && (
           <span className="relative h-4 w-6 overflow-hidden rounded-sm">
             <Image
@@ -349,10 +347,8 @@ function ImagePickButton({
 function FileRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 px-4 py-1.5">
-      <dt className="shrink-0 font-mono text-body-xs uppercase tracking-[0.12em] text-muted">
-        {label}
-      </dt>
-      <dd className="min-w-0 text-right text-body-sm">{children}</dd>
+      <dt className="shrink-0 text-body-sm font-medium text-muted">{label}</dt>
+      <dd className="min-w-0 text-right text-body">{children}</dd>
     </div>
   );
 }

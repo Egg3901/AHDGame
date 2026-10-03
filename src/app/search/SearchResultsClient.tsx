@@ -89,7 +89,7 @@ export function SearchResultsClient({ initialQuery }: { initialQuery: string }) 
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-9">
         <header className="relative isolate overflow-hidden rounded-2xl border border-card-border bg-card shadow-panel">
           <div className="relative px-5 py-7 sm:px-8 sm:py-9">
-            <div className="mb-3 flex items-center gap-2 text-[length:var(--text-body-sm)] font-semibold uppercase tracking-[0.16em] text-primary">
+            <div className="mb-3 flex items-center gap-2 text-body-sm font-medium text-primary">
               {t("search.eyebrow")}
             </div>
             <h1 className="text-[length:var(--text-display)] font-bold tracking-tight text-foreground">
@@ -131,9 +131,7 @@ export function SearchResultsClient({ initialQuery }: { initialQuery: string }) 
         <section aria-label={t("search.resultsRegion")} aria-live="polite">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3 px-1">
             <div>
-              <p className="text-[length:var(--text-body-sm)] font-semibold uppercase tracking-[0.14em] text-muted">
-                {t("search.topMatches")}
-              </p>
+              <p className="text-body-sm font-medium text-muted">{t("search.topMatches")}</p>
               <h2 className="mt-1 break-words text-[length:var(--text-heading)] font-semibold text-foreground sm:text-[length:var(--text-heading-lg)]">
                 {showResults
                   ? t("search.resultsFor", { query: submittedQuery })

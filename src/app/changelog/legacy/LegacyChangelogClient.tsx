@@ -31,17 +31,17 @@ export function LegacyChangelogClient({ entries }: { entries: ChangelogEntry[] }
         </div>
         <HeroStatsStrip>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Newest here</span>
+            <span className="text-body-sm font-medium text-muted">Newest here</span>
             <span className="text-base font-bold tabular-nums text-primary">{latestVersion}</span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Versions</span>
+            <span className="text-body-sm font-medium text-muted">Versions</span>
             <span className="text-base font-bold tabular-nums text-foreground">
               {entries.length}
             </span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Changes</span>
+            <span className="text-body-sm font-medium text-muted">Changes</span>
             <span className="text-base font-bold tabular-nums text-foreground">{totalChanges}</span>
           </div>
         </HeroStatsStrip>

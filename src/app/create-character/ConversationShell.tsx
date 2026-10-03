@@ -101,10 +101,7 @@ export function ConversationShell({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-5 sm:px-6">
-      <p
-        className="font-mono text-body-xs uppercase tracking-[0.14em] text-muted"
-        aria-live="polite"
-      >
+      <p className="text-body-sm font-medium text-muted" aria-live="polite">
         Step {activeIndex + 1} of {steps.length}
       </p>
 
@@ -156,9 +153,7 @@ export function ConversationShell({
         <ol aria-label="Your answers so far" className="mt-4 space-y-2">
           {answered.map((s) => (
             <li key={s.id} className="rounded-lg border border-card-border bg-card px-3 py-2">
-              <p className="font-mono text-body-xs uppercase tracking-[0.14em] text-muted">
-                {s.title}
-              </p>
+              <p className="text-body-sm font-medium text-muted">{s.title}</p>
               <div className="mt-1 flex items-start justify-between gap-3">
                 <p className="min-w-0 flex-1 text-body-sm text-foreground">{s.summary}</p>
                 {reached.includes(s.id) && (

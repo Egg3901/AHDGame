@@ -66,10 +66,8 @@ const TYPE_LABELS: Partial<Record<NotificationType, string>> = {
 };
 
 function humanizeType(type: NotificationType): string {
-  return type
-    .replace(/^(corp|national|caucus|committee)_/, "$1 ")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const words = type.replace(/^(corp|national|caucus|committee)_/, "$1 ").replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function notificationLabel(type: NotificationType): string {

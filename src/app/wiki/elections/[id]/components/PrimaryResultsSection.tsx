@@ -66,9 +66,7 @@ const PrimaryTrendChart = memo(function PrimaryTrendChart({
 
   return (
     <div className="mb-4">
-      <p className="text-xs text-muted mb-2 font-medium uppercase tracking-wide">
-        {partyName} — Share Over Time
-      </p>
+      <p className="text-body-sm font-medium text-muted mb-2">{partyName} — share over time</p>
       <ResponsiveContainer width="100%" height={160}>
         <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />

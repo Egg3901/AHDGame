@@ -74,9 +74,7 @@ function MetricCard({
         <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
       <div className="text-2xl font-semibold leading-none text-foreground">{value}</div>
-      <div className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-        {label}
-      </div>
+      <div className="mt-2 text-body-sm font-medium text-muted">{label}</div>
       <p className="mt-2 text-sm leading-relaxed text-muted">{detail}</p>
     </div>
   );
@@ -85,7 +83,7 @@ function MetricCard({
 function MiniMetric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="rounded-md border border-card-border bg-card-elevated/55 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-1 text-lg font-semibold leading-tight text-foreground">{value}</div>
       {detail && <p className="mt-1 text-xs leading-relaxed text-muted">{detail}</p>}
     </div>
@@ -98,9 +96,7 @@ function StartingMetricsMatrix({ countries }: { countries: CountryStartingStateC
     <section id="starting-metrics" className="scroll-mt-24 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-            Macro Snapshot
-          </p>
+          <p className="text-body-sm font-medium text-primary">Macro snapshot</p>
           <h3 className="mt-1 text-xl font-semibold text-foreground">
             Economy, debt, and resource posture
           </h3>
@@ -202,16 +198,10 @@ function IdeologyPlot({ parties }: { parties: readonly PartySeed[] }) {
       <div className="relative h-[220px] overflow-hidden rounded-md border border-card-border bg-card-elevated/70">
         <div className="absolute left-1/2 top-0 h-full w-px bg-card-border" />
         <div className="absolute left-0 top-1/2 h-px w-full bg-card-border" />
-        <div className="absolute left-3 top-3 text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-          Progressive
-        </div>
-        <div className="absolute bottom-3 left-3 text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-          Left
-        </div>
-        <div className="absolute bottom-3 right-3 text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-          Right
-        </div>
-        <div className="absolute right-3 top-3 text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+        <div className="absolute left-3 top-3 text-body-sm font-medium text-muted">Progressive</div>
+        <div className="absolute bottom-3 left-3 text-body-sm font-medium text-muted">Left</div>
+        <div className="absolute bottom-3 right-3 text-body-sm font-medium text-muted">Right</div>
+        <div className="absolute right-3 top-3 text-body-sm font-medium text-muted">
           Traditional
         </div>
 
@@ -303,9 +293,9 @@ function StartingEconomyPanel({ countryId }: { countryId: StartingCountryId }) {
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+          <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
             <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-            Starting Metrics
+            Starting metrics
           </div>
           <h4 className="mt-1 text-lg font-semibold text-foreground">
             Economy and fiscal position
@@ -318,38 +308,38 @@ function StartingEconomyPanel({ countryId }: { countryId: StartingCountryId }) {
 
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <MiniMetric
-          label="Economy Size"
+          label="Economy size"
           value={formatCompactCurrency(economy.gdp, economy.currencyCode)}
           detail={`${formatCompactNumber(economy.population)} population`}
         />
         <MiniMetric
-          label="Opening Debt"
+          label="Opening debt"
           value={formatCompactCurrency(economy.debtPrincipal, economy.currencyCode)}
           detail={`${formatPercent(debtToGdp, 0)} of GDP`}
         />
         <MiniMetric
-          label="Debt Headroom"
+          label="Debt headroom"
           value={formatCompactCurrency(headroom, economy.currencyCode)}
           detail={`Ceiling ${formatCompactCurrency(economy.debtCeiling, economy.currencyCode)}`}
         />
         <MiniMetric
-          label="Credit / Interest"
+          label="Credit / interest"
           value={`${economy.creditRating} / ${formatPercent(economy.debtInterestRate)}`}
           detail="Seeded sovereign terms"
         />
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-4">
-        <MiniMetric label="GDP Growth" value={formatPointPercent(economy.gdpGrowth)} />
+        <MiniMetric label="GDP growth" value={formatPointPercent(economy.gdpGrowth)} />
         <MiniMetric label="Inflation" value={formatPointPercent(economy.inflationRate)} />
-        <MiniMetric label="Wage Growth" value={formatPointPercent(economy.wageGrowth)} />
-        <MiniMetric label="Trade Growth" value={formatPointPercent(economy.tradeGrowth)} />
+        <MiniMetric label="Wage growth" value={formatPointPercent(economy.wageGrowth)} />
+        <MiniMetric label="Trade growth" value={formatPointPercent(economy.tradeGrowth)} />
       </div>
 
       <div className="mt-4 rounded-md border border-card-border bg-card-elevated/45 p-3">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+        <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
           <MapPinned className="h-3.5 w-3.5" aria-hidden="true" />
-          Regional Baseline
+          Regional baseline
         </div>
         <p className="mt-2 text-sm leading-relaxed text-muted">
           {regions.length} {COUNTRY_CONFIGS[countryId].regionLabelPlural.toLowerCase()} seed local
@@ -378,9 +368,9 @@ function ResourceCapacityPanel({ countryId }: { countryId: StartingCountryId }) 
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+          <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
             <Pickaxe className="h-3.5 w-3.5" aria-hidden="true" />
-            Starting Resource Capacity
+            Starting resource capacity
           </div>
           <h4 className="mt-1 text-lg font-semibold text-foreground">Extraction ceiling</h4>
         </div>
@@ -391,12 +381,12 @@ function ResourceCapacityPanel({ countryId }: { countryId: StartingCountryId }) 
 
       <div className="grid gap-2 sm:grid-cols-2">
         <MiniMetric
-          label="Resource Regions"
+          label="Resource regions"
           value={String(summary.activeRegionCount)}
           detail="Regions with at least one seeded extractable resource."
         />
         <MiniMetric
-          label="Market Context"
+          label="Market context"
           value={`${CORPORATION_TYPES.length} sectors`}
           detail="Resource output constrains extraction-sector supply."
         />
@@ -506,23 +496,23 @@ function CountrySection({ country }: { country: CountryStartingStateCopy }) {
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+              <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
                 <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
                 System
               </div>
               <p className="mt-1 text-sm leading-relaxed text-foreground">{country.system}</p>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+              <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
                 <Vote className="h-3.5 w-3.5" aria-hidden="true" />
                 Legislature
               </div>
               <p className="mt-1 text-sm leading-relaxed text-foreground">{country.legislature}</p>
             </div>
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+              <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
                 <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
-                Party Entry
+                Party entry
               </div>
               <p className="mt-1 text-sm leading-relaxed text-foreground">
                 {formatPartyCreationRule(country.id)} to found a new party.
@@ -565,7 +555,7 @@ function CountrySection({ country }: { country: CountryStartingStateCopy }) {
 
         <aside className="space-y-3">
           <div className="rounded-lg border border-card-border bg-card/45 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+            <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
               <Users className="h-3.5 w-3.5" aria-hidden="true" />
               Starting NPPs
             </div>
@@ -586,9 +576,9 @@ function CountrySection({ country }: { country: CountryStartingStateCopy }) {
           </div>
 
           <div className="rounded-lg border border-card-border bg-card/45 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+            <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
               <LayoutList className="h-3.5 w-3.5" aria-hidden="true" />
-              Opening Notes
+              Opening notes
             </div>
             <ul className="mt-3 space-y-2">
               {country.highlights.map((highlight) => (
@@ -622,9 +612,9 @@ function ScenarioToggle({
   return (
     <div className="rounded-lg border border-card-border bg-card/45 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+        <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
           <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-          Start Date
+          Start date
         </div>
         <div
           role="tablist"
@@ -790,9 +780,9 @@ function StartingStateDashboard1991() {
         aria-label="1991 country shortcuts"
         className="scroll-mt-24 rounded-lg border border-card-border bg-card/35 p-3"
       >
-        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+        <div className="mb-3 flex items-center gap-2 text-body-sm font-medium text-muted">
           <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
-          Jump Index
+          Jump index
         </div>
         <div className="flex flex-wrap gap-2">
           {STARTING_STATE_1991_COUNTRIES.map((country) => {
@@ -874,25 +864,25 @@ function StartingStateDashboard2019() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon={Building2}
-          label="Seeded Countries"
+          label="Seeded countries"
           value={String(countries.length)}
           detail="Each country has its own party field, legislature, executive rule, and NPP model."
         />
         <MetricCard
           icon={Users}
-          label="Default Parties"
+          label="Default parties"
           value={String(totalParties)}
           detail="Protected parties exist at world creation and cannot be deleted by players."
         />
         <MetricCard
           icon={Banknote}
-          label="Opening Treasury"
+          label="Opening treasury"
           value={formatMoney(totalTreasury)}
           detail="Total money held by default parties before dues, taxes, events, or player funding."
         />
         <MetricCard
           icon={BarChart2}
-          label="Sector Markets"
+          label="Sector markets"
           value={String(CORPORATION_TYPES.length)}
           detail="Every region starts with an unowned market pool for each corporation sector."
         />
@@ -902,27 +892,21 @@ function StartingStateDashboard2019() {
 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="rounded-lg border border-card-border bg-card/45 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-            Government at Turn 0
-          </div>
+          <div className="text-body-sm font-medium text-muted">Government at turn 0</div>
           <p className="mt-2 text-sm leading-relaxed text-foreground">
             Parliamentary countries start pending government formation. Presidential countries open
             on fixed executive cycles.
           </p>
         </div>
         <div className="rounded-lg border border-card-border bg-card/45 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-            NPP Seeding
-          </div>
+          <div className="text-body-sm font-medium text-muted">NPP seeding</div>
           <p className="mt-2 text-sm leading-relaxed text-foreground">
             Most NPPs are generated dynamically. Germany is the exception, opening with a large
             named NPP pool.
           </p>
         </div>
         <div className="rounded-lg border border-card-border bg-card/45 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-            Political Systems
-          </div>
+          <div className="text-body-sm font-medium text-muted">Political systems</div>
           <p className="mt-2 text-sm leading-relaxed text-foreground">
             {parliamentaryCount} parliamentary systems, {presidentialCount} presidential systems,
             and {onePartyDominantCount} one-party-dominant opening are documented here.
@@ -936,9 +920,9 @@ function StartingStateDashboard2019() {
         className="scroll-mt-24 rounded-lg border border-card-border bg-card/35 p-3"
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+          <div className="flex items-center gap-2 text-body-sm font-medium text-muted">
             <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
-            Jump Index
+            Jump index
           </div>
           <a
             href="#starting-metrics"

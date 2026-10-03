@@ -137,9 +137,7 @@ function PartyGroup({ title, children }: { title: string; children: React.ReactN
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="font-mono text-body-xs uppercase tracking-[0.16em] text-muted">
-          {title}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{title}</span>
         <span className="h-px flex-1 bg-card-border" />
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{children}</div>

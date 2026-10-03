@@ -579,7 +579,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
 
         {/* Header */}
         <div
-          className="relative z-30 flex items-center justify-between px-5 pt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/90"
+          className="relative z-30 flex items-center justify-between px-5 pt-4 text-body-sm font-medium text-white/90"
           style={{ textShadow: "0 1px 3px rgba(0,0,0,.6)" }}
         >
           <span>A House Divided</span>
@@ -609,7 +609,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
             <div className="relative">
               <p
                 style={enter(40)}
-                className="mb-6 flex items-center justify-center gap-3 text-xs font-bold uppercase tracking-[0.28em]"
+                className="mb-6 flex items-center justify-center gap-3 text-body-sm font-medium"
               >
                 <span className="h-px w-6" style={{ background: GOLD }} />
                 <span style={{ color: GOLD }}>{slide.eyebrow}</span>
@@ -707,10 +707,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
                 style={{ backgroundImage: GRAIN }}
               />
 
-              <p
-                className="text-center text-[11px] font-bold uppercase tracking-[0.32em]"
-                style={{ color: GOLD }}
-              >
+              <p className="text-center text-body-sm font-medium" style={{ color: GOLD }}>
                 Official record · {season}
               </p>
               <div className="mx-auto mt-3 mb-1 h-px w-16" style={{ background: `${GOLD}88` }} />
@@ -732,9 +729,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
                     className="border-t pt-2"
                     style={{ borderColor: "rgba(255,255,255,.14)" }}
                   >
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
-                      {t.label}
-                    </p>
+                    <p className="text-body-sm font-medium text-white/55">{t.label}</p>
                     <p
                       className="mt-0.5 truncate text-lg font-black tabular-nums tracking-tight"
                       style={{ color: CREAM }}
@@ -747,7 +742,7 @@ export function SeasonRecapStory({ recap, onClose }: SeasonRecapStoryProps) {
 
               <div className="mt-auto pt-6 text-center">
                 <p className="text-sm font-semibold text-white/90">That was your season.</p>
-                <p className="mt-0.5 text-xs uppercase tracking-[0.28em]" style={{ color: GOLD }}>
+                <p className="mt-0.5 text-body-sm font-medium" style={{ color: GOLD }}>
                   A House Divided · Wrapped
                 </p>
               </div>

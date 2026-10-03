@@ -36,9 +36,7 @@ export function CompassLegend({ position, parties, electorate, regionNoun }: Com
 
   return (
     <div className="border-t border-card-border pt-3">
-      <p className="mb-1.5 font-mono text-body-xs uppercase tracking-[0.16em] text-muted">
-        Distance from your pin
-      </p>
+      <p className="mb-1.5 text-body-sm font-medium text-muted">Distance from your pin</p>
       <ul className="space-y-1">
         <li className="flex items-center gap-2">
           <span

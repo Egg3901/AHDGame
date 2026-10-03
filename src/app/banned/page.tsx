@@ -40,7 +40,7 @@ function BannedContent() {
 
           {/* Reason box */}
           <div className="rounded-lg border border-card-border bg-card p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Reason</p>
+            <p className="text-body-sm font-medium text-muted mb-2">Reason</p>
             <p className="text-sm font-medium text-foreground">{reason}</p>
           </div>
 

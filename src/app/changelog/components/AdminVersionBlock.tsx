@@ -127,7 +127,7 @@ export function AdminVersionBlock({
                 {/* Section heading */}
                 <div className="mb-2.5 flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${color.dot}`} />
-                  <span className={`text-xs font-bold uppercase tracking-wider ${color.text}`}>
+                  <span className={`text-body-sm font-medium ${color.text}`}>
                     {section.heading}
                   </span>
                   <span className="text-xs text-zinc-600">
@@ -142,7 +142,7 @@ export function AdminVersionBlock({
                       {hasBoth && group.label && (
                         <div className="mb-1 mt-2 flex items-center gap-2 first:mt-0">
                           <span
-                            className={`text-[10px] font-bold uppercase tracking-widest ${
+                            className={`text-body-sm font-medium ${
                               group.label === "Major" ? "text-zinc-400" : "text-zinc-600"
                             }`}
                           >

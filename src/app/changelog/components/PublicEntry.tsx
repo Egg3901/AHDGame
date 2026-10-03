@@ -109,9 +109,7 @@ export function PublicEntry({ entry, isLatest, startExpanded }: PublicEntryProps
                     {/* Category heading */}
                     <div className="mb-2 flex items-center gap-2">
                       {meta && <span className="text-sm">{meta.icon}</span>}
-                      <span
-                        className={`text-xs font-bold uppercase tracking-wider ${meta?.color ?? "text-muted"}`}
-                      >
+                      <span className={`text-body-sm font-medium ${meta?.color ?? "text-muted"}`}>
                         {cat.name}
                       </span>
                       <span className="h-px flex-1 bg-card-border" />

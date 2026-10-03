@@ -15,9 +15,7 @@ export function ElectionFooter({ election }: ElectionFooterProps) {
       <h3 className="mb-4 text-base font-semibold text-foreground">See Also</h3>
       <div className="space-y-3">
         <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted/70">
-            Navigation
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Navigation</p>
           <div className="flex flex-wrap gap-2">
             <Link
               href="/wiki/elections"
@@ -42,9 +40,7 @@ export function ElectionFooter({ election }: ElectionFooterProps) {
           </div>
         </div>
         <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted/70">
-            Related Topics
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Related topics</p>
           <div className="flex flex-wrap gap-2">
             <Link
               href="/wiki/election-mechanics"

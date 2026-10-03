@@ -235,7 +235,7 @@ export function CompassPicker({
       {/* Axis captions, sitting in the reserved padding. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 font-mono text-body-xs uppercase tracking-[0.16em] text-muted"
+        className="pointer-events-none absolute inset-0 text-body-sm font-medium text-muted"
       >
         <span className="absolute left-1 top-1/2 -translate-y-1/2 [writing-mode:vertical-rl] rotate-180">
           Left

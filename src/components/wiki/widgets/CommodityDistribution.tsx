@@ -111,9 +111,7 @@ export function CommodityDistribution({ data: rawType }: { data?: string }) {
     <div className="my-4 space-y-4 rounded-xl border border-card-border bg-card/40 p-6">
       <header className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Live distribution
-          </p>
+          <p className="text-body-sm font-medium text-muted">Live distribution</p>
           <h3 className="mt-0.5 font-semibold text-foreground">{data.label}</h3>
         </div>
         <div className="text-right">
@@ -192,9 +190,7 @@ export function CommodityDistribution({ data: rawType }: { data?: string }) {
 
       {data.isExtractable && data.topProducerStates.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-            Top producing regions
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Top producing regions</p>
           <ul className="space-y-1 text-sm">
             {data.topProducerStates.map((s) => (
               <li

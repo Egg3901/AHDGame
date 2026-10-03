@@ -461,8 +461,8 @@
     },
     "referrals": {
       "intro": "Share your invite link or code with friends. When they register and create a character, they start with a <strong>10% stat bonus</strong>, <strong>+10 actions</strong>, and <strong>$500,000</strong> personal capital. You'll receive <strong>+10 actions</strong> and <strong>$500,000</strong> personal capital for each successful referral.",
-      "inviteLink": "Your Invite Link",
-      "referralCode": "Your Referral Code",
+      "inviteLink": "Your invite link",
+      "referralCode": "Your referral code",
       "copyLink": "Copy link",
       "copy": "Copy",
       "copied": "Copied",

@@ -150,21 +150,21 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
 
         <HeroStatsStrip>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Latest</span>
+            <span className="text-body-sm font-medium text-muted">Latest</span>
             <span className="text-base font-bold tabular-nums text-primary">v{latestVersion}</span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Releases</span>
+            <span className="text-body-sm font-medium text-muted">Releases</span>
             <span className="text-base font-bold tabular-nums text-foreground">
               {activePosts.length}
             </span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Feed since</span>
+            <span className="text-body-sm font-medium text-muted">Feed since</span>
             <span className="text-base font-bold tabular-nums text-foreground">{sinceLabel}</span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Archive</span>
+            <span className="text-body-sm font-medium text-muted">Archive</span>
             <Link
               href="/changelog/legacy"
               className="text-base font-bold text-foreground hover:text-primary"

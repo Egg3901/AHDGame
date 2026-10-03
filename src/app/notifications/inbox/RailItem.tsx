@@ -58,11 +58,7 @@ export function RailItem({ item, selected, compact, onSelect }: RailItemProps) {
         <div className="min-w-0 flex-1">
           {/* Type + time row */}
           <div className="flex items-center gap-2">
-            <span
-              className={`truncate text-[10px] font-bold uppercase tracking-[0.14em] ${category.text}`}
-            >
-              {eyebrow}
-            </span>
+            <span className={`truncate text-body-sm font-medium ${category.text}`}>{eyebrow}</span>
             {item.kind === "mail" && item.counterpartName && (
               <span className="truncate text-[10px] text-muted">from {item.counterpartName}</span>
             )}

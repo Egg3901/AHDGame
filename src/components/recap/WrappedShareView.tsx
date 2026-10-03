@@ -72,7 +72,7 @@ export function WrappedShareView({ recap }: { recap: CharacterRecap }) {
             color: CREAM,
           }}
         >
-          <p className="text-[11px] font-bold uppercase tracking-[0.32em]" style={{ color: GOLD }}>
+          <p className="text-body-sm font-medium" style={{ color: GOLD }}>
             Official record · {season}
           </p>
           <div className="mx-auto my-3 h-px w-16" style={{ background: `${GOLD}88` }} />
@@ -93,9 +93,7 @@ export function WrappedShareView({ recap }: { recap: CharacterRecap }) {
                 className="border-t pt-2"
                 style={{ borderColor: "rgba(255,255,255,.14)" }}
               >
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
-                  {label}
-                </p>
+                <p className="text-body-sm font-medium text-white/55">{label}</p>
                 <p className="mt-0.5 truncate text-lg font-black" style={{ color: CREAM }}>
                   {value}
                 </p>
@@ -103,7 +101,7 @@ export function WrappedShareView({ recap }: { recap: CharacterRecap }) {
             ))}
           </div>
 
-          <p className="mt-7 text-xs uppercase tracking-[0.28em]" style={{ color: GOLD }}>
+          <p className="mt-7 text-body-sm font-medium" style={{ color: GOLD }}>
             A House Divided · Wrapped
           </p>
         </div>

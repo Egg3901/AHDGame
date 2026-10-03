@@ -53,9 +53,7 @@ export default function GlobalError({
               {/* Error details */}
               {error.message && (
                 <div className="rounded-lg border border-card-border bg-card p-4 text-left">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
-                    Error Details
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-2">Error details</p>
                   <p className="text-xs font-mono text-foreground break-all">{error.message}</p>
                   {error.digest && (
                     <div className="mt-2">

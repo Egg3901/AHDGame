@@ -121,9 +121,7 @@ export function CountryHistory({ data: rawCountry }: { data?: string }) {
   return (
     <div className="my-4 space-y-6 rounded-xl border border-card-border bg-card/40 p-6">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-          Live country history
-        </p>
+        <p className="text-body-sm font-medium text-muted">Live country history</p>
         <h3 className="mt-0.5 font-semibold text-foreground">
           {data.countryName} — {data.headOfGovernmentTitle} timeline
         </h3>

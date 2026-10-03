@@ -190,15 +190,11 @@ function ImfHero({ data }: { data: OverviewResponse | null }) {
 
       <HeroStatsStrip variant="overlay">
         <div className="flex min-w-[140px] flex-col justify-between p-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-            Liquid capital
-          </span>
+          <span className="text-body-sm font-medium text-muted">Liquid capital</span>
           <span className="text-lg font-bold tabular-nums text-foreground">{liquid ?? "—"}</span>
         </div>
         <div className="flex min-w-[180px] flex-1 flex-col justify-between p-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-            Board members
-          </span>
+          <span className="text-body-sm font-medium text-muted">Board members</span>
           {board.length === 0 ? (
             <span className="text-sm italic text-muted">None seeded</span>
           ) : (
@@ -216,25 +212,19 @@ function ImfHero({ data }: { data: OverviewResponse | null }) {
           )}
         </div>
         <div className="flex min-w-[120px] flex-col justify-between p-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-            Active bailouts
-          </span>
+          <span className="text-body-sm font-medium text-muted">Active bailouts</span>
           <span className="text-lg font-bold tabular-nums text-foreground">
             {data?.activeSovereignBailouts.length ?? 0}
           </span>
         </div>
         <div className="flex min-w-[120px] flex-col justify-between p-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-            Pending board votes
-          </span>
+          <span className="text-body-sm font-medium text-muted">Pending board votes</span>
           <span className="text-lg font-bold tabular-nums text-foreground">
             {data?.pendingBoardOverrides.length ?? 0}
           </span>
         </div>
         <div className="flex min-w-[160px] flex-col justify-between p-4">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-            Lifetime received
-          </span>
+          <span className="text-body-sm font-medium text-muted">Lifetime received</span>
           <span className="text-lg font-bold tabular-nums text-foreground">
             {data?.totalReceivedAnchor ? formatCapital(data.totalReceivedAnchor, "USD") : "—"}
           </span>

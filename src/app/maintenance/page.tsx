@@ -115,9 +115,7 @@ export default async function MaintenancePage() {
 
         {recap && (
           <div className="mb-6 flex flex-col items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 p-6">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              Your Season, Wrapped
-            </p>
+            <p className="text-body-sm font-medium text-primary">Your season, wrapped</p>
             <MaintenanceRecapLauncher recap={recap} />
             {/* Only the newest recap is launched above; character history is the
                 way to re-watch older characters' Wrapped, so link it directly
@@ -140,9 +138,7 @@ export default async function MaintenancePage() {
           <div className="mb-6 rounded-xl border border-card-border bg-card p-5 text-left shadow-card">
             <div className="mb-2 flex items-center gap-2">
               <div className="h-3 w-0.5 rounded-full bg-warning" />
-              <span className="text-xs font-semibold uppercase tracking-widest text-muted">
-                Reason
-              </span>
+              <span className="text-body-sm font-medium text-muted">Reason</span>
             </div>
             <p className="text-sm leading-relaxed text-foreground">{reason}</p>
           </div>

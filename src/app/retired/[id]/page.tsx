@@ -13,6 +13,13 @@ import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
 import type { CharacterRecap } from "@/lib/recap/types";
 import { LocalTime } from "@/components/time/LocalTime";
 
+const BACKGROUND_LABELS = {
+  race: "Race",
+  gender: "Gender",
+  education: "Education",
+  wealth: "Wealth",
+} as const;
+
 interface RetiredCharacterResponse {
   gameDateAnchor: GameDateAnchor | null;
   retiredCharacter: {
@@ -367,7 +374,9 @@ export default function RetiredCharacterProfilePage() {
                         key={key}
                         className="rounded-lg border border-card-border/50 bg-card/40 px-3 py-2"
                       >
-                        <p className="text-[10px] uppercase tracking-wider text-muted">{key}</p>
+                        <p className="text-body-sm font-medium text-muted">
+                          {BACKGROUND_LABELS[key]}
+                        </p>
                         <p className="text-sm font-medium text-foreground mt-0.5">
                           {getDemographicLabel(key, value)}
                         </p>

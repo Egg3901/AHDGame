@@ -1024,7 +1024,7 @@ export default function CreateCharacterPage() {
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
               <h1 className="text-heading font-semibold tracking-tight">New candidate</h1>
               {creationInfo ? (
-                <p className="font-mono text-body-xs uppercase tracking-[0.14em] text-muted">
+                <p className="text-body-sm font-medium text-muted">
                   {creationInfo.gameDate}
                   <span className="mx-2 text-card-border">|</span>
                   world began {creationInfo.startDate}
@@ -1049,7 +1049,7 @@ export default function CreateCharacterPage() {
           {creationInfo ? (
             creationInfo.flavorText && (
               <div className="mt-1.5 max-w-3xl">
-                <p className="font-mono text-body-xs uppercase tracking-[0.14em] text-muted/70">
+                <p className="text-body-sm font-medium text-muted">
                   How it started &mdash; {creationInfo.flavorDate}
                 </p>
                 <p className="mt-1 text-body-sm leading-relaxed text-muted">
@@ -1140,12 +1140,8 @@ function AxisStepper({
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-body-xs font-semibold uppercase tracking-[0.14em] text-muted">
-          {label}
-        </span>
-        <span className="font-mono text-body-sm tabular-nums">
-          {value > 0 ? `+${value}` : value}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{label}</span>
+        <span className="font-mono text-body tabular-nums">{value > 0 ? `+${value}` : value}</span>
       </div>
       {/* The `policy-slider` rule styles the thumb only, so the track is drawn
           behind the transparent input. */}
