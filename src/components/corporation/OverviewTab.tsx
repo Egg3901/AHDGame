@@ -183,40 +183,15 @@ export default function OverviewTab({
       {/* §6.2 (P7b): how the country's economic model treats this corp's sector. */}
       <CorpEconomicModelBadge countryId={corporation.countryId} sectorType={corporation.type} />
 
-      {/* Thesis banner — mirror of the SOE charter banner, flipped to shareholders. */}
+      {/* Who controls the company: the CEO seat goes to the shareholders' vote leader. */}
       {!isNationalCorp && (
-        <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-4 sm:p-5">
-          <div className="flex items-start gap-3">
-            <svg
-              className="mt-0.5 h-5 w-5 shrink-0 text-primary"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-              />
-            </svg>
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-primary/80">
-                Shareholder instrument
-              </div>
-              <p className="mt-1 max-w-3xl text-body-sm leading-relaxed text-foreground/90">
-                {`${corporation.name} is a `}
-                <span className="font-semibold text-primary">
-                  {`${corporation.isPrivate ? "privately held" : "publicly traded"} instrument of its shareholders`}
-                </span>
-                {
-                  ". It is judged on what it gives them back: share price, dividends, and the total "
-                }
-                value of the company. The CEO runs it to grow that value
-                {corporation.isPrivate ? "." : "; the market prices it in real time."}
-              </p>
-            </div>
+        <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-muted">
+            Ownership
           </div>
+          <p className="mt-1 max-w-3xl text-body-sm leading-relaxed text-foreground/90">
+            {`${corporation.name} is ${corporation.isPrivate ? "privately held" : "publicly traded"}, and its shareholders choose the CEO by a vote weighted by the shares they hold.`}
+          </p>
         </div>
       )}
 
@@ -584,7 +559,7 @@ export default function OverviewTab({
               )
             }
           />
-          <StatRow label="Structure" value={corporation.legalStructureLabel ?? "—"} />
+          <StatRow label="Structure" value={corporation.legalStructureLabel ?? "Not set"} />
           {corporation.parentCorporation && (
             <StatRow
               label="Parent corp"
