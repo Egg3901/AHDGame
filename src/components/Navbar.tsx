@@ -380,6 +380,7 @@ export const Navbar = React.memo(function Navbar({
         >
           <Image
             src={CDN_LOGO_URL}
+            priority
             unoptimized
             alt="A House Divided Logo"
             width={36}

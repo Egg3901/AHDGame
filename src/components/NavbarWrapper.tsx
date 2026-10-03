@@ -571,6 +571,7 @@ export function NavbarWrapper({
             <div className="flex items-center gap-2">
               <Image
                 src={CDN_LOGO_URL}
+                priority
                 unoptimized
                 alt="A House Divided Logo"
                 width={40}

@@ -11,7 +11,7 @@ import {
 } from "@/lib/utils/formatters";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { useRefetchNav } from "@/contexts/AuthDataContext";
+import { useRefetchNav, useSignedIn } from "@/contexts/AuthDataContext";
 import { CHARACTER_STATS_UPDATED, CHARACTER_STATS_REFETCH } from "@/lib/characterStatsSync";
 import {
   useCharacterStats,
@@ -89,6 +89,8 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
   const gameState = useGameTurnStatus(!isExcludedPath);
   const isProcessing = gameState?.isProcessing ?? false;
   const { layout, layoutSynced } = useStatusBarLayout();
+  // Stats are per character; a signed-out visitor would only collect 401s.
+  const signedIn = useSignedIn();
   const previousLayoutRef = useRef<StatusBarLayout | null>(null);
 
   // Track personal cash changes triggered by actions (e.g. fundraise)
@@ -181,6 +183,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
   // endpoint's private ETag lets an unchanged poll return a body-less 304,
   // cutting egress on this large, every-session payload.
   const refetchStats = useCallback(async () => {
+    if (!signedIn) return;
     try {
       const res = await fetch(buildClientStatusUrl(layout), {
         signal: AbortSignal.timeout(10_000),
@@ -198,7 +201,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
     } catch {
       /* network/timeout — chips stay as-is until the next trigger */
     }
-  }, [layout, patchStats]);
+  }, [layout, patchStats, signedIn]);
 
   // Trade flows (bonds/shares/forex/savings/transfers) that mutate wallet state
   // but don't echo the new character dispatch CHARACTER_STATS_REFETCH.
