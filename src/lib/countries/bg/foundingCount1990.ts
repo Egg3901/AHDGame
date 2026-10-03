@@ -43,6 +43,8 @@ export interface BgFoundingAssemblyRecord {
   activeRunoffElectionIds?: string[] | null;
   second?: BgFoundingBallots;
   seatedAtTurn?: number;
+  /** Original Grand term, locked once the founding calendar unpins. */
+  grandTermEndTurn?: number;
   seatedAt?: Date;
   officialIds?: import("mongodb").ObjectId[];
   settled?: ReturnType<typeof import("./rules/foundingMandates1990").settleBgFoundingMandates>;

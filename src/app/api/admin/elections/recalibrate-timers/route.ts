@@ -43,6 +43,7 @@
  * perpetual-election system can spawn the next cycle.
  */
 
+import { frozenBgAssemblyTurns } from "@/lib/countries/bg/rules/assemblyClock1991";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -100,6 +101,10 @@ export function canonicalTurns(
   priorEndTurn?: number | null,
   ctx: CycleAnchorContext = DEFAULT_CYCLE_ANCHOR_CONTEXT
 ): { endTurn: number; primaryEndTurn: number; startTurn: number } | null {
+  if (ctx.preset === "1991-default") {
+    const frozen = frozenBgAssemblyTurns(election);
+    if (frozen !== undefined) return frozen;
+  }
   const { electionType, senateClass, cycle, state } = election;
   if (cycle == null || !electionType) return null;
   const chamberClass = (election as { chamberClass?: number }).chamberClass;
@@ -175,6 +180,7 @@ export function shouldReactivatePrematureElection(
   ctx: CycleAnchorContext = DEFAULT_CYCLE_ANCHOR_CONTEXT
 ): boolean {
   if (election.cycle == null || !election.electionType) return false;
+  if (ctx.preset === "1991-default" && frozenBgAssemblyTurns(election) !== undefined) return false;
   const canonical = canonicalTurns(election, undefined, ctx);
   if (!canonical) return false;
   if (canonical.endTurn <= currentTurn) return false;
@@ -340,6 +346,8 @@ export async function POST() {
 
       function expectedCycleForTurn(election: Election): number | null {
         if (election.cycle == null || !election.electionType) return null;
+        if (ctx.preset === "1991-default" && frozenBgAssemblyTurns(election) !== undefined)
+          return election.cycle;
         // For lower-chamber types where a snap has resolved, the cycle math
         // is anchored to the snap's endTurn, not the bootstrap — don't use
         // step 0b renumbering for those (canonicalTurns handles it).
@@ -589,6 +597,31 @@ export async function POST() {
       const canonical = canonicalTurns(election, priorEndTurnFor(election), ctx);
       if (!canonical) {
         skipped++;
+        continue;
+      }
+
+      if (ctx.preset === "1991-default" && frozenBgAssemblyTurns(election) !== undefined) {
+        // Native owners retain status, cycle and all turn bounds. Only repair
+        // the derived wall-clock dates, including an upcoming filing window.
+        ops.push({
+          updateOne: {
+            filter: { _id: election._id },
+            update: {
+              $set: {
+                startTime: new Date(
+                  ref.getTime() + (canonical.startTurn - currentTurn) * MS_PER_TURN
+                ),
+                primaryEndTime: new Date(
+                  ref.getTime() + (canonical.primaryEndTurn - currentTurn) * MS_PER_TURN
+                ),
+                endTime: new Date(ref.getTime() + (canonical.endTurn - currentTurn) * MS_PER_TURN),
+                updatedAt: now,
+              },
+            },
+          },
+        });
+        if (canonical.endTurn <= currentTurn) pastDue++;
+        else recalibrated++;
         continue;
       }
 

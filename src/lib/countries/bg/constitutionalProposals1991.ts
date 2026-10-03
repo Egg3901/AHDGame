@@ -14,7 +14,7 @@ import type {
 } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
-import { calendarTurn } from "@/lib/utils/gameDate";
+import { calendarTurn, turnToGameMonth } from "@/lib/utils/gameDate";
 import {
   passesBgConstitution1991,
   bg1991DecisionAvailability,
@@ -24,6 +24,8 @@ import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
 import type { CountryState } from "@/lib/db/types/countryState";
 import { loadBg1991Initiative, signBg1991Initiative } from "./constitutionalInitiative1991";
 import { BG_FOUNDING_COUNTS_COLLECTION, type BgFoundingAssemblyRecord } from "./foundingCount1990";
+import { planBg1991AssemblyClock } from "./rules/assemblyClock1991";
+import { turnToWallClock } from "@/lib/elections/canonicalCycle";
 import { canRebindBg1991PrimaryCohort } from "./rules/primaryHandover1991";
 
 export const BG_1991_PROPOSALS_COLLECTION = "bg1991ConstitutionalProposals";
@@ -339,7 +341,7 @@ export async function authorizeBg1991ConstitutionalProposal(
     throw new Bg1991ConstitutionalConflict(
       "Enacted amendment lacks a frozen full-membership constituent result"
     );
-  await rebindBg1991PrimaryCohort(db, turn, now, session);
+  await rebindBg1991PrimaryCohort(db, game, turn, now, session);
   await db
     .collection<CountryGameState>("countryGameStates")
     .updateOne(
@@ -417,7 +419,19 @@ export async function processBg1991ConstitutionalMandate(
 }
 
 /** Only a complete untouched primary cohort may accept the new ordinary capacity. */
-async function rebindBg1991PrimaryCohort(db: Db, turn: number, now: Date, session: ClientSession) {
+async function rebindBg1991PrimaryCohort(
+  db: Db,
+  game: Calendar,
+  turn: number,
+  now: Date,
+  session: ClientSession
+) {
+  const clock = planBg1991AssemblyClock({
+    currentTurn: turn,
+    authorized: true,
+    previousOrdinary: false,
+  });
+  if (clock.kind !== "ordinary-first") throw new Error("Invalid Bulgarian transition clock");
   const polls = await db
     .collection<Election>("elections")
     .find(
@@ -503,6 +517,23 @@ async function rebindBg1991PrimaryCohort(db: Db, turn: number, now: Date, sessio
         update: {
           $set: {
             totalSeats: BG_ORDINARY_ASSEMBLY_SEATS[row.state],
+            status: "active",
+            startTurn: clock.startTurn,
+            primaryEndTurn: clock.primaryEndTurn,
+            endTurn: clock.endTurn,
+            shiftedScheduleEndTurn: clock.endTurn,
+            startTime: now,
+            primaryEndTime: turnToWallClock(clock.primaryEndTurn, now, turn),
+            endTime: turnToWallClock(clock.endTurn, now, turn),
+            electionYear: turnToGameMonth(
+              calendarTurn(clock.endTurn, {
+                preIterationActive: game.preIteration?.active,
+                preIterationTurns: game.preIterationTurns,
+              }),
+              1991
+            ).year,
+            durationHours: clock.endTurn - clock.startTurn,
+            primaryDurationHours: clock.primaryEndTurn - clock.startTurn,
             updatedAt: now,
           },
           $unset: { bulgarianFoundingRound: "" },

@@ -449,6 +449,7 @@ export function buildCanonicalSpawn(params: {
   freshStandup?: boolean;
   /** Short start-year campaigns may have less than the usual 24 primary turns. */
   minPrimaryHours?: number;
+  customCycle1EndTurn?: number;
 }): Omit<Election, "_id"> | null {
   const {
     electionType,
@@ -464,6 +465,7 @@ export function buildCanonicalSpawn(params: {
     openPrimaryImmediately,
     freshStandup,
     minPrimaryHours,
+    customCycle1EndTurn,
   } = params;
 
   const dur = DEFAULT_DURATIONS[electionType];
@@ -483,6 +485,7 @@ export function buildCanonicalSpawn(params: {
     currentTurn,
     ctx,
     minPrimaryHours,
+    customCycle1EndTurn,
   });
   if (!spawn) return null;
 

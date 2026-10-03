@@ -262,6 +262,30 @@ describe.skipIf(!uri)(
       }
     });
 
+    it("seats an authorized early election before the historical November date", async () => {
+      const { db, player } = await fixture();
+      try {
+        await db
+          .collection("countryGameStates")
+          .updateOne({}, { $set: { bgConstitution1991SinceTurn: 25 } });
+        expect(await resolveGeneralElections(now)).toBe(5);
+        const officials = await db
+          .collection("electedOfficials")
+          .find({ officeType: "assemblyDeputy" })
+          .toArray();
+        expect(officials.reduce((sum, row) => sum + row.seatsHeld, 0)).toBe(240);
+        expect(officials.find((row) => row.characterId?.equals(player))?.seatsHeld).toBe(1);
+        expect(
+          await db.collection("countryGameStates").findOne({ _id: "BG" } as never)
+        ).toMatchObject({ bgOrdinaryAssemblySinceTurn: 40 });
+        const saved = await snapshot(db);
+        expect(await resolveGeneralElections(now)).toBe(0);
+        expect(await snapshot(db)).toEqual(saved);
+      } finally {
+        await db.dropDatabase();
+      }
+    });
+
     it("reconciles a partly resolved legacy cycle together instead of stranding its remaining regions", async () => {
       const { db } = await fixture();
       try {

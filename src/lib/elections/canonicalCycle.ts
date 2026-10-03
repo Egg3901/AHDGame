@@ -304,7 +304,8 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
     // Ordinary terms last four years. The historical December 1994 election
     // was early; it must follow a political dissolution, not a forced timer.
     // https://data.ipu.org/election-summary/HTML/2045_94.htm
-    const firstTurn = (1991 - ctx.startingYear) * 48 + 38 + (ctx.preIterationTurns ?? 0);
+    const firstTurn =
+      customCycle1EndTurn ?? (1991 - ctx.startingYear) * 48 + 38 + (ctx.preIterationTurns ?? 0);
     const endTurn = firstTurn + (cycle - 1) * 192;
     return {
       endTurn,
