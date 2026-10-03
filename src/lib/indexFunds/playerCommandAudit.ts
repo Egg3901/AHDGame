@@ -6,6 +6,7 @@ import { buildTxDocs, loadTxThresholds, type TxInput } from "@/lib/financialTxLo
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { ledgerTurnFromClock } from "@/lib/ledger/ledgerTurn";
 import { prepareAuditRecord } from "@/lib/audit/recordAudit";
 
 /** Original native amounts are frozen with completion, never recalculated from current FX. */
@@ -101,7 +102,9 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
           rows.push({
             collection: "ledgerEntries",
             document: {
-              ...finalizeLedgerEntry(input),
+              // The command stamped the clock when its cash moved; the ledger
+              // entry belongs to the turn that clock was accumulating (#3022).
+              ...finalizeLedgerEntry({ ...input, turn: ledgerTurnFromClock(audit.turn) }),
               _id: derivedId(doc._id, `ledger:${leg}`),
             },
           });

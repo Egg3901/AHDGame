@@ -163,6 +163,7 @@ describe("fund float settlement", () => {
         turnLength: 60,
         shadow: true,
         auditEnabled: true,
+        ledgerTurn: null,
       },
     });
     expect(prepared).toBeDefined();

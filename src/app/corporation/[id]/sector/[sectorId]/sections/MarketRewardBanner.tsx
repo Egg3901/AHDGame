@@ -49,8 +49,8 @@ export default function MarketRewardBanner({ hasPricing, hasCapital }: MarketRew
     hasPricing && hasCapital
       ? "You now set your own posted prices and manage each sector's productive capacity."
       : hasPricing
-        ? "You now set your own posted price on each sector — demand fills the cheapest sellers first."
-        : "Each sector now owns productive capacity that depreciates — your growth budget is investment.";
+        ? "You now set your own posted price on each sector. Demand fills the cheapest sellers first."
+        : "Each sector now owns productive capacity that depreciates, so your growth budget is investment.";
 
   return (
     <div className="relative rounded-xl border border-primary/30 bg-primary/5 p-4 pr-10">

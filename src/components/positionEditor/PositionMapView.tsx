@@ -55,7 +55,7 @@ export function PositionMapView() {
   useAbortableEffectFetch(
     async (signal) => {
       const response = await fetch(
-        `/api/admin/position-editor/preset?era=${era}&country=${country}`,
+        `/api/admin/position-editor/preset?era=${encodeURIComponent(era)}&country=${encodeURIComponent(country)}`,
         { signal }
       );
       const d = await response.json();
@@ -242,7 +242,9 @@ export function PositionMapView() {
                   </div>
                 </div>
                 <Link
-                  href={`/admin/position-editor/${country}/${selected.stateId}?era=${era}`}
+                  // Era and country come from picker values (DOM text), so every
+                  // part of the URL is encoded rather than trusted.
+                  href={`/admin/position-editor/${encodeURIComponent(country)}/${encodeURIComponent(selected.stateId)}?era=${encodeURIComponent(era)}`}
                   className="mt-4 block rounded-lg bg-primary px-3 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
                 >
                   Edit state demographics →

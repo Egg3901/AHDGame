@@ -284,15 +284,16 @@ for (const native of [false, true]) {
           tier: "discounted",
           consequence: { method: "executive", triggers: [], turn: 2 },
         });
-        expect(result.shareholderPayoutAnchor).toBeGreaterThan(0);
+        // Valuation: 80,000 cash + 500 held shares - 70,000 debt, discounted (0.5) at
+        // the 5x buyout premium. The held shares are paid for in the buyout (#3041).
+        expect(result.shareholderPayoutAnchor).toBeCloseTo(26_250, 6);
         expect(await db.collection("corporations").countDocuments({ _id: ids.target })).toBe(0);
-        // Pool, three holder rows, float, CEO surplus, recoup, held equity, dissolution.
-        await close(db, 9);
+        // Pool, three holder rows, float, CEO surplus, recoup, dissolution.
+        await close(db, 8);
         const contras = await contraAccounts(db);
         expect(contras.filter((a) => !a.startsWith("corporation:"))).toEqual([
           "mint:corporation_liquidation:GBP",
           "mint:corporation_liquidation:GBP",
-          "mint:nationalization_held_equity:GBP",
           "sink:corporation_liquidation:GBP",
         ]);
         // Every other contra is the seized corporation the buyout passes through.
@@ -300,8 +301,13 @@ for (const native of [false, true]) {
         expect(
           contras.filter((a) => a.startsWith("corporation:")).map((a) => a.split(":")[1])
         ).toEqual(Array(5).fill(target));
+        // The National Corporation takes the shares and no cash for them.
         const natCorp = await db.collection("corporations").findOne({ _id: natCorpId });
-        expect(natCorp?.liquidCapital).toBe(10_250);
+        expect(natCorp?.liquidCapital).toBe(10_000);
+        const holding = await db.collection("corporations").findOne({ _id: ids.holding });
+        expect(holding?.shareholders).toEqual([
+          { corporationId: natCorpId, shares: 50, avgCostPerShare: 8 },
+        ]);
       });
 
       it("names the IPO float proceeds as a mint", async () => {

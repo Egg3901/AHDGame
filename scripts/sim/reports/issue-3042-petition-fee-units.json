@@ -1,0 +1,30 @@
+{
+  "issue": 3042,
+  "runtimeSource": "6e0d78980d9987ad4033a5347ef6c60d7c0bbc98",
+  "decision": "convert the anchor contribution at the corporation's rate (owner, 2026-10-03)",
+  "fixture": {
+    "currency": "GBP",
+    "rate": 0.5,
+    "contributionAnchor": 1000,
+    "corporationPays": 500,
+    "holderReceives": 500,
+    "treasuryReceives": 500
+  },
+  "redWithBaseService": "corporation pays 1000 GBP and the holder receives 1000",
+  "limits": ["No production database was reset or repaired."],
+  "qualification": {
+    "integration": {
+      "passed": 4,
+      "native": 2
+    },
+    "focusedSuites": {
+      "files": 54,
+      "passed": 461,
+      "skipped": 58,
+      "failed": 0
+    },
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass"
+  }
+}

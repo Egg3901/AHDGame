@@ -223,7 +223,7 @@ export default function StrategyChangeConfirm({
                     {supplyChanged ? (
                       <span>
                         <span className="text-muted">
-                          {oldSupply > 0 ? oldSupply.toFixed(2) : "—"}
+                          {oldSupply > 0 ? oldSupply.toFixed(2) : "0"}
                         </span>
                         <span className="text-muted/50 mx-0.5">→</span>
                         <span
@@ -235,20 +235,20 @@ export default function StrategyChangeConfirm({
                                 : "text-blue-400/60"
                           }
                         >
-                          {newSupply > 0 ? newSupply.toFixed(2) : "—"}
+                          {newSupply > 0 ? newSupply.toFixed(2) : "0"}
                         </span>
                       </span>
                     ) : oldSupply > 0 ? (
                       <span className="text-muted/50">{oldSupply.toFixed(2)}</span>
                     ) : (
-                      <span className="text-muted/30">—</span>
+                      <span className="text-muted/30">0</span>
                     )}
                   </td>
                   <td className="py-0.5 tabular-nums text-right pr-1.5">
                     {demandChanged ? (
                       <span>
                         <span className="text-muted">
-                          {oldDemand > 0 ? oldDemand.toFixed(2) : "—"}
+                          {oldDemand > 0 ? oldDemand.toFixed(2) : "0"}
                         </span>
                         <span className="text-muted/50 mx-0.5">→</span>
                         <span
@@ -260,13 +260,13 @@ export default function StrategyChangeConfirm({
                                 : "text-amber-400/60"
                           }
                         >
-                          {newDemand > 0 ? newDemand.toFixed(2) : "—"}
+                          {newDemand > 0 ? newDemand.toFixed(2) : "0"}
                         </span>
                       </span>
                     ) : oldDemand > 0 ? (
                       <span className="text-muted/50">{oldDemand.toFixed(2)}</span>
                     ) : (
-                      <span className="text-muted/30">—</span>
+                      <span className="text-muted/30">0</span>
                     )}
                   </td>
                   <td className="py-0.5 text-right">

@@ -299,25 +299,25 @@ export function SharePurchaseLimitView({
         >
           {orderSide === "buy" && limitBuyFillsNow && (
             <>
-              ✓ Fills immediately — your limit ({formatSharePriceOrder(limitPrice, inputSymbol)}) is
+              ✓ Fills immediately: your limit ({formatSharePriceOrder(limitPrice, inputSymbol)}) is
               at or above market
             </>
           )}
           {orderSide === "buy" && !limitBuyFillsNow && (
             <>
-              Queued — fills when price drops to {formatSharePriceOrder(limitPrice, inputSymbol)} or
+              Queued: fills when price drops to {formatSharePriceOrder(limitPrice, inputSymbol)} or
               a seller fills it
             </>
           )}
           {orderSide === "sell" && limitSellFillsNow && (
             <>
-              ✓ Fills immediately — your limit ({formatSharePriceOrder(limitPrice, inputSymbol)}) is
+              ✓ Fills immediately: your limit ({formatSharePriceOrder(limitPrice, inputSymbol)}) is
               at or below market
             </>
           )}
           {orderSide === "sell" && !limitSellFillsNow && (
             <>
-              Queued — fills when price rises to {formatSharePriceOrder(limitPrice, inputSymbol)} or
+              Queued: fills when price rises to {formatSharePriceOrder(limitPrice, inputSymbol)} or
               a buyer fills it
             </>
           )}
