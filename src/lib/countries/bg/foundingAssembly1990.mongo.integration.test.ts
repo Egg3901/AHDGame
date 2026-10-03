@@ -9,6 +9,7 @@ import { openBgFoundingRunoff, certifyBgFoundingRunoff } from "./foundingRunoff1
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
 import { registerBgFoundingPlayerFiling } from "./foundingPlayerFiling1990";
 import { BG_1990_CONSTITUENCIES } from "./data/foundingDistricts1990";
+import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(), getMongoClient: vi.fn() }));
 vi.mock("@/lib/news", () => ({ generateElectionNews: vi.fn().mockResolvedValue(undefined) }));
@@ -233,6 +234,23 @@ describe.skipIf(!uri)("Bulgarian founding parallel election on isolated Mongo", 
         .updateOne({ _id: electionIds[0] }, { $set: { status: "completed" } });
       expect(await resolveGeneralElections(now)).toBe(5);
       expect(await db.collection("electedOfficials").countDocuments()).toBe(400);
+    } finally {
+      await db.dropDatabase();
+    }
+  });
+  it("ordinary campaigns skip founding transactions on steady turns", async () => {
+    const { db } = await fixture();
+    try {
+      for (const [state, totalSeats] of Object.entries(BG_ORDINARY_ASSEMBLY_SEATS))
+        await db.collection("elections").updateMany({ state }, { $set: { totalSeats } });
+      commands = 0;
+      expect(await bindBgFoundingCampaigns(db, now)).toBe(0);
+      expect(commands).toBe(2);
+      expect(
+        await db
+          .collection("elections")
+          .countDocuments({ bulgarianFoundingRound: { $exists: true } })
+      ).toBe(0);
     } finally {
       await db.dropDatabase();
     }

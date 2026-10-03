@@ -8,6 +8,7 @@ import type { Election, GameState, State, StateRegistrationPool } from "@/lib/db
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { scalePoolToRegistered } from "@/lib/electionEngine/rules/registration";
 import { BG_1990_LIST_DISTRICTS } from "./data/foundingDistricts1990";
+import { isBgOrdinaryCapacity } from "./rules/assemblyTransition";
 
 export async function materializeBgFoundingCampaignBinding(input: {
   db: Db;
@@ -164,12 +165,15 @@ export async function bindBgFoundingCampaigns(
         bulgarianFoundingRound: { $exists: false },
         ...(cycles ? { cycle: { $in: cycles } } : {}),
       },
-      { projection: { cycle: 1 } }
+      { projection: { cycle: 1, state: 1, totalSeats: 1 } }
     )
     .toArray();
   let bound = 0;
   for (const cycle of new Set(
-    unbound.map((row) => row.cycle).filter((value) => Number.isSafeInteger(value) && value >= 0)
+    unbound
+      .filter((row) => !isBgOrdinaryCapacity(row.state, row.totalSeats))
+      .map((row) => row.cycle)
+      .filter((value) => Number.isSafeInteger(value) && value >= 0)
   ))
     if (
       await runRequiredTransaction((session) =>
