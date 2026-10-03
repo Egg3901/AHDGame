@@ -30,6 +30,10 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTx: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Load the route graph at collection time. A cold import inside the first test
+// can outlast its budget and leave that request running into the next test.
+import { POST } from "./route";
+
 let db: MockDb;
 
 beforeEach(() => {
@@ -106,7 +110,6 @@ describe("POST /api/bonds/[bondId]/sell", () => {
     // 2,500 of cash buys two units and the player asks for ten.
     db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({ _id: "USD", cashLocal: 2_500 });
 
-    const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/bonds/x/sell", {
         method: "POST",
@@ -164,7 +167,6 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       modifiedCount: 0,
     });
 
-    const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/bonds/x/sell", {
         method: "POST",
@@ -236,7 +238,6 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       modifiedCount: 0,
     });
 
-    const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/bonds/x/sell", {
         method: "POST",
@@ -299,7 +300,6 @@ describe("POST /api/bonds/[bondId]/sell", () => {
       modifiedCount: 1,
     });
 
-    const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/bonds/x/sell", {
         method: "POST",
@@ -359,7 +359,6 @@ describe("POST /api/bonds/[bondId]/sell", () => {
 
     const { emitTx } = await import("@/lib/financialTxLog/emit");
 
-    const { POST } = await import("./route");
     const response = await POST(
       new Request("http://localhost/api/bonds/x/sell", {
         method: "POST",

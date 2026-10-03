@@ -42,6 +42,10 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
 
+// Load the route graph at collection time. A cold import inside the first test
+// can outlast its budget and leave that request running into the next test.
+import { POST } from "../[bondId]/buy/route";
+
 function makeCursor(docs: unknown[]) {
   return {
     toArray: vi.fn().mockResolvedValue(docs),
@@ -139,7 +143,6 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
       headers: { "content-type": "application/json" },
     });
 
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
 
     expect(res.status).toBe(400);
@@ -175,7 +178,6 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
       headers: { "content-type": "application/json" },
     });
 
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
 
     expect(res.status).toBe(200);
@@ -210,7 +212,6 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
       headers: { "content-type": "application/json" },
     });
 
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
 
     expect(res.status).toBe(200);
@@ -251,7 +252,6 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
       headers: { "content-type": "application/json" },
     });
 
-    const { POST } = await import("../[bondId]/buy/route");
     const res = await POST(req, { params: Promise.resolve({ bondId: bondId.toString() }) });
 
     expect(res.status).toBe(500);

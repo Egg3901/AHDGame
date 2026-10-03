@@ -7,6 +7,7 @@
  * action cap are the throttle, not a per-action discount).
  */
 
+import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 import { equityPoolCurrency } from "@/lib/equities/marketPool";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
@@ -235,6 +236,10 @@ export async function processNppActions(
   db: Db,
   currentTurn: number
 ): Promise<NppActionProcessingResult> {
+  return withBondPoolLedgerSnapshot(db, currentTurn, () => runNppActions(db, currentTurn));
+}
+
+async function runNppActions(db: Db, currentTurn: number): Promise<NppActionProcessingResult> {
   const step = substepMarker();
   // Only process every 4 turns
   if (currentTurn % ACTION_PROCESSING_INTERVAL !== 0) {
