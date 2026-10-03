@@ -45,8 +45,8 @@ export async function loadFloatAuditContext(
 }
 type FloatCorp = Pick<
   Corporation,
-  "_id" | "countryId" | "liquidCurrencyCode" | "shareBuybackMode" | "publicFloat" | "totalShares"
-> & { name?: string };
+  "_id" | "countryId" | "liquidCurrencyCode" | "publicFloat" | "totalShares"
+> & { name?: string; shareBuybackMode?: string };
 type CorpSnapshot = Pick<
   Corporation,
   | "_id"
