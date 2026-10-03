@@ -101,7 +101,7 @@ export async function materializeHuModernByElectionOpening(input: {
     { _id: "current" },
     {
       session,
-      projection: { preset: 1, huAssemblyReformedAtYear: 1 },
+      projection: { preset: 1, huAssemblyReformedAtYear: 1, preIteration: 1, preIterationTurns: 1 },
     }
   );
   if (game?.preset !== "1991-default" || game.huAssemblyReformedAtYear == null) return [];
@@ -392,7 +392,7 @@ export async function materializeHuModernByElectionResolution(input: {
     { _id: "current" },
     {
       session,
-      projection: { preset: 1, huAssemblyReformedAtYear: 1, preIteration: 1, preIterationTurns: 1 },
+      projection: { preset: 1, huAssemblyReformedAtYear: 1 },
     }
   );
   if (
