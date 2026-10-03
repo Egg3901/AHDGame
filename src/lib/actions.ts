@@ -341,7 +341,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
       return {
         fundsChange: -quote.fundCostAnchor,
         politicalInfluenceChange: quote.influenceGain,
-        message: `Campaigned in ${state?.name ?? "your state"} — gained ${quote.influenceGain.toFixed(2)}% political influence.`,
+        message: `Campaigned in ${state?.name ?? "your state"}: gained ${quote.influenceGain.toFixed(2)}% political influence.`,
       };
     },
   },
@@ -501,7 +501,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
         cashOnHandChange: -cash,
         fundsChange: converted,
         infamyChange: infamy,
-        message: `Donated ${formatLocalFunds(cash, homeCode)} personal funds — ${formatLocalFunds(converted, homeCode)} added to campaign coffers. +${infamy} Infamy.`,
+        message: `Donated ${formatLocalFunds(cash, homeCode)} personal funds. ${formatLocalFunds(converted, homeCode)} added to campaign coffers. +${infamy} Infamy.`,
       };
     },
   },

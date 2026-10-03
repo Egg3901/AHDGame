@@ -259,7 +259,7 @@ export async function executeCharacterAction(
         cashOnHandChange: -convertAmount,
         fundsChange: fundsChangeAnchor,
         infamyChange: infamy,
-        message: `Donated ${formatLocalFunds(convertAmount, homeCurrency)} personal funds — ${formatLocalFunds(convertedLocal, homeCurrency)} added to campaign coffers. +${infamy} Infamy.`,
+        message: `Donated ${formatLocalFunds(convertAmount, homeCurrency)} personal funds. ${formatLocalFunds(convertedLocal, homeCurrency)} added to campaign coffers. +${infamy} Infamy.`,
       };
     } else {
       effect = action.effect(current, state || undefined, {

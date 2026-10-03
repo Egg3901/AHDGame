@@ -69,10 +69,10 @@ function props(type: string): ActionCardProps {
   };
 }
 
-function renderCard(type: string) {
+function renderCard(type: string, overrides: Partial<ActionCardProps> = {}) {
   return render(
     <CurrencyProvider>
-      <ActionCard {...props(type)} />
+      <ActionCard {...props(type)} {...overrides} />
     </CurrencyProvider>
   );
 }
@@ -101,5 +101,35 @@ describe("ActionCard layout", () => {
     renderCard("fundraise");
     const gain = screen.getByText(/^\+/);
     expect(gain.className).toContain("text-success");
+  });
+
+  it("previews what one use does to the stat it moves", () => {
+    const { container } = renderCard("campaign", {
+      projection: { label: "Influence", from: "12.0%", to: "13.0%" },
+    });
+    const terms = Array.from(container.querySelectorAll("dt")).map((dt) => dt.textContent);
+    expect(terms).toEqual(["Cost", "Effect", "After"]);
+    expect(screen.getByText("13.0%").className).toContain("text-success");
+  });
+
+  it("keeps the last result on the card as a status line", () => {
+    renderCard("poll", { flash: { type: "poll", msg: "Poll commissioned.", ok: true } });
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("Poll commissioned.");
+    expect(status.className).toContain("text-success");
+  });
+
+  it("does not show another card's result", () => {
+    renderCard("poll", { flash: { type: "campaign", msg: "Campaigned.", ok: true } });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("keeps a blocked card readable and says why", () => {
+    const { container } = renderCard("campaign", {
+      character: makeCharacter({ countryId: "US", actions: 0, funds: 1_000_000 }),
+    });
+    expect(container.firstElementChild?.className).not.toContain("opacity-");
+    expect(screen.getByText("Insufficient actions.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Execute action" })).toHaveProperty("disabled", true);
   });
 });
