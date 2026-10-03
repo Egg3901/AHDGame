@@ -51,7 +51,7 @@ export interface LocPlan {
   prepared?: boolean;
   records?: Array<{ collection: string; document: Document }>;
 }
-interface LocRecord extends Document {
+export interface LocRecord extends Document {
   _id: string;
   kind: "line_of_credit";
   turn: number;
@@ -118,10 +118,22 @@ async function recordsFor(db: Db, key: string, plan: LocPlan) {
   ];
 }
 
-/** Claim the original quote. A retry with a changed request is never a new command. */
-export async function settleLocPlan(db: Db, key: string, turn: number, plan: LocPlan) {
+/**
+ * Claim the original quote. A retry with a changed request is never a new command.
+ *
+ * `knownAbsent` is for a caller that already read this key in the same pass
+ * and found nothing: the first lookup is skipped, and a record created since
+ * is still caught by the insert's duplicate-key refusal and loaded below.
+ */
+export async function settleLocPlan(
+  db: Db,
+  key: string,
+  turn: number,
+  plan: LocPlan,
+  options: { knownAbsent?: boolean } = {}
+) {
   const journal = db.collection<LocRecord>(MONEY_MOVE_COLLECTION);
-  let original = await loadLocSettlement(db, key);
+  let original = options.knownAbsent ? null : await loadLocSettlement(db, key);
   if (!original) {
     if (
       Object.entries(plan.effect.walletInc).some(
@@ -150,14 +162,45 @@ export async function settleLocPlan(db: Db, key: string, turn: number, plan: Loc
   }
   if (!original || !isDeepStrictEqual(original.locSettlement.request, plan.request))
     throw new Error("LOC command identity already belongs to a different request");
-  const settled = await resumeLocSettlement(db, key);
-  return { ...settled, result: (await loadLocSettlement(db, key))!.locSettlement.effect.result };
+  return resumeLoadedLocSettlement(db, key, original);
 }
 
 /** Resume only stored debt/cash and aftercare; never reprice the accepted operation. */
 export async function resumeLocSettlement(db: Db, key: string): Promise<SettlementResult> {
+  return (await resumeLocRecord(db, key, await loadLocSettlement(db, key))).settled;
+}
+
+/**
+ * Resume a record this process has just read, and return the accepted result
+ * with it. Nothing touches the journal between that read and this call, so a
+ * second read could only have seen the same document.
+ */
+export async function resumeLoadedLocSettlement(db: Db, key: string, record: LocRecord | null) {
+  const { settled, last } = await resumeLocRecord(db, key, record);
+  return { ...settled, result: await acceptedResult(db, key, last) };
+}
+
+/**
+ * The accepted result without a final read. `locSettlement` is written only
+ * when the record is created and once more by the guarded service preparation
+ * (`prepared: { $ne: true }`); after that nothing in the codebase rewrites it,
+ * so the copy the resume last read from the journal is what a re-read returns.
+ * An unprepared service copy, or a missing record, still reads as before.
+ */
+async function acceptedResult(db: Db, key: string, last: LocRecord | null) {
+  const settlement =
+    last && !(last.locSettlement.service && !last.locSettlement.prepared)
+      ? last.locSettlement
+      : (await loadLocSettlement(db, key))!.locSettlement;
+  return settlement.effect.result;
+}
+
+async function resumeLocRecord(
+  db: Db,
+  key: string,
+  record: LocRecord | null
+): Promise<{ settled: SettlementResult; last: LocRecord | null }> {
   const journal = db.collection<LocRecord>(MONEY_MOVE_COLLECTION);
-  const record = await loadLocSettlement(db, key);
   const result: SettlementResult = {
     key,
     status: "rejected",
@@ -165,24 +208,32 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
     appliedProjections: [],
     newlyAppliedProjections: [],
   };
-  if (!record) return { ...result, error: "LOC settlement not found" };
-  if (record.status === "applied") return { ...result, status: "replayed" };
+  const done = (settled: SettlementResult) => ({ settled, last: record });
+  if (!record) return done({ ...result, error: "LOC settlement not found" });
+  if (record.status === "applied") return done({ ...result, status: "replayed" });
   if (record.status === "rejected")
-    return { ...result, error: String(record.error ?? "LOC quote changed") };
+    return done({ ...result, error: String(record.error ?? "LOC quote changed") });
   if (record.locSettlement.service && !record.locSettlement.prepared) {
     const effect = await prepareServiceEffect(db, key, record.turn, record.locSettlement);
     const next = { ...record.locSettlement, effect, prepared: true };
     next.records = await recordsFor(db, key, next);
-    await journal.updateOne(
+    // The same guarded write as before, returning the document it produced in
+    // the same round trip. If another worker prepared first, read its copy.
+    const prepared = await journal.findOneAndUpdate(
       { _id: key, "locSettlement.prepared": { $ne: true } },
       {
         $set: {
           locSettlement: next,
           legs: effect.flows.map((flow) => ({ ...flow, applied: false })),
         },
-      }
+      },
+      { returnDocument: "after" }
     );
-    return resumeLocSettlement(db, key);
+    return resumeLocRecord(
+      db,
+      key,
+      prepared?.kind === "line_of_credit" ? prepared : await loadLocSettlement(db, key)
+    );
   }
   const plan = record.locSettlement,
     receipt = `${key}:character`;
@@ -197,7 +248,7 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
       { _id: key, status: "partial" },
       { $set: { status: "rejected", error } }
     );
-    return { ...result, error };
+    return done({ ...result, error });
   };
   if (record.locAdmissionRejected) return reject(record.locAdmissionRejected);
   if (plan.drawAdmission) {
@@ -303,7 +354,11 @@ export async function resumeLocSettlement(db: Db, key: string): Promise<Settleme
       $unset: { error: "" },
     }
   );
-  return { ...result, status: "applied", appliedLegs: plan.effect.flows.map((_, i) => i) };
+  return done({
+    ...result,
+    status: "applied",
+    appliedLegs: plan.effect.flows.map((_, i) => i),
+  });
 }
 
 export function locInterestCredits(amounts: Partial<Record<CurrencyCode, number>>) {

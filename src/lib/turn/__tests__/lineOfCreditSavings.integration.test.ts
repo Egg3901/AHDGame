@@ -184,3 +184,177 @@ describe("line-of-credit payment overflowing into savings", () => {
     expect(db.collection("bankMoneyMoves").docs.length).toBe(after.records);
   });
 });
+
+/**
+ * The pass reuses journal documents it has just read or written instead of
+ * reading them again, and reads every CEO credit snapshot in one query. These
+ * pin that it lands exactly where the read-back path lands, and that a crash
+ * at any of the new seams still resumes without moving money twice.
+ */
+describe("line-of-credit service without redundant reads", () => {
+  const ACCOUNT = new ObjectId();
+  const CORP = new ObjectId();
+
+  function seeded(): InMemoryDb {
+    const db = world(["USD"]);
+    db.collection("savingsAccounts").docs[0]._id = ACCOUNT;
+    db.seed("corporations", [
+      { _id: CORP, ceoId: OWNER, countryId: "US", creditCompositeSnapshot: 72 },
+    ]);
+    return db;
+  }
+
+  /** Every collection, with wall-clock dates and freshly minted ids masked. */
+  function snapshot(db: InMemoryDb) {
+    const fixed = new Set([OWNER, ACCOUNT, CORP].map((id) => id.toHexString()));
+    const mask = (value: unknown): unknown => {
+      if (value instanceof Date) return "<date>";
+      if (value instanceof ObjectId)
+        return fixed.has(value.toHexString()) ? value.toHexString() : "<id>";
+      if (Array.isArray(value)) return value.map(mask);
+      if (value && typeof value === "object")
+        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mask(v)]));
+      return value;
+    };
+    const names = [
+      "characters",
+      "centralBanks",
+      "savingsAccounts",
+      "bankMoneyMoves",
+      "locLedger",
+      "financialTxLog",
+      "ledgerEntries",
+      "corporations",
+    ];
+    return Object.fromEntries(names.map((name) => [name, mask(db.collection(name).docs)]));
+  }
+
+  /** Force every read the pass now skips: the behaviour before the change. */
+  function readBack(db: InMemoryDb) {
+    const journal = db.collection("bankMoneyMoves");
+    const update = journal.updateOne.bind(journal);
+    vi.spyOn(journal, "findOneAndUpdate").mockImplementation(async (filter, spec) => {
+      await update(filter, spec);
+      return null;
+    });
+    vi.spyOn(journal, "updateOne").mockImplementation(async (filter, spec, options) => {
+      const result = await update(filter, spec, options);
+      const set = !Array.isArray(spec) ? (spec.$set as Record<string, unknown>) : undefined;
+      return set && Object.keys(set).some((path) => path.startsWith("locTargetOutcomes."))
+        ? { ...result, matchedCount: 0 }
+        : result;
+    });
+    const corps = db.collection("corporations");
+    const find = corps.find.bind(corps);
+    vi.spyOn(corps, "find").mockImplementation((filter) => {
+      const cursor = find(filter);
+      const toArray = cursor.toArray;
+      // A ceoId shape the batch refuses to interpret sends every character
+      // back to its own findOne.
+      cursor.toArray = async () => [...(await toArray()), { ceoId: "not-an-id", countryId: "US" }];
+      return cursor;
+    });
+  }
+
+  /** Reads of this pass's own journal records; the savings withdrawal keeps its own. */
+  function countReads(db: InMemoryDb) {
+    const journal = db.collection("bankMoneyMoves");
+    const corps = db.collection("corporations");
+    const counts = { journalReads: 0, corpFindOne: 0 };
+    const ours = (filter: Record<string, unknown> = {}) =>
+      filter.kind === "line_of_credit" || String(filter._id).startsWith("loc:");
+    const findOne = journal.findOne.bind(journal);
+    vi.spyOn(journal, "findOne").mockImplementation(async (filter) => {
+      if (ours(filter)) counts.journalReads += 1;
+      return findOne(filter);
+    });
+    const find = journal.find.bind(journal);
+    vi.spyOn(journal, "find").mockImplementation((filter) => {
+      if (ours(filter)) counts.journalReads += 1;
+      return find(filter);
+    });
+    const corpFindOne = corps.findOne.bind(corps);
+    vi.spyOn(corps, "findOne").mockImplementation(async (filter) => {
+      counts.corpFindOne += 1;
+      return corpFindOne(filter);
+    });
+    return counts;
+  }
+
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("lands on the same documents and balances as the read-back path", async () => {
+    const fast = seeded();
+    const slow = seeded();
+    readBack(slow);
+    const fastResult = await run(fast);
+    const slowResult = await run(slow);
+    expect(fastResult).toEqual(slowResult);
+    expect(fastResult.charactersProcessed).toBe(1);
+    expect(snapshot(fast)).toEqual(snapshot(slow));
+    expect(
+      fast.collection("bankMoneyMoves").docs.find((d) => d.kind === "line_of_credit")
+    ).toMatchObject({ status: "applied" });
+  });
+
+  it("reads the journal three times per settled character instead of nine", async () => {
+    const db = seeded();
+    const counts = countReads(db);
+    await run(db);
+    // Per turn: recovery's queue scan and the started-records batch. Per
+    // settled character: the post-insert load and one publication read for
+    // each of its two targets (cash, lender interest reserve). Before: nine
+    // (load, post-insert load, resume load, post-prepare load, a publication
+    // read and an outcome read-back per target, and a final result load).
+    expect(counts.journalReads).toBe(2 + 3);
+    expect(counts.corpFindOne).toBe(0);
+  });
+
+  it.each([
+    ["prepare", "findOneAndUpdate"],
+    ["outcome", "updateOne"],
+    ["completion", "updateOne"],
+  ] as const)(
+    "resumes after a crash at the %s write without moving money twice",
+    async (point, method) => {
+      const clean = seeded();
+      await run(clean);
+
+      const db = seeded();
+      const journal = db.collection("bankMoneyMoves");
+      const original = journal[method].bind(journal) as (...args: unknown[]) => Promise<unknown>;
+      let fired = false;
+      vi.spyOn(journal, method).mockImplementation((async (...args: unknown[]) => {
+        const result = await original(...args);
+        const spec = args[1] as { $set?: Record<string, unknown> };
+        const set = Object.keys(spec.$set ?? {});
+        const hit =
+          point === "prepare" ||
+          (point === "outcome" && set.some((path) => path.startsWith("locTargetOutcomes."))) ||
+          (point === "completion" && spec.$set?.status === "applied");
+        if (!fired && hit) {
+          fired = true;
+          throw new Error(`crashed after ${point}`);
+        }
+        return result;
+      }) as never);
+      await expect(run(db)).rejects.toThrow(`crashed after ${point}`);
+      vi.restoreAllMocks();
+      const resumed = await run(db);
+      expect(resumed.charactersProcessed).toBe(1);
+      // A third pass is a pure replay.
+      await run(db);
+      expect(snapshot(db)).toEqual(snapshot(clean));
+    }
+  );
+
+  it("falls back to findOne when a character runs two corporations in its country", async () => {
+    const db = seeded();
+    db.seed("corporations", [
+      { _id: new ObjectId(), ceoId: OWNER, countryId: "US", creditCompositeSnapshot: 10 },
+    ]);
+    const counts = countReads(db);
+    await run(db);
+    expect(counts.corpFindOne).toBe(1);
+  });
+});
