@@ -24,6 +24,7 @@ import {
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
+import { anchorToCorpLiquidCapital, getCorpFxRate } from "@/lib/currency/corporationCapital";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { applyListingStandards, isMateriallyInsolvent } from "../listingStandards";
 import type { IndexFundCandidate } from "../constituents";
@@ -130,7 +131,13 @@ export async function fileListingPetition(opts: {
     };
   }
 
-  const debit = await atomicallyDebitCorpLiquidCapital(db, corporation._id, contributionAnchor);
+  // The contribution is set in anchor terms, so every corporation pays the same
+  // value: charge it in the corporation's own currency at its rate.
+  const feeCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
+  const feeLocal = Math.round(
+    anchorToCorpLiquidCapital(contributionAnchor, corporation, await getCorpFxRate(db, corporation))
+  );
+  const debit = await atomicallyDebitCorpLiquidCapital(db, corporation._id, feeLocal);
   if (!debit.ok) return { ok: false, error: debit.error, status: 400 };
 
   const now = new Date();
@@ -157,13 +164,12 @@ export async function fileListingPetition(opts: {
   } catch (e) {
     // The debit already happened, so put it back rather than leaving the corp
     // out of pocket for a petition that does not exist.
-    await refundCorpLiquidCapital(db, corporation._id, contributionAnchor);
+    await refundCorpLiquidCapital(db, corporation._id, feeLocal);
     throw e;
   }
 
   // Credit through the same helpers every other money movement uses, so the
   // forex-aware balance field and the treasury account stay single-sourced.
-  const feeCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
   // What the treasury actually received, in its own currency, when nobody holds
   // the seat. Witnessed by the treasury writer; the row below keeps the record.
   let treasuryCredit: { amount: number; currencyCode: CurrencyCode } | null = null;
@@ -172,7 +178,7 @@ export async function fileListingPetition(opts: {
       db,
       authority.holderCharacterId,
       feeCurrency,
-      contributionAnchor,
+      feeLocal,
       await isForexEnabled()
     );
   } else {
@@ -205,7 +211,7 @@ export async function fileListingPetition(opts: {
     subjectType: "corporation",
     subjectId: corporation._id,
     subjectName: corporation.name,
-    amount: -contributionAnchor,
+    amount: -feeLocal,
     currencyCode: feeCurrency,
     counterpartyType: authority.holderCharacterId ? "character" : "government",
     ...(authority.holderCharacterId ? { counterpartyId: authority.holderCharacterId } : {}),
@@ -232,7 +238,7 @@ export async function fileListingPetition(opts: {
           subjectName: `${corporation.countryId} Treasury`,
         }),
     // The treasury row records what the treasury received, in its own currency.
-    amount: treasuryCredit?.amount ?? contributionAnchor,
+    amount: treasuryCredit?.amount ?? feeLocal,
     currencyCode: treasuryCredit?.currencyCode ?? feeCurrency,
     counterpartyType: "corporation",
     counterpartyId: corporation._id,

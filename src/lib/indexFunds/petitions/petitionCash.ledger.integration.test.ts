@@ -128,6 +128,9 @@ for (const native of [false, true]) {
           .findOne({ type: "index_listing_lobbying", subjectType: "government" });
         expect(row?.amount).toBe(500);
         expect(row?.currencyCode).toBe("GBP");
+        // 1,000 anchor at 0.5 GBP per anchor: the corporation pays 500 GBP (#3042).
+        const payer = await db.collection("corporations").findOne({ _id: corporation._id });
+        expect(payer?.liquidCapital).toBe(99_500);
       });
 
       it("pays a seated holder through two linked rows", async () => {
@@ -152,6 +155,11 @@ for (const native of [false, true]) {
           `character:${holder.toString()}:GBP`,
           `corporation:${corporation._id.toString()}:GBP`,
         ]);
+        // The holder receives exactly what the corporation paid, in its currency.
+        const paid = await db.collection("characters").findOne({ _id: holder });
+        expect(paid?.currencyBalances?.personal?.GBP).toBe(500);
+        const payer = await db.collection("corporations").findOne({ _id: corporation._id });
+        expect(payer?.liquidCapital).toBe(99_500);
       });
     }
   );
