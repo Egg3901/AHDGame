@@ -186,7 +186,11 @@ export type FinancialSubjectType =
   | "npp"
   // A8: a union pension scheme holds real assets paid in by employers, so it is
   // a counterparty in its own right rather than a destination with no account.
-  | "pension_scheme";
+  | "pension_scheme"
+  // Cash held by system counterparties, such as equity pools and share escrow.
+  // The original collection and cash path live in settlement metadata. These
+  // receipts do not imply snapshot coverage or a corporate treasury movement.
+  | "system";
 export type FinancialCounterpartyType = FinancialSubjectType | "system";
 export type SuspectFlagType =
   | "large_transaction"
