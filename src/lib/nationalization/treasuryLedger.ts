@@ -15,6 +15,7 @@ import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
 import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { snapshotTreasuryCurrency } from "@/lib/ledger/balanceSnapshot";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
+import { ledgerTurnFromClock } from "@/lib/ledger/ledgerTurn";
 import type { LedgerEntryInput } from "@/lib/ledger/types";
 import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
 
@@ -119,7 +120,9 @@ export async function loadTreasuryCashContext(
         .find({}, { projection: { countryId: 1, currencyCode: 1 } })
         .toArray(),
     ]);
-    const resolvedTurn = turn ?? state?.currentTurn;
+    const resolvedTurn =
+      turn ??
+      (state?.currentTurn === undefined ? undefined : ledgerTurnFromClock(state.currentTurn));
     if (resolvedTurn === undefined || !Number.isInteger(resolvedTurn)) {
       throw new Error("Treasury cash witness requires a turn");
     }

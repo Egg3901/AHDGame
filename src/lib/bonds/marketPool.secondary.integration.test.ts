@@ -58,7 +58,7 @@ async function world(native: boolean, currency: "USD" | "GBP" = "USD", enabled =
     .insertOne({ _id: "default", ledgerShadow: enabled });
   await db
     .collection<{ _id: string; currentTurn: number; preset: string }>("gameState")
-    .insertOne({ _id: "current", currentTurn: 2, preset: "1991-default" });
+    .insertOne({ _id: "current", currentTurn: 1, preset: "1991-default" });
   await db.collection("exchangeRates").insertOne({ currencyCode: currency, rate });
   await db
     .collection<{ _id: string; cashLocal: number; targetCashLocal: number }>("bondMarketPools")
@@ -278,7 +278,7 @@ it("isolates simultaneous worlds and currencies; never reuses a finished phase",
   );
   await a.db
     .collection("gameState")
-    .updateOne({ _id: "current" } as never, { $set: { currentTurn: 3 } });
+    .updateOne({ _id: "current" } as never, { $set: { currentTurn: 2 } });
   await creditBondPool(a.db, "USD", 100, "purchasesIn");
   expect(await a.db.collection("ledgerEntries").countDocuments({ turn: 3 })).toBe(1);
 });

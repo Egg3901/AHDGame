@@ -12,6 +12,7 @@ import type { FinancialTxType } from "@/lib/db/types/financialTxLog";
 import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import type { LedgerEntryInput } from "@/lib/ledger/types";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
+import { ledgerTurnFromClock } from "@/lib/ledger/ledgerTurn";
 
 export interface BondPoolLedgerContext {
   turn: number;
@@ -41,7 +42,9 @@ export async function loadBondPoolLedgerContext(
             .findOne({ _id: "current" }, { projection: { currentTurn: 1 } })
         : Promise.resolve(null),
     ]);
-    const resolvedTurn = turn ?? state?.currentTurn;
+    const resolvedTurn =
+      turn ??
+      (state?.currentTurn === undefined ? undefined : ledgerTurnFromClock(state.currentTurn));
     if (resolvedTurn === undefined || !Number.isInteger(resolvedTurn)) {
       throw new Error("Bond-pool ledger witness requires a turn");
     }

@@ -1,0 +1,34 @@
+{
+  "issue": 2983,
+  "runtimeSource": "2e444f14a776bc558a48bd68ff206c86eafb674b",
+  "rule": "a witness with no explicit processing turn is stamped gameState.currentTurn + 1, the turn whose closing snapshot holds the cash",
+  "runtimeFiles": [
+    "src/lib/ledger/ledgerTurn.ts",
+    "src/lib/nationalization/treasuryLedger.ts",
+    "src/lib/bonds/marketPoolLedger.ts",
+    "src/lib/corporations/startingGrantLedger.ts",
+    "src/lib/nationalization/ownershipTransition.ts",
+    "src/lib/nationalization/privatizationAuction.ts",
+    "src/lib/nationalization/privatizeAsset.ts"
+  ],
+  "qualification": {
+    "unitCases": 4,
+    "ledgerIntegrationFiles": 6,
+    "integrationAndUnitPassed": 92,
+    "nativeOrReplicaPassed": 35,
+    "redWithOldDefaults": "19 cases fail against the corrected fixtures",
+    "focusedSuites": { "files": 283, "passed": 2809, "skipped": 97, "failed": 0 },
+    "changedTypeScriptFiles": 14,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "outOfScope": [
+    "Request-path transaction log rows stamp the clock (wires stamp 0), so their derived entries land in a turn that never reconciles them; simulated worlds have no request paths."
+  ],
+  "limits": [
+    "Does not clear #968 or the #2159 cash gate.",
+    "No production database was reset or repaired."
+  ]
+}

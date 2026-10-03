@@ -410,7 +410,9 @@ export async function privatizeAsset(
     // No buyer pays for the float: the proceeds are an explicit, named mint.
     await creditTreasuryProceeds(db, params.countryId, structure.proceedsLocal, now, {
       flow: "privatization_ipo",
-      ledger: { context: await loadTreasuryCashContext(db, params.turn) },
+      // The caller's turn is the clock on the executive route; the context resolves
+      // the turn whose snapshot will hold this cash on every path.
+      ledger: { context: await loadTreasuryCashContext(db) },
     });
     proceedsLocal = structure.proceedsLocal;
     // Privatization politics (spec §12.1) — an IPO completes immediately. Auction
