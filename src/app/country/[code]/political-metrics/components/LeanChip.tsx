@@ -2,7 +2,7 @@ import { leanTone } from "./tones";
 
 /**
  * Political-association chip ("Strong Left" … "Strong Right"). Association
- * only — never a quality judgment, so it uses the blue↔red identity ramp,
+ * only, never a quality judgment, so it uses the blue↔red identity ramp,
  * not the score ramp.
  */
 export function LeanChip({

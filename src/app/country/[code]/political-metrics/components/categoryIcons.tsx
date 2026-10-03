@@ -1,5 +1,5 @@
 /**
- * Category icon paths (24×24 stroke outlines) — from the approved dashboard
+ * Category icon paths (24×24 stroke outlines), from the approved dashboard
  * mock, which lifted them from the game's category icon set. Keyed by the
  * catalog categories' `icon` field.
  */

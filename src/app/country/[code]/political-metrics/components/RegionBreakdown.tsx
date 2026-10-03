@@ -1,16 +1,18 @@
 "use client";
 
-import { scoreTone } from "./tones";
-
 export interface RegionValue {
   regionId: string;
   name: string;
   value: number;
 }
 
+const MINUS = "−";
+
 /**
- * Per-region breakdown for one metric — the storage is per-region, national is
- * the population-weighted mean, and this panel shows the spread honestly.
+ * Per-region breakdown for one metric. Storage is per region and the national
+ * figure is the population-weighted mean, so this table shows the spread
+ * honestly. The bars share one neutral colour; the figure beside each is the
+ * score itself.
  */
 export function RegionBreakdown({
   nationalValue,
@@ -21,44 +23,57 @@ export function RegionBreakdown({
 }) {
   const sorted = [...regions].sort((a, b) => b.value - a.value);
   return (
-    <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-      <div className="mb-3 font-mono text-body-xs uppercase tracking-widest text-muted">
+    <section aria-labelledby="pm-region-breakdown">
+      <h3 id="pm-region-breakdown" className="text-heading-sm font-semibold text-foreground">
         Regional breakdown
-      </div>
-      <table className="w-full border-collapse">
+      </h3>
+      <table
+        aria-labelledby="pm-region-breakdown"
+        className="mt-3 w-full max-w-2xl border-collapse"
+      >
         <thead>
-          <tr className="text-left font-mono text-body-xs uppercase tracking-wider text-muted">
-            <th className="pb-2 font-medium">Region</th>
-            <th className="pb-2 font-medium">Score</th>
-            <th className="pb-2 text-right font-medium">vs national</th>
+          <tr className="border-b border-card-border text-left text-body-sm text-muted">
+            <th scope="col" className="py-2 pr-3 font-medium">
+              Region
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              Score
+            </th>
+            <th scope="col" className="py-2 pl-3 text-right font-medium">
+              vs national
+            </th>
           </tr>
         </thead>
         <tbody>
           {sorted.map((r) => {
-            const tone = scoreTone(r.value);
             const delta = Math.round(r.value - nationalValue);
-            const deltaTxt = delta === 0 ? "±0" : delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`;
-            const deltaTone =
-              delta === 0 ? "text-muted" : delta > 0 ? "text-success" : "text-error";
+            const deltaTxt =
+              delta === 0 ? "±0" : delta > 0 ? `+${delta}` : `${MINUS}${Math.abs(delta)}`;
             return (
-              <tr key={r.regionId} className="border-t border-dashed border-card-border">
-                <td className="py-1.5 pr-2 text-body-sm text-foreground">{r.name}</td>
-                <td className="py-1.5 pr-2">
-                  <span className="flex items-center gap-2">
-                    <span className="h-1.5 w-24 max-w-full overflow-hidden rounded-full bg-track">
+              <tr key={r.regionId} className="border-b border-card-border/60 last:border-b-0">
+                <th
+                  scope="row"
+                  className="py-2 pr-3 text-left text-body font-normal text-foreground"
+                >
+                  {r.name}
+                </th>
+                <td className="px-3 py-2">
+                  <span className="flex items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-card-border sm:block"
+                    >
                       <span
-                        className={`block h-full rounded-full ${tone.bg}`}
+                        className="block h-full rounded-full bg-foreground/60"
                         style={{ width: `${Math.max(0, Math.min(100, r.value))}%` }}
                       />
                     </span>
-                    <span className={`text-body-sm font-bold tabular-nums ${tone.text}`}>
+                    <span className="font-mono text-body font-semibold tabular-nums text-foreground">
                       {Math.round(r.value)}
                     </span>
                   </span>
                 </td>
-                <td
-                  className={`py-1.5 text-right text-body-sm font-bold tabular-nums ${deltaTone}`}
-                >
+                <td className="py-2 pl-3 text-right font-mono text-body tabular-nums text-muted">
                   {deltaTxt}
                 </td>
               </tr>
@@ -66,6 +81,6 @@ export function RegionBreakdown({
           })}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
