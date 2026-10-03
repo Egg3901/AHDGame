@@ -52,6 +52,11 @@ import { runBillLifecycle } from "@/lib/turn/billLifecycle/engine";
 import { buildOnePartyBillConfig } from "@/lib/turn/billLifecycle/configs/oneParty";
 import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
 import type { CountryGameState } from "@/lib/db/types/gameState";
+import {
+  RO_1992_PROPOSALS_COLLECTION,
+  type Ro1992ElectoralProposal,
+} from "@/lib/countries/ro/electoralProposals1992";
+import { passesRoElectoralAmendment } from "@/lib/countries/ro/rules/electoralDecision1992";
 import { passesHuElectoralAmendment } from "@/lib/countries/hu/rules/electoralLaw";
 import {
   HU_1994_PROPOSALS_COLLECTION,
@@ -125,6 +130,34 @@ export async function processOnePartyBillLifecycleForCountry(
             );
           };
         }
+      }
+      if (countryId === "RO") {
+        const proposal = await db
+          .collection<Ro1992ElectoralProposal>(RO_1992_PROPOSALS_COLLECTION)
+          .findOne(
+            { _id: "1991-default:ro-electoral:parliament1992", status: "open" },
+            { projection: { billId: 1, revision: 1, capacities: 1 } }
+          );
+        for (const stage of lifecycle.stages)
+          if (stage.kind === "chamberVote") {
+            stage.passCheck = (bill, totals) => {
+              const mandate = bill.romanianElectoralMandate;
+              if (!mandate) return undefined;
+              return Boolean(
+                proposal &&
+                proposal.billId.equals(bill._id) &&
+                mandate.proposalId === proposal._id &&
+                mandate.revision === proposal.revision &&
+                mandate.kind === "parliament1992" &&
+                passesRoElectoralAmendment(
+                  totals,
+                  stage.officeTypeFor(bill) === "senator"
+                    ? proposal.capacities.senate
+                    : proposal.capacities.deputies
+                )
+              );
+            };
+          }
       }
       const result = await runBillLifecycle(db, lifecycle, now, currentTurn);
       return {

@@ -114,6 +114,26 @@
       },
       "npcReason": "The NPC government introduced this decision with a two-thirds governing mandate. Deputies still vote on the bill.",
       "legislatorReason": "A deputy introduced this amendment for a parliamentary vote."
+    },
+    "romanianElectoralReform1992": {
+      "title": "Romanian 1992 parliamentary framework",
+      "help": "Propose 341 deputy and 143 Senate mandates for later untouched campaigns. The sitting chambers retain their mandates until both replacement elections have resolved.",
+      "threshold": "Approval requires a majority of the full membership of each chamber, followed by presidential promulgation. A date alone does not change the chamber sizes.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Propose framework",
+      "revise": "Propose revised framework",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in July 1992.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "Both chambers have enacted this framework.",
+        "existing-settlement": "The later Parliament already has its settlement.",
+        "no-legislature": "The current political settlement has no eligible Romanian Parliament."
+      },
+      "npcReason": "The NPC government introduced this decision with governing majorities in both chambers. Legislators still vote on the bill.",
+      "legislatorReason": "A legislator introduced this framework for parliamentary votes."
     }
   }
 }

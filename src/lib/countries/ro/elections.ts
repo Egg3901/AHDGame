@@ -1,3 +1,4 @@
+import type { CountryGameState } from "@/lib/db/types";
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import { getDb } from "@/lib/mongodb";
@@ -15,6 +16,14 @@ export async function ensureROElections(now: Date, inFlightTurn?: number): Promi
   const db = await getDb();
   const { ctx } = await getCurrentTurnAndCtx(db);
   if (ctx.preset === "1991-default") {
+    const country = await db
+      .collection<CountryGameState>("countryGameStates")
+      .findOne(
+        { _id: "RO" },
+        { projection: { roElectoralLaw1992SinceTurn: 1, roParliament1992SinceTurn: 1 } }
+      );
+    const authorized =
+      country?.roElectoralLaw1992SinceTurn != null || country?.roParliament1992SinceTurn != null;
     for (const [electionType, field, label, chamber] of [
       ["chamberOfDeputies", "houseDistricts", "Assembly of Deputies", "deputies"],
       ["senat", "stateSenateSeats", "Senate", "senate"],
@@ -28,8 +37,10 @@ export async function ensureROElections(now: Date, inFlightTurn?: number): Promi
               seatsFromRegionField(regions, field),
               chamber,
               preset,
-              cycleContext.preIterationActive === true
+              cycleContext.preIterationActive === true,
+              authorized
             ),
+          preserveLiveSeatCounts: true,
           openPrimaryImmediately: true,
           statusGated: true,
           electionsLiveGate: easternBlocElectionsLive,

@@ -7,6 +7,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
 import FederationDecisionPanel from "./FederationDecisionPanel";
 import RussianConstitutionalDecisionPanel from "./RussianConstitutionalDecisionPanel";
+import RomanianElectoralDecisionPanel from "./RomanianElectoralDecisionPanel";
 import HungarianElectoralDecisionPanel from "./HungarianElectoralDecisionPanel";
 
 const LegislatureFallback = (_props: { name?: string }) => <LegislatureSkeleton />;
@@ -71,6 +72,7 @@ interface Props {
   legislatureName?: string;
   generic?: boolean;
   hungarianElectoralDecisions?: boolean;
+  romanianElectoralDecision?: boolean;
 }
 
 export default function LegislatureClient({
@@ -78,6 +80,7 @@ export default function LegislatureClient({
   legislatureName,
   generic,
   hungarianElectoralDecisions,
+  romanianElectoralDecision,
 }: Props) {
   const config = COUNTRY_CONFIGS[countryId];
   const displayedName = legislatureName ?? config.legislature.name;
@@ -99,6 +102,8 @@ export default function LegislatureClient({
       </>
     );
   }
+
+  if (countryId === "RO" && romanianElectoralDecision) return <RomanianElectoralDecisionPanel />;
 
   // Countries without a dedicated legislature component
   if (countryId === "HU" && hungarianElectoralDecisions)

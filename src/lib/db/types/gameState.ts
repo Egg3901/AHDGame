@@ -674,6 +674,8 @@ export interface CountryGameState {
   bgOrdinaryAssemblySinceTurn?: number;
   /** RO 1991 world: raw turn when the 341/143 parliament replaced the 396/119 constituent chambers. */
   roParliament1992SinceTurn?: number;
+  /** Bound bicameral enacted decision, separate from the completed chamber handover. */
+  roElectoralLaw1992SinceTurn?: number;
   /** RU 1991: ratified succession changed the playable RU slot from USSR to Russia. */
   ruSovietSuccessionSinceTurn?: number;
   /** Retained district capacity of the negotiated provisional Russian Congress. */
