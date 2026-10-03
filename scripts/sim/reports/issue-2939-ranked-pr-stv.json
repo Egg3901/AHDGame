@@ -1,0 +1,1919 @@
+{
+  "runtimeCommit": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+  "nativeResolutions": 18,
+  "beforeSeatingRefusals": 5,
+  "selectedWorldStvEnabled": false,
+  "releaseAcceptance": false,
+  "native": {
+    "sourceCommit": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+    "development": false,
+    "preset": "1991-default",
+    "fixtureYear": 1993,
+    "productionTouched": false,
+    "worldAcceptance": false,
+    "selectedWorldStvEnabled": false,
+    "results": [
+      {
+        "field": "npp_only",
+        "cycles": [
+          {
+            "cycle": 1,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000010": 1,
+                "000000000000000000000011": 1,
+                "000000000000000000000012": 0,
+                "000000000000000000000013": 1,
+                "000000000000000000000014": 0,
+                "000000000000000000000015": 0
+              },
+              "elected": [
+                "000000000000000000000010",
+                "000000000000000000000013",
+                "000000000000000000000011"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000010": 30,
+                    "000000000000000000000011": 25,
+                    "000000000000000000000012": 18,
+                    "000000000000000000000013": 14,
+                    "000000000000000000000014": 8,
+                    "000000000000000000000015": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000010"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000011": 25,
+                    "000000000000000000000012": 18,
+                    "000000000000000000000013": 18,
+                    "000000000000000000000014": 8,
+                    "000000000000000000000015": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000015"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000011": 25,
+                    "000000000000000000000012": 18,
+                    "000000000000000000000013": 23,
+                    "000000000000000000000014": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000014"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000011": 25,
+                    "000000000000000000000012": 18,
+                    "000000000000000000000013": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000013"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000011": 25,
+                    "000000000000000000000012": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000012"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "000000000000000000000011": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["000000000000000000000011"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 34,
+              "returnedBson": 6704
+            }
+          },
+          {
+            "cycle": 2,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000018": 1,
+                "000000000000000000000019": 1,
+                "00000000000000000000001a": 0,
+                "00000000000000000000001b": 1,
+                "00000000000000000000001c": 0,
+                "00000000000000000000001d": 0
+              },
+              "elected": [
+                "000000000000000000000018",
+                "00000000000000000000001b",
+                "000000000000000000000019"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000018": 30,
+                    "000000000000000000000019": 25,
+                    "00000000000000000000001a": 18,
+                    "00000000000000000000001b": 14,
+                    "00000000000000000000001c": 8,
+                    "00000000000000000000001d": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000018"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000019": 25,
+                    "00000000000000000000001a": 18,
+                    "00000000000000000000001b": 18,
+                    "00000000000000000000001c": 8,
+                    "00000000000000000000001d": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000001d"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000019": 25,
+                    "00000000000000000000001a": 18,
+                    "00000000000000000000001b": 23,
+                    "00000000000000000000001c": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000001c"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000019": 25,
+                    "00000000000000000000001a": 18,
+                    "00000000000000000000001b": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000001b"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000019": 25,
+                    "00000000000000000000001a": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000001a"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "000000000000000000000019": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["000000000000000000000019"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 34,
+              "returnedBson": 6911
+            }
+          },
+          {
+            "cycle": 3,
+            "byParty": {
+              "1": 1,
+              "2": 2
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000020": 1,
+                "000000000000000000000021": 1,
+                "000000000000000000000022": 1,
+                "000000000000000000000023": 0,
+                "000000000000000000000024": 0,
+                "000000000000000000000025": 0
+              },
+              "elected": [
+                "000000000000000000000020",
+                "000000000000000000000022",
+                "000000000000000000000021"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000020": 30,
+                    "000000000000000000000021": 25,
+                    "000000000000000000000022": 18,
+                    "000000000000000000000023": 14,
+                    "000000000000000000000024": 8,
+                    "000000000000000000000025": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000020"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000021": 25,
+                    "000000000000000000000022": 22,
+                    "000000000000000000000023": 14,
+                    "000000000000000000000024": 8,
+                    "000000000000000000000025": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000025"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000021": 25,
+                    "000000000000000000000022": 27,
+                    "000000000000000000000023": 14,
+                    "000000000000000000000024": 8
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000022"],
+                  "transferValue": 0.037037037037,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000021": 25.666666666666,
+                    "000000000000000000000023": 14,
+                    "000000000000000000000024": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000024"],
+                  "transferValue": 1,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000021": 33.666666666666,
+                    "000000000000000000000023": 14
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000021"],
+                  "transferValue": 0.227722772277,
+                  "exhausted": 8,
+                  "retained": 78,
+                  "continuing": 14,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 34,
+              "returnedBson": 6911
+            }
+          }
+        ],
+        "holdPassed": true,
+        "transferControlFlipPassed": true,
+        "repeatPassed": true
+      },
+      {
+        "field": "player_vs_npp",
+        "cycles": [
+          {
+            "cycle": 1,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000036": 1,
+                "000000000000000000000037": 1,
+                "000000000000000000000038": 0,
+                "000000000000000000000039": 1,
+                "00000000000000000000003a": 0,
+                "00000000000000000000003b": 0
+              },
+              "elected": [
+                "000000000000000000000036",
+                "000000000000000000000039",
+                "000000000000000000000037"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000036": 30,
+                    "000000000000000000000037": 25,
+                    "000000000000000000000038": 18,
+                    "000000000000000000000039": 14,
+                    "00000000000000000000003a": 8,
+                    "00000000000000000000003b": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000036"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000037": 25,
+                    "000000000000000000000038": 18,
+                    "000000000000000000000039": 18,
+                    "00000000000000000000003a": 8,
+                    "00000000000000000000003b": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000003b"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000037": 25,
+                    "000000000000000000000038": 18,
+                    "000000000000000000000039": 23,
+                    "00000000000000000000003a": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000003a"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000037": 25,
+                    "000000000000000000000038": 18,
+                    "000000000000000000000039": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000039"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000037": 25,
+                    "000000000000000000000038": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000038"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "000000000000000000000037": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["000000000000000000000037"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 42,
+              "returnedBson": 7674
+            }
+          },
+          {
+            "cycle": 2,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "00000000000000000000003e": 1,
+                "00000000000000000000003f": 1,
+                "000000000000000000000040": 0,
+                "000000000000000000000041": 1,
+                "000000000000000000000042": 0,
+                "000000000000000000000043": 0
+              },
+              "elected": [
+                "00000000000000000000003e",
+                "000000000000000000000041",
+                "00000000000000000000003f"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "00000000000000000000003e": 30,
+                    "00000000000000000000003f": 25,
+                    "000000000000000000000040": 18,
+                    "000000000000000000000041": 14,
+                    "000000000000000000000042": 8,
+                    "000000000000000000000043": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000003e"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "00000000000000000000003f": 25,
+                    "000000000000000000000040": 18,
+                    "000000000000000000000041": 18,
+                    "000000000000000000000042": 8,
+                    "000000000000000000000043": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000043"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "00000000000000000000003f": 25,
+                    "000000000000000000000040": 18,
+                    "000000000000000000000041": 23,
+                    "000000000000000000000042": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000042"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "00000000000000000000003f": 25,
+                    "000000000000000000000040": 18,
+                    "000000000000000000000041": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000041"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "00000000000000000000003f": 25,
+                    "000000000000000000000040": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000040"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "00000000000000000000003f": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["00000000000000000000003f"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 42,
+              "returnedBson": 8470
+            }
+          },
+          {
+            "cycle": 3,
+            "byParty": {
+              "1": 1,
+              "2": 2
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000046": 1,
+                "000000000000000000000047": 1,
+                "000000000000000000000048": 1,
+                "000000000000000000000049": 0,
+                "00000000000000000000004a": 0,
+                "00000000000000000000004b": 0
+              },
+              "elected": [
+                "000000000000000000000046",
+                "000000000000000000000048",
+                "000000000000000000000047"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000046": 30,
+                    "000000000000000000000047": 25,
+                    "000000000000000000000048": 18,
+                    "000000000000000000000049": 14,
+                    "00000000000000000000004a": 8,
+                    "00000000000000000000004b": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000046"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000047": 25,
+                    "000000000000000000000048": 22,
+                    "000000000000000000000049": 14,
+                    "00000000000000000000004a": 8,
+                    "00000000000000000000004b": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000004b"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000047": 25,
+                    "000000000000000000000048": 27,
+                    "000000000000000000000049": 14,
+                    "00000000000000000000004a": 8
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000048"],
+                  "transferValue": 0.037037037037,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000047": 25.666666666666,
+                    "000000000000000000000049": 14,
+                    "00000000000000000000004a": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000004a"],
+                  "transferValue": 1,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000047": 33.666666666666,
+                    "000000000000000000000049": 14
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000047"],
+                  "transferValue": 0.227722772277,
+                  "exhausted": 8,
+                  "retained": 78,
+                  "continuing": 14,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 42,
+              "returnedBson": 8935
+            }
+          }
+        ],
+        "holdPassed": true,
+        "transferControlFlipPassed": true,
+        "repeatPassed": true
+      },
+      {
+        "field": "opposing_players",
+        "cycles": [
+          {
+            "cycle": 1,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "00000000000000000000005c": 1,
+                "00000000000000000000005d": 1,
+                "00000000000000000000005e": 0,
+                "00000000000000000000005f": 1,
+                "000000000000000000000060": 0,
+                "000000000000000000000061": 0
+              },
+              "elected": [
+                "00000000000000000000005c",
+                "00000000000000000000005f",
+                "00000000000000000000005d"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "00000000000000000000005c": 30,
+                    "00000000000000000000005d": 25,
+                    "00000000000000000000005e": 18,
+                    "00000000000000000000005f": 14,
+                    "000000000000000000000060": 8,
+                    "000000000000000000000061": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000005c"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "00000000000000000000005d": 25,
+                    "00000000000000000000005e": 18,
+                    "00000000000000000000005f": 18,
+                    "000000000000000000000060": 8,
+                    "000000000000000000000061": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000061"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "00000000000000000000005d": 25,
+                    "00000000000000000000005e": 18,
+                    "00000000000000000000005f": 23,
+                    "000000000000000000000060": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000060"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "00000000000000000000005d": 25,
+                    "00000000000000000000005e": 18,
+                    "00000000000000000000005f": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000005f"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "00000000000000000000005d": 25,
+                    "00000000000000000000005e": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000005e"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "00000000000000000000005d": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["00000000000000000000005d"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 63,
+              "returnedBson": 10128
+            }
+          },
+          {
+            "cycle": 2,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000064": 1,
+                "000000000000000000000065": 1,
+                "000000000000000000000066": 0,
+                "000000000000000000000067": 1,
+                "000000000000000000000068": 0,
+                "000000000000000000000069": 0
+              },
+              "elected": [
+                "000000000000000000000064",
+                "000000000000000000000067",
+                "000000000000000000000065"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000064": 30,
+                    "000000000000000000000065": 25,
+                    "000000000000000000000066": 18,
+                    "000000000000000000000067": 14,
+                    "000000000000000000000068": 8,
+                    "000000000000000000000069": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000064"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000065": 25,
+                    "000000000000000000000066": 18,
+                    "000000000000000000000067": 18,
+                    "000000000000000000000068": 8,
+                    "000000000000000000000069": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000069"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000065": 25,
+                    "000000000000000000000066": 18,
+                    "000000000000000000000067": 23,
+                    "000000000000000000000068": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000068"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000065": 25,
+                    "000000000000000000000066": 18,
+                    "000000000000000000000067": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000067"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000065": 25,
+                    "000000000000000000000066": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000066"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "000000000000000000000065": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["000000000000000000000065"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 63,
+              "returnedBson": 13849
+            }
+          },
+          {
+            "cycle": 3,
+            "byParty": {
+              "1": 1,
+              "2": 2
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "00000000000000000000006c": 1,
+                "00000000000000000000006d": 1,
+                "00000000000000000000006e": 1,
+                "00000000000000000000006f": 0,
+                "000000000000000000000070": 0,
+                "000000000000000000000071": 0
+              },
+              "elected": [
+                "00000000000000000000006c",
+                "00000000000000000000006e",
+                "00000000000000000000006d"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "00000000000000000000006c": 30,
+                    "00000000000000000000006d": 25,
+                    "00000000000000000000006e": 18,
+                    "00000000000000000000006f": 14,
+                    "000000000000000000000070": 8,
+                    "000000000000000000000071": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000006c"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "00000000000000000000006d": 25,
+                    "00000000000000000000006e": 22,
+                    "00000000000000000000006f": 14,
+                    "000000000000000000000070": 8,
+                    "000000000000000000000071": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000071"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "00000000000000000000006d": 25,
+                    "00000000000000000000006e": 27,
+                    "00000000000000000000006f": 14,
+                    "000000000000000000000070": 8
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000006e"],
+                  "transferValue": 0.037037037037,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "00000000000000000000006d": 25.666666666666,
+                    "00000000000000000000006f": 14,
+                    "000000000000000000000070": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000070"],
+                  "transferValue": 1,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "00000000000000000000006d": 33.666666666666,
+                    "00000000000000000000006f": 14
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000006d"],
+                  "transferValue": 0.227722772277,
+                  "exhausted": 8,
+                  "retained": 78,
+                  "continuing": 14,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 63,
+              "returnedBson": 16619
+            }
+          }
+        ],
+        "holdPassed": true,
+        "transferControlFlipPassed": true,
+        "repeatPassed": true
+      },
+      {
+        "field": "mixed_same_party",
+        "cycles": [
+          {
+            "cycle": 1,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000082": 1,
+                "000000000000000000000083": 1,
+                "000000000000000000000084": 0,
+                "000000000000000000000085": 1,
+                "000000000000000000000086": 0,
+                "000000000000000000000087": 0
+              },
+              "elected": [
+                "000000000000000000000082",
+                "000000000000000000000085",
+                "000000000000000000000083"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000082": 30,
+                    "000000000000000000000083": 25,
+                    "000000000000000000000084": 18,
+                    "000000000000000000000085": 14,
+                    "000000000000000000000086": 8,
+                    "000000000000000000000087": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000082"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000083": 25,
+                    "000000000000000000000084": 18,
+                    "000000000000000000000085": 18,
+                    "000000000000000000000086": 8,
+                    "000000000000000000000087": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000087"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000083": 25,
+                    "000000000000000000000084": 18,
+                    "000000000000000000000085": 23,
+                    "000000000000000000000086": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000086"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000083": 25,
+                    "000000000000000000000084": 18,
+                    "000000000000000000000085": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000085"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000083": 25,
+                    "000000000000000000000084": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000084"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "000000000000000000000083": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["000000000000000000000083"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 51,
+              "returnedBson": 8572
+            }
+          },
+          {
+            "cycle": 2,
+            "byParty": {
+              "1": 2,
+              "2": 1
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "00000000000000000000008a": 1,
+                "00000000000000000000008b": 1,
+                "00000000000000000000008c": 0,
+                "00000000000000000000008d": 1,
+                "00000000000000000000008e": 0,
+                "00000000000000000000008f": 0
+              },
+              "elected": [
+                "00000000000000000000008a",
+                "00000000000000000000008d",
+                "00000000000000000000008b"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "00000000000000000000008a": 30,
+                    "00000000000000000000008b": 25,
+                    "00000000000000000000008c": 18,
+                    "00000000000000000000008d": 14,
+                    "00000000000000000000008e": 8,
+                    "00000000000000000000008f": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000008a"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "00000000000000000000008b": 25,
+                    "00000000000000000000008c": 18,
+                    "00000000000000000000008d": 18,
+                    "00000000000000000000008e": 8,
+                    "00000000000000000000008f": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000008f"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "00000000000000000000008b": 25,
+                    "00000000000000000000008c": 18,
+                    "00000000000000000000008d": 23,
+                    "00000000000000000000008e": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000008e"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "00000000000000000000008b": 25,
+                    "00000000000000000000008c": 18,
+                    "00000000000000000000008d": 31
+                  },
+                  "action": "elect",
+                  "candidates": ["00000000000000000000008d"],
+                  "transferValue": 0.16129032258,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "00000000000000000000008b": 25,
+                    "00000000000000000000008c": 18
+                  },
+                  "action": "eliminate",
+                  "candidates": ["00000000000000000000008c"],
+                  "transferValue": 1,
+                  "exhausted": 5,
+                  "retained": 52,
+                  "continuing": 43,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 6,
+                  "totals": {
+                    "00000000000000000000008b": 43
+                  },
+                  "action": "elect_remaining",
+                  "candidates": ["00000000000000000000008b"],
+                  "transferValue": 0,
+                  "exhausted": 5,
+                  "retained": 95,
+                  "continuing": 0,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 51,
+              "returnedBson": 10530
+            }
+          },
+          {
+            "cycle": 3,
+            "byParty": {
+              "1": 1,
+              "2": 2
+            },
+            "resolutionPath": "pr_stv",
+            "count": {
+              "version": 1,
+              "transferMethod": "weighted_inclusive_gregory",
+              "arithmetic": "exact_rational",
+              "tieBreak": "countback_then_candidate_id",
+              "totalBallots": 100,
+              "quota": 26,
+              "seats": {
+                "000000000000000000000092": 1,
+                "000000000000000000000093": 1,
+                "000000000000000000000094": 1,
+                "000000000000000000000095": 0,
+                "000000000000000000000096": 0,
+                "000000000000000000000097": 0
+              },
+              "elected": [
+                "000000000000000000000092",
+                "000000000000000000000094",
+                "000000000000000000000093"
+              ],
+              "rounds": [
+                {
+                  "count": 1,
+                  "totals": {
+                    "000000000000000000000092": 30,
+                    "000000000000000000000093": 25,
+                    "000000000000000000000094": 18,
+                    "000000000000000000000095": 14,
+                    "000000000000000000000096": 8,
+                    "000000000000000000000097": 5
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000092"],
+                  "transferValue": 0.133333333333,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 2,
+                  "totals": {
+                    "000000000000000000000093": 25,
+                    "000000000000000000000094": 22,
+                    "000000000000000000000095": 14,
+                    "000000000000000000000096": 8,
+                    "000000000000000000000097": 5
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000097"],
+                  "transferValue": 1,
+                  "exhausted": 0,
+                  "retained": 26,
+                  "continuing": 74,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 3,
+                  "totals": {
+                    "000000000000000000000093": 25,
+                    "000000000000000000000094": 27,
+                    "000000000000000000000095": 14,
+                    "000000000000000000000096": 8
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000094"],
+                  "transferValue": 0.037037037037,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 4,
+                  "totals": {
+                    "000000000000000000000093": 25.666666666666,
+                    "000000000000000000000095": 14,
+                    "000000000000000000000096": 8
+                  },
+                  "action": "eliminate",
+                  "candidates": ["000000000000000000000096"],
+                  "transferValue": 1,
+                  "exhausted": 0.333333333333,
+                  "retained": 52,
+                  "continuing": 47.666666666666,
+                  "conservationResidual": 0
+                },
+                {
+                  "count": 5,
+                  "totals": {
+                    "000000000000000000000093": 33.666666666666,
+                    "000000000000000000000095": 14
+                  },
+                  "action": "elect",
+                  "candidates": ["000000000000000000000093"],
+                  "transferValue": 0.227722772277,
+                  "exhausted": 8,
+                  "retained": 78,
+                  "continuing": 14,
+                  "conservationResidual": 0
+                }
+              ]
+            },
+            "performance": {
+              "commands": 52,
+              "returnedBson": 12177
+            }
+          }
+        ],
+        "holdPassed": true,
+        "transferControlFlipPassed": true,
+        "repeatPassed": true
+      },
+      {
+        "field": "missing_ballots",
+        "refusedBeforeSeating": true,
+        "existingHolderPreserved": true
+      },
+      {
+        "field": "contradictory_ballots",
+        "refusedBeforeSeating": true,
+        "existingHolderPreserved": true
+      },
+      {
+        "field": "undersized_field",
+        "refusedBeforeSeating": true,
+        "existingHolderPreserved": true
+      },
+      {
+        "field": "duplicate_holders",
+        "refusedBeforeSeating": true,
+        "existingHolderPreserved": true
+      },
+      {
+        "field": "empty_ballots",
+        "refusedBeforeSeating": true,
+        "existingHolderPreserved": true
+      },
+      {
+        "field": "withdrawn",
+        "originalBallotsPreserved": true,
+        "transferPassed": true,
+        "count": {
+          "version": 1,
+          "transferMethod": "weighted_inclusive_gregory",
+          "arithmetic": "exact_rational",
+          "tieBreak": "countback_then_candidate_id",
+          "totalBallots": 100,
+          "quota": 26,
+          "seats": {
+            "000000000000000000000117": 1,
+            "000000000000000000000118": 1,
+            "000000000000000000000119": 1,
+            "00000000000000000000011a": 0,
+            "00000000000000000000011b": 0
+          },
+          "elected": [
+            "000000000000000000000119",
+            "000000000000000000000117",
+            "000000000000000000000118"
+          ],
+          "rounds": [
+            {
+              "count": 1,
+              "totals": {
+                "000000000000000000000117": 25,
+                "000000000000000000000118": 18,
+                "000000000000000000000119": 44,
+                "00000000000000000000011a": 8,
+                "00000000000000000000011b": 5
+              },
+              "action": "elect",
+              "candidates": ["000000000000000000000119"],
+              "transferValue": 0.40909090909,
+              "exhausted": 18,
+              "retained": 26,
+              "continuing": 56,
+              "conservationResidual": 0
+            },
+            {
+              "count": 2,
+              "totals": {
+                "000000000000000000000117": 25,
+                "000000000000000000000118": 18,
+                "00000000000000000000011a": 8,
+                "00000000000000000000011b": 5
+              },
+              "action": "eliminate",
+              "candidates": ["00000000000000000000011b"],
+              "transferValue": 1,
+              "exhausted": 23,
+              "retained": 26,
+              "continuing": 51,
+              "conservationResidual": 0
+            },
+            {
+              "count": 3,
+              "totals": {
+                "000000000000000000000117": 25,
+                "000000000000000000000118": 18,
+                "00000000000000000000011a": 8
+              },
+              "action": "eliminate",
+              "candidates": ["00000000000000000000011a"],
+              "transferValue": 1,
+              "exhausted": 31,
+              "retained": 26,
+              "continuing": 43,
+              "conservationResidual": 0
+            },
+            {
+              "count": 4,
+              "totals": {
+                "000000000000000000000117": 25,
+                "000000000000000000000118": 18
+              },
+              "action": "elect_remaining",
+              "candidates": ["000000000000000000000117", "000000000000000000000118"],
+              "transferValue": 0,
+              "exhausted": 31,
+              "retained": 69,
+              "continuing": 0,
+              "conservationResidual": 0
+            }
+          ]
+        }
+      },
+      {
+        "field": "retired",
+        "originalBallotsPreserved": true,
+        "transferPassed": true,
+        "count": {
+          "version": 1,
+          "transferMethod": "weighted_inclusive_gregory",
+          "arithmetic": "exact_rational",
+          "tieBreak": "countback_then_candidate_id",
+          "totalBallots": 100,
+          "quota": 26,
+          "seats": {
+            "00000000000000000000012d": 1,
+            "00000000000000000000012e": 1,
+            "00000000000000000000012f": 1,
+            "000000000000000000000130": 0,
+            "000000000000000000000131": 0
+          },
+          "elected": [
+            "00000000000000000000012f",
+            "00000000000000000000012d",
+            "00000000000000000000012e"
+          ],
+          "rounds": [
+            {
+              "count": 1,
+              "totals": {
+                "00000000000000000000012d": 25,
+                "00000000000000000000012e": 18,
+                "00000000000000000000012f": 44,
+                "000000000000000000000130": 8,
+                "000000000000000000000131": 5
+              },
+              "action": "elect",
+              "candidates": ["00000000000000000000012f"],
+              "transferValue": 0.40909090909,
+              "exhausted": 18,
+              "retained": 26,
+              "continuing": 56,
+              "conservationResidual": 0
+            },
+            {
+              "count": 2,
+              "totals": {
+                "00000000000000000000012d": 25,
+                "00000000000000000000012e": 18,
+                "000000000000000000000130": 8,
+                "000000000000000000000131": 5
+              },
+              "action": "eliminate",
+              "candidates": ["000000000000000000000131"],
+              "transferValue": 1,
+              "exhausted": 23,
+              "retained": 26,
+              "continuing": 51,
+              "conservationResidual": 0
+            },
+            {
+              "count": 3,
+              "totals": {
+                "00000000000000000000012d": 25,
+                "00000000000000000000012e": 18,
+                "000000000000000000000130": 8
+              },
+              "action": "eliminate",
+              "candidates": ["000000000000000000000130"],
+              "transferValue": 1,
+              "exhausted": 31,
+              "retained": 26,
+              "continuing": 43,
+              "conservationResidual": 0
+            },
+            {
+              "count": 4,
+              "totals": {
+                "00000000000000000000012d": 25,
+                "00000000000000000000012e": 18
+              },
+              "action": "elect_remaining",
+              "candidates": ["00000000000000000000012d", "00000000000000000000012e"],
+              "transferValue": 0,
+              "exhausted": 31,
+              "retained": 69,
+              "continuing": 0,
+              "conservationResidual": 0
+            }
+          ]
+        }
+      },
+      {
+        "field": "deleted",
+        "originalBallotsPreserved": true,
+        "transferPassed": true,
+        "count": {
+          "version": 1,
+          "transferMethod": "weighted_inclusive_gregory",
+          "arithmetic": "exact_rational",
+          "tieBreak": "countback_then_candidate_id",
+          "totalBallots": 100,
+          "quota": 26,
+          "seats": {
+            "000000000000000000000143": 1,
+            "000000000000000000000144": 1,
+            "000000000000000000000145": 1,
+            "000000000000000000000146": 0,
+            "000000000000000000000147": 0
+          },
+          "elected": [
+            "000000000000000000000145",
+            "000000000000000000000143",
+            "000000000000000000000144"
+          ],
+          "rounds": [
+            {
+              "count": 1,
+              "totals": {
+                "000000000000000000000143": 25,
+                "000000000000000000000144": 18,
+                "000000000000000000000145": 44,
+                "000000000000000000000146": 8,
+                "000000000000000000000147": 5
+              },
+              "action": "elect",
+              "candidates": ["000000000000000000000145"],
+              "transferValue": 0.40909090909,
+              "exhausted": 18,
+              "retained": 26,
+              "continuing": 56,
+              "conservationResidual": 0
+            },
+            {
+              "count": 2,
+              "totals": {
+                "000000000000000000000143": 25,
+                "000000000000000000000144": 18,
+                "000000000000000000000146": 8,
+                "000000000000000000000147": 5
+              },
+              "action": "eliminate",
+              "candidates": ["000000000000000000000147"],
+              "transferValue": 1,
+              "exhausted": 23,
+              "retained": 26,
+              "continuing": 51,
+              "conservationResidual": 0
+            },
+            {
+              "count": 3,
+              "totals": {
+                "000000000000000000000143": 25,
+                "000000000000000000000144": 18,
+                "000000000000000000000146": 8
+              },
+              "action": "eliminate",
+              "candidates": ["000000000000000000000146"],
+              "transferValue": 1,
+              "exhausted": 31,
+              "retained": 26,
+              "continuing": 43,
+              "conservationResidual": 0
+            },
+            {
+              "count": 4,
+              "totals": {
+                "000000000000000000000143": 25,
+                "000000000000000000000144": 18
+              },
+              "action": "elect_remaining",
+              "candidates": ["000000000000000000000143", "000000000000000000000144"],
+              "transferValue": 0,
+              "exhausted": 31,
+              "retained": 69,
+              "continuing": 0,
+              "conservationResidual": 0
+            }
+          ]
+        }
+      },
+      {
+        "field": "cleanup_retry",
+        "finalizedBeforeFailure": true,
+        "holdersNotReseated": true,
+        "candidatesCleaned": true,
+        "repeatedRecoveryPassed": true,
+        "candidates": 6
+      },
+      {
+        "field": "actual_accumulation",
+        "originalBallots": 4029,
+        "rankedParcels": 6,
+        "replayPassed": true,
+        "initializationGuardPassed": true,
+        "projectionResolutionPassed": true,
+        "batchReplayPassed": true,
+        "staleRevisionRefused": true
+      }
+    ],
+    "passed": true
+  },
+  "matchedResolverProfile": {
+    "before": {
+      "source": "093daeae41b152c61bb22ad352054ff8cd5cef2a",
+      "mode": "legacy",
+      "commands": 34,
+      "returnedBson": 6500,
+      "byParty": {
+        "1": 1,
+        "2": 2
+      },
+      "firstPreferences": {
+        "000000000000000000000010": 30,
+        "000000000000000000000011": 25,
+        "000000000000000000000012": 18,
+        "000000000000000000000013": 14,
+        "000000000000000000000014": 8,
+        "000000000000000000000015": 5
+      },
+      "actorParties": ["1", "2", "2", "1", "2", "1"],
+      "seats": 3,
+      "selectedProfileAcceptance": false,
+      "productionTouched": false,
+      "passed": true
+    },
+    "after": {
+      "source": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+      "mode": "stv",
+      "commands": 34,
+      "returnedBson": 6464,
+      "byParty": {
+        "1": 2,
+        "2": 1
+      },
+      "firstPreferences": {
+        "000000000000000000000010": 30,
+        "000000000000000000000011": 25,
+        "000000000000000000000012": 18,
+        "000000000000000000000013": 14,
+        "000000000000000000000014": 8,
+        "000000000000000000000015": 5
+      },
+      "actorParties": ["1", "2", "2", "1", "2", "1"],
+      "seats": 3,
+      "selectedProfileAcceptance": false,
+      "productionTouched": false,
+      "passed": true
+    },
+    "identicalFirstPreferences": true,
+    "identicalActorParties": true
+  },
+  "localCouncil": {
+    "source": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+    "mode": "stv",
+    "electionType": "localCouncil",
+    "commands": 34,
+    "returnedBson": 6488,
+    "byParty": {
+      "1": 2,
+      "2": 1
+    },
+    "firstPreferences": {
+      "000000000000000000000010": 30,
+      "000000000000000000000011": 25,
+      "000000000000000000000012": 18,
+      "000000000000000000000013": 14,
+      "000000000000000000000014": 8,
+      "000000000000000000000015": 5
+    },
+    "actorParties": ["1", "2", "2", "1", "2", "1"],
+    "seats": 3,
+    "selectedProfileAcceptance": false,
+    "productionTouched": false,
+    "passed": true
+  }
+}
