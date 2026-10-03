@@ -93,7 +93,7 @@ interface PoliticalCompassProps {
   economic: number;
   social: number;
   embedded?: boolean;
-  /** Optional party hex color for the position dot. Falls back to var(--primary). */
+  /** Optional CSS color for the position dot. Falls back to var(--primary). */
   dotColor?: string;
   /** Secondary reference markers (e.g. party or state position). */
   markers?: CompassMarker[];
@@ -121,35 +121,23 @@ export function PoliticalCompass({
     <div className="flex w-full flex-col items-center">
       <div className="relative flex w-full max-w-[min(100%,320px)] items-stretch gap-2 sm:gap-3">
         <div className="relative aspect-square min-w-0 flex-1">
-          <div className="absolute inset-0 overflow-hidden rounded-2xl border border-card-border/80 bg-zinc-950/40 shadow-inner ring-1 ring-white/[0.04]">
-            {/* Quadrants - Custom color scheme */}
-            {/* Top-Left: Red */}
-            <div className="absolute top-0 left-0 h-1/2 w-1/2 bg-gradient-to-br from-red-500/[0.18] to-red-600/[0.10]" />
-            {/* Top-Right: Blue */}
-            <div className="absolute top-0 right-0 h-1/2 w-1/2 bg-gradient-to-bl from-blue-500/[0.18] to-blue-600/[0.10]" />
-            {/* Bottom-Left: Green */}
-            <div className="absolute bottom-0 left-0 h-1/2 w-1/2 bg-gradient-to-tr from-green-500/[0.18] to-green-600/[0.10]" />
-            {/* Bottom-Right: Purple */}
-            <div className="absolute right-0 bottom-0 h-1/2 w-1/2 bg-gradient-to-tl from-purple-500/[0.18] to-violet-600/[0.10]" />
+          <div className="absolute inset-0 overflow-hidden rounded-md border border-card-border bg-card-elevated/40">
+            {/* Quadrants: neutral shading on the diagonal, no hue */}
+            <div className="absolute top-0 left-0 h-1/2 w-1/2 bg-foreground/[0.035]" />
+            <div className="absolute right-0 bottom-0 h-1/2 w-1/2 bg-foreground/[0.035]" />
 
-            <div
-              className="absolute inset-0 opacity-[0.35]"
-              style={{
-                backgroundImage: `
-                  linear-gradient(to right, transparent 0%, transparent calc(50% - 0.5px), rgba(255,255,255,0.08) calc(50% - 0.5px), rgba(255,255,255,0.08) calc(50% + 0.5px), transparent calc(50% + 0.5px)),
-                  linear-gradient(to bottom, transparent 0%, transparent calc(50% - 0.5px), rgba(255,255,255,0.08) calc(50% - 0.5px), rgba(255,255,255,0.08) calc(50% + 0.5px), transparent calc(50% + 0.5px))
-                `,
-              }}
-            />
+            {/* Axes */}
+            <div className="absolute top-0 left-1/2 h-full w-px bg-card-border" />
+            <div className="absolute top-1/2 left-0 h-px w-full bg-card-border" />
 
             <div className="pointer-events-none absolute inset-2 flex flex-col justify-between text-[9px] font-semibold tracking-wide text-foreground/45">
               <div className="flex justify-between gap-1">
-                <span className="drop-shadow-sm">Left · Trad.</span>
-                <span className="drop-shadow-sm">Right · Trad.</span>
+                <span>Left · Trad.</span>
+                <span>Right · Trad.</span>
               </div>
               <div className="flex justify-between gap-1">
-                <span className="drop-shadow-sm">Left · Lib.</span>
-                <span className="drop-shadow-sm">Right · Lib.</span>
+                <span>Left · Lib.</span>
+                <span>Right · Lib.</span>
               </div>
             </div>
           </div>
@@ -228,20 +216,8 @@ export function PoliticalCompass({
             }}
           >
             <div
-              className="absolute inset-0 animate-ping rounded-full motion-reduce:animate-none"
-              style={{
-                backgroundColor: dotColor
-                  ? `${dotColor}40`
-                  : "var(--color-primary, oklch(65% 0.3 290))",
-                opacity: dotColor ? 1 : undefined,
-              }}
-            />
-            <div
               className="relative h-full w-full rounded-full border-2 border-background shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
-              style={{
-                backgroundColor: dotColor ?? "var(--color-primary)",
-                boxShadow: `0 0 0 1px rgba(0,0,0,0.25), 0 0 0 3px ${dotColor ? `${dotColor}50` : "color-mix(in srgb, var(--color-primary) 30%, transparent)"}`,
-              }}
+              style={{ backgroundColor: dotColor ?? "var(--color-primary)" }}
             />
             <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 max-w-[min(90vw,240px)] -translate-x-1/2 rounded-lg border border-card-border bg-popover px-2.5 py-1.5 text-center text-xs font-medium text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
               <div className={getPolicyColor(economic)}>

@@ -1,6 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import type { GeneralPosting } from "@/lib/military/generalPosting";
+import { SectionHeader } from "@/app/profile/components/ProfileMeters";
 export interface MilitaryService {
   commissioned: boolean;
   commissionedTurn?: number;
@@ -23,20 +24,22 @@ export function MilitaryServiceRecord({
       : []),
   ].sort((a, b) => b.turn - a.turn);
   return (
-    <section className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-      <h2 className="text-lg font-semibold">{t("service")}</h2>
-      <p className="font-medium">{t(service.commissioned ? "active" : "retired")}</p>
+    <section className="space-y-3">
+      <SectionHeader>{t("service")}</SectionHeader>
+      <p className="text-body font-medium text-foreground">
+        {t(service.commissioned ? "active" : "retired")}
+      </p>
       {events.length ? (
-        <ol className="space-y-2 text-sm">
+        <ol className="space-y-2 text-body text-foreground">
           {events.map((e) => (
             <li key={e.kind}>{t(e.kind, { turn: e.turn })}</li>
           ))}
         </ol>
       ) : (
-        <p className="text-sm text-muted">{t("unknownDates")}</p>
+        <p className="text-body text-muted">{t("unknownDates")}</p>
       )}
       {service.commissioned && (
-        <div className="border-t border-card-border pt-3 text-sm space-y-1">
+        <div className="space-y-1 border-t border-card-border/60 pt-3 text-body text-foreground">
           <h3 className="font-semibold">{t("currentPosting")}</h3>
           <p>
             {posting?.formationName ? t("command", { name: posting.formationName }) : t("reserve")}
@@ -45,7 +48,7 @@ export function MilitaryServiceRecord({
           <p>{t("units", { count: posting?.unitCount ?? 0 })}</p>
         </div>
       )}
-      <p className="text-xs text-muted">{t("recordHint")}</p>
+      <p className="text-body-sm text-muted">{t("recordHint")}</p>
     </section>
   );
 }

@@ -66,7 +66,7 @@ export const WIKI_LAST_UPDATED: Record<string, string> = {
   corporations: "2026-09-08",
   "create-a-character": "2026-08-30",
   "crisis-interaction": "2026-08-23",
-  "currency-exchange": "2026-08-21",
+  "currency-exchange": "2026-10-02",
   "dd-overview": "2026-08-31",
   "de-overview": "2026-08-30",
   "declaring-war": "2026-09-30",

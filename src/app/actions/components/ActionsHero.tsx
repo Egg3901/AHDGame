@@ -64,13 +64,9 @@ export default function ActionsHero({
           className="absolute inset-0 bg-gradient-to-t from-black/92 via-black/45 to-black/10"
           aria-hidden
         />
-        <div
-          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
-          aria-hidden
-        />
         <div className="absolute inset-0 flex flex-col justify-end px-6 pb-6 sm:px-8 sm:pb-8">
           {eraLabel && (
-            <span className="mb-2 inline-flex w-fit items-center rounded-full border border-white/25 bg-black/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/90 backdrop-blur-md">
+            <span className="mb-2 inline-flex w-fit items-center rounded-full border border-white/25 bg-black px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/90">
               {eraLabel}
             </span>
           )}
@@ -78,8 +74,7 @@ export default function ActionsHero({
             Campaign Operations
           </h1>
           <p className="mt-2 text-sm text-white/90 drop-shadow sm:text-base max-w-2xl">
-            Direct your political operation. Manage resources, expand your influence, and shape
-            public opinion.
+            Spend actions and campaign money on influence, favorability, fundraising and polls.
           </p>
         </div>
       </div>

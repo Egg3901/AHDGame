@@ -17,5 +17,4 @@ export interface SearchResult {
   title: string;
   subtitle: string;
   href: string;
-  icon: string;
 }

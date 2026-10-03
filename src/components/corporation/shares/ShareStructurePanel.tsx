@@ -8,6 +8,7 @@ import {
 } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CorporationDetail } from "../CorporationPageTypes";
+import { DenseSection, SmallButton } from "../dense/DenseKit";
 
 interface ShareStructurePanelProps {
   corporation: CorporationDetail;
@@ -62,31 +63,33 @@ export default function ShareStructurePanel({ corporation, trading }: ShareStruc
     corporation.shareConsolidationMinTotalShares ?? SHARE_CONSOLIDATION_MIN_TOTAL_SHARES;
   const foundingShares = corporation.foundingTotalShares ?? CEO_INITIAL_SHARES;
 
+  const reverseRange = `${minTotalShares.toLocaleString("en-US")} to ${(corporation.totalShares - 1).toLocaleString("en-US")}`;
+  const forwardRange = `${(corporation.totalShares + 1).toLocaleString("en-US")} to ${maxForwardTotal.toLocaleString("en-US")}`;
+
   return (
-    <div className="rounded-xl border border-card-border bg-card-elevated/40 p-6">
-      <h2 className="text-lg font-bold text-foreground mb-1">Stock split & reverse split</h2>
-      <p className="text-sm text-muted mb-4">
-        Set a new total share count. All shareholders and the public float are adjusted in
-        proportion so{" "}
-        <span className="text-foreground font-medium">market capitalization stays the same</span>.
-        Reverse splits cannot go below {minTotalShares.toLocaleString("en-US")} shares; forward
-        splits are capped at {MAX_FORWARD_SHARE_SPLIT_MULTIPLIER}× current shares. At most once
-        every {SHARE_STRUCTURE_COOLDOWN_TURNS} turns.
-      </p>
-      {!ceoEligibleForShareStructure && (
-        <p className="text-xs text-muted mb-3">Not available for state-owned corporations.</p>
-      )}
-      {ceoEligibleForShareStructure && shareStructureOnCooldown && (
-        <p className="text-sm text-warning mb-3">
-          Share structure cooldown: {shareStructureCooldownTurnsRemaining} turn(s) remaining (last
-          change turn {corporation.lastShareStructureTurn ?? "—"}).
+    <DenseSection title="Stock split" meta="CEO">
+      <div className="space-y-2 py-1">
+        <p className="text-xs text-muted">
+          Set a new total share count. Every holding and the public float scale in proportion, so
+          market capitalization stays the same. Reverse splits stop at{" "}
+          {minTotalShares.toLocaleString("en-US")} shares; forward splits at{" "}
+          {MAX_FORWARD_SHARE_SPLIT_MULTIPLIER}x current shares. Once every{" "}
+          {SHARE_STRUCTURE_COOLDOWN_TURNS} turns.
         </p>
-      )}
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs text-muted mb-1">New total shares</label>
+        {!ceoEligibleForShareStructure && (
+          <p className="text-xs text-muted">Not available for state-owned corporations.</p>
+        )}
+        {ceoEligibleForShareStructure && shareStructureOnCooldown && (
+          <p className="text-xs text-warning">
+            Available again in {shareStructureCooldownTurnsRemaining} turn
+            {shareStructureCooldownTurnsRemaining === 1 ? "" : "s"} (last change turn{" "}
+            {corporation.lastShareStructureTurn ?? "unknown"}).
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5">
           <input
             type="number"
+            aria-label="New total shares"
             value={consolidateTarget === "" ? "" : consolidateTarget}
             onChange={(e) => {
               const raw = e.target.value;
@@ -96,72 +99,61 @@ export default function ShareStructurePanel({ corporation, trading }: ShareStruc
               }
               setConsolidateTarget(Math.max(0, Math.floor(Number(raw))));
             }}
-            placeholder={`Reverse ${minTotalShares.toLocaleString("en-US")}–${(corporation.totalShares - 1).toLocaleString("en-US")} · forward ${(corporation.totalShares + 1).toLocaleString("en-US")}–${maxForwardTotal.toLocaleString("en-US")}`}
+            placeholder="New total shares"
             disabled={!canEditShareStructureTarget}
-            className="w-full max-w-md rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
+            className="h-7 w-40 rounded-md border border-card-border bg-background px-2 text-right text-[13px] tabular-nums text-foreground focus:border-foreground focus:outline-none disabled:opacity-50"
           />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
+          <SmallButton
             disabled={!canEditShareStructureTarget}
             onClick={() =>
               setConsolidateTarget(
                 Math.max(minTotalShares, Math.floor(corporation.totalShares / 10))
               )
             }
-            className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium text-muted hover:text-foreground transition-colors disabled:opacity-50"
           >
             10:1 reverse
-          </button>
-          <button
-            type="button"
+          </SmallButton>
+          <SmallButton
             disabled={!canEditShareStructureTarget || corporation.totalShares * 2 > maxForwardTotal}
             onClick={() => setConsolidateTarget(corporation.totalShares * 2)}
-            className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium text-muted hover:text-foreground transition-colors disabled:opacity-50"
           >
             2:1 forward
-          </button>
-          <button
-            type="button"
+          </SmallButton>
+          <SmallButton
             disabled={
               !canEditShareStructureTarget ||
               foundingShares >= corporation.totalShares ||
               foundingShares < minTotalShares
             }
             onClick={() => setConsolidateTarget(foundingShares)}
-            className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium text-muted hover:text-foreground transition-colors disabled:opacity-50"
           >
-            {foundingShares.toLocaleString("en-US")} (founding size)
-          </button>
+            Founding size ({foundingShares.toLocaleString("en-US")})
+          </SmallButton>
+          <SmallButton
+            tone="primary"
+            onClick={handleConsolidateShares}
+            disabled={loading || !shareStructureTargetValid}
+          >
+            {loading ? "Applying" : "Apply"}
+          </SmallButton>
         </div>
-        <button
-          type="button"
-          onClick={handleConsolidateShares}
-          disabled={loading || !shareStructureTargetValid}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
-        >
-          {loading ? "..." : "Apply"}
-        </button>
-      </div>
-      {consolidateTargetNum > 0 &&
-        !shareStructurePricePreview &&
-        consolidateTargetNum !== corporation.totalShares &&
-        canEditShareStructureTarget && (
-          <p className="text-xs text-error mt-2">
-            Reverse: {minTotalShares.toLocaleString("en-US")}–
-            {(corporation.totalShares - 1).toLocaleString("en-US")}. Forward:{" "}
-            {(corporation.totalShares + 1).toLocaleString("en-US")}–
-            {maxForwardTotal.toLocaleString("en-US")}.
+        {consolidateTargetNum > 0 &&
+          !shareStructurePricePreview &&
+          consolidateTargetNum !== corporation.totalShares &&
+          canEditShareStructureTarget && (
+            <p className="text-xs text-error">
+              Reverse: {reverseRange}. Forward: {forwardRange}.
+            </p>
+          )}
+        {newPriceAfterShareStructure != null && (
+          <p className="text-xs tabular-nums text-muted">
+            Indicative new price about{" "}
+            {formatPrice(toAnchor(newPriceAfterShareStructure), liquidCode)} (market cap{" "}
+            {formatAmount(toAnchor(corporation.sharePrice * corporation.totalShares), liquidCode)}
+            ).
           </p>
         )}
-      {newPriceAfterShareStructure != null && (
-        <p className="text-xs text-muted mt-3 tabular-nums">
-          Indicative new price ~{formatPrice(toAnchor(newPriceAfterShareStructure), liquidCode)}{" "}
-          (market cap{" "}
-          {formatAmount(toAnchor(corporation.sharePrice * corporation.totalShares), liquidCode)})
-        </p>
-      )}
-    </div>
+      </div>
+    </DenseSection>
   );
 }

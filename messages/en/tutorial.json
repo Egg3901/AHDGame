@@ -60,18 +60,18 @@
       },
       "whatsNewElections": {
         "title": "Elections are harder to coast through",
-        "body": "An incumbent's advantage now scales with how popular they actually are, parties that have held power a long time pick up a penalty, and every governor and senate race gets a real opponent. A census redraws the seats every ten years, so safe ground does not stay safe forever.",
+        "body": "An incumbent's advantage now scales with how popular they actually are, parties that have held power a long time pick up a penalty, and every governor and senate race gets a real opponent. A census redraws the seats every ten years, so a safe seat can become a contested one.",
         "readMore": "See the races",
         "next": "Got it"
       },
       "welcome": {
         "title": "Welcome to A House Divided",
-        "body": "{countryName} is a living country, and the other people in it are real players. The ones who do well build allies and an income early. A good platform on its own does not get you very far. This tour shows you the moves that actually matter. You can stop at any point and pick it up again from the tutorial page.",
+        "body": "Many of the other politicians in {countryName} are real players. The ones who do well build allies and a steady income early. This tour covers the main pages and actions. You can stop at any point and pick it up again from the tutorial page.",
         "next": "Show me"
       },
       "howTurnsWork": {
         "title": "The game moves in turns",
-        "body": "Nothing happens the moment you click it. What you do now resolves on the next turn, along with everyone else's moves and the economy. You get a small number of actions each turn. Money and influence carry over, but an unspent turn is gone.",
+        "body": "The world moves forward one turn at a time. Each turn the economy updates, races and bills advance, and you get at least 4 new actions, more if you hold office. Money, influence and unspent actions carry over, but if you bank more than 100 actions you lose 4 a turn.",
         "next": "Next"
       },
       "joinDiscord": {
@@ -81,19 +81,19 @@
       },
       "scoutRegion": {
         "title": "Look at your home {region} before you spend anything",
-        "body": "Everything starts local. Your {region} page shows how its economy is doing, who currently holds office there, and which seats are coming up. Read it first so you know where the gaps are instead of guessing.",
+        "body": "Your {region} page shows how its economy is doing, who holds office there, and which seats are up for election next. Read it before you spend anything so you know which races you could enter.",
         "hint": "Open your {region} page to continue.",
         "next": "Next"
       },
       "readWire": {
         "title": "Read the news every turn",
-        "body": "The News page tells you what other players did last turn and what the economy did in response. It is the difference between reacting to the game and being surprised by it. Most strong players read it before they spend anything.",
+        "body": "The News page reports what other players did last turn and how the economy moved in response. Read it before you spend your actions so you know what changed.",
         "hint": "Open the News page.",
         "next": "Next"
       },
       "officeIntro": {
         "title": "How a career gets built here",
-        "body": "Nobody hands you an office. You join a party, spend actions to get your name known, win a small seat, build a voting record, and trade up from there. Players who try to start at the top almost always lose their first primary and give up.",
+        "body": "Offices are won one step at a time. You join a party, spend actions to raise your influence, win a small seat, build a voting record, and run for bigger offices from there. Influence counts in primaries, so a first run for a top office usually fails.",
         "next": "Next"
       },
       "joinParty": {
@@ -104,19 +104,19 @@
       },
       "actionsWhat": {
         "title": "Actions are your time",
-        "body": "You get a few actions each turn and they are the main thing you have to spend. Money you can raise later. Actions you cannot get back. The next few cards walk through what each one does and when it is worth the cost.",
+        "body": "Action points are the main thing you spend. Each action on the Actions page costs some of them, and most also cost campaign money. The next few steps cover what each one does and when it is worth the cost.",
         "hint": "Open the Actions page to follow along.",
         "next": "Next"
       },
       "actionCampaign": {
         "title": "Campaign is the one you start with",
-        "body": "Campaigning raises your Political Influence, which is how well known you are. It is the cheapest action in the game and it is what turns a nobody into someone who can win a primary. The cost goes up as your influence grows, so it is at its best right now while you have none.",
+        "body": "Campaigning raises your Political Influence, which is how well known you are, and influence counts when primaries are decided. It costs 1 action while your influence is below 20% and gets more expensive as it grows, so it is cheapest now.",
         "hint": "Run a Campaign action to continue.",
         "next": "Next"
       },
       "actionAdvertise": {
         "title": "Advertising is for later",
-        "body": "Adverts raise Favorability, which is whether people like you rather than whether they have heard of you. It costs about five times what campaigning costs. Buying adverts before anyone knows your name is the most common way new players waste a turn. Get your influence up first.",
+        "body": "Adverts raise Favorability, which is whether people like you rather than whether they have heard of you. At the start they cost about five times as much as campaigning, in both actions and money, so raise your influence first.",
         "next": "Next"
       },
       "actionFundraise": {
@@ -126,7 +126,7 @@
       },
       "actionDonors": {
         "title": "Build the donor network early",
-        "body": "This is the action new players skip and regret. It costs a lot up front and pays nothing straight away, but every fundraise you ever run afterwards pays more. Do not fund your own campaign out of pocket instead. Self funding drives your Infamy up and bleeds Favorability every turn, and it is the fastest way to end a promising career.",
+        "body": "Build Donor Network costs 4 actions at first and pays out nothing itself. You need donor level 1 before you can fundraise at all, and each level raises what every later Fundraise pays. Paying for your campaign out of your own pocket loses half the money in the transfer and adds Infamy, and Infamy above 20 drains your Favorability every turn.",
         "next": "Got it"
       },
       "fileForRace": {
@@ -143,7 +143,7 @@
       },
       "officeWider": {
         "title": "Where this goes next",
-        "body": "A seat is the start, not the finish. From here you chase committee places, party office, and leadership votes, and every one of those is decided by players you will need on your side. The Discord is where most of that gets arranged.",
+        "body": "After a seat come committee places, party office and leadership votes. Other players decide each of those, so you will need their support. Most of those deals are made on the Discord.",
         "readMore": "See every race",
         "next": "Got it"
       },
@@ -171,7 +171,7 @@
       },
       "companyIntro": {
         "title": "A company here is a real business",
-        "body": "It is not just a share price. A company works in specific sectors, employs people in specific regions, buys what it needs from other companies, and sells to households and to the government. Run one well and it pays for a political career nobody can outspend.",
+        "body": "A company works in specific sectors, employs people in specific regions, buys what it needs from other companies, and sells to households and to the government. Its profits can pay dividends to everyone who holds its shares.",
         "next": "Next"
       },
       "companyTakeCharge": {
@@ -197,7 +197,7 @@
         "next": "Got it"
       },
       "unionIntro": {
-        "title": "A union is pressure, not a member list",
+        "title": "A union's power is its membership pressure",
         "body": "Unions here are not groups of players. Each one has a membership pressure score that stands for the workers in that industry. Pressure is what gives a union any power at all, and organising drives are how it goes up. As leader, your job is to raise it and then spend it on something worth having.",
         "next": "Next"
       },
@@ -215,7 +215,7 @@
       },
       "unionPower": {
         "title": "Wage demands and strikes",
-        "body": "A union with enough pressure and money behind it can demand higher wages across its industry, and strike if employers refuse. Strikes cost the union money and cost companies output, so it is a threat you spend rather than a button you press repeatedly. Watch out for governments passing a ban, which freezes your union until it is repealed.",
+        "body": "A union with enough pressure and money behind it can demand higher wages across its industry, and strike if employers refuse. A strike costs the union money and costs companies output. Governments can ban unions by law, which freezes yours until the ban is repealed.",
         "next": "Got it"
       },
       "nationIntro": {
@@ -231,26 +231,26 @@
       },
       "nationCabinet": {
         "title": "Cabinet posts are the realistic first step",
-        "body": "Cabinet jobs run a whole area of policy and they are handed out rather than elected. For most players that is the first real taste of national power, long before the top job is possible. Which means being useful to whoever will be doing the handing out is worth more than any campaign action.",
+        "body": "Cabinet jobs run a whole area of policy, and they are appointed rather than elected. For most players a cabinet post is the first national office within reach. To get one, you need the support of whoever makes the appointments.",
         "readMore": "See the cabinet",
         "next": "Next"
       },
       "nationBudget": {
-        "title": "Governing is mostly arithmetic",
-        "body": "The budget is where promises meet money. Every programme costs something, every tax slows something down, and deficits turn into debt payments that squeeze out everything you actually wanted to do. Read it before you promise anything in a campaign.",
+        "title": "Read the national budget",
+        "body": "The national budget lists what the government spends, what each tax brings in, and the interest it pays on its debt. Deficits add to that debt, and the interest comes out of later budgets. Read it before you promise spending or tax cuts in a campaign.",
         "hint": "Open the national budget.",
         "next": "Next"
       },
       "nationMoney": {
         "title": "The levers underneath the budget",
-        "body": "The central bank sets interest rates, and those move inflation, the cost of borrowing, and the value of your currency. A leader who ignores this still gets the consequences. Currency strength also sets what imports cost you and what your exporters earn abroad.",
+        "body": "The central bank sets interest rates, and those move inflation, the cost of borrowing, and the value of your currency. The exchange rate also sets what imports cost and what exporters earn abroad.",
         "readMore": "See the central bank",
         "next": "Got it"
       }
     },
     "closing": {
       "title": "That is the loop",
-      "bodyFull": "Read the wire, spend your actions where they count, and let the turns compound. You can replay any chapter from the tutorial page whenever you want it. Good luck out there.",
+      "bodyFull": "Read the news, spend your actions, and check the results after each turn. You can replay any chapter from the tutorial page whenever you want it. Good luck out there.",
       "bodyShort": "That is your path. If you want to see one of the others later, the tutorial page has every chapter and you can run them one at a time. Good luck out there.",
       "next": "Done"
     },
@@ -293,7 +293,7 @@
       "mostPlayers": "Most players",
       "aboutMinutesShort": "about {minutes} min",
       "minutesShort": "{minutes} min",
-      "allOfItBlurb": "The whole game. Politics and money feed each other, and the players who do both end up ahead of the ones who pick a side.",
+      "allOfItBlurb": "Every chapter below, from running for office to running a nation.",
       "pickAtLeastOne": "Pick at least one to continue.",
       "estimate": "About {minutes} minutes, and you can stop any time.",
       "back": "Back",

@@ -68,7 +68,6 @@ export function ReferendumMasthead({
   accent = "neutral",
   emblemSeal,
   emblemSplit,
-  watermark,
   viewingAs,
 }: {
   countryId: string;
@@ -86,8 +85,6 @@ export function ReferendumMasthead({
   accent?: "yes" | "neutral";
   /** Circular crest, top-right (kind-aware text). */
   emblemSeal?: { line1: string; line2: string };
-  /** Faded oversized watermark behind the header. */
-  watermark?: string;
   /** A row under the title (the admin "Viewing as" control). */
   viewingAs?: React.ReactNode;
 }) {
@@ -104,11 +101,6 @@ export function ReferendumMasthead({
             : undefined
         }
       >
-        {watermark && (
-          <span className="pointer-events-none absolute right-6 top-1 select-none text-[68px] font-black leading-none tracking-tighter text-foreground/[0.06]">
-            {watermark}
-          </span>
-        )}
         <div className="relative flex flex-wrap items-center gap-4">
           {emblemSplit ? (
             <SplitFlagEmblem topLeft={emblemSplit.topLeft} bottomRight={emblemSplit.bottomRight} />
@@ -128,7 +120,7 @@ export function ReferendumMasthead({
               {subtitle && <span className="text-sm text-muted">{subtitle}</span>}
               {statusPill && <CampaignStatusPill status={statusPill} />}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-card-border bg-background/40 px-2.5 py-1 text-[11px] font-semibold text-muted">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--success)]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" aria-hidden />
                 Live · turn-weighted
               </span>
             </div>
@@ -149,13 +141,6 @@ export function ReferendumMasthead({
           </div>
         </div>
       </div>
-      <div
-        className="h-0.5 opacity-80"
-        style={{
-          background:
-            "linear-gradient(90deg,transparent,var(--ref-gold) 16%,var(--ref-amber) 50%,var(--ref-gold) 84%,transparent)",
-        }}
-      />
       <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] bg-background/40">
         {tiles.map((t) => (
           <div

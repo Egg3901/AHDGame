@@ -8,9 +8,6 @@ import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import { InstitutionSeal } from "@/components/national/InstitutionSeal";
 import { hexToRgba } from "@/components/national/identityColor";
 
-const SERIF_CJK = "'Noto Serif SC', 'Noto Serif JP', 'Songti SC', serif";
-const SERIF_MONO = "'Playfair Display', Georgia, 'Times New Roman', serif";
-
 export interface InstitutionMastheadProps {
   countryId: CountryId;
   identity: InstitutionIdentity;
@@ -27,12 +24,12 @@ export interface InstitutionMastheadProps {
 }
 
 /**
- * Shared institution masthead — the Executive / National Policy / Central
- * Bank counterpart of `TreasuryMasthead`, same identity grammar: optional
- * photo hero → brand-gradient band (watermark glyph, NationalSeal, registry
- * eyebrow, serif title) → optional fused tile strip. Banner gradient + accent
- * are the institution's fixed brand colors (the documented raw-value
- * exception); everything else inherits semantic tokens.
+ * Shared institution masthead: the Executive / National Policy / Central Bank
+ * counterpart of `TreasuryMasthead`, same identity grammar. Optional photo hero,
+ * then the brand-gradient band (seal, registry line, title), then an optional
+ * fused tile strip. Banner gradient and accent are the institution's fixed
+ * brand colors (the documented raw-value exception); everything else inherits
+ * semantic tokens.
  */
 export function InstitutionMasthead({
   countryId,
@@ -43,8 +40,7 @@ export function InstitutionMasthead({
   rightSlot,
   strip,
 }: InstitutionMastheadProps) {
-  const serif = id.serif === "cjk" ? SERIF_CJK : SERIF_MONO;
-  const bannerBg = `radial-gradient(120% 160% at 0% 0%, ${hexToRgba(id.accent, 0.14)} 0%, transparent 42%), linear-gradient(135deg, ${id.palette[0]} 0%, ${id.palette[1]} 46%, ${id.palette[2]} 100%)`;
+  const bannerBg = `linear-gradient(135deg, ${id.palette[0]} 0%, ${id.palette[1]} 46%, ${id.palette[2]} 100%)`;
 
   return (
     <header className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
@@ -73,15 +69,6 @@ export function InstitutionMasthead({
         className={`relative overflow-hidden px-5 pb-4 pt-5 sm:px-7 ${heroImage ? "border-t border-white/10" : ""}`}
         style={{ background: bannerBg }}
       >
-        {/* Faint watermark glyph */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-3 -top-14 select-none font-black leading-none"
-          style={{ fontSize: 200, fontFamily: serif, color: hexToRgba(id.accentSoft, 0.06) }}
-        >
-          {id.glyph}
-        </div>
-
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           <InstitutionSeal
             country={countryId}
@@ -100,7 +87,7 @@ export function InstitutionMasthead({
               {id.registry}
             </div>
             <h1 className="mt-1 text-xl font-bold leading-[1.1] tracking-tight text-white sm:text-2xl">
-              <span style={{ fontFamily: serif }}>{id.title}</span>
+              {id.title}
               {id.titleEn && (
                 <span className="ml-2 align-middle text-base font-semibold text-white/55 sm:text-lg">
                   {id.titleEn}
@@ -114,16 +101,7 @@ export function InstitutionMasthead({
         </div>
       </div>
 
-      {/* Accent rule (brand line) */}
-      <div
-        aria-hidden
-        className="h-0.5"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${id.accent} 18%, ${id.accentSoft} 50%, ${id.accent} 82%, transparent)`,
-          opacity: 0.85,
-        }}
-      />
-
+      {strip && <div aria-hidden className="h-px bg-card-border" />}
       {strip}
     </header>
   );

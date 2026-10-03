@@ -40,13 +40,18 @@ export async function publishLocTarget(db: Db, key: string, spec: TargetSpec): P
   const outcomePath = `locTargetOutcomes.${spec.token}`;
   const admissionPath = `locTargetAdmissions.${spec.token}`;
   const acknowledge = async (outcome: Outcome, marker?: Document) => {
-    await journal.updateOne(
+    const recorded = await journal.updateOne(
       { ...journalId, status: "partial", [outcomePath]: { $exists: false } },
       { $set: { [outcomePath]: outcome } }
     );
-    const saved = await journal.findOne(journalId, { projection: { [outcomePath]: 1 } });
-    if (!isDeepStrictEqual(saved?.locTargetOutcomes?.[spec.token], outcome))
-      throw new Error("LOC target outcome conflicts with its durable journal");
+    // A matched write stored this outcome where none existed, and an outcome
+    // is only ever written under that same guard, never rewritten or unset:
+    // re-reading it could only return this value. Otherwise compare.
+    if (!recorded.matchedCount) {
+      const saved = await journal.findOne(journalId, { projection: { [outcomePath]: 1 } });
+      if (!isDeepStrictEqual(saved?.locTargetOutcomes?.[spec.token], outcome))
+        throw new Error("LOC target outcome conflicts with its durable journal");
+    }
     if (marker)
       await target.updateOne(
         { ...targetId, [spec.marker]: marker },

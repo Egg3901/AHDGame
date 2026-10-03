@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { previewEffectivePlay } from "@/lib/alignment/rules/previewEffectivePlay";
 import { POLE_TEXT, ShareBar } from "@/components/alignment/ShareBar";
 import type { InfluenceTarget, OrgInfluenceView } from "@/lib/alignment/queries/orgInfluence";
 import { formatShare, roundToShareGrid } from "@/lib/alignment/normalize";
@@ -30,6 +32,7 @@ interface Props {
  * put it somewhere it does not mean.
  */
 export function NationDossier({ view, target, orgId, viewerCountryId, onCommitted }: Props) {
+  const t = useTranslations("worldOrganizations.influence");
   // Costs are informational — what a nation would take — so they read in the
   // viewer's currency. The commit input below deliberately does not: the route
   // takes `amountLocal` in the FUND's currency, and a field that accepted one
@@ -137,16 +140,17 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
       <div data-testid="rival-intel" className="space-y-1">
         <h4 className="text-body-xs uppercase tracking-wide text-muted">Rival activity</h4>
         {intel.length === 0 ? (
-          <p className="text-body-sm text-muted">No rival has moved here recently.</p>
+          <p className="text-body-sm text-muted">{t("noRivals")}</p>
         ) : (
           intel.map((e, i) => (
             <p key={`${e.poleLabel}-${i}`} className="text-body-sm text-foreground">
-              <span className={POLE_TEXT[e.accentToken]}>{e.poleLabel}</span> landed{" "}
-              {e.pointsLanded} here{" "}
-              {e.turnsAgo === 0
-                ? "this turn"
-                : `${e.turnsAgo} turn${e.turnsAgo === 1 ? "" : "s"} ago`}
-              .
+              <span className={POLE_TEXT[e.accentToken]}>
+                {t(e.pointsLanded == null ? "rivalUnknown" : "rivalGain", {
+                  pole: e.poleLabel,
+                  points: formatShare(e.pointsLanded ?? 0),
+                  when: e.turnsAgo === 0 ? t("thisTurn") : t("turnsAgo", { count: e.turnsAgo }),
+                })}
+              </span>
             </p>
           ))
         )}
@@ -159,25 +163,11 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
         </p>
       ) : (
         <p className="text-body-xs text-muted">
-          {target.name} costs{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {fundAmount(target.pointCostLocal)}
-          </span>{" "}
-          a point.{" "}
-          {target.resistsAtHalfStrength
-            ? "That is twice the usual tenth of a percent of its economy, because of the resistance noted above."
-            : "That is a tenth of a percent of its economy."}{" "}
-          Moving it the full {turnCap} points a turn allows costs{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {fundAmount(target.turnCapCostLocal ?? 0)}
-          </span>{" "}
-          when nobody pushes back. A rival&rsquo;s push cancels yours point for point before that
-          limit applies, so against a rival you need their points plus {turnCap}. One play lands at
-          most {target.playMaxPoints} points, which costs{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {fundAmount(target.playCapCostLocal ?? 0)}
-          </span>
-          . Spending more on one play buys nothing, but a second play in the same turn adds its own.
+          {t("pricing", {
+            nation: target.name,
+            cap: turnCap,
+            spend: fundAmount(target.playCapCostLocal ?? 0),
+          })}
         </p>
       )}
 
@@ -219,6 +209,7 @@ function CommitPlayForm({
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("worldOrganizations.influence");
 
   // Everything below is in the FUND's own currency, never the viewer's. The
   // costs stated above this form read in the viewer's preferred currency, so
@@ -233,8 +224,9 @@ function CommitPlayForm({
   const typed = parseMoneyAmountInput(amount);
   const pointCost = target.pointCostLocal ?? 0;
   const hasPreview = typed > 0 && pointCost > 0;
-  // pointCostLocal already carries the non-aligned resistance, so this is points
-  // actually landed, not list price. One play is capped before anything else, so
+  // The quote carries resistance but not channel strength, strain, opposition,
+  // the turn ceiling or normalization. Never display this intermediate pressure.
+  // One play is capped before anything else, so
   // past playMaxPoints the money buys nothing even against a rival (ticket #1371).
   // The turn limit is different: it bounds what is left after opposing pushes
   // cancel, so points past it still count when a rival pushes back.
@@ -242,12 +234,25 @@ function CommitPlayForm({
   const playPoints = Math.min(rawPoints, target.playMaxPoints);
   const overPlayCap = rawPoints > target.playMaxPoints;
   const turnCap = turnCapFor(target);
-  const overTurnCap = !overPlayCap && playPoints > turnCap;
+  const strength = (view.channel?.weight ?? 1) * (view.blocStress?.effectiveness ?? 1);
+  const overTurnCap = !overPlayCap && playPoints * strength > turnCap;
+  const effectivePoints = view.channel
+    ? previewEffectivePlay({
+        shares: { shares: target.shares, nonAligned: target.nonAligned },
+        poles: view.poles.map((pole) => pole.id),
+        poleId: view.channel.poleId,
+        amountLocal: typed,
+        pointCostLocal: pointCost,
+        playMaxPoints: target.playMaxPoints,
+        resistsAtHalfStrength: target.resistsAtHalfStrength,
+        weight: view.channel.weight,
+        effectiveness: view.blocStress?.effectiveness ?? 1,
+        turnCap,
+      })
+    : 0;
   const overBalance = typed > view.fundBalanceLocal;
-  // The smallest spend that lands a storable movement — one grid step (0.01),
-  // priced at this nation's per-point cost. A play below it resolves to zero and
-  // is refunded, so the commit path refuses it and this is what the player must
-  // reach instead (ticket #1213).
+  // Preserve the existing form minimum. It is not a guarantee of movement:
+  // strain, normalization and opposing pressure can still leave zero gain.
   const minSpendLocal = pointCost > 0 ? Math.ceil(pointCost * MIN_PLAY_POINTS) : 0;
   const buysNothing = hasPreview && roundToShareGrid(playPoints) < MIN_PLAY_POINTS;
 
@@ -259,9 +264,7 @@ function CommitPlayForm({
       return;
     }
     if (buysNothing) {
-      setError(
-        `That buys nothing. Spend at least ${inFundCurrency(minSpendLocal)} to move ${target.name} by ${formatShare(MIN_PLAY_POINTS)}.`
-      );
+      setError(t("minimumSpend", { spend: inFundCurrency(minSpendLocal) }));
       return;
     }
     setSubmitting(true);
@@ -328,20 +331,14 @@ function CommitPlayForm({
 
       {hasPreview && (
         <p className={`text-body-xs ${buysNothing ? "text-warning" : "text-muted"}`}>
-          Buys{" "}
-          <span className="font-mono tabular-nums text-foreground">
-            {formatShare(roundToShareGrid(playPoints))}
-          </span>{" "}
-          points at {inFundCurrency(pointCost)} each.{" "}
+          {t("preview", { points: formatShare(effectivePoints) })}{" "}
           {buysNothing
-            ? `That is too little to move ${target.name} at all. Spend at least ${inFundCurrency(minSpendLocal)} to shift it by ${formatShare(MIN_PLAY_POINTS)}.`
+            ? t("minimumSpend", { spend: inFundCurrency(minSpendLocal) })
             : overPlayCap
-              ? `One play lands at most ${target.playMaxPoints} points here, so anything over ${inFundCurrency(target.playCapCostLocal ?? 0)} is wasted. To push harder, commit a second play this turn.`
+              ? t("overPlay", { spend: inFundCurrency(target.playCapCostLocal ?? 0) })
               : overTurnCap
-                ? `That is past the ${turnCap} point limit for one turn. The extra only counts if a rival pushes back this turn, because opposing pushes cancel before the limit applies.`
-                : target.nonAligned > 0
-                  ? "One point is one share of this nation's alignment."
-                  : `None of ${target.name} is uncommitted, so a gain is shared out across every side and each point raises your share by less than one.`}
+                ? t("overTurn", { cap: turnCap })
+                : null}
         </p>
       )}
 
@@ -351,11 +348,7 @@ function CommitPlayForm({
         </p>
       )}
 
-      <p className="text-body-xs text-muted">
-        The fund is debited now; the nation moves when the turn processes, and the points bought
-        appear under Recent plays. A play that lands on a nation which locks before then is refunded
-        in full.
-      </p>
+      <p className="text-body-xs text-muted">{t("settlement")}</p>
 
       {error && <p className="text-body-sm text-error">{error}</p>}
     </form>

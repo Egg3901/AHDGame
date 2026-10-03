@@ -719,7 +719,7 @@ export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapCo
       name: r.name,
       secondaryLabel: `${r.constituencies} MPs`,
     })),
-    regionListHeading: "All Regions",
+    regionListHeading: "All regions",
     headerSubtitle: `${UK_REGIONS.length} regions · ${totalUKConstituencies} Westminster constituencies`,
     renderPaths: ({ regionData, onRegionClick, regionCodes }) => (
       <RegionalGeoMap
@@ -772,7 +772,7 @@ export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapCo
       name: r.name,
       secondaryLabel: `${r.shugiinDistricts} Shugiin`,
     })),
-    regionListHeading: "All Regions",
+    regionListHeading: "All regions",
     headerSubtitle: `${JP_REGIONS.length} regions · ${totalShugiin} Shugiin seats`,
     renderPaths: ({ regionData, onRegionClick, regionCodes }) => (
       <RegionalGeoMap
@@ -795,7 +795,7 @@ export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapCo
       name: r.name,
       secondaryLabel: `${r.houseDistricts} seats`,
     })),
-    regionListHeading: "All Regions",
+    regionListHeading: "All regions",
     headerSubtitle: `${cnRegions.length} regions · ${totalNpcSeats} NPC seats`,
     renderPaths: ({ regionData, onRegionClick, regionCodes, gameTime }) => (
       <RegionalGeoMap
@@ -822,7 +822,7 @@ export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapCo
       name: r.name,
       secondaryLabel: `${r.houseDistricts} Chamber`,
     })),
-    regionListHeading: "All Regions",
+    regionListHeading: "All regions",
     headerSubtitle: `${brRegions.length} regions · ${totalBRChamber} Chamber seats`,
     renderPaths: ({ regionData, onRegionClick, regionCodes }) => (
       <RegionalGeoMap
@@ -846,7 +846,7 @@ export const COUNTRY_MAP_CONFIGS: Record<ParliamentaryMapCountryId, CountryMapCo
       name: r.name,
       secondaryLabel: `${r.houseDistricts} seats`,
     })),
-    regionListHeading: "All Zones",
+    regionListHeading: "All zones",
     headerSubtitle: `${ngRegions.length} geopolitical zones`,
     renderPaths: ({ regionData, onRegionClick, regionCodes }) => (
       <RegionalGeoMap

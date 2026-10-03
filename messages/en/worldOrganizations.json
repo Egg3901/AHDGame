@@ -1,5 +1,22 @@
 {
   "worldOrganizations": {
+    "influence": {
+      "effective": "Effective gain",
+      "minimumSpend": "Below this form's minimum spend. Enter at least {spend}; a positive effective gain is not guaranteed.",
+      "notRecorded": "Not recorded",
+      "points": "{points} pts",
+      "historyNote": "Effective gains are each play's proportional share of the bloc's actual gain after resistance, opposing pressure, the shared turn cap and share normalization. Background movement keeps its own share. Older plays without recorded effective gains are marked Not recorded.",
+      "rivalGain": "{pole} gained {points} effective points here {when}.",
+      "rivalUnknown": "{pole} played here {when}; effective gain was not recorded.",
+      "thisTurn": "this turn",
+      "turnsAgo": "{count, plural, one {# turn ago} other {# turns ago}}",
+      "noRivals": "No rival plays recorded here recently.",
+      "pricing": "{nation} shares a {cap}-point movement ceiling across all plays and background effects each turn. Opposing pressure cancels before that ceiling applies. One play stops gaining influence from spending above {spend}. Extra plays can counter opposition, but cannot raise the shared turn ceiling.",
+      "preview": "Estimated effective gain: {points} points from this play alone, using current resistance, channel strength, bloc strain and share normalization. Other plays and background effects can change the result at resolution.",
+      "overPlay": "Anything above {spend} on one play is wasted, even against opposition.",
+      "overTurn": "This reaches the shared {cap}-point movement ceiling before share normalization. Extra pressure only helps counter opposition; it does not raise that ceiling.",
+      "settlement": "The fund is debited now; effective gains are recorded under Recent plays when the turn resolves. A target that locks before resolution triggers a full refund. Opposition or the shared cap reducing the gain to zero does not trigger a refund."
+    },
     "maastricht": {
       "title": "Maastricht ratification",
       "community": "The Community continues until every current member consents and the treaty can take effect.",

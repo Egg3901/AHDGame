@@ -17,7 +17,6 @@ const result: SearchResult = {
   title: "Steel",
   subtitle: "Market & price data",
   href: "/commodity/steel",
-  icon: "📦",
 };
 const fetchMock = vi.fn<typeof fetch>();
 

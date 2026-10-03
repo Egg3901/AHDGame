@@ -609,7 +609,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Organize</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+            <div className="h-px flex-1 bg-card-border" />
           </div>
 
           <p className="text-sm text-muted">
@@ -667,7 +667,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
             Dues, Services &amp; Politics
           </h2>
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          <div className="h-px flex-1 bg-card-border" />
         </div>
         <UnionDuesPanel
           unionId={id}
@@ -759,7 +759,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
               Leader Actions
             </h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+            <div className="h-px flex-1 bg-card-border" />
           </div>
 
           {/* The recruitment drive that used to live here is retired. It only
@@ -1398,7 +1398,7 @@ function UndergroundOrganizePanel({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
           Organize underground
         </h2>
-        <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+        <div className="h-px flex-1 bg-card-border" />
       </div>
 
       <p className="text-sm text-muted">

@@ -101,12 +101,7 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
 
   return (
     <section className="scroll-mt-24 rounded-2xl border border-card-border bg-card/80 backdrop-blur-sm p-6 md:p-8 shadow-card">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="block h-3 w-0.5 rounded-full bg-primary opacity-70 shrink-0" />
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          {t("achievements.title")}
-        </h2>
-      </div>
+      <SectionLabel className="mb-1">{t("achievements.title")}</SectionLabel>
       <p className="mb-4 text-sm text-muted">{t("achievements.intro")}</p>
       <form onSubmit={handleSave} className="space-y-3">
         <div className="flex flex-wrap gap-2">

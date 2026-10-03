@@ -20,7 +20,7 @@ const priorityConfig: Record<
   critical: {
     badgeClass: "bg-error/15 text-error border border-error/30",
     borderClass: "border-error/40",
-    dotClass: "bg-error animate-pulse",
+    dotClass: "bg-error",
     label: "Critical",
   },
   high: {

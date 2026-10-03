@@ -19,7 +19,7 @@ import {
 import type { Side } from "./proxyWar";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 type Cable = { c: string; t: string };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

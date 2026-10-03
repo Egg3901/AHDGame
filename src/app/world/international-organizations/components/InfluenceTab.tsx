@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { formatShare } from "@/lib/alignment/normalize";
 import { BalanceBar } from "./influence/BalanceBar";
 import { NationsInPlay } from "./influence/NationsInPlay";
@@ -28,6 +29,7 @@ export function InfluenceTab({
   // NationsInPlay owns the ordering, so the tab does not duplicate it — it
   // simply remembers which nation the player picked.
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const t = useTranslations("worldOrganizations.influence");
 
   // Play amounts are a record of what was spent, not a field anyone types into,
   // so they read in the viewer's currency.
@@ -194,6 +196,7 @@ export function InfluenceTab({
 
       <Panel>
         <h3 className="mb-3 text-body-sm font-semibold text-foreground">Recent plays</h3>
+        <p className="mb-3 text-body-xs text-muted">{t("historyNote")}</p>
         {view.recent.length === 0 ? (
           <p className="text-body-sm text-muted">
             No influence has been committed through this organization yet.
@@ -206,7 +209,7 @@ export function InfluenceTab({
                   <Th>Nation</Th>
                   <Th>By</Th>
                   <Th numeric>Spend</Th>
-                  <Th numeric>Bought</Th>
+                  <Th numeric>{t("effective")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -231,8 +234,10 @@ export function InfluenceTab({
                         // Distinct from "0 pts": the money came back, and a row
                         // reading zero next to a spend looks like theft.
                         <span className="text-muted">refunded</span>
+                      ) : p.effectivePoints == null ? (
+                        t("notRecorded")
                       ) : (
-                        `${p.appliedPoints ?? 0} pts`
+                        t("points", { points: formatShare(p.effectivePoints) })
                       )}
                     </td>
                   </tr>

@@ -17,7 +17,7 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   loadTxThresholds: vi.fn().mockResolvedValue({}),
   emitTxBulk: vi.fn(),
 }));
-vi.mock("@/lib/treasury/emit", () => ({ emitTreasuryTransaction: vi.fn() }));
+vi.mock("@/lib/treasury/emit", () => ({ emitTreasuryTransactionsBulk: vi.fn() }));
 
 interface CapturedOp {
   updateOne?: { filter: Record<string, unknown>; update: Record<string, unknown> };
@@ -168,9 +168,10 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
     expect(ledger.some((r) => (r as { metric: string }).metric === "unregistered")).toBe(true);
 
     // National registration spend emitted as a treasury transaction.
-    const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
-    expect(emitTreasuryTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ category: "operations", amount: 100 })
+    const { emitTreasuryTransactionsBulk } = await import("@/lib/treasury/emit");
+    expect(emitTreasuryTransactionsBulk).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ category: "operations", amount: 100 })])
     );
   });
 });

@@ -15,7 +15,6 @@ export interface LearningPath {
   title: string;
   description: string;
   difficulty: "beginner" | "intermediate" | "advanced";
-  icon: string;
   estimatedTime: string;
   pages: LearningPathPage[];
 }
@@ -50,7 +49,6 @@ export const LEARNING_PATHS: LearningPath[] = [
     description:
       "Essential guide for getting started in A House Divided. Learn the basics and run your first campaign.",
     difficulty: "beginner",
-    icon: "🌟",
     estimatedTime: "63 minutes",
     pages: [
       {
@@ -110,7 +108,6 @@ export const LEARNING_PATHS: LearningPath[] = [
     description:
       "Advanced campaign tactics, demographics, and winning strategies for competitive elections.",
     difficulty: "intermediate",
-    icon: "🏆",
     estimatedTime: "97 minutes",
     pages: [
       {
@@ -163,7 +160,6 @@ export const LEARNING_PATHS: LearningPath[] = [
     title: "Advanced Strategy",
     description: "Master Congress, party building, and min-maxing for experienced players.",
     difficulty: "advanced",
-    icon: "🎯",
     estimatedTime: "2 hours 22 minutes",
     pages: [
       {
@@ -229,7 +225,6 @@ export const LEARNING_PATHS: LearningPath[] = [
     description:
       "Learn the plants economy from corporate operations and commodity clearing through household demand, finance, and macro policy.",
     difficulty: "intermediate",
-    icon: "🏭",
     estimatedTime: "96 minutes",
     pages: [
       {
@@ -313,7 +308,6 @@ export const LEARNING_PATHS: LearningPath[] = [
     description:
       "Everything you need to raise an army, command it, and fight a war, from the chain of command to a full worked campaign.",
     difficulty: "intermediate",
-    icon: "⚔️",
     estimatedTime: "93 minutes",
     pages: [
       {
@@ -397,7 +391,6 @@ export const LEARNING_PATHS: LearningPath[] = [
     description:
       "Use blocs, international organizations, trade restrictions, and military power in historical worlds.",
     difficulty: "advanced",
-    icon: "🌐",
     estimatedTime: "40 minutes",
     pages: [
       {

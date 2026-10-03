@@ -26,8 +26,6 @@ interface LegacyLeaderboardClientProps {
   initialRankBy: LegacyRankBy;
 }
 
-const MEDAL_BY_RANK: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
-
 const SCORE_BREAKDOWN_ROWS: {
   key: keyof LegacyLeaderboardEntry["scoreBreakdown"];
   label: string;
@@ -46,27 +44,14 @@ function formatNetWorth(value: number): string {
 }
 
 function RankCell({ rank }: { rank: number }) {
-  const medal = MEDAL_BY_RANK[rank];
-
   return (
     <div className="flex items-center justify-center md:justify-start">
-      {medal ? (
-        <span
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-card-border bg-card-elevated text-xl leading-none shadow-sm"
-          role="img"
-          aria-label={`Rank ${rank}`}
-          title={`Rank ${rank}`}
-        >
-          {medal}
-        </span>
-      ) : (
-        <span
-          className="flex h-8 min-w-8 items-center justify-center rounded-full border border-card-border bg-card px-2 font-mono text-xs font-bold text-muted"
-          aria-label={`Rank ${rank}`}
-        >
-          {rank}
-        </span>
-      )}
+      <span
+        className={`font-mono text-sm font-bold tabular-nums ${rank <= 3 ? "text-foreground" : "text-muted"}`}
+        aria-label={`Rank ${rank}`}
+      >
+        {rank}
+      </span>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "./marketPool
 import { creditBondPool, debitBondPoolGated } from "./marketPool";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
-  loadCountrySovereignSnapshot: vi.fn().mockResolvedValue(null),
+  loadCountrySovereignSnapshots: vi.fn().mockResolvedValue(new Map()),
 }));
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,7 +31,7 @@ it.each(cases)("reconciles actual modeled upkeep in $currency", async ({ currenc
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal: 100, targetCashLocal: 500 }]);
   memory.seed("moneySupplySnapshots", [{ currencyCode: currency, m2: 10000, turn: 24 }]);
@@ -55,7 +55,7 @@ it.each(cases)("reconciles actual coupon receipts in $currency", async ({ curren
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal: 100, targetCashLocal: 500 }]);
   const opening = await collectBalances(db);
@@ -78,7 +78,7 @@ function fixture(currency: "USD" | "GBP" = "USD", rate = 1, cashLocal = 100, ena
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: enabled }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal, targetCashLocal: 500 }]);
   memory.seed("moneySupplySnapshots", [{ currencyCode: currency, m2: 10000, turn: TURN - 1 }]);
@@ -202,12 +202,12 @@ it("preserves cash outcomes with shadow disabled", async () => {
   expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
 });
 
-it("does not infer duplicate primary placement or secondary trade legs", async () => {
+it("keeps primary placement journal-owned while witnessing secondary trades", async () => {
   const { db } = fixture();
   await creditBondPool(db, "USD", 20, "purchasesIn", NOW);
   await debitBondPoolGated(db, "USD", 20, "issuanceOut", NOW);
   await debitBondPoolGated(db, "USD", 20, "salesOut", NOW);
-  expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+  expect(await db.collection("ledgerEntries").countDocuments()).toBe(2);
 });
 
 it("uses the processing turn rather than a stale game clock", async () => {

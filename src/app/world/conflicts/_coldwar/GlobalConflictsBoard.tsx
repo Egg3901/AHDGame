@@ -11,7 +11,7 @@ import { ColdWarHelp } from "./TensionHeader";
 import { controlSplitDisplay } from "../controlDisplay";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 /** Global Conflicts — "Conflicts of <in-game year>". Faithful port of the design page. */
 export function GlobalConflictsBoard({ year, conflicts }: { year: number; conflicts: Conflict[] }) {

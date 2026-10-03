@@ -416,7 +416,7 @@ describe("reabsorbSpunOutCorp", () => {
     expect(upd[1].$set.corporationId).toEqual(primaryId);
     expect(upd[1].$set.absorbedAtTurn).toBe(42);
     // Residual cash → primary.
-    const corpUpd = db.collectionMocks.corporations.updateOne.mock.calls.find(
+    const corpUpd = db.collectionMocks.corporations.findOneAndUpdate.mock.calls.find(
       (c) => c[1].$inc?.liquidCapital === 500
     );
     expect(corpUpd).toBeDefined();
@@ -475,7 +475,8 @@ describe("resolveNationalizationAuction", () => {
       db,
       "US",
       5000,
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "privatization_auction_proceeds" })
     );
     // Loser refunded; winner not.
     expect(vi.mocked(refundCharacterCash)).toHaveBeenCalledWith(db, loserId, "USD", 3000, false);

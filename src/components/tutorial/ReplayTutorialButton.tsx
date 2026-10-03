@@ -19,7 +19,6 @@ export function ReplayTutorialButton({ className }: { className?: string }) {
         "inline-flex items-center gap-1.5 rounded-lg border border-card-border bg-card/50 px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary/50"
       }
     >
-      <span aria-hidden>🎓</span>
       {t("hub.entryLabel")}
     </Link>
   );

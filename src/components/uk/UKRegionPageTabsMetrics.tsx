@@ -167,7 +167,7 @@ export function UKRegionPageTabsMetrics({ regionId }: { regionId: string }) {
 
       {/* Government approval over time (regional) */}
       <div className="rounded-xl border border-card-border bg-card p-5 shadow-card">
-        <SectionLabel>{stateName} Approval Over Time</SectionLabel>
+        <SectionLabel>{stateName} approval over time</SectionLabel>
         {approvalHistory.length > 0 ? (
           <ApprovalChart history={approvalHistory} />
         ) : (

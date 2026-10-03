@@ -219,7 +219,7 @@ export default function SuggestedActionsPage() {
             <div className="absolute top-4 left-4 sm:top-5 sm:left-5">
               <Link
                 href="/actions"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/50 hover:bg-black/70 text-white text-sm font-medium transition-colors backdrop-blur-sm border border-white/20"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white text-sm font-medium transition-colors border border-white/20"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -236,7 +236,7 @@ export default function SuggestedActionsPage() {
             <div className="absolute top-4 right-4 sm:top-5 sm:right-5">
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/50 hover:bg-black/70 text-white text-sm font-medium transition-colors backdrop-blur-sm border border-white/20"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white text-sm font-medium transition-colors border border-white/20"
                 title="Manage muted suggestion types"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -318,7 +318,7 @@ export default function SuggestedActionsPage() {
             <div className="flex items-center gap-3 px-5 py-3 ml-auto">
               {criticalCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-error">
-                  <span className="w-2 h-2 rounded-full bg-error animate-pulse inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-error inline-block" />
                   {criticalCount} Critical
                 </span>
               )}

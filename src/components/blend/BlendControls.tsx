@@ -7,7 +7,7 @@ import { BLEND, FONT } from "./tokens";
  * Form and callout primitives for the Blend treatment.
  *
  * Blend has no rounded cards and no Tailwind tokens: controls are hairline
- * rectangles, labels are letterspaced mono, prose is Lora. These are shared so
+ * rectangles, labels are letterspaced mono, prose is sans. These are shared so
  * every panel on a Blend screen agrees rather than each restyling by hand.
  */
 

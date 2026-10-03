@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CorporationDefenceView } from "./CorporationPageTypes";
+import { DenseSection, InlineStatus, SmallButton, TableScroll, Td, Th } from "./dense/DenseKit";
 
 const GRADE_LABEL = ["None", "Legacy", "Modernised", "Cutting-edge"];
 
 /**
- * A delivery rate can be well under one lot per turn for a small plant — it still delivers, just
+ * A delivery rate can be well under one lot per turn for a small plant; it still delivers, just
  * slowly, as the fractional output accumulates. Show that honestly rather than rounding it to a
  * flat "0/turn" that reads as broken.
  */
@@ -19,19 +20,19 @@ function formatRate(n: number): string {
 }
 
 const STATUS_TONE: Record<string, string> = {
-  pending: "text-[var(--warning)] border-[color-mix(in_srgb,var(--warning)_45%,transparent)]",
-  active: "text-[var(--success)] border-[color-mix(in_srgb,var(--success)_40%,transparent)]",
-  complete: "text-muted border-card-border",
-  cancelled: "text-[var(--error)] border-[color-mix(in_srgb,var(--error)_40%,transparent)]",
-  declined: "text-muted border-card-border",
+  pending: "text-warning",
+  active: "text-success",
+  complete: "text-muted",
+  cancelled: "text-error",
+  declined: "text-muted",
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "offered",
-  active: "active",
-  complete: "complete",
-  cancelled: "terminated",
-  declined: "declined",
+  pending: "Offered",
+  active: "Active",
+  complete: "Complete",
+  cancelled: "Terminated",
+  declined: "Declined",
 };
 
 /**
@@ -40,8 +41,8 @@ const STATUS_LABEL: Record<string, string> = {
  * can deliver.
  *
  * The minister's Arsenal tab and this panel read the same contracts from opposite ends, but a
- * CEO's questions are different — they cannot see the national stockpile, and what they need
- * is throughput and revenue rather than shortfall — so this is a distinct view rather than the
+ * CEO's questions are different: they cannot see the national stockpile, and what they need
+ * is throughput and revenue rather than shortfall, so this is a distinct view rather than the
  * ministerial one re-pointed.
  */
 export default function DefenceContractsTab({
@@ -62,7 +63,7 @@ export default function DefenceContractsTab({
   const contracts = defence?.contracts ?? [];
   const pending = contracts.filter((c) => c.status === "pending");
   const active = contracts.filter((c) => c.status === "active");
-  // Throughput is the number a CEO can act on — it is what re-tooling or expanding a plant
+  // Throughput is the number a CEO can act on: it is what re-tooling or expanding a plant
   // changes, and it counts only lines already committed, not offers still unanswered.
   const perTurn = active.reduce((s, c) => s + c.projectedLotsPerTurn, 0);
   const outstanding = active.reduce((s, c) => s + Math.max(0, c.lotsOrdered - c.lotsDelivered), 0);
@@ -116,274 +117,303 @@ export default function DefenceContractsTab({
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Offers awaiting you" value={pending.length.toLocaleString("en-US")} />
-        <Tile label="Lots outstanding" value={outstanding.toLocaleString("en-US")} />
-        <Tile label="Lots per turn" value={formatRate(perTurn)} />
-        <Tile label="Earned to date" value={formatAmount(defence?.totalEarned ?? 0)} />
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-        <Tile label="Margin after build cost" value={formatAmount(defence?.totalNetMargin ?? 0)} />
-        <Tile label="Committed by buyers" value={formatAmount(defence?.totalEncumbered ?? 0)} />
-      </div>
+  const figure = (label: string, value: string, title?: string) => (
+    <div className="min-w-0" title={title}>
+      <dt className="truncate text-[11px] text-muted">{label}</dt>
+      <dd className="mt-0.5 truncate font-mono text-sm font-medium tabular-nums text-foreground">
+        {value}
+      </dd>
+    </div>
+  );
 
-      {error && (
-        <div className="rounded-lg border border-[color-mix(in_srgb,var(--error)_40%,transparent)] bg-[color-mix(in_srgb,var(--error)_10%,transparent)] px-3 py-2 text-[12px] text-[var(--error)]">
-          {error}
-        </div>
-      )}
+  return (
+    <div className="space-y-6">
+      <DenseSection title="Defence procurement">
+        <dl
+          aria-label="Procurement summary"
+          className="grid grid-cols-3 gap-x-6 gap-y-3 py-1 lg:grid-cols-6"
+        >
+          {figure("Offers awaiting you", pending.length.toLocaleString("en-US"))}
+          {figure("Lots outstanding", outstanding.toLocaleString("en-US"))}
+          {figure("Lots per turn", formatRate(perTurn))}
+          {figure("Earned to date", formatAmount(defence?.totalEarned ?? 0))}
+          {figure("Margin after build cost", formatAmount(defence?.totalNetMargin ?? 0))}
+          {figure("Committed by buyers", formatAmount(defence?.totalEncumbered ?? 0))}
+        </dl>
+        <p className="border-t border-card-border/60 py-1.5 text-xs text-muted">
+          <span className="font-medium text-foreground">Delivery grade </span>
+          <span className="font-medium text-foreground">{GRADE_LABEL[grade]}</span>
+          <span className="font-mono tabular-nums"> ({grade} of 3)</span>. The best quality this
+          corporation can currently build, set by the technology decades its research has reached.
+          Governments receive materiel at this grade, so improving it raises the value of everything
+          you deliver.
+        </p>
+      </DenseSection>
+
+      <InlineStatus message={error} tone="error" />
 
       {pending.length > 0 && (
-        <div className="rounded-xl border border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-card">
-          <div className="border-b border-card-border px-4 py-2.5">
-            <h3 className="text-sm font-semibold text-foreground">Offers awaiting your answer</h3>
-            <p className="mt-0.5 text-[11px] text-muted">
-              A government has offered these orders. Nothing is built and nothing is paid until you
-              accept — and once you do, the plant&apos;s output goes to the arsenal instead of the
-              open market.
-            </p>
-          </div>
-          <div className="divide-y divide-card-border">
-            {pending.map((c) => (
-              <div key={c._id} className="px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium text-foreground">
-                      {c.countryId} · {c.lotsOrdered.toLocaleString("en-US")} lots of {c.component}
-                    </div>
-                    <div className="text-[11px] text-muted">
-                      at {c.plantLabel}
-                      {" · "}
-                      {formatAmount(c.pricePerLot)} per lot on delivery · worth{" "}
-                      {formatAmount(c.pricePerLot * c.lotsOrdered)} in full
-                      {c.projectedLotsPerTurn > 0 && (
-                        <>
-                          {" "}
-                          · about{" "}
-                          {Math.ceil(c.lotsOrdered / c.projectedLotsPerTurn).toLocaleString(
-                            "en-US"
-                          )}{" "}
-                          turns at current output
-                        </>
-                      )}
-                    </div>
-                  </div>
+        <DenseSection title="Offers awaiting your answer" meta={`${pending.length}`}>
+          <p className="py-1 text-xs text-muted">
+            A government has offered these orders. Nothing is built and nothing is paid until you
+            accept. Once you do, the plant&apos;s output goes to the arsenal instead of the open
+            market.
+          </p>
+          <TableScroll>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <Th>Order</Th>
+                  <Th>Plant</Th>
+                  <Th align="right">Per lot</Th>
+                  <Th align="right">Worth</Th>
+                  <Th
+                    align="right"
+                    title="Turns to deliver the order at the plant's current output"
+                  >
+                    Time
+                  </Th>
                   {isCeo && (
-                    <div className="flex gap-2">
-                      <button
-                        disabled={busyId === c._id}
-                        onClick={() => respond(c._id, "accept")}
-                        className="rounded-lg border border-[color-mix(in_srgb,var(--success)_45%,transparent)] bg-[color-mix(in_srgb,var(--success)_15%,transparent)] px-3 py-1.5 text-[12px] font-semibold text-[var(--success)] disabled:opacity-50"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        disabled={busyId === c._id}
-                        onClick={() => respond(c._id, "decline")}
-                        className="rounded-lg border border-card-border px-3 py-1.5 text-[12px] text-muted hover:text-foreground disabled:opacity-50"
-                      >
-                        Decline
-                      </button>
-                    </div>
+                    <Th align="right">
+                      <span className="sr-only">Answer</span>
+                    </Th>
                   )}
-                </div>
-                {c.projectedLotsPerTurn === 0 && (
-                  <p className="mt-1.5 text-[11px] text-[var(--error)]">
-                    This plant is currently producing nothing, so accepting would not start
-                    deliveries until its output recovers.
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((c) => (
+                  <Fragment key={c._id}>
+                    <tr>
+                      <Td className="text-foreground">
+                        {c.countryId} · {c.lotsOrdered.toLocaleString("en-US")} lots of{" "}
+                        {c.component}
+                      </Td>
+                      <Td className="text-muted">{c.plantLabel}</Td>
+                      <Td align="right">{formatAmount(c.pricePerLot)}</Td>
+                      <Td align="right">{formatAmount(c.pricePerLot * c.lotsOrdered)}</Td>
+                      <Td align="right" className="text-muted">
+                        {c.projectedLotsPerTurn > 0
+                          ? `${Math.ceil(c.lotsOrdered / c.projectedLotsPerTurn).toLocaleString("en-US")} turns`
+                          : ""}
+                      </Td>
+                      {isCeo && (
+                        <Td align="right" numeric={false}>
+                          <span className="inline-flex gap-1.5">
+                            <SmallButton
+                              tone="primary"
+                              disabled={busyId === c._id}
+                              onClick={() => void respond(c._id, "accept")}
+                            >
+                              Accept
+                            </SmallButton>
+                            <SmallButton
+                              disabled={busyId === c._id}
+                              onClick={() => void respond(c._id, "decline")}
+                            >
+                              Decline
+                            </SmallButton>
+                          </span>
+                        </Td>
+                      )}
+                    </tr>
+                    {c.projectedLotsPerTurn === 0 && (
+                      <tr>
+                        <td colSpan={isCeo ? 6 : 5} className="pb-1.5 pl-2 text-xs text-error">
+                          This plant is currently producing nothing, so accepting would not start
+                          deliveries until its output recovers.
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
+        </DenseSection>
       )}
 
-      <div className="rounded-xl border border-card-border bg-card">
-        <div className="border-b border-card-border px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-foreground">Delivery grade</h3>
-          <p className="mt-0.5 text-[11px] text-muted">
-            The best quality this corporation can currently build, set by the technology decades its
-            research has reached. Governments receive materiel at this grade — improving it raises
-            the value of everything you deliver.
-          </p>
-        </div>
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-semibold text-foreground">{GRADE_LABEL[grade]}</span>
-            <div className="flex flex-1 gap-1">
-              {[1, 2, 3].map((step) => (
-                <div
-                  key={step}
-                  className="h-1.5 flex-1 rounded-full"
-                  style={{ background: step <= grade ? "var(--gov)" : "var(--card-muted)" }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-card-border bg-card">
-        <div className="border-b border-card-border px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-foreground">Order book</h3>
-          <p className="mt-0.5 text-[11px] text-muted">
-            Every order this corporation has been offered. Each pays per lot on delivery — nothing
-            is paid up front, and a plant re-tooled off its contracted component stops earning.
-          </p>
-        </div>
+      <DenseSection title="Order book" meta={contracts.length ? `${contracts.length}` : undefined}>
+        <p className="py-1 text-xs text-muted">
+          Every order this corporation has been offered. Each pays per lot on delivery. Nothing is
+          paid up front, and a plant re-tooled off its contracted component stops earning.
+        </p>
         {contracts.length === 0 ? (
-          <div className="px-4 py-6 text-center text-[13px] text-muted">
+          <p className="py-2 text-xs text-muted">
             {isCeo
               ? "No government has offered this corporation a contract. Defence ministers award them from their own cabinet office; a plant running a line that builds materiel is what makes you eligible."
               : "This corporation holds no government procurement contracts."}
-          </div>
+          </p>
         ) : (
-          <div className="divide-y divide-card-border">
-            {contracts.map((c) => {
-              const pct = c.lotsOrdered > 0 ? (c.lotsDelivered / c.lotsOrdered) * 100 : 0;
-              const remaining = Math.max(0, c.lotsOrdered - c.lotsDelivered);
-              // A live contract with no output is the one actionable failure here: the plant
-              // has been re-tooled off the component, or its production has collapsed.
-              const stalled = c.status === "active" && c.projectedLotsPerTurn === 0;
-              return (
-                <div key={c._id} className="px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-medium text-foreground">
+          <TableScroll>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <Th>Contract</Th>
+                  <Th>Status</Th>
+                  <Th align="right">Delivered</Th>
+                  <Th>Progress</Th>
+                  <Th align="right">Per lot</Th>
+                  <Th align="right" title="Margin per lot after the cost to build it">
+                    Margin
+                  </Th>
+                  <Th align="right">Paid</Th>
+                  <Th align="right">Build cost</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {contracts.map((c) => {
+                  const pct = c.lotsOrdered > 0 ? (c.lotsDelivered / c.lotsOrdered) * 100 : 0;
+                  const remaining = Math.max(0, c.lotsOrdered - c.lotsDelivered);
+                  // A live contract with no output is the one actionable failure here: the
+                  // plant has been re-tooled off the component, or its production has collapsed.
+                  const stalled = c.status === "active" && c.projectedLotsPerTurn === 0;
+                  const margin =
+                    c.unitProductionCost != null ? c.pricePerLot - c.unitProductionCost : null;
+                  const notes: { text: string; tone: string }[] = [];
+                  if (c.lotsBuiltNotDelivered > 0 || c.partialLot > 0) {
+                    notes.push({
+                      text: `${c.lotsBuiltNotDelivered.toLocaleString("en-US")} built and waiting${
+                        c.partialLot > 0 ? `, ${(c.partialLot * 100).toFixed(0)}% of another` : ""
+                      }.`,
+                      tone: "text-warning",
+                    });
+                  }
+                  if (c.unitProductionCost == null) {
+                    notes.push({
+                      text: "Build cost unknown: the certified plant is gone.",
+                      tone: "text-muted",
+                    });
+                  }
+                  if (c.encumberedAmount > 0) {
+                    notes.push({
+                      text: `${formatAmount(c.encumberedAmount)} committed by the buyer.`,
+                      tone: "text-muted",
+                    });
+                  }
+                  if (c.carryReasonText)
+                    notes.push({ text: c.carryReasonText, tone: "text-warning" });
+                  if (c.selfDealing) {
+                    notes.push({
+                      text: `Declared interest: ${c.selfDealing.ministerName ?? "the awarding minister"} ${
+                        c.selfDealing.basis === "owner"
+                          ? "owns this corporation"
+                          : `holds ${(c.selfDealing.stakeShare * 100).toFixed(1)}% of it`
+                      }. This award is on the public record.`,
+                      tone: "text-error",
+                    });
+                  }
+                  if (c.termination) {
+                    notes.push({
+                      text:
+                        c.termination.basis === "withdrawal"
+                          ? `Offer withdrawn by ${c.termination.ministerName ?? "the minister"} before you answered it.`
+                          : c.termination.basis === "cause"
+                            ? `Terminated for cause on ${c.termination.lotsCancelled.toLocaleString("en-US")} undelivered lots. The plant had stopped delivering, so no break fee was owed.`
+                            : `Terminated by ${c.termination.ministerName ?? "the minister"} on ${c.termination.lotsCancelled.toLocaleString("en-US")} undelivered lots. You were paid ${formatAmount(c.termination.fee)} in break fees.`,
+                      tone: "text-warning",
+                    });
+                  }
+                  if (stalled) {
+                    notes.push({
+                      text: `Delivering nothing. This plant is either re-tooled off ${c.component} or producing no output, and the order will not advance until that changes.`,
+                      tone: "text-error",
+                    });
+                  }
+                  const showLines = isCeo && (c.status === "active" || c.status === "pending");
+                  return (
+                    <Fragment key={c._id}>
+                      <tr>
+                        <Td className="text-foreground">
                           {c.countryId} · {c.component}
                           {c.plantLabel ? ` · ${c.plantLabel}` : ""}
-                        </span>
-                        <span
-                          className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                            STATUS_TONE[c.status] ?? "border-card-border text-muted"
-                          }`}
-                        >
+                        </Td>
+                        <Td className={STATUS_TONE[c.status] ?? "text-muted"}>
                           {STATUS_LABEL[c.status] ?? c.status}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-muted">
-                        {formatAmount(c.pricePerLot)} per lot
-                        {c.unitProductionCost != null ? (
-                          <>
-                            {" "}
-                            · costs {formatAmount(c.unitProductionCost)} to build · margin{" "}
-                            <span
-                              className={
-                                c.pricePerLot - c.unitProductionCost >= 0
-                                  ? "text-[var(--success)]"
-                                  : "text-[var(--error)]"
-                              }
-                            >
-                              {formatAmount(c.pricePerLot - c.unitProductionCost)}
-                            </span>{" "}
-                            per lot
-                          </>
-                        ) : (
-                          <> · build cost unknown: the certified plant is gone</>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-muted">
-                        paid {formatAmount(c.amountPaid)} · build cost{" "}
-                        {formatAmount(c.productionCostPaid)}
-                        {c.encumberedAmount > 0 &&
-                          ` · ${formatAmount(c.encumberedAmount)} committed by the buyer`}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="tabular text-[12px] text-foreground">
-                        {c.lotsDelivered.toLocaleString("en-US")} /{" "}
-                        {c.lotsOrdered.toLocaleString("en-US")}
-                      </div>
-                      <div className="text-[11px] text-muted">
-                        {c.status === "active"
-                          ? `${remaining.toLocaleString("en-US")} outstanding · ${formatRate(c.projectedLotsPerTurn)}/turn`
-                          : c.status === "pending"
-                            ? "awaiting your answer"
-                            : `${Math.round(pct)}% delivered`}
-                      </div>
-                      {(c.lotsBuiltNotDelivered > 0 || c.partialLot > 0) && (
-                        <div className="text-[11px] text-[var(--warning)]">
-                          {c.lotsBuiltNotDelivered.toLocaleString("en-US")} built and waiting
-                          {c.partialLot > 0 && ` · ${(c.partialLot * 100).toFixed(0)}% of another`}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-card-muted">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, pct)}%`, background: "var(--gov)" }}
-                    />
-                  </div>
-                  {c.carryReasonText && (
-                    <p className="mt-1.5 text-[11px] text-[var(--warning)]">{c.carryReasonText}</p>
-                  )}
-                  {c.selfDealing && (
-                    <p className="mt-1.5 text-[11px] text-[var(--error)]">
-                      Declared interest: {c.selfDealing.ministerName ?? "the awarding minister"}{" "}
-                      {c.selfDealing.basis === "owner"
-                        ? "owns this corporation"
-                        : `holds ${(c.selfDealing.stakeShare * 100).toFixed(1)}% of it`}
-                      . This award is on the public record.
-                    </p>
-                  )}
-                  {c.termination && (
-                    <p className="mt-1.5 text-[11px] text-[var(--warning)]">
-                      {c.termination.basis === "withdrawal"
-                        ? `Offer withdrawn by ${c.termination.ministerName ?? "the minister"} before you answered it.`
-                        : c.termination.basis === "cause"
-                          ? `Terminated for cause on ${c.termination.lotsCancelled.toLocaleString("en-US")} undelivered lots. The plant had stopped delivering, so no break fee was owed.`
-                          : `Terminated by ${c.termination.ministerName ?? "the minister"} on ${c.termination.lotsCancelled.toLocaleString("en-US")} undelivered lots. You were paid ${formatAmount(c.termination.fee)} in break fees.`}
-                    </p>
-                  )}
-                  {isCeo && (c.status === "active" || c.status === "pending") && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] text-muted">Production lines</span>
-                      {Array.from({ length: c.totalFactories }, (_, i) => i + 1).map((n) => (
-                        <button
-                          key={n}
-                          disabled={busyId === c._id || n === c.assignedFactories}
-                          onClick={() => setFactories(c._id, n)}
-                          className={`rounded-md border px-2 py-0.5 text-[11px] disabled:opacity-60 ${
-                            n === c.assignedFactories
-                              ? "border-[color-mix(in_srgb,var(--gov)_45%,transparent)] text-gov-soft"
-                              : "border-card-border text-muted hover:text-foreground"
-                          }`}
+                        </Td>
+                        <Td align="right">
+                          {c.lotsDelivered.toLocaleString("en-US")} /{" "}
+                          {c.lotsOrdered.toLocaleString("en-US")}
+                        </Td>
+                        <Td className="text-xs text-muted">
+                          {c.status === "active"
+                            ? `${remaining.toLocaleString("en-US")} outstanding, ${formatRate(c.projectedLotsPerTurn)}/turn`
+                            : c.status === "pending"
+                              ? "awaiting your answer"
+                              : `${Math.round(pct)}% delivered`}
+                        </Td>
+                        <Td align="right">{formatAmount(c.pricePerLot)}</Td>
+                        <Td
+                          align="right"
+                          className={
+                            margin == null
+                              ? "text-muted"
+                              : margin >= 0
+                                ? "text-success"
+                                : "text-error"
+                          }
+                          title={
+                            c.unitProductionCost != null
+                              ? `Costs ${formatAmount(c.unitProductionCost)} per lot to build`
+                              : undefined
+                          }
                         >
-                          {n}
-                        </button>
-                      ))}
-                      <span className="text-[11px] text-muted">
-                        of {c.totalFactories} lines at {c.plantLabel}. More lines use more of this
-                        plant; they do not add plants, and the price per lot does not change.
-                      </span>
-                    </div>
-                  )}
-                  {stalled && (
-                    <p className="mt-1.5 text-[11px] text-[var(--error)]">
-                      Delivering nothing. This plant is either re-tooled off {c.component} or
-                      producing no output — the order will not advance until that changes.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                          {margin == null ? "n/a" : formatAmount(margin)}
+                        </Td>
+                        <Td align="right">{formatAmount(c.amountPaid)}</Td>
+                        <Td align="right" className="text-muted">
+                          {formatAmount(c.productionCostPaid)}
+                        </Td>
+                      </tr>
+                      {(notes.length > 0 || showLines) && (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            className="space-y-1 border-b border-card-border/60 pb-2 pl-4 pr-2 text-xs"
+                          >
+                            {notes.map((n) => (
+                              <p key={n.text} className={n.tone}>
+                                {n.text}
+                              </p>
+                            ))}
+                            {showLines && (
+                              <div className="flex flex-wrap items-center gap-1.5 text-muted">
+                                <span>Production lines</span>
+                                {Array.from({ length: c.totalFactories }, (_, i) => i + 1).map(
+                                  (n) => (
+                                    <button
+                                      key={n}
+                                      type="button"
+                                      disabled={busyId === c._id || n === c.assignedFactories}
+                                      onClick={() => void setFactories(c._id, n)}
+                                      aria-pressed={n === c.assignedFactories}
+                                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded border px-1.5 font-mono text-[11px] ${
+                                        n === c.assignedFactories
+                                          ? "border-foreground bg-foreground font-medium text-background"
+                                          : "border-card-border text-foreground hover:bg-card-elevated disabled:opacity-60"
+                                      }`}
+                                    >
+                                      {n}
+                                    </button>
+                                  )
+                                )}
+                                <span>
+                                  of {c.totalFactories} lines at {c.plantLabel}. More lines use more
+                                  of this plant; they do not add plants, and the price per lot does
+                                  not change.
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableScroll>
         )}
-      </div>
-    </div>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-card-border bg-card px-3 py-2.5">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-muted">{label}</div>
-      <div className="tabular mt-0.5 text-[15px] font-semibold text-foreground">{value}</div>
+      </DenseSection>
     </div>
   );
 }

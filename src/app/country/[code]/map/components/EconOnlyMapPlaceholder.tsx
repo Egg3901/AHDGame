@@ -371,7 +371,7 @@ export function EconOnlyMapPlaceholder({
         <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
           {hasGeoMap && (
             <div className="flex flex-col items-center gap-4 rounded-xl border border-card-border bg-card p-4 sm:p-6">
-              <SectionLabel className="mb-4">Interactive Map</SectionLabel>
+              <SectionLabel className="mb-4">Interactive map</SectionLabel>
               <p className="-mt-2 mb-1 text-xs text-muted">
                 Click a region to open it. Hover for population &amp; seat detail.
               </p>
@@ -395,7 +395,7 @@ export function EconOnlyMapPlaceholder({
               hasGeoMap ? "lg:col-span-2" : "lg:col-span-3"
             }`}
           >
-            <SectionLabel className="mb-4">All Regions</SectionLabel>
+            <SectionLabel className="mb-4">All regions</SectionLabel>
             <div className="space-y-1">
               {displayRegions.map((region) => {
                 const d = regionData[region._id];

@@ -47,7 +47,7 @@ function MPCard({ mp, isVacant }: { mp: SerializedMP; isVacant: boolean }) {
   const seatsHeld = mp.seatsHeld ?? 1;
 
   return (
-    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-card-border bg-card px-3 pb-4 pt-1 transition-colors card-hover hover:border-primary/30 hover:bg-card-elevated">
+    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-card-border bg-card px-3 pb-4 pt-1 transition-colors hover:border-primary/30 hover:bg-card-elevated">
       {/* Party-color top accent */}
       {!isVacant && partyColor && (
         <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: partyColor }} />

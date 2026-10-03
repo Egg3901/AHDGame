@@ -112,9 +112,8 @@ export function AccountSection({
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-card-border bg-card/90 shadow-panel backdrop-blur-sm">
+    <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-panel">
       <div className="relative border-b border-card-border px-5 py-5 sm:px-7 sm:py-6">
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary via-primary/40 to-transparent" />
         <SectionLabel as="p">{t("sectionLabel")}</SectionLabel>
         <h2 className="mt-1 font-display text-heading font-semibold text-foreground">
           {t("heading")}

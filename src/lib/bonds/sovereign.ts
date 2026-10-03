@@ -461,6 +461,22 @@ export async function calculateSovereignRolloverAmount(
       defaulted: false,
     })
     .toArray();
+  const budget = await db
+    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
+    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
+  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn);
+}
+
+/**
+ * Rollover for a country from its live (unmatured, undefaulted) sovereign
+ * bonds and its budget principal. Pure, so a caller holding both for many
+ * countries at once gets the same figure without a read per country.
+ */
+export function sovereignRolloverFromBonds(
+  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued">>,
+  principal: unknown,
+  turn: number
+): number {
   const maturingSoon = activeBonds.filter(
     (bond) =>
       bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
@@ -476,10 +492,6 @@ export async function calculateSovereignRolloverAmount(
   // coupons from nothing. Cap the rollover so bonds outstanding after this
   // quarter never exceed the budget's principal. A missing budget keeps the
   // old behaviour (roll everything) so seeds and tests without one still work.
-  const budget = await db
-    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
-    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
-  const principal = budget?.debt?.principal;
   const rollover =
     typeof principal === "number" && Number.isFinite(principal)
       ? Math.min(maturingFace, Math.max(0, principal - (activeFace - maturingFace)))
@@ -1182,7 +1194,24 @@ export async function refreshSovereignDebtTerms(
   db: Db,
   budgetId: FederalBudget["_id"]
 ): Promise<void> {
-  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+  // Only what applySovereignDebtAdjustment reads: the full budget carries an
+  // ever-growing settledKeys list this refresh has no use for.
+  const refreshed = await db.collection<FederalBudget>("federalBudget").findOne(
+    { _id: budgetId },
+    {
+      projection: {
+        debt: 1,
+        "spending.debtInterest": 1,
+        "spending.total": 1,
+        "revenue.total": 1,
+        gdp: 1,
+        gdpSmoothed: 1,
+        sovereignRiskAnchor: 1,
+        imfSovereignBailoutActive: 1,
+        investorConfidence: 1,
+      },
+    }
+  );
   if (refreshed) {
     const terms = applySovereignDebtAdjustment(refreshed, 0, 0);
     await db.collection<FederalBudget>("federalBudget").updateOne(

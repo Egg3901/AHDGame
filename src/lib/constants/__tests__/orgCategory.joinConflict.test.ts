@@ -29,3 +29,18 @@ describe("join_conflict is a bloc-only power", () => {
     expect(IMPLEMENTED_RESOLUTION_TYPES).toContain("join_conflict");
   });
 });
+
+describe("declare_war is a bloc-only power", () => {
+  it("is tableable only by a bloc", () => {
+    expect(canTableResolutionType("bloc", "declare_war")).toBe(true);
+    for (const category of ["security", "political", "economic", "development"] as const) {
+      expect(canTableResolutionType(category, "declare_war"), category).toBe(false);
+    }
+  });
+
+  it("is implemented without becoming a baseline power", () => {
+    expect(IMPLEMENTED_RESOLUTION_TYPES).toContain("declare_war");
+    expect(ORGANIZATION_CATEGORY_META.bloc.powers).toContain("declare_war");
+    expect(ORGANIZATION_CATEGORY_META.political.powers).not.toContain("declare_war");
+  });
+});

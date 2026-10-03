@@ -293,7 +293,7 @@ export const ElectionCard = memo(function ElectionCard({
           <div className="rounded-lg border border-card-border/60 overflow-hidden">
             <div className="px-3 py-1.5 flex items-center justify-between text-[10px] font-medium bg-blue-500/10 border-b border-blue-500/20 text-blue-400">
               <span className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
                 {election.electionType === "president"
                   ? t("card.popularVote")
                   : t("card.liveVoteTally")}
@@ -680,7 +680,7 @@ export const ElectionCard = memo(function ElectionCard({
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
             >
               {election.status === "active" && (
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               )}
               {t("card.liveResults")}
             </Link>

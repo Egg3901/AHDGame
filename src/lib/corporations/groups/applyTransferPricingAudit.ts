@@ -175,7 +175,8 @@ export async function applyTransferPricingAudit(
           db,
           assessment.claimantCountryId as CountryId,
           corpLiquidCapitalToAnchor(collected, liable as Corporation, fxRate),
-          now
+          now,
+          { flow: "regulatory_fine" }
         );
         await emitTx(db, {
           type: "corp_fine",

@@ -29,6 +29,7 @@ import {
   debitBondPoolGated,
   loadBondQuote,
   readBondPoolCash,
+  refundBondPoolDebit,
 } from "@/lib/bonds/marketPool";
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
 import { SETTLED_KEYS_FIELD } from "@/lib/banking/moneyMove";
@@ -189,18 +190,14 @@ function buildBondSaleFallbackOps(db: Db, intent: BondSaleIntent): BondSaleSettl
       );
     },
     refundPool: async () => {
-      // Inline rather than refundBondPoolDebit: the stamp must be pulled in
-      // the SAME write that returns the cash, or a concurrent resume could
-      // read a refunded pool as still-debited and pay the seller twice.
-      const stamp = bondSaleLegStamp(intent._id, "pool");
-      const amount = roundBondSaleCents(intent.proceedsLocal);
-      await db.collection(BOND_MARKET_POOLS_COLLECTION).updateOne(
-        { _id: intent.poolCurrency, [SETTLED_KEYS_FIELD]: stamp } as unknown as Filter<Document>,
-        {
-          $inc: { cashLocal: amount, "lifetime.salesOut": -amount },
-          $set: { updatedAt: new Date() },
-          $pull: { [SETTLED_KEYS_FIELD]: stamp },
-        } as unknown as UpdateFilter<Document>
+      // Return cash and clear its ownership stamp in the same guarded write.
+      await refundBondPoolDebit(
+        db,
+        intent.poolCurrency,
+        roundBondSaleCents(intent.proceedsLocal),
+        "salesOut",
+        new Date(),
+        { stamp: bondSaleLegStamp(intent._id, "pool") }
       );
     },
   };

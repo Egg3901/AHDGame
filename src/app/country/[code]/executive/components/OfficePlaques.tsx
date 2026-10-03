@@ -7,9 +7,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { InstitutionIdentity } from "@/lib/constants/institutionIdentity";
 import { hexToRgba } from "@/components/national/identityColor";
 
-const SERIF_CJK = "'Noto Serif SC', 'Noto Serif JP', 'Songti SC', serif";
-const SERIF_MONO = "'Playfair Display', Georgia, 'Times New Roman', serif";
-
 export interface OfficePlaque {
   /** Office title in constitutional order (e.g. "President", "Premier"). */
   title: string;
@@ -46,7 +43,6 @@ export function OfficePlaques({
   /** Override for narrow containers (e.g. a half-width hub column). */
   gridClassName?: string;
 }) {
-  const serif = identity.serif === "cjk" ? SERIF_CJK : SERIF_MONO;
   return (
     <div className={gridClassName}>
       {plaques.map((plaque) => {
@@ -71,7 +67,6 @@ export function OfficePlaques({
                   : {
                       borderColor: hexToRgba(identity.accentSoft, 0.35),
                       color: hexToRgba(identity.accentSoft, 0.6),
-                      fontFamily: serif,
                     }
               }
             >

@@ -3,6 +3,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { InternationalOrganizationId } from "@/lib/constants/internationalOrganizations";
 import type { AlertPosture } from "@/lib/constants/orgPosture";
+import type { WarGoal } from "@/lib/military/warGoals";
 import type { InternationalActionType } from "./legislation";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 
@@ -119,6 +120,8 @@ export type OrganizationResolutionType =
   | "set_dues"
   | "set_posture"
   | "fund_agency"
+  /** Declare a new war against a player-enabled country. Bloc organisations only. */
+  | "declare_war"
   /** Enter an existing conflict on a named side. Bloc organisations only. */
   | "join_conflict";
 
@@ -163,6 +166,10 @@ export interface OrganizationLegislation {
   agencyKey?: string;
   /** `fund_agency`: turn the programme's effect lapses and the resolution terminates. */
   agencyExpiresOnTurn?: number;
+  /** `declare_war`: country the bloc proposes to attack. */
+  warDeclarationTargetCountryId?: CountryId;
+  /** `declare_war`: stated objective carried into each national declaration. */
+  warDeclarationGoal?: WarGoal;
   /**
    * `join_conflict`: the conflict to enter — a ConflictDoc._id (the theater key).
    *

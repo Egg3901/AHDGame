@@ -1,0 +1,66 @@
+{
+  "issue": 2983,
+  "part": 2,
+  "runtimeSource": "4ea6702f08be2f117d9950f1ccc5ab98ad0fb47e",
+  "runtimeFiles": [
+    "src/lib/db/types/financialTxLog.ts",
+    "src/lib/financialTxLog/atomicCashGuard.ts",
+    "src/lib/financialTxLog/types-extended.ts",
+    "src/lib/nationalization/dissolvedCorporation.ts",
+    "src/lib/nationalization/ownershipTransition.ts",
+    "src/lib/nationalization/privatizationAuction.ts",
+    "src/lib/nationalization/privatizeAsset.ts",
+    "src/lib/nationalization/treasury.ts",
+    "src/lib/nationalization/treasuryLedger.ts"
+  ],
+  "families": {
+    "wholeCorporationNationalization": [
+      "treasury payout pool (pass-through contra on the seized corporation)",
+      "holder buyout rows: character, corporation, fund (newly emitted)",
+      "public float slice to the treasury (pass-through)",
+      "CEO surplus, treasury recoup and dissolution closing balance (corporation_liquidation)",
+      "held-equity cash credit to the National Corporation (named mint)"
+    ],
+    "privatizationIpo": ["float proceeds (named mint privatization_ipo, owner decision)"],
+    "privatizationAuction": [
+      "bid escrow debits",
+      "lost-race, outbid and loser refunds",
+      "winning amount to the treasury",
+      "passed-in shell cash to the National Corporation"
+    ]
+  },
+  "qualification": {
+    "integrationCases": 10,
+    "memoryCases": 5,
+    "nativeMongoCases": 5,
+    "wholeCorporationEntries": 9,
+    "redWithBaseWriters": "all 4 reconciled cases fail on stock divergence (7, 1, 2 and 2 accounts); shadow-off passes",
+    "partOneNativeCasesOnThisHead": 4,
+    "focusedSuites": {
+      "files": 151,
+      "passed": 1363,
+      "skipped": 18,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 13,
+    "refundHelperCallersSemanticCheck": "pass",
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "unchanged": [
+    "amounts, rounding, unconditional-debit rules and tolerances",
+    "behavior with shadow accounting disabled"
+  ],
+  "findingsOutsideChange": [
+    "The held-equity credit creates money; witnessed as a named mint, amount unchanged pending an owner decision.",
+    "Imperial character wallets are not in the balance snapshot, so imperial holder rows have no stock.",
+    "Escrow taken before deploy has no witnessed debit; its later refund or sale is a one-sided named mint."
+  ],
+  "limits": [
+    "Crisis interaction costs and peace-term transfers remain open under #2983.",
+    "Fixtures qualify flow boundaries, not the whole world; #968 and the #2159 cash gate stay open.",
+    "No production database was reset or repaired."
+  ]
+}

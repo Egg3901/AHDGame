@@ -54,7 +54,13 @@ export async function applyEstateEffects(
   positionId: string,
   bucket: { national: Record<string, number>; regional: Record<string, Record<string, number>> },
   /** The country's federal budget, preloaded by the caller iterating every seat. */
-  budget?: FederalBudget | null
+  budget?: FederalBudget | null,
+  /**
+   * This seat's estates, preloaded by the caller from one read across every
+   * seat (natural order, as the per-seat query returns them). Omitted means
+   * read them here.
+   */
+  preloadedEstates?: CabinetEstate[]
 ): Promise<void> {
   const portfolioKey = resolveEstatePortfolio(countryId, positionId);
   if (!portfolioKey) return;
@@ -62,7 +68,9 @@ export async function applyEstateEffects(
   if (!mechanics) return;
 
   const col = getCabinetEstatesCollection(db);
-  const estates = await col.find({ countryId: countryId as CountryId, positionId }).toArray();
+  const estates =
+    preloadedEstates ??
+    (await col.find({ countryId: countryId as CountryId, positionId }).toArray());
   if (estates.length === 0) return;
 
   const metrics = [...mechanics.nationalMetrics, ...mechanics.regionalMetrics];

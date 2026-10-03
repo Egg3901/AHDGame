@@ -42,10 +42,12 @@ export default function MergerReviewPanel() {
   if (!data || data.involving.length === 0) return null;
 
   return (
-    <section className="rounded-lg border border-card-border bg-card p-4">
-      <h3 className="mb-2 text-sm font-semibold text-foreground">Merger review</h3>
-      <p className="mb-2 text-xs text-muted">Deals of yours that competition policy has touched.</p>
-      <ul className="space-y-2">
+    <section className="min-w-0">
+      <div className="flex min-h-8 items-baseline gap-2 border-b border-card-border pb-1.5">
+        <h2 className="text-sm font-semibold text-foreground">Merger review</h2>
+        <p className="text-xs text-muted">deals of yours that competition policy has touched</p>
+      </div>
+      <ul className="divide-y divide-card-border/60">
         {data.involving.map((review) => (
           <MergerReviewCard key={review.id} review={review} />
         ))}

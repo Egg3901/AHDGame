@@ -70,9 +70,7 @@ export function ChamberComposition({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {chamber.inGeneral && (
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-secondary" />
-          )}
+          {chamber.inGeneral && <span className="h-1.5 w-1.5 rounded-full bg-muted" aria-hidden />}
           <span className="text-[10px] text-muted">{chartLabel}</span>
         </div>
       </div>

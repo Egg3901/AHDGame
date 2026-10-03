@@ -32,8 +32,6 @@ export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className={`h-1 shrink-0 bg-gradient-to-r ${category.gradient}`} />
-
       <div className="flex-1 overflow-y-auto p-5 sm:p-7">
         {/* Header row */}
         <div className="flex items-start justify-between gap-4">
@@ -71,7 +69,7 @@ export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
         </div>
 
         {/* Headline */}
-        <div className={`mt-7 rounded-2xl border ${category.border} ${category.wash} p-5 sm:p-6`}>
+        <div className="mt-7">
           <h2 className="font-serif text-2xl font-semibold leading-tight text-foreground">
             {item.title}
           </h2>
@@ -110,10 +108,8 @@ export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
 
         {/* Source CTA */}
         {item.source && (
-          <div className="mt-6 rounded-xl border border-primary/25 bg-primary/5 p-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary/75">
-              Continue the thread
-            </p>
+          <div className="mt-6 rounded-xl border border-card-border p-4">
+            <p className="text-sm font-semibold text-foreground">Continue the thread</p>
             <p className="mt-1 text-xs text-muted">
               {item.source.hint ?? "Open the relevant game screen to act on this update."}
             </p>

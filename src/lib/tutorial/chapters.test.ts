@@ -269,11 +269,10 @@ describe("registry", () => {
     ]);
   });
 
-  it("gives every chapter a title, icon, blurb, and non-empty step list", () => {
+  it("gives every chapter a title, blurb, and non-empty step list", () => {
     for (const id of TUTORIAL_CHAPTER_IDS) {
       const chapter = TUTORIAL_CHAPTERS[id];
       expect(chapter.title).toBeTruthy();
-      expect(chapter.icon).toBeTruthy();
       expect(chapter.blurb).toBeTruthy();
       expect(chapter.estimatedMinutes).toBeGreaterThan(0);
       expect(buildChapterTour(CHARACTER, id).length).toBeGreaterThan(1);

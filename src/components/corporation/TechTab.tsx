@@ -1,9 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Modal, Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import {
+  DenseSection,
+  InlineStatus,
+  KVList,
+  KVRow,
+  SmallButton,
+  TableScroll,
+  Td,
+  Th,
+} from "./dense/DenseKit";
 
 type Lane = "generic" | "sector";
 type EffectCategory =
@@ -81,60 +91,26 @@ interface TechTabProps {
 }
 
 const LANE_LABEL: Record<Lane, string> = { generic: "Corporate", sector: "Sector" };
-const PLACEHOLDER = "https://cdn.ahousedividedgame.com/static/tech/placeholder.webp";
 
-// ── Inline SVG icons (no emojis) ──────────────────────────────────────────────
-function Svg({ d, className = "h-3.5 w-3.5" }: { d: string; className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      {d.split("|").map((p, i) => (
-        <path key={i} d={p} />
-      ))}
-    </svg>
-  );
+/** Decade labels arrive as "2019–2029"; player copy carries no dashes. */
+function decadeLabel(label: string): string {
+  return label.replace(/\s*[–—]\s*/g, " to ");
 }
-const EFFECT_ICON: Record<EffectCategory, string> = {
-  margin: "M3 17l6-6 4 4 7-7|M14 8h5v5",
-  growth: "M12 5v14|M6 13l6 6 6-6",
-  input: "M12 3v9|M8 9l4 4 4-4|M4 18h16",
-  output: "M12 14V5|M8 9l4-4 4 4|M4 18h16",
-  dominance: "M12 3l8 4v5c0 4-3.5 7-8 9-4.5-2-8-5-8-9V7z|M9 12l2 2 4-4",
-  tariff: "M3 9h18l-2 11H5z|M8 9V6a4 4 0 018 0v3",
-  expansion: "M12 4v16|M4 12h16|M7 7l-3 5 3 5|M17 7l3 5-3 5",
-  marketing: "M3 11l13-5v12L3 13z|M6 13v3a2 2 0 002 2h1",
-  logistics:
-    "M3 7h11v8H3z|M14 10h4l3 3v2h-7|M7 19a1 1 0 100-2 1 1 0 000 2|M17 19a1 1 0 100-2 1 1 0 000 2",
-  method:
-    "M12 9a3 3 0 100 6 3 3 0 000-6|M12 3v2|M12 19v2|M4 12H2|M22 12h-2|M5 5l1.5 1.5|M17.5 17.5L19 19",
-};
-const EFFECT_COLOR: Record<EffectCategory, string> = {
-  margin: "text-emerald-300",
-  growth: "text-sky-300",
-  input: "text-orange-300",
-  output: "text-lime-300",
-  dominance: "text-red-300",
-  tariff: "text-yellow-300",
-  expansion: "text-teal-300",
-  marketing: "text-pink-300",
-  logistics: "text-indigo-300",
-  method: "text-fuchsia-300",
-};
-const IconLock = () => <Svg d="M8 11V7a4 4 0 118 0v4|M6 11h12v9H6z" className="h-3 w-3" />;
-const IconCheck = () => <Svg d="M5 13l4 4L19 7" className="h-3.5 w-3.5" />;
-const IconChevron = ({ open }: { open: boolean }) => (
-  <Svg d="M6 9l6 6 6-6" className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
-);
+
+/**
+ * The tree's slots, in reading order. Each decade lane is a root, two branches
+ * of four researched in order, and (from v3) a pick-one specialization tier of
+ * three entries, each with its capstone.
+ */
+const SLOT_GROUPS: { label: string; slots: number[] }[] = [
+  { label: "Root", slots: [1] },
+  { label: "Branch A", slots: [2, 4, 6, 8] },
+  { label: "Branch B", slots: [3, 5, 7, 9] },
+  { label: "Specialization, pick one", slots: [10, 13, 11, 14, 12, 15] },
+];
 
 export default function TechTab({ corporationId, isCeo }: TechTabProps) {
-  const { toInternalFrom, formatFull } = useCurrency();
+  const { toInternalFrom, formatFull, formatAmount } = useCurrency();
   const [data, setData] = useState<TechResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -205,7 +181,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
       const json = (await res.json()) as { error?: string };
       if (!res.ok) setMsg({ kind: "err", text: json.error ?? "Abandon failed" });
       else {
-        setMsg({ kind: "ok", text: `Abandoned ${confirmAbandon.label}.` });
+        setMsg({ kind: "ok", text: `Abandoned ${decadeLabel(confirmAbandon.label)}.` });
         await load();
       }
     } catch {
@@ -222,206 +198,238 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
   );
   const history = useMemo(() => reached.filter((d) => d.id !== current?.id), [reached, current]);
   // Only the current and the immediately-previous decade still apply
-  // per-turn effects (see getSectorTechEffectsForYear) — everything older is
+  // per-turn effects (see getSectorTechEffectsForYear); everything older is
   // inert baseline tech. `reached` preserves TECH_DECADES order and `current`
   // is always its last entry, so the previous decade is the one right before it.
   const previousDecadeId = reached.length >= 2 ? reached[reached.length - 2].id : null;
 
   if (loading) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-14 w-72" />
-        <Skeleton className="h-80 w-full" />
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
   if (error) {
-    return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-        {error}
-      </div>
-    );
+    return <InlineStatus message={error} tone="error" className="py-2" />;
   }
   if (!data || data.enabled === false) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-6 text-gray-400">
+      <p className="py-2 text-xs text-muted">
         The sector tech-tree system is not currently enabled.
-      </div>
+      </p>
     );
   }
   if (data.redacted) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-6 text-gray-400">
+      <p className="py-2 text-xs text-muted">
         This corporation is private. Its technology choices are visible only to the CEO.
-      </div>
+      </p>
     );
   }
 
   const viewerIsCeo = (data.isCeo ?? isCeo) === true;
   const code = data.currencyCode ?? "USD";
   const fmtCash = (n: number | null | undefined) =>
-    n == null ? "—" : formatFull(toInternalFrom(n, code as CurrencyCode), code as CurrencyCode);
+    n == null ? "n/a" : formatFull(toInternalFrom(n, code as CurrencyCode), code as CurrencyCode);
+  // Node prices in the tables: compact, the exact figure is in the unlock dialog.
+  const fmtCashShort = (n: number | null | undefined) =>
+    n == null ? "n/a" : formatAmount(toInternalFrom(n, code as CurrencyCode), code as CurrencyCode);
+  const previous = reached.find((d) => d.id === previousDecadeId);
+  const methods = data.unlockedStrategyNames ?? [];
+  const chancePct = Math.round((data.breakthroughChance ?? 0) * 100);
+  const ecosystem =
+    data.rdDemandFactor == null
+      ? null
+      : data.rdDemandFactor > 1
+        ? `+${Math.round((data.rdDemandFactor - 1) * 100)}%`
+        : data.rdDemandFactor < 1
+          ? `${Math.round((data.rdDemandFactor - 1) * 100)}%`
+          : "Neutral";
 
   return (
-    <div className="space-y-5">
-      {/* Wallet header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-700 bg-gradient-to-r from-gray-800/60 to-gray-900/40 p-4">
-        <div>
-          <h2 className="text-lg font-semibold text-white">{data.sectorLabel} Tech Tree</h2>
-          <p className="max-w-2xl text-sm text-gray-400">
-            Spend R&amp;D points + cash to research technologies. Each decade splits into two
-            tracks: the <span className="text-sky-300">Corporate</span> track boosts <em>all</em>{" "}
-            your sectors at reduced strength, while the{" "}
-            <span className="text-amber-300">Sector</span> track gives full-strength bonuses to your
-            primary {data.sectorLabel?.toLowerCase()} sectors only. Commit to one track per decade
-            and research its branch in order; switch tracks only by abandoning the decade.
-          </p>
-          {current ? (
-            <p className="mt-1 text-xs font-medium text-gray-500">
-              Active effect window:{" "}
-              <span className="text-gray-300">
-                {(() => {
-                  const prev = reached.find((d) => d.id === previousDecadeId);
-                  return prev ? `${prev.label} + ${current.label}` : current.label;
-                })()}
-              </span>{" "}
-              — bonuses apply from the current and previous decade only (rolling 20 years); older
-              decades are inert baseline tech and prior decades can’t be unlocked late.
+    <div className="space-y-6">
+      <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <DenseSection title={`${data.sectorLabel ?? "Sector"} tech tree`}>
+          <div className="space-y-2 py-1 text-xs text-muted">
+            <p>
+              Spend R&amp;D points and cash to research technologies. Each decade splits into two
+              tracks: the Corporate track boosts <em>all</em> your sectors at reduced strength,
+              while the Sector track gives full-strength bonuses to your primary{" "}
+              {data.sectorLabel?.toLowerCase()} sectors only. Commit to one track per decade and
+              research its branch in order; switch tracks only by abandoning the decade.
             </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Stat
-            label="R&D Points"
-            value={(data.rdScore ?? 0).toLocaleString("en-US")}
-            tone="blue"
-          />
-          <Stat label="Cash" value={fmtCash(data.liquidCapital)} tone="emerald" />
-          <Stat
-            label="Tech Margin"
-            value={`+${data.activeMarginPp ?? 0} / +${data.marginCapPp ?? 8}`}
-            tone="violet"
-          />
-        </div>
+            {current && (
+              <p>
+                Active effect window:{" "}
+                <span className="text-foreground">
+                  {previous
+                    ? `${decadeLabel(previous.label)} and ${decadeLabel(current.label)}`
+                    : decadeLabel(current.label)}
+                </span>
+                . Bonuses apply from the current and previous decade only (a rolling 20 years);
+                older decades are inert baseline tech, and earlier decades cannot be unlocked late.
+              </p>
+            )}
+            {data.cashPricing && (
+              <p>
+                <span className="font-medium text-foreground">How cash prices work</span>{" "}
+                <span>
+                  Most technologies cost {Math.round(data.cashPricing.defaultRevenueFraction * 100)}
+                  % of the corporation&apos;s {fmtCash(data.cashPricing.dailyGrossOperatingScale)}{" "}
+                  daily gross operating scale. Market cap and profit do not set the price.
+                  {data.cashPricing.capacityFloorApplied && (
+                    <>
+                      {" "}
+                      Owned plant capacity is the minimum pricing basis, so mothballing does not
+                      make research free.
+                    </>
+                  )}{" "}
+                  Foreign sectors are converted into {code}. Exchange rates can move the converted
+                  total.
+                </span>
+              </p>
+            )}
+            <p>
+              Each {data.breakthroughInterval ?? 6} turns, accumulated R&amp;D may spark a free
+              revenue boost to one of your sectors. The chance rises with your R&amp;D score and is
+              guaranteed at 200.
+            </p>
+          </div>
+        </DenseSection>
+
+        <DenseSection title="Research position">
+          <KVList>
+            <KVRow
+              label="R&D points"
+              value={(data.rdScore ?? 0).toLocaleString("en-US")}
+              hint={data.rdGainPerTurn != null ? `+${data.rdGainPerTurn}/turn` : undefined}
+            />
+            <KVRow label="Cash" value={fmtCash(data.liquidCapital)} />
+            <KVRow
+              label="Techs unlocked"
+              value={`${data.techsUnlocked ?? 0} / ${data.totalNodes ?? 0}`}
+            />
+            <KVRow
+              label="Tech margin"
+              value={`+${data.activeMarginPp ?? 0}pp`}
+              hint={`cap +${data.marginCapPp ?? 8}pp`}
+            />
+            <KVRow
+              label="Production methods"
+              value={methods.length}
+              title={methods.length ? methods.join(", ") : "None unlocked"}
+            />
+            <KVRow
+              label="Breakthrough chance"
+              value={`${chancePct}%`}
+              hint={`every ${data.breakthroughInterval ?? 6} turns`}
+            />
+            {ecosystem && (
+              <KVRow
+                label="R&D ecosystem"
+                value={
+                  <span
+                    className={
+                      (data.rdDemandFactor ?? 1) > 1.02
+                        ? "text-success"
+                        : (data.rdDemandFactor ?? 1) < 0.98
+                          ? "text-error"
+                          : ""
+                    }
+                  >
+                    {ecosystem}
+                  </span>
+                }
+              />
+            )}
+          </KVList>
+        </DenseSection>
       </div>
 
-      {/* Tech overview */}
-      <TechOverview data={data} code={code} fmtCash={fmtCash} />
-
-      {data.cashPricing && (
-        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">
-          <div className="font-semibold">How cash prices work</div>
-          <p className="mt-1 text-xs leading-relaxed text-gray-300">
-            Most technologies cost {Math.round(data.cashPricing.defaultRevenueFraction * 100)}% of
-            the corporation&apos;s {fmtCash(data.cashPricing.dailyGrossOperatingScale)} daily gross
-            operating scale. Market cap and profit do not set the price.
-            {data.cashPricing.capacityFloorApplied && (
-              <>
-                {" "}
-                Owned plant capacity is the minimum pricing basis, so mothballing does not make
-                research free.
-              </>
-            )}{" "}
-            Foreign sectors are converted into {code}. Exchange rates can move the converted total.
-          </p>
-        </div>
-      )}
-
-      {/* Ready-to-unlock callout */}
       {viewerIsCeo && (data.unlockableCount ?? 0) > 0 && !dismissUnlock && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
-          <div className="flex items-center gap-2 text-sm text-amber-200">
-            <Svg
-              d="M12 9v4|M12 17h.01|M10.3 4.3l-7 12A1.5 1.5 0 004.6 19h14.8a1.5 1.5 0 001.3-2.7l-7-12a1.5 1.5 0 00-2.6 0z"
-              className="h-5 w-5"
-            />
-            <span>
-              <strong>{data.unlockableCount}</strong> technolog
-              {data.unlockableCount === 1 ? "y is" : "ies are"} ready to unlock with your current
-              R&amp;D and cash.
-            </span>
-          </div>
+        <p className="flex flex-wrap items-center gap-2 text-xs text-warning">
+          <span>
+            <span className="font-mono font-medium">{data.unlockableCount}</span> technolog
+            {data.unlockableCount === 1 ? "y is" : "ies are"} ready to unlock with your current
+            R&amp;D and cash.
+          </span>
           <button
+            type="button"
             onClick={() => setDismissUnlock(true)}
-            className="rounded px-2 py-0.5 text-xs text-amber-200/70 hover:bg-amber-500/10"
+            className="text-muted underline decoration-card-border underline-offset-2 hover:text-foreground"
           >
             Dismiss
           </button>
-        </div>
+        </p>
       )}
 
-      {msg && (
-        <div
-          className={`rounded-lg border p-3 text-sm ${
-            msg.kind === "ok"
-              ? "border-green-500/30 bg-green-500/10 text-green-300"
-              : "border-red-500/30 bg-red-500/10 text-red-300"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
+      <InlineStatus message={msg?.text} tone={msg?.kind === "err" ? "error" : "success"} />
 
-      {/* Active decade */}
       {current && (
-        <div>
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-300">
-            Active decade
-          </div>
-          <DecadeBlock
-            decade={current}
-            viewerIsCeo={viewerIsCeo}
-            code={code}
-            busyNode={busyNode}
-            onUnlock={(node, lane) => setConfirmNode({ node, lane, decade: current.id })}
-            onAbandon={() => setConfirmAbandon(current)}
-          />
-        </div>
+        <DecadeSection
+          decade={current}
+          caption="active decade"
+          viewerIsCeo={viewerIsCeo}
+          fmtCash={fmtCashShort}
+          busyNode={busyNode}
+          onUnlock={(node, lane) => setConfirmNode({ node, lane, decade: current.id })}
+          onAbandon={() => setConfirmAbandon(current)}
+        />
       )}
 
-      {/* Collapsible history */}
       {history.length > 0 && (
-        <div>
+        <section className="space-y-4">
           <button
+            type="button"
             onClick={() => setShowHistory((v) => !v)}
-            className="flex w-full items-center justify-between rounded-lg border border-gray-700 bg-gray-800/30 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800/60"
+            aria-expanded={showHistory}
+            className="flex w-full items-center justify-between border-b border-card-border pb-1.5 text-left"
           >
-            <span className="font-semibold">
-              History — {history.length} earlier decade{history.length > 1 ? "s" : ""} (baseline
-              tech)
+            <span className="text-sm font-semibold text-foreground">
+              Earlier decades{" "}
+              <span className="text-xs font-normal text-muted">
+                {history.length} of baseline tech
+              </span>
             </span>
-            <IconChevron open={showHistory} />
+            <span className="text-xs text-muted">{showHistory ? "Hide" : "Show"}</span>
           </button>
-          {showHistory && (
-            <div className="mt-3 space-y-4">
-              {history.map((decade) => (
-                <DecadeBlock
-                  key={decade.id}
-                  decade={decade}
-                  viewerIsCeo={viewerIsCeo}
-                  code={code}
-                  busyNode={busyNode}
-                  inert={decade.id !== previousDecadeId}
-                  onUnlock={(node, lane) => setConfirmNode({ node, lane, decade: decade.id })}
-                  onAbandon={() => setConfirmAbandon(decade)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+          {showHistory &&
+            history.map((decade) => (
+              <DecadeSection
+                key={decade.id}
+                decade={decade}
+                caption={
+                  decade.id === previousDecadeId
+                    ? "previous decade, still providing bonuses"
+                    : "no longer providing bonuses"
+                }
+                inert={decade.id !== previousDecadeId}
+                viewerIsCeo={viewerIsCeo}
+                fmtCash={fmtCashShort}
+                busyNode={busyNode}
+                onUnlock={(node, lane) => setConfirmNode({ node, lane, decade: decade.id })}
+                onAbandon={() => setConfirmAbandon(decade)}
+              />
+            ))}
+        </section>
       )}
 
       {confirmNode && (
         <Modal open title={`Unlock ${confirmNode.node.name}?`} onClose={() => setConfirmNode(null)}>
           <div className="space-y-4">
-            <p className="text-sm text-gray-300">
+            <p className="text-sm text-foreground">
               Spend <strong>{confirmNode.node.cost} R&amp;D points</strong> and{" "}
               <strong>{fmtCash(confirmNode.node.cashCost)}</strong> cash.
               {confirmNode.node.parentSlot === null && (
                 <>
                   {" "}
                   This commits you to the <strong>{LANE_LABEL[confirmNode.lane]}</strong> track for{" "}
-                  {confirmNode.decade}.
+                  {decadeLabel(
+                    reached.find((d) => d.id === confirmNode.decade)?.label ?? confirmNode.decade
+                  )}
+                  .
                 </>
               )}
             </p>
@@ -444,13 +452,13 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
       {confirmAbandon && (
         <Modal
           open
-          title={`Abandon ${confirmAbandon.label}?`}
+          title={`Abandon ${decadeLabel(confirmAbandon.label)}?`}
           onClose={() => setConfirmAbandon(null)}
         >
           <div className="space-y-4">
-            <p className="text-sm text-gray-300">
-              This removes every node you unlocked in {confirmAbandon.label} and frees the decade so
-              you can choose the other track.{" "}
+            <p className="text-sm text-foreground">
+              This removes every node you unlocked in {decadeLabel(confirmAbandon.label)} and frees
+              the decade so you can choose the other track.{" "}
               <strong>No R&amp;D points or cash are refunded.</strong>
             </p>
             <div className="flex justify-end gap-2">
@@ -468,439 +476,194 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "blue" | "emerald" | "violet";
-}) {
-  const c =
-    tone === "blue"
-      ? "bg-blue-500/10 text-blue-200"
-      : tone === "emerald"
-        ? "bg-emerald-500/10 text-emerald-200"
-        : "bg-violet-500/10 text-violet-200";
-  return (
-    <div className={`rounded-lg px-4 py-2 text-right ${c}`}>
-      <div className="text-[10px] uppercase tracking-wide opacity-80">{label}</div>
-      <div className="text-lg font-bold">{value}</div>
-    </div>
-  );
-}
-
-function TechOverview({
-  data,
-  fmtCash,
-}: {
-  data: TechResponse;
-  code: string;
-  fmtCash: (n: number | null | undefined) => string;
-}) {
-  const chancePct = Math.round((data.breakthroughChance ?? 0) * 100);
-  const methods = data.unlockedStrategyNames ?? [];
-  return (
-    <div className="rounded-xl border border-gray-700 bg-gray-800/30 p-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-300">
-        Tech Overview
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <OverviewCard
-          label="R&D Points"
-          value={(data.rdScore ?? 0).toLocaleString("en-US")}
-          sub={data.rdGainPerTurn != null ? `+${data.rdGainPerTurn}/turn` : undefined}
-        />
-        <OverviewCard label="Cash" value={fmtCash(data.liquidCapital)} />
-        <OverviewCard
-          label="Techs Unlocked"
-          value={`${data.techsUnlocked ?? 0} / ${data.totalNodes ?? 0}`}
-          sub={`+${data.activeMarginPp ?? 0}pp margin (cap +${data.marginCapPp ?? 8})`}
-        />
-        <OverviewCard
-          label="Production Methods"
-          value={`${methods.length}`}
-          sub={
-            methods.length
-              ? methods.slice(0, 3).join(", ") + (methods.length > 3 ? "…" : "")
-              : "none unlocked"
-          }
-        />
-      </div>
-      {/* Random R&D breakthrough chance */}
-      <div className="mt-3 rounded-lg bg-gray-900/40 p-3">
-        <div className="mb-1 flex items-center justify-between text-xs text-gray-300">
-          <span className="inline-flex items-center gap-1">
-            <Svg
-              d="M9 18h6|M10 22h4|M12 2a7 7 0 00-4 12.7c.6.5 1 1.2 1 2h6c0-.8.4-1.5 1-2A7 7 0 0012 2z"
-              className="h-4 w-4 text-yellow-300"
-            />
-            Random breakthrough chance
-            <span className="text-gray-500">(every {data.breakthroughInterval ?? 6} turns)</span>
-          </span>
-          <span className="font-semibold text-yellow-200">{chancePct}%</span>
-        </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-700">
-          <div className="h-full rounded-full bg-yellow-400" style={{ width: `${chancePct}%` }} />
-        </div>
-        <div className="mt-1 text-[10px] text-gray-500">
-          Each interval, accumulated R&amp;D may spark a free revenue boost to one of your sectors —
-          chance rises with your R&amp;D score (guaranteed at 200).
-        </div>
-      </div>
-      {/* R&D Ecosystem signal */}
-      {data.rdDemandFactor != null && (
-        <div className="mt-2 flex items-center justify-between rounded-lg bg-gray-900/40 px-3 py-2 text-xs">
-          <span className="inline-flex items-center gap-1 text-gray-300">
-            <Svg
-              d="M12 2a10 10 0 100 20 10 10 0 000-20|M12 8v4l3 3"
-              className="h-4 w-4 text-sky-300"
-            />
-            R&amp;D Ecosystem
-          </span>
-          <span
-            className={`font-semibold ${
-              data.rdDemandFactor > 1.02
-                ? "text-emerald-300"
-                : data.rdDemandFactor < 0.98
-                  ? "text-red-300"
-                  : "text-gray-300"
-            }`}
-          >
-            {data.rdDemandFactor > 1
-              ? `+${Math.round((data.rdDemandFactor - 1) * 100)}%`
-              : data.rdDemandFactor < 1
-                ? `${Math.round((data.rdDemandFactor - 1) * 100)}%`
-                : "Neutral"}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function OverviewCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-lg border border-gray-700 bg-gray-900/30 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
-      <div className="text-lg font-bold text-white">{value}</div>
-      {sub && <div className="mt-0.5 truncate text-[10px] text-gray-500">{sub}</div>}
-    </div>
-  );
-}
-
-function DecadeBlock({
+function DecadeSection({
   decade,
-  viewerIsCeo,
-  code,
-  busyNode,
+  caption,
   inert = false,
+  viewerIsCeo,
+  fmtCash,
+  busyNode,
   onUnlock,
   onAbandon,
 }: {
   decade: TechDecade;
-  viewerIsCeo: boolean;
-  code: string;
-  busyNode: string | null;
+  caption: string;
   inert?: boolean;
+  viewerIsCeo: boolean;
+  fmtCash: (n: number | null | undefined) => string;
+  busyNode: string | null;
   onUnlock: (node: TechNode, lane: Lane) => void;
   onAbandon: () => void;
 }) {
   const canAbandon =
     viewerIsCeo && decade.reached && !decade.autoGrantedDecade && !!decade.committedLane;
+  const meta = [
+    caption,
+    decade.autoGrantedDecade ? "baseline" : null,
+    decade.committedLane ? `${LANE_LABEL[decade.committedLane]} track committed` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
-    <div className="relative overflow-hidden rounded-xl border border-gray-700 bg-gray-800/20 p-4">
-      {inert && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-gray-900/50 backdrop-blur-sm">
-          <span className="rounded bg-gray-900/80 px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wide text-gray-300">
-            Historical decade — no longer providing bonuses
-          </span>
-        </div>
-      )}
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="rounded-md bg-gray-700/70 px-3 py-1 text-sm font-semibold text-white">
-          {decade.label}
-        </span>
-        {decade.autoGrantedDecade && (
-          <span className="rounded bg-purple-600/20 px-2 py-0.5 text-xs text-purple-200">
-            Baseline
-          </span>
-        )}
-        {decade.committedLane && (
-          <span
-            className={`rounded px-2 py-0.5 text-xs ${
-              decade.committedLane === "generic"
-                ? "bg-sky-600/20 text-sky-200"
-                : "bg-amber-600/20 text-amber-200"
-            }`}
-          >
-            {LANE_LABEL[decade.committedLane]} committed
-          </span>
-        )}
-        {canAbandon && (
-          <button
-            onClick={onAbandon}
-            className="ml-auto rounded border border-red-500/40 px-2 py-0.5 text-xs text-red-300 hover:bg-red-500/10"
-          >
+    <DenseSection
+      title={decadeLabel(decade.label)}
+      meta={meta}
+      actions={
+        canAbandon ? (
+          <SmallButton tone="danger" onClick={onAbandon}>
             Abandon decade
-          </button>
-        )}
-      </div>
-
-      <Split active={!!decade.committedLane} />
-      <div className="mt-1 grid grid-cols-2 gap-2 sm:gap-4">
+          </SmallButton>
+        ) : undefined
+      }
+      className={inert ? "opacity-70" : ""}
+    >
+      <div className="grid gap-x-8 gap-y-6 pt-1 xl:grid-cols-2">
         {(["generic", "sector"] as Lane[]).map((lane) => (
-          <LanePanel
+          <LaneTable
             key={lane}
             lane={lane}
             decade={decade}
             viewerIsCeo={viewerIsCeo}
-            code={code}
+            fmtCash={fmtCash}
             busyNode={busyNode}
             onUnlock={onUnlock}
           />
         ))}
       </div>
-    </div>
+    </DenseSection>
   );
 }
 
-function VLine({ active }: { active?: boolean }) {
-  return <div className={`h-4 w-0.5 ${active ? "bg-emerald-500" : "bg-gray-600"}`} />;
-}
-function Split({ active }: { active?: boolean }) {
-  const c = active ? "bg-emerald-500" : "bg-gray-600";
-  return (
-    <div className="relative h-5 w-full">
-      <div className={`absolute left-1/2 top-0 h-2.5 w-0.5 -translate-x-1/2 ${c}`} />
-      <div className={`absolute left-1/4 right-1/4 top-2.5 h-0.5 ${c}`} />
-      <div className={`absolute left-1/4 top-2.5 h-2.5 w-0.5 ${c}`} />
-      <div className={`absolute right-1/4 top-2.5 h-2.5 w-0.5 ${c}`} />
-    </div>
-  );
-}
-
-function LanePanel({
+function LaneTable({
   lane,
   decade,
   viewerIsCeo,
-  code,
+  fmtCash,
   busyNode,
   onUnlock,
 }: {
   lane: Lane;
   decade: TechDecade;
   viewerIsCeo: boolean;
-  code: string;
+  fmtCash: (n: number | null | undefined) => string;
   busyNode: string | null;
   onUnlock: (node: TechNode, lane: Lane) => void;
 }) {
   const nodes = decade.lanes[lane];
-  const bySlot = (s: number) => nodes.find((n) => n.slot === s);
-  const [n1, n2, n3, n4, n5, n6, n7, n8, n9] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(bySlot);
-  // v3 tier: three exclusive specialization entries (10–12), each with its
-  // capstone (13–15). Reachable after finishing either branch above.
-  const specEntries = [10, 11, 12].map(bySlot);
-  const specCapstones = [13, 14, 15].map(bySlot);
-  const hasSpecTier = specEntries.some(Boolean);
-  const chosenSpec = specEntries.find((n) => n?.owned);
+  const bySlot = new Map(nodes.map((n) => [n.slot, n]));
   const dimmed = decade.committedLane != null && decade.committedLane !== lane;
-  const accent =
-    lane === "generic"
-      ? "border-sky-500/40 from-sky-600/10"
-      : "border-amber-500/40 from-amber-600/10";
+  const owned = nodes.filter((n) => n.owned).length;
+  const chosenSpec = [10, 11, 12].map((s) => bySlot.get(s)).find((n) => n?.owned);
+  const groups = SLOT_GROUPS.map((g) => ({
+    label: g.slots[0] === 10 && chosenSpec ? `Specialization: ${chosenSpec.name}` : g.label,
+    nodes: g.slots.map((s) => bySlot.get(s)).filter((n): n is TechNode => !!n),
+  })).filter((g) => g.nodes.length > 0);
 
-  const card = (node: TechNode | undefined) => (
-    <NodeCard
-      node={node}
-      lane={lane}
-      reached={decade.reached}
-      viewerIsCeo={viewerIsCeo}
-      code={code}
-      busy={busyNode === node?.id}
-      onUnlock={onUnlock}
-    />
-  );
-
-  return (
-    <div
-      className={`rounded-lg border bg-gradient-to-b to-gray-900/20 ${accent} ${dimmed ? "opacity-60" : ""}`}
-    >
-      <div className="relative h-16 overflow-hidden rounded-t-lg bg-gray-900">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={nodes[0]?.image || PLACEHOLDER}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover"
-          onError={(e) => {
-            const el = e.currentTarget as HTMLImageElement;
-            if (el.src !== PLACEHOLDER) el.src = PLACEHOLDER;
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-        <span className="absolute bottom-1 left-2 text-sm font-bold uppercase tracking-wide text-white drop-shadow">
-          {LANE_LABEL[lane]}
-        </span>
-      </div>
-
-      <div className="flex flex-col items-center px-2 pb-4 pt-2 sm:px-3">
-        {card(n1)}
-        <VLine active={n1?.owned} />
-        <Split active={n1?.owned} />
-        <div className="grid w-full grid-cols-2 gap-1.5 sm:gap-2">
-          <div className="flex flex-col items-center">
-            {card(n2)}
-            {n4 && (
-              <>
-                <VLine active={n2?.owned} />
-                {card(n4)}
-              </>
-            )}
-            {n6 && (
-              <>
-                <VLine active={n4?.owned} />
-                {card(n6)}
-              </>
-            )}
-            {n8 && (
-              <>
-                <VLine active={n6?.owned} />
-                {card(n8)}
-              </>
-            )}
-          </div>
-          <div className="flex flex-col items-center">
-            {card(n3)}
-            {n5 && (
-              <>
-                <VLine active={n3?.owned} />
-                {card(n5)}
-              </>
-            )}
-            {n7 && (
-              <>
-                <VLine active={n5?.owned} />
-                {card(n7)}
-              </>
-            )}
-            {n9 && (
-              <>
-                <VLine active={n7?.owned} />
-                {card(n9)}
-              </>
-            )}
-          </div>
-        </div>
-        {hasSpecTier && (
-          <>
-            <VLine active={n8?.owned || n9?.owned} />
-            <div className="mb-1 mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-              {chosenSpec ? `Specialization: ${chosenSpec.name}` : "Specialization — pick one"}
-            </div>
-            <div className="grid w-full grid-cols-3 gap-1.5 sm:gap-2">
-              {specEntries.map((entry, i) => (
-                <div
-                  key={entry?.id ?? i}
-                  className={`flex flex-col items-center ${entry?.pathLocked ? "opacity-50" : ""}`}
-                >
-                  {card(entry)}
-                  {specCapstones[i] && (
-                    <>
-                      <VLine active={entry?.owned} />
-                      {card(specCapstones[i])}
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NodeCard({
-  node,
-  lane,
-  reached,
-  viewerIsCeo,
-  code,
-  busy,
-  onUnlock,
-}: {
-  node: TechNode | undefined;
-  lane: Lane;
-  reached: boolean;
-  viewerIsCeo: boolean;
-  code: string;
-  busy: boolean;
-  onUnlock: (node: TechNode, lane: Lane) => void;
-}) {
-  const { toInternalFrom, formatFull } = useCurrency();
-  if (!node) return null;
-  const fmtNodeCash = (n: number | null | undefined) =>
-    n == null ? "—" : formatFull(toInternalFrom(n, code as CurrencyCode), code as CurrencyCode);
-  const border = node.owned
-    ? "border-emerald-500/60 bg-emerald-500/10"
-    : node.affordable
-      ? "border-sky-500/50 bg-gray-900/50"
-      : "border-gray-700 bg-gray-900/30";
-
-  const status = () => {
-    if (node.owned)
+  const status = (node: TechNode) => {
+    if (node.owned) {
+      return <span className="text-success">{node.autoGranted ? "Auto" : "Owned"}</span>;
+    }
+    if (!decade.reached || node.laneLocked || node.pathLocked || !node.prereqMet) {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-400">
-          <IconCheck /> {node.autoGranted ? "Auto" : "Owned"}
-        </span>
-      );
-    if (!reached || node.laneLocked || node.pathLocked || !node.prereqMet)
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
-          <IconLock />{" "}
+        <span className="text-muted">
           {node.laneLocked
             ? "Other track"
             : node.pathLocked
               ? "Other path"
-              : !reached
+              : !decade.reached
                 ? "Locked"
                 : "Needs previous"}
         </span>
       );
-    if (!viewerIsCeo) return null;
-    if (node.affordable)
+    }
+    if (!viewerIsCeo) return <span className="text-muted">Available</span>;
+    if (node.affordable) {
       return (
-        <Button size="sm" variant="primary" disabled={busy} onClick={() => onUnlock(node, lane)}>
-          {busy ? "…" : "Unlock"}
-        </Button>
+        <SmallButton
+          tone="primary"
+          disabled={busyNode === node.id}
+          onClick={() => onUnlock(node, lane)}
+        >
+          {busyNode === node.id ? "…" : "Unlock"}
+        </SmallButton>
       );
-    return <span className="text-[10px] text-amber-400/80">Can&apos;t afford</span>;
+    }
+    return <span className="text-warning">Can&apos;t afford</span>;
   };
 
   return (
-    <div className={`w-full rounded-md border p-2 text-center ${border}`}>
-      <div className="text-[11px] font-semibold leading-tight text-white">{node.name}</div>
-      {node.effects.length > 0 && (
-        <ul className="mt-1 space-y-0.5">
-          {node.effects.map((eff, i) => (
-            <li
-              key={i}
-              className={`flex items-center justify-center gap-1 text-[10px] leading-tight ${EFFECT_COLOR[eff.category]}`}
-            >
-              <Svg d={EFFECT_ICON[eff.category]} className="h-3 w-3 shrink-0" />
-              <span>{eff.label}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {!node.owned && (
-        <div className="mt-1 text-[10px] text-gray-400">
-          {node.cost} R&amp;D · {fmtNodeCash(node.cashCost)}
-        </div>
-      )}
-      <div className="mt-1 flex justify-center">{status()}</div>
+    <div className={`min-w-0 ${dimmed ? "opacity-60" : ""}`}>
+      <h3 className="flex items-baseline justify-between gap-2 pb-1 text-xs font-medium text-foreground">
+        <span>{LANE_LABEL[lane]} track</span>
+        <span className="font-mono text-[11px] font-normal tabular-nums text-muted">
+          {owned}/{nodes.length} owned
+        </span>
+      </h3>
+      <TableScroll>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <Th>Technology</Th>
+              <Th>Effects</Th>
+              <Th align="right">Cost</Th>
+              <Th align="right">
+                <span className="sr-only">Status</span>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => (
+              <GroupRows
+                key={group.label}
+                label={group.label}
+                nodes={group.nodes}
+                fmtCash={fmtCash}
+                status={status}
+              />
+            ))}
+          </tbody>
+        </table>
+      </TableScroll>
     </div>
+  );
+}
+
+function GroupRows({
+  label,
+  nodes,
+  fmtCash,
+  status,
+}: {
+  label: string;
+  nodes: TechNode[];
+  fmtCash: (n: number | null | undefined) => string;
+  status: (node: TechNode) => ReactNode;
+}) {
+  return (
+    <>
+      <tr>
+        <td colSpan={4} className="pb-0.5 pt-2 text-[11px] font-medium text-muted">
+          {label}
+        </td>
+      </tr>
+      {nodes.map((node) => (
+        <tr key={node.id} className={node.pathLocked ? "opacity-60" : undefined}>
+          <Td wrap title={node.description}>
+            <span className={node.owned ? "text-foreground" : "text-foreground/90"}>
+              {node.name}
+            </span>
+          </Td>
+          <Td wrap className="text-xs text-muted">
+            {node.effects.map((e) => e.label).join(", ")}
+          </Td>
+          <Td align="right" className="text-xs text-muted">
+            {node.owned ? "" : `${node.cost} R&D, ${fmtCash(node.cashCost)}`}
+          </Td>
+          <Td align="right" numeric={false} className="text-xs">
+            {status(node)}
+          </Td>
+        </tr>
+      ))}
+    </>
   );
 }
