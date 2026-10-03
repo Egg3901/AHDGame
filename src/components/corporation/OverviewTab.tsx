@@ -587,7 +587,11 @@ export default function OverviewTab({
                     />
                   </>
                 ) : (
-                  <KVRow label="Credit" value={<span className="text-muted">Loading</span>} />
+                  <KVRow
+                    label="Credit"
+                    value={<span className="text-muted">Loading</span>}
+                    mono={false}
+                  />
                 )}
                 <KVRow label={`Costs${suffix}`} value={est(fmt(scale(financials.totalCosts)))} />
               </KVList>
@@ -672,7 +676,7 @@ export default function OverviewTab({
                 {openVotes.map((v) => (
                   <tr key={v._id}>
                     <Td className="text-foreground">{VOTE_LABEL[v.type] ?? v.type}</Td>
-                    <Td align="right" className="text-muted">
+                    <Td align="right" numeric={false} className="text-muted">
                       {v.deadlineAtTurn != null ? `closes turn ${v.deadlineAtTurn}` : "open"}
                     </Td>
                   </tr>
@@ -714,7 +718,7 @@ export default function OverviewTab({
                 </span>
               }
             />
-            {brand && <KVRow label="Brand loyalty" value={brand} />}
+            {brand && <KVRow label="Brand loyalty" value={brand} mono={false} />}
             {corporation.averageQuality != null && (
               <KVRow
                 label="Average quality"
@@ -782,10 +786,11 @@ export default function OverviewTab({
 
         <DenseSection title="Structure">
           <KVList>
-            <KVRow label="Legal form" value={corporation.legalStructureLabel ?? "—"} />
-            <KVRow label="Headquarters" value={corporation.headquartersStateName} />
+            <KVRow label="Legal form" value={corporation.legalStructureLabel ?? "—"} mono={false} />
+            <KVRow label="Headquarters" value={corporation.headquartersStateName} mono={false} />
             {corporation.parentCorporation && (
               <KVRow
+                mono={false}
                 label="Parent"
                 value={
                   <Link
@@ -801,6 +806,7 @@ export default function OverviewTab({
             {(corporation.subsidiaries ?? []).map((sub) => (
               <KVRow
                 key={sub._id}
+                mono={false}
                 label="Subsidiary"
                 value={
                   <Link

@@ -47,15 +47,22 @@ function Figure({
   label,
   children,
   title,
+  mono = true,
 }: {
   label: string;
   children: ReactNode;
   title?: string;
+  /** Figures render in Geist Mono; pass false for words. */
+  mono?: boolean;
 }) {
   return (
     <div className="flex items-baseline gap-1.5 whitespace-nowrap" title={title}>
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="text-[13px] font-medium tabular-nums text-foreground">{children}</dd>
+      <dd
+        className={`text-[13px] font-medium tabular-nums text-foreground ${mono ? "font-mono" : ""}`}
+      >
+        {children}
+      </dd>
     </div>
   );
 }
@@ -320,12 +327,12 @@ export function CorporationMasthead({
         {hasPrice && (
           <div className="flex items-center gap-3">
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-semibold tabular-nums text-foreground">
+              <span className="font-mono text-xl font-semibold tabular-nums text-foreground">
                 {money.fmtPrice(corporation.sharePrice)}
               </span>
               {dayChange && (
                 <span
-                  className={`text-[13px] font-medium tabular-nums ${signTone(dayChange.changePct)}`}
+                  className={`font-mono text-[13px] font-medium tabular-nums ${signTone(dayChange.changePct)}`}
                   title={`Previous turn ${money.fmtPrice(dayChange.prevClose)}`}
                 >
                   {dayChange.changePct >= 0 ? "+" : ""}
@@ -400,7 +407,11 @@ export function CorporationMasthead({
                 )}
             </Figure>
           )}
-          {brand && <Figure label="Brand">{brand}</Figure>}
+          {brand && (
+            <Figure label="Brand" mono={false}>
+              {brand}
+            </Figure>
+          )}
           {corporation.averageQuality != null && (
             <Figure label="Quality" title="Average product quality, out of 100.">
               {Math.round(corporation.averageQuality)}

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useAbortableEffectFetch } from "@/hooks/useAbortableEffectFetch";
+import { DenseSection, InlineStatus, SmallButton, Td } from "./dense/DenseKit";
 
 /**
  * A7 part 2 surface, mirroring `MergerReviewPanel`: one panel serving both
@@ -129,123 +130,97 @@ export default function IndexCommitteePanel({ corpId }: { corpId: string }) {
   if (!showIssuer && !showInbox) return null;
 
   return (
-    <div className="rounded-xl border bg-card p-5 space-y-4 shadow-sm">
-      <div>
-        <h3 className="font-semibold text-sm">Index committee</h3>
-        <p className="text-xs text-muted-foreground">
+    <DenseSection title="Index committee">
+      <div className="space-y-2 py-1 text-xs">
+        <p className="text-muted">
           A corporation that misses a listing standard can ask to be admitted to the indices anyway.
           Solvency is never waivable.
         </p>
-      </div>
 
-      {showIssuer && committee && (
-        <div className="space-y-2 text-xs">
-          <p>
-            <span className="text-muted-foreground">Decided by</span>{" "}
-            <span className="font-medium">{committee.seatName}</span>
-            {committee.vacant ? (
-              <span className="text-muted-foreground"> (vacant, the deadline decides)</span>
-            ) : committee.holderIsNpp ? (
-              <span className="text-muted-foreground">
-                {" "}
-                ({committee.holderName}, the deadline decides)
-              </span>
-            ) : (
-              <span className="text-muted-foreground"> ({committee.holderName})</span>
-            )}
-          </p>
-
-          {standing?.waiver && (
-            <p className="rounded-lg bg-green-100 px-3 py-2 font-medium text-green-800 dark:bg-green-900/30 dark:text-green-300">
-              Waiver in force through turn {standing.waiver.waiverUntilTurn ?? "?"}.
+        {showIssuer && committee && (
+          <div className="space-y-2">
+            <p className="text-muted">
+              Decided by <span className="font-medium text-foreground">{committee.seatName}</span>
+              {committee.vacant
+                ? " (vacant, the deadline decides)"
+                : committee.holderIsNpp
+                  ? ` (${committee.holderName}, the deadline decides)`
+                  : ` (${committee.holderName})`}
             </p>
-          )}
 
-          {standing?.pending && (
-            <p className="rounded-lg bg-muted px-3 py-2">
-              Petition before the {standing.pending.seatName}, filed turn{" "}
-              {standing.pending.filedAtTurn}, decided by turn {standing.pending.deadlineAtTurn}.
-              Contribution {formatAnchor(standing.pending.contributionAnchor)}.
-            </p>
-          )}
-
-          {standing?.isCeo && !standing.pending && !standing.waiver && (
-            <div className="space-y-2">
-              <label className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Lobbying contribution
-              </label>
-              <p className="text-muted-foreground">
-                Paid from corporate cash on filing and never refunded. An unattended petition needs
-                at least {formatAnchor(standing.suggestedContributionAnchor)} to carry, and a
-                shortfall too far below the bar is refused at any price.
+            {standing?.waiver && (
+              <p className="font-medium text-success">
+                Waiver in force through turn {standing.waiver.waiverUntilTurn ?? "?"}.
               </p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  value={contribution}
-                  onChange={(e) => setContribution(e.target.value)}
-                  className="w-40 rounded-lg border border-card-border bg-card px-2 py-1"
-                />
-                <button
-                  type="button"
-                  disabled={loading || !contribution}
-                  onClick={file}
-                  className="rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground disabled:opacity-50"
-                >
-                  Petition
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
 
-      {showInbox && (
-        <div className="space-y-2 border-t border-card-border pt-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Before you as {seatName}
-          </p>
-          {inbox.map((petition) => (
-            <div
-              key={petition.id}
-              className="flex flex-wrap items-center justify-between gap-2 text-xs"
-            >
-              <div>
-                <p className="font-medium">{petition.corporationName}</p>
-                <p className="text-muted-foreground">
-                  Filed turn {petition.filedAtTurn}, decide by {petition.deadlineAtTurn},
-                  contribution {formatAnchor(petition.contributionAnchor)}
+            {standing?.pending && (
+              <p className="text-foreground">
+                Petition before the {standing.pending.seatName}, filed turn{" "}
+                {standing.pending.filedAtTurn}, decided by turn {standing.pending.deadlineAtTurn}.
+                Contribution {formatAnchor(standing.pending.contributionAnchor)}.
+              </p>
+            )}
+
+            {standing?.isCeo && !standing.pending && !standing.waiver && (
+              <div className="space-y-1.5">
+                <p className="text-muted">
+                  Lobbying contribution, paid from corporate cash on filing and never refunded. An
+                  unattended petition needs at least{" "}
+                  {formatAnchor(standing.suggestedContributionAnchor)} to carry; one too far below
+                  the bar is refused at any price.
                 </p>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    value={contribution}
+                    onChange={(e) => setContribution(e.target.value)}
+                    aria-label="Lobbying contribution"
+                    className="h-7 w-40 rounded-md border border-card-border bg-background px-2 text-right font-mono text-[13px] text-foreground focus:border-foreground focus:outline-none"
+                  />
+                  <SmallButton tone="primary" disabled={loading || !contribution} onClick={file}>
+                    Petition
+                  </SmallButton>
+                </div>
               </div>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => decide(petition.id, true)}
-                  className="rounded-lg bg-green-100 px-2.5 py-1 font-semibold text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                >
-                  Grant
-                </button>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => decide(petition.id, false)}
-                  className="rounded-lg bg-red-100 px-2.5 py-1 font-semibold text-red-800 dark:bg-red-900/30 dark:text-red-300"
-                >
-                  Refuse
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-950/30">
-          {error}
-        </p>
-      )}
-    </div>
+        {showInbox && (
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">Before you as {seatName}</p>
+            <table className="w-full border-collapse">
+              <tbody>
+                {inbox.map((petition) => (
+                  <tr key={petition.id}>
+                    <Td>
+                      <span className="text-foreground">{petition.corporationName}</span>
+                      <span className="ml-2 text-xs text-muted">
+                        filed turn {petition.filedAtTurn}, decide by {petition.deadlineAtTurn},
+                        contribution {formatAnchor(petition.contributionAnchor)}
+                      </span>
+                    </Td>
+                    <Td align="right" numeric={false}>
+                      <span className="inline-flex gap-1.5">
+                        <SmallButton disabled={loading} onClick={() => decide(petition.id, true)}>
+                          Grant
+                        </SmallButton>
+                        <SmallButton disabled={loading} onClick={() => decide(petition.id, false)}>
+                          Refuse
+                        </SmallButton>
+                      </span>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <InlineStatus message={error} tone="error" />
+      </div>
+    </DenseSection>
   );
 }

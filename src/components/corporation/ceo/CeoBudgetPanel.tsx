@@ -100,11 +100,11 @@ function Line({
         {label}
       </td>
       <td
-        className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right text-[13px] tabular-nums ${amountClass}`}
+        className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right font-mono text-[13px] tabular-nums ${amountClass}`}
       >
         {amount}
       </td>
-      <td className="hidden whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right text-xs tabular-nums text-muted sm:table-cell">
+      <td className="hidden whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right font-mono text-xs tabular-nums text-muted sm:table-cell">
         {pct ?? ""}
       </td>
       <td className="hidden border-b border-card-border/60 py-1.5 pl-2 text-xs text-muted md:table-cell">

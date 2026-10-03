@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { fillBandSentence, fillBandShort, formatFillPercent } from "../plantsPresentation";
@@ -54,6 +55,7 @@ export function KVRow({
   hint,
   action,
   title,
+  mono = true,
 }: {
   label: ReactNode;
   value: ReactNode;
@@ -62,6 +64,8 @@ export function KVRow({
   /** Inline control (link or small button) at the end of the row. */
   action?: ReactNode;
   title?: string;
+  /** Figures render in Geist Mono (design system tenet 2); pass false for words. */
+  mono?: boolean;
 }) {
   return (
     <div
@@ -70,11 +74,13 @@ export function KVRow({
     >
       <dt className="min-w-0 truncate text-xs text-muted">{label}</dt>
       <dd className="flex min-w-0 items-center justify-end gap-2 text-right">
-        <span className="truncate text-[13px] font-medium tabular-nums text-foreground">
+        <span
+          className={`truncate text-[13px] font-medium tabular-nums text-foreground ${mono ? "font-mono" : ""}`}
+        >
           {value}
         </span>
         {hint != null && (
-          <span className="shrink-0 text-[11px] tabular-nums text-muted">{hint}</span>
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">{hint}</span>
         )}
         {action}
       </dd>
@@ -140,12 +146,18 @@ export function Td({
   className = "",
   title,
   colSpan,
+  numeric = align === "right",
 }: {
   children?: ReactNode;
   align?: "left" | "right" | "center";
   className?: string;
   title?: string;
   colSpan?: number;
+  /**
+   * Figures render in Geist Mono (design system tenet 2). Right-aligned cells
+   * are figures unless they hold controls or words; pass false for those.
+   */
+  numeric?: boolean;
 }) {
   const alignClass =
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
@@ -153,7 +165,7 @@ export function Td({
     <td
       title={title}
       colSpan={colSpan}
-      className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-[13px] tabular-nums ${alignClass} ${className}`}
+      className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-[13px] tabular-nums ${numeric ? "font-mono" : ""} ${alignClass} ${className}`}
     >
       {children}
     </td>
@@ -197,7 +209,7 @@ export function SmallButton({
       disabled={disabled}
       title={title}
       aria-label={ariaLabel}
-      className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${toneClass} ${className}`}
+      className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border px-2.5 font-sans text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${toneClass} ${className}`}
     >
       {children}
     </button>
@@ -358,20 +370,25 @@ export function MiniSparkline({
 }
 
 /**
- * Money formatting for figures stored in the corporation's own currency.
- * Every corp-side amount (revenue, budgets, cash) is local; display goes
- * through the anchor so the viewer's currency preference still applies.
+ * Money formatting for figures stored in the corporation's own currency, on top
+ * of `useLocalCurrency` (local -> anchor -> the viewer's display currency).
+ * Adds a signed amount for P&L lines, and share prices in the listing currency.
  */
 export function useCorpMoney(liquidCurrencyCode: string | null | undefined) {
-  const { formatAmount, formatFull, formatPriceIn, formatPrice, toInternalFrom } = useCurrency();
+  const { formatPriceIn, formatPrice } = useCurrency();
+  const local = useLocalCurrency(liquidCurrencyCode ?? undefined);
   const code = (liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
-  const toAnchor = (local: number) => (code ? toInternalFrom(local, code) : local);
-  const fmt = (local: number) => formatAmount(toAnchor(local), code);
-  const fmtFull = (local: number) => formatFull(toAnchor(local), code);
-  const fmtSigned = (local: number) =>
-    `${local > 0 ? "+" : local < 0 ? "-" : ""}${formatAmount(toAnchor(Math.abs(local)), code)}`;
-  /** Share prices always render in the listing currency (see masthead note). */
-  const fmtPrice = (local: number) =>
-    code ? formatPriceIn(toAnchor(local), code) : formatPrice(local, code);
-  return { code, toAnchor, fmt, fmtFull, fmtSigned, fmtPrice };
+  const fmtSigned = (amount: number) =>
+    `${amount > 0 ? "+" : amount < 0 ? "-" : ""}${local.fmtAmount(Math.abs(amount))}`;
+  /** A share trades in its listing currency, whatever the viewer's display preference. */
+  const fmtPrice = (amount: number) =>
+    code ? formatPriceIn(local.toAnchor(amount), code) : formatPrice(amount, code);
+  return {
+    code,
+    toAnchor: local.toAnchor,
+    fmt: local.fmtAmount,
+    fmtFull: local.fmtFull,
+    fmtSigned,
+    fmtPrice,
+  };
 }

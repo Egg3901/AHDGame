@@ -428,7 +428,7 @@ export default function CeoGovernancePanel({
           )}
           {chosenStructure && (
             <dl className="max-w-md">
-              <KVRow label="Tax" value={taxLabel(chosenStructure)} />
+              <KVRow label="Tax" value={taxLabel(chosenStructure)} mono={false} />
               {chosenStructure.minimumDividendRate != null && (
                 <KVRow
                   label="Minimum dividend"
