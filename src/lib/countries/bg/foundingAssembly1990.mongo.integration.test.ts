@@ -388,4 +388,168 @@ describe.skipIf(!uri)("Bulgarian founding parallel election on isolated Mongo", 
       await db.dropDatabase();
     }
   });
+  it("reopens single-candidate districts for one player and bounded NPC slates, preserving first lists and financial actors", async () => {
+    const { db, electionIds } = await fixture(true);
+    try {
+      await db
+        .collection("electionCandidates")
+        .deleteMany({ $or: [{ party: "B" }, { isNPP: false }] });
+      for (const electionId of electionIds) {
+        const sole = await db.collection("electionCandidates").findOne({ electionId });
+        const race = await db.collection("elections").findOne({ _id: electionId });
+        await db.collection("electionVoteTallies").updateOne(
+          { electionId },
+          {
+            $set: {
+              totalVotes: { [sole!._id.toHexString()]: 20000 },
+              candidateNames: { [sole!._id.toHexString()]: sole!.characterName },
+              candidateParties: { [sole!._id.toHexString()]: sole!.party },
+            },
+          }
+        );
+        // A previously unfiled existing owner represents the renewed party slate.
+        const spare = await db
+          .collection("campaigns")
+          .findOne({ electionId, candidateId: { $ne: sole!.nppId } });
+        await db
+          .collection("npps")
+          .updateOne(
+            { _id: spare!.candidateId },
+            { $set: { party: "2", name: "Synthetic renewed NPC", homeState: race!.state } }
+          );
+      }
+      await db.collection("politicalParties").insertMany(
+        [2, 3].map((sequentialId) => ({
+          countryId: "BG",
+          sequentialId,
+          regimeStatus: "approved",
+        }))
+      );
+      await bindBgFoundingCampaigns(db, now);
+      const first = await certifyBgFoundingFirstCount(db, 0, 10, now);
+      expect(first?.count.unresolved).toHaveLength(200);
+      const accounts = await db.collection("bankAccounts").find().toArray();
+      const funds = await db.collection("campaigns").find().toArray();
+      commands = 0;
+      requestBytes = 0;
+      replyBytes = 0;
+      const ids = await openBgFoundingRunoff(db, 0, 10, now);
+      process.stdout.write(
+        `${JSON.stringify({ profile: "bg-founding-renewed-opening", commands, requestBytes, replyBytes })}\n`
+      );
+      expect(ids).toHaveLength(5);
+      expect(await openBgFoundingRunoff(db, 0, 10, now)).toEqual(ids);
+      const race = await db.collection("elections").findOne({ _id: new ObjectId(ids[0]) });
+      expect(race!.primaryEndTurn).toBe(11);
+      const district = BG_1990_CONSTITUENCIES.find((row) => row.regionId === race!.state)!;
+      const owners = [new ObjectId(), new ObjectId()];
+      await db.collection("characters").insertMany(
+        owners.map((_id) => ({
+          _id,
+          countryId: "BG",
+          homeState: race!.state,
+          party: "3",
+          currentOffice: null,
+          userId: new ObjectId(),
+          careerHistory: [],
+        }))
+      );
+      const inputs = owners.map((characterId) => ({
+        db,
+        electionId: race!._id,
+        candidate: {
+          electionId: race!._id,
+          countryId: "BG" as const,
+          characterId,
+          characterName: "Synthetic renewed player",
+          party: "3",
+          status: "active" as const,
+          support: 0,
+          enteredAt: now,
+        },
+        requestedDistrictId: district.id,
+        turn: 10,
+        now,
+      }));
+      await db.command({
+        collMod: BG_FOUNDING_COUNTS_COLLECTION,
+        validator: { "nominees.party": { $ne: "3" } },
+      });
+      await expect(registerBgFoundingPlayerFiling(inputs[0])).rejects.toThrow("validation");
+      expect(
+        await db.collection("electionCandidates").countDocuments({ characterId: owners[0] })
+      ).toBe(0);
+      expect(await db.collection("bgFoundingAssemblyFilingLocks").countDocuments()).toBe(0);
+      await db.command({ collMod: BG_FOUNDING_COUNTS_COLLECTION, validator: {} });
+      const results = await Promise.all(
+        inputs.map((input) => registerBgFoundingPlayerFiling(input))
+      );
+      expect(results.filter((row) => row.allowed)).toHaveLength(1);
+      const success = results.find((row) => row.allowed)!;
+      if (!success.allowed) throw new Error("Missing renewed player");
+      const original = await db
+        .collection("electionCandidates")
+        .findOne({ _id: success.insertedId });
+      const input = inputs.find((row) => row.candidate.characterId.equals(original!.characterId))!;
+      await db
+        .collection("electionCandidates")
+        .updateOne({ _id: original!._id }, { $set: { status: "withdrawn" } });
+      expect(await registerBgFoundingPlayerFiling(input)).toEqual(success);
+      expect(await registerBgFoundingPlayerFiling({ ...input, turn: 11 })).toEqual({
+        allowed: false,
+        reason: "filing-closed",
+      });
+      // A no-vote renewal remains pending; the next real poll retains the newly admitted people.
+      for (const id of ids)
+        await db
+          .collection("elections")
+          .updateOne({ _id: new ObjectId(id) }, { $set: { status: "completed" } });
+      expect(await certifyBgFoundingRunoff(db, 0, 12, now)).toBe(true);
+      const repeatIds = await openBgFoundingRunoff(db, 0, 12, now);
+      expect(repeatIds).toHaveLength(5);
+      expect(await db.collection("npps").countDocuments()).toBe(10);
+      for (const id of repeatIds) {
+        const electionId = new ObjectId(id);
+        const candidates = await db.collection("electionCandidates").find({ electionId }).toArray();
+        await db.collection("electionVoteTallies").updateOne(
+          { electionId },
+          {
+            $set: {
+              totalVotes: Object.fromEntries(
+                candidates.map((row) => [
+                  row._id.toHexString(),
+                  row.isNPP ? (row.party === "2" ? 10000 : 1000) : 20000,
+                ])
+              ),
+              candidateParties: Object.fromEntries(
+                candidates.map((row) => [row._id.toHexString(), row.party])
+              ),
+            },
+          }
+        );
+        await db
+          .collection("elections")
+          .updateOne({ _id: electionId }, { $set: { status: "completed" } });
+      }
+      expect(await certifyBgFoundingRunoff(db, 0, 14, now)).toBe(true);
+      const final = await certifyBgFoundingFirstCount(db, 0, 12, now);
+      expect(final?.first).toEqual(first?.first);
+      expect(final?.count.lists).toEqual(first?.count.lists);
+      expect(final?.count.constituencyWinners[district.id]).toBe(success.insertedId.toHexString());
+      expect(await seatBgFoundingAssembly(db, 0, 14, now)).toBe(true);
+      expect(
+        await db
+          .collection("electedOfficials")
+          .countDocuments({ characterId: original!.characterId })
+      ).toBe(1);
+      expect(await db.collection("electedOfficials").countDocuments()).toBe(400);
+      expect(await db.collection("npps").countDocuments()).toBe(10);
+      expect(await db.collection("bankAccounts").find().toArray()).toEqual(accounts);
+      expect((await db.collection("campaigns").find().toArray()).map((row) => row.balance)).toEqual(
+        funds.map((row) => row.balance)
+      );
+    } finally {
+      await db.dropDatabase();
+    }
+  });
 });

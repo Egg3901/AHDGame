@@ -9,6 +9,21 @@ import { BgFoundingConstituencyPicker } from "./BgFoundingConstituencyPicker";
 
 afterEach(cleanup);
 describe("Bulgarian founding constituency filing selector", () => {
+  it("limits reopened filing to the eligible local constituency", () => {
+    const local = BG_1990_CONSTITUENCIES.filter((row) => row.regionId === "BG_SOF");
+    render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+        <BgFoundingConstituencyPicker
+          regionId="BG_SOF"
+          value=""
+          onChange={vi.fn()}
+          allowedDistrictIds={[local[0].id, "foreign-district"]}
+        />
+      </NextIntlClientProvider>
+    );
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    expect(screen.getAllByRole("option")[1].getAttribute("value")).toBe(local[0].id);
+  });
   it("offers only local constituencies and sends the chosen seat", () => {
     const onChange = vi.fn();
     render(

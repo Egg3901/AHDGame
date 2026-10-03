@@ -198,7 +198,11 @@ export interface ElectionDetail {
   state: string;
   countryId: string;
   hungarianModernByElection?: { districtId: string };
-  bulgarianFoundingRound?: { ruleVersion: "parallel-1990-v1"; round: 1 | 2 };
+  bulgarianFoundingRound?: {
+    ruleVersion: "parallel-1990-v1";
+    round: 1 | 2;
+    newNominationDistrictIds?: string[];
+  };
   hungarianAssemblyRound?: {
     ruleVersion: "mixed-1989-v1";
     round: 1 | 2;

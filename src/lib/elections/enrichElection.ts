@@ -1401,6 +1401,7 @@ export async function _enrichElection(
           bulgarianFoundingRound: {
             ruleVersion: election.bulgarianFoundingRound.ruleVersion,
             round: election.bulgarianFoundingRound.round,
+            newNominationDistrictIds: election.bulgarianFoundingRound.newNominationDistrictIds,
           },
         }
       : {}),

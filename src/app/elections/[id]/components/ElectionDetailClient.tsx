@@ -265,7 +265,8 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       const res = await fetch(`/api/elections/${id}/enter`, {
         method: "POST",
         ...((election.hungarianAssemblyRound?.round === 1 ||
-          election.bulgarianFoundingRound?.round === 1) &&
+          election.bulgarianFoundingRound?.round === 1 ||
+          Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
         huDistrictId
           ? {
               headers: { "Content-Type": "application/json" },
@@ -452,13 +453,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="The full map, the trends, and your campaign operations."
         >
-          {canEnter && election.bulgarianFoundingRound?.round === 1 && (
-            <BgFoundingConstituencyPicker
-              regionId={election.state}
-              value={huDistrictId}
-              onChange={setHuDistrictId}
-            />
-          )}
+          {canEnter &&
+            (election.bulgarianFoundingRound?.round === 1 ||
+              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+              <BgFoundingConstituencyPicker
+                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+                regionId={election.state}
+                value={huDistrictId}
+                onChange={setHuDistrictId}
+              />
+            )}
           {canEnter && election.hungarianAssemblyRound?.round === 1 && (
             <Hu1991ConstituencyPicker
               allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
@@ -540,13 +544,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           title="Also on this race"
           lede="Filing, the state map, and your campaign operations."
         >
-          {canEnter && election.bulgarianFoundingRound?.round === 1 && (
-            <BgFoundingConstituencyPicker
-              regionId={election.state}
-              value={huDistrictId}
-              onChange={setHuDistrictId}
-            />
-          )}
+          {canEnter &&
+            (election.bulgarianFoundingRound?.round === 1 ||
+              Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+              <BgFoundingConstituencyPicker
+                allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+                regionId={election.state}
+                value={huDistrictId}
+                onChange={setHuDistrictId}
+              />
+            )}
           {canEnter && election.hungarianAssemblyRound?.round === 1 && (
             <Hu1991ConstituencyPicker
               allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
@@ -615,13 +622,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         <ElectionNavigation election={election} />
 
-        {canEnter && election.bulgarianFoundingRound?.round === 1 && (
-          <BgFoundingConstituencyPicker
-            regionId={election.state}
-            value={huDistrictId}
-            onChange={setHuDistrictId}
-          />
-        )}
+        {canEnter &&
+          (election.bulgarianFoundingRound?.round === 1 ||
+            Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
+            <BgFoundingConstituencyPicker
+              allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
+              regionId={election.state}
+              value={huDistrictId}
+              onChange={setHuDistrictId}
+            />
+          )}
         {canEnter && election.hungarianAssemblyRound?.round === 1 && (
           <Hu1991ConstituencyPicker
             allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
