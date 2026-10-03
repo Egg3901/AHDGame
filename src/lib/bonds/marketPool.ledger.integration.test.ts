@@ -14,7 +14,7 @@ import { loadBondPoolLedgerContext, withBondPoolLedgerBatch } from "./marketPool
 import { creditBondPool, debitBondPoolGated } from "./marketPool";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/sovereignDefault/snapshotLoader", () => ({
-  loadCountrySovereignSnapshot: vi.fn().mockResolvedValue(null),
+  loadCountrySovereignSnapshots: vi.fn().mockResolvedValue(new Map()),
 }));
 beforeEach(() => {
   vi.clearAllMocks();
