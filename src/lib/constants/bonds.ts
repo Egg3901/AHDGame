@@ -438,3 +438,13 @@ export function calculateBondYieldToMaturityPercent(
 export function perTurnCouponPayment(couponRate: number, faceValue: number): number {
   return ((couponRate / 100) * faceValue) / TURNS_PER_YEAR;
 }
+
+/**
+ * Whether a bond's coupon actually changes hands this turn. A bond in default
+ * pays nothing: the bond turn skips it on both sides (no holder receipt, no
+ * issuer cost). Every projection of a holder's coupon income must apply the
+ * same rule, or it books income that never arrives and the corp turn taxes it.
+ */
+export function bondAccruesCoupon(bond: { defaulted?: boolean | null }): boolean {
+  return !bond.defaulted;
+}

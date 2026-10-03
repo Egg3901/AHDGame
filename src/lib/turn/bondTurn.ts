@@ -17,6 +17,7 @@ import {
   CORP_BOND_DUE_SOON_REMINDER_TURNS,
   calculateBondMarketPrice,
   calculateCreditScore,
+  bondAccruesCoupon,
   getBondCouponRate,
   perTurnCouponPayment,
 } from "@/lib/constants/bonds";
@@ -338,7 +339,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
 
   // ── Phase 1: Coupon payments ──────────────────────────────────────────────
   for (const bond of activeBonds) {
-    if (bond.defaulted) continue;
+    if (!bondAccruesCoupon(bond)) continue;
 
     // `perTurnCouponPayment(rate, BOND_UNIT_FACE_VALUE)` returns the coupon in
     // the bond's LOCAL currency (`bond.currencyCode`, post-Task-18B). Downstream
