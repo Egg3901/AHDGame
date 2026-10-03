@@ -42,7 +42,42 @@ export const RUNTIME_WIPE_SPECIAL_CASES: ReadonlySet<string> = new Set<string>([
   "bills",
   "stateBills",
   "statePartyElections",
+  // Partial delete below: account history rows survive, world rows do not.
+  "activityLog",
 ]);
+
+/**
+ * `activityLog` rows that describe the ACCOUNT rather than the world, and so
+ * survive a reset. Login/logout rows carry the IP, user agent, fingerprint and
+ * tracking id that alt detection (`altDetection/run.ts`) and the moderation
+ * dossier read, and `character_deleted` is the moderator marker written before
+ * a hard delete. Dropping them let an account rotate its address across a
+ * reset with no trail left behind.
+ *
+ * Every other type is world state and must go: `suspiciousDetection` reads
+ * `turn_summary` by `turnNumber`, which restarts at 1, and NPP party capacity
+ * counts recent `game_action`/`turn_summary` rows per user, so a surviving
+ * world row would be read as the new world's activity.
+ */
+export const PRESERVED_ACTIVITY_LOG_TYPES: readonly string[] = Object.freeze([
+  "login",
+  "logout",
+  "character_deleted",
+]);
+
+/**
+ * Accounts a full reset (`deleteProfiles: true`) deletes: everyone except
+ * staff and banned players. A ban lives on the user row (`isBanned`,
+ * `banReason`, mod notes, identity signals), so deleting a banned account
+ * deleted the ban and freed its email and OAuth identities to register again.
+ * Moderators carry `role: "moderator"` without `isAdmin`, so `isAdmin` alone
+ * deleted the moderation team.
+ */
+export const FULL_RESET_DELETABLE_USERS_FILTER = Object.freeze({
+  isAdmin: { $ne: true },
+  role: { $nin: ["admin", "moderator"] },
+  isBanned: { $ne: true },
+});
 
 /**
  * `gameState._id: "current"` survives every reset in place (it is re-initialized,
@@ -216,6 +251,9 @@ export async function resetGameWorld(
   const billsResult = await db.collection("bills").deleteMany({});
   const stateBillsResult = await db.collection("stateBills").deleteMany({});
   const statePartyElectionsResult = await db.collection("statePartyElections").deleteMany({});
+  await db
+    .collection("activityLog")
+    .deleteMany({ type: { $nin: [...PRESERVED_ACTIVITY_LOG_TYPES] } });
 
   const sweepCollections = getRuntimeCollectionNames().filter(
     (name) => !RUNTIME_WIPE_SPECIAL_CASES.has(name)
@@ -313,13 +351,24 @@ export async function resetGameWorld(
     const deleteResult = await db.collection("characters").deleteMany({});
     charactersDeleted = deleteResult.deletedCount;
 
-    // Preserve admin accounts — only delete non-admin users
-    const usersResult = await db.collection("users").deleteMany({ isAdmin: { $ne: true } });
+    // Staff and banned accounts survive; see FULL_RESET_DELETABLE_USERS_FILTER.
+    const usersResult = await db
+      .collection("users")
+      .deleteMany({ ...FULL_RESET_DELETABLE_USERS_FILTER });
     usersDeleted = usersResult.deletedCount;
+    // Every surviving account just lost all of its characters. Settle the
+    // fields `retireCharacter` settles on a soft reset, or the one-character
+    // limit (`activeCharacterCount >= 1`) refuses a kept moderator a new one.
+    await db
+      .collection<User>("users")
+      .updateMany({}, { $set: { hasCompletedSetup: false, activeCharacterCount: 0 } });
 
     await db.collection("retiredCharacters").deleteMany({});
     await db.collection("characterAchievements").deleteMany({});
-    log(`Deleted ${charactersDeleted} character(s) and ${usersDeleted} non-admin user(s)`);
+    log(
+      `Deleted ${charactersDeleted} character(s) and ${usersDeleted} player account(s); ` +
+        `staff and banned accounts kept`
+    );
   } else {
     const allCharacters = await db.collection<Character>("characters").find({}).toArray();
     charactersReset = allCharacters.length;
