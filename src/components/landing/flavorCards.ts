@@ -14,10 +14,17 @@
  *
  * All other imageSlug values below (eisenhower, churchill, malenkov, carter,
  * callaghan, clinton, blair, jiang, bush-jr, brown, hu, trump, may, xi,
- * biden, sunak) have NO asset on the CDN — the card renders without an image
- * (StaticCard hides the <img> onError). Do not upload portraits for them
- * without recording a public-domain/CC source in this table first.
+ * biden, sunak) have NO asset on the CDN, so the card renders without an image.
+ * Do not upload portraits for them without recording a public-domain/CC source
+ * in this table first, then adding the slug to FLAVOR_CARD_PORTRAITS.
  */
+
+/**
+ * Slugs with a portrait on the CDN: the licensed rows of the table above. A
+ * card whose slug is missing here draws no image at all, rather than asking
+ * the CDN for one and logging a failed request on every landing load.
+ */
+export const FLAVOR_CARD_PORTRAITS: ReadonlySet<string> = new Set(["bush", "deng", "major"]);
 
 export type FlavorCard = {
   id: string;
