@@ -126,6 +126,165 @@ describe.skipIf(!uri)("Romanian1992 decision on isolated Mongo", () => {
     await clock(turn);
     await processOnePartyBillLifecycleForCountry("RO", NOW);
   }
+  it("commits capacity, owner counters and formation together with rollback and replay", async () => {
+    const { db } = await fixture();
+    try {
+      await db
+        .collection<StringRow>("countryGameStates")
+        .updateOne({ _id: "RO" }, { $set: { roElectoralLaw1992SinceTurn: 76 } });
+      const races = (
+        [
+          ["chamberOfDeputies", RO_1992_DEPUTIES_BY_REGION],
+          ["senat", RO_1992_SENATORS_BY_REGION],
+        ] as const
+      ).flatMap(([electionType, seats]) =>
+        Object.entries(seats).map(([state, totalSeats]) => ({
+          countryId: "RO",
+          electionType,
+          cycle: 2,
+          status: "resolved",
+          state,
+          totalSeats,
+        }))
+      );
+      await db.collection("elections").insertMany(races);
+      await db.collection("electedOfficials").deleteMany({ countryId: "RO" });
+      const person = new ObjectId();
+      await db.collection("characters").insertOne({
+        _id: person,
+        countryId: "RO",
+        balance: 777,
+        currentOffice: { type: "deputy", state: String(roRegions1991[0]._id), seatsHeld: 1 },
+      });
+      const owners = roRegions1991.map((region, index) => ({
+        _id: new ObjectId(),
+        countryId: "RO",
+        balance: 666,
+        currentOffice: index === 0 ? { type: "primeMinister" } : null,
+        seatsHeld: 0,
+        region: String(region._id),
+      }));
+      await db.collection("npps").insertMany(owners);
+      const original = roRegions1991.flatMap((region, index) =>
+        (
+          [
+            ["deputy", region.houseDistricts],
+            ["senator", region.stateSenateSeats],
+          ] as const
+        ).map(([officeType, seats]) => ({
+          _id: new ObjectId(),
+          countryId: "RO",
+          state: String(region._id),
+          officeType,
+          party: "1",
+          nppId: owners[index]._id,
+          characterId: null,
+          seatsHeld: seats - (index === 0 && officeType === "deputy" ? 1 : 0),
+          termEnds: new Date("2029-01-01T00:00:00Z"),
+        }))
+      );
+      const human = {
+        _id: new ObjectId(),
+        countryId: "RO",
+        state: String(roRegions1991[0]._id),
+        officeType: "deputy",
+        party: "1",
+        characterId: person,
+        nppId: null,
+        seatsHeld: 1,
+        termEnds: new Date("2029-01-01T00:00:00Z"),
+      };
+      await db.collection("electedOfficials").insertMany([...original, human]);
+      const failing = new Proxy(db, {
+        get(target, key) {
+          if (key !== "collection") {
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          }
+          return (name: string) => {
+            const collection = target.collection(name);
+            if (name !== "countryGameStates") return collection;
+            return new Proxy(collection, {
+              get(inner, property) {
+                if (property === "updateOne")
+                  return async () => {
+                    throw new Error("injected Romanian handover marker failure");
+                  };
+                const value = Reflect.get(inner, property);
+                return typeof value === "function" ? value.bind(inner) : value;
+              },
+            });
+          };
+        },
+      });
+      await expect(processRoParliamentTransition(failing, GAME, 288, NOW)).rejects.toThrow(
+        "injected Romanian handover marker failure"
+      );
+      expect(await db.collection("npps").countDocuments({ seatsHeld: 0 })).toBe(owners.length);
+      const before = await db.collection<StringRow>("states").find({ countryId: "RO" }).toArray();
+      expect(before.reduce((n, row) => n + Number(row.houseDistricts), 0)).toBe(396);
+      expect(
+        (await db.collection<StringRow>("countryGameStates").findOne({ _id: "RO" }))
+          ?.roParliament1992SinceTurn
+      ).toBeUndefined();
+      const duplicate = { ...human, _id: new ObjectId(), officeType: "senator" };
+      await db.collection("electedOfficials").insertOne(duplicate);
+      await expect(processRoParliamentTransition(db, GAME, 288, NOW)).rejects.toThrow(
+        "cannot hold duplicate parliamentary seats"
+      );
+      expect(
+        (await db.collection<StringRow>("countryGameStates").findOne({ _id: "RO" }))
+          ?.roParliament1992SinceTurn
+      ).toBeUndefined();
+      expect(await db.collection("npps").countDocuments({ seatsHeld: 0 })).toBe(owners.length);
+      await db.collection("electedOfficials").deleteOne({ _id: duplicate._id });
+      commands = commandBytes = replyBytes = 0;
+      const result = await Promise.all([
+        processRoParliamentTransition(db, GAME, 288, NOW),
+        processRoParliamentTransition(db, GAME, 288, NOW),
+      ]);
+      expect(result.sort()).toEqual([false, true]);
+      process.stdout.write(
+        JSON.stringify({
+          fixture: "ro1992-handover-concurrent",
+          commands,
+          commandBytes,
+          replyBytes,
+        }) + "\n"
+      );
+      expect(commands).toBeLessThanOrEqual(70);
+      const held = await db.collection("electedOfficials").find({ countryId: "RO" }).toArray();
+      expect(
+        held.filter((row) => row.officeType === "deputy").reduce((n, row) => n + row.seatsHeld, 0)
+      ).toBe(341);
+      expect(
+        held.filter((row) => row.officeType === "senator").reduce((n, row) => n + row.seatsHeld, 0)
+      ).toBe(143);
+      expect(held.find((row) => row.characterId?.equals(person))?.seatsHeld).toBe(1);
+      expect(held.find((row) => row.characterId?.equals(person))?.termEnds).toEqual(human.termEnds);
+      expect(await db.collection("npps").countDocuments()).toBe(owners.length);
+      expect(await db.collection("npps").countDocuments({ balance: 666 })).toBe(owners.length);
+      expect((await db.collection("characters").findOne({ _id: person }))?.balance).toBe(777);
+      for (const owner of await db.collection("npps").find().toArray())
+        expect(owner.seatsHeld).toBe(
+          held
+            .filter((row) => row.nppId?.equals(owner._id))
+            .reduce((n, row) => n + row.seatsHeld, 0)
+        );
+      expect((await db.collection("npps").findOne({ _id: owners[0]._id }))?.currentOffice).toEqual({
+        type: "primeMinister",
+      });
+      commands = commandBytes = replyBytes = 0;
+      expect(await processRoParliamentTransition(db, GAME, 289, NOW)).toBe(false);
+      process.stdout.write(
+        JSON.stringify({ fixture: "ro1992-handover-replay", commands, commandBytes, replyBytes }) +
+          "\n"
+      );
+      expect(commands).toBe(1);
+    } finally {
+      await db.dropDatabase();
+    }
+  });
   it.each([false, true])(
     "opens one NPC decision only with no player legislators (%s)",
     async (human) => {
@@ -332,7 +491,25 @@ describe.skipIf(!uri)("Romanian1992 decision on isolated Mongo", () => {
               seatsHeld: row.totalSeats,
             }))
           );
+          const holders = await db
+            .collection("electedOfficials")
+            .find({ countryId: "RO" })
+            .toArray();
+          await db.collection("npps").insertMany(
+            holders.map((row) => ({
+              _id: row.nppId,
+              countryId: "RO",
+              balance: 333,
+              currentOffice: null,
+            }))
+          );
           expect(await processRoParliamentTransition(db, GAME, 288, NOW)).toBe(true);
+          expect(await db.collection("npps").countDocuments({ balance: 333 })).toBe(holders.length);
+          for (const owner of await db.collection("npps").find().toArray())
+            expect(owner.seatsHeld).toBe(
+              holders.find((row) => row.nppId.equals(owner._id))!.seatsHeld
+            );
+
           expect(
             (await db.collection<StringRow>("governmentFormations").findOne({ _id: "RO" }))
               ?.totalSeats
