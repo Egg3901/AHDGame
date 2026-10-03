@@ -7,14 +7,15 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 const enabled = process.env.AHD_NPC_PARTY_HEALTH_REAL_MONGO === "1";
 
-it.skipIf(!enabled)(
-  "counts active NPC members without hiding retired, foreign or genuinely empty parties",
-  async () => {
+it.skipIf(!enabled).each([false, true])(
+  "counts active NPC members without hiding empty parties, human characters: %s",
+  async (hasHumanCharacters) => {
     const client = await new MongoClient("mongodb://127.0.0.1:27018").connect();
     const name = `ahd_sim_issue2072_party_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const db = client.db(name);
     try {
-      await db.collection("characters").insertOne({ countryId: "US", funds: 0 });
+      if (hasHumanCharacters)
+        await db.collection("characters").insertOne({ countryId: "US", funds: 0 });
       await db.collection("politicalParties").insertMany([
         { sequentialId: 1, countryId: "DE", memberCount: 0 },
         { sequentialId: 2, countryId: "DE", memberCount: 0 },

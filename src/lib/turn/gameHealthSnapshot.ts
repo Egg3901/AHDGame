@@ -228,11 +228,9 @@ async function runIntegrityChecks(
 
   // 3. Parties with neither human nor active NPC members. memberCount is
   // the human cache; NPC affiliations use the party sequentialId string.
-  const hasPlayerCharacters =
-    (await db.collection("characters").countDocuments({}, { limit: 1 })) > 0;
-  const partiesWithoutHumanMembers = hasPlayerCharacters
-    ? await db.collection("politicalParties").countDocuments({ memberCount: 0 })
-    : 0;
+  const partiesWithoutHumanMembers = await db
+    .collection("politicalParties")
+    .countDocuments({ memberCount: 0 });
   const npcBackedParties =
     partiesWithoutHumanMembers > 0
       ? await db
