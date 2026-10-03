@@ -62,7 +62,7 @@ recovery preserves the closing cash and original receipts.
 The additional database work provides durable recovery and complete cash
 witnesses. These are component measurements, with no claimed performance gain.
 The existing 18000-command fund phase budget is unchanged. Full-load turn
-performance (#2088), selected-release world accounting (#968), broader financial
+performance (#2271 and #2692), selected-release world accounting (#968), broader financial
 product acceptance and the final world matrix remain open on #2159.
 
 All native controls used new, isolated synthetic fixture namespaces. No database
