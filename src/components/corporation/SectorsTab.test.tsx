@@ -229,14 +229,14 @@ describe("SectorsTab type select and dossier", () => {
     );
   });
 
-  it("offers exactly two build buttons, neither of them inside the strategy panel", () => {
+  it("offers exactly one build button, pointed at the open division", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
     pickType("manufacturing");
 
-    // The dossier and the toolbar each carry one; the strategy panel used to add
-    // a third that only differed by pre-selecting a strategy.
+    // The toolbar carries it. The dossier and the strategy panel used to add
+    // their own, and the panel's only differed by pre-selecting a strategy.
     const builds = screen.getAllByRole("button", { name: /Build a plant/ });
-    expect(builds).toHaveLength(2);
+    expect(builds).toHaveLength(1);
     for (const button of builds) expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByRole("button", { name: /Build a plant · / })).toBeNull();
   });

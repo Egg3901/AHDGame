@@ -344,12 +344,10 @@ export default function SectorsTab({
             sectorType={dossierType}
             sectors={dossierSectors}
             allSectors={sectors}
-            isCeo={isCeo}
             timeScale={timeScale}
             scaleFactor={scaleFactor}
             fmtMoney={fmtMoney}
             metricContext={metricContext}
-            onBuild={() => openExpandModal(dossierType)}
           />
           <SectorStrategyPanel
             key={dossierType}
