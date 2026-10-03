@@ -1,41 +1,25 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Skeleton, CardSkeleton } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 
 /**
- * Layout-reserving skeleton shown while a dynamic() tab chunk loads.
- * Mirrors the overview tab's two-column card layout and reserves the
- * typical tab height so switching tabs doesn't collapse/expand the page.
+ * Layout-reserving skeleton shown while a dynamic() tab chunk loads: a heading
+ * rule and table rows, the shape every tab now opens with. Reserves the
+ * typical tab height so switching tabs doesn't collapse the page.
  */
 export const TabFallback = () => (
-  <div className="min-h-[480px]">
-    <div className="grid gap-6 lg:grid-cols-2">
-      <CardSkeleton className="space-y-4">
-        <Skeleton className="h-4 w-32" />
-        {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="flex justify-between py-2 border-b border-card-border last:border-0"
-          >
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-3 w-20" />
-          </div>
-        ))}
-      </CardSkeleton>
-      <CardSkeleton className="space-y-4">
-        <Skeleton className="h-4 w-36" />
-        <Skeleton className="h-40 w-full rounded-lg" />
-        <div className="grid grid-cols-2 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="space-y-1">
-              <Skeleton className="h-2.5 w-16" />
-              <Skeleton className="h-5 w-24" />
-            </div>
-          ))}
-        </div>
-      </CardSkeleton>
+  <div className="min-h-[480px] space-y-2">
+    <div className="flex items-center justify-between border-b border-card-border pb-2">
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="h-6 w-40" />
     </div>
+    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+      <div key={i} className="flex justify-between border-b border-card-border/60 py-2">
+        <Skeleton className="h-3 w-40" />
+        <Skeleton className="h-3 w-24" />
+      </div>
+    ))}
   </div>
 );
 

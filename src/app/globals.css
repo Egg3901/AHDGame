@@ -859,6 +859,16 @@ h1 {
   font-family: var(--font-lora), Georgia, serif;
 }
 
+/* The corporation page is a data surface: its title stays in the UI sans.
+   Unlayered, like the rule above, so it can win against it. */
+h1.corp-masthead-title {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+[data-theme="command-1953"] h1.corp-masthead-title {
+  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
+}
+
 /* Glass card utility */
 .glass-card {
   background: color-mix(in srgb, var(--card) 70%, transparent);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Toast } from "@/components/ui";
 import type { ToastVariant } from "@/components/ui/Toast";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -59,6 +60,20 @@ export default function SharesTab({
   // ─── Sub-tab + modal visibility ───────────────────────────────────────────────
   const [activeSubTab, setActiveSubTab] = useState<SharesSubTab>("market");
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  // `?trade=1` (the masthead's Trade button) opens the ticket on arrival.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const tradeRequested = searchParams.get("trade") === "1";
+  const purchaseOpen = showPurchaseModal || tradeRequested;
+  const closePurchase = () => {
+    setShowPurchaseModal(false);
+    if (tradeRequested) {
+      const p = new URLSearchParams(searchParams.toString());
+      p.delete("trade");
+      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
+    }
+  };
   const [showIssuanceModal, setShowIssuanceModal] = useState(false);
   const [openVotes, setOpenVotes] = useState<{ _id: string; type: string }[]>([]);
 
@@ -147,7 +162,7 @@ export default function SharesTab({
       )}
 
       {/* ─── Trade / Issue modals (shared across sub-tabs) ───────────────── */}
-      {showPurchaseModal && myCharacterId && (
+      {purchaseOpen && myCharacterId && (
         <SharePurchaseModal
           corporation={corporation}
           corpId={corpId}
@@ -162,7 +177,7 @@ export default function SharesTab({
           myOrders={myOrders}
           marketOrders={marketOrders}
           isCeo={isCeo}
-          onClose={() => setShowPurchaseModal(false)}
+          onClose={closePurchase}
           onSuccess={handleTradeSuccess}
         />
       )}

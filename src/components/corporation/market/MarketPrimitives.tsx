@@ -14,41 +14,6 @@
 
 import { useId } from "react";
 
-/* Ticker tile — market analogue of the national "chop"/seal. */
-export function TickerTile({
-  text,
-  size = 64,
-  radius,
-  className = "",
-}: {
-  text: string;
-  size?: number;
-  radius?: number;
-  className?: string;
-}) {
-  const len = (text || "").length;
-  const fontSize = len >= 3 ? size * 0.3 : len === 2 ? size * 0.4 : size * 0.5;
-  return (
-    <div
-      className={`flex shrink-0 items-center justify-center font-mono font-semibold text-white ${className}`}
-      style={{
-        width: size,
-        height: size,
-        fontSize,
-        borderRadius: radius ?? 12,
-        letterSpacing: "0.02em",
-        background:
-          "linear-gradient(155deg, color-mix(in srgb, var(--brand, #3b82f6) 88%, white), var(--brand, #3b82f6))",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.35), 0 6px 18px -6px color-mix(in srgb, var(--brand, #3b82f6) 70%, transparent)",
-      }}
-      aria-hidden
-    >
-      {text}
-    </div>
-  );
-}
-
 /* Live market badge — analogue of the authorization seal/stamp. */
 export function LiveBadge({
   exchange,

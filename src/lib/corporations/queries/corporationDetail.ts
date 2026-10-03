@@ -157,6 +157,11 @@ export async function loadCorporationDetailView(args: {
       tariffLookups: { blendPresenceKeys, ftaCoverage },
       stateCtx,
       marketCtx,
+      // Same test the CEO-only routes apply (requireCeo).
+      viewerIsCeo:
+        !!viewerUserId &&
+        corporation.ceoVacant !== true &&
+        corporation.userId?.toString() === viewerUserId,
     });
 
   const portfolio = await loadPortfolioHoldings(db, corporation, currentTurn, fxByCurrency);
