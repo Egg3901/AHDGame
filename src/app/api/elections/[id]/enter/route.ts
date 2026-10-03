@@ -107,10 +107,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const election = resolved.election;
     const electionObjectId = election._id;
 
-    const hu1991 = isHu1991AssemblyCampaign(election);
+    const hu1991 = isHu1991AssemblyCampaign(election) || election.hungarianModernByElection != null;
     let huDistrictId: string | undefined;
     if (hu1991) {
-      if (election.hungarianAssemblyRound?.round !== 1)
+      if (!election.hungarianModernByElection && election.hungarianAssemblyRound?.round !== 1)
         return NextResponse.json({ error: hu1991FilingMessages["filing-closed"] }, { status: 403 });
       const text = await request.text();
       let body: unknown = {};
@@ -494,7 +494,15 @@ export async function POST(request: Request, { params }: RouteParams) {
           now,
         });
         if (!filed.allowed)
-          return NextResponse.json({ error: hu1991FilingMessages[filed.reason] }, { status: 403 });
+          return NextResponse.json(
+            {
+              error:
+                election.hungarianModernByElection && filed.reason === "filing-closed"
+                  ? "Filing has closed for this constituency by-election."
+                  : hu1991FilingMessages[filed.reason],
+            },
+            { status: 403 }
+          );
         result = { insertedId: filed.insertedId };
       } else {
         result = await db.collection("electionCandidates").insertOne(candidateDoc);

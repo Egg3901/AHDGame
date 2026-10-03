@@ -30,6 +30,13 @@ export type UKElectionType =
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
 export interface Election {
+  /** A modern Hungarian vacancy ballot freezes one existing district and electorate. */
+  hungarianModernByElection?: {
+    receiptId: string;
+    parentReceiptId: string;
+    districtId: string;
+    registeredVoters: number;
+  };
   /** Missing means legacy campaigning for this entire race. */
   campaignRulesVersion?: number;
   _id: ObjectId;

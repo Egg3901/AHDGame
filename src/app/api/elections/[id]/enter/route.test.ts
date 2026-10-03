@@ -970,6 +970,64 @@ describe("Hungarian 1991 constituency filing route", () => {
     db.collection("electedOfficials").findOne.mockResolvedValue(null);
     return { db, poll };
   }
+  it.each(["valid", "foreign", "superseded", "incumbent"])(
+    "validates modern Hungarian vacancy filing through the authenticated route (%s)",
+    async (kind) => {
+      const { db, election } = await setupHungary();
+      const receiptId = "HU:mixed2011:1:by-election:1";
+      const poll = {
+        ...election,
+        hungarianAssemblyRound: undefined,
+        hungarianModernByElection: {
+          receiptId,
+          parentReceiptId: "HU:mixed2011:1",
+          districtId: "HU_BUD:1",
+          registeredVoters: 100,
+        },
+      };
+      vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election: poll } as never);
+      db.collection("elections").findOne.mockResolvedValue(poll);
+      db.collection("gameState").findOne.mockResolvedValue({
+        preset: "1991-default",
+        currentTurn: 50,
+        huAssemblyReformedAtYear: 2014,
+      });
+      db.collection("hu2011ConstituencyByElections").findOne.mockResolvedValue({
+        _id: receiptId,
+        parentReceiptId: "HU:mixed2011:1",
+        generation: 1,
+        termEndTurn: 200,
+        electionIds: [electionOid.toHexString()],
+        districtIds: ["HU_BUD:1"],
+        constituencies: [{ id: "HU_BUD:1", regionId: "HU_BUD" }],
+      });
+      db.collection("hu2011AssemblyCounts").findOne.mockResolvedValue({
+        _id: kind === "superseded" ? "HU:mixed2011:2" : "HU:mixed2011:1",
+      });
+      db.collection("governmentFormations").updateOne.mockResolvedValue({
+        matchedCount: 1,
+        modifiedCount: 1,
+      });
+      db.collection("electedOfficials").findOne.mockResolvedValue(
+        kind === "incumbent" ? { _id: new ObjectId() } : null
+      );
+      const response = await POST(
+        new Request("http://test/route", {
+          method: "POST",
+          body: JSON.stringify({
+            constituencyId: kind === "foreign" ? "HU-constituency-01-12" : "HU_BUD:1",
+          }),
+        }),
+        { params: Promise.resolve({ id: electionOid.toHexString() }) }
+      );
+      expect(response.status, JSON.stringify(await response.clone().json())).toBe(
+        kind === "valid" ? 200 : 403
+      );
+      if (kind === "valid")
+        expect(db.collection("electionCandidates").insertOne).toHaveBeenCalledTimes(1);
+      else expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+    }
+  );
   it("files only the vacant constituency in a journal-bound by-election", async () => {
     const { db } = await setupHungarianByElection();
     const response = await POST(

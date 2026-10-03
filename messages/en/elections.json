@@ -380,6 +380,9 @@
       "supportCampaign": "Support campaign",
       "runningMate": "Vice-presidential nominee: {name}"
     },
+    "huModernByElection": {
+      "description": "Constituency by-election: {district}. One seat for the remaining Assembly term."
+    },
     "hu1991": {
       "constituencyLabel": "Your constituency",
       "automatic": "Assign an available constituency in my region",

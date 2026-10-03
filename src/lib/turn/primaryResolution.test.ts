@@ -6,6 +6,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
+import {
+  resolvePrimariesIfNeeded,
+  recordPrimarySnapshots,
+  accumulateGeneralElectionVotes,
+} from "./primaryResolution";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
@@ -74,7 +79,6 @@ describe("resolvePrimariesIfNeeded", () => {
   it("does nothing when no elections have passed primaryEndTime", async () => {
     // Pre-init collections we want to assert on
     db.collection("electionCandidates");
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
@@ -191,7 +195,6 @@ describe("resolvePrimariesIfNeeded", () => {
       db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
       db.collectionMocks["electionVoteTallies"].find.mockReturnValue(makeCursor([]));
 
-      const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
       await resolvePrimariesIfNeeded(NOW, 100);
 
       // No withdrawals — each party already at/under the advance cap
@@ -301,7 +304,6 @@ describe("resolvePrimariesIfNeeded", () => {
     db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
     db.collectionMocks["electionVoteTallies"].findOne.mockResolvedValue(null);
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     // Should withdraw the loser
@@ -430,7 +432,6 @@ describe("resolvePrimariesIfNeeded", () => {
     );
     db.collectionMocks["electionVoteTallies"].findOne.mockResolvedValue(null);
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     // The score favourite is the one eliminated.
@@ -530,7 +531,6 @@ describe("resolvePrimariesIfNeeded", () => {
     db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
     db.collectionMocks["electionVoteTallies"].findOne.mockResolvedValue(null);
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     // NPP should be eliminated (60*0.75=45 < 60)
@@ -590,7 +590,6 @@ describe("resolvePrimariesIfNeeded", () => {
       ])
     );
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     const { initElectionVoteTally } = await import("@/lib/electionEngine");
@@ -641,7 +640,6 @@ describe("resolvePrimariesIfNeeded", () => {
       ])
     );
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     const { initElectionVoteTally } = await import("@/lib/electionEngine");
@@ -736,7 +734,6 @@ describe("resolvePrimariesIfNeeded", () => {
       .mockReturnValueOnce(40)
       .mockReturnValueOnce(50);
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     // The NPP loses the primary and is withdrawn, so it cannot take districts.
@@ -811,7 +808,6 @@ describe("resolvePrimariesIfNeeded", () => {
     const { calcPrimaryScore } = await import("@/lib/primaryScore");
     vi.mocked(calcPrimaryScore).mockReturnValue(50);
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     const { initElectionVoteTally } = await import("@/lib/electionEngine");
@@ -884,7 +880,6 @@ describe("resolvePrimariesIfNeeded", () => {
     db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
     db.collectionMocks["electionVoteTallies"].findOne.mockResolvedValue(null);
 
-    const { resolvePrimariesIfNeeded } = await import("./primaryResolution");
     await resolvePrimariesIfNeeded(NOW, 100);
 
     expect(db.collectionMocks["electionCandidates"].updateMany).toHaveBeenCalled();
@@ -906,7 +901,6 @@ describe("recordPrimarySnapshots", () => {
   });
 
   it("returns 0 when no elections in primary phase", async () => {
-    const { recordPrimarySnapshots } = await import("./primaryResolution");
     const count = await recordPrimarySnapshots(NOW, 100);
     expect(count).toBe(0);
   });
@@ -955,7 +949,6 @@ describe("recordPrimarySnapshots", () => {
       makeCursor([{ _id: new ObjectId(), electionId, turn: 100, byParty: {} }])
     );
 
-    const { recordPrimarySnapshots } = await import("./primaryResolution");
     const count = await recordPrimarySnapshots(NOW, 100);
 
     expect(count).toBe(0);
@@ -1007,7 +1000,6 @@ describe("recordPrimarySnapshots", () => {
     const { calcPrimaryScore } = await import("@/lib/primaryScore");
     vi.mocked(calcPrimaryScore).mockReturnValue(55);
 
-    const { recordPrimarySnapshots } = await import("./primaryResolution");
     const count = await recordPrimarySnapshots(NOW, 100);
 
     expect(count).toBe(1);
@@ -1083,7 +1075,6 @@ describe("recordPrimarySnapshots", () => {
       );
       const { calcPrimaryScore } = await import("@/lib/primaryScore");
       vi.mocked(calcPrimaryScore).mockReturnValue(50);
-      const { recordPrimarySnapshots } = await import("./primaryResolution");
       expect(await recordPrimarySnapshots(NOW, 100)).toBe(1);
       const inserted = db.collection("primarySnapshots").insertMany.mock.calls[0][0];
       expect(inserted[0].byParty.DEM[0].primaryScore).toBeGreaterThan(50);
@@ -1177,7 +1168,6 @@ describe("recordPrimarySnapshots", () => {
       );
       const { calcPrimaryScore } = await import("@/lib/primaryScore");
       vi.mocked(calcPrimaryScore).mockReturnValue(50);
-      const { recordPrimarySnapshots } = await import("./primaryResolution");
       expect(await recordPrimarySnapshots(NOW, 100)).toBe(1);
       const inserted = db.collection("primarySnapshots").insertMany.mock.calls[0][0];
       expect(inserted[0].byParty.DEM[0].primaryScore).toBeGreaterThan(50);
@@ -1197,7 +1187,6 @@ describe("accumulateGeneralElectionVotes", () => {
   });
 
   it("does nothing when no general-phase elections exist", async () => {
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { accumulateVoteTurn } = await import("@/lib/electionEngine");
@@ -1247,7 +1236,6 @@ describe("accumulateGeneralElectionVotes", () => {
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
 
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { accumulateVoteTurn } = await import("@/lib/electionEngine");
@@ -1364,7 +1352,6 @@ describe("accumulateGeneralElectionVotes", () => {
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
 
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { accumulateVoteTurn } = await import("@/lib/electionEngine");
@@ -1501,7 +1488,6 @@ describe("accumulateGeneralElectionVotes", () => {
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
 
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { accumulateVoteTurn } = await import("@/lib/electionEngine");
@@ -1546,7 +1532,6 @@ describe("accumulateGeneralElectionVotes", () => {
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([]));
 
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { accumulatePresidentVoteTurn } = await import("@/lib/presidentialElectionEngine");
@@ -1654,7 +1639,6 @@ describe("accumulateGeneralElectionVotes", () => {
       },
     ] as never);
 
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { initPresidentVoteTally } = await import("@/lib/presidentialElectionEngine");
@@ -1708,7 +1692,6 @@ describe("accumulateGeneralElectionVotes", () => {
     db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
     db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([candidate]));
 
-    const { accumulateGeneralElectionVotes } = await import("./primaryResolution");
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { initElectionVoteTally } = await import("@/lib/electionEngine");

@@ -5,6 +5,7 @@
  */
 import { HU_1991_CONSTITUENCIES } from "../data/electoralDistricts1991";
 export function chooseHu1991PlayerDistrict(input: {
+  districts?: readonly { id: string; regionId: string }[];
   personId: string;
   regionId: string;
   partyId: string;
@@ -14,7 +15,7 @@ export function chooseHu1991PlayerDistrict(input: {
 }):
   | { allowed: true; constituencyId: string }
   | { allowed: false; reason: "invalid-residence" | "outside-region" | "party-slot-full" } {
-  const local = HU_1991_CONSTITUENCIES.filter(
+  const local = (input.districts ?? HU_1991_CONSTITUENCIES).filter(
     (row) =>
       row.regionId === input.regionId &&
       (!input.allowedDistrictIds || input.allowedDistrictIds.includes(row.id))

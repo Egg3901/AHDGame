@@ -3,6 +3,20 @@ import { HU_1991_CONSTITUENCIES } from "../data/electoralDistricts1991";
 import { chooseHu1991PlayerDistrict } from "./playerFiling1991";
 const input = { personId: "player", regionId: "HU_BUD", partyId: "1", otherFilings: [] };
 describe("Hungarian player constituency choices", () => {
+  it("uses the modern chamber's frozen district set without restoring old districts", () => {
+    const modern = {
+      ...input,
+      districts: [{ id: "HU_BUD:1", regionId: "HU_BUD" }],
+      allowedDistrictIds: ["HU_BUD:1"],
+    };
+    expect(chooseHu1991PlayerDistrict(modern)).toEqual({
+      allowed: true,
+      constituencyId: "HU_BUD:1",
+    });
+    expect(
+      chooseHu1991PlayerDistrict({ ...modern, requestedId: HU_1991_CONSTITUENCIES[0].id })
+    ).toMatchObject({ allowed: false, reason: "outside-region" });
+  });
   it("retains one explicit choice in the player's region", () => {
     expect(
       chooseHu1991PlayerDistrict({ ...input, requestedId: HU_1991_CONSTITUENCIES[0].id })

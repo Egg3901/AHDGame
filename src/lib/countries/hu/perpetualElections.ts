@@ -1,3 +1,4 @@
+import { openHuModernByElections } from "./constituencyByElections2011";
 import { advanceHu1991ListVacancy } from "./listVacancies1991";
 import { getDb } from "@/lib/mongodb";
 import type { CountryGameState, Election, GameState } from "@/lib/db/types";
@@ -57,6 +58,7 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
         cycle: { $gte: 1 },
         status: "completed",
         hungarianModernAssembly: { $exists: false },
+        hungarianModernByElection: { $exists: false },
       },
       { projection: { _id: 1 } }
     );
@@ -71,7 +73,10 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
       {
         countryId: "HU",
         electionType: "nationalAssembly",
-        "hungarianAssemblyRound.byElection": { $exists: true },
+        $or: [
+          { "hungarianAssemblyRound.byElection": { $exists: true } },
+          { hungarianModernByElection: { $exists: true } },
+        ],
         status: { $in: ["active", "upcoming"] },
       },
       { projection: { _id: 1 } }
@@ -81,7 +86,11 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
       if (
         !Number.isSafeInteger(currentTurn) ||
         currentTurn < 1 ||
-        (await openHu1991ByElections(db, currentTurn, now)).length
+        (
+          await (
+            game.huAssemblyReformedAtYear != null ? openHuModernByElections : openHu1991ByElections
+          )(db, currentTurn, now)
+        ).length
       )
         return;
     }
@@ -112,6 +121,8 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
       Number.isSafeInteger(inFlightTurn ?? game.currentTurn) &&
       (inFlightTurn ?? game.currentTurn) > 0
     )
-      await openHu1991ByElections(db, inFlightTurn ?? game.currentTurn, now);
+      await (
+        game.huAssemblyReformedAtYear != null ? openHuModernByElections : openHu1991ByElections
+      )(db, inFlightTurn ?? game.currentTurn, now);
   }
 }
