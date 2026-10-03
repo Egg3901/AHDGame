@@ -4,15 +4,13 @@ import type { CountryEraOverride } from "../../contract";
  * Bulgaria begins 1991 with the multiparty Seventh Grand National Assembly
  * elected in June 1990. It sat with 400 deputies until 2 October 1991; the
  * ordinary 240-seat Assembly first met on 4 November after the 13 October poll.
- * The start preset describes the Grand Assembly. The turn processor changes
- * the live regional and formation seat counts after the October 1991 election
- * once the game calendar reaches November.
+ * The native election engine counts 200 constituency and 200 list mandates.
+ * A constitutional vote and a separate disposition decision control whether
+ * the Grand Assembly continues or gives way to a 240-seat ordinary Assembly.
  *
  * https://www.parliament.bg/en/16
  * https://data.ipu.org/election-summary/HTML/2045_90.htm
  * https://data.ipu.org/election-summary/PDF/BULGARIA_1991_E.PDF
- * `ams` approximates the 1990 parallel half constituency, half list system
- * until the election engine has a separate parallel mixed method.
  */
 export const BG_1991: CountryEraOverride = {
   preset: "1991-default",
