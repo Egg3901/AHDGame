@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
+import { useSignedIn } from "@/contexts/AuthDataContext";
 import {
   DEFAULT_TUTORIAL_PLAN,
   resolveTutorialPlan,
@@ -50,8 +51,11 @@ export function TutorialCoachMount() {
   const [dismissedChooser, setDismissedChooser] = useState(false);
   /** True once the player answers in this session, so the tour starts straight away. */
   const [justChose, setJustChose] = useState(false);
+  const signedIn = useSignedIn();
 
   useEffect(() => {
+    // No character to coach before sign-in; the request could only 401.
+    if (!signedIn) return;
     let cancelled = false;
     (async () => {
       try {
@@ -88,7 +92,7 @@ export function TutorialCoachMount() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [signedIn]);
 
   useEffect(() => {
     const onChoose = () => {

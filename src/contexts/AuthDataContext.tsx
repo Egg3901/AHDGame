@@ -208,6 +208,17 @@ export function useRefetchNav(): () => void {
 }
 
 /**
+ * Whether a signed-in user is known, for chrome that fetches per-user data on
+ * mount. False while auth is loading or signed out, so a logged-out visitor's
+ * page makes no requests that can only 401. True outside a provider, so a
+ * component rendered in isolation keeps fetching as it did.
+ */
+export function useSignedIn(): boolean {
+  const ctx = useContext(AuthDataContext);
+  return ctx ? Boolean(ctx.user) : true;
+}
+
+/**
  * Non-throwing accessor for the Conflicts-subsystem flag. Returns false when
  * rendered outside an AuthDataProvider (e.g. isolated component tests), so
  * conflicts-gated UI stays hidden rather than crashing.

@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSignedIn } from "@/contexts/AuthDataContext";
 
 interface AlertItem {
   id: string;
@@ -27,8 +28,11 @@ const POLL_INTERVAL_MS = 60_000; // 1 minute
 export function MassCrashAlertBanner() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [dismissing, setDismissing] = useState<string | null>(null);
+  // Alerts are per user; a signed-out visitor would only collect 401s.
+  const signedIn = useSignedIn();
 
   useEffect(() => {
+    if (!signedIn) return;
     let cancelled = false;
     async function load() {
       try {
@@ -46,7 +50,7 @@ export function MassCrashAlertBanner() {
       cancelled = true;
       clearInterval(handle);
     };
-  }, []);
+  }, [signedIn]);
 
   if (alerts.length === 0) return null;
   const top = alerts[0];

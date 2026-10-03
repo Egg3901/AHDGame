@@ -114,6 +114,18 @@ const SHOWCASE_IDLE_MS = 12_000;
  */
 const FRAME_BUDGET_MS = 33;
 const LOW_POWER_FRAME_BUDGET_MS = 66;
+/**
+ * The idle spin waits this long after the globe loads, and then for an idle
+ * moment, so the first paint, hydration and the largest paint are not fighting
+ * a reprojection every frame. The globe is drawn, just still, until then.
+ */
+const SPIN_START_DELAY_MS = 2500;
+/** A spin frame slower than this, on average, drops the globe to half rate. */
+const SLOW_SPIN_FRAME_MS = 12;
+/** Spin frames averaged before deciding the device is slow. */
+const SLOW_SPIN_SAMPLE = 8;
+/** Path coordinates are written to a tenth of a viewBox unit, under half a pixel. */
+const PATH_DIGITS = 1;
 const SPIN_DEGREES_PER_FRAME = 0.12;
 const SHOWCASE_TRANSITION_MS = 1_500;
 const SHOWCASE_HOLD_MS = 4_200;
@@ -470,6 +482,14 @@ export function LandingGlobe({
     return { sr: cache.svg, mr: cache.overlay };
   }, []);
   useEffect(invalidateLayout, [markerList, invalidateLayout]);
+  // Written only when it changes: rewriting it every frame restyles the overlay.
+  const leadersViewBoxRef = useRef("");
+  const setLeadersViewBox = useCallback((rect: DOMRect) => {
+    const viewBox = `0 0 ${rect.width} ${rect.height}`;
+    if (!leadersSvgRef.current || leadersViewBoxRef.current === viewBox) return;
+    leadersViewBoxRef.current = viewBox;
+    leadersSvgRef.current.setAttribute("viewBox", viewBox);
+  }, []);
 
   const updateMarkers = useCallback(() => {
     const d3 = d3Ref.current;
@@ -488,9 +508,7 @@ export function LandingGlobe({
       .clipAngle(90 + 1e-6);
 
     const { sr, mr } = readRects(svg, overlay);
-    if (leadersSvgRef.current) {
-      leadersSvgRef.current.setAttribute("viewBox", `0 0 ${mr.width} ${mr.height}`);
-    }
+    setLeadersViewBox(mr);
     const HALF = Math.PI / 2;
     const center: [number, number] = [-rot[0], -rot[1]];
     // The showcase card takes over the spotlight — fade the player-count
@@ -597,7 +615,7 @@ export function LandingGlobe({
         dot.style.opacity = String(v.op);
       }
     }
-  }, [readRects]);
+  }, [readRects, setLeadersViewBox]);
 
   // Historical-crisis showcase card: attached to its country like the
   // player-count chips above, via the same projection + leader line into
@@ -628,9 +646,7 @@ export function LandingGlobe({
     // Belt-and-suspenders: updateMarkers() usually owns this, but it no-ops
     // when there are no player-count chips, which would otherwise leave this
     // unset on a markerless page.
-    if (leadersSvgRef.current) {
-      leadersSvgRef.current.setAttribute("viewBox", `0 0 ${mr.width} ${mr.height}`);
-    }
+    setLeadersViewBox(mr);
     const center: [number, number] = [-rot[0], -rot[1]];
     const visible = d3.geoDistance(entry.lonLat, center) < (Math.PI / 2) * 0.995;
     const pt = visible ? proj(entry.lonLat) : null;
@@ -676,7 +692,7 @@ export function LandingGlobe({
       line.setAttribute("x2", String(px - mr.left));
       line.setAttribute("y2", String(py - mr.top));
     }
-  }, [readRects, showcase]);
+  }, [readRects, setLeadersViewBox, showcase]);
 
   const updateEnhancedOverlay = useCallback(() => {
     const d3 = d3Ref.current;
@@ -728,7 +744,7 @@ export function LandingGlobe({
       .rotate(rotationRef.current)
       .clipAngle(90 + 1e-6);
 
-    const pathGen = d3.geoPath(proj);
+    const pathGen = d3.geoPath(proj).digits(PATH_DIGITS);
     const rotate = d3.geoRotation(rotationRef.current);
     const frame = createGlobeFrame(rotate, LANDING_ORTHO_SCALE * z, LANDING_TRANSLATE, pathGen);
     const lookup = tierLookupRef.current;
@@ -823,7 +839,7 @@ export function LandingGlobe({
       .rotate(rotationRef.current)
       .clipAngle(90 + 1e-6);
 
-    const pathGen = d3.geoPath(proj);
+    const pathGen = d3.geoPath(proj).digits(PATH_DIGITS);
     const rotate = d3.geoRotation(rotationRef.current);
     const frame = createGlobeFrame(rotate, LANDING_ORTHO_SCALE * z, LANDING_TRANSLATE, pathGen);
     const newPaths = new Map<string, string | null>();
@@ -964,6 +980,43 @@ export function LandingGlobe({
     };
   }, [geoUrl, shouldSplitGermany, dissolvedKey, dissolvedGeometryRef]);
 
+  // The idle spin holds until the page has settled (see SPIN_START_DELAY_MS).
+  // A drag or the showcase moves the globe before then as usual.
+  const spinReadyRef = useRef(false);
+  useEffect(() => {
+    if (!isLoaded || spinReadyRef.current) return;
+    let idleHandle = 0;
+    const timer = window.setTimeout(() => {
+      const start = () => {
+        spinReadyRef.current = true;
+      };
+      if ("requestIdleCallback" in window) {
+        idleHandle = window.requestIdleCallback(start, { timeout: SPIN_START_DELAY_MS });
+      } else {
+        start();
+      }
+    }, SPIN_START_DELAY_MS);
+    return () => {
+      window.clearTimeout(timer);
+      if (idleHandle) window.cancelIdleCallback(idleHandle);
+    };
+  }, [isLoaded]);
+
+  // Measured weak-device detection: the hints below miss a fast-cored but
+  // throttled or busy device, so the spin also times its own frames and drops
+  // to half rate when they run long.
+  const spinCostRef = useRef({ total: 0, frames: 0 });
+  const noteSpinFrameCost = useCallback((ms: number) => {
+    if (lowPowerRef.current) return;
+    const cost = spinCostRef.current;
+    cost.total += ms;
+    cost.frames += 1;
+    if (cost.frames < SLOW_SPIN_SAMPLE) return;
+    if (cost.total / cost.frames > SLOW_SPIN_FRAME_MS) setLowPower(true);
+    cost.total = 0;
+    cost.frames = 0;
+  }, []);
+
   // Weak-device detection, once on mount. Core count and device memory are the
   // only signals a browser gives before anything is rendered; both are coarse
   // and `deviceMemory` is Chromium-only, so this is a hint, not a measurement —
@@ -1086,7 +1139,12 @@ export function LandingGlobe({
           imperativeUpdate();
           if (progress === 1) showcaseMotion.settled = true;
         }
-      } else if (!isDraggingRef.current && !hoveredRef.current && isInViewRef.current) {
+      } else if (
+        spinReadyRef.current &&
+        !isDraggingRef.current &&
+        !hoveredRef.current &&
+        isInViewRef.current
+      ) {
         // Cap the background globe's frame rate to bound the d3 path budget.
         if (!bare || ts - lastFrameRef.current >= frameBudget) {
           lastFrameRef.current = ts;
@@ -1095,7 +1153,9 @@ export function LandingGlobe({
             rotationRef.current[1],
             0,
           ];
+          const started = performance.now();
           imperativeUpdate();
+          noteSpinFrameCost(performance.now() - started);
         }
       }
       // The broadcast globe's satellites and flourish keep moving while the
@@ -1134,6 +1194,7 @@ export function LandingGlobe({
     enhanced,
     initialZoom,
     markInteraction,
+    noteSpinFrameCost,
     isBroadcast,
     renderBroadcast,
     showcase,
