@@ -334,17 +334,15 @@ describe.skipIf(!uri)("Bulgarian list succession on isolated Mongo", () => {
       await db
         .collection<Row>(BG_FOUNDING_COUNTS_COLLECTION)
         .updateOne({ _id: RECEIPT }, { $set: { nominations: data.nominations } });
-      await db
-        .collection("characters")
-        .insertOne({
-          _id: playerId,
-          userId,
-          countryId: "BG",
-          party: "a",
-          balance: 888,
-          currentOffice: null,
-          careerHistory: [],
-        });
+      await db.collection("characters").insertOne({
+        _id: playerId,
+        userId,
+        countryId: "BG",
+        party: "a",
+        balance: 888,
+        currentOffice: null,
+        careerHistory: [],
+      });
       const beforePlayer = await db.collection("characters").findOne({ _id: playerId });
       await db.collection("electedOfficials").deleteOne({ _id: stableId(slot.personId) });
       await db.command({
