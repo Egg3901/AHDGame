@@ -240,23 +240,23 @@ function SectorTable({
                   <Td className="text-muted">{s.sectorLabel}</Td>
                   {hasMoney && (
                     <Td align="right">
-                      {typeof s.revenue === "number" ? est(fmt(scale(sectorRevenue(s)))) : "—"}
+                      {typeof s.revenue === "number" ? est(fmt(scale(sectorRevenue(s)))) : "n/a"}
                     </Td>
                   )}
                   <Td align="right" className={signTone(margin)}>
-                    {margin != null ? `${margin.toFixed(1)}%` : "—"}
+                    {margin != null ? `${margin.toFixed(1)}%` : "n/a"}
                   </Td>
                   <Td align="right" className={signTone(s.profit)}>
-                    {typeof s.profit === "number" ? est(fmtSigned(scale(s.profit))) : "—"}
+                    {typeof s.profit === "number" ? est(fmtSigned(scale(s.profit))) : "n/a"}
                   </Td>
                   <Td align="right" className="text-muted">
                     {typeof s.marketSharePercent === "number"
                       ? `${s.marketSharePercent.toFixed(1)}%`
-                      : "—"}
+                      : "n/a"}
                   </Td>
                   {hasMoney && (
                     <Td align="right" className="hidden text-muted sm:table-cell">
-                      {typeof s.workers === "number" ? s.workers.toLocaleString("en-US") : "—"}
+                      {typeof s.workers === "number" ? s.workers.toLocaleString("en-US") : "n/a"}
                     </Td>
                   )}
                   {plantsMode ? (
@@ -270,7 +270,7 @@ function SectorTable({
                     </>
                   ) : (
                     <Td align="right" className="text-muted">
-                      {Number.isFinite(s.currentGrowthRate) ? `${s.currentGrowthRate}%` : "—"}
+                      {Number.isFinite(s.currentGrowthRate) ? `${s.currentGrowthRate}%` : "n/a"}
                     </Td>
                   )}
                 </tr>
@@ -286,7 +286,7 @@ function SectorTable({
                 <Td align="right" className={signTone(totals.revenue ? totals.profit : null)}>
                   {totals.revenue > 0
                     ? `${((totals.profit / totals.revenue) * 100).toFixed(1)}%`
-                    : "—"}
+                    : "n/a"}
                 </Td>
                 <Td align="right" className={signTone(totals.profit)}>
                   {est(fmtSigned(scale(totals.profit)))}
@@ -525,12 +525,10 @@ export default function OverviewTab({
                     }
                   />
                 )}
-                {netMarginPct != null && (
+                {netMargin != null && (
                   <KVRow
                     label="Net margin"
-                    value={
-                      <span className={signTone(netMarginPct)}>{netMarginPct.toFixed(1)}%</span>
-                    }
+                    value={<span className={signTone(netMargin)}>{netMargin.toFixed(1)}%</span>}
                   />
                 )}
                 <KVRow
@@ -733,7 +731,7 @@ export default function OverviewTab({
                 <KVRow
                   label="Fill"
                   value={
-                    physical.fillRate != null ? `${Math.round(physical.fillRate * 100)}%` : "—"
+                    physical.fillRate != null ? `${Math.round(physical.fillRate * 100)}%` : "n/a"
                   }
                   hint={
                     physical.buildingSectorCount > 0
@@ -784,7 +782,11 @@ export default function OverviewTab({
 
         <DenseSection title="Structure">
           <KVList>
-            <KVRow label="Legal form" value={corporation.legalStructureLabel ?? "—"} mono={false} />
+            <KVRow
+              label="Legal form"
+              value={corporation.legalStructureLabel ?? "n/a"}
+              mono={false}
+            />
             <KVRow label="Headquarters" value={corporation.headquartersStateName} mono={false} />
             {corporation.parentCorporation && (
               <KVRow

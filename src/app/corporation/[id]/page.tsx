@@ -524,7 +524,7 @@ export default function CorporationDetailPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setSectorsMessage({ type: "success", text: "Transition cancelled — reversing now." });
+        setSectorsMessage({ type: "success", text: "Transition cancelled, reversing now." });
         fetchCorporation();
       } else {
         setSectorsMessage({ type: "error", text: data.error || "Failed to cancel transition" });
@@ -1171,10 +1171,7 @@ export default function CorporationDetailPage() {
                       />
                     );
                     const bondsPanel = financials ? (
-                      <div id="corp-bonds" className="scroll-mt-24 space-y-3">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted">
-                          Bonds &amp; issuance
-                        </h2>
+                      <div id="corp-bonds" className="scroll-mt-24">
                         <BondsTab
                           bondInfo={bondInfo}
                           bondLoading={!bondInfo && tab === "credit"}
@@ -1191,7 +1188,7 @@ export default function CorporationDetailPage() {
 
                     // The CEO is the only one who can issue bonds, so lead with the
                     // interactable issuance controls for them; everyone else sees the
-                    // credit-rating readout first. A divider sits between the two panels.
+                    // credit-rating readout first.
                     const panels = (
                       isCeo ? [bondsPanel, creditPanel] : [creditPanel, bondsPanel]
                     ).filter(Boolean);
@@ -1199,12 +1196,7 @@ export default function CorporationDetailPage() {
                     return (
                       <div className="space-y-8">
                         {panels.map((panel, i) => (
-                          <div
-                            key={i}
-                            className={i > 0 ? "border-t border-card-border pt-6" : undefined}
-                          >
-                            {panel}
-                          </div>
+                          <div key={i}>{panel}</div>
                         ))}
                       </div>
                     );
@@ -1213,19 +1205,12 @@ export default function CorporationDetailPage() {
                 {tab === "charts" && (
                   <ChartsTab
                     corpId={id}
-                    brandColor={corporation.brandColor}
                     modViewEnabled={modViewEnabled}
                     ownerView={isCeo || modViewEnabled}
                   />
                 )}
 
-                {tab === "snapshot" && (
-                  <SnapshotTab
-                    corpId={id}
-                    brandColor={corporation.brandColor}
-                    modViewEnabled={modViewEnabled}
-                  />
-                )}
+                {tab === "snapshot" && <SnapshotTab corpId={id} modViewEnabled={modViewEnabled} />}
 
                 {tab === "tech" && corporation.techTreesEnabled && (
                   <TechTab corporationId={id} isCeo={isCeo} />

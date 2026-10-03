@@ -37,10 +37,12 @@ export function DenseSection({
   return (
     <section id={id} className={`min-w-0 scroll-mt-24 ${className}`}>
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-card-border pb-1.5">
-        <h2 className="flex min-w-0 items-baseline gap-2 text-sm font-semibold text-foreground">
-          <span className="truncate">{title}</span>
-          {meta != null && <span className="text-xs font-normal text-muted">{meta}</span>}
-        </h2>
+        {/* The meta sits beside the heading, not inside it, so the heading's
+            accessible name is just the title. */}
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
+          {meta != null && <span className="text-xs text-muted">{meta}</span>}
+        </div>
         {actions != null && <div className="flex flex-wrap items-center gap-1.5">{actions}</div>}
       </div>
       <div className="pt-1">{children}</div>

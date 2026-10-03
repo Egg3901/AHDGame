@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { DenseSection, KVList, KVRow, Td, Th } from "./dense/DenseKit";
+import { DenseLineChart } from "./dense/DenseLineChart";
 import { INDEX_INCLUSION_THRESHOLD } from "@/lib/corporations/indexOwnership";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import {
@@ -93,10 +94,6 @@ function improvementHint(
   return `Roughly ${need} more composite point${need === 1 ? "" : "s"} to reach ${better} (threshold ${threshold}).`;
 }
 
-const CHART_W = 560;
-const CHART_H = 140;
-const C_PAD = 36;
-
 function CreditCompositeChart({ points }: { points: CorpHistoryPoint[] }) {
   const creditPts = points.filter(
     (p): p is CorpHistoryPoint & { creditComposite: number } =>
@@ -104,81 +101,32 @@ function CreditCompositeChart({ points }: { points: CorpHistoryPoint[] }) {
   );
   if (creditPts.length < 2) {
     return (
-      <p className="text-xs text-muted">
+      <p className="py-2 text-xs text-muted">
         Composite history appears after at least two hourly turns with credit snapshots saved.
       </p>
     );
   }
-
-  const minTurn = Math.min(...creditPts.map((p) => p.turn));
-  const maxTurn = Math.max(...creditPts.map((p) => p.turn));
-  const spanT = Math.max(1, maxTurn - minTurn);
-  const innerW = CHART_W - C_PAD * 2;
-  const innerH = CHART_H - C_PAD * 2;
-
-  const pathD = creditPts
-    .map((p, i) => {
-      const x = C_PAD + ((p.turn - minTurn) / spanT) * innerW;
-      const y = C_PAD + innerH - (p.creditComposite / 100) * innerH;
-      return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  const last = creditPts[creditPts.length - 1];
-
   return (
-    <div className="w-full overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        className="w-full max-w-full h-auto text-foreground"
-        role="img"
-        aria-label="Composite credit score over time"
-      >
-        <rect
-          x={C_PAD}
-          y={C_PAD}
-          width={innerW}
-          height={innerH}
-          className="fill-none stroke-card-border"
-          strokeWidth={1}
-          rx={4}
-        />
-        {[0, 25, 50, 75, 100].map((g) => {
-          const y = C_PAD + innerH - (g / 100) * innerH;
-          return (
-            <g key={g}>
-              <line
-                x1={C_PAD}
-                y1={y}
-                x2={C_PAD + innerW}
-                y2={y}
-                className="stroke-card-border/60"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-              />
-              <text x={4} y={y + 4} className="fill-muted text-[9px] tabular-nums">
-                {g}
-              </text>
-            </g>
-          );
-        })}
-        <path
-          d={pathD}
-          className="stroke-primary fill-none"
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        <text
-          x={CHART_W - 4}
-          y={14}
-          textAnchor="end"
-          className="fill-muted text-[9px] tabular-nums"
-        >
-          Turn {last.turn} · {last.creditComposite}
-          {last.creditRating ? ` (${last.creditRating})` : ""}
-        </text>
-      </svg>
-    </div>
+    <DenseLineChart
+      turns={creditPts.map((p) => p.turn)}
+      series={[
+        {
+          label: "Composite",
+          values: creditPts.map((p) => p.creditComposite),
+          tone: "text-foreground",
+        },
+      ]}
+      domain={[0, 100]}
+      height={180}
+      formatTick={(v) => v.toFixed(0)}
+      ariaLabel="Composite credit score over time"
+      tooltip={(i) => (
+        <div className="font-mono tabular-nums text-foreground">
+          {creditPts[i].creditComposite}/100
+          {creditPts[i].creditRating ? ` ${creditPts[i].creditRating}` : ""}
+        </div>
+      )}
+    />
   );
 }
 
@@ -196,7 +144,7 @@ function WhatIfDebtPanel({
   // (native), but creditDiagnostics.totalEquity / bondInfo.totalDebt / coupon
   // obligations are all anchor-denominated (server uses liquidCapitalAnchor in
   // computeCorporateCreditAtTurn). Convert once to anchor so this panel's math
-  // — npv, newEquity, the slider bounds — operates in a single unit.
+  // (npv, newEquity, the slider bounds) operates in a single unit.
   const liqAnchor = toInternalFrom(
     corporation.liquidCapital,
     corporation.liquidCurrencyCode as Parameters<typeof toInternalFrom>[1]
@@ -255,8 +203,8 @@ function WhatIfDebtPanel({
     <DenseSection title="What-if debt" meta="simplified, ignores issuance fees">
       <div className="space-y-2 py-1">
         <p className="text-xs text-muted">
-          Raise or repay face value at your current average coupon. Cash moves one for one with
-          the debt.
+          Raise or repay face value at your current average coupon. Cash moves one for one with the
+          debt.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <label htmlFor="credit-debt-delta" className="text-xs text-muted">
@@ -380,7 +328,11 @@ export default function CreditRatingTab({
   const cr = bondInfo.creditRating;
   const cd = bondInfo.creditDiagnostics;
   const hint =
-    improvementHint(cr.compositeScore, cr.rating, Boolean(bondInfo.bondDefaultCreditPenalty?.active)) ??
+    improvementHint(
+      cr.compositeScore,
+      cr.rating,
+      Boolean(bondInfo.bondDefaultCreditPenalty?.active)
+    ) ??
     (CREDIT_RATINGS.indexOf(cr.rating as CreditRating) === 0 ? "At the top published tier." : null);
 
   return (
@@ -440,17 +392,18 @@ export default function CreditRatingTab({
                 hint={`prime ${cr.primeRate.toFixed(2)} + ${CREDIT_RATING_SPREADS[cr.rating as CreditRating].toFixed(2)} + ${CORPORATE_BOND_SPREAD_PREMIUM.toFixed(2)}`}
                 title="Prime, plus your tier's spread, plus the corporate premium."
               />
-              {corporation.indexOwnershipPercent != null && corporation.indexOwnershipPercent > 0 && (
-                <KVRow
-                  label="Index funds hold"
-                  value={`${corporation.indexOwnershipPercent}%`}
-                  hint={
-                    corporation.indexInclusionActive
-                      ? "one-notch upgrade"
-                      : `${Math.round(INDEX_INCLUSION_THRESHOLD * 100)}% earns a notch`
-                  }
-                />
-              )}
+              {corporation.indexOwnershipPercent != null &&
+                corporation.indexOwnershipPercent > 0 && (
+                  <KVRow
+                    label="Index funds hold"
+                    value={`${corporation.indexOwnershipPercent}%`}
+                    hint={
+                      corporation.indexInclusionActive
+                        ? "one-notch upgrade"
+                        : `${Math.round(INDEX_INCLUSION_THRESHOLD * 100)}% earns a notch`
+                    }
+                  />
+                )}
             </KVList>
           </div>
           {hint && <p className="pt-1.5 text-xs text-muted">{hint}</p>}
@@ -582,7 +535,7 @@ export default function CreditRatingTab({
                 <KVRow label="Annual coupons" value={formatAmount(cd.annualCouponObligations)} />
                 <KVRow
                   label="Debt to equity"
-                  value={cd.debtToEquityRatio != null ? cd.debtToEquityRatio.toFixed(2) : "—"}
+                  value={cd.debtToEquityRatio != null ? cd.debtToEquityRatio.toFixed(2) : "n/a"}
                 />
                 <KVRow
                   label="Coverage"
@@ -591,7 +544,7 @@ export default function CreditRatingTab({
                       ? `${cd.interestCoverageRatio.toFixed(2)}x`
                       : cd.annualCouponObligations <= 0
                         ? "No coupons"
-                        : "—"
+                        : "n/a"
                   }
                   title="Estimated annual income over annual coupons."
                 />
@@ -613,25 +566,25 @@ export default function CreditRatingTab({
               <tbody>
                 <tr>
                   <Td className="text-muted">Peers</Td>
-                  <Td align="right">{peerStats.countryPeers?.n ?? "—"}</Td>
-                  <Td align="right">{peerStats.sectorPeers?.n ?? "—"}</Td>
+                  <Td align="right">{peerStats.countryPeers?.n ?? "n/a"}</Td>
+                  <Td align="right">{peerStats.sectorPeers?.n ?? "n/a"}</Td>
                 </tr>
                 <tr>
                   <Td className="text-muted">Avg composite</Td>
-                  <Td align="right">{peerStats.countryPeers?.avgComposite ?? "—"}</Td>
-                  <Td align="right">{peerStats.sectorPeers?.avgComposite ?? "—"}</Td>
+                  <Td align="right">{peerStats.countryPeers?.avgComposite ?? "n/a"}</Td>
+                  <Td align="right">{peerStats.sectorPeers?.avgComposite ?? "n/a"}</Td>
                 </tr>
                 <tr>
                   <Td className="text-muted">Avg new-issue coupon</Td>
                   <Td align="right">
                     {peerStats.countryPeers
                       ? `${peerStats.countryPeers.avgNewIssueCouponPct.toFixed(2)}%`
-                      : "—"}
+                      : "n/a"}
                   </Td>
                   <Td align="right">
                     {peerStats.sectorPeers
                       ? `${peerStats.sectorPeers.avgNewIssueCouponPct.toFixed(2)}%`
-                      : "—"}
+                      : "n/a"}
                   </Td>
                 </tr>
               </tbody>
@@ -661,10 +614,15 @@ export default function CreditRatingTab({
               {CREDIT_RATING_THRESHOLDS.map(([, grade], i) => {
                 const current = grade === cr.rating;
                 return (
-                  <tr key={grade} className={current ? "bg-card-elevated/60 font-semibold" : undefined}>
+                  <tr
+                    key={grade}
+                    className={current ? "bg-card-elevated/60 font-semibold" : undefined}
+                  >
                     <Td className={current ? "text-foreground" : "text-muted"}>
                       {grade}
-                      {current && <span className="ml-1.5 text-[11px] font-normal text-muted">you</span>}
+                      {current && (
+                        <span className="ml-1.5 text-[11px] font-normal text-muted">you</span>
+                      )}
                     </Td>
                     <Td align="right" className={current ? "text-foreground" : "text-muted"}>
                       {tierScoreRangeLabel(i)}

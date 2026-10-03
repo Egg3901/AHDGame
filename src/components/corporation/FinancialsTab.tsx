@@ -186,21 +186,21 @@ export default function FinancialsTab({
                 <tr>
                   <Td className="text-muted">Revenue</Td>
                   <Td align="right">
-                    {lastQ.revenue != null ? money.fmt(scale(lastQ.revenue)) : "—"}
+                    {lastQ.revenue != null ? money.fmt(scale(lastQ.revenue)) : "n/a"}
                   </Td>
                   <Td align="right">~{money.fmt(scale(revenue))}</Td>
                 </tr>
                 <tr>
                   <Td className="text-muted">Total costs</Td>
                   <Td align="right">
-                    {lastQ.totalCosts != null ? `(${money.fmt(scale(lastQ.totalCosts))})` : "—"}
+                    {lastQ.totalCosts != null ? `(${money.fmt(scale(lastQ.totalCosts))})` : "n/a"}
                   </Td>
                   <Td align="right">~({money.fmt(scale(financials.totalCosts))})</Td>
                 </tr>
                 <tr>
                   <Td className="text-muted">Net income</Td>
                   <Td align="right" className={signTone(lastQ.income)}>
-                    {lastQ.income != null ? money.fmtSigned(scale(lastQ.income)) : "—"}
+                    {lastQ.income != null ? money.fmtSigned(scale(lastQ.income)) : "n/a"}
                   </Td>
                   <Td align="right" className={signTone(financials.income)}>
                     ~{money.fmtSigned(scale(financials.income))}
@@ -214,10 +214,7 @@ export default function FinancialsTab({
 
       {view === "income" && (
         <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <DenseSection
-            title="Income statement"
-            meta={MONEY_PERIOD_PER_LABEL[periodView]}
-          >
+          <DenseSection title="Income statement" meta={MONEY_PERIOD_PER_LABEL[periodView]}>
             <StatementTable>
               <StatementLine
                 strong
@@ -629,7 +626,11 @@ export default function FinancialsTab({
                   note="unlocked tech nodes, older decades discounted"
                 />
               )}
-              <StatementLine strong label="Total assets" amount={fmt(balanceSheet.assets.totalAssets)} />
+              <StatementLine
+                strong
+                label="Total assets"
+                amount={fmt(balanceSheet.assets.totalAssets)}
+              />
 
               <StatementGroup>Liabilities</StatementGroup>
               {balanceSheet.liabilities.totalDebt > 0 ? (
@@ -663,7 +664,10 @@ export default function FinancialsTab({
           <aside className="min-w-0 space-y-6">
             <DenseSection title="Valuation">
               <KVList>
-                <KVRow label="Market cap" value={money.fmt(balanceSheet.equity.marketCapitalization)} />
+                <KVRow
+                  label="Market cap"
+                  value={money.fmt(balanceSheet.equity.marketCapitalization)}
+                />
                 {(() => {
                   const v = valuation(
                     balanceSheet.equity.marketCapitalization,
@@ -718,7 +722,10 @@ export default function FinancialsTab({
                     <thead>
                       <tr>
                         <Th>Region</Th>
-                        <Th align="right" title="Net margin over the full cost bill where plants report it.">
+                        <Th
+                          align="right"
+                          title="Net margin over the full cost bill where plants report it."
+                        >
                           Margin
                         </Th>
                         <Th align="right">NPV</Th>
@@ -743,7 +750,11 @@ export default function FinancialsTab({
                             <Td
                               align="right"
                               className={row.npv > 0 ? "text-foreground" : "text-muted"}
-                              title={row.npv === 0 ? "Zero because the margin is zero or less." : undefined}
+                              title={
+                                row.npv === 0
+                                  ? "Zero because the margin is zero or less."
+                                  : undefined
+                              }
                             >
                               {fmt(row.npv)}
                             </Td>

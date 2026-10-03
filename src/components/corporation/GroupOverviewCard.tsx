@@ -86,13 +86,13 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
 
   return (
     <DenseSection
-      title={`Group: ${group.rootName}`}
-      meta={`${group.memberCount} members in ${group.countries.length} ${group.countries.length === 1 ? "country" : "countries"}`}
+      title={group.rootName}
+      meta={`corporate group, ${group.memberCount} members in ${group.countries.length} ${group.countries.length === 1 ? "country" : "countries"}`}
     >
       <div className="space-y-3 py-1">
         <p className="text-xs text-muted">
-          Members of a formalized group file together for loss relief within each country and
-          share brand and logistics strength, converging on the strongest member each turn.
+          Members of a formalized group file together for loss relief within each country and share
+          brand and logistics strength, converging on the strongest member each turn.
         </p>
         <div className="grid gap-x-8 sm:grid-cols-3">
           <KVList>
@@ -118,11 +118,16 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
               {group.members.map((m) => (
                 <tr key={m.corporationId}>
                   <Td className="max-w-[16rem] truncate">
-                    <Link href={`/corporation/${m.corporationId}`} className="text-foreground hover:underline">
+                    <Link
+                      href={`/corporation/${m.corporationId}`}
+                      className="text-foreground hover:underline"
+                    >
                       {m.name}
                     </Link>
                     {m.tickerSymbol && (
-                      <span className="ml-1.5 font-mono text-[11px] text-muted">{m.tickerSymbol}</span>
+                      <span className="ml-1.5 font-mono text-[11px] text-muted">
+                        {m.tickerSymbol}
+                      </span>
                     )}
                     {m.isRoot && <span className="ml-1.5 text-[11px] text-muted">parent</span>}
                   </Td>
@@ -171,7 +176,8 @@ export function GroupOverviewCard({ corpId }: { corpId: string }) {
                       Turn {a.turn}: {a.corporationName}, reassessed by {a.treasury}
                     </Td>
                     <Td align="right" className="text-error">
-                      {formatAmount(a.assessmentAnchor)} on {formatAmount(a.shiftedBaseAnchor)} shifted
+                      {formatAmount(a.assessmentAnchor)} on {formatAmount(a.shiftedBaseAnchor)}{" "}
+                      shifted
                     </Td>
                   </tr>
                 ))}

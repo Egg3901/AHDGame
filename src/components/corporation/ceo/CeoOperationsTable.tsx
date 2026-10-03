@@ -283,7 +283,7 @@ function OperationsRow({
         <Td className="text-muted">{sector.sectorLabel}</Td>
         <Td align="right">{fmt(scale(revenue))}</Td>
         <Td align="right" className={signTone(margin)}>
-          {Number.isFinite(margin) ? `${margin.toFixed(1)}%` : "—"}
+          {Number.isFinite(margin) ? `${margin.toFixed(1)}%` : "n/a"}
         </Td>
         <Td align="right" className={signTone(sector.profit)}>
           {fmtSigned(scale(sector.profit))}

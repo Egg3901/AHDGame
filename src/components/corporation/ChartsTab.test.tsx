@@ -42,36 +42,41 @@ async function showHistory(quote: { marketCapCurrencyCode?: string | null }) {
     })
   );
   render(<ChartsTab corpId="16" />);
-  await screen.findByText("Current");
+  await screen.findByRole("button", { name: "Share price" });
 }
 
-function expectCurrent(value: string) {
-  const container = screen.getByText("Current").parentElement;
-  expect(container).not.toBeNull();
-  expect(within(container!).getByText(value)).toBeTruthy();
+/** The metric table carries each series' latest value in its own row. */
+function expectLatest(metric: string, value: string) {
+  const row = screen.getByRole("button", { name: metric }).closest("tr");
+  expect(row).not.toBeNull();
+  expect(within(row!).getByText(value)).toBeTruthy();
 }
 
 describe("corporation chart currency basis", () => {
   it("uses live FX only for the latest market cap while other metrics retain snapshot FX", async () => {
     await showHistory({ marketCapCurrencyCode: "EUR" });
-    expectCurrent("price:20:USD");
-    fireEvent.click(screen.getByRole("button", { name: "Cash on Hand" }));
-    expectCurrent("money:200:USD");
-    fireEvent.click(screen.getByRole("button", { name: "Revenue & Costs" }));
-    expectCurrent("money:100:USD");
-    fireEvent.click(screen.getByRole("button", { name: "Market Cap" }));
-    expectCurrent("money:100:EUR");
+    expectLatest("Share price", "price:20:USD");
+    expectLatest("Cash on hand", "money:200:USD");
+    expectLatest("Revenue and costs", "money:100:USD");
+    expectLatest("Market cap", "money:100:EUR");
+  });
+
+  it("charts the metric picked from the table", async () => {
+    await showHistory({ marketCapCurrencyCode: "EUR" });
+    fireEvent.click(screen.getByRole("button", { name: "Cash on hand" }));
+    expect(screen.getByRole("button", { name: "Cash on hand" }).getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    expect(screen.getByRole("img", { name: "Cash on hand by turn" })).toBeTruthy();
   });
 
   it("treats an explicit null live quote currency as anchor currency", async () => {
     await showHistory({ marketCapCurrencyCode: null });
-    fireEvent.click(screen.getByRole("button", { name: "Market Cap" }));
-    expectCurrent("money:500:anchor");
+    expectLatest("Market cap", "money:500:anchor");
   });
 
   it("preserves the snapshot basis for legacy responses without a live quote currency", async () => {
     await showHistory({});
-    fireEvent.click(screen.getByRole("button", { name: "Market Cap" }));
-    expectCurrent("money:250:USD");
+    expectLatest("Market cap", "money:250:USD");
   });
 });

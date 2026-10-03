@@ -352,7 +352,7 @@ export default function MarketOverviewPanel({
                       <Td align="right" className="text-muted">
                         {tvp > 0
                           ? `${(((corporation.publicFloat ?? 0) / tvp) * 100).toFixed(2)}%`
-                          : "—"}
+                          : "n/a"}
                       </Td>
                     )}
                     <Td />
