@@ -75,6 +75,7 @@ import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilte
 import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { createVoteTurnMemo } from "@/lib/electionEngine/tallyManagement";
+import { writeVoteTallies } from "./election/writeVoteTallies";
 import { loadFundsByPartyForElections } from "@/lib/electionEngine/fundsByParty";
 import { resolveTurnWindow } from "@/lib/electionEngine/voteCalculations";
 import { eraYearContextFromGameState } from "@/lib/era/context";
@@ -1984,24 +1985,9 @@ export async function accumulateGeneralElectionVotes(
       if (tallyByElection.get(election._id.toString())?.countingMethod === "pr_stv") throw err;
     }
   }
-  if (tallyWrites.length > 0) {
-    try {
-      const result = await db
-        .collection<ElectionVoteTally>("electionVoteTallies")
-        .bulkWrite(tallyWrites, { ordered: false });
-      const hasPrStv = orderedElections.some(
-        (e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv"
-      );
-      if (hasPrStv && result.matchedCount !== tallyWrites.length)
-        throw new Error("PR-STV ballot batch lost a tally revision; retry the turn");
-    } catch (err) {
-      logger.error("Turn", `Error writing ${tallyWrites.length} election vote tallies`, err);
-      if (
-        orderedElections.some(
-          (e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv"
-        )
-      )
-        throw err;
-    }
-  }
+  await writeVoteTallies(
+    db,
+    tallyWrites,
+    orderedElections.some((e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv")
+  );
 }
