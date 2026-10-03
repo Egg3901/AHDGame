@@ -13,6 +13,7 @@ import {
 import { processBg1991ConstitutionalNpcProposal } from "./constitutionalNpcProposals1991";
 import { bgRegions1991 } from "./data/bgRegions1991";
 import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
+import { BG_FOUNDING_COUNTS_COLLECTION } from "./foundingCount1990";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(), getMongoClient: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
@@ -69,6 +70,7 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
       "states",
       "bills",
       BG_1991_PROPOSALS_COLLECTION,
+      BG_FOUNDING_COUNTS_COLLECTION,
       "elections",
       "electionVoteTallies",
       "electedOfficials",
@@ -103,6 +105,9 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
     [267, true, "snapshot"],
     [267, true, "late"],
     [267, true, "partial"],
+    [267, true, "bound"],
+    [267, true, "runoff"],
+    [267, true, "certified"],
   ] as const)(
     "uses actual constituent vote%d with approval%s and frozen%s campaigns",
     async (support, approved, mode) => {
@@ -117,19 +122,36 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
           status: "active",
           primaryEndTurn: mode === "late" ? 26 : 30,
           totalSeats: region.houseDistricts,
+          ...(["bound", "runoff", "certified"].includes(mode)
+            ? {
+                bulgarianFoundingRound: {
+                  ruleVersion: "parallel-1990-v1",
+                  receiptId: "BG:founding1990:2",
+                  round: mode === "runoff" ? 2 : 1,
+                  registeredVoters: 100000,
+                  rootElectionId: new ObjectId().toHexString(),
+                },
+              }
+            : {}),
         }));
         if (mode === "partial") campaigns.pop();
         await db.collection("elections").insertMany(campaigns);
+        if (mode === "certified")
+          await db
+            .collection<Row>(BG_FOUNDING_COUNTS_COLLECTION)
+            .insertOne({ _id: "BG:founding1990:2", cycle: 99 });
         await db.collection("electionVoteTallies").insertMany(
           campaigns.map((row, i) => ({
             electionId: row._id,
             finalized: false,
+            bulgarianFoundingBallot: ["bound", "runoff", "certified"].includes(mode),
             totalVotes: mode === "counted" && i === 0 ? { prior: 1 } : {},
             turnSnapshots:
               mode === "snapshot" && i === 0 ? [{ cumulativeVotes: { prior: 1 } }] : [],
           }))
         );
         const original = await db.collection("elections").find().toArray();
+        const originalTallies = await db.collection("electionVoteTallies").find().toArray();
         const proposal = await openBg1991ConstitutionalProposal({
           db,
           game: GAME,
@@ -155,7 +177,7 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
         expect((await db.collection("bills").findOne({ _id: proposal.billId }))?.status).toBe(
           approved ? "signed" : "failed"
         );
-        if (approved && mode === "untouched") {
+        if (approved && ["untouched", "bound"].includes(mode)) {
           const failing = new Proxy(db, {
             get(target, key) {
               if (key !== "collection") {
@@ -182,13 +204,16 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
             "injected constituent marker failure"
           );
           expect(await db.collection("elections").find().toArray()).toEqual(original);
+          expect(await db.collection("electionVoteTallies").find().toArray()).toEqual(
+            originalTallies
+          );
           expect(
             (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
               ?.bgConstitution1991SinceTurn
           ).toBeUndefined();
         }
         commands = requestBytes = replyBytes = 0;
-        const concurrent = approved && mode === "untouched";
+        const concurrent = approved && ["untouched", "bound"].includes(mode);
         const outcomes = concurrent
           ? await Promise.all([
               processBg1991ConstitutionalMandate(db, GAME, 26, NOW),
@@ -199,14 +224,20 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
         const outcome = outcomes.some(Boolean);
         const measure = { commands, requestBytes, replyBytes };
         expect(outcome).toBe(approved);
-        expect(commands).toBeLessThanOrEqual(concurrent ? 36 : 16);
-        console.log(`BG1991 ${support}/${mode}: ${JSON.stringify(measure)}`);
+        expect(commands).toBeLessThanOrEqual(concurrent ? 40 : 18);
+        process.stdout.write(`BG1991 ${support}/${mode}: ${JSON.stringify(measure)}\n`);
         const after = await db.collection("elections").find().toArray();
-        if (approved && mode === "untouched")
+        if (approved && ["untouched", "bound"].includes(mode)) {
           expect(Object.fromEntries(after.map((row) => [row.state, row.totalSeats]))).toEqual(
             BG_ORDINARY_ASSEMBLY_SEATS
           );
-        else expect(after).toEqual(original);
+          expect(after.every((row) => row.bulgarianFoundingRound === undefined)).toBe(true);
+          expect(
+            (await db.collection("electionVoteTallies").find().toArray()).every(
+              (row) => row.bulgarianFoundingBallot === undefined
+            )
+          ).toBe(true);
+        } else expect(after).toEqual(original);
         expect(await processBg1991ConstitutionalMandate(db, GAME, 27, NOW)).toBe(false);
         expect(
           (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))

@@ -23,6 +23,8 @@ import {
 import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
 import type { CountryState } from "@/lib/db/types/countryState";
 import { loadBg1991Initiative, signBg1991Initiative } from "./constitutionalInitiative1991";
+import { BG_FOUNDING_COUNTS_COLLECTION, type BgFoundingAssemblyRecord } from "./foundingCount1990";
+import { canRebindBg1991PrimaryCohort } from "./rules/primaryHandover1991";
 
 export const BG_1991_PROPOSALS_COLLECTION = "bg1991ConstitutionalProposals";
 const ID = "1991-default:bg-constitutional:constitution1991";
@@ -427,7 +429,14 @@ async function rebindBg1991PrimaryCohort(db: Db, turn: number, now: Date, sessio
       },
       {
         session,
-        projection: { cycle: 1, state: 1, electionType: 1, primaryEndTurn: 1, primaryEndTime: 1 },
+        projection: {
+          cycle: 1,
+          state: 1,
+          electionType: 1,
+          primaryEndTurn: 1,
+          primaryEndTime: 1,
+          bulgarianFoundingRound: 1,
+        },
       }
     )
     .toArray();
@@ -439,39 +448,55 @@ async function rebindBg1991PrimaryCohort(db: Db, turn: number, now: Date, sessio
     )
     .toArray();
   const byPoll = new Map(tallies.map((row) => [row.electionId.toHexString(), row]));
+  const receipts = polls.length
+    ? await db
+        .collection<BgFoundingAssemblyRecord>(BG_FOUNDING_COUNTS_COLLECTION)
+        .find(
+          { _id: { $in: [...new Set(polls.map((row) => `BG:founding1990:${row.cycle}`))] } },
+          { session, projection: { _id: 1 } }
+        )
+        .toArray()
+    : [];
+  const certifiedReceiptIds = new Set(receipts.map((row) => row._id));
+  const reboundIds: ObjectId[] = [];
   const updates: AnyBulkWriteOperation<Election>[] = [
     ...new Set(polls.map((row) => row.cycle)),
   ].flatMap((cycle) => {
     const cohort = polls.filter((row) => row.cycle === cycle);
     if (
-      cohort.length !== Object.keys(BG_ORDINARY_ASSEMBLY_SEATS).length ||
-      cohort.some((row) => {
-        const tally = byPoll.get(row._id.toHexString());
-        return row.primaryEndTurn != null
-          ? row.primaryEndTurn <= turn ||
-              !tally ||
-              tally.finalized ||
-              Object.values(tally.totalVotes ?? {}).some((votes) => votes !== 0) ||
-              Object.values(tally.turnSnapshots?.[0]?.cumulativeVotes ?? {}).some(
-                (votes) => votes !== 0
-              )
-          : !row.primaryEndTime ||
-              row.primaryEndTime <= now ||
-              !tally ||
-              tally.finalized ||
-              Object.values(tally.totalVotes ?? {}).some((votes) => votes !== 0) ||
-              Object.values(tally.turnSnapshots?.[0]?.cumulativeVotes ?? {}).some(
-                (votes) => votes !== 0
-              );
+      !canRebindBg1991PrimaryCohort({
+        polls: cohort.map((row) => ({
+          id: row._id.toHexString(),
+          state: row.state,
+          cycle: row.cycle,
+          primaryEndTurn: row.primaryEndTurn,
+          primaryEndTimeMs: row.primaryEndTime?.getTime(),
+          foundingRound: row.bulgarianFoundingRound?.round,
+          receiptId: row.bulgarianFoundingRound?.receiptId,
+          ruleVersion: row.bulgarianFoundingRound?.ruleVersion,
+        })),
+        tallies: cohort.flatMap((row) => {
+          const tally = byPoll.get(row._id.toHexString());
+          return tally
+            ? [
+                {
+                  electionId: row._id.toHexString(),
+                  finalized: tally.finalized,
+                  votes: [
+                    ...Object.values(tally.totalVotes ?? {}),
+                    ...Object.values(tally.turnSnapshots?.[0]?.cumulativeVotes ?? {}),
+                  ],
+                },
+              ]
+            : [];
+        }),
+        hasCertifiedReceipt: certifiedReceiptIds.has(`BG:founding1990:${cycle}`),
+        turn,
+        nowMs: now.getTime(),
       })
     )
       return [];
-    const regions = cohort.map((row) => row.state);
-    if (
-      new Set(regions).size !== Object.keys(BG_ORDINARY_ASSEMBLY_SEATS).length ||
-      regions.some((id) => BG_ORDINARY_ASSEMBLY_SEATS[id] == null)
-    )
-      return [];
+    reboundIds.push(...cohort.map((row) => row._id));
     return cohort.map((row) => ({
       updateOne: {
         filter: { _id: row._id, status: { $in: ["active", "upcoming"] } },
@@ -480,9 +505,19 @@ async function rebindBg1991PrimaryCohort(db: Db, turn: number, now: Date, sessio
             totalSeats: BG_ORDINARY_ASSEMBLY_SEATS[row.state],
             updatedAt: now,
           },
+          $unset: { bulgarianFoundingRound: "" },
         },
       },
     }));
   });
-  if (updates.length) await db.collection<Election>("elections").bulkWrite(updates, { session });
+  if (updates.length) {
+    await db.collection<Election>("elections").bulkWrite(updates, { session });
+    await db
+      .collection<ElectionVoteTally>("electionVoteTallies")
+      .updateMany(
+        { electionId: { $in: reboundIds } },
+        { $unset: { bulgarianFoundingBallot: "" } },
+        { session }
+      );
+  }
 }
