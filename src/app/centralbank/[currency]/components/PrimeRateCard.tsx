@@ -10,6 +10,7 @@ import {
   PRIME_RATE_STEP,
   snapToPrimeRateGrid,
 } from "@/lib/db/types/centralBank";
+import { CentralBankSection } from "./CentralBankSection";
 
 export interface RateGovernance {
   allowedActions: Array<{ action: string; allowed: boolean; reason?: string }>;
@@ -132,47 +133,48 @@ export function PrimeRateCard({
   const isAggressiveCut = pendingRate !== null && pendingRate < aggressiveCutThreshold - 1e-9;
 
   return (
-    <div className="min-w-0 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-3 text-sm font-semibold text-muted">Prime rate</h2>
-      <p className="text-4xl font-bold text-foreground">{(primeRate ?? 0).toFixed(2)}%</p>
+    <CentralBankSection title="Prime rate" level="aside">
+      <p className="text-heading-lg font-semibold tabular-nums text-foreground">
+        {(primeRate ?? 0).toFixed(2)}%
+      </p>
 
-      <div className="mt-4 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-xs text-muted space-y-1">
-        <div className="font-semibold uppercase tracking-wider text-[10px] text-foreground/80">
-          Policy Targets
-        </div>
-        <div className="flex min-w-0 justify-between gap-3">
-          <span className="min-w-0">Inflation target</span>
-          <span className="shrink-0 tabular-nums font-medium text-foreground">2.00%</span>
-        </div>
-        <div className="flex min-w-0 justify-between gap-3">
-          <span className="min-w-0">GDP growth target</span>
-          <span className="shrink-0 tabular-nums font-medium text-foreground">3.00%</span>
-        </div>
-        <div className="flex min-w-0 justify-between gap-3">
-          <span className="min-w-0">Neutral prime rate</span>
-          <span className="shrink-0 tabular-nums font-medium text-foreground">3.00%</span>
-        </div>
-        <p className="pt-1 text-[11px] leading-snug text-muted">
+      <div className="mt-4">
+        <p className="text-body-sm text-muted">Policy targets</p>
+        <dl className="mt-1 text-body">
+          <div className="flex min-w-0 justify-between gap-3 border-b border-card-border/60 py-1.5">
+            <dt className="min-w-0 text-muted">Inflation target</dt>
+            <dd className="shrink-0 font-medium tabular-nums text-foreground">2.00%</dd>
+          </div>
+          <div className="flex min-w-0 justify-between gap-3 border-b border-card-border/60 py-1.5">
+            <dt className="min-w-0 text-muted">GDP growth target</dt>
+            <dd className="shrink-0 font-medium tabular-nums text-foreground">3.00%</dd>
+          </div>
+          <div className="flex min-w-0 justify-between gap-3 py-1.5">
+            <dt className="min-w-0 text-muted">Neutral prime rate</dt>
+            <dd className="shrink-0 font-medium tabular-nums text-foreground">3.00%</dd>
+          </div>
+        </dl>
+        <p className="mt-2 text-body-sm leading-snug text-muted">
           Raise rates when inflation runs above 2% to cool demand; cut rates when GDP growth sags
           below 3% to stimulate the economy. Rates near 3% are roughly neutral.
         </p>
       </div>
 
       {governmentControlled && (
-        <div className="mt-4 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-xs text-muted">
+        <p className="mt-4 text-body-sm text-muted">
           This bank has no operational independence: the rate is set by the head of government or
           the finance minister, not by the bank. Independence would take an act of the legislature.
-        </div>
+        </p>
       )}
 
       {!governmentControlled && isChair && chairControlsLocked && (
-        <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <p className="mt-4 text-body-sm font-medium text-warning">
           Chair rate controls are locked by an administrator.
-        </div>
+        </p>
       )}
 
       {committeeSeated && !governmentControlled && (
-        <div className="mt-4 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-xs text-muted">
+        <p className="mt-4 text-body-sm text-muted">
           A committee is seated: the rate moves by committee vote, not by chair decree.
           {onOpenCommittee && (
             <>
@@ -187,11 +189,11 @@ export function PrimeRateCard({
               .
             </>
           )}
-        </div>
+        </p>
       )}
 
       {committeeDead && !governmentControlled && (
-        <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+        <p className="mt-4 text-body-sm text-warning">
           The committee board is understaffed: with too few seated members it cannot carry a rate
           motion, so the chair is setting the rate directly.
           {onOpenCommittee && (
@@ -207,34 +209,30 @@ export function PrimeRateCard({
               to restore the committee&apos;s vote.
             </>
           )}
-        </div>
+        </p>
       )}
 
       {(setRateAction
         ? true
         : !committeeSeated &&
           (governmentControlled ? viewerSetsRate : isChair && !chairControlsLocked)) && (
-        <div className="mt-4 space-y-3 border-t border-card-border pt-4">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <label className="shrink-0 text-xs font-medium text-muted">Adjust Rate</label>
-            <span className="text-[11px] leading-snug text-muted">
+        <div className="mt-5 space-y-3 border-t border-card-border pt-4">
+          <div className="flex flex-col gap-1">
+            <label className="shrink-0 text-body font-semibold text-foreground">Adjust rate</label>
+            <span className="text-body-sm leading-snug text-muted">
               Hike max +{MAX_RATE_CHANGE_DELTA.toFixed(2)}% · Cut max -
               {MAX_RATE_CUT_DELTA.toFixed(2)}% · one change per {RATE_CHANGE_COOLDOWN_TURNS} turns
             </span>
           </div>
           {onCooldown && (
-            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-              On cooldown - {cooldownRemaining} more turn
+            <p className="text-body-sm text-warning">
+              On cooldown: {cooldownRemaining} more turn
               {cooldownRemaining === 1 ? "" : "s"} before the next rate change.
-            </div>
+            </p>
           )}
-          {governedRefusal && (
-            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-              {governedRefusal}
-            </div>
-          )}
+          {governedRefusal && <p className="text-body-sm text-warning">{governedRefusal}</p>}
           {effectiveGovernance?.nextDeadline && (
-            <p className="text-[11px] text-muted">
+            <p className="text-body-sm text-muted">
               Next deadline: turn {effectiveGovernance.nextDeadline.turn} (
               {effectiveGovernance.nextDeadline.kind === "meeting_deadline"
                 ? "the vote closes"
@@ -243,19 +241,19 @@ export function PrimeRateCard({
             </p>
           )}
           {isAggressiveCut && (
-            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-              Aggressive cut - this move exceeds the normal ±{MAX_RATE_CHANGE_DELTA.toFixed(2)}%
+            <p className="text-body-sm text-warning">
+              Aggressive cut. This move exceeds the normal ±{MAX_RATE_CHANGE_DELTA.toFixed(2)}%
               threshold and will add{" "}
               <span className="font-semibold">+{AGGRESSIVE_CUT_SCRUTINY} scrutiny</span> to the
               chair immediately.
-            </div>
+            </p>
           )}
           <div className="flex items-center gap-2">
             <button
               onClick={() =>
                 setPendingRate(Math.max(rateFloor, (pendingRate ?? gridBase) - PRIME_RATE_STEP))
               }
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-card-border text-foreground transition-colors hover:bg-card-elevated disabled:opacity-40"
               disabled={
                 submitting ||
                 onCooldown ||
@@ -265,14 +263,14 @@ export function PrimeRateCard({
             >
               -
             </button>
-            <span className="min-w-[4rem] text-center text-lg font-semibold text-foreground">
+            <span className="min-w-[4rem] text-center text-body-lg font-semibold tabular-nums text-foreground">
               {currentRate.toFixed(2)}%
             </span>
             <button
               onClick={() =>
                 setPendingRate(Math.min(rateCeiling, (pendingRate ?? gridBase) + PRIME_RATE_STEP))
               }
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30 transition-colors disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-card-border text-foreground transition-colors hover:bg-card-elevated disabled:opacity-40"
               disabled={
                 submitting ||
                 onCooldown ||
@@ -283,8 +281,8 @@ export function PrimeRateCard({
               +
             </button>
           </div>
-          <p className="text-[11px] text-muted">
-            Allowed range this change: {rateFloor.toFixed(2)}% - {rateCeiling.toFixed(2)}%
+          <p className="text-body-sm text-muted">
+            Allowed range this change: {rateFloor.toFixed(2)}% to {rateCeiling.toFixed(2)}%
             {aggressiveCutThreshold > rateFloor && (
               <>
                 {" "}
@@ -300,7 +298,7 @@ export function PrimeRateCard({
             onChange={(e) => setReason(e.target.value)}
             maxLength={200}
             disabled={onCooldown || governedRefusal !== null}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted/50 focus:border-primary/50 focus:outline-none disabled:opacity-60"
+            className="w-full rounded-md border border-card-border bg-background px-3 py-2 text-body text-foreground placeholder:text-muted focus:border-primary/50 focus:outline-none disabled:opacity-60"
           />
           <button
             onClick={handleSubmit}
@@ -311,13 +309,13 @@ export function PrimeRateCard({
               pendingRate === null ||
               pendingRate === primeRate
             }
-            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="w-full rounded-md bg-primary px-4 py-2 text-body font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {submitting ? "Updating..." : "Confirm Rate Change"}
+            {submitting ? "Updating..." : "Confirm rate change"}
           </button>
-          {rateError && <p className="text-xs text-error">{rateError}</p>}
+          {rateError && <p className="text-body-sm text-error">{rateError}</p>}
         </div>
       )}
-    </div>
+    </CentralBankSection>
   );
 }

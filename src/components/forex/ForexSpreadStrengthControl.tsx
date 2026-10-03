@@ -61,13 +61,13 @@ export function ForexSpreadStrengthControl({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-muted">
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <h2 className="text-body-lg font-semibold text-foreground">
           Spread fee strength {currencyCode ? `· ${currencyCode}` : ""}
-        </h3>
-        <span className="font-mono text-lg font-bold tabular-nums text-foreground">{pct}%</span>
+        </h2>
+        <span className="text-heading font-semibold tabular-nums text-foreground">{pct}%</span>
       </div>
-      <p className="text-xs text-muted">
+      <p className="max-w-3xl text-body-sm text-muted">
         Sets the fee charged when {currencyCode ?? "your currency"} is sold, from{" "}
         {forexSpread.min * 100}% to {forexSpread.max * 100}% of normal. 100% is the default. You can
         change it once every {forexSpread.cooldownTurns} turns.
@@ -84,20 +84,20 @@ export function ForexSpreadStrengthControl({
           onChange={(e) => setValue(Number(e.target.value))}
           className="w-full accent-primary disabled:opacity-50"
         />
-        <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-muted">
+        <div className="mt-1 flex justify-between gap-3 text-body-sm text-muted">
           <span>{forexSpread.min * 100}% · cheaper, more volume</span>
           <span>100%</span>
-          <span>{forexSpread.max * 100}% · pricier, more reserves</span>
+          <span className="text-right">{forexSpread.max * 100}% · pricier, more reserves</span>
         </div>
       </div>
 
-      {/* Macro explainer */}
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-            ▼ Lower (toward {forexSpread.min * 100}%)
+      {/* What each direction does */}
+      <div className="mt-5 grid gap-6 sm:grid-cols-2">
+        <div>
+          <p className="text-body font-semibold text-foreground">
+            Lower, toward {forexSpread.min * 100}%
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-body-sm text-muted">
             Cheaper to trade {currencyCode ?? "your currency"}, so more people trade it. That makes
             it easier to buy and sell in size, and makes other countries more willing to hold it as
             a reserve, which can push it up the leading-currency ranks and steady its value. The
@@ -105,11 +105,11 @@ export function ForexSpreadStrengthControl({
             that keeps costs low to pull money in.
           </p>
         </div>
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-            ▲ Raise (toward {forexSpread.max * 100}%)
+        <div>
+          <p className="text-body font-semibold text-foreground">
+            Raise, toward {forexSpread.max * 100}%
           </p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-body-sm text-muted">
             Pricier to trade {currencyCode ?? "your currency"}, so your central bank earns more fees
             and foreign reserves on each trade. The cost makes it harder for fast money to rush in
             and out. The downside: traders may avoid your currency, so it gets harder to buy and
@@ -119,8 +119,8 @@ export function ForexSpreadStrengthControl({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted">
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-body-sm text-muted">
           {onCooldown
             ? `On cooldown for another ${forexSpread.turnsRemaining} turn(s).`
             : !forexSpread.canEdit
@@ -131,8 +131,8 @@ export function ForexSpreadStrengthControl({
           {submitting ? "Saving…" : "Set strength"}
         </Button>
       </div>
-      {success && <p className="mt-2 text-xs text-success">{success}</p>}
-      {error && <p className="mt-2 text-xs text-error">{error}</p>}
+      {success && <p className="mt-2 text-body-sm text-success">{success}</p>}
+      {error && <p className="mt-2 text-body-sm text-error">{error}</p>}
     </div>
   );
 }

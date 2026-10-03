@@ -6,8 +6,8 @@ import Image from "next/image";
 import BackButton from "@/components/BackButton";
 import { HeroImage } from "@/components/HeroImage";
 import { Avatar } from "@/components/Avatar";
-import { SectionLabel, Skeleton } from "@/components/ui";
-import type { CountryAvailability } from "@/lib/countryAvailability";
+import { Skeleton } from "@/components/ui";
+import type { CountryAvailability, CountryAvailabilityState } from "@/lib/countryAvailability";
 import {
   COUNTRY_CONFIGS,
   getCountryConfig,
@@ -58,23 +58,28 @@ function BetaBanner({ countryName }: { countryName: string }) {
         />
       </svg>
       <div>
-        <p className="text-sm font-semibold text-warning">{countryName} — Beta</p>
-        <p className="mt-0.5 text-xs text-muted">
-          The {countryName} simulation is under active development. Core game mechanics — elections,
-          parliament, and party politics — are being built. Check Discord for updates.
+        <p className="text-body font-semibold text-warning">{countryName} is in beta</p>
+        <p className="mt-0.5 text-body-sm text-muted">
+          The {countryName} simulation is under active development. Core game mechanics, including
+          elections, parliament and party politics, are still being built. Check Discord for
+          updates.
         </p>
       </div>
     </div>
   );
 }
 
-// ── Approval color helper ─────────────────────────────────────────────────────
+/** The country's status as one plain word, the same vocabulary as the world page. */
+const STATUS_WORD: Record<CountryAvailabilityState, string> = {
+  playable: "Active",
+  "beta-access": "Beta access",
+  "econ-only": "Econ-only",
+  hidden: "Under development",
+};
 
-function approvalHex(pct: number): string {
-  if (pct >= 55) return "#22c55e";
-  if (pct >= 40) return "#f59e0b";
-  return "#ef4444";
-}
+const SECTION_HEADING = "text-heading-lg font-semibold tracking-tight text-foreground";
+const NAV_BUTTON =
+  "rounded-md border border-card-border px-4 py-2 text-body font-medium text-foreground transition-colors hover:bg-card-elevated";
 
 // ── National ideology + directory figures ───────────────────────────────────
 
@@ -243,7 +248,17 @@ function useCountryLeadershipData(countryId: CountryId): {
   return { data, loading };
 }
 
-// ── Leader mini-card for stats strip ─────────────────────────────────────────
+// ── Header figures ───────────────────────────────────────────────────────────
+
+/** One figure in the header: a small muted label over a larger value. */
+function HeaderStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-max flex-col">
+      <span className="text-body-sm text-muted">{label}</span>
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
 
 function LeaderStatItem({
   label,
@@ -263,17 +278,16 @@ function LeaderStatItem({
   loading?: boolean;
 }) {
   return (
-    <div className="flex flex-col px-5 py-3 min-w-max">
-      <span className="text-[10px] uppercase tracking-widest text-muted font-medium">{label}</span>
+    <HeaderStat label={label}>
       {loading ? (
-        // Silhouette of the loaded avatar + name row so the card doesn't pop
-        // from an em-dash to content. Same 22px avatar + text-sm line height.
-        <div className="mt-1 flex items-center gap-1.5" aria-hidden>
-          <Skeleton className="h-[22px] w-[22px] rounded-full shrink-0" />
-          <Skeleton className="h-3.5 w-24" />
+        // Silhouette of the loaded avatar + name row so the figure doesn't pop
+        // from a placeholder to content.
+        <div className="flex h-7 items-center gap-2" aria-hidden>
+          <Skeleton className="h-6 w-6 shrink-0 rounded-full" />
+          <Skeleton className="h-4 w-24" />
         </div>
       ) : !leader ? (
-        <span className="mt-1 text-sm font-bold text-muted italic">Vacant</span>
+        <span className="text-body-lg text-muted">Vacant</span>
       ) : leader.characterId ? (
         <Link
           href={
@@ -281,34 +295,68 @@ function LeaderStatItem({
               ? `/politicians/npp/${leader.sequentialId ?? leader.characterId}`
               : `/character/${leader.sequentialId ?? leader.characterId}`
           }
-          className="flex items-center gap-1.5 mt-1 group hover:text-primary transition-colors"
+          className="group flex items-center gap-2"
         >
           <Avatar
             url={leader.avatarUrl}
             name={leader.characterName}
-            size="h-[22px] w-[22px]"
+            size="h-6 w-6"
             borderKey={leader.borderKey}
             tintColor={leader.tintColor}
           />
-          <span className="text-sm font-semibold truncate max-w-[120px] group-hover:text-primary transition-colors">
+          <span className="max-w-[180px] truncate text-body-lg font-semibold text-foreground underline-offset-4 group-hover:underline">
             {leader.characterName}
           </span>
         </Link>
       ) : (
-        <div className="flex items-center gap-1.5 mt-1">
+        <div className="flex items-center gap-2">
           <Avatar
             url={leader.avatarUrl}
             name={leader.characterName}
-            size="h-[22px] w-[22px]"
+            size="h-6 w-6"
             borderKey={leader.borderKey}
             tintColor={leader.tintColor}
           />
-          <span className="text-sm font-semibold truncate max-w-[120px]">
+          <span className="max-w-[180px] truncate text-body-lg font-semibold text-foreground">
             {leader.characterName}
           </span>
         </div>
       )}
-    </div>
+    </HeaderStat>
+  );
+}
+
+/** Government approval. Red only below 40%, where a government is in trouble. */
+function ApprovalStat({
+  countryId,
+  data,
+  loading,
+}: {
+  countryId: CountryId;
+  data: CountryLeadershipData | null;
+  loading: boolean;
+}) {
+  return (
+    <HeaderStat label="Approval">
+      {loading ? (
+        <Skeleton className="h-6 w-14" aria-hidden />
+      ) : data?.approval != null ? (
+        <span
+          className={`text-body-lg font-semibold tabular-nums ${
+            data.approval < 40 ? "text-error" : "text-foreground"
+          }`}
+        >
+          <ApprovalTooltip
+            summary
+            approval={data.approval}
+            modifiers={data.approvalModifiers}
+            href={approvalUrl(countryId)}
+          />
+        </span>
+      ) : (
+        <span className="text-body-lg text-muted">No data</span>
+      )}
+    </HeaderStat>
   );
 }
 
@@ -372,19 +420,8 @@ export default function CountryOverviewClient({
   const counts = useOverviewCounts(countryId);
   const bannerImage = config.overviewHeroImage ?? config.heroImage;
 
-  // Registration pill over the hero photo (always-dark backdrop, so the solid
-  // black shell is photo-anchored, not theme-surface-anchored).
-  const pill =
-    availability.displayState === "econ-only"
-      ? { border: "border-secondary/40", text: "text-secondary", dot: "bg-secondary" }
-      : availability.tone === "active"
-        ? { border: "border-success/40", text: "text-success", dot: "bg-success" }
-        : availability.tone === "beta"
-          ? { border: "border-warning/40", text: "text-warning", dot: "bg-warning" }
-          : { border: "border-white/20", text: "text-white/80", dot: "bg-white/60" };
-
-  // N2 grouped directory — rows from country config, live figures from the
-  // batched counts route; every figure degrades per-row to a plain chevron.
+  // N2 grouped directory: rows from country config, live figures from the
+  // batched counts route; a row whose figure is missing shows just its link.
   // Composition lives in `buildCountryDirectory` so the ordering and the gating
   // can be tested without mounting the page.
   const groups: DirectoryGroup[] = buildCountryDirectory({
@@ -400,221 +437,154 @@ export default function CountryOverviewClient({
     <div className="min-h-screen bg-background pb-16">
       {/* Reading order is the design: identity and vital signs first, then the
           directory into everything this country contains, then the detail.
-          The hero is deliberately short so the directory starts above the fold
-          on a phone. */}
-      <main className="mx-auto max-w-7xl min-w-0 overflow-x-hidden px-6 py-8 sm:py-12 sm:px-8 lg:px-12 space-y-8">
-        {/* Hero header */}
-        <header className="relative overflow-hidden rounded-2xl border border-card-border bg-card shadow-lg">
-          {/* Hero image */}
-          <div className="relative h-[130px] w-full sm:h-[170px]">
+          The photo is deliberately short so the directory starts high on a
+          phone. */}
+      <main className="mx-auto min-w-0 max-w-7xl space-y-12 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+        <div className="space-y-3">
+          <BackButton />
+
+          {/* Header band: the page's one surface change. */}
+          <header className="overflow-hidden rounded-xl border border-card-border bg-card">
             {bannerImage && (
-              <HeroImage
-                src={bannerImage}
-                alt={name}
-                fill
-                className="object-cover object-center"
-                sizes="(max-width: 1280px) 100vw, 1280px"
-                priority
-              />
+              <div className="relative h-[96px] w-full sm:h-[150px]">
+                <HeroImage
+                  src={bannerImage}
+                  alt={name}
+                  fill
+                  className="object-cover object-center"
+                  sizes="(max-width: 1280px) 100vw, 1280px"
+                  priority
+                />
+              </div>
             )}
-            <div
-              className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"
-              aria-hidden
-            />
-            <div className="absolute inset-0 flex flex-col justify-between px-5 sm:px-6 py-4 sm:py-5">
-              <div className="flex items-start gap-3">
-                <BackButton iconOnly />
-                {/* Registration pill — replaces the stats-strip Registration tile.
-                    ml-auto keeps it right-aligned even when BackButton renders nothing. */}
-                <span
-                  className={`ml-auto inline-flex items-center gap-2 rounded-full border bg-black px-3.5 py-1.5 ${pill.border}`}
-                >
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${pill.dot}`} aria-hidden />
-                  <span className={`text-xs font-semibold ${pill.text}`}>{availability.label}</span>
-                </span>
+
+            <div className="px-5 pt-5 sm:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                {config.heroImage && (
+                  <Image
+                    src={config.heroImage}
+                    alt={`${name} flag`}
+                    width={48}
+                    height={32}
+                    className="shrink-0 rounded-sm object-cover"
+                    unoptimized={bypassNextImageOptimization(config.heroImage)}
+                  />
+                )}
+                <h1 className="min-w-0 break-words text-display font-bold tracking-tight text-foreground sm:text-[2.25rem] sm:leading-tight">
+                  {name}
+                </h1>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs text-white/80 drop-shadow italic mb-1">
-                  {config.regionLabelPlural}
-                </p>
-                <div className="flex items-center gap-3">
-                  {config.heroImage && (
-                    <Image
-                      src={config.heroImage}
-                      alt={`${name} flag`}
-                      width={56}
-                      height={40}
-                      className="object-cover rounded shrink-0"
-                      unoptimized={bypassNextImageOptimization(config.heroImage)}
-                    />
-                  )}
-                  <div>
-                    <h1 className="text-xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl lg:text-4xl leading-tight">
-                      {name}
-                    </h1>
-                  </div>
-                </div>
-              </div>
+              <p className="mt-1 text-body text-muted">
+                {governmentTypeLabel} · {STATUS_WORD[availability.displayState]}
+              </p>
             </div>
-          </div>
 
-          {/* Stats strip */}
-          <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
-            {/* Executive */}
-            <LeaderStatItem
-              label={config.executiveTitle}
-              leader={
-                isPresidential ? (leadershipData?.president ?? null) : (leadershipData?.pm ?? null)
-              }
-              loading={leadershipLoading}
-            />
+            {/* Leadership and approval. One row that scrolls sideways on a
+                phone, so the header stays short there. */}
+            <div className="mt-5 flex gap-x-10 gap-y-4 overflow-x-auto border-t border-card-border px-5 py-4 sm:flex-wrap sm:overflow-visible sm:px-6">
+              <LeaderStatItem
+                label={config.executiveTitle}
+                leader={
+                  isPresidential
+                    ? (leadershipData?.president ?? null)
+                    : (leadershipData?.pm ?? null)
+                }
+                loading={leadershipLoading}
+              />
 
-            {/* Presidential systems: upper-chamber leader + Speaker + Approval.
-                US resolves these from the congress leadership routes; other
-                presidential countries (NG, …) from country-scoped presiding
-                officers (Senate President + House Speaker). */}
-            {isPresidential && (
-              <>
-                <LeaderStatItem
-                  label={isUS ? "Senate Leader" : "Senate President"}
-                  leader={leadershipData?.sml ?? null}
-                  loading={leadershipLoading}
-                />
-                <LeaderStatItem
-                  label="Speaker"
-                  leader={leadershipData?.speaker ?? null}
-                  loading={leadershipLoading}
-                />
-                <div className="flex flex-col px-5 py-3 min-w-max">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                    Approval
-                  </span>
-                  {leadershipLoading ? (
-                    <span className="text-base font-bold text-muted">—</span>
-                  ) : leadershipData?.approval != null ? (
-                    <span
-                      className="text-base font-bold tabular-nums"
-                      style={{ color: approvalHex(leadershipData.approval) }}
-                    >
-                      <ApprovalTooltip
-                        summary
-                        approval={leadershipData.approval}
-                        modifiers={leadershipData.approvalModifiers}
-                        href={approvalUrl(countryId)}
-                      />
-                    </span>
-                  ) : (
-                    <span className="text-base font-bold text-muted">—</span>
-                  )}
-                </div>
-              </>
-            )}
+              {/* Presidential systems: upper-chamber leader + Speaker + Approval.
+                  US resolves these from the congress leadership routes; other
+                  presidential countries (NG, …) from country-scoped presiding
+                  officers (Senate President + House Speaker). */}
+              {isPresidential && (
+                <>
+                  <LeaderStatItem
+                    label={isUS ? "Senate leader" : "Senate president"}
+                    leader={leadershipData?.sml ?? null}
+                    loading={leadershipLoading}
+                  />
+                  <LeaderStatItem
+                    label="Speaker"
+                    leader={leadershipData?.speaker ?? null}
+                    loading={leadershipLoading}
+                  />
+                </>
+              )}
 
-            {/* Head of State + PM + Approval. Monarchies (UK/JP) render the
-                imperial head of state; other non-presidential systems (CN
-                President of the PRC, IE Uachtarán, the Warsaw Pact council
-                chairmanships) render their office-based ceremonial head of state.
+              {/* Head of state for non-presidential systems. Monarchies (UK/JP)
+                  render the imperial head of state; other non-presidential
+                  systems (CN President of the PRC, IE Uachtarán, the Warsaw Pact
+                  council chairmanships) render their office-based ceremonial head
+                  of state.
 
-                A country with NO head-of-state office renders no row at all. It
-                used to fall through to "Vacant", which asserted a vacancy in an
-                office that does not exist — a player asked why East Germany's head
-                of state was vacant when its ruling party plainly had a chair. */}
-            {!isPresidential && (
-              <>
-                {governmentType === "parliamentaryMonarchy" ? (
+                  A country with NO head-of-state office renders no figure at all.
+                  It used to fall through to "Vacant", which asserted a vacancy in
+                  an office that does not exist: a player asked why East Germany's
+                  head of state was vacant when its ruling party plainly had a
+                  chair. */}
+              {!isPresidential &&
+                (governmentType === "parliamentaryMonarchy" ? (
                   <ImperialHeadOfState countryId={countryId} />
                 ) : hasHeadOfStateOffice ? (
                   <LeaderStatItem
-                    label="Head of State"
+                    label="Head of state"
                     leader={leadershipData?.headOfState ?? null}
                     loading={leadershipLoading}
                   />
-                ) : null}
-                <div className="flex flex-col px-5 py-3 min-w-max">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                    Approval
-                  </span>
-                  {leadershipLoading ? (
-                    <span className="text-base font-bold text-muted">—</span>
-                  ) : leadershipData?.approval != null ? (
-                    <span
-                      className="text-base font-bold tabular-nums"
-                      style={{ color: approvalHex(leadershipData.approval) }}
-                    >
-                      <ApprovalTooltip
-                        summary
-                        approval={leadershipData.approval}
-                        modifiers={leadershipData.approvalModifiers}
-                        href={approvalUrl(countryId)}
-                      />
-                    </span>
-                  ) : (
-                    <span className="text-base font-bold text-muted">—</span>
-                  )}
-                </div>
-              </>
-            )}
+                ) : null)}
 
-            {/* Government Type */}
-            <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Government Type
-              </span>
-              <span className="text-base font-bold text-foreground">{governmentTypeLabel}</span>
+              <ApprovalStat
+                countryId={countryId}
+                data={leadershipData}
+                loading={leadershipLoading}
+              />
             </div>
-          </div>
-        </header>
+          </header>
+        </div>
 
-        {/* Beta banner, kept directly under the hero, because it changes how
+        {/* Beta banner, kept directly under the header, because it changes how
             everything below it should be read. */}
         {availability.displayState === "beta-access" && <BetaBanner countryName={name} />}
 
         {/* Explore directory, the reason the page exists. Everything a country
             contains is one tap from here, each entry carrying a live figure so
             the list answers "anything happening?" as well as "where do I go?" */}
-        <div>
-          <SectionLabel className="mb-4">Explore {name}</SectionLabel>
+        <section>
+          <h2 className={`${SECTION_HEADING} mb-4`}>Explore {name}</h2>
           <ExploreDirectory groups={groups} />
-        </div>
+        </section>
 
         {/* Descriptor blurb */}
-        <p className="text-lg text-muted max-w-3xl leading-relaxed">{config.descriptor}</p>
+        <p className="max-w-3xl text-body-lg leading-relaxed text-muted">{config.descriptor}</p>
 
-        {/* National Ideology band: equal-weight axes over implemented national laws */}
+        {/* National ideology: equal-weight axes over implemented national laws */}
         <NationalIdeologyBand countryId={countryId} data={axesData} loading={axesLoading} />
 
-        {/* One-party-state regime stability — short-circuits to null for
-            countries whose runtime governmentType isn't onePartyState. */}
+        {/* One-party-state regime stability. Renders nothing for countries
+            whose runtime governmentType isn't onePartyState. */}
         <div>
           <RegimeStabilityPanel countryCode={countryId} />
         </div>
 
-        {/* Sovereign debt market signal — Phase 2 read-only validation surface.
-            Phase 9 will polish placement / styling alongside the full
-            sovereign-default UI surface. */}
-        <div>
-          <SectionLabel className="mb-4">Sovereign debt</SectionLabel>
+        {/* Sovereign debt market signal: the read-only validation surface for
+            the sovereign-default system. */}
+        <section>
+          <h2 className={`${SECTION_HEADING} mb-4`}>Sovereign debt</h2>
           <div className="space-y-3">
             <SovereignCrisisDecisionPanel countryCode={countryId} />
             <SovereignRecoveryProgressPanel countryCode={countryId} />
             <BondMarketDemandWidget countryCode={countryId} />
           </div>
-        </div>
+        </section>
 
         {/* Footer nav */}
-        <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-card-border/40">
-          <Link
-            href="/world"
-            className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
-          >
-            ← Back to World
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/world" className={NAV_BUTTON}>
+            Back to World
           </Link>
           {countryId === COUNTRY_CONFIGS.US.id && (
-            <Link
-              href="/dashboard"
-              className="rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
-            >
-              Go to Dashboard →
+            <Link href="/dashboard" className={NAV_BUTTON}>
+              Go to dashboard
             </Link>
           )}
           {countryId === COUNTRY_CONFIGS.UK.id && (
@@ -622,9 +592,9 @@ export default function CountryOverviewClient({
               href="https://discord.gg/DmF8zJJuqN"
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
+              className={NAV_BUTTON}
             >
-              Follow UK Updates on Discord →
+              Follow UK updates on Discord
             </a>
           )}
         </div>

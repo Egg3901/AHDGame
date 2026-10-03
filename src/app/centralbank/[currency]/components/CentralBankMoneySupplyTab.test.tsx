@@ -162,7 +162,7 @@ it.each(["liquidity_injection", "treasury_advance", "qe", "qt"])(
     const firstBody = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(firstBody.operationId).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Execute operation/i }));
-    await screen.findByText(new RegExp(`${type.replaceAll("_", " ").toUpperCase()} completed`));
+    await screen.findByText(new RegExp(`^${type.replaceAll("_", " ")} completed`, "i"));
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).operationId).toBe(firstBody.operationId);
     fireEvent.change(
       screen.getByPlaceholderText(type === "qe" || type === "qt" ? "Bond units" : "Amount (USD)"),

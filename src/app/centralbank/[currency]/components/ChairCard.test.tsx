@@ -28,7 +28,7 @@ const baseProps = {
 };
 
 describe("ChairCard", () => {
-  it("renders the Autonomous Chair (AI) badge and plain-text name when chairMode === 'npp'", () => {
+  it("renders the autonomous chair (AI) label and plain-text name when chairMode === 'npp'", () => {
     render(
       <ChairCard
         {...baseProps}
@@ -41,7 +41,7 @@ describe("ChairCard", () => {
       />
     );
     expect(screen.getByText("Technocrat Alpha")).toBeTruthy();
-    expect(screen.getByText("Autonomous Chair (AI)")).toBeTruthy();
+    expect(screen.getByText("Autonomous chair (AI)")).toBeTruthy();
     expect(screen.getByTestId("avatar").getAttribute("data-avatar-url")).toBe(
       "/portraits/technocrat.png"
     );
@@ -61,7 +61,7 @@ describe("ChairCard", () => {
       />
     );
     expect(screen.getByText("Alex Smith")).toBeTruthy();
-    expect(screen.queryByText("Autonomous Chair (AI)")).toBeNull();
+    expect(screen.queryByText("Autonomous chair (AI)")).toBeNull();
     expect(screen.getByRole("link", { name: "Alex Smith" })).toBeTruthy();
   });
 
@@ -78,7 +78,7 @@ describe("ChairCard", () => {
       />
     );
     expect(screen.getByText("Alex Smith")).toBeTruthy();
-    expect(screen.queryByText("Autonomous Chair (AI)")).toBeNull();
+    expect(screen.queryByText("Autonomous chair (AI)")).toBeNull();
     expect(screen.getByRole("link", { name: "Alex Smith" })).toBeTruthy();
   });
 
@@ -110,6 +110,6 @@ describe("ChairCard", () => {
     expect(screen.getByText("Accept appointment")).toBeTruthy();
     expect(screen.getByText("Decline")).toBeTruthy();
     expect(screen.queryByText("Hanna Technocrat")).toBeNull();
-    expect(screen.queryByText("Autonomous Chair (AI)")).toBeNull();
+    expect(screen.queryByText("Autonomous chair (AI)")).toBeNull();
   });
 });
