@@ -188,7 +188,8 @@ export type ElectionType =
   | "dail"
   | "seanad"
   | "uachtaran"
-  | "localCouncil";
+  | "localCouncil"
+  | "nationalAssembly";
 
 export interface ElectionDetail {
   id: string;
