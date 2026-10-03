@@ -33,13 +33,7 @@ import { successorProxiesForYear } from "@/components/landing/countryTiers";
 import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorld";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
-import {
-  BroadcastBackdrop,
-  BroadcastHeadline,
-  BroadcastKicker,
-  BroadcastTicker,
-  BroadcastTierKey,
-} from "./BroadcastHero";
+import { BroadcastBackdrop, BroadcastHeadline, BroadcastTierKey } from "./BroadcastHero";
 import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import type { GovernmentType } from "@/lib/constants/countries";
 import type { EraNation, EraTileKey } from "@/components/landing/eraThemes";
@@ -518,8 +512,8 @@ export function SandboxHome({
       <div
         id="top"
         className={`pointer-events-none relative z-10 flex h-[100svh] min-h-[560px] flex-col justify-center ${
-          // Centre the copy in the space above the ticker, not behind it.
-          broadcast ? "pb-[calc(12vh+3.75rem)]" : ""
+          // Centre the copy in the space above the tier key, not behind it.
+          broadcast ? "pb-[calc(12vh+1.5rem)]" : ""
         }`}
       >
         {/* Hero copy — fades out of the way during the idle crisis showcase,
@@ -533,7 +527,6 @@ export function SandboxHome({
             <CrtCountdown remaining={countdown} />
             {broadcast ? (
               <>
-                <BroadcastKicker kicker={broadcast.kicker} dateline={broadcast.dateline} />
                 <BroadcastHeadline
                   text={eraConfig.heroHeadline}
                   year={eraConfig.year}
@@ -592,9 +585,8 @@ export function SandboxHome({
           <span className="block h-5 w-[1px] animate-pulse bg-muted/60" />
         </div>
 
-        {/* The crawl sits just above the drawer's 12vh overlap, so it is the
-            last thing in the first viewport. It stays up through the idle
-            showcase, the way a crawl outlasts the segment over it. */}
+        {/* The tier key sits just above the drawer's 12vh overlap, so it is
+            the last thing in the first viewport. */}
         {broadcast && (
           <div className="absolute inset-x-0 bottom-[calc(12vh+1rem)]">
             <div className="mx-auto w-full max-w-7xl px-5 sm:px-8">
@@ -602,7 +594,6 @@ export function SandboxHome({
                 hidden={showcaseActive}
                 backgroundIsSimulated={Boolean(backgroundMacroFeatureIds?.length)}
               />
-              <BroadcastTicker label={broadcast.tickerLabel} items={broadcast.ticker} />
             </div>
           </div>
         )}

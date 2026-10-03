@@ -29,7 +29,7 @@ export type EraNation = {
 /** Where a headline was filed from. */
 export type BroadcastPlace = { name: string; lonLat: readonly [number, number] };
 
-/** One crawl item on the broadcast lander's news ticker. */
+/** One of the year's headlines. The globe's uplinks name its place and date. */
 export type BroadcastTickerItem = {
   /** Short dateline, e.g. "25 Dec". Rendered uppercase. */
   date: string;
@@ -45,13 +45,7 @@ export type BroadcastTickerItem = {
  * either has this or it doesn't; the two looks never stack.
  */
 export type BroadcastLanderConfig = {
-  /** Red block of the hero kicker. */
-  kicker: string;
-  /** Dateline beside the kicker. */
-  dateline: string;
-  /** Label block at the left edge of the ticker. */
-  tickerLabel: string;
-  /** Crawl items, oldest first. Their places are the satellites' datelines. */
+  /** The year's headlines, oldest first. Their places are the satellites' datelines. */
   ticker: readonly BroadcastTickerItem[];
   /**
    * Map feature ids of a state that has just broken up. Their merged outline is
@@ -418,9 +412,6 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     // first frame and the UK's chip clears the hero copy.
     initialRotation: [-24, -42, 0],
     broadcast: {
-      kicker: "Special report",
-      dateline: "Moscow · 25 Dec 1991",
-      tickerLabel: "1991",
       ticker: TICKER_1991,
       dissolvedStateFeatureIds: SOVIET_REPUBLIC_FEATURE_IDS,
       orbitLabel: "MIR",
