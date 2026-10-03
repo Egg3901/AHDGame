@@ -24,7 +24,7 @@ import {
 import { WP_BASE_COHESION, WP_MEMBERS, WP_TREATY_FLOOR } from "./warsawPact";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 const ACCENT = "#dc2626";
 
 /** Warsaw Pact Command (East) — STAVKA's unified-command force-commitment console. */

@@ -19,7 +19,7 @@ import { ORGS, ORG_ORDER } from "./orgs";
 import { OrgsForcesTab, type Reaction, type ViewerCommit } from "./OrgsForcesTab";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 const TABS: [string, string][] = [
   ["overview", "OVERVIEW"],

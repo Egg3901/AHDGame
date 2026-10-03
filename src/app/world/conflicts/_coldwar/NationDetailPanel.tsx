@@ -1,7 +1,7 @@
 import { BLOC, nationActions, type BlocId, type BlocSide, type Nation } from "./blocs";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 function benefitsFor(bloc: BlocId): { k: string; v: string }[] {
   if (bloc === "west")
