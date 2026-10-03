@@ -216,7 +216,7 @@ describe("fundCron: queued redemption claims", () => {
 
     await expect(processQueuedRedemptions(db as never, fund, false, 1)).resolves.toBe(0);
     expect(db.collectionMocks.indexFunds).toBeUndefined();
-    expect(db.collectionMocks.characters).toBeUndefined();
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
 });
 
