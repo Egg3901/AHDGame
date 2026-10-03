@@ -562,7 +562,7 @@ export function SharePurchaseAtMarketView({
           {isCeo && !sellAsCorp && myShares > 0 && quantity === myShares && (
             <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-2.5 text-xs text-error">
               You are the CEO. Selling all {myShares.toLocaleString("en-US")} of your remaining
-              shares will remove you as CEO — you&apos;ll need to be re-appointed to become CEO
+              shares will remove you as CEO. You&apos;ll need to be re-appointed to become CEO
               again. You&apos;ll be asked to confirm before this goes through.
             </div>
           )}

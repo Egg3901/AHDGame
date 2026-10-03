@@ -60,7 +60,7 @@ export function AppointSubsidiaryCeoModal({
     >
       <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-5 space-y-4">
         <h2 id={titleId} className="text-base font-bold text-foreground">
-          Appoint CEO — {corporationName}
+          Appoint CEO: {corporationName}
         </h2>
         <p className="text-xs text-muted">
           A subsidiary must be operated by a different player than the parent, or by an NPP

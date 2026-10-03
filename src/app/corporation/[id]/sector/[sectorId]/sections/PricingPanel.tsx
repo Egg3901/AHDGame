@@ -101,13 +101,13 @@ export default function PricingPanel({
               Share of this sector&apos;s output that found a buyer last turn, blended across every
               commodity it makes and weighted by output rate. Cheaper sellers fill first. A sector
               with two outputs can sell one out completely and the other hardly at all and still
-              land in the middle here — see Commodity Flows for the per-output rates.
+              land in the middle here. See Commodity Flows for the per-output rates.
             </p>
           </InfoTooltip>
         )}
       </div>
       <p className="text-xs text-muted mb-4">
-        Your posted price relative to the market. Demand fills the cheapest sellers first — undercut
+        Your posted price relative to the market. Demand fills the cheapest sellers first. Undercut
         to sell out ahead of rivals, or skim for margin and risk holding unsold output.
       </p>
 
@@ -124,7 +124,7 @@ export default function PricingPanel({
                 p < 0
                   ? "Undercut the market: thinner margin per unit, but your order book fills first."
                   : p > 0
-                    ? "Premium: more revenue per unit sold, but you sell last — in a glut this output can go unsold."
+                    ? "Premium: more revenue per unit sold, but you sell last, so in a glut this output can go unsold."
                     : "Sell at the market price."
               }
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium tabular-nums transition-colors disabled:opacity-50 ${
@@ -202,7 +202,7 @@ export default function PricingPanel({
                 : "text-error"
           }`}
         >
-          {pricing.clearingFactor == null ? "—" : `×${pricing.clearingFactor.toFixed(2)}`}
+          {pricing.clearingFactor == null ? "n/a" : `×${pricing.clearingFactor.toFixed(2)}`}
         </span>
       </div>
 
