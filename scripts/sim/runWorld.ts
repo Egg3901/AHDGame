@@ -85,6 +85,7 @@ interface SimRunDoc {
   lastMessage?: string;
   lastWarnings?: string[];
   health?: GameHealthSummary | null;
+  openingLedgerSnapshot?: import("./openingLedgerSnapshot").OpeningLedgerSnapshot;
   /** Pinned-source identity (#1966): requested pin plus the exact code that
    * executed this run. Proves the SHA in the experiment report. */
   source?: {
@@ -1210,13 +1211,20 @@ async function main() {
 
   const gameStateBefore = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const startTurn = (gameStateBefore?.currentTurn as number | undefined) ?? 0;
-  const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
-    await import("./sectorInvestmentSnapshot");
-  if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
-  const targetTurn = startTurn + turns;
-  log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
-
   try {
+    const { prepareOpeningLedgerSnapshot } = await import("./openingLedgerSnapshot");
+    const openingLedgerSnapshot = await prepareOpeningLedgerSnapshot(db, startTurn);
+    await simRuns.updateOne({ _id: runId }, { $set: { openingLedgerSnapshot } });
+    log(
+      `Opening cash snapshot at turn ${startTurn}: ${openingLedgerSnapshot.accounts} accounts ` +
+        `(${openingLedgerSnapshot.reused ? "reused" : "captured"})`
+    );
+    const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
+      await import("./sectorInvestmentSnapshot");
+    if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
+    const targetTurn = startTurn + turns;
+    log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
+
     let lastTurn = startTurn;
     let iterations = 0;
     let skippedSinceMs: number | null = null;
