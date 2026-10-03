@@ -43,7 +43,8 @@ export async function depositNppSavings(
       $inc: { funds: -amount, [savingsField]: amount },
       $set: { updatedAt: new Date() },
     },
-    { returnDocument: "after" }
+    // Only the two balances are read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { funds: 1, [savingsField]: 1 } }
   );
   if (!updated) {
     return { ok: false, reason: "Insufficient liquid funds for deposit." };
@@ -75,7 +76,8 @@ export async function withdrawNppSavings(
       $inc: { funds: amount, [savingsField]: -amount },
       $set: { updatedAt: new Date() },
     },
-    { returnDocument: "after" }
+    // Only the two balances are read back; an NPP document is ~28 KB.
+    { returnDocument: "after", projection: { funds: 1, [savingsField]: 1 } }
   );
   if (!updated) {
     return { ok: false, reason: "Insufficient savings for withdrawal." };

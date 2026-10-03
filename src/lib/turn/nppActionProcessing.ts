@@ -7,6 +7,8 @@
  * action cap are the throttle, not a per-action discount).
  */
 
+import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
+import { equityPoolCurrency } from "@/lib/equities/marketPool";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db, ObjectId } from "mongodb";
 import type { NPP, GameConfig, PoliticalParty, Bond, StatePartyOrg } from "@/lib/db/types";
@@ -922,6 +924,21 @@ async function investNppStockSurplus(
   }
 }
 
+/** Partitions (countries, currencies) whose sweep work runs at once. */
+const NPP_SWEEP_PARTITION_CONCURRENCY = 8;
+
+/** Group items by key, keeping both first-seen key order and item order. */
+export function groupInOrder<T>(items: readonly T[], keyOf: (item: T) => string): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return [...groups.values()];
+}
+
 /**
  * v3 party-org-building sweep — the missing counteraction to
  * `processPartyOrgTurn`'s unconditional decay (see constant comment above).
@@ -980,6 +997,8 @@ async function buildNppPartyOrgSurplus(
   const sweepCountries = [...new Set(rows.map((r) => r.countryId as CountryId))];
   const sweepCache = await preloadNppBuildOrgSweepCache(db, sweepCountries);
 
+  const builds: { actorId: ObjectId; countryId: CountryId; stateId: string; partySeq: number }[] =
+    [];
   for (const row of rows) {
     const countryId = row.countryId as CountryId;
     const partySeq = Number(row.partyId);
@@ -1007,16 +1026,30 @@ async function buildNppPartyOrgSurplus(
     const { campaignAggressionMult } = careerArchetypeModifiersContinuous(actor.personality);
     if (rng() >= NPP_BUILD_ORG_BASE_PROBABILITY * campaignAggressionMult) continue;
 
-    await nppBuildPartyOrg(
-      db,
-      actor._id,
-      countryId,
-      row.stateId,
-      partySeq,
-      currentTurn,
-      sweepCache
-    );
+    builds.push({ actorId: actor._id, countryId, stateId: row.stateId, partySeq });
   }
+
+  // Every draw above reads only preloaded data, so the decisions are fixed
+  // before anything is written. A build reads and writes only its own
+  // country's parties, state org rows, pressure and treasuries, so countries
+  // run concurrently while each keeps the original row order.
+  await boundedParallelMap(
+    groupInOrder(builds, (build) => build.countryId),
+    NPP_SWEEP_PARTITION_CONCURRENCY,
+    async (countryBuilds) => {
+      for (const build of countryBuilds) {
+        await nppBuildPartyOrg(
+          db,
+          build.actorId,
+          build.countryId,
+          build.stateId,
+          build.partySeq,
+          currentTurn,
+          sweepCache
+        );
+      }
+    }
+  );
 }
 
 /**
@@ -1089,6 +1122,14 @@ async function sellNppStockSurplus(
   const rng = makeSeededRng(`npp-stock-sell:${currentTurn}${NPP_ACTION_RNG_SALT}`);
   const fxByCcy = await loadFxRatesByCurrency(db);
 
+  const sales: {
+    corp: (typeof corps)[number];
+    holding: NonNullable<(typeof corps)[number]["shareholders"]>[number];
+    nppId: ObjectId;
+    countryId: CountryId;
+    sharesToSell: number;
+    homeRate: number;
+  }[] = [];
   for (const corp of corps) {
     // Sell pressure now responds to price. Above fundamentals, NPPs take profits;
     // underwater, they sit on the position. That's loss aversion, and it's what
@@ -1116,26 +1157,41 @@ async function sellNppStockSurplus(
       const sharesToSell = Math.floor(holding.shares * Math.min(sellFraction, 1));
       if (sharesToSell < 1) continue;
 
-      const countryId = countryById.get(holding.nppId.toString());
+      const countryId = countryById.get(holding.nppId.toString()) as CountryId | undefined;
       if (!countryId) continue;
       const homeRate = fxByCcy.get(COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD") ?? 1;
 
-      // Proceeds credit nppInvestmentCashAnchor (the forex account), not funds.
-      const result = await nppSellShares(
-        db,
-        { _id: holding.nppId, countryId },
-        corp._id,
-        sharesToSell,
-        currentTurn,
-        homeRate,
-        corp
-      );
-      if (result.ok) {
-        corp.publicFloat = (corp.publicFloat ?? 0) + sharesToSell;
-        holding.shares -= sharesToSell;
-      }
+      sales.push({ corp, holding, nppId: holding.nppId, countryId, sharesToSell, homeRate });
     }
   }
+
+  // Each draw above reads only the preloaded book, so the sales are fixed
+  // before any executes. A sale's price and settlement read and write its
+  // currency's equity pool, the corporation and its NPP holder, and NPPs trade
+  // only in their home currency, so currencies run concurrently while each
+  // keeps the original order.
+  await boundedParallelMap(
+    groupInOrder(sales, (sale) => equityPoolCurrency(sale.corp)),
+    NPP_SWEEP_PARTITION_CONCURRENCY,
+    async (currencySales) => {
+      for (const { corp, holding, nppId, countryId, sharesToSell, homeRate } of currencySales) {
+        // Proceeds credit nppInvestmentCashAnchor (the forex account), not funds.
+        const result = await nppSellShares(
+          db,
+          { _id: nppId, countryId },
+          corp._id,
+          sharesToSell,
+          currentTurn,
+          homeRate,
+          corp
+        );
+        if (result.ok) {
+          corp.publicFloat = (corp.publicFloat ?? 0) + sharesToSell;
+          holding.shares -= sharesToSell;
+        }
+      }
+    }
+  );
 }
 
 /**
