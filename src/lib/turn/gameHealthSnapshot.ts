@@ -140,14 +140,12 @@ export async function processGameHealthSnapshot(
   const cadence = healthConfig?.integrityCheckCadenceTurns ?? 1;
   const shouldRunIntegrity = turn % cadence === 0;
 
-  // Run integrity checks if cadence matches
-  let dataIntegrity: DataIntegrityResult | null = null;
-  if (shouldRunIntegrity) {
-    dataIntegrity = await runIntegrityChecks(db, turn, cadence);
-  }
-
-  // Collect population and economy stats in parallel
-  const [population, economy] = await Promise.all([
+  // Integrity checks (when the cadence matches), population and economy stats
+  // are all read-only and independent, so they are collected in parallel.
+  const [dataIntegrity, population, economy] = await Promise.all([
+    shouldRunIntegrity
+      ? runIntegrityChecks(db, turn, cadence)
+      : Promise.resolve<DataIntegrityResult | null>(null),
     collectPopulationStats(db),
     collectEconomyStats(db),
   ]);
@@ -183,27 +181,136 @@ async function runIntegrityChecks(
 ): Promise<DataIntegrityResult> {
   const issues: IntegrityIssue[] = [];
 
-  // 1. Orphaned candidates — electionCandidates where electionId has no matching election
-  // (#2166): project to the join key before the $lookup so full candidate
-  // documents never cross the join. The count is unchanged.
-  const orphanedCandidates = await db
-    .collection("electionCandidates")
-    .aggregate([
-      { $project: { electionId: 1 } },
-      {
-        $lookup: {
-          from: "elections",
-          localField: "electionId",
-          foreignField: "_id",
-          as: "election",
-          // Only existence matters; never materialize the matching documents.
-          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
+  // Every check below is an independent read, so they are issued together and
+  // the issues are then recorded in the fixed check order.
+  const [
+    orphanedCandidates,
+    seatIntegrity,
+    [partiesWithoutHumanMembers, npcBackedParties],
+    membersInDeletedParties,
+    electionsWithoutCandidates,
+    missingFederalBudget,
+    budgetCountryMismatches,
+  ] = await Promise.all([
+    // 1. Orphaned candidates: electionCandidates where electionId has no
+    // matching election (#2166): project to the join key before the $lookup so
+    // full candidate documents never cross the join. The count is unchanged.
+    db
+      .collection("electionCandidates")
+      .aggregate([
+        { $project: { electionId: 1 } },
+        {
+          $lookup: {
+            from: "elections",
+            localField: "electionId",
+            foreignField: "_id",
+            as: "election",
+            // Only existence matters; never materialize the matching documents.
+            pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
+          },
         },
-      },
-      { $match: { election: { $size: 0 } } },
-      { $count: "count" },
-    ])
-    .toArray();
+        { $match: { election: { $size: 0 } } },
+        { $count: "count" },
+      ])
+      .toArray(),
+    // 2. Orphaned officials: electedOfficials where seatId has no matching seat
+    collectSeatIntegrity(db),
+    // 3. Parties with neither human nor active NPC members. memberCount is
+    // the human cache; NPC affiliations use the party sequentialId string.
+    db
+      .collection("politicalParties")
+      .countDocuments({ memberCount: 0 })
+      .then(async (humanless) => {
+        const npcBacked =
+          humanless > 0
+            ? await db
+                .collection("politicalParties")
+                .aggregate<{ count: number }>([
+                  { $match: { memberCount: 0 } },
+                  { $project: { sequentialId: 1, countryId: 1 } },
+                  {
+                    $lookup: {
+                      from: "npps",
+                      let: {
+                        partyId: { $toString: "$sequentialId" },
+                        countryId: { $ifNull: ["$countryId", "US"] },
+                      },
+                      pipeline: [
+                        {
+                          $match: {
+                            retiredAt: null,
+                            $expr: {
+                              $and: [
+                                { $ne: ["$$partyId", null] },
+                                { $eq: ["$party", "$$partyId"] },
+                                { $eq: [{ $ifNull: ["$countryId", "US"] }, "$$countryId"] },
+                              ],
+                            },
+                          },
+                        },
+                        { $project: { _id: 1 } },
+                        { $limit: 1 },
+                      ],
+                      as: "npcMembers",
+                    },
+                  },
+                  { $match: { "npcMembers.0": { $exists: true } } },
+                  { $count: "count" },
+                ])
+                .toArray()
+            : [];
+        return [humanless, npcBacked] as const;
+      }),
+    // 4. Party members referencing deleted parties (#2166): project to the
+    // join key before the $lookup so full member documents never cross the
+    // join. The count is unchanged.
+    db
+      .collection("partyMembers")
+      .aggregate([
+        { $project: { partyId: 1 } },
+        {
+          $lookup: {
+            from: "politicalParties",
+            localField: "partyId",
+            foreignField: "_id",
+            as: "party",
+            // Only existence matters; never materialize the matching documents.
+            pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
+          },
+        },
+        { $match: { party: { $size: 0 } } },
+        { $count: "count" },
+      ])
+      .toArray(),
+    // 5. Active elections with zero candidates (#2166): project to the join
+    // key after the status match so full election documents never cross the
+    // $lookup. The count is unchanged.
+    db
+      .collection("elections")
+      .aggregate([
+        { $match: { status: "active" } },
+        { $project: { _id: 1 } },
+        {
+          $lookup: {
+            from: "electionCandidates",
+            localField: "_id",
+            foreignField: "electionId",
+            as: "candidates",
+            // Only existence matters; never materialize the matching documents.
+            pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
+          },
+        },
+        { $match: { candidates: { $size: 0 } } },
+        { $count: "count" },
+      ])
+      .toArray(),
+    // 7. Countries with a live central bank but no federalBudget document.
+    findCountriesMissingFederalBudget(db),
+    // 8. federalBudget docs whose own `countryId` disagrees with their `_id`.
+    findFederalBudgetCountryMismatches(db),
+  ]);
+
+  // 1. Orphaned candidates
   const orphanedCandidateCount = orphanedCandidates[0]?.count ?? 0;
   if (orphanedCandidateCount > 0) {
     issues.push({
@@ -214,8 +321,7 @@ async function runIntegrityChecks(
     });
   }
 
-  // 2. Orphaned officials — electedOfficials where seatId has no matching seat
-  const seatIntegrity = await collectSeatIntegrity(db);
+  // 2. Orphaned officials
   const orphanedOfficialCount = seatIntegrity.orphanedOfficialCount;
   if (orphanedOfficialCount > 0) {
     issues.push({
@@ -226,49 +332,7 @@ async function runIntegrityChecks(
     });
   }
 
-  // 3. Parties with neither human nor active NPC members. memberCount is
-  // the human cache; NPC affiliations use the party sequentialId string.
-  const partiesWithoutHumanMembers = await db
-    .collection("politicalParties")
-    .countDocuments({ memberCount: 0 });
-  const npcBackedParties =
-    partiesWithoutHumanMembers > 0
-      ? await db
-          .collection("politicalParties")
-          .aggregate<{ count: number }>([
-            { $match: { memberCount: 0 } },
-            { $project: { sequentialId: 1, countryId: 1 } },
-            {
-              $lookup: {
-                from: "npps",
-                let: {
-                  partyId: { $toString: "$sequentialId" },
-                  countryId: { $ifNull: ["$countryId", "US"] },
-                },
-                pipeline: [
-                  {
-                    $match: {
-                      retiredAt: null,
-                      $expr: {
-                        $and: [
-                          { $ne: ["$$partyId", null] },
-                          { $eq: ["$party", "$$partyId"] },
-                          { $eq: [{ $ifNull: ["$countryId", "US"] }, "$$countryId"] },
-                        ],
-                      },
-                    },
-                  },
-                  { $project: { _id: 1 } },
-                  { $limit: 1 },
-                ],
-                as: "npcMembers",
-              },
-            },
-            { $match: { "npcMembers.0": { $exists: true } } },
-            { $count: "count" },
-          ])
-          .toArray()
-      : [];
+  // 3. Parties with neither human nor active NPC members
   const partiesWithoutMembers = Math.max(
     0,
     partiesWithoutHumanMembers - (npcBackedParties[0]?.count ?? 0)
@@ -283,26 +347,6 @@ async function runIntegrityChecks(
   }
 
   // 4. Party members referencing deleted parties
-  // (#2166): project to the join key before the $lookup so full member
-  // documents never cross the join. The count is unchanged.
-  const membersInDeletedParties = await db
-    .collection("partyMembers")
-    .aggregate([
-      { $project: { partyId: 1 } },
-      {
-        $lookup: {
-          from: "politicalParties",
-          localField: "partyId",
-          foreignField: "_id",
-          as: "party",
-          // Only existence matters; never materialize the matching documents.
-          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
-        },
-      },
-      { $match: { party: { $size: 0 } } },
-      { $count: "count" },
-    ])
-    .toArray();
   const membersInDeletedCount = membersInDeletedParties[0]?.count ?? 0;
   if (membersInDeletedCount > 0) {
     issues.push({
@@ -314,27 +358,6 @@ async function runIntegrityChecks(
   }
 
   // 5. Active elections with zero candidates
-  // (#2166): project to the join key after the status match so full
-  // election documents never cross the $lookup. The count is unchanged.
-  const electionsWithoutCandidates = await db
-    .collection("elections")
-    .aggregate([
-      { $match: { status: "active" } },
-      { $project: { _id: 1 } },
-      {
-        $lookup: {
-          from: "electionCandidates",
-          localField: "_id",
-          foreignField: "electionId",
-          as: "candidates",
-          // Only existence matters; never materialize the matching documents.
-          pipeline: [{ $project: { _id: 1 } }, { $limit: 1 }],
-        },
-      },
-      { $match: { candidates: { $size: 0 } } },
-      { $count: "count" },
-    ])
-    .toArray();
   const electionsNoCandidatesCount = electionsWithoutCandidates[0]?.count ?? 0;
   if (electionsNoCandidatesCount > 0) {
     issues.push({
@@ -353,7 +376,6 @@ async function runIntegrityChecks(
   // but a country still showing up here means the self-heal itself is failing
   // (e.g. no seed config for that country/preset) — surface it as an error
   // rather than let it go silent again.
-  const missingFederalBudget = await findCountriesMissingFederalBudget(db);
   if (missingFederalBudget.length > 0) {
     issues.push({
       category: "missingFederalBudget",
@@ -369,7 +391,6 @@ async function runIntegrityChecks(
   // treasuryTurn/inflationRecalc use, so those keep working, but any
   // consumer that derives country from `budget.countryId` (sovereign.ts,
   // fiscalYear.ts, corporationDetail.ts, ...) would misattribute the budget.
-  const budgetCountryMismatches = await findFederalBudgetCountryMismatches(db);
   if (budgetCountryMismatches.length > 0) {
     issues.push({
       category: "federalBudgetCountryMismatch",
@@ -497,6 +518,7 @@ async function collectPopulationStats(db: Db): Promise<PopulationStats> {
     partiesCount,
     activeElections,
     filledSeats,
+    enabledIds,
   ] = await Promise.all([
     db.collection("users").countDocuments({ banned: { $ne: true } }),
     db.collection("characters").countDocuments(),
@@ -505,6 +527,8 @@ async function collectPopulationStats(db: Db): Promise<PopulationStats> {
     db.collection("politicalParties").countDocuments(),
     db.collection("elections").countDocuments({ status: "active" }),
     db.collection("electedOfficials").countDocuments(),
+    // Simulated roster for the per-country breakdown below.
+    getSimulatedCountryIds(db),
   ]);
 
   const emptySeats = Math.max(0, totalSeats - filledSeats);
@@ -521,7 +545,6 @@ async function collectPopulationStats(db: Db): Promise<PopulationStats> {
   // exact roster it had while a sandbox that enables extra countries gets them
   // instrumented. Flipping the global config instead would have been wrong: it
   // is era-blind, and would put the USSR and East Germany on a 2019 roster.
-  const enabledIds = await getSimulatedCountryIds(db);
   const enabledSet = new Set<string>(enabledIds);
   const activeCountries = COUNTRY_ORDER.filter(
     (id) => enabledSet.has(id) || COUNTRY_CONFIGS[id].status === "active"
@@ -605,19 +628,42 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   // Read central banks for interest rates, and stateMetrics national docs for GDP/economic data.
   // National metrics are stored as stateMetrics docs with national scope IDs (e.g., "federal" for US).
   // (#2166): only the join key and the rate flow into the snapshot.
-  const centralBanks = await db
-    .collection<CentralBank>("centralBanks")
-    .find({}, { projection: { countryId: 1, primeRate: 1 } })
-    .toArray();
+  // The four discovery reads are independent, so they are issued together.
+  // ALL federalBudget docs are read once here: the discovery keys feed the
+  // country set, and the same docs (with the inflation rate) feed the byCountry
+  // loop below. The Eastern-bloc stubs (PL/HU/CS/RO/BG/YU) have a federalBudget
+  // but no national metrics doc, so scoping this read to the NATIONAL_SCOPE ids
+  // would hide them. (#2166): only the discovery key and the inflation rate are
+  // read.
+  const [centralBanks, simulatedIds, fxRows, budgetDocs] = await Promise.all([
+    db
+      .collection<CentralBank>("centralBanks")
+      .find({}, { projection: { countryId: 1, primeRate: 1 } })
+      .toArray(),
+    // Every country the engine simulates, not just those with a national
+    // metrics doc. The per-country aggregations below all $group by countryId
+    // anyway, so widening the match simply lets budget-only countries (the
+    // Eastern-bloc stubs) carry real GDP and corporate-revenue figures instead
+    // of zeroes.
+    getSimulatedCountryIds(db),
+    // FX rates, so corporate revenue can be reported in a single comparable unit.
+    db
+      .collection<{ _id: string; rate?: number; currencyCode?: string }>("exchangeRates")
+      .find({}, { projection: { rate: 1, currencyCode: 1 } })
+      .toArray(),
+    db
+      .collection<FederalBudget>("federalBudget")
+      .find({}, { projection: { countryId: 1, "economicFactors.inflationRate": 1 } })
+      .toArray(),
+  ]);
   const centralBankMap = new Map(centralBanks.map((b) => [String(b.countryId ?? b._id), b]));
 
   const nationalIds = Object.keys(NATIONAL_SCOPE);
-  // Every country the engine simulates, not just those with a national metrics
-  // doc. The per-country aggregations below all $group by countryId anyway, so
-  // widening the match simply lets budget-only countries (the Eastern-bloc
-  // stubs) carry real GDP and corporate-revenue figures instead of zeroes.
   const scopedCountryIds = Object.values(NATIONAL_SCOPE) as string[];
-  const simulatedIds = await getSimulatedCountryIds(db);
+  const fxByCurrency = new Map<string, number>(
+    fxRows.map((r) => [String(r.currencyCode ?? r._id), Number(r.rate) || 1])
+  );
+
   // ...AND every country that merely has a budget. The byCountry loop discovers
   // countries from `federalBudget`, so if the $match filters on a NARROWER set
   // than the discovery set, those countries get a row with every aggregate
@@ -625,21 +671,7 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   // gdp=0 and revenue=0 while holding real states and sectors: they have no
   // `countryGameStates.status`, so they fell out of the filter but stayed in
   // the discovery. Filter set and discovery set must be the same set.
-  // FX rates, so corporate revenue can be reported in a single comparable unit.
-  const fxRows = await db
-    .collection<{ _id: string; rate?: number; currencyCode?: string }>("exchangeRates")
-    .find({}, { projection: { rate: 1, currencyCode: 1 } })
-    .toArray();
-  const fxByCurrency = new Map<string, number>(
-    fxRows.map((r) => [String(r.currencyCode ?? r._id), Number(r.rate) || 1])
-  );
-
-  const budgetCountryIds = (
-    await db
-      .collection<FederalBudget>("federalBudget")
-      .find({}, { projection: { countryId: 1 } })
-      .toArray()
-  )
+  const budgetCountryIds = budgetDocs
     .map((b) => String((b as { countryId?: string }).countryId ?? ""))
     .filter(Boolean);
   const countryIds = Array.from(
@@ -649,7 +681,6 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
   // Batch all per-country data in parallel instead of looping individual queries
   const [
     nationalMetricsDocs,
-    budgetDocs,
     bondCounts,
     corpRevenues,
     // NOTE: this destructuring MUST track the Promise.all order below —
@@ -662,16 +693,6 @@ async function collectEconomyStats(db: Db): Promise<EconomyStats> {
       .collection<StateMetrics>("macroMetrics")
       // (#2166): only the gdpGrowth value is read below.
       .find({ _id: { $in: nationalIds } }, { projection: { "economic.gdpGrowth.value": 1 } })
-      .toArray(),
-    db
-      .collection<FederalBudget>("federalBudget")
-      // ALL budgets, not just the NATIONAL_SCOPE ones: the Eastern-bloc stubs
-      // (PL/HU/CS/RO/BG/YU) have a federalBudget but no national metrics doc, and
-      // the byCountry loop below uses this list to discover them. Scoping it to
-      // `budgetIds` made that discovery impossible, so the bloc produced no
-      // economy row and could not be charted individually.
-      // (#2166): only the discovery key and the inflation rate are read below.
-      .find({}, { projection: { countryId: 1, "economicFactors.inflationRate": 1 } })
       .toArray(),
     db
       .collection("bonds")
