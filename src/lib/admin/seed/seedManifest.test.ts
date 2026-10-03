@@ -69,6 +69,38 @@ describe("runtime lifecycle category determines reset selection", () => {
     expect(getPreservedCollectionNames()).not.toContain(name);
   });
 
+  it.each([
+    // Wiki
+    "wikiPages",
+    "wikiTemplates",
+    "wikiReports",
+    "manualOfficeHistory",
+    "politicianOverrides",
+    "eventDefinitions",
+    // Accounts, sessions, bans
+    "users",
+    "unifiedSessions",
+    "bannedIps",
+    "userApiKeys",
+    "userSubscriptions",
+    // Identity and moderation evidence
+    "identityObservations",
+    "altLinks",
+    "altClusters",
+    "suspiciousCharacters",
+    "modAuditLog",
+    "adminLogs",
+    "playerMailReports",
+    "playerContentReports",
+    // Site analytics and staff tooling
+    "siteTrafficPageviews",
+    "codeQualitySnapshots",
+    "apiAccessLog",
+  ])("keeps cross-game collection %s out of the reset sweep", (name) => {
+    expect(getCollectionCategory(name)).toBe("preserved");
+    expect(getRuntimeCollectionNames()).not.toContain(name);
+  });
+
   it("keeps actual world reference and account collections in their own lifecycle", () => {
     expect(getReferenceCollectionNames()).toContain("states");
     expect(getRuntimeCollectionNames()).not.toContain("states");

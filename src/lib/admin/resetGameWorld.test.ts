@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MongoServerError } from "mongodb";
 import { createMockDb, type MockDb, assertSetFields } from "@/lib/test-utils/mockDb";
-import { resetGameWorld, RUNTIME_WIPE_SPECIAL_CASES } from "@/lib/admin/resetGameWorld";
+import {
+  resetGameWorld,
+  PRESERVED_ACTIVITY_LOG_TYPES,
+  RUNTIME_WIPE_SPECIAL_CASES,
+} from "@/lib/admin/resetGameWorld";
 import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
 
 vi.mock("@/lib/admin/bootstrapGameWorld", () => ({
@@ -326,6 +330,66 @@ describe("resetGameWorld", () => {
     // world's rather than the dead world's. What this test pins is the half
     // that stayed here: the blanket sweep must NOT drop it.
     expect(db.collectionMocks.partyCharters.drop).not.toHaveBeenCalled();
+
+    // activityLog: partial delete that keeps the account history rows.
+    expect(db.collectionMocks.activityLog?.deleteMany).toHaveBeenCalledWith({
+      type: { $nin: ["login", "logout", "character_deleted"] },
+    });
+  });
+
+  it.each([true, false])(
+    "keeps login IP history and deletion markers in activityLog (deleteProfiles: %s)",
+    async (deleteProfiles) => {
+      db.collection("activityLog");
+      db.collection("characters");
+      db.collectionMocks.characters.find.mockReturnValue({ toArray: async () => [] });
+
+      await resetGameWorld(db as never, {
+        deleteProfiles,
+        preset: "1991-default",
+        seedHistorical: false,
+      });
+
+      const activityLog = db.collectionMocks.activityLog;
+      expect(activityLog.drop).not.toHaveBeenCalled();
+      expect(activityLog.deleteMany).toHaveBeenCalledTimes(1);
+      const [filter] = activityLog.deleteMany.mock.calls[0];
+      for (const kept of PRESERVED_ACTIVITY_LOG_TYPES) {
+        expect(filter.type.$nin).toContain(kept);
+      }
+      for (const worldType of ["turn_summary", "game_action", "fund_event", "party_change"]) {
+        expect(filter.type.$nin).not.toContain(worldType);
+      }
+    }
+  );
+
+  it("keeps staff and banned accounts through a full reset", async () => {
+    db.collection("users");
+
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "1991-default",
+      seedHistorical: false,
+    });
+
+    const users = db.collectionMocks.users;
+    expect(users.deleteMany).toHaveBeenCalledTimes(1);
+    expect(users.deleteMany).toHaveBeenCalledWith({
+      isAdmin: { $ne: true },
+      role: { $nin: ["admin", "moderator"] },
+      isBanned: { $ne: true },
+    });
+    // Survivors lost every character, so the one-character limit must not
+    // still count the deleted ones.
+    expect(users.updateMany).toHaveBeenCalledWith(
+      {},
+      { $set: { hasCompletedSetup: false, activeCharacterCount: 0 } }
+    );
+    // The surviving counter reset runs after the delete, so it only ever
+    // touches the kept accounts.
+    expect(users.deleteMany.mock.invocationCallOrder[0]).toBeLessThan(
+      users.updateMany.mock.invocationCallOrder.at(-1)!
+    );
   });
 
   it("clears the previous world's per-world progress guards from gameState", async () => {

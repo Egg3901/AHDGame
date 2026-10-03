@@ -21,9 +21,31 @@ export interface PlayerMail {
   createdAt: Date;
 }
 
+/** The reported message as it read when the report was filed. */
+export type PlayerMailSnapshot = Pick<
+  PlayerMail,
+  | "fromCharacterId"
+  | "fromCharacterName"
+  | "fromCharacterSequentialId"
+  | "toUserId"
+  | "toCharacterId"
+  | "toCharacterName"
+  | "toCharacterSequentialId"
+  | "subject"
+  | "body"
+  | "createdAt"
+>;
+
 export interface PlayerMailReport {
   _id: ObjectId;
   mailId: ObjectId;
+  /**
+   * Copy of the reported message. `playerMail` is world state: a reset drops
+   * it, and a message both sides delete is removed outright. The report is
+   * moderation history and has to outlive both. Absent on reports filed
+   * before snapshots existed.
+   */
+  mailSnapshot?: PlayerMailSnapshot;
   reportedByUserId: ObjectId;
   status: "pending" | "dismissed" | "actioned";
   adminNote?: string;
