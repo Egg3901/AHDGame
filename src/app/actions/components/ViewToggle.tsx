@@ -12,10 +12,11 @@ export default function ViewToggle({ viewMode, onViewModeChange }: ViewTogglePro
     <div className="flex items-center rounded-lg border border-card-border bg-card p-0.5">
       <button
         onClick={() => onViewModeChange("cards")}
-        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+        aria-pressed={viewMode === "cards"}
+        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-body-sm font-medium transition-colors ${
           viewMode === "cards"
-            ? "bg-primary/10 text-primary border border-primary/30 shadow-sm"
-            : "text-muted hover:text-foreground border border-transparent"
+            ? "border border-card-border bg-card-elevated text-foreground"
+            : "border border-transparent text-muted hover:text-foreground"
         }`}
         title="Card view"
       >
@@ -37,10 +38,11 @@ export default function ViewToggle({ viewMode, onViewModeChange }: ViewTogglePro
       </button>
       <button
         onClick={() => onViewModeChange("compact")}
-        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+        aria-pressed={viewMode === "compact"}
+        className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-body-sm font-medium transition-colors ${
           viewMode === "compact"
-            ? "bg-primary/10 text-primary border border-primary/30 shadow-sm"
-            : "text-muted hover:text-foreground border border-transparent"
+            ? "border border-card-border bg-card-elevated text-foreground"
+            : "border border-transparent text-muted hover:text-foreground"
         }`}
         title="Compact view"
       >
