@@ -35,7 +35,7 @@ import {
   type BankingTransition,
   type TransitionProjection,
 } from "@/lib/banking/rules/boundary";
-import { accountId } from "@/lib/ledger/accounts";
+import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
@@ -388,6 +388,44 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
         note: "reverse refused QT flow",
       },
     ];
+  }
+  if (isLedgerShadowEnabledFromConfig(config)) {
+    // Published only with a completed receipt; a refused or refunded operation moved nothing.
+    const quote = await db
+      .collection<{ currencyCode: string; rate: number }>("exchangeRates")
+      .findOne({ currencyCode: receipt.currency }, { projection: { rate: 1 } });
+    const amount = command.type === "qe" ? plan.consideration : -plan.consideration;
+    // Same valuation and missing-rate fallback as the snapshot's bond_pool account.
+    const anchorAmount = amount / (quote?.rate && quote.rate > 0 ? quote.rate : 1);
+    const reason = command.type === "qe" ? "central_bank_qe" : "central_bank_qt";
+    receipt.witnesses.push({
+      collection: "ledgerEntries",
+      insert: {
+        ...finalizeLedgerEntry({
+          turn: command.turn,
+          createdAt: now,
+          txType: command.type === "qe" ? "monetary_qe" : "monetary_qt",
+          legs: [
+            {
+              account: accountId("bond_pool", receipt.currency, receipt.currency),
+              amount,
+              currencyCode: receipt.currency,
+              anchorAmount,
+              role: "primary",
+            },
+            {
+              account: mintSinkAccount(anchorAmount, reason, receipt.currency),
+              amount: -amount,
+              currencyCode: receipt.currency,
+              anchorAmount: -anchorAmount,
+              role: "contra",
+            },
+          ],
+          emitSite: `moneySupply/monetaryOperationJournal.ts:${command.type}`,
+        }),
+      },
+      note: "pool cash the central bank created or withdrew",
+    });
   }
   return receipt;
 }
