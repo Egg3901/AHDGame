@@ -1,6 +1,6 @@
 # Bulgarian constituent collective initiative
 
-Qualified runtime source: `d771a4f272f3972e98d4dbab185c3f041328510b`.
+Qualified runtime source: `7e6708380d9ee2546972e4be4756c8822e05f0ee`.
 
 The [amended 1971 Constitution, article 143(1)](https://www.parliament.bg/bg/19), permits the government, President or at least a quarter of the deputies to introduce a constitution draft. The missing collective route now requires 100 of the full 400 constituent mandates. It does not lower the separate 267-vote adoption threshold.
 
@@ -8,7 +8,7 @@ Authenticated deputies endorse their own mandates. A player remains limited to o
 
 Current mandate custody determines support. Departed deputies stop contributing, duplicate signatures do not multiply votes, and the active journal retains only current actors. A rejected revision requires new signatures and cannot precede the resolved vote. The threshold signature, bound proposal and normal bill publication share one required transaction.
 
-Qualification passes 118 checks across nine suites, including three new actual Mongo journeys and eight existing founding-consent journeys. The new journeys exercise 99-signature replay, introduction at 100, an actual normal 100-to-300 rejection, fresh revision support, bill-publication rollback, concurrent introduction, departed deputies, and canonical calendar/dissolution guards. Every pre-existing NPC owner document remains identical. Existing consent checks retain the exact 266/267 adoption boundary.
+Core qualification passes 118 checks across nine suites, including three new actual Mongo journeys and eight existing founding-consent journeys. The new journeys exercise 99-signature replay, introduction at 100, an actual normal 100-to-300 rejection, fresh revision support, bill-publication rollback, concurrent introduction, departed deputies, and canonical calendar/dissolution guards. Every pre-existing NPC owner document remains identical. Existing consent checks retain the exact 266/267 adoption boundary. Sixteen route and UI checks also pass, including five rendered-panel checks for the legacy introduction payload, conflict handling, pending signatures and threshold navigation.
 
 | Actual collective introduction | Commands | Request bytes | Response bytes |
 | ------------------------------ | -------: | ------------: | -------------: |
