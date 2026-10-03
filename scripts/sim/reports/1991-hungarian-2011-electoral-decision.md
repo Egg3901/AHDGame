@@ -35,3 +35,5 @@ Driver command and BSON measurements exclude fixture setup and assertions. Autho
 ## Remaining parent criteria
 
 Modern post-handover constituency by-elections and party-designated list replacements require continuity qualification. Legacy duplicate candidature reconciliation, separately filed modern district/list streams, joint and linked lists and minority nominations remain open. Other country institution transitions, fresh source-pinned whole-world horizons and actual development promotion remain required by #2488 and the broader repair program. This component does not close that parent.
+
+Additional custody qualification: all 53 normal resolver cases pass, including a bounded NPC delegation and rejection of seven mandates assigned to one player. All 18 existing native Assembly Mongo cases pass, including cancellation through both the opening scheduler and resolution after a modern Assembly takes office. The old 176-constituency scheduler cannot reopen its former chamber after a modern handover. These checks supplement the runtime-source qualification above.

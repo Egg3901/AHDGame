@@ -107,16 +107,23 @@ export async function materializeHu1991ByElectionOpening(input: {
   assertTransaction(session, turn, now);
   const game = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { session, projection: { preset: 1 } });
+    .findOne(
+      { _id: "current" },
+      { session, projection: { preset: 1, huAssemblyReformedAtYear: 1 } }
+    );
   if (game?.preset !== "1991-default") return [];
   const parent = await db
     .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
     .findOne({ seatedAtTurn: { $exists: true } }, { session, sort: { seatedAtTurn: -1 } });
   if (!parent?.settled || parent.seatedAtTurn == null) return [];
   const journal = db.collection<Hu1991ByElectionRecord>(HU_1991_BY_ELECTIONS_COLLECTION);
+  const modernChamber = game.huAssemblyReformedAtYear != null;
   const superseded = await journal
     .find(
-      { parentReceiptId: { $ne: parent._id }, completedAtTurn: { $exists: false } },
+      {
+        ...(modernChamber ? {} : { parentReceiptId: { $ne: parent._id } }),
+        completedAtTurn: { $exists: false },
+      },
       { session, projection: { electionIds: 1 } }
     )
     .toArray();
@@ -142,6 +149,7 @@ export async function materializeHu1991ByElectionOpening(input: {
         { session }
       );
   }
+  if (modernChamber) return [];
   const prior = await journal.findOne(
     { parentReceiptId: parent._id },
     { session, sort: { generation: -1 } }
@@ -403,7 +411,11 @@ export async function materializeHu1991ByElectionResolution(input: {
       { seatedAtTurn: { $exists: true } },
       { session, sort: { seatedAtTurn: -1 }, projection: { _id: 1 } }
     );
-  const currentChamber = latestParent?._id === job.parentReceiptId;
+  const game = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { session, projection: { huAssemblyReformedAtYear: 1 } });
+  const currentChamber =
+    game?.huAssemblyReformedAtYear == null && latestParent?._id === job.parentReceiptId;
   if (!currentChamber || turn >= job.termEndTurn) {
     await cancelByElection(db, session, job, turn, now);
     return job.electionIds.length;

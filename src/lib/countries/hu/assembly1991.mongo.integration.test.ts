@@ -988,38 +988,55 @@ describe.skipIf(!uri)(
         await db.dropDatabase();
       }
     });
-    it("cancels old by-election custody after a newer Assembly takes office", async () => {
-      const { db } = await fixture();
-      try {
-        await bind(db);
-        await certifyHu1991FirstCount(db, 1, 101, now);
-        await seatHu1991Assembly(db, 1, 101, now);
-        const seat = await db
-          .collection("electedOfficials")
-          .findOne({ "hungarianAssemblyMandate.tier": "constituency", isNPP: true });
-        await db.collection("electedOfficials").deleteOne({ _id: seat!._id });
-        const ids = await openHu1991ByElections(db, 102, now);
-        const poll = await db.collection("elections").findOne({ _id: new ObjectId(ids[0]) });
-        const original = await db
-          .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
-          .findOne({ _id: "HU:mixed1989:1" });
-        await db
-          .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
-          .insertOne({ ...original!, _id: "HU:mixed1989:2", cycle: 2, seatedAtTurn: 103 });
-        const held = await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray();
-        expect(
-          await resolveHu1991ByElection(db, poll!.hungarianAssemblyRound.receiptId, 104, now)
-        ).toBe(1);
-        expect(await db.collection("elections").findOne({ _id: poll!._id })).toMatchObject({
-          status: "cancelled",
-        });
-        expect(await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray()).toEqual(
-          held
-        );
-      } finally {
-        await db.dropDatabase();
+    it.each(["classic", "modern", "modern-opening"])(
+      "cancels old by-election custody after a newer %s Assembly takes office",
+      async (successor) => {
+        const { db } = await fixture();
+        try {
+          await bind(db);
+          await certifyHu1991FirstCount(db, 1, 101, now);
+          await seatHu1991Assembly(db, 1, 101, now);
+          const seat = await db
+            .collection("electedOfficials")
+            .findOne({ "hungarianAssemblyMandate.tier": "constituency", isNPP: true });
+          await db.collection("electedOfficials").deleteOne({ _id: seat!._id });
+          const ids = await openHu1991ByElections(db, 102, now);
+          const poll = await db.collection("elections").findOne({ _id: new ObjectId(ids[0]) });
+          const original = await db
+            .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>(
+              HU_1991_COUNTS_COLLECTION
+            )
+            .findOne({ _id: "HU:mixed1989:1" });
+          if (successor === "classic")
+            await db
+              .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>(
+                HU_1991_COUNTS_COLLECTION
+              )
+              .insertOne({ ...original!, _id: "HU:mixed1989:2", cycle: 2, seatedAtTurn: 103 });
+          else
+            await db
+              .collection<StringRecord>("gameState")
+              .updateOne({ _id: "current" }, { $set: { huAssemblyReformedAtYear: 2014 } });
+          const held = await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray();
+          if (successor === "modern-opening")
+            expect(await openHu1991ByElections(db, 104, now)).toEqual([]);
+          else
+            expect(
+              await resolveHu1991ByElection(db, poll!.hungarianAssemblyRound.receiptId, 104, now)
+            ).toBe(1);
+          if (successor !== "classic")
+            expect(await openHu1991ByElections(db, 105, now)).toEqual([]);
+          expect(await db.collection("elections").findOne({ _id: poll!._id })).toMatchObject({
+            status: "cancelled",
+          });
+          expect(await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray()).toEqual(
+            held
+          );
+        } finally {
+          await db.dropDatabase();
+        }
       }
-    });
+    );
     it("files a new independent player in a vacant seat and delivers one win notice through normal turn resolution", async () => {
       const { db } = await fixture();
       try {
