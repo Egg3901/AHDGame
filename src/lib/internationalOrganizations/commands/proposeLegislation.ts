@@ -18,6 +18,8 @@ import {
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { isConflictConcluded } from "@/lib/military/conflictLifecycle";
+import { validateDeclareWar } from "@/lib/military/validateDeclareWar";
+import { warGoalLabel, type WarGoal } from "@/lib/military/warGoals";
 
 export type ProposeResolutionInput =
   | { type: "free_trade_agreement"; parties: CountryId[]; title?: string; description?: string }
@@ -46,6 +48,13 @@ export type ProposeResolutionInput =
     }
   | { type: "set_posture"; posture: AlertPosture; title?: string; description?: string }
   | { type: "fund_agency"; agencyKey: string; title?: string; description?: string }
+  | {
+      type: "declare_war";
+      targetCountryId: CountryId;
+      warGoal: WarGoal;
+      title?: string;
+      description?: string;
+    }
   | {
       type: "join_conflict";
       /** ConflictDoc._id — the theater key, not the public conflictId. */
@@ -369,6 +378,79 @@ export async function proposeOrganizationLegislation(params: {
       currentTurn,
       `${COUNTRY_CONFIGS[countryId].name} proposed funding the ${def.label} at ${orgId}.`,
       { organizationId: orgId, legislationId: legislationId.toString() }
+    );
+
+    return { ok: true as const, legislationId: legislationId.toString() };
+  }
+
+  if (input.type === "declare_war") {
+    const gs = await db
+      .collection<{ _id: string; conflictsEnabled?: boolean }>("gameState")
+      .findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
+    if (!gs?.conflictsEnabled) {
+      return { ok: false as const, status: 404, error: "Conflicts subsystem disabled" };
+    }
+
+    const target = input.targetCountryId;
+    if (members.has(target)) {
+      return {
+        ok: false as const,
+        status: 400,
+        error: `${COUNTRY_CONFIGS[target].name} is a member of ${orgId}. An organization cannot declare war on its own member.`,
+      };
+    }
+    const check = await validateDeclareWar(
+      db,
+      { targetCountry: target, warGoal: input.warGoal },
+      countryId,
+      currentTurn
+    );
+    if (!check.ok) return check;
+
+    const existing = await legislation.findOne({
+      organizationId: orgId,
+      type: "declare_war",
+      warDeclarationTargetCountryId: target,
+      // A declaration is a one-shot resolution. Its active row records that it
+      // passed, but must not forbid a later declaration after the war and the
+      // national cooldowns have ended.
+      status: "pending",
+    });
+    if (existing) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: `${orgId} is already considering a declaration against ${COUNTRY_CONFIGS[target].name}.`,
+      };
+    }
+
+    const targetName = COUNTRY_CONFIGS[target].name;
+    const title = input.title?.trim() || `${orgId} Declaration of War against ${targetName}`;
+    await legislation.insertOne({
+      _id: legislationId,
+      organizationId: orgId,
+      type: "declare_war",
+      title,
+      description: input.description,
+      parties: [],
+      warDeclarationTargetCountryId: target,
+      warDeclarationGoal: input.warGoal,
+      proposingCountryId: countryId,
+      proposedByCharacterId: actor.characterId,
+      proposedByCharacterName: actor.characterName,
+      status: "pending",
+      votes: [],
+      proposedAt: now,
+      proposedOnTurn: currentTurn,
+      closesOnTurn: currentTurn + ORG_PROPOSAL_VOTING_TURNS,
+    });
+
+    await recordOrgHistoryEvent(
+      db,
+      countryId,
+      currentTurn,
+      `${COUNTRY_CONFIGS[countryId].name} moved that ${orgId} declare war on ${targetName} for ${warGoalLabel(input.warGoal).toLowerCase()}.`,
+      { organizationId: orgId, legislationId: legislationId.toString(), target }
     );
 
     return { ok: true as const, legislationId: legislationId.toString() };

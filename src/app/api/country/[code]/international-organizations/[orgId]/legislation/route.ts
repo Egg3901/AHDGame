@@ -27,6 +27,7 @@ import {
   getDiplomaticActionsRemaining,
   spendDiplomaticAction,
 } from "@/lib/internationalOrganizations/diplomaticActions";
+import { isSelectableWarGoal, type WarGoal } from "@/lib/military/warGoals";
 
 const ftaSchema = z.object({
   type: z.literal("free_trade_agreement"),
@@ -101,6 +102,14 @@ const joinConflictSchema = z.object({
   description: z.string().max(2000).optional(),
 });
 
+const declareWarSchema = z.object({
+  type: z.literal("declare_war"),
+  targetCountryId: z.string().min(2).max(3),
+  warGoal: z.string().min(1).max(32),
+  title: z.string().min(3).max(120).optional(),
+  description: z.string().max(2000).optional(),
+});
+
 const resolutionSchema = z.discriminatedUnion("type", [
   ftaSchema,
   sanctionsSchema,
@@ -110,6 +119,7 @@ const resolutionSchema = z.discriminatedUnion("type", [
   jointStatementSchema,
   setPostureSchema,
   fundAgencySchema,
+  declareWarSchema,
   joinConflictSchema,
 ]);
 
@@ -220,6 +230,26 @@ export async function POST(
       validatedInput = {
         type: "fund_agency",
         agencyKey: body.data.agencyKey,
+        title: body.data.title,
+        description: body.data.description,
+      };
+    } else if (body.data.type === "declare_war") {
+      const targetCountryId = body.data.targetCountryId.toUpperCase() as CountryId;
+      if (!COUNTRY_CONFIGS[targetCountryId]) {
+        return NextResponse.json(
+          badRequest(`Unknown target country: ${targetCountryId}`).toJson(),
+          { status: 400 }
+        );
+      }
+      if (!isSelectableWarGoal(body.data.warGoal)) {
+        return NextResponse.json(badRequest("That war goal is not available.").toJson(), {
+          status: 400,
+        });
+      }
+      validatedInput = {
+        type: "declare_war",
+        targetCountryId,
+        warGoal: body.data.warGoal as WarGoal,
         title: body.data.title,
         description: body.data.description,
       };

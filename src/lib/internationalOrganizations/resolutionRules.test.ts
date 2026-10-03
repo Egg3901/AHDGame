@@ -33,6 +33,7 @@ const ORG_BALLOT_KINDS: OrgBallotKind[] = [
   "set_dues",
   "set_posture",
   "fund_agency",
+  "declare_war",
   "join_conflict",
   "membership_proposal",
   "leadership_election",
@@ -41,6 +42,7 @@ const ORG_BALLOT_KINDS: OrgBallotKind[] = [
 describe("votesNeeded", () => {
   it("requires the whole ballot for the unanimous kinds", () => {
     expect(votesNeeded("join_conflict", 4)).toBe(4);
+    expect(votesNeeded("declare_war", 4)).toBe(4);
     expect(votesNeeded("free_trade_agreement", 2)).toBe(2);
     expect(votesNeeded("membership_proposal", 3)).toBe(3);
   });
@@ -54,7 +56,8 @@ describe("votesNeeded", () => {
 });
 
 describe("requiresUnanimity", () => {
-  it("covers war entry, trade agreements and admissions", () => {
+  it("covers war declarations, war entry, trade agreements and admissions", () => {
+    expect(requiresUnanimity("declare_war")).toBe(true);
     expect(requiresUnanimity("join_conflict")).toBe(true);
     expect(requiresUnanimity("free_trade_agreement")).toBe(true);
     expect(requiresUnanimity("membership_proposal")).toBe(true);
@@ -68,8 +71,9 @@ describe("requiresUnanimity", () => {
 });
 
 describe("ballotIsPlayerOnly", () => {
-  it("covers the admission and the bloc war entry", () => {
+  it("covers admissions, bloc war declarations and bloc war entry", () => {
     expect(ballotIsPlayerOnly("membership_proposal")).toBe(true);
+    expect(ballotIsPlayerOnly("declare_war")).toBe(true);
     expect(ballotIsPlayerOnly("join_conflict")).toBe(true);
   });
 
@@ -208,6 +212,25 @@ describe("resolutionPasses", () => {
         votes: [vote("US", "yes"), vote("UK", "yes")],
       })
     ).toBe(true);
+  });
+
+  it("declare_war is decided unanimously by the supplied player roll", () => {
+    expect(
+      resolutionPasses({
+        type: "declare_war",
+        members: ["US", "UK"],
+        parties: [],
+        votes: [vote("US", "yes"), vote("UK", "yes"), vote("FR", "no")],
+      })
+    ).toBe(true);
+    expect(
+      resolutionPasses({
+        type: "declare_war",
+        members: ["US", "UK"],
+        parties: [],
+        votes: [vote("US", "yes")],
+      })
+    ).toBe(false);
   });
 
   it("join_conflict fails when a voting member stays silent", () => {

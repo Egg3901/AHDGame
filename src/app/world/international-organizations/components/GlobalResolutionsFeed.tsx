@@ -24,6 +24,7 @@ const TYPE_LABEL: Record<OrganizationResolutionType, string> = {
   set_dues: "Dues change",
   set_posture: "Alert posture",
   fund_agency: "Agency funding",
+  declare_war: "Declaration of war",
   join_conflict: "Entry into a conflict",
 };
 

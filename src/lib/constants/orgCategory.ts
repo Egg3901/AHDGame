@@ -111,7 +111,14 @@ export const ORGANIZATION_CATEGORY_META: Record<OrganizationCategory, OrgCategor
     // `join_conflict` is granted here and NOWHERE else. Calling its members into a
     // war is the defining act of a bloc, and an ordinary defence pact — which is
     // what `security` models — does not get to make it.
-    powers: ["set_posture", "joint_statement", "aid_package", "sanctions", "join_conflict"],
+    powers: [
+      "set_posture",
+      "joint_statement",
+      "aid_package",
+      "sanctions",
+      "declare_war",
+      "join_conflict",
+    ],
     // A bloc honours Article 5 like any defence pact, and is also where a standing
     // charter (NATO, the Warsaw Pact) binds without a vote: those two are `bloc` only
     // in a world that began in the Cold War, which is exactly when their charters
@@ -137,6 +144,7 @@ export const IMPLEMENTED_RESOLUTION_TYPES: OrganizationResolutionType[] = [
   "joint_statement",
   "set_posture",
   "fund_agency",
+  "declare_war",
   "join_conflict",
 ];
 

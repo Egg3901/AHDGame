@@ -17,8 +17,8 @@ import type { ConcurrentVoteStage } from "../types";
  * the property that matters. It is also preset-sensitive (TR and ES flip
  * `upperElectionSystem` between eras), which is why `StageBillContext` carries a preset.
  *
- * Nothing produces an `active_both` bill until the Join Conflict provision lands, so
- * this stage is registered but unreached until then — that silence is expected.
+ * Bloc conflict-entry and war-declaration resolutions produce `active_both` bills so
+ * every elected chamber decides the national commitment on the same clock.
  */
 export const CONCURRENT_VOTE_STAGE: ConcurrentVoteStage = {
   kind: "concurrentVote",
@@ -28,9 +28,9 @@ export const CONCURRENT_VOTE_STAGE: ConcurrentVoteStage = {
     officeType === getJointSittingOfficeTypes((b.countryId ?? "US") as CountryId, b.preset)[0]
       ? "votes"
       : "otherChamberVotes",
-  // Simple majority by design: a bloc war-entry bill is honouring a treaty the country
-  // already ratified, and the bloc vote is the hard gate. `closeConcurrentVoteStage`
-  // still resolves nat/priv's two-thirds supersede per bill.
+  // Simple majority is the stage default for bloc conflict entry. The close path
+  // resolves provision-specific supersedes per bill, including the two-thirds rule
+  // for declarations of war.
   passRule: "simpleMajority",
   requireAll: true,
   onPassStatus: "signed",
