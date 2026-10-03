@@ -9,7 +9,7 @@ interface PatreonBadgeProps {
   since?: string | Date | null;
   /** Which system granted the benefits; drives provider-neutral tooltip copy. */
   provider?: SupporterProvider;
-  /** `tag` is the flat hairline treatment shared with other profile tags. */
+  /** `tag` renders the tier as plain text for the profile's fact line. */
   appearance?: "badge" | "tag";
   className?: string;
 }
@@ -69,7 +69,7 @@ export function PatreonBadge({
 
   if (appearance === "tag") {
     return (
-      <span title={title} className={`dossier-tag ${className}`}>
+      <span title={title} className={`font-medium text-foreground ${className}`}>
         {label}
       </span>
     );
