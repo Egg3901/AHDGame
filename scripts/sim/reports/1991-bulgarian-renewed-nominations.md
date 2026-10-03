@@ -1,6 +1,6 @@
 # Bulgarian renewed nomination qualification
 
-Qualified runtime source: pending final source pin.
+Qualified runtime source: `1b6716d85cce62a333098abc36a26ac088e45c25`.
 
 The founding count already recognized failed single-candidate constituencies, but every second-round filing was closed. [Article73(3) of the original April1990 law](https://www.ciela.net/svobodna-zona-darjaven-vestnik/document/2132293633/issue/1081/zakon-za-izbirane-na-veliko-narodno-sabranie) permits new nominations when the sole candidate is not elected. Such constituencies now expose one turn of filing in the existing two-turn renewed campaign. This is bounded campaign timing. Ordinary top-two runoffs retain their qualified candidates.
 
