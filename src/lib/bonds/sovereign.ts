@@ -859,12 +859,23 @@ export async function reconcileSovereignDebt(
 
 export async function settleSovereignBondMaturity(
   db: Db,
-  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent">
-): Promise<void> {
-  if (!bond.countryId) return;
+  bond: Pick<
+    Bond,
+    "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent" | "currencyCode"
+  >,
+  repaymentLocal = bond.totalIssued
+): Promise<{ amountLocal: number; currencyCode: CurrencyCode } | null> {
+  if (!bond.countryId) return null;
   const budgetId = getNationalBudgetId(bond.countryId);
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
-  if (!budget) return;
+  if (!budget) return null;
+  const currencyCode = resolveCountryCurrencyCode(budget) ?? COUNTRY_CURRENCY_MAP[bond.countryId];
+  if (bond.currencyCode && bond.currencyCode !== currencyCode) {
+    throw new Error("Sovereign maturity currency differs from its treasury");
+  }
+  if (!Number.isFinite(repaymentLocal) || repaymentLocal < 0) {
+    throw new Error("Sovereign maturity requires a finite nonnegative repayment");
+  }
 
   // Net exactly this bond's outstanding contribution (face minus any restructure
   // haircut, see sovereignPrincipal.ts), not raw face: a haircut bond carries
@@ -880,9 +891,12 @@ export async function settleSovereignBondMaturity(
   const annualCouponCost = (bond.couponRate / 100) * bond.totalIssued;
   const budgetUpdate = applySovereignDebtAdjustment(budget, -maturedFace, -annualCouponCost);
 
-  await db.collection<FederalBudget>("federalBudget").updateOne(
+  const landed = await db.collection<FederalBudget>("federalBudget").updateOne(
     { _id: budgetId },
     {
+      // Rollover issuance credits this same treasury. Redemption must pay its
+      // holders from cash as well as retiring the bond-owned debt stock.
+      $inc: { treasuryBalance: -repaymentLocal },
       $set: {
         debt: budgetUpdate.debt,
         spending: budgetUpdate.spending,
@@ -893,6 +907,7 @@ export async function settleSovereignBondMaturity(
       },
     }
   );
+  return landed.matchedCount === 1 ? { amountLocal: repaymentLocal, currencyCode } : null;
 }
 
 export interface SovereignPrincipalResync {

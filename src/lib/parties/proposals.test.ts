@@ -22,6 +22,12 @@ import type { PoliticalParty } from "@/lib/db/types";
 import { POSITION_SHIFT_COOLDOWN_TURNS, PROPOSAL_COOLDOWN_TURNS } from "./proposalConstants";
 import type { CommitteeProposal } from "@/lib/db/types/committeeProposal";
 import * as gameTimeModule from "@/lib/time/gameTime";
+import { getPartyNppCapacity } from "@/lib/npp/partyCapacity";
+
+vi.mock("@/lib/npp/partyCapacity", () => ({ getPartyNppCapacity: vi.fn() }));
+beforeEach(() => {
+  vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 5, maxNpps: 25 });
+});
 
 vi.mock("@/lib/time/gameTime", async () => {
   const actual = await vi.importActual<typeof gameTimeModule>("@/lib/time/gameTime");
@@ -1113,9 +1119,20 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
 
     // Candidacy / seat references for the culled NPP are cleaned up too.
     const candDel = db.collectionMocks.electionCandidates!.deleteMany.mock.calls[0];
-    expect(
-      (candDel![0] as { nppId: { $in: ObjectId[] } }).nppId.$in.map((i) => i.toString())
-    ).toEqual([weak._id.toString()]);
+    expect(candDel![0]).toEqual({
+      $or: [{ nppId: { $in: [weak._id] } }, { characterId: { $in: [weak._id] } }],
+    });
+    expect(db.collectionMocks.campaigns!.updateMany).toHaveBeenCalledWith(
+      { candidateId: { $in: [weak._id] }, status: { $ne: "archived" } },
+      {
+        $set: {
+          status: "archived",
+          archivedAt: expect.any(Date),
+          archivedReason: "removed",
+          updatedAt: expect.any(Date),
+        },
+      }
+    );
   });
 
   it("re-points the survivors (kept + retired NPPs) to the target, excluding culls", async () => {
@@ -1152,6 +1169,123 @@ describe("processMergeProposal (NPP recruitment-cap enforcement)", () => {
       (c) => (c[0] as { _id?: { $in?: ObjectId[] } })._id?.$in
     );
     expect(del).toBeFalsy();
+  });
+
+  it("uses combined post-transfer membership and culls national overflow across regions", async () => {
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5 });
+    const own = Array.from({ length: 4 }, () => ({
+      _id: new ObjectId(),
+      homeState: "DUB",
+      politicalInfluence: 1,
+      favorability: 20,
+    }));
+    const strong = {
+      _id: new ObjectId(),
+      homeState: "COR",
+      politicalInfluence: 90,
+      favorability: 50,
+    };
+    const weak = {
+      _id: new ObjectId(),
+      homeState: "GAL",
+      politicalInfluence: 30,
+      favorability: 80,
+    };
+    const db = setup({ proposingActiveNpps: [weak, strong], targetActiveNpps: own });
+    const capacity = vi.mocked(getPartyNppCapacity);
+    capacity.mockClear();
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+    expect(capacity).toHaveBeenCalledWith(db, "IE", "3", expect.any(Date));
+    expect(db.collectionMocks.characters!.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      capacity.mock.invocationCallOrder[0]
+    );
+    expect(db.collectionMocks.npps!.deleteMany).toHaveBeenCalledWith({ _id: { $in: [weak._id] } });
+    const moved = db.collectionMocks.electionCandidates!.updateMany.mock.calls[0][0] as {
+      characterId: { $in: ObjectId[] };
+    };
+    expect(moved.characterId.$in).toContainEqual(strong._id);
+    expect(moved.characterId.$in).not.toContainEqual(weak._id);
+  });
+
+  it("keeps the entire surviving roster above the national cap and removes incoming officeholders", async () => {
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5 });
+    const own = Array.from({ length: 6 }, () => ({
+      _id: new ObjectId(),
+      homeState: "DUB",
+      politicalInfluence: 1,
+      favorability: 20,
+    }));
+    const incoming = {
+      _id: new ObjectId(),
+      homeState: "COR",
+      politicalInfluence: 100,
+      favorability: 100,
+    };
+    const seat = {
+      _id: new ObjectId(),
+      nppId: incoming._id,
+      officeType: "commons",
+      countryId: "IE",
+    };
+    const db = setup({ proposingActiveNpps: [incoming], targetActiveNpps: own });
+    db.collection("electedOfficials").find.mockReturnValue(makeCursor([seat]));
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+    expect(db.collectionMocks.npps!.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: [incoming._id] },
+    });
+    expect(db.collectionMocks.electedOfficials!.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: [seat._id] },
+    });
+  });
+
+  it("combines regional and national overflow without reconsidering regional culls", async () => {
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 1, maxNpps: 5 });
+    const own = Array.from({ length: 4 }, () => ({ _id: new ObjectId(), homeState: "DUB" }));
+    const incoming = (homeState: string, politicalInfluence: number) => ({
+      _id: new ObjectId(),
+      homeState,
+      politicalInfluence,
+      favorability: 50,
+    });
+    // DUB is already regionally over capacity; even the strongest incoming NPP
+    // cannot replace existing NPPs there. Only one national slot remains.
+    const blocked = incoming("DUB", 100);
+    const retained = incoming("COR", 90);
+    const nationalOverflow = incoming("GAL", 80);
+    const db = setup({
+      proposingActiveNpps: [blocked, nationalOverflow, retained],
+      targetActiveNpps: own,
+    });
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+    const removed = [blocked._id, nationalOverflow._id];
+    expect(db.collectionMocks.npps!.deleteMany).toHaveBeenCalledWith({ _id: { $in: removed } });
+    expect(db.collectionMocks.npps!.updateMany).toHaveBeenCalledWith(
+      { party: "1", countryId: "IE", _id: { $nin: removed } },
+      { $set: { party: "3" } }
+    );
+  });
+
+  it("deletes all incoming active NPPs at zero national capacity but still transfers retired history", async () => {
+    vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 0, maxNpps: 0 });
+    const incoming = {
+      _id: new ObjectId(),
+      homeState: "COR",
+      politicalInfluence: 100,
+      favorability: 100,
+    };
+    const db = setup({ proposingActiveNpps: [incoming] });
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+    expect(db.collectionMocks.npps!.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: [incoming._id] },
+    });
+    expect(db.collectionMocks.npps!.find).toHaveBeenCalledWith(
+      { party: "1", countryId: "IE", retiredAt: null },
+      { projection: { homeState: 1, politicalInfluence: 1, favorability: 1 } }
+    );
+    expect(db.collectionMocks.npps!.updateMany).toHaveBeenCalledWith(
+      { party: "1", countryId: "IE", _id: { $nin: [incoming._id] } },
+      { $set: { party: "3" } }
+    );
   });
 });
 

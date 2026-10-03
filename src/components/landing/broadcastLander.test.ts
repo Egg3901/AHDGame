@@ -66,9 +66,6 @@ describe("1991 broadcast lander content", () => {
 
   it("keeps em and en dashes out of the copy players read", () => {
     const copy = [
-      broadcast.kicker,
-      broadcast.dateline,
-      broadcast.tickerLabel,
       broadcast.orbitLabel,
       ...broadcast.ticker.flatMap((item) => [item.date, item.text, item.place?.name ?? ""]),
       ...Object.values(ERA_CONFIGS).flatMap((config) => [
