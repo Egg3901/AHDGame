@@ -4,6 +4,7 @@ import type { PoliticalParty, StatePartyOrg, TreasuryTransaction } from "@/lib/d
 import type { CountryId } from "@/lib/constants/countries";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import type { OrgBuildFundingScope } from "@/lib/politicalStrength/buildOrgFunding";
+import { witnessOrgBuildCharge, type OrgBuildLedgerOptions } from "@/lib/parties/orgBuildLedger";
 
 /**
  * Cash side of the Build Org action — the money counterpart to
@@ -68,7 +69,9 @@ function debitPipeline(amount: number, now: Date) {
 
 export async function chargeOrgBuildFunds(
   input: ChargeOrgBuildFundsInput,
-  injectedDb?: Db
+  injectedDb?: Db,
+  /** Preloaded accounting context for a sweep; omitted loads one per charge. */
+  ledger?: OrgBuildLedgerOptions
 ): Promise<ChargeOrgBuildFundsResult> {
   const amount = input.amount;
   if (!Number.isFinite(amount) || amount <= 0) return { charged: 0 };
@@ -78,7 +81,7 @@ export async function chargeOrgBuildFunds(
 
   // Debit and read the PRE-update balance in one atomic op, so the amount we
   // report (and audit) is exactly what the pipeline took.
-  let before: { treasury?: number } | null;
+  let before: { _id: unknown; treasury?: number } | null;
   let holderId: string;
   if (isState) {
     if (!input.stateRowId) return { charged: 0 };
@@ -123,6 +126,14 @@ export async function chargeOrgBuildFunds(
     amount: charged,
     memo: input.memo,
     initiatedBy: input.initiatedBy,
+    turn: input.turn,
+    now: input.now,
+  });
+  await witnessOrgBuildCharge(db, ledger, {
+    scope: isState ? "state" : "national",
+    accountRef: String(before._id),
+    countryId: input.countryId,
+    charged,
     turn: input.turn,
     now: input.now,
   });

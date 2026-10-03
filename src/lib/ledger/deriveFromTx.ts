@@ -79,6 +79,8 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // not yet model as a real account. Name the contra instead of reporting an unexplained mint.
   defence_contract_payment: "defence_procurement",
   party_dues_received: "party_dues",
+  // Org building buys organization, not cash held by anyone: a named sink.
+  party_org_building: "organization_building",
   // Genuine one-directional system mint: the new-player checklist completion
   // bonus has no in-world payer, so it is an attributed mint rather than
   // Phase-3 `unattributed` backlog.
