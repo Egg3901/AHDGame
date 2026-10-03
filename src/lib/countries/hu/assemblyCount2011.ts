@@ -16,14 +16,14 @@ import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { buildHuMixedPlan } from "./rules/mixedElectionPlan";
 import { buildHuModernAssembly } from "./rules/modernAssembly2011";
 import type { Hu1991AssemblyRecord } from "./assemblyCount1991";
-import type { Hu1991InstalledMandates, Hu1991Person } from "./rules/mandates1991";
+import type { Hu1991InstalledMandates } from "./rules/mandates1991";
 export const HU_2011_COUNTS_COLLECTION = "hu2011AssemblyCounts";
 export interface Hu2011AssemblyRecord {
   _id: string;
   cycle: number;
   electionIds: string[];
   legacyResolvedElectionIds: string[];
-  nominations: { people: Hu1991Person[] };
+  nominations: import("./rules/listVacancies1991").HuListNominations;
   nominees: Hu1991AssemblyRecord["nominees"];
   count: { kind: "counted" };
   installed: Hu1991InstalledMandates;
@@ -160,7 +160,18 @@ export async function materializeHu2011Count(input: {
     cycle,
     electionIds: polls.map((row) => row._id.toHexString()),
     legacyResolvedElectionIds: [],
-    nominations: { people: assembly.people },
+    nominations: {
+      people: assembly.people,
+      territorial: [],
+      national: Object.entries(plan.result.listSeats)
+        .filter(([, seats]) => seats > 0)
+        .map(([partyId]) => ({
+          partyId,
+          candidateIds: assembly.people
+            .filter((row) => row.partyId === partyId)
+            .map((row) => row.id),
+        })),
+    },
     nominees,
     count: { kind: "counted" },
     installed: assembly.installed,

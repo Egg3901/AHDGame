@@ -5,10 +5,10 @@
  */
 import { createHash } from "node:crypto";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
-import type { Character, ElectedOfficial, GameState, NPP, PoliticalParty } from "@/lib/db/types";
+import type { Character, ElectedOfficial, NPP, PoliticalParty } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
-import { HU_1991_COUNTS_COLLECTION, type Hu1991AssemblyRecord } from "./assemblyCount1991";
+import { huListParentCollection, readHuListAssemblyReceipt } from "./listAssemblyReceipt";
 import {
   designateHu1991ListReplacement,
   findHu1991ListVacancies,
@@ -34,29 +34,7 @@ function stableId(key: string): ObjectId {
 }
 
 async function readContext(db: Db, turn: number, session?: ClientSession) {
-  const game = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      { session, projection: { preset: 1, huAssemblyReformedAtYear: 1 } }
-    );
-  if (game?.preset !== "1991-default" || game.huAssemblyReformedAtYear != null) return null;
-  const parent = await db.collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION).findOne(
-    { seatedAtTurn: { $exists: true } },
-    {
-      session,
-      sort: { seatedAtTurn: -1 },
-      projection: {
-        nominations: 1,
-        settled: 1,
-        nominees: 1,
-        seatedAt: 1,
-        seatedAtTurn: 1,
-        cycle: 1,
-        listReplacementGeneration: 1,
-      },
-    }
-  );
+  const parent = await readHuListAssemblyReceipt(db, session);
   if (!parent?.settled || parent.seatedAtTurn == null || turn >= parent.seatedAtTurn + 192)
     return null;
   const held = await db
@@ -65,7 +43,13 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
       { countryId: "HU", officeType: "assemblyDelegate" },
       {
         session,
-        projection: { hungarianAssemblyMandate: 1, characterId: 1, nppId: 1, termEnds: 1 },
+        projection: {
+          hungarianAssemblyMandate: 1,
+          characterId: 1,
+          nppId: 1,
+          termEnds: 1,
+          state: 1,
+        },
       }
     )
     .toArray();
@@ -104,13 +88,18 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
     };
   const eligible = new Set(preliminary.flatMap((row) => row.eligiblePersonIds));
   const people = parent.nominations.people.filter((row) => eligible.has(row.id));
+  const departed = preliminary.map((row) => row.mandate);
+  const ownerPeople = [...people, ...departed];
   const npcs = await db
     .collection<NPP>("npps")
     .find(
       {
-        _id: { $in: people.filter((row) => row.isNpc).map((row) => new ObjectId(row.ownerId)) },
+        _id: {
+          $in: ownerPeople.filter((row) => row.isNpc).map((row) => new ObjectId(row.ownerId)),
+        },
         countryId: "HU",
         retiredAt: null,
+        isTechnocrat: { $ne: true },
       },
       { session, projection: { party: 1, currentOffice: 1 } }
     )
@@ -119,7 +108,9 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
     .collection<Character>("characters")
     .find(
       {
-        _id: { $in: people.filter((row) => !row.isNpc).map((row) => new ObjectId(row.ownerId)) },
+        _id: {
+          $in: ownerPeople.filter((row) => !row.isNpc).map((row) => new ObjectId(row.ownerId)),
+        },
         countryId: "HU",
         federationPendingResidenceId: { $exists: false },
       },
@@ -233,13 +224,11 @@ export async function designateHu1991ListDeputy(input: {
       .updateOne({ _id: "HU" }, { $inc: { hu1991MandateGeneration: 1 } }, { session });
     if (chamberLock.matchedCount !== 1) throw new Error("Hungarian chamber authority is missing");
     // The shared parent write serializes different vacancies claiming one person.
-    const lock = await db
-      .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
-      .updateOne(
-        { _id: context.parent._id, seatedAtTurn: context.parent.seatedAtTurn },
-        { $inc: { listReplacementGeneration: 1 } },
-        { session }
-      );
+    const lock = await huListParentCollection(db, context.parent._id).updateOne(
+      { _id: context.parent._id, seatedAtTurn: context.parent.seatedAtTurn },
+      { $inc: { listReplacementGeneration: 1 } },
+      { session }
+    );
     if (lock.modifiedCount !== 1) throw new Error("Hungarian replacement parent changed");
     const id = `${context.parent._id}:list:${vacancy.slotPersonId}:${mandate.personId}`;
     const officialId = stableId(`${context.parent._id}:person:${vacancy.slotPersonId}`);
@@ -319,6 +308,32 @@ export async function designateHu1991ListDeputy(input: {
       },
       { session }
     );
+    const departed = vacancy.mandate;
+    const departedOwner = context.owners.get(departed.ownerId);
+    if (departed.ownerId !== mandate.ownerId && departedOwner) {
+      const held = context.held.filter(
+        (row) => (departed.isNpc ? row.nppId : row.characterId)?.toHexString() === departed.ownerId
+      );
+      const first = held[0];
+      await db.collection(departed.isNpc ? "npps" : "characters").updateOne(
+        { _id: new ObjectId(departed.ownerId), countryId: "HU" },
+        {
+          $set: {
+            ...(departedOwner.currentOffice &&
+            ["assemblyDelegate", "assemblyDeputy"].includes(departedOwner.currentOffice.type)
+              ? {
+                  currentOffice: first
+                    ? { type: "assemblyDelegate", state: first.state, seatsHeld: held.length }
+                    : null,
+                }
+              : {}),
+            ...(departed.isNpc ? { seatsHeld: held.length } : {}),
+            updatedAt: now,
+          },
+        },
+        { session }
+      );
+    }
     if (!mandate.isNpc)
       await db.collection<Character>("characters").updateOne(
         { _id: new ObjectId(mandate.ownerId) },
