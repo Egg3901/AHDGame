@@ -43,7 +43,13 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
       { countryId: "HU", officeType: "assemblyDelegate" },
       {
         session,
-        projection: { hungarianAssemblyMandate: 1, characterId: 1, nppId: 1, termEnds: 1 },
+        projection: {
+          hungarianAssemblyMandate: 1,
+          characterId: 1,
+          nppId: 1,
+          termEnds: 1,
+          state: 1,
+        },
       }
     )
     .toArray();
@@ -82,11 +88,15 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
     };
   const eligible = new Set(preliminary.flatMap((row) => row.eligiblePersonIds));
   const people = parent.nominations.people.filter((row) => eligible.has(row.id));
+  const departed = preliminary.map((row) => row.mandate);
+  const ownerPeople = [...people, ...departed];
   const npcs = await db
     .collection<NPP>("npps")
     .find(
       {
-        _id: { $in: people.filter((row) => row.isNpc).map((row) => new ObjectId(row.ownerId)) },
+        _id: {
+          $in: ownerPeople.filter((row) => row.isNpc).map((row) => new ObjectId(row.ownerId)),
+        },
         countryId: "HU",
         retiredAt: null,
         isTechnocrat: { $ne: true },
@@ -98,7 +108,9 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
     .collection<Character>("characters")
     .find(
       {
-        _id: { $in: people.filter((row) => !row.isNpc).map((row) => new ObjectId(row.ownerId)) },
+        _id: {
+          $in: ownerPeople.filter((row) => !row.isNpc).map((row) => new ObjectId(row.ownerId)),
+        },
         countryId: "HU",
         federationPendingResidenceId: { $exists: false },
       },
@@ -296,6 +308,32 @@ export async function designateHu1991ListDeputy(input: {
       },
       { session }
     );
+    const departed = vacancy.mandate;
+    const departedOwner = context.owners.get(departed.ownerId);
+    if (departed.ownerId !== mandate.ownerId && departedOwner) {
+      const held = context.held.filter(
+        (row) => (departed.isNpc ? row.nppId : row.characterId)?.toHexString() === departed.ownerId
+      );
+      const first = held[0];
+      await db.collection(departed.isNpc ? "npps" : "characters").updateOne(
+        { _id: new ObjectId(departed.ownerId), countryId: "HU" },
+        {
+          $set: {
+            ...(departedOwner.currentOffice &&
+            ["assemblyDelegate", "assemblyDeputy"].includes(departedOwner.currentOffice.type)
+              ? {
+                  currentOffice: first
+                    ? { type: "assemblyDelegate", state: first.state, seatsHeld: held.length }
+                    : null,
+                }
+              : {}),
+            ...(departed.isNpc ? { seatsHeld: held.length } : {}),
+            updatedAt: now,
+          },
+        },
+        { session }
+      );
+    }
     if (!mandate.isNpc)
       await db.collection<Character>("characters").updateOne(
         { _id: new ObjectId(mandate.ownerId) },

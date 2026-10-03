@@ -10,11 +10,20 @@ import {
   processHu2011ElectoralMandate,
   type Hu2011ElectoralProposal,
 } from "./electoralProposals2011";
-import { certifyHu2011Count, HU_2011_COUNTS_COLLECTION } from "./assemblyCount2011";
+import {
+  certifyHu2011Count,
+  HU_2011_COUNTS_COLLECTION,
+  type Hu2011AssemblyRecord,
+} from "./assemblyCount2011";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
 import { seatHu2011Assembly } from "./assemblySeating2011";
 import { huRegions1991 } from "./data/huRegions1991";
-import { loadHu1991ListVacancies, designateHu1991ListDeputy } from "./listVacancies1991";
+import {
+  loadHu1991ListVacancies,
+  designateHu1991ListDeputy,
+  advanceHu1991ListVacancy,
+  HU_1991_LIST_REPLACEMENTS_COLLECTION,
+} from "./listVacancies1991";
 import { processHu2011ElectoralNpcProposal } from "./electoralNpcProposals2011";
 import { bindHu2011Campaigns } from "./assemblyCampaignBinding2011";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
@@ -180,7 +189,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       );
       commands = commandBytes = replyBytes = 0;
       expect(await processHu2011ElectoralMandate(db, GAME, 1006, NOW)).toBe(true);
-      console.info({ fixture: "hu-2011-authorization", commands, commandBytes, replyBytes });
+      console.log({ fixture: "hu-2011-authorization", commands, commandBytes, replyBytes });
       expect(await processHu2011ElectoralMandate(db, GAME, 1007, NOW)).toBe(false);
       expect(
         (await db.collection<StringRecord>("countryGameStates").findOne({ _id: "HU" }))
@@ -190,7 +199,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       expect(await bindHu2011Campaigns(db, GAME as never, 1008, NOW)).toBe(false);
       commands = commandBytes = replyBytes = 0;
       expect(await bindHu2011Campaigns(db, GAME as never, 1009, NOW)).toBe(true);
-      console.info({ fixture: "hu-2011-primary-binding", commands, commandBytes, replyBytes });
+      console.log({ fixture: "hu-2011-primary-binding", commands, commandBytes, replyBytes });
       expect(
         await db
           .collection("elections")
@@ -369,7 +378,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         resolveGeneralElections(NOW),
       ]);
       expect(resolutions.sort()).toEqual([0, 6]);
-      console.info({
+      console.log({
         fixture: "hu-2011-native-count-and-handover",
         commands,
         commandBytes,
@@ -411,32 +420,123 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       expect(vacancies).toHaveLength(1);
       expect(vacancies[0].receiptId).toBe(receipt!._id);
       expect(vacancies[0].candidates.length).toBeGreaterThan(0);
-      expect(
-        await designateHu1991ListDeputy({
-          db,
-          turn: 1122,
-          now: NOW,
-          receiptId: vacancies[0].receiptId,
-          slotPersonId: vacancies[0].slotPersonId,
-          personId: vacancies[0].candidates[0].personId,
-          actor: { characterId: null, isAdmin: true },
-        })
-      ).toBeTruthy();
-      expect(
-        await db
-          .collection("electedOfficials")
-          .countDocuments({ countryId: "HU", officeType: "assemblyDelegate" })
-      ).toBe(199);
-      expect(await db.collection("npps").countDocuments()).toBe(12);
-      expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
-      expect(await loadHu1991ListVacancies(db, 1122)).toHaveLength(0);
+      // Receipts shipped before national-list metadata retain their stored people order.
+      await db
+        .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
+        .updateOne(
+          { _id: receipt!._id },
+          { $unset: { "nominations.national": "", "nominations.territorial": "" } }
+        );
+      expect(await loadHu1991ListVacancies(db, 1122)).toEqual(vacancies);
       expect(
         (
           await db
-            .collection<StringRecord>(HU_2011_COUNTS_COLLECTION)
+            .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
             .findOne({ _id: receipt!._id })
-        )?.seatedAtTurn
-      ).toBe(1120);
+        )?.nominations.national
+      ).toBeUndefined();
+      const chair = new ObjectId();
+      await db.collection("politicalParties").insertOne({
+        countryId: "HU",
+        sequentialId: 1,
+        chairId: chair,
+      });
+      expect(await advanceHu1991ListVacancy(db, 1122, NOW)).toBe(false);
+      const person = vacancies[0].candidates.find(
+        (row) =>
+          receipt!.nominations.people.find((p) => p.id === row.personId)?.ownerId !==
+          departed!.nppId.toHexString()
+      )!;
+      expect(person).toBeDefined();
+      const designation = {
+        db,
+        turn: 1122,
+        now: NOW,
+        receiptId: vacancies[0].receiptId,
+        slotPersonId: vacancies[0].slotPersonId,
+        personId: person.personId,
+        actor: { characterId: chair, isAdmin: false },
+      };
+      await expect(
+        designateHu1991ListDeputy({
+          ...designation,
+          actor: { characterId: new ObjectId(), isAdmin: false },
+        })
+      ).rejects.toThrow("Only this party's chair");
+      const ownerMirrors = await db.collection("npps").find().sort({ _id: 1 }).toArray();
+      const failReplacement = new Proxy(db, {
+        get(target, key) {
+          if (key !== "collection") {
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          }
+          return (name: string) => {
+            const collection = target.collection(name);
+            if (name !== HU_1991_LIST_REPLACEMENTS_COLLECTION) return collection;
+            return new Proxy(collection, {
+              get(inner, property) {
+                if (property === "insertOne")
+                  return async () => {
+                    throw new Error("injected modern replacement journal failure");
+                  };
+                const value = Reflect.get(inner, property);
+                return typeof value === "function" ? value.bind(inner) : value;
+              },
+            });
+          };
+        },
+      });
+      await expect(
+        designateHu1991ListDeputy({ ...designation, db: failReplacement })
+      ).rejects.toThrow("injected modern replacement journal failure");
+      expect(await db.collection("electedOfficials").countDocuments()).toBe(198);
+      expect(await db.collection("npps").find().sort({ _id: 1 }).toArray()).toEqual(ownerMirrors);
+      expect(await db.collection(HU_1991_LIST_REPLACEMENTS_COLLECTION).countDocuments()).toBe(0);
+      expect(await loadHu1991ListVacancies(db, 1122)).toEqual(vacancies);
+      commands = commandBytes = replyBytes = 0;
+      const designations = await Promise.all([
+        designateHu1991ListDeputy(designation),
+        designateHu1991ListDeputy(designation),
+      ]);
+      expect(designations.sort()).toEqual([false, true]);
+      process.stdout.write(
+        JSON.stringify({
+          fixture: "hu-modern-list-replacement-concurrent",
+          commands,
+          commandBytes,
+          replyBytes,
+        }) + "\n"
+      );
+      expect(await designateHu1991ListDeputy(designation)).toBe(false);
+      expect(await db.collection(HU_1991_LIST_REPLACEMENTS_COLLECTION).countDocuments()).toBe(1);
+      expect(
+        await db.collection("electedOfficials").countDocuments({
+          countryId: "HU",
+          officeType: "assemblyDelegate",
+        })
+      ).toBe(199);
+      const replacement = await db.collection("electedOfficials").findOne({
+        "hungarianAssemblyMandate.personId": person.personId,
+      });
+      expect(replacement?.termEnds).toEqual(departed!.termEnds);
+      for (const owner of await db.collection("npps").find().toArray()) {
+        const held = await db.collection("electedOfficials").countDocuments({ nppId: owner._id });
+        expect(owner.seatsHeld).toBe(held);
+        expect(owner.currentOffice.seatsHeld).toBe(held);
+      }
+      expect(await db.collection("npps").countDocuments()).toBe(12);
+      expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
+      expect(await loadHu1991ListVacancies(db, 1122)).toHaveLength(0);
+      // A completed legacy modern settlement must not borrow an old native slate.
+      await db
+        .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
+        .deleteOne({ _id: receipt!._id });
+      await db.collection<StringRecord>("hu1991AssemblyCounts").insertOne({
+        ...receipt!,
+        _id: "HU:mixed1989:legacy",
+        seatedAtTurn: 1120,
+      });
+      expect(await loadHu1991ListVacancies(db, 1122)).toEqual([]);
     } finally {
       await db.dropDatabase();
     }

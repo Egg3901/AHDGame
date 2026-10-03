@@ -7,6 +7,7 @@ import type { ClientSession, Collection, Db } from "mongodb";
 import type { GameState } from "@/lib/db/types";
 import { HU_1991_COUNTS_COLLECTION, type Hu1991AssemblyRecord } from "./assemblyCount1991";
 import { HU_2011_COUNTS_COLLECTION } from "./assemblyCount2011";
+import type { Hu1991InstalledMandates } from "./rules/mandates1991";
 import type { HuListNominations } from "./rules/listVacancies1991";
 export type HuListAssemblyReceipt = Pick<
   Hu1991AssemblyRecord,
@@ -17,7 +18,7 @@ export type HuListAssemblyReceipt = Pick<
   | "seatedAt"
   | "seatedAtTurn"
   | "listReplacementGeneration"
-> & { nominations: HuListNominations };
+> & { nominations: HuListNominations; installed?: Hu1991InstalledMandates };
 
 export function huListParentCollection(
   db: Db,
@@ -47,6 +48,7 @@ export async function readHuListAssemblyReceipt(db: Db, session?: ClientSession)
       sort: { seatedAtTurn: -1 },
       projection: {
         nominations: 1,
+        installed: 1,
         settled: 1,
         nominees: 1,
         seatedAt: 1,
@@ -60,7 +62,9 @@ export async function readHuListAssemblyReceipt(db: Db, session?: ClientSession)
     // Earlier modern receipts already froze the full original person slate.
     // Reading its stored order adds no nominee and does not rewrite certification.
     const parties = new Set(
-      parent.settled?.mandates.filter((row) => row.tier === "national").map((row) => row.partyId)
+      (parent.installed?.mandates ?? parent.settled?.mandates ?? [])
+        .filter((row) => row.tier === "national")
+        .map((row) => row.partyId)
     );
     parent.nominations = {
       people: parent.nominations.people,
