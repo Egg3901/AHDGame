@@ -6,6 +6,29 @@ import { ensureIndex } from "./helpers";
 export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   log("Performance indexes:");
 
+  // Native Grand Assembly replacement journals are queried once per chamber.
+  await ensureIndex(
+    db,
+    "bg1991ListReplacements",
+    { parentReceiptId: 1, generation: 1, _id: 1 },
+    { name: "bg1991ListReplacements_parent_generation" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "bgGrandConstituencyByElections",
+    { status: 1, parentReceiptId: 1 },
+    { name: "bgGrandConstituencyByElections_active_parent" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "bgGrandConstituencyByElections",
+    { parentReceiptId: 1, status: 1, districtId: 1, completedAtTurn: -1, generation: -1 },
+    { name: "bgGrandConstituencyByElections_previous_holder" },
+    log
+  );
+
   // Clock repair filters successful logs within the current reset iteration.
   await ensureIndex(
     db,

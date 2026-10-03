@@ -7,6 +7,8 @@ export interface BgFoundingCampaignBinding {
   rootElectionId: string;
   /** Bounded Article73(3) filing window; the receipt remains authoritative. */
   newNominationDistrictIds?: string[];
+  /** A fresh ballot for one vacant constituency; national list awards stay frozen. */
+  byElection?: { parentReceiptId: string; districtId: string; generation: number };
 }
 
 export function isBgFoundingCampaign(election: {

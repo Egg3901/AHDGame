@@ -119,7 +119,8 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     // Bound Assembly families use their atomic slate shells.
     if (
       isNativeRussianAssemblyElection(p) ||
-      (p.countryId === "BG" && p.bulgarianFoundingRound?.round === 2) ||
+      (p.countryId === "BG" &&
+        (p.bulgarianFoundingRound?.round === 2 || p.bulgarianFoundingRound?.byElection)) ||
       p.hungarianModernByElection != null ||
       (isHu1991AssemblyCampaign(p) &&
         (p.hungarianAssemblyRound?.round === 2 || p.hungarianAssemblyRound?.byElection))

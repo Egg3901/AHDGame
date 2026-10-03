@@ -1212,6 +1212,9 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const { advanceBg1991ListVacancies } =
             await import("@/lib/countries/bg/listVacancies1991");
           await advanceBg1991ListVacancies(db, context.gameState, newTurn, gameNow);
+          const { openBgGrandConstituencyByElections } =
+            await import("@/lib/countries/bg/constituencyByElections1991");
+          await openBgGrandConstituencyByElections(db, context.gameState, newTurn, gameNow);
           const { processRoParliamentTransition } =
             await import("@/lib/turn/roParliamentTransition");
           const { processRo1992ElectoralMandate } =

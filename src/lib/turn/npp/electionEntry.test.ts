@@ -515,6 +515,31 @@ describe("processElectionEntry", () => {
     expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
 
+  it("leaves first-round Bulgarian constituency replacements to atomic nominee admission", async () => {
+    const election = createTestElection({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG_SOF",
+      bulgarianFoundingRound: {
+        ruleVersion: "parallel-1990-v1",
+        receiptId: "BG:founding1990:0:partial:1:district",
+        round: 1,
+        rootElectionId: new ObjectId().toHexString(),
+        registeredVoters: 1000,
+        byElection: { parentReceiptId: "BG:founding1990:0", districtId: "district", generation: 1 },
+      },
+    });
+    const npp = createTestNpp({
+      countryId: "BG",
+      homeState: "BG_SOF",
+      party: "1",
+      currentOffice: null,
+    });
+    db.collection("electionCandidates");
+    expect(await processElectionEntry(buildContext(db, election, [npp], []))).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
   it("keeps unqualified NPC recruitment out of a Bulgarian founding runoff", async () => {
     const election = createTestElection({
       countryId: "BG",
