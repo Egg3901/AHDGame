@@ -91,6 +91,7 @@ import { createCorporationTurnTimer, type CorporationTurnResult } from "./corpor
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
 import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
+import { partitionedBulkWrite } from "./partitionedBulkWrite";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -620,9 +621,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
 
   // Phase 3: Bulk write sector and corp updates
   if (sectorOps.length > 0) {
-    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
+    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid.
+    // Every op is keyed by its sector `_id`; ops on one sector (the flip-turn
+    // `$push` after the main update) stay together and in order.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("corporateSectors").bulkWrite(sectorOps as any[]);
+    await partitionedBulkWrite(db.collection("corporateSectors"), sectorOps as any[]);
   }
   if (corpOps.length > 0) {
     // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
