@@ -593,6 +593,12 @@ export interface Bill {
     revision: number;
     kind: "presidency" | "federalAssembly";
   };
+  /** A Duma electoral statute follows normal bicameral votes and presidential enactment. */
+  russianDumaElectoralMandate?: {
+    proposalId: string;
+    revision: number;
+    kind: "law1995";
+  };
   /** A Council formation statute follows ordinary full-capacity chamber majorities. */
   russianCouncilFormationMandate?: {
     proposalId: string;

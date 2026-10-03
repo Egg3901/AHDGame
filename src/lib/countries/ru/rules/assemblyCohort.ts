@@ -3,6 +3,7 @@
  * resolveRussianDumaCohort records failed constituencies as vacancies, requires the
  * complete frozen ballot map and keeps constituency winners out of player list seats.
  */
+import { russianDumaElectoralLaw, type RussianDumaElectoralLaw } from "./dumaElectoralLaw";
 import { planRussianDumaDistricts } from "./assemblyDistricts";
 import { allocateRussianDumaListMandates } from "./assemblyList";
 import { resolveRussianDumaConstituency, resolveRussianDumaList } from "./assemblyResult";
@@ -26,6 +27,9 @@ export interface RussianDumaCohortBallot {
   tier: "constituency" | "list";
   registeredVoters: number;
   againstAllVotes: number;
+  law?: RussianDumaElectoralLaw;
+  invalidBallots?: number;
+  issuedBallots?: number;
   invalidated?: boolean;
   candidates: readonly RussianDumaCohortCandidate[];
 }
@@ -50,6 +54,8 @@ function resolveRussianDumaBallots(ballots: readonly RussianDumaCohortBallot[], 
     )
   )
     throw new Error("First-Duma certification needs 226 unique safe ballots");
+  if (new Set(ballots.map((row) => russianDumaElectoralLaw(row.law))).size !== 1)
+    throw new Error("Duma certification cannot mix frozen electoral laws");
   const lists = ballots.filter((row) => row.tier === "list");
   const districts = ballots.filter((row) => row.tier === "constituency");
   if (
@@ -126,6 +132,9 @@ function resolveRussianDumaBallots(ballots: readonly RussianDumaCohortBallot[], 
           registrationOrder: row.registrationOrder,
         })),
         againstAllVotes: ballot.againstAllVotes,
+        law: ballot.law,
+        invalidBallots: ballot.invalidBallots,
+        issuedBallots: ballot.issuedBallots,
         invalidated: ballot.invalidated,
       });
       if (decision.outcome !== "elected")
@@ -188,6 +197,9 @@ function resolveRussianDumaBallots(ballots: readonly RussianDumaCohortBallot[], 
   const listDecision = resolveRussianDumaList({
     registeredVoters: list.registeredVoters,
     againstAllVotes: list.againstAllVotes,
+    law: list.law,
+    invalidBallots: list.invalidBallots,
+    issuedBallots: list.issuedBallots,
     invalidated: list.invalidated,
     options: [...partyVotes.values()],
   });
@@ -252,6 +264,7 @@ export function resolveRussianDumaRepeatGeneration(input: {
       return (
         !old ||
         old.tier !== row.tier ||
+        russianDumaElectoralLaw(old.law) !== russianDumaElectoralLaw(row.law) ||
         old.regionId !== row.regionId ||
         oldElectionIds.has(row.id) ||
         row.candidates.some((c) => oldCandidateIds.has(c.id))

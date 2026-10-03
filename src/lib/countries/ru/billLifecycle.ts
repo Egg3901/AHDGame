@@ -9,6 +9,7 @@ import { getGameState } from "@/lib/gameState";
 import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
 import { buildConfiguredCountryBillLifecycle } from "../../turn/billLifecycle/configs/configuredCountry";
 import { runBillLifecycle } from "../../turn/billLifecycle/engine";
+import { passesRussianDumaLawChamber } from "./rules/dumaElectoralLaw";
 import { passesRussianCouncilFormationLaw } from "./rules/councilComposition";
 import { passesRussianConstitutionalDecision } from "./rules/constitutionalDecisions";
 
@@ -23,9 +24,20 @@ export async function processRussian1991Bills(db: Db, now: Date, currentTurn: nu
   for (const stage of lifecycle.stages) {
     if (stage.kind !== "chamberVote") continue;
     stage.passCheck = (bill, totals) => {
-      if (!bill.russianConstitutionalMandate && !bill.russianCouncilFormationMandate)
+      if (
+        !bill.russianConstitutionalMandate &&
+        !bill.russianCouncilFormationMandate &&
+        !bill.russianDumaElectoralMandate
+      )
         return undefined;
-      if (bill.russianConstitutionalMandate && bill.russianCouncilFormationMandate) return false;
+      if (
+        [
+          bill.russianConstitutionalMandate,
+          bill.russianCouncilFormationMandate,
+          bill.russianDumaElectoralMandate,
+        ].filter(Boolean).length !== 1
+      )
+        return false;
       const office = stage.officeTypeFor(bill);
       const seats =
         office === offices.lowerOfficeType
@@ -35,9 +47,11 @@ export async function processRussian1991Bills(db: Db, now: Date, currentTurn: nu
             : undefined;
       return (
         seats != null &&
-        (bill.russianCouncilFormationMandate
-          ? passesRussianCouncilFormationLaw(totals.for, seats)
-          : passesRussianConstitutionalDecision(totals.for, seats))
+        (bill.russianDumaElectoralMandate
+          ? passesRussianDumaLawChamber(totals, seats)
+          : bill.russianCouncilFormationMandate
+            ? passesRussianCouncilFormationLaw(totals.for, seats)
+            : passesRussianConstitutionalDecision(totals.for, seats))
       );
     };
   }

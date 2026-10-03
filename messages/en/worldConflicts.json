@@ -69,6 +69,8 @@
         "other-era": "This decision is unavailable in this era.",
         "awaiting-assembly": "A seated Federal Assembly is required before changing Council formation."
       },
+      "law1995": "Duma 1995 electoral law",
+      "law1995Help": "Include invalid ballots in the five-percent list threshold and use ballot receipt counts for district turnout. The parallel 225 constituency and 225 list seats remain. Existing campaigns and repeat ballots keep their frozen rules.",
       "regionalHeads": "Regional heads in the Council",
       "regionalDelegates": "Separate regional Council representatives",
       "regionalHeadsHelp": "Let the executive head and legislative chair of each federal subject represent their region in the Council.",

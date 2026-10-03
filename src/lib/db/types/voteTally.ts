@@ -51,6 +51,8 @@ export interface ElectionVoteTally {
   finalized: boolean;
   /** Native first-Duma valid against-all ballots and certification outcome. */
   russianDumaBallot?: {
+    invalidBallots?: number;
+    issuedBallots?: number;
     againstAllVotes: number;
     invalidated?: boolean;
     outcome?: "elected" | "repeat";

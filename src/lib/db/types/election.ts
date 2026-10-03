@@ -93,6 +93,8 @@ export interface Election {
   };
   /** Bound first-Duma ballots share one mandate and frozen registration cohort. */
   russianDumaRound?: {
+    /** Missing preserves the first decree for existing saves and repeat families. */
+    electoralLaw?: "decree1993" | "law1995";
     cohortId: ObjectId;
     /** Absent on the original generation; repeats retain their original mandate identity. */
     rootCohortId?: ObjectId;

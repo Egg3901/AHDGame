@@ -3,6 +3,7 @@
  * materializeRussianDumaRepeatOpening freezes fresh registers and a new campaign
  * atomically, binding each generation to its immutable predecessor receipt.
  */
+import { russianDumaElectoralLaw } from "./rules/dumaElectoralLaw";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type {
   CountryGameState,
@@ -178,7 +179,12 @@ export async function materializeRussianDumaRepeatOpening(input: {
     new Set(electionIds.map((id) => id.toHexString())).size !== pending.length ||
     cohortId.equals(rootCohortId) ||
     cohortId.equals(previous.cohortId) ||
-    previous.ballots.some((ballot) => !ObjectId.isValid(ballot.id)) ||
+    previous.ballots.some(
+      (ballot) =>
+        !ObjectId.isValid(ballot.id) ||
+        russianDumaElectoralLaw(ballot.law) !==
+          russianDumaElectoralLaw(authority.record?.electoralLaw)
+    ) ||
     electionIds.some((id) => previous.ballots!.some((ballot) => ballot.id === id.toHexString()))
   )
     throw new Error("Duma repeats need distinct new ballot identities");
@@ -225,6 +231,7 @@ export async function materializeRussianDumaRepeatOpening(input: {
     createdAt: now,
     updatedAt: now,
     russianDumaRound: {
+      ...(old.law != null ? { electoralLaw: old.law } : {}),
       cohortId,
       rootCohortId,
       generation,

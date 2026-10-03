@@ -184,6 +184,9 @@ export async function materializeRussianDumaRepeatNpcAdmission(input: {
       seatId: row.seatId!,
       regionId: row.state,
       tier: row.russianDumaRound!.tier,
+      ...(row.russianDumaRound!.electoralLaw != null
+        ? { law: row.russianDumaRound!.electoralLaw }
+        : {}),
       registeredVoters: row.russianDumaRound!.registeredVoters,
       againstAllVotes: 0,
       candidates: [],

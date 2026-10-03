@@ -3,6 +3,8 @@
  * loadRussianDumaAuthority validates ordinary openings against the current predecessor;
  * loadCurrentRussianDumaClock preserves the immutable first Assembly term proof.
  */
+import { loadEnactedRussianDumaLaw } from "./dumaElectoralProposals1995";
+import { russianDumaElectoralLaw, type RussianDumaElectoralLaw } from "./rules/dumaElectoralLaw";
 import type { ClientSession, Db, ObjectId } from "mongodb";
 import type { CountryGameState } from "@/lib/db/types";
 import type { RussianAssemblySeatingRecord } from "./assemblySeating";
@@ -23,6 +25,8 @@ export interface RussianDumaConvocationRecord {
   firstCouncilRoot: ObjectId;
   mandateSinceTurn: number;
   number: number;
+  electoralLaw?: RussianDumaElectoralLaw;
+  electoralMandate?: CountryGameState["ruDumaElectoralMandate"];
   predecessorCohortId: ObjectId;
   predecessorSeatedOnTurn: number;
   predecessorTermEndTurn: number;
@@ -69,6 +73,14 @@ function validateRecord(
   country: AuthorityCountry,
   turn: number
 ) {
+  const law = russianDumaElectoralLaw(record.electoralLaw);
+  if (
+    (law === "law1995") !== (record.electoralMandate != null) ||
+    (record.electoralMandate &&
+      (record.electoralMandate.law !== law ||
+        record.electoralMandate.sinceTurn > record.openedOnTurn))
+  )
+    throw new Error("Duma opening lacks its frozen enacted law binding");
   if (
     record._id !== record.cohortId.toHexString() ||
     record.countryId !== "RU" ||
@@ -225,6 +237,14 @@ export async function loadRussianDumaAuthority(input: {
     .findOne({ _id: root.toHexString() }, { session });
   if (!record) throw new Error("Ordinary Duma campaign lacks its immutable journal");
   validateRecord(record, country, turn);
+  if (record.electoralMandate) {
+    await loadEnactedRussianDumaLaw({
+      db,
+      session,
+      country: { ...country, ruDumaElectoralMandate: record.electoralMandate },
+      turn: record.openedOnTurn,
+    });
+  }
   const current = await loadCurrentRussianDumaClock(input);
   if (
     !current ||

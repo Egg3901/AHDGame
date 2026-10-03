@@ -112,6 +112,30 @@ describe("Russian constitutional decision routes", () => {
       expect.objectContaining({ kind: "regionalHeads", threshold: "majority", seatCapacity: 450 })
     );
   });
+  it("opens the1995 Duma bill without changing country authority and exposes its status", async () => {
+    mem.seed("gameState", [{ _id: "current", preset: "1991-default" }]);
+    mocks.getGameState.mockResolvedValue({ preset: "1991-default", currentTurn: 213 });
+    Object.assign(mem.collection("countryGameStates").docs[0], { ruFederalAssemblySinceTurn: 145 });
+    mem.collection("electedOfficials").docs[0].officeType = "dumaDeputy";
+    const response = await POST(request({ kind: "law1995" }), params);
+    expect(response.status).toBe(201);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(mem.collection("bills").docs[0]).toMatchObject({
+      russianDumaElectoralMandate: { kind: "law1995", revision: 1 },
+      status: "proposed",
+    });
+    expect(mem.collection("countryGameStates").docs[0]).not.toHaveProperty(
+      "ruDumaElectoralMandate"
+    );
+    expect(
+      (await (await GET(new Request("http://localhost"), params)).json()).decisions
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "law1995",
+        proposal: expect.objectContaining({ billStatus: "proposed" }),
+      })
+    );
+  });
   it("preserves the government formation freeze", async () => {
     mocks.checkLegislationFreeze.mockResolvedValue({
       ok: false,

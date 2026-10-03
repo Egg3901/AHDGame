@@ -3,6 +3,7 @@
  * materializeRussianDumaConvocationOpening atomically publishes 226 frozen ballots
  * and a new authority receipt while retaining the current Duma and Council offices.
  */
+import { loadEnactedRussianDumaLaw } from "./dumaElectoralProposals1995";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type { CountryGameState, Election, State, StateRegistrationPool } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
@@ -41,9 +42,16 @@ export async function materializeRussianDumaConvocationOpening(input: {
   const countries = db.collection<CountryGameState>("countryGameStates");
   const country = await countries.findOne(
     { _id: "RU" },
-    { session, projection: RUSSIAN_DUMA_AUTHORITY_PROJECTION }
+    {
+      session,
+      projection: {
+        ...RUSSIAN_DUMA_AUTHORITY_PROJECTION,
+        ruDumaElectoralMandate: 1,
+        dissolvedTurn: 1,
+      },
+    }
   );
-  if (!country) return null;
+  if (!country || country.dissolvedTurn != null) return null;
   const current = await loadCurrentRussianDumaClock({ db, session, country, turn });
   if (!current) return null;
   const pending =
@@ -72,6 +80,8 @@ export async function materializeRussianDumaConvocationOpening(input: {
   }
   if (electionIds.length !== 226 || new Set(electionIds.map((id) => id.toHexString())).size !== 226)
     throw new Error("An ordinary Duma requires 226 distinct ballot identities");
+  const electoralLaw = await loadEnactedRussianDumaLaw({ db, session, country, turn });
+  const lawFields = electoralLaw === "law1995" ? { electoralLaw } : {};
   const elections = db.collection<Election>("elections");
   // Let a current family's last pending repeat certify before changing its authority.
   if (
@@ -135,6 +145,7 @@ export async function materializeRussianDumaConvocationOpening(input: {
     seatId: district.seatId,
     totalSeats: 1,
     russianDumaRound: {
+      ...lawFields,
       cohortId,
       mandateSinceTurn,
       tier: "constituency",
@@ -149,6 +160,7 @@ export async function materializeRussianDumaConvocationOpening(input: {
     seatId: "RU-duma-national-list",
     totalSeats: 225,
     russianDumaRound: {
+      ...lawFields,
       cohortId,
       mandateSinceTurn,
       tier: "list",
@@ -164,6 +176,8 @@ export async function materializeRussianDumaConvocationOpening(input: {
     firstCouncilRoot: country.ruFirstCouncilElectionCohortId!,
     mandateSinceTurn,
     number: planned.number,
+    ...lawFields,
+    ...(electoralLaw === "law1995" ? { electoralMandate: country.ruDumaElectoralMandate } : {}),
     predecessorCohortId: new ObjectId(current.rootId),
     predecessorSeatedOnTurn: current.seatedOnTurn,
     predecessorTermEndTurn: current.termEndTurn,

@@ -18,8 +18,20 @@ import {
   loadRussianCouncilFormationDecisions,
   openRussianCouncilFormationProposal,
 } from "@/lib/countries/ru/councilFormationProposals";
+import {
+  loadRussianDuma1995Decisions,
+  openRussianDuma1995Proposal,
+} from "@/lib/countries/ru/dumaElectoralProposals1995";
 const bodySchema = z
-  .object({ kind: z.enum(["presidency", "federalAssembly", "regionalHeads", "regionalDelegates"]) })
+  .object({
+    kind: z.enum([
+      "presidency",
+      "federalAssembly",
+      "regionalHeads",
+      "regionalDelegates",
+      "law1995",
+    ]),
+  })
   .strict();
 type RouteContext = { params: Promise<{ code: string }> };
 export async function GET(_request: Request, { params }: RouteContext) {
@@ -39,6 +51,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
         decisions: [
           ...(await loadRussianConstitutionalDecisions(db, game, game.currentTurn ?? 1)),
           ...(await loadRussianCouncilFormationDecisions(db, game, game.currentTurn ?? 1)),
+          ...(await loadRussianDuma1995Decisions(db, game, game.currentTurn ?? 1)),
         ],
       },
       { headers: { "Cache-Control": "private, no-store" } }
@@ -98,14 +111,16 @@ export async function POST(request: Request, { params }: RouteContext) {
     const proposal =
       parsed.data.kind === "regionalHeads" || parsed.data.kind === "regionalDelegates"
         ? await openRussianCouncilFormationProposal({ ...input, mode: parsed.data.kind })
-        : await openRussianConstitutionalProposal({ ...input, kind: parsed.data.kind });
+        : parsed.data.kind === "law1995"
+          ? await openRussianDuma1995Proposal(input)
+          : await openRussianConstitutionalProposal({ ...input, kind: parsed.data.kind });
     return NextResponse.json(
       {
         billId: proposal.billId.toHexString(),
         revision: proposal.revision,
         status: proposal.status,
       },
-      { status: 201 }
+      { status: 201, headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
     if (error instanceof RussianConstitutionalDecisionConflict)
