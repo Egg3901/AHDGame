@@ -24,6 +24,7 @@ export interface Hu2011AssemblyRecord {
   electionIds: string[];
   /** Frozen modern district boundaries remain stable throughout this Assembly term. */
   constituencies?: readonly { id: string; regionId: string }[];
+  constituencyByElectionGeneration?: number;
   legacyResolvedElectionIds: string[];
   nominations: import("./rules/listVacancies1991").HuListNominations;
   nominees: Hu1991AssemblyRecord["nominees"];

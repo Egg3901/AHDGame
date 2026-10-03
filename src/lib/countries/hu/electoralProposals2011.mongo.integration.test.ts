@@ -17,6 +17,10 @@ import {
 } from "./assemblyCount2011";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
 import { seatHu2011Assembly } from "./assemblySeating2011";
+import {
+  openHuModernByElections,
+  HU_2011_BY_ELECTIONS_COLLECTION,
+} from "./constituencyByElections2011";
 import { huRegions1991 } from "./data/huRegions1991";
 import {
   loadHu1991ListVacancies,
@@ -530,6 +534,53 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       expect(await db.collection("npps").countDocuments()).toBe(12);
       expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
       expect(await loadHu1991ListVacancies(db, 1122)).toHaveLength(0);
+      const direct = await db.collection("electedOfficials").findOne({
+        countryId: "HU",
+        seatSource: "direct",
+        isNPP: true,
+      });
+      await db.collection("electedOfficials").deleteOne({ _id: direct!._id });
+      const lists = await db
+        .collection("electedOfficials")
+        .find({ seatSource: "list" })
+        .sort({ _id: 1 })
+        .toArray();
+      commands = commandBytes = replyBytes = 0;
+      const openings = await Promise.all([
+        openHuModernByElections(db, 1123, NOW),
+        openHuModernByElections(db, 1123, NOW),
+      ]);
+      expect(openings[0]).toEqual(openings[1]);
+      expect(openings[0]).toHaveLength(1);
+      process.stdout.write(
+        JSON.stringify({
+          fixture: "hu-modern-by-election-opening-concurrent",
+          commands,
+          commandBytes,
+          replyBytes,
+        }) + "\n"
+      );
+      const vacancyPoll = await db
+        .collection("elections")
+        .findOne({ _id: new ObjectId(openings[0][0]) });
+      expect(vacancyPoll?.totalSeats).toBe(1);
+      expect(vacancyPoll?.hungarianModernByElection).toMatchObject({
+        parentReceiptId: receipt!._id,
+        districtId: direct!.constituencyId,
+      });
+      expect(vacancyPoll?.hungarianModernByElection.registeredVoters).toBeGreaterThan(0);
+      expect(await db.collection(HU_2011_BY_ELECTIONS_COLLECTION).countDocuments()).toBe(1);
+      expect(
+        await db.collection("electionCandidates").countDocuments({ electionId: vacancyPoll!._id })
+      ).toBe(2);
+      expect(
+        await db
+          .collection("electedOfficials")
+          .find({ seatSource: "list" })
+          .sort({ _id: 1 })
+          .toArray()
+      ).toEqual(lists);
+      expect(await db.collection("npps").countDocuments()).toBe(12);
       // A completed legacy modern settlement must not borrow an old native slate.
       await db
         .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
