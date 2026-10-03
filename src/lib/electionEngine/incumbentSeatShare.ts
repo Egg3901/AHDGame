@@ -97,6 +97,15 @@ export function computeSeatShareFromTally(
   return shares;
 }
 
+/** STV incumbency follows seats actually won, not non-transferable first-preference shares. */
+export function incumbentShareFromFinalizedTally(tally: ElectionVoteTally): Map<string, number> {
+  if (tally.countingMethod === "pr_stv") {
+    if (tally.resolutionPath !== "pr_stv" || !tally.seatsEstimate) return new Map();
+    return computeSeatShareFromTally(tally.seatsEstimate, tally.candidateParties);
+  }
+  return computeSeatShareFromTally(tally.totalVotes, tally.candidateParties);
+}
+
 /**
  * Look up the prior-cycle seat-share map for a given election. Returns
  * an empty Map when there is no prior resolved election on the same
@@ -149,7 +158,7 @@ export async function getIncumbentSeatShareByParty(
     .findOne({ electionId: prior._id });
   if (!tally || !tally.finalized) return new Map();
 
-  return computeSeatShareFromTally(tally.totalVotes, tally.candidateParties);
+  return incumbentShareFromFinalizedTally(tally);
 }
 
 /**
@@ -210,9 +219,7 @@ export async function preloadIncumbentSeatShares(
     const tally = tallyByElection.get(prior._id.toString());
     result.set(
       electionId,
-      !tally || !tally.finalized
-        ? new Map()
-        : computeSeatShareFromTally(tally.totalVotes, tally.candidateParties)
+      !tally || !tally.finalized ? new Map() : incumbentShareFromFinalizedTally(tally)
     );
   }
   return result;

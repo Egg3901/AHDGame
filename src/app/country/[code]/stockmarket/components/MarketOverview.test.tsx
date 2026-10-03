@@ -282,6 +282,8 @@ describe("world dates and refreshed data", () => {
     );
     const { rerender } = render(<MarketOverview exchangeFilter="global" currentTurn={1266} />);
     await waitFor(() => expect(screen.getByText(/Through May 1978/)).toBeTruthy());
+    // Data can render before the chart's asynchronous import finishes.
+    await waitFor(() => expect(fit).toHaveBeenCalledTimes(1));
     expect(screen.getByText(/Turnover incomplete/)).toBeTruthy();
     expect(createChart.mock.calls.at(-1)?.[1].timeScale.tickMarkFormatter(1000)).toBe("May 1978");
     rerender(<MarketOverview exchangeFilter="global" currentTurn={1267} />);
