@@ -139,7 +139,7 @@
     },
     "bulgarianConstitution1991": {
       "title": "Bulgarian 1991 constitution",
-      "help": "The July 1991 date opens a constituent decision. The government or President can introduce a draft. Approval authorizes later ordinary Assembly campaigns; rejection retains the Grand Assembly.",
+      "help": "The July 1991 date opens a constituent decision. The government, President or 100 constituent deputies can introduce a draft. Adoption requires a separate vote; rejection retains the Grand Assembly.",
       "threshold": "At least 267 of all 400 constituent deputies must vote for adoption.",
       "loadError": "Could not load the electoral decision.",
       "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
@@ -155,7 +155,10 @@
         "no-legislature": "The current political settlement has no eligible Bulgarian constituent Assembly."
       },
       "npcReason": "An autonomous government introduced this draft after finding a constituent majority.",
-      "legislatorReason": "The government or President introduced this draft."
+      "legislatorReason": "The government or President introduced this draft.",
+      "endorse": "Endorse the collective draft",
+      "initiativeProgress": "Collective initiative: {support} of {required} required deputy signatures.",
+      "initiativeReason": "A quarter of constituent deputies endorsed this draft. NPC co-partisans decide whether to endorse using their existing party loyalty and stubbornness."
     }
   }
 }

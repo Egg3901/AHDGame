@@ -22,6 +22,7 @@ import {
 
 import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
 import type { CountryState } from "@/lib/db/types/countryState";
+import { loadBg1991Initiative, signBg1991Initiative } from "./constitutionalInitiative1991";
 
 export const BG_1991_PROPOSALS_COLLECTION = "bg1991ConstitutionalProposals";
 const ID = "1991-default:bg-constitutional:constitution1991";
@@ -32,7 +33,7 @@ export interface Bg1991ConstitutionalProposal {
   revision: number;
   openedOnTurn: number;
   status: "open" | "authorized";
-  reason: "executive_proposal" | "npc_government_constituent_mandate";
+  reason: "executive_proposal" | "npc_government_constituent_mandate" | "deputy_quarter_initiative";
   authorizedOnTurn?: number;
   capacity: number;
   createdAt: Date;
@@ -42,25 +43,35 @@ export class Bg1991ConstitutionalConflict extends Error {}
 async function availability(db: Db, game: Calendar, turn: number, session?: ClientSession) {
   const current = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { session, projection: { preset: 1 } });
+    .findOne(
+      { _id: "current" },
+      { session, projection: { preset: 1, preIteration: 1, preIterationTurns: 1 } }
+    );
   const runtime = await db
     .collection<CountryState>("countryState")
     .findOne({ _id: "BG" }, { session, projection: { governmentType: 1 } });
-  const country = await db
-    .collection<CountryGameState>("countryGameStates")
-    .findOne(
-      { _id: "BG" },
-      { session, projection: { bgConstitution1991SinceTurn: 1, bgOrdinaryAssemblySinceTurn: 1 } }
-    );
+  const country = await db.collection<CountryGameState>("countryGameStates").findOne(
+    { _id: "BG" },
+    {
+      session,
+      projection: {
+        bgConstitution1991SinceTurn: 1,
+        bgOrdinaryAssemblySinceTurn: 1,
+        dissolvedTurn: 1,
+      },
+    }
+  );
   return bg1991DecisionAvailability({
     preset: current?.preset,
     calendarTurn: calendarTurn(turn, {
-      preIterationActive: game.preIteration?.active,
-      preIterationTurns: game.preIterationTurns,
+      preIterationActive: current?.preIteration?.active,
+      preIterationTurns: current?.preIterationTurns,
     }),
     authorizedTurn: country?.bgConstitution1991SinceTurn,
     completedTurn: country?.bgOrdinaryAssemblySinceTurn,
-    hasParliament: !runtime || runtime.governmentType === "parliamentaryRepublic",
+    hasParliament:
+      country?.dissolvedTurn == null &&
+      (!runtime || runtime.governmentType === "parliamentaryRepublic"),
   });
 }
 
@@ -90,12 +101,18 @@ export async function materializeBg1991ConstitutionalProposal(input: {
   if (prior) {
     if (!Number.isSafeInteger(prior.revision) || prior.revision < 1)
       throw new Bg1991ConstitutionalConflict("Invalid electoral proposal revision");
-    const bill = await db
-      .collection<Bill>("bills")
-      .findOne(
-        { _id: prior.billId },
-        { session, projection: { countryId: 1, status: 1, bulgarianConstitutionalMandate: 1 } }
-      );
+    const bill = await db.collection<Bill>("bills").findOne(
+      { _id: prior.billId },
+      {
+        session,
+        projection: {
+          countryId: 1,
+          status: 1,
+          bulgarianConstitutionalMandate: 1,
+          "voteSnapshot.resolvedAtTurn": 1,
+        },
+      }
+    );
     if (
       !bill ||
       bill.countryId !== "BG" ||
@@ -105,6 +122,10 @@ export async function materializeBg1991ConstitutionalProposal(input: {
     )
       throw new Bg1991ConstitutionalConflict("Electoral proposal no longer matches its bill");
     if (!["failed", "vetoed", "override_failed"].includes(bill.status)) return prior;
+    if (turn < prior.openedOnTurn || (bill.voteSnapshot && turn < bill.voteSnapshot.resolvedAtTurn))
+      throw new Bg1991ConstitutionalConflict(
+        "A revised draft cannot precede the previous decision"
+      );
   }
   const regions = await db
     .collection("states")
@@ -115,7 +136,30 @@ export async function materializeBg1991ConstitutionalProposal(input: {
     throw new Bg1991ConstitutionalConflict(
       "The constituent decision needs the full 400-seat Grand Assembly"
     );
-  if (input.sponsor) {
+  let sponsorParty = input.sponsorParty;
+  if (input.reason === "deputy_quarter_initiative") {
+    if (
+      !input.sponsor ||
+      !(await loadBg1991Initiative(db, (prior?.revision ?? 0) + 1, session)).canIntroduce
+    )
+      throw new Bg1991ConstitutionalConflict(
+        "One hundred constituent deputies must endorse this draft"
+      );
+    const deputy = await db.collection("electedOfficials").findOne(
+      {
+        countryId: "BG",
+        characterId: input.sponsor._id,
+        officeType: "assemblyDeputy",
+        seatsHeld: { $ne: 0 },
+      },
+      { session, projection: { _id: 1, party: 1 } }
+    );
+    if (!deputy)
+      throw new Bg1991ConstitutionalConflict(
+        "A seated constituent deputy must introduce the collective draft"
+      );
+    sponsorParty = typeof deputy.party === "string" ? deputy.party : undefined;
+  } else if (input.sponsor) {
     const office = await db.collection("electedOfficials").findOne(
       {
         countryId: "BG",
@@ -145,12 +189,12 @@ export async function materializeBg1991ConstitutionalProposal(input: {
     stateId: "bg_national",
     title: "Bulgarian 1991 Constitution Decision",
     summary:
-      "Authorize the ordinary 240-seat National Assembly with a two-thirds vote of all 400 constituent deputies. The government or President introduces the draft. Existing cast ballots retain their frozen rules.",
+      "Authorize the ordinary 240-seat National Assembly with a two-thirds vote of all 400 constituent deputies. The government, President or a quarter of constituent deputies introduces the draft. Existing cast ballots retain their frozen rules.",
     originChamber: "nationalAssembly",
     currentChamber: "nationalAssembly",
     sponsorId: input.sponsor?._id ?? null,
     sponsorName: input.sponsor?.name ?? "Bulgarian Government",
-    ...(input.sponsorParty ? { sponsorParty: input.sponsorParty } : {}),
+    ...(sponsorParty ? { sponsorParty } : {}),
     status: "proposed",
     votesFor: 0,
     votesAgainst: 0,
@@ -184,6 +228,67 @@ export async function openBg1991ConstitutionalProposal(
   const newBillId = input.newBillId ?? new ObjectId();
   return runRequiredTransaction(
     (session) => materializeBg1991ConstitutionalProposal({ ...input, newBillId, session }),
+    { client: input.db.client }
+  );
+}
+
+export async function endorseBg1991ConstitutionalInitiative(
+  input: Omit<Parameters<typeof materializeBg1991ConstitutionalProposal>[0], "session">
+) {
+  if (!Number.isFinite(input.now.getTime()))
+    throw new Error("Constituent initiative needs a valid time");
+  if (!input.sponsor)
+    throw new Bg1991ConstitutionalConflict(
+      "A seated constituent deputy must endorse this initiative"
+    );
+  const sponsor = input.sponsor;
+  return runRequiredTransaction(
+    async (session) => {
+      const allowed = await availability(input.db, input.game, input.turn, session);
+      if (!allowed.available) throw new Bg1991ConstitutionalConflict(allowed.reason);
+      const prior = await input.db
+        .collection<Bg1991ConstitutionalProposal>(BG_1991_PROPOSALS_COLLECTION)
+        .findOne(
+          { _id: ID },
+          { session, projection: { revision: 1, billId: 1, status: 1, openedOnTurn: 1 } }
+        );
+      if (prior) {
+        const bill = await input.db
+          .collection<Bill>("bills")
+          .findOne(
+            { _id: prior.billId },
+            { session, projection: { status: 1, "voteSnapshot.resolvedAtTurn": 1 } }
+          );
+        if (!bill || !["failed", "vetoed", "override_failed"].includes(bill.status))
+          throw new Bg1991ConstitutionalConflict(
+            "The current draft must resolve before another initiative"
+          );
+        if (
+          input.turn < prior.openedOnTurn ||
+          (bill.voteSnapshot && input.turn < bill.voteSnapshot.resolvedAtTurn)
+        )
+          throw new Bg1991ConstitutionalConflict(
+            "A revised draft cannot precede the previous decision"
+          );
+      }
+      const revision = (prior?.revision ?? 0) + 1;
+      const initiative = await signBg1991Initiative({
+        db: input.db,
+        session,
+        revision,
+        turn: input.turn,
+        characterId: sponsor._id,
+      });
+      const proposal = initiative.canIntroduce
+        ? await materializeBg1991ConstitutionalProposal({
+            ...input,
+            sponsor,
+            session,
+            reason: "deputy_quarter_initiative",
+          })
+        : null;
+      return { initiative, proposal };
+    },
     { client: input.db.client }
   );
 }
@@ -264,6 +369,12 @@ export async function loadBg1991ConstitutionalDecision(db: Db, game: Calendar, t
   return {
     kind: "constitution1991" as const,
     ...allowed,
+    initiative: await loadBg1991Initiative(
+      db,
+      proposal && bill && !["failed", "vetoed", "override_failed"].includes(bill.status)
+        ? proposal.revision
+        : (proposal?.revision ?? 0) + 1
+    ),
     proposal: proposal
       ? {
           billId: proposal.billId.toHexString(),

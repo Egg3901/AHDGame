@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 interface Decision {
   available: boolean;
   reason: string;
+  initiative?: { support: number; required: number; canIntroduce: boolean };
   proposal: {
     billId: string;
     billStatus: string | null;
@@ -37,17 +38,28 @@ export default function BulgarianConstitutionalDecisionPanel() {
       active = false;
     };
   }, [t, endpoint]);
-  async function open() {
+  async function open(action: "introduce" | "endorse" = "introduce") {
     setBusy(true);
     setError(null);
     try {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify({ kind, action }),
       });
-      const body = (await response.json()) as { billId?: string };
-      if (!response.ok || !body.billId) {
+      const body = (await response.json()) as {
+        billId?: string;
+        initiative?: Decision["initiative"];
+      };
+      if (!response.ok) {
+        setError(t("openError"));
+        return;
+      }
+      if (!body.billId && action === "endorse" && body.initiative) {
+        setDecision((prior) => (prior ? { ...prior, initiative: body.initiative } : prior));
+        return;
+      }
+      if (!body.billId) {
         setError(t("openError"));
         return;
       }
@@ -64,6 +76,14 @@ export default function BulgarianConstitutionalDecisionPanel() {
       <h2 className="text-xl font-semibold">{t("title")}</h2>
       <p>{t("help")}</p>
       <p>{t("threshold")}</p>
+      {decision?.initiative && (
+        <p>
+          {t("initiativeProgress", {
+            support: decision.initiative.support,
+            required: decision.initiative.required,
+          })}
+        </p>
+      )}
       {error && <p role="alert">{error}</p>}
       {decision && !decision.available && <p>{t(`reasons.${decision.reason}`)}</p>}
       {decision?.proposal && (
@@ -79,19 +99,31 @@ export default function BulgarianConstitutionalDecisionPanel() {
           {t(
             decision.proposal.reason?.startsWith("npc_government_")
               ? "npcReason"
-              : "legislatorReason"
+              : decision.proposal.reason === "deputy_quarter_initiative"
+                ? "initiativeReason"
+                : "legislatorReason"
           )}
         </p>
       )}
       {decision?.available && (!decision.proposal || decision.proposal.canRevise) && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void open()}
-          className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
-        >
-          {t(decision.proposal?.canRevise ? "revise" : "open")}
-        </button>
+        <>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void open()}
+            className="rounded bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50"
+          >
+            {t(decision.proposal?.canRevise ? "revise" : "open")}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void open("endorse")}
+            className="rounded border border-border px-4 py-2 disabled:opacity-50"
+          >
+            {t("endorse")}
+          </button>
+        </>
       )}
     </section>
   );
