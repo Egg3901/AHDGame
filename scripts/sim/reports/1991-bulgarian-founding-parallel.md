@@ -1,5 +1,7 @@
 # Bulgarian founding parallel election qualification
 
+Qualified runtime source: `d6cb5d599b4952d06fecff09aefc8b5c409836c0`.
+
 The 400-seat Grand Assembly previously used a regional approximation of a compensatory mixed election. Founding campaigns now bind to one native count: 200 constituency mandates and 200 independent party-list mandates. This includes the bootstrap cycle and later founding campaigns when constitutional reform has not passed. Fully resolved historical campaigns retain their settlement. Ordinary 240-seat campaigns keep their existing national allocation.
 
 The [founding election law, articles 4, 5, 17, 39, 72, 73 and 76](https://www.ciela.net/svobodna-zona-darjaven-vestnik/document/2132293633/issue/1081/zakon-za-izbirane-na-veliko-narodno-sabranie) establishes separate ballots, 200 constituencies, 28 list areas, dual candidacy, a strict majority of valid constituency votes and participation above half the register in the first round. Unresolved constituencies hold a new poll; its plurality winner needs no turnout quorum. Lists qualify at four percent of national valid list votes. The [CEC methodology, sections 7 through 12](https://www.ciela.net/svobodna-zona-darjaven-vestnik/document/-15180285/issue/1091/metodika-za-izchislyavane-na-rezultatite-ot-glasuvaneto-po-proportsionalnata-izbiratelna-sistema) distributes 200 list seats nationally through D'Hondt, independently of direct victories.
