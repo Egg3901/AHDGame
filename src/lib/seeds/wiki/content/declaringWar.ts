@@ -95,6 +95,8 @@ Three things follow from that:
 
 There is a second route in for a bloc: a member can table a resolution calling the whole organization into a conflict. That needs **unanimous consent** from every member entitled to vote, because it commits allies' soldiers. If the bloc is joining the side that holds the war's territory, the call is collective defence and passing the organization vote enrolls eligible allies immediately without national legislation. This includes extending protection to a new member whose war began before admission. Joining the attacking side remains an offensive coalition choice and produces a join-conflict bill in each eligible member's legislature. The membership ballot warns the bloc when an applicant is already at war or is the target of a pending declaration. See [International Organizations](/wiki/international-organizations).
 
+A Bloc can also vote to begin a new war against a player nation. Only player nations hold ballots on that resolution, and all of them must vote yes. Passage puts a declaration before every eligible player nation's legislature, with both chambers voting concurrently where both have a vote. Each declaration still needs two-thirds in every required chamber. NPP-governed members enter automatically when the bloc resolution passes. If one player nation's declaration fails, only that nation stays out; the NPP members and every country whose legislature passed remain in the coalition.
+
 Autonomous governments use these roads too. A country nobody plays can ratify a war-entry bill on its own, provided its public approval, readiness, treasury and alliance all support it, and it deploys real forces when it does.
 
 ## What happens the moment it passes

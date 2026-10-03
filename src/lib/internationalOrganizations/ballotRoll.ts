@@ -18,7 +18,8 @@
  *    are unanimous but voted only by their own named parties, each deciding an
  *    agreement it is itself signing.
  *
- * 2. AN ADMISSION AND A BLOC WAR ENTRY seat player-enabled members only. These
+ * 2. AN ADMISSION, BLOC WAR DECLARATION, AND BLOC WAR ENTRY seat player-enabled
+ *    members only. These
  *    are the ballots that ask a member to consent to someone ELSE's business
  *    while letting it block the whole thing, so a silence there is
  *    indistinguishable from a veto. An NPP government plans once every six turns
@@ -45,7 +46,7 @@ import { foreignPolicyModeFrom } from "@/lib/nppAutonomy/foreignPolicyRollout";
  *
  * Requires a formed government with an NPP at its head AND a bill lifecycle: a
  * country that cannot put a bill through a legislature cannot answer for a vote,
- * which is the same bar `join_conflict` billing applies.
+ * which is the same bar `join_conflict` and `declare_war` billing applies.
  */
 export async function nppGovernedMembers(
   db: Db,

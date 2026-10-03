@@ -14,6 +14,7 @@ import { DirectivePanel } from "./DirectivePanel";
 import { JointStatementPanel } from "./JointStatementPanel";
 import { PosturePanel } from "./PosturePanel";
 import { JoinConflictPanel } from "./JoinConflictPanel";
+import { OrganizationWarDeclarationPanel } from "./OrganizationWarDeclarationPanel";
 import { AgencyFundingPanel } from "./AgencyFundingPanel";
 import { FundOrgPanel } from "./FundOrgPanel";
 import { DuesPanel } from "./DuesPanel";
@@ -234,6 +235,15 @@ export function OverviewTab({
           safe wherever it is mounted. */}
       {canTableResolutionType(org.def.category, "join_conflict") && (
         <JoinConflictPanel
+          org={org}
+          viewer={viewer}
+          currentTurn={currentTurn}
+          votingWindowTurns={votingWindowTurns}
+          onChange={onChange}
+        />
+      )}
+      {canTableResolutionType(org.def.category, "declare_war") && (
+        <OrganizationWarDeclarationPanel
           org={org}
           viewer={viewer}
           currentTurn={currentTurn}
