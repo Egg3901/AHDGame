@@ -99,6 +99,11 @@ export type EraConfig = {
   nations: EraNation[];
   /** Broadcast lander art direction. Absent means the CRT or plain globe. */
   broadcast?: BroadcastLanderConfig;
+  /**
+   * Off-site explainer for this era's world, linked under the hero copy. It
+   * lives on the studio site, so the link opens in a new tab.
+   */
+  explainer?: { href: string; label: string };
   /** Globe rotation at first paint, `[-lon, -lat, 0]`. Defaults to the Mediterranean. */
   initialRotation?: [number, number, number];
 };
@@ -400,6 +405,10 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
       orbitLabel: "MIR",
       showcase: SHOWCASE_1991,
       showcaseBadge: "Special report",
+    },
+    explainer: {
+      href: "https://lakesidegames.net/ahd-1991/",
+      label: "What's new in the 1991 world",
     },
   },
 
