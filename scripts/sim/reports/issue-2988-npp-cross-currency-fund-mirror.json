@@ -1,0 +1,38 @@
+{
+  "issue": 2988,
+  "runtimeSource": "be00d66041a2e43de1ad77af49c13db81be8b2e5",
+  "runtimeFiles": ["src/lib/ledger/deriveFromTx.ts"],
+  "reproduction": {
+    "turn": 4,
+    "nppSubscriptionRows": 10486,
+    "fundMirrorEntries": 4663,
+    "unmirroredCrossCurrencyRows": 5823,
+    "unmirroredAnchor": 2610312,
+    "fundDivergenceTotal": -2610312
+  },
+  "qualification": {
+    "crossCurrencyNppCases": {
+      "memory": 1,
+      "nativeMongo": 1
+    },
+    "nativeHolderControl": "single-sided",
+    "redOnBaseDerivation": "one fund stock finding",
+    "focusedSuites": {
+      "files": 70,
+      "passed": 656,
+      "skipped": 56,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 3,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "limits": [
+    "Native fixtures qualify the derivation boundary, not the whole world.",
+    "Native-currency holders across currencies still fail closed.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired."
+  ]
+}
