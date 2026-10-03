@@ -24,7 +24,7 @@ import type {
   StockExchangeSnapshot,
   StockExchangeListing,
 } from "@/lib/db/types";
-import { perTurnCouponPayment } from "@/lib/constants/bonds";
+import { bondAccruesCoupon, perTurnCouponPayment } from "@/lib/constants/bonds";
 import {
   imfFacilityPaymentAnchorPerTurn,
   anchorPerTurnToFinancialDaily,
@@ -496,6 +496,8 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       // it into the income expression. (A17)
       for (const bond of allBonds) {
         if (!bond.holders || bond.holders.length === 0) continue;
+        // Defaulted bonds pay holders nothing (the bond turn skips them).
+        if (!bondAccruesCoupon(bond)) continue;
         const bondCcy = (bond.currencyCode ??
           (bond.countryId && bond.countryId in COUNTRY_CURRENCY_MAP
             ? COUNTRY_CURRENCY_MAP[bond.countryId as keyof typeof COUNTRY_CURRENCY_MAP]

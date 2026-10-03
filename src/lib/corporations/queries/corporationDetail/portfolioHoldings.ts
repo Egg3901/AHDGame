@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Bond, Corporation, Shareholder } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { perTurnCouponPayment } from "@/lib/constants/bonds";
+import { bondAccruesCoupon, perTurnCouponPayment } from "@/lib/constants/bonds";
 import { getBondIssuerDisplayName } from "@/lib/bonds/sovereign";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
@@ -116,7 +116,10 @@ export async function loadPortfolioHoldings(
       (h) => h.corporationId?.toString() === corporation._id.toString()
     );
     const units = holding?.units ?? 0;
-    const couponPerUnit = perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE);
+    // A defaulted bond pays no coupon, so it adds nothing to the income statement.
+    const couponPerUnit = bondAccruesCoupon(bond)
+      ? perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE)
+      : 0;
     const dailyIncome = couponPerUnit * units * TURNS_PER_DAY;
     const currentValue = units * BOND_UNIT_FACE_VALUE * bond.marketPrice;
     const bondCcy = (bond.currencyCode ??

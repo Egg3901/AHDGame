@@ -10,11 +10,21 @@
  * `bond.currencyCode` (Task 18B) while corp income math runs in ₳, so a US corp
  * holding a UK sovereign would otherwise sum GBP straight into ₳. Pre-migration
  * bonds carry no `currencyCode` and pass through, their totals already being ₳.
+ *
+ * Holder-side coupon income skips defaulted bonds, because the bond turn pays
+ * nothing on them. Counting them booked coupon income that never arrived, and
+ * the corp turn then taxed that phantom income in real cash every turn. The
+ * issuer side deliberately keeps them: defaulted debt is still owed, and dropping
+ * its interest would let a corp raise its dividends and share price by defaulting.
  */
 
 import type { Bond } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { BOND_UNIT_FACE_VALUE, perTurnCouponPayment } from "@/lib/constants/bonds";
+import {
+  BOND_UNIT_FACE_VALUE,
+  bondAccruesCoupon,
+  perTurnCouponPayment,
+} from "@/lib/constants/bonds";
 import { corpCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 
@@ -41,6 +51,7 @@ export function perTurnBondCouponIncomeAsHolder(
   if (!positions?.length) return 0;
   let sumAnchor = 0;
   for (const { bond, units } of positions) {
+    if (!bondAccruesCoupon(bond)) continue;
     const couponLocal = perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE) * units;
     const rate = bond.currencyCode ? (fxByCurrency.get(bond.currencyCode) ?? 1) : 1;
     sumAnchor += corpCapitalToAnchor(couponLocal, bond.currencyCode, rate);

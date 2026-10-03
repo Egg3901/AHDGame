@@ -939,6 +939,43 @@ describe("corporate tax deduction", () => {
     const hourlyIncome = (24_000 / TURNS_PER_DAY) * EFF_MARGIN_100;
     expect(usIncome).toBeCloseTo(hourlyIncome * TURNS_PER_YEAR, 0);
   });
+
+  it("neither books nor taxes coupons on a defaulted held bond, which the bond turn never pays", () => {
+    // Regression: a live corp held two defaulted sovereigns. Their coupons
+    // still counted as income, the coupon tax on them exceeded every coupon the
+    // corp really received, and its cash fell every turn while the income
+    // statement showed a profit.
+    const performing = {
+      couponRate: 10,
+      currencyCode: "USD",
+      defaulted: false,
+    } as unknown as import("@/lib/db/types/bond").Bond;
+    const defaulted = {
+      couponRate: 23,
+      currencyCode: "USD",
+      defaulted: true,
+    } as unknown as import("@/lib/db/types/bond").Bond;
+
+    const run = (positions: { bond: typeof performing; units: number }[]) => {
+      const corp = makeCorp({ dividendRate: 10 });
+      const lookups = baseLookups([corp], [makeSector(corp._id)]);
+      lookups.domesticCorpTaxRateByCountry.set("US", 50);
+      lookups.bondsHeldByCorpId.set(corp._id.toString(), positions);
+      return processSectors(lookups, 1, new Date()).corpSnapshots[0];
+    };
+
+    const performingOnly = run([{ bond: performing, units: 4_800 }]);
+    const withDefaulted = run([
+      { bond: performing, units: 4_800 },
+      { bond: defaulted, units: 1_000_000 },
+    ]);
+
+    // 4,800 units × ₳1,000 face × 10% / 48 turns = ₳10,000 per turn.
+    expect(withDefaulted.perTurnBondCouponIncome).toBeCloseTo(10_000, 6);
+    expect(withDefaulted.federalTaxPaid).toBeCloseTo(performingOnly.federalTaxPaid, 6);
+    expect(withDefaulted.dividendPaidPerTurn).toBeCloseTo(performingOnly.dividendPaidPerTurn, 6);
+    expect(withDefaulted.income).toBeCloseTo(performingOnly.income, 6);
+  });
 });
 
 // ── Dividend payouts ──────────────────────────────────────────────────────────
