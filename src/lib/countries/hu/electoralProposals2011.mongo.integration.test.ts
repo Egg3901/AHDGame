@@ -257,6 +257,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
     "tied",
     "empty",
     "root-withdrawn",
+    "re-entry",
   ])(
     "counts and seats the modern Assembly and protects constituency custody (%s)",
     async (kind) => {
@@ -421,6 +422,27 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           .findOne({ electionId: cast[0].electionId });
         expect(firstTally?.hungarianAssemblyBallot).toBe(true);
         expect(firstTally?.primaryResults).toBeDefined();
+        let reEntryAlias: { oldId: string; newId: string } | undefined;
+        if (kind === "re-entry") {
+          const previous = await db
+            .collection("electionCandidates")
+            .findOne({ characterId: playerId });
+          const newId = new ObjectId();
+          await db
+            .collection("electionCandidates")
+            .updateOne({ _id: previous!._id }, { $set: { status: "withdrawn" } });
+          await db.collection("electionCandidates").insertOne({
+            ...previous!,
+            _id: newId,
+            status: "active",
+            enteredAt: new Date(NOW.getTime() + 1),
+          });
+          const oldId = previous!._id.toHexString();
+          cast[0].totalVotes[oldId] = 600000;
+          cast[0].totalVotes[newId.toHexString()] = 399999;
+          cast[0].candidateParties[newId.toHexString()] = "1";
+          reEntryAlias = { oldId, newId: newId.toHexString() };
+        }
         for (const row of cast)
           await db
             .collection("electionVoteTallies")
@@ -451,6 +473,17 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         commands = commandBytes = replyBytes = 0;
         const receipt = await certifyHu2011Count(db, 6, 1120, NOW);
         expect(receipt?.installed.mandates).toHaveLength(199 - initialVacancies);
+        if (reEntryAlias) {
+          expect(receipt?.campaignAliases).toEqual({ [reEntryAlias.oldId]: reEntryAlias.newId });
+          expect(
+            receipt?.nominations.people.some((row) => row.candidateId === reEntryAlias.oldId)
+          ).toBe(false);
+          const ledger = await db
+            .collection("electionVoteTallies")
+            .findOne({ electionId: cast[0].electionId });
+          expect(ledger?.totalVotes[reEntryAlias.oldId]).toBe(600000);
+          expect(ledger?.totalVotes[reEntryAlias.newId]).toBe(399999);
+        }
         expect(receipt?.installed.vacancies).toHaveLength(initialVacancies);
         expect(receipt?.constituencies).toHaveLength(106);
         expect(new Set(receipt?.constituencies?.map((row) => row.id)).size).toBe(106);

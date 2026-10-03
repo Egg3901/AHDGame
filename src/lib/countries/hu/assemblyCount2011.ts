@@ -14,6 +14,7 @@ import type {
 } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { buildHuMixedPlan } from "./rules/mixedElectionPlan";
+import { coalesceHuModernCampaignActors } from "./rules/campaignActors2011";
 import { buildHuModernAssembly } from "./rules/modernAssembly2011";
 import type { Hu1991AssemblyRecord } from "./assemblyCount1991";
 import type { Hu1991InstalledMandates } from "./rules/mandates1991";
@@ -21,6 +22,7 @@ export const HU_2011_COUNTS_COLLECTION = "hu2011AssemblyCounts";
 export interface Hu2011AssemblyRecord {
   _id: string;
   cycle: number;
+  campaignAliases?: Record<string, string>;
   electionIds: string[];
   /** Frozen modern district boundaries remain stable throughout this Assembly term. */
   constituencies?: readonly { id: string; regionId: string }[];
@@ -105,6 +107,7 @@ export async function materializeHu2011Count(input: {
           isNPP: 1,
           party: 1,
           status: 1,
+          enteredAt: 1,
           characterName: 1,
         },
       }
@@ -120,30 +123,52 @@ export async function materializeHu2011Count(input: {
   const byPoll = new Map(polls.map((row) => [row._id.toHexString(), row]));
   const byTally = new Map(tallies.map((row) => [row.electionId.toHexString(), row]));
   if (tallies.length !== 6 || tallies.some((row) => row.finalized)) return null;
+  const byCandidate = new Map(candidates.map((row) => [row._id.toHexString(), row]));
+  for (const tally of tallies)
+    for (const [id, votes] of Object.entries(tally.totalVotes ?? {})) {
+      const candidate = byCandidate.get(id);
+      if (
+        votes > 0 &&
+        (!candidate ||
+          !candidate.electionId.equals(tally.electionId) ||
+          tally.candidateParties[id] !== candidate.party)
+      )
+        throw new Error("Hungarian modern ballot names an unfiled or changed nominee");
+    }
+  const canonical = coalesceHuModernCampaignActors(
+    candidates.map((row) => ({
+      id: row._id.toHexString(),
+      ownerId: (row.isNPP ? row.nppId : row.characterId)?.toHexString() ?? "",
+      partyId: row.party ?? "independent",
+      regionId: byPoll.get(row.electionId.toHexString())!.state,
+      isNpc: row.isNPP === true,
+      status: row.status,
+      filingOrder: row.enteredAt?.getTime() ?? 0,
+      votes: byTally.get(row.electionId.toHexString())?.totalVotes[row._id.toHexString()] ?? 0,
+    }))
+  );
   const plan = buildHuMixedPlan(
     regions.map((row) => ({ id: String(row._id), population: row.population })),
-    polls.map((row) => {
-      const tally = byTally.get(row._id.toHexString())!;
-      return {
-        electionId: row._id.toHexString(),
-        regionId: row.state,
-        candidates: Object.entries(tally.totalVotes ?? {}).map(([candidateId, votes]) => ({
-          candidateId,
-          partyId: tally.candidateParties[candidateId],
-          votes,
-        })),
-      };
-    })
+    polls.map((row) => ({
+      electionId: row._id.toHexString(),
+      regionId: row.state,
+      candidates: canonical.actors
+        .filter((actor) => actor.regionId === row.state)
+        .map((actor) => ({ candidateId: actor.id, partyId: actor.partyId, votes: actor.votes })),
+    }))
   );
-  const nominees = candidates.map((row) => ({
-    id: row._id.toHexString(),
-    ownerId: (row.isNPP ? row.nppId : row.characterId)?.toHexString() ?? "",
-    electionId: row.electionId.toHexString(),
-    isNpc: row.isNPP === true,
-    party: row.party ?? "independent",
-    name: row.characterName,
-    regionId: byPoll.get(row.electionId.toHexString())!.state,
-  }));
+  const nominees = canonical.actors.map((actor) => {
+    const row = byCandidate.get(actor.id)!;
+    return {
+      id: actor.id,
+      ownerId: actor.ownerId,
+      electionId: row.electionId.toHexString(),
+      isNpc: actor.isNpc,
+      party: actor.partyId,
+      name: row.characterName,
+      regionId: actor.regionId,
+    };
+  });
   const assembly = buildHuModernAssembly(
     plan,
     nominees.map((row) => ({
@@ -152,13 +177,14 @@ export async function materializeHu2011Count(input: {
       partyId: row.party,
       regionId: row.regionId,
       isNpc: row.isNpc,
-      votes: byTally.get(row.electionId)?.totalVotes[row.id] ?? 0,
+      votes: canonical.actors.find((actor) => actor.id === row.id)!.votes,
     }))
   );
   if (!assembly) return null;
   const receipt: Hu2011AssemblyRecord = {
     _id: id,
     cycle,
+    ...(Object.keys(canonical.aliases).length ? { campaignAliases: canonical.aliases } : {}),
     electionIds: polls.map((row) => row._id.toHexString()),
     legacyResolvedElectionIds: [],
     constituencies: Object.keys(plan.result.constituencyWinners)
