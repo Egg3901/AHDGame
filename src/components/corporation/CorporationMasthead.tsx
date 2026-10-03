@@ -42,7 +42,7 @@ interface CorporationMastheadProps {
   showBanner?: boolean;
 }
 
-/** Inline "label value" pair for the figures row. */
+/** One cell of the key-figures grid: a small label over its value. */
 function Figure({
   label,
   children,
@@ -56,10 +56,10 @@ function Figure({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-baseline gap-1.5 whitespace-nowrap" title={title}>
-      <dt className="text-xs text-muted">{label}</dt>
+    <div className="min-w-0" title={title}>
+      <dt className="truncate text-[11px] text-muted">{label}</dt>
       <dd
-        className={`text-[13px] font-medium tabular-nums text-foreground ${mono ? "font-mono" : ""}`}
+        className={`mt-0.5 truncate text-sm font-medium tabular-nums text-foreground ${mono ? "font-mono" : ""}`}
       >
         {children}
       </dd>
@@ -76,12 +76,10 @@ function Sep() {
 }
 
 /**
- * Corporation page header: identity, the quote, and one row of key figures.
- *
- * Replaces the banner hero. Everything a player scans for (price, change,
- * market cap, cash, dividend, credit) sits in two lines at body size, and the
- * one action the viewer can take from here (trade, or settings for the CEO)
- * is a button, not a decoration.
+ * Corporation page header, in three levels: the name and identity line, the
+ * quote (the one large figure on the page), and a grid of labelled key
+ * figures. The one action the viewer can take from here (trade, or settings
+ * for the CEO) is a button, not a decoration.
  */
 export function CorporationMasthead({
   corporation,
@@ -145,7 +143,7 @@ export function CorporationMasthead({
   const threatActive = threat != null && (threat.whole || threat.sectorCount > 0);
 
   return (
-    <header className="space-y-2">
+    <header className="space-y-4">
       {/* A CEO-uploaded banner is the corp's own identity, so it stays on the
           Overview, as a plain strip with nothing printed over it. */}
       {showBanner && corporation.headerImageUrl && (
@@ -161,24 +159,24 @@ export function CorporationMasthead({
       )}
 
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {corporation.logoUrl && (
             <Image
               src={corporation.logoUrl}
               alt=""
-              width={40}
-              height={40}
-              className="mt-0.5 h-10 w-10 shrink-0 rounded-md border border-card-border object-cover"
-              sizes="40px"
+              width={44}
+              height={44}
+              className="h-11 w-11 shrink-0 rounded-md border border-card-border object-cover"
+              sizes="44px"
               unoptimized={bypassNextImageOptimization(corporation.logoUrl)}
             />
           )}
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
+            <h1 className="truncate text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-[28px]">
               {corporation.name}
             </h1>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
-              <span className="font-medium text-foreground">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+              <span className="font-mono font-medium text-foreground">
                 {exchangeLabel}: {ticker}
               </span>
               <Sep />
@@ -323,37 +321,47 @@ export function CorporationMasthead({
         </ul>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-card-border py-2">
+      <div className="flex flex-col gap-x-10 gap-y-4 border-t border-card-border pt-4 lg:flex-row lg:items-start">
         {hasPrice && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-xl font-semibold tabular-nums text-foreground">
-                {money.fmtPrice(corporation.sharePrice)}
-              </span>
-              {dayChange && (
-                <span
-                  className={`font-mono text-[13px] font-medium tabular-nums ${signTone(dayChange.changePct)}`}
-                  title={`Previous turn ${money.fmtPrice(dayChange.prevClose)}`}
-                >
-                  {dayChange.changePct >= 0 ? "+" : ""}
-                  {dayChange.changePct.toFixed(2)}%
+          <div className="shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[28px] font-semibold leading-none tabular-nums text-foreground">
+                  {money.fmtPrice(corporation.sharePrice)}
                 </span>
-              )}
+                {dayChange && (
+                  <span
+                    className={`font-mono text-sm font-medium tabular-nums ${signTone(dayChange.changePct)}`}
+                    title={`Previous turn ${money.fmtPrice(dayChange.prevClose)}`}
+                  >
+                    {dayChange.changePct >= 0 ? "+" : ""}
+                    {dayChange.changePct.toFixed(2)}%
+                  </span>
+                )}
+              </div>
+              <MiniSparkline
+                data={series}
+                width={112}
+                height={28}
+                label="Share price, recent turns"
+              />
             </div>
-            <MiniSparkline data={series} label="Share price, recent turns" />
+            {hasQuote && (
+              <p
+                className="mt-2 text-xs text-muted"
+                title="The equity market pool's live quote. Market sales fill at the bid, purchases at the ask."
+              >
+                Bid / Ask{" "}
+                <span className="font-mono font-medium tabular-nums text-foreground">
+                  {money.fmtPrice(corporation.marketBidPrice as number)} /{" "}
+                  {money.fmtPrice(corporation.marketAskPrice as number)}
+                </span>
+              </p>
+            )}
           </div>
         )}
 
-        <dl className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1">
-          {hasQuote && (
-            <Figure
-              label="Bid / Ask"
-              title="The equity market pool's live quote. Market sales fill at the bid, purchases at the ask."
-            >
-              {money.fmtPrice(corporation.marketBidPrice as number)} /{" "}
-              {money.fmtPrice(corporation.marketAskPrice as number)}
-            </Figure>
-          )}
+        <dl className="grid min-w-0 flex-1 grid-cols-3 gap-x-6 gap-y-3 md:grid-cols-5">
           {priceVisible && Number.isFinite(corporation.marketCapitalization) && (
             <Figure label="Mkt cap">{money.fmt(corporation.marketCapitalization)}</Figure>
           )}
@@ -399,7 +407,7 @@ export function CorporationMasthead({
               {Number.isFinite(corporation.marketingStrengthGrowth) &&
                 corporation.marketingStrengthGrowth !== 0 && (
                   <span
-                    className={`ml-1 text-[11px] font-normal ${signTone(corporation.marketingStrengthGrowth)}`}
+                    className={`ml-1.5 text-[11px] font-normal ${signTone(corporation.marketingStrengthGrowth)}`}
                   >
                     {corporation.marketingStrengthGrowth > 0 ? "+" : ""}
                     {corporation.marketingStrengthGrowth.toFixed(2)}

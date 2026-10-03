@@ -61,6 +61,20 @@ const ACCENT_IDLE: Record<TabAccent, string> = {
   error: "border-transparent text-error/70 hover:border-error/50 hover:text-error",
 };
 
+// Sub-tabs are a second, quieter level: smaller text and a filled active state
+// instead of a second underline, so the two bars never read as equals.
+const SUB_ACTIVE: Record<TabAccent, string> = {
+  primary: "bg-card-elevated font-medium text-foreground",
+  warning: "bg-warning/10 font-medium text-warning",
+  error: "bg-error/10 font-medium text-error",
+};
+
+const SUB_IDLE: Record<TabAccent, string> = {
+  primary: "text-muted hover:bg-card-elevated/60 hover:text-foreground",
+  warning: "text-warning/70 hover:text-warning",
+  error: "text-error/70 hover:text-error",
+};
+
 function findTab(tabs: NavSuperTabDef[], id: string): NavSuperTabDef | undefined {
   return tabs.find((t) => t.id === id);
 }
@@ -188,7 +202,7 @@ export function SuperTabNav({
     <div className="min-w-0 overflow-x-hidden">
       {preTabContent}
 
-      {/* Super-tab bar — flex-wrap per design system (no horizontal scroll) */}
+      {/* Super-tab bar: flex-wrap per design system (no horizontal scroll) */}
       <div className="border-b border-card-border">
         <nav className="flex flex-wrap items-center gap-x-1">
           {tabs.map((tab) => {
@@ -199,7 +213,7 @@ export function SuperTabNav({
                 type="button"
                 onClick={() => setSuperTab(tab.id)}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-2 px-3 py-3 text-[13px] font-semibold transition-colors border-b-2 ${
+                className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive
                     ? accent === "primary"
                       ? "border-primary text-foreground"
@@ -220,10 +234,10 @@ export function SuperTabNav({
         </nav>
       </div>
 
-      {/* Sub-tab bar — only when the super-tab has more than one sub-tab */}
+      {/* Sub-tab bar, only when the super-tab has more than one sub-tab */}
       {visibleSubTabs.length > 1 && (
-        <div className="border-b border-card-border">
-          <nav className="flex flex-wrap items-center gap-x-1">
+        <div className="pt-2">
+          <nav className="flex flex-wrap items-center gap-1">
             {visibleSubTabs.map((sub) => {
               const accent = sub.accent ?? "primary";
               const isActive = activeSub === sub.id;
@@ -232,8 +246,8 @@ export function SuperTabNav({
                   type="button"
                   onClick={() => navigate(activeSuper, sub.id)}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
-                    isActive ? ACCENT_ACTIVE[accent] : ACCENT_IDLE[accent]
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] transition-colors ${
+                    isActive ? SUB_ACTIVE[accent] : SUB_IDLE[accent]
                   }`}
                 >
                   {sub.label}
@@ -251,7 +265,7 @@ export function SuperTabNav({
       )}
 
       {/* Content */}
-      <div className={visibleSubTabs.length > 1 ? "mt-6" : "mt-8"}>
+      <div className={visibleSubTabs.length > 1 ? "mt-5" : "mt-6"}>
         {renderContent(activeSuper, activeSub)}
       </div>
     </div>
