@@ -1059,7 +1059,8 @@ export default async function CharacterPage({ params }: PageProps) {
                     character,
                     forexEnabled,
                     campaignRates,
-                    campaignPriceLevel
+                    campaignPriceLevel,
+                    gamePreset
                   ),
                   populationTier,
                   influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,

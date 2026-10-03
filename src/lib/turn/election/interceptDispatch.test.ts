@@ -36,6 +36,12 @@ describe("resolver intercept dispatch keys", () => {
     }
   });
 
+  it("routes Bulgaria by preset instead of the 1979 base method", () => {
+    expect(getElectionMethod("BG", "nationalAssembly", "1979-default")).toBe("fptp");
+    expect(getElectionMethod("BG", "nationalAssembly", "1991-default")).toBe("ams");
+    expect(getElectionMethod("BG", "nationalAssembly", "2027-default")).toBe("pr_hareQuota");
+  });
+
   it("US President is electoralCollege; IE Uachtarán is fptp (president intercept stays electionType-based)", () => {
     // The president intercept keys on electionType, not method — these values
     // document the head-of-state methods but do NOT drive that dispatch.

@@ -31,7 +31,6 @@ import {
 import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/characterFunds";
-import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
 import { sumBondPrincipalAnchor } from "@/lib/bonds/bondPrincipalSum";
 import {
   allocateShareholderPool,
@@ -63,7 +62,7 @@ import {
 import { getGameState } from "@/lib/gameState";
 import { sumSectorBookValueAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { readStateOwnershipConcentration, sociMultiplier } from "./concentration";
-import { creditTreasuryProceeds, debitTreasuryCompensation } from "./treasury";
+import { creditTreasuryProceedsFromAnchor, debitTreasuryCompensation } from "./treasury";
 import {
   loadTreasuryCashContext,
   resolveTreasuryCashOptions,
@@ -726,7 +725,7 @@ export async function nationalizeWholeCorp(
     const treasuryCashAnchor = liquidCapitalAnchor - ceoSurplusAnchor;
 
     if (ceoChar && ceoSurplusAnchor > 0) {
-      const currency = getHomeCurrency(ceoChar);
+      const currency = getHomeCurrency(ceoChar, corpGameState?.preset);
       const rate = fxByCurrency.get(currency as CurrencyCode) ?? 1;
       const amt = Math.round(forexEnabled ? ceoSurplusAnchor * rate : ceoSurplusAnchor);
       const credited = await db
@@ -746,17 +745,10 @@ export async function nationalizeWholeCorp(
       }
     }
     if (treasuryCashAnchor > 0) {
-      const cashCurrency = (target.liquidCurrencyCode ??
-        COUNTRY_CURRENCY_MAP[target.countryId] ??
-        "USD") as CurrencyCode;
-      const rate = fxByCurrency.get(cashCurrency) ?? 1;
-      await creditTreasuryProceeds(
-        db,
-        params.countryId,
-        writeGovBudgetLocal(treasuryCashAnchor, cashCurrency, rate),
-        now,
-        { flow: "corporation_liquidation", ledger }
-      );
+      await creditTreasuryProceedsFromAnchor(db, params.countryId, treasuryCashAnchor, now, {
+        flow: "corporation_liquidation",
+        ledger,
+      });
     }
   }
 
@@ -1024,16 +1016,11 @@ export async function payShareholders(
   // Public float → the national treasury (no value dropped). Same unified
   // treasury the rest of the nationalization money flows move (spec §5).
   if (allocation.publicFloatRow && allocation.publicFloatRow.payout > 0) {
-    const floatCurrency = (target.liquidCurrencyCode ??
-      COUNTRY_CURRENCY_MAP[target.countryId] ??
-      "USD") as CurrencyCode;
-    const rate = fxByCurrency.get(floatCurrency) ?? 1;
-    const floatLocal = writeGovBudgetLocal(allocation.publicFloatRow.payout, floatCurrency, rate);
     // The treasury leg settles against the seized corporation like the holder rows.
-    await creditTreasuryProceeds(
+    await creditTreasuryProceedsFromAnchor(
       db,
       target.countryId,
-      floatLocal,
+      allocation.publicFloatRow.payout,
       now,
       ledger
         ? {

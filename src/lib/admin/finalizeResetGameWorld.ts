@@ -39,6 +39,7 @@ import { getAllCountryAccess } from "@/lib/countryAccess";
 import { realignPartyCountersToExisting, resetPartyCounters } from "@/lib/db/sequentialId";
 import { ensureImfInstitutionPlaceholder } from "@/lib/imf/ensureImfInstitutionPlaceholder";
 import type { ResetGameWorldResult } from "@/lib/admin/resetGameWorld";
+import { backfillMissingRegionLeans } from "./seed/backfillMissingRegionLeans";
 
 export interface FinalizeResetOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -126,6 +127,11 @@ export async function finalizeResetGameWorld(
       demographicsReset++;
     }
   }
+
+  const leanBackfill = await backfillMissingRegionLeans(db, now);
+  log(
+    `Regional leans: ${leanBackfill.written} filled; ${leanBackfill.missingDemographics} missing demographics; ${leanBackfill.missingCategories} missing weighted categories`
+  );
 
   const presetConfig = getPresetById(preset);
   const deleteAllParties = presetConfig?.deleteDefaultParties ?? false;

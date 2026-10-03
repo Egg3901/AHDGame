@@ -79,7 +79,8 @@
     "audit:sector-viability": "npx tsx scripts/sim/sectorStrategyViability.ts",
     "ops:corporation-balance": "npx tsx scripts/ops/corporationBalanceAudit.ts --pretty",
     "architecture:audit": "node scripts/architecture-audit.mjs",
-    "verify:build": "next build"
+    "verify:build": "next build",
+    "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [

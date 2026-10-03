@@ -13,7 +13,13 @@ import {
   redactPrivateCorporation,
   redactPrivateSectorRow,
 } from "@/lib/corporations/redaction";
-import type { CorporationPrivatizationVote, Corporation, CorporationHistory } from "@/lib/db/types";
+import type {
+  CorporationPrivatizationVote,
+  Corporation,
+  CorporationHistory,
+  WikiPage,
+} from "@/lib/db/types";
+import { corporationWikiSlug } from "@/lib/wiki/playerPages";
 import {
   booksAreExposed,
   getFogFactor,
@@ -93,6 +99,22 @@ export async function GET(request: Request, { params }: RouteParams) {
     const openPrivatizationVoteId = openVote?._id?.toString() ?? null;
     (detail.corporation as Record<string, unknown>).openPrivatizationVoteId =
       openPrivatizationVoteId;
+
+    // Wiki-link gate (#2347): the hero links to `/wiki/corp-<sequentialId>`,
+    // but that page only renders PUBLISHED, non-private pages — anything else
+    // is a Not Found. Surface availability so the hero can hide the link (or
+    // offer the CEO the create flow) instead of linking into a 404.
+    const wikiSlug =
+      corporation.sequentialId != null ? corporationWikiSlug(corporation.sequentialId) : null;
+    const wikiPagePublished = wikiSlug
+      ? (await db
+          .collection<WikiPage>("wikiPages")
+          .findOne(
+            { slug: wikiSlug, status: "published", private: { $ne: true } },
+            { projection: { _id: 1 } }
+          )) != null
+      : false;
+    (detail.corporation as Record<string, unknown>).wikiPagePublished = wikiPagePublished;
 
     // Public nationalization-risk surface (player corps only). Derived from the
     // financial-distress clock; intentionally NOT redacted/fogged so the at-risk

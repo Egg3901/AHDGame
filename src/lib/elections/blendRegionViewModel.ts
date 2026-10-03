@@ -155,6 +155,8 @@ export interface PartyLookup {
 export interface BlendRegionInput {
   elections: ElectionDisplay[];
   countryId: CountryId;
+  /** Active world preset for era-specific election methods. */
+  preset?: string;
   regionName: string;
   parties: PartyLookup;
   /** Viewing character's id, so their own row can be marked. */
@@ -315,7 +317,11 @@ export function omittedCandidateLabel(count: number): string | null {
  * decides it: the multi-seat type list first, then the configured method for
  * the single-type races that remain.
  */
-export function isMultiSeatRace(election: ElectionDisplay, countryId: CountryId): boolean {
+export function isMultiSeatRace(
+  election: ElectionDisplay,
+  countryId: CountryId,
+  preset?: string
+): boolean {
   // The engine allocates every type in MULTI_SEAT_TYPES proportionally
   // whatever the configured method says (the RU/UKR/BLR/BAL soviets run "fptp"
   // yet seat a whole delegation), and a Nigerian senate zone carries more
@@ -328,16 +334,28 @@ export function isMultiSeatRace(election: ElectionDisplay, countryId: CountryId)
     return true;
   }
   const method =
-    getElectionMethod(election.countryId as CountryId | undefined, election.electionType) ??
-    getElectionMethod(countryId, election.electionType);
+    getElectionMethod(
+      election.countryId as CountryId | undefined,
+      election.electionType,
+      preset,
+      election.cycle
+    ) ?? getElectionMethod(countryId, election.electionType, preset, election.cycle);
   if (!method) return (election.totalSeats ?? 1) > 1;
   return isMultiSeatMethod(method);
 }
 
-function methodOf(election: ElectionDisplay, countryId: CountryId): ElectionMethod | undefined {
+function methodOf(
+  election: ElectionDisplay,
+  countryId: CountryId,
+  preset?: string
+): ElectionMethod | undefined {
   return (
-    getElectionMethod(election.countryId as CountryId | undefined, election.electionType) ??
-    getElectionMethod(countryId, election.electionType)
+    getElectionMethod(
+      election.countryId as CountryId | undefined,
+      election.electionType,
+      preset,
+      election.cycle
+    ) ?? getElectionMethod(countryId, election.electionType, preset, election.cycle)
   );
 }
 
@@ -346,8 +364,12 @@ function methodOf(election: ElectionDisplay, countryId: CountryId): ElectionMeth
  * mockup hardcodes "Hare quota" copy; the live game runs seven methods, so a
  * quota line on a Sainte-Lague or AMS race would be a straight fabrication.
  */
-export function hareQuota(election: ElectionDisplay, countryId: CountryId): number | null {
-  if (methodOf(election, countryId) !== "pr_hareQuota") return null;
+export function hareQuota(
+  election: ElectionDisplay,
+  countryId: CountryId,
+  preset?: string
+): number | null {
+  if (methodOf(election, countryId, preset) !== "pr_hareQuota") return null;
   const seats = election.totalSeats ?? 0;
   if (seats <= 0) return null;
   const votes = countedVotes(election);
@@ -779,7 +801,7 @@ export function buildBlendRegionCards(input: BlendRegionInput): BlendRaceCard[] 
   return scoped.map((election) => {
     const regionScoped = isRegionScoped(election);
     const phase = blendPhase(election);
-    const multiSeat = isMultiSeatRace(election, countryId);
+    const multiSeat = isMultiSeatRace(election, countryId, input.preset);
     const totalSeats = election.totalSeats ?? 1;
     const isPresident = election.electionType === "president";
     const tier: BlendTier = tierById[election.id] ?? (isPresident ? "presidential" : "regional");
@@ -795,7 +817,7 @@ export function buildBlendRegionCards(input: BlendRegionInput): BlendRaceCard[] 
         ? groups.reduce((sum, g) => sum + g.partyVotes, 0)
         : countedVotes(election);
     const hasBallots = ballots > 0;
-    const quota = hareQuota(election, countryId);
+    const quota = hareQuota(election, countryId, input.preset);
     const title = titleById[election.id] ?? election.electionType;
 
     // The presidency awards this region's electoral votes whole, so it reports

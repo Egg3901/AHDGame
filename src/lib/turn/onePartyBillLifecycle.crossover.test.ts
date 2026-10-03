@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Bill } from "@/lib/db/types";
+import { processOnePartyBillLifecycleForCountry } from "./onePartyBillLifecycle";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({
@@ -107,7 +108,6 @@ describe("RU crossover (bicameral one-party)", () => {
     const bill = makeBill({ votesFor: 5, votesAgainst: 2 });
     const { db } = makeDb([bill], []);
     await mount(db);
-    const { processOnePartyBillLifecycleForCountry } = await import("./onePartyBillLifecycle");
     await processOnePartyBillLifecycleForCountry("RU", new Date());
 
     const { claimStatusTransition } = await import("@/lib/turn/atomicClaim");
@@ -128,7 +128,6 @@ describe("RU crossover (bicameral one-party)", () => {
     const bill = makeBill({ votesFor: 1, votesAgainst: 3 });
     const { db } = makeDb([bill], []);
     await mount(db);
-    const { processOnePartyBillLifecycleForCountry } = await import("./onePartyBillLifecycle");
     const result = await processOnePartyBillLifecycleForCountry("RU", new Date());
 
     expect(result.failed).toBe(1);
@@ -150,7 +149,6 @@ describe("RU crossover (bicameral one-party)", () => {
     } as Partial<Bill>);
     const { db } = makeDb([], [bill]);
     await mount(db);
-    const { processOnePartyBillLifecycleForCountry } = await import("./onePartyBillLifecycle");
     const result = await processOnePartyBillLifecycleForCountry("RU", new Date());
 
     expect(result.enacted).toBe(1);
@@ -168,7 +166,6 @@ describe("RU crossover (bicameral one-party)", () => {
     } as Partial<Bill>);
     const { db } = makeDb([], [bill]);
     await mount(db);
-    const { processOnePartyBillLifecycleForCountry } = await import("./onePartyBillLifecycle");
     const result = await processOnePartyBillLifecycleForCountry("RU", new Date());
 
     expect(result.failed).toBe(1);
@@ -188,7 +185,6 @@ describe("CN parity (unicameral one-party)", () => {
     });
     const { db } = makeDb([bill], []);
     await mount(db);
-    const { processOnePartyBillLifecycleForCountry } = await import("./onePartyBillLifecycle");
     const result = await processOnePartyBillLifecycleForCountry("CN", new Date());
 
     expect(result.enacted).toBe(1);

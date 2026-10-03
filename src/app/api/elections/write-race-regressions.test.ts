@@ -102,6 +102,7 @@ function duplicateKeyError(message: string, keyPattern: Record<string, number>) 
 
 function mockDbWithCollections(collections: Record<string, unknown>) {
   const defaults: Record<string, unknown> = {
+    gameState: { findOne: vi.fn().mockResolvedValue({ _id: "current", preset: "2019-default" }) },
     // Enter-route geography gate looks up politicalParties; US tests have no
     // abbreviation so the gate no-ops when findOne returns null.
     politicalParties: { findOne: vi.fn().mockResolvedValue(null) },

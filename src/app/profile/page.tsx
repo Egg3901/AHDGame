@@ -28,6 +28,7 @@ import type {
   ImperialCharacter,
   GameState,
   Corporation,
+  ExchangeRate,
   CongressLeader,
   SupremeCourtSeat,
   ElectedOfficial,
@@ -87,6 +88,8 @@ import { OnboardingFlaggedCard } from "./components/OnboardingFlaggedCard";
 import { isOnboardingChecklistEnabled } from "@/lib/onboarding/featureFlag";
 import { isOnboardingDismissed, loadOnboardingChecklist } from "@/lib/onboarding/checklist";
 import { onboardingRewardAmount } from "@/lib/onboarding/reward";
+import { onboardingRewardLocalAmount } from "@/lib/onboarding/rules";
+import { CURRENCY_SYMBOLS, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { StatAllocationBanner } from "./components/StatAllocationBanner";
 import { SectionHeader } from "./components/ProfileMeters";
 import {
@@ -210,6 +213,7 @@ async function getCharacterData() {
     completedCount: number;
     total: number;
     rewardAmount: number;
+    rewardSymbol: string;
   } | null = null;
   if (
     onboardingChecklistEnabled &&
@@ -217,14 +221,26 @@ async function getCharacterData() {
     character.onboarding?.rewardGrantedAt === undefined
   ) {
     const checklist = await loadOnboardingChecklist(db, character);
+    const homeCurrency = getHomeCurrency(character, gameState?.preset);
+    const anchorCountry = getCountryIdForCurrency(homeCurrency);
+    const rateDoc = forexEnabled
+      ? await db.collection<ExchangeRate>("exchangeRates").findOne({ _id: anchorCountry })
+      : null;
     onboardingChecklist = {
       steps: checklist.steps,
       completedCount: checklist.completedCount,
       total: checklist.total,
-      rewardAmount: Math.round(
-        onboardingRewardAmount(gameConfig?.startingFunds) *
-          resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, gameState?.preset)
+      rewardAmount: onboardingRewardLocalAmount(
+        Math.round(
+          onboardingRewardAmount(gameConfig?.startingFunds) *
+            resolveCampaignPriceLevel(gameConfig?.campaignEraPriceLevelEnabled, gameState?.preset)
+        ),
+        forexEnabled,
+        homeCurrency,
+        rateDoc?.rate,
+        gameState?.preset
       ),
+      rewardSymbol: forexEnabled ? CURRENCY_SYMBOLS[homeCurrency] : "₳",
     };
   }
 
@@ -402,6 +418,7 @@ async function getCharacterData() {
     conflictsEnabled: !!gameState?.conflictsEnabled,
     ...conflictExtras,
     gameDateAnchor: gameState ? gameDateAnchorFromState(gameState) : undefined,
+    preset: gameState?.preset,
     gameYear: gameState ? resolveGameYear(gameState) : null,
     enabledCabinetSeats: gameState?.manuallyEnabledSeats,
     iteration: gameState?.iteration ?? null,
@@ -463,6 +480,7 @@ export default async function ProfilePage() {
     onboardingChecklist,
     nationalNpiOrdinalRank,
     gameDateAnchor,
+    preset,
     gameYear,
     enabledCabinetSeats,
     conflictsEnabled,
@@ -811,7 +829,7 @@ export default async function ProfilePage() {
                 maxDonorLevel={maxDonorLevel}
                 campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
                 cashOnHand={getTotalPersonalLiquidWealth(character, forexEnabled, fxRatesRecord)}
-                currency={getHomeCurrency(character)}
+                currency={getHomeCurrency(character, preset)}
                 donorIncome={{
                   passivePerHour: fundDistribution.donorBaseBonus,
                   perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
@@ -819,7 +837,8 @@ export default async function ProfilePage() {
                     character,
                     forexEnabled,
                     campaignRates,
-                    campaignPriceLevel
+                    campaignPriceLevel,
+                    preset
                   ),
                   populationTier,
                   influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,

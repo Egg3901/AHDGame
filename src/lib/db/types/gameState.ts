@@ -646,6 +646,8 @@ export interface GameState {
    * run quietly stands up every active-but-empty branch and stamps without posting.
    */
   lastMilitaryBranchYearProcessed?: number;
+  /** 1991-world Hungarian Assembly resized from 386 to 199 seats in 2014. */
+  huAssemblyReformedAtYear?: number;
   /**
    * Cabinet seat ids brought into existence early by a create_department bill,
    * regardless of their era `yearEnabled` (e.g. "secretary_of_education" after the
@@ -664,6 +666,82 @@ export interface GameState {
 export interface CountryGameState {
   /** Country ID - acts as document _id */
   _id: CountryId;
+  /** HU 1991: enacted 1994 electoral amendment, never inferred from the year. */
+  huElectoralLaw1994SinceTurn?: number;
+  /** A bound parliamentary decision authorizes the later Hungarian electoral system. */
+  huElectoralSystem2011SinceTurn?: number;
+  /** BG 1991: raw turn when the elected 240-seat ordinary Assembly replaced the Grand Assembly. */
+  bgOrdinaryAssemblySinceTurn?: number;
+  /** Optional for existing settlements; only a recorded constituent vote authorizes new ordinary rules. */
+  bgConstitution1991SinceTurn?: number;
+  /** Explicit alternate transition retains the400-seat chamber until its original term ends. */
+  bgGrandAssemblyContinuationSinceTurn?: number;
+  /** Separate enacted ordinary vote ends an explicitly continued constituent chamber. */
+  bgGrandAssemblyDissolutionSinceTurn?: number;
+  /** RO 1991 world: raw turn when the 341/143 parliament replaced the 396/119 constituent chambers. */
+  roParliament1992SinceTurn?: number;
+  /** Bound bicameral enacted decision, separate from the completed chamber handover. */
+  roElectoralLaw1992SinceTurn?: number;
+  /** RU 1991: ratified succession changed the playable RU slot from USSR to Russia. */
+  ruSovietSuccessionSinceTurn?: number;
+  /** Retained district capacity of the negotiated provisional Russian Congress. */
+  ruProvisionalCongressSeats?: number;
+  /** RU 1991: enacted authority to establish the post-Soviet presidential office. */
+  ruPresidencyMandateSinceTurn?: number;
+  /** RU 1991: the first presidential election has a certified result. */
+  ruPresidencyElectionCertifiedSinceTurn?: number;
+  /** Bound result journal of the latest certified Russian presidential ballot. */
+  ruPresidencyCertifiedElectionId?: ObjectId;
+  /** First direct Russian ballot opened under the bound constitutional mandate. */
+  ruPresidencyFirstElectionId?: ObjectId;
+  /** RU 1991: enacted authority to replace Congress with the Federal Assembly. */
+  ruFederalAssemblyMandateSinceTurn?: number;
+  /** Bound first-Duma election cohort; opening it does not retire Congress. */
+  ruFirstDumaElectionCohortId?: ObjectId;
+  /** Optional enacted Duma electoral law; existing and repeat ballots stay frozen. */
+  ruDumaElectoralMandate?: {
+    law: "law1995";
+    proposalId: string;
+    revision: number;
+    sinceTurn: number;
+  };
+  /** Optional enacted Council formation law; existing first roots remain immutable. */
+  ruCouncilFormationMandate?: {
+    mode: "regionalHeads" | "regionalDelegates";
+    proposalId: string;
+    revision: number;
+    sinceTurn: number;
+  };
+  /** Installed regional composition, separate from the first elected Council. */
+  ruCouncilComposition?: {
+    mode: "regionalHeads" | "regionalDelegates";
+    proposalId: string;
+    revision: number;
+    sinceTurn: number;
+    receiptId: string;
+  };
+  /** Latest ordinary Duma campaign; first-election roots remain immutable. */
+  ruDumaConvocationCohortId?: ObjectId;
+  /** Latest actually seated ordinary Duma, independent of an open successor campaign. */
+  ruDumaCurrentConvocationCohortId?: ObjectId;
+  /** Bound first-Council subject cohort; opening it does not retire Congress. */
+  ruFirstCouncilElectionCohortId?: ObjectId;
+  /** Atomic first-Duma bounded NPC slate admission receipt. */
+  ruDumaNpcAdmissionCohortId?: ObjectId;
+  /** Registered parties without an eligible profile for fallback NPC nominees. */
+  ruDumaUnrepresentedParties?: string[];
+  /** RU 1991: the first Federal Assembly election has a certified result. */
+  ruFederalAssemblyElectionCertifiedSinceTurn?: number;
+  /** RU 1991: raw turn when the July presidential inauguration replaced the Chairman as head of state. */
+  ruPresidencySinceTurn?: number;
+  /** RU 1991 world: raw turn of the September 1993 Congress dissolution. */
+  ruCongressDissolvedSinceTurn?: number;
+  /** RU 1991 world: raw turn of the December 1993 first Federal Assembly. */
+  ruFederalAssemblySinceTurn?: number;
+  /** YU 1991: enacted mandate to settle the federation's political succession. */
+  yuSuccessionMandateSinceTurn?: number;
+  /** YU 1991: successor sovereignty and obligations were applied before office retirement. */
+  yuSettlementAppliedSinceTurn?: number;
   currentTurn: number;
   currentYear: number;
   /** Turn on which the current electoral cycle began */
@@ -682,7 +760,7 @@ export interface CountryGameState {
   /** DB-driven country status - overrides CountryConfig.status at runtime */
   status?: CountryStatus;
   /**
-   * Turn this country ceased to exist — absorbed into another state.
+   * Turn this country ceased to exist through absorption or dissolution.
    *
    * The registry could previously only ever ADD: `registeredBase` returns
    * `[...COUNTRY_ORDER, ...activated]`, so a country compiled into the static
@@ -697,7 +775,9 @@ export interface CountryGameState {
    * two enumeration chokepoints are the only readers.
    *
    * Retirement is not deletion. The documents stay for history, the wiki, and
-   * any future restoration; the country simply stops being simulated.
+   * any future restoration; the country simply stops being simulated. The
+   * 1992 SFRY dissolution uses this marker while its successor polities await
+   * their own migration.
    */
   dissolvedTurn?: number | null;
   /**

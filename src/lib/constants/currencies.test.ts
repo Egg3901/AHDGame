@@ -11,6 +11,7 @@ import {
   INITIAL_RATES_1979,
   INITIAL_RATES_1953,
   getCountryIdForCurrency,
+  getSeedCurrencyCode,
   getSeedHardPeg,
   type CurrencyCode,
 } from "./currencies";
@@ -53,7 +54,12 @@ describe("currency anchor resolution", () => {
       // fallback for currencies with no launched country (e.g. CAD → US/USD).
       const anchorCurrency = COUNTRY_CURRENCY_MAP[anchor];
       const isParityFallback = anchorCurrency === "USD" && code !== "USD";
-      expect(anchorCurrency === code || isParityFallback).toBe(true);
+      // RUB is preset-aware: the era-blind map keeps RU on SUR (the Cold
+      // War/1991 identity) while a 2027-default seed resolves RU to RUB.
+      const isPresetSeedMatch = ["2019-default", "2027-default"].some(
+        (preset) => getSeedCurrencyCode(anchor, preset) === code
+      );
+      expect(anchorCurrency === code || isParityFallback || isPresetSeedMatch).toBe(true);
     }
   });
 

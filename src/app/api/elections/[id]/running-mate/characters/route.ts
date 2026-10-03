@@ -95,6 +95,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       .collection<Character>("characters")
       .find({
         userId: { $exists: true },
+        federationPendingResidenceId: { $exists: false },
         $or: [{ countryId: electionCountry }, { countryId: { $exists: false } }],
       })
       .project({
@@ -106,6 +107,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         careerHistory: 1,
         countryId: 1,
         executiveTermsServed: 1,
+        federationPendingResidenceId: 1,
       })
       .sort({ name: 1 })
       .toArray();
@@ -145,6 +147,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const list = characters
       .filter((c) => {
+        if (c.federationPendingResidenceId !== undefined) return false;
         if (c._id.toString() === presidentCharId) return false;
         if (c._id.equals(character._id)) return false;
         if (!eligibleUserIds.has(c.userId?.toString() ?? "")) return false;

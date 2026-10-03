@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { NextResponse } from "next/server";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn() }));
@@ -631,5 +632,66 @@ describe("POST /api/country/[code]/legislature/bills", () => {
         scopeType: "economy_wide",
       })
     );
+  });
+});
+
+describe("Russian runtime bill route", () => {
+  it.each([
+    [{}, "unionCongress", "unionCongressDeputy"],
+    [{ ruSovietSuccessionSinceTurn: 4 }, "congressOfPeoplesDeputies", "congressDeputy"],
+    [{ ruFederalAssemblySinceTurn: 4 }, "stateDuma", "dumaDeputy"],
+  ] as const)(
+    "lists the current chamber and its activated office alias for %j",
+    async (markers, chamber, office) => {
+      const mem = createInMemoryDb();
+      mem.seed("gameState", [{ _id: "current", preset: "1991-default", currentTurn: 5 }]);
+      mem.seed("countryGameStates", [{ _id: "RU", ...markers }]);
+      mem.seed(
+        "bills",
+        [chamber, office, "obsoleteChamber"].map((currentChamber) => ({
+          _id: new ObjectId(),
+          countryId: "RU",
+          title: currentChamber,
+          status: "active",
+          originChamber: chamber,
+          currentChamber,
+          provisions: [],
+          votes: {},
+          votesFor: 0,
+          votesAgainst: 0,
+          votesAbstain: 0,
+          proposedAt: new Date(0),
+          sponsorId: null,
+        }))
+      );
+      vi.mocked(getDb).mockResolvedValue(mem as unknown as Db);
+      vi.mocked(getAuthUser).mockResolvedValue({
+        userId: new ObjectId().toString(),
+        isAdmin: true,
+      } as never);
+      const { GET } = await import("@/app/api/country/[code]/legislature/bills/route");
+      const response = await GET(new Request("http://localhost/api/country/ru/legislature/bills"), {
+        params: Promise.resolve({ code: "ru" }),
+      });
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.total).toBe(2);
+      expect(data.bills.map((bill: { title: string }) => bill.title).sort()).toEqual(
+        [chamber, office].sort()
+      );
+    }
+  );
+  it("rejects a proposal to a dissolved Congress", async () => {
+    const mem = createInMemoryDb();
+    mem.seed("gameState", [{ _id: "current", preset: "1991-default", currentTurn: 5 }]);
+    mem.seed("countryGameStates", [{ _id: "RU", ruCongressDissolvedSinceTurn: 4 }]);
+    vi.mocked(getDb).mockResolvedValue(mem as unknown as Db);
+    const { POST } = await import("@/app/api/country/[code]/legislature/bills/route");
+    const response = await POST(
+      new Request("http://localhost/api/country/ru/legislature/bills", { method: "POST" }),
+      { params: Promise.resolve({ code: "ru" }) }
+    );
+    expect(response.status).toBe(409);
+    expect(mem.collection("bills").docs).toHaveLength(0);
   });
 });

@@ -157,7 +157,12 @@ export async function seedSovereignBondInstruments(
       centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
-    const currencyCode = resolveCountryCurrencyCode({ countryId });
+    // The seeded budget row carries the preset-correct code (EUR for 2027
+    // euro members); it wins over the era-blind map fallback.
+    const currencyCode = resolveCountryCurrencyCode({
+      countryId,
+      currencyCode: budget.currencyCode,
+    });
 
     const bondDocs: Omit<Bond, "_id">[] = [];
     for (const [maturityStr, fraction] of Object.entries(SOVEREIGN_RECONCILE_DISTRIBUTION)) {

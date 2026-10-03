@@ -8,6 +8,8 @@ export function mapElectionResponseToDisplay(election: ElectionResponse): Electi
     electionType: election.electionType,
     state: election.state,
     countryId: election.countryId,
+    hungarianAssemblyRound: election.hungarianAssemblyRound,
+    russianDumaRound: election.russianDumaRound,
     senateClass: election.senateClass ?? undefined,
     chamberClass: election.chamberClass ?? undefined,
     cycle: election.cycle,

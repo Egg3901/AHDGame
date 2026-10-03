@@ -1,3 +1,4 @@
+import type { ElectionVoteTally } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
@@ -133,6 +134,7 @@ export interface ElectoralMapState {
 }
 
 export interface GeneralVotes {
+  russianPresidentialResult?: ElectionVoteTally["russianPresidentialResult"];
   totalVotes: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
@@ -186,7 +188,8 @@ export type ElectionType =
   | "dail"
   | "seanad"
   | "uachtaran"
-  | "localCouncil";
+  | "localCouncil"
+  | "nationalAssembly";
 
 export interface ElectionDetail {
   id: string;
@@ -194,6 +197,17 @@ export interface ElectionDetail {
   electionType: ElectionType;
   state: string;
   countryId: string;
+  hungarianModernByElection?: { districtId: string };
+  bulgarianFoundingRound?: {
+    ruleVersion: "parallel-1990-v1";
+    round: 1 | 2;
+    newNominationDistrictIds?: string[];
+  };
+  hungarianAssemblyRound?: {
+    ruleVersion: "mixed-1989-v1";
+    round: 1 | 2;
+    vacancyDistrictIds?: string[];
+  };
   senateClass: number | null;
   chamberClass: number | null;
   cycle: number;

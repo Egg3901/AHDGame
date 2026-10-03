@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/constants/exchangeRegistry", () => ({
@@ -224,6 +225,21 @@ describe("queryLegislature", () => {
     expect(result).toBeNull();
   });
 
+  it("reads Bulgaria's chamber name and size from the 1991 transition state", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "1991-default" });
+    db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "BG" });
+    const { queryLegislature } = await import("./economy");
+    const grand = await queryLegislature(db as unknown as Db, "BG");
+    expect(grand).toMatchObject({ chamber: "Grand National Assembly", totalSeats: 400 });
+
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "BG",
+      bgOrdinaryAssemblySinceTurn: 41,
+    });
+    const ordinary = await queryLegislature(db as unknown as Db, "BG");
+    expect(ordinary).toMatchObject({ chamber: "National Assembly", totalSeats: 240 });
+  });
+
   it("limits pendingBills and recentlyPassed to 5 each", async () => {
     db.collectionMocks.electedOfficials!.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
@@ -274,4 +290,73 @@ describe("queryLegislature", () => {
     expect(result!.pendingBills.length).toBeLessThanOrEqual(5);
     expect(result!.recentlyPassed.length).toBeLessThanOrEqual(5);
   });
+});
+
+describe("Bulgarian public mandate presentation", () => {
+  it.each([
+    [undefined, undefined, 400, "Grand National Assembly", undefined, undefined],
+    [26, undefined, 400, "Continued National Assembly", 26, undefined],
+    [26, 41, 240, "National Assembly", 26, 27],
+    [undefined, undefined, 400, "Caretaker National Assembly", 26, undefined],
+    [26, undefined, 400, "Caretaker National Assembly", 26, 27],
+  ] as const)(
+    "shows continuation%s and ordinary%s with%s weighted mandates",
+    async (continuation, ordinary, seats, name, constitution, dissolution) => {
+      const db = createInMemoryDb();
+      db.seed("gameState", [{ _id: "current", preset: "1991-default", currentTurn: 42 }]);
+      db.seed("countryGameStates", [
+        {
+          _id: "BG",
+          ...(continuation != null ? { bgGrandAssemblyContinuationSinceTurn: continuation } : {}),
+          ...(ordinary != null ? { bgOrdinaryAssemblySinceTurn: ordinary } : {}),
+          ...(constitution != null ? { bgConstitution1991SinceTurn: constitution } : {}),
+          ...(dissolution != null ? { bgGrandAssemblyDissolutionSinceTurn: dissolution } : {}),
+        },
+      ]);
+      db.seed("countryState", [{ _id: "BG", governmentType: "parliamentaryRepublic" }]);
+      db.seed("states", [{ _id: "BG_TEST", countryId: "BG", houseDistricts: seats }]);
+      db.seed("electedOfficials", [
+        {
+          _id: new ObjectId(),
+          countryId: "BG",
+          officeType: "assemblyDeputy",
+          party: "1",
+          seatsHeld: seats - 1,
+          nppId: new ObjectId(),
+        },
+        {
+          _id: new ObjectId(),
+          countryId: "BG",
+          officeType: "assemblyDeputy",
+          party: "2",
+          seatsHeld: 1,
+          characterId: new ObjectId(),
+        },
+        {
+          _id: new ObjectId(),
+          countryId: "BG",
+          officeType: "president",
+          party: "3",
+          seatsHeld: 100,
+          nppId: new ObjectId(),
+        },
+      ]);
+      db.seed("politicalParties", [
+        { _id: new ObjectId(), countryId: "BG", sequentialId: "1", name: "Synthetic majority" },
+        { _id: new ObjectId(), countryId: "BG", sequentialId: "2", name: "Synthetic deputy" },
+      ]);
+      const { getGovernmentFormationsCollection } =
+        await import("@/lib/db/collections/governmentFormation");
+      vi.mocked(getGovernmentFormationsCollection).mockReturnValue({
+        findOne: vi.fn().mockResolvedValue(null),
+      } as never);
+      const { queryLegislature, queryCountrySummary } = await import("./economy");
+      const legislature = await queryLegislature(db as unknown as Db, "BG");
+      expect(legislature).toMatchObject({ chamber: name, totalSeats: seats });
+      expect(legislature!.composition.map((row) => row.seats)).toEqual([seats - 1, 1]);
+      const summary = await queryCountrySummary(db as unknown as Db, "BG");
+      expect(summary!.legislatureComposition.map((row) => row.seats)).toEqual([seats - 1, 1]);
+      expect(summary!.legislatureComposition[0].seatPct).toBe(seats === 400 ? 99.8 : 99.6);
+    }
+  );
 });

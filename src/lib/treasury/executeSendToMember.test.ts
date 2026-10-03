@@ -13,6 +13,7 @@ vi.mock("@/lib/treasury/payoutCap", () => ({
   checkPlayerPayoutCap: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/lib/treasury/emit", () => ({ emitTreasuryTransaction: vi.fn(async () => undefined) }));
+vi.mock("@/lib/gameState", () => ({ getGameState: vi.fn(async () => ({ currentTurn: 100 })) }));
 
 describe("executeSendToMember", () => {
   let db: MockDb;
@@ -163,5 +164,45 @@ describe("executeSendToMember", () => {
 
     expect(result.ok).toBe(false);
     expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("stamps EUR on the treasury and activity rows for a 2027 euro member", async () => {
+    const { checkPlayerPayoutCap } = await import("@/lib/treasury/payoutCap");
+    vi.mocked(checkPlayerPayoutCap).mockResolvedValue({ ok: true } as never);
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 100,
+      preset: "2027-default",
+    } as never);
+    const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
+    vi.mocked(emitTreasuryTransaction).mockResolvedValue(undefined as never);
+
+    const { executeSendToMember } = await import("./executeSendToMember");
+    const result = await executeSendToMember({ ...args(), countryId: "FR" });
+
+    expect(result.ok).toBe(true);
+    const treasuryCalls = vi.mocked(emitTreasuryTransaction).mock.calls;
+    expect(treasuryCalls).toHaveLength(1);
+    expect(treasuryCalls[0][0].currencyCode).toBe("EUR");
+    expect(db.collectionMocks["activityLog"]!.insertOne.mock.calls[0][0].currencyCode).toBe("EUR");
+  });
+
+  it("keeps the era-blind code on non-euro presets", async () => {
+    const { checkPlayerPayoutCap } = await import("@/lib/treasury/payoutCap");
+    vi.mocked(checkPlayerPayoutCap).mockResolvedValue({ ok: true } as never);
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      currentTurn: 100,
+      preset: "1991-default",
+    } as never);
+    const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
+    vi.mocked(emitTreasuryTransaction).mockResolvedValue(undefined as never);
+
+    const { executeSendToMember } = await import("./executeSendToMember");
+    const result = await executeSendToMember({ ...args(), countryId: "FR" });
+
+    expect(result.ok).toBe(true);
+    expect(vi.mocked(emitTreasuryTransaction).mock.calls[0][0].currencyCode).toBe("FRF");
+    expect(db.collectionMocks["activityLog"]!.insertOne.mock.calls[0][0].currencyCode).toBe("FRF");
   });
 });

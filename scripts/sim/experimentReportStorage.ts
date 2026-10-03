@@ -190,6 +190,170 @@ export async function readExperimentReport(
   return hydrateExperimentReport(report, chunks);
 }
 
+/** Read the MCP's sampled timelines without transferring unrelated telemetry. */
+export async function readExperimentReportSummary(
+  db: Db,
+  runId: string,
+  maxPoints: number
+): Promise<StoredExperimentReport | null> {
+  if (!Number.isSafeInteger(maxPoints) || maxPoints < 10 || maxPoints > 5000)
+    throw new Error("Report sample limit must be an integer between 10 and 5000");
+  const inlineSample = (field: string) => ({
+    $let: {
+      vars: { points: { $cond: [{ $isArray: `$${field}` }, `$${field}`, []] } },
+      in: {
+        $cond: [
+          { $lte: [{ $size: "$$points" }, maxPoints] },
+          "$$points",
+          {
+            $map: {
+              input: { $range: [0, maxPoints] },
+              as: "index",
+              in: {
+                $arrayElemAt: [
+                  "$$points",
+                  {
+                    $floor: {
+                      $multiply: ["$$index", { $divide: [{ $size: "$$points" }, maxPoints] }],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+  const [report] = await db
+    .collection<StoredExperimentReport>(SIM_EXPERIMENT_REPORTS)
+    .aggregate<StoredExperimentReport>([
+      { $match: { _id: runId } },
+      {
+        $project: {
+          _id: 1,
+          turn: 1,
+          finalMetrics: 1,
+          collectedAt: 1,
+          timelineStorage: 1,
+          ...Object.fromEntries(
+            EXPERIMENT_TIMELINE_FIELDS.map((field) => [field, inlineSample(field)])
+          ),
+        },
+      },
+    ])
+    .toArray();
+  if (!report?.timelineStorage) return report ?? null;
+  const manifest = report.timelineStorage;
+  if (manifest.version !== 1 && manifest.version !== 2)
+    throw new Error("Unsupported report storage version");
+  if (manifest.version === 2 && !manifest.fields) throw new Error("Missing report field manifest");
+  const descriptors = await db
+    .collection<TimelineChunk>(SIM_EXPERIMENT_REPORT_CHUNKS)
+    .aggregate<{ field: TimelineField; sequence: number; pointCount: number }>([
+      { $match: { runId, generation: manifest.generation } },
+      { $project: { _id: 0, field: 1, sequence: 1, pointCount: { $size: "$points" } } },
+      { $sort: { field: 1, sequence: 1 } },
+    ])
+    .toArray();
+  if (descriptors.length !== manifest.chunkCount)
+    throw new Error(
+      `Experiment report ${runId} expected ${manifest.chunkCount} timeline chunks, found ${descriptors.length}`
+    );
+  const fields =
+    manifest.version === 2
+      ? manifest.fields!.map((entry) => entry.path)
+      : [...new Set([...EXPERIMENT_TIMELINE_FIELDS, ...descriptors.map((chunk) => chunk.field)])];
+  if (new Set(fields).size !== fields.length) throw new Error("Duplicate report field manifest");
+  if (
+    fields.some((field) => !EXPERIMENT_CHUNK_FIELDS.includes(field)) ||
+    descriptors.some((chunk) => !fields.includes(chunk.field))
+  )
+    throw new Error("Unexpected report chunk field");
+  const plans: { field: TimelineField; sequence: number; indexes: number[] }[] = [];
+  for (const field of fields) {
+    const selected = descriptors.filter((chunk) => chunk.field === field);
+    if (
+      selected.some(
+        (chunk, index) =>
+          chunk.sequence !== index ||
+          !Number.isSafeInteger(chunk.pointCount) ||
+          chunk.pointCount < 0
+      )
+    )
+      throw new Error(`Non-contiguous report chunks: ${field}`);
+    const count = selected.reduce((total, chunk) => total + chunk.pointCount, 0);
+    const expected = manifest.fields?.find((entry) => entry.path === field);
+    if (
+      !Number.isSafeInteger(count) ||
+      (manifest.version === 2 &&
+        (selected.length !== expected?.chunkCount || count !== expected?.pointCount))
+    )
+      throw new Error(`Incomplete report field: ${field}`);
+    if (!(EXPERIMENT_TIMELINE_FIELDS as readonly string[]).includes(field)) continue;
+    const indexes = Array.from({ length: Math.min(count, maxPoints) }, (_, index) =>
+      count <= maxPoints ? index : Math.floor(index * (count / maxPoints))
+    );
+    let offset = 0;
+    for (const chunk of selected) {
+      const local = indexes
+        .filter((index) => index >= offset && index < offset + chunk.pointCount)
+        .map((index) => index - offset);
+      if (local.length) plans.push({ field, sequence: chunk.sequence, indexes: local });
+      offset += chunk.pointCount;
+    }
+    report[field] = [];
+  }
+  if (!plans.length) return report;
+  const samples = await db
+    .collection<TimelineChunk>(SIM_EXPERIMENT_REPORT_CHUNKS)
+    .aggregate<Pick<TimelineChunk, "field" | "sequence" | "points">>([
+      {
+        $match: {
+          runId,
+          generation: manifest.generation,
+          $or: plans.map(({ field, sequence }) => ({ field, sequence })),
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          field: 1,
+          sequence: 1,
+          points: {
+            $switch: {
+              branches: plans.map((plan) => ({
+                case: {
+                  $and: [{ $eq: ["$field", plan.field] }, { $eq: ["$sequence", plan.sequence] }],
+                },
+                then: {
+                  $map: {
+                    input: plan.indexes,
+                    as: "index",
+                    in: { $arrayElemAt: ["$points", "$$index"] },
+                  },
+                },
+              })),
+              default: [],
+            },
+          },
+        },
+      },
+      { $sort: { field: 1, sequence: 1 } },
+    ])
+    .toArray();
+  if (samples.length !== plans.length) throw new Error("Report generation changed during sampling");
+  for (const sample of samples) {
+    const plan = plans.find(
+      (item) => item.field === sample.field && item.sequence === sample.sequence
+    );
+    if (!plan || sample.points.length !== plan.indexes.length)
+      throw new Error("Incomplete report sample");
+    report[sample.field]!.push(...sample.points);
+  }
+  return report;
+}
+
 export function hydrateExperimentReport(
   report: StoredExperimentReport,
   chunks: TimelineChunk[]
@@ -208,7 +372,12 @@ export function hydrateExperimentReport(
   const fields: TimelineField[] =
     manifest.version === 2
       ? manifest.fields!.map((entry) => entry.path)
-      : [...EXPERIMENT_TIMELINE_FIELDS];
+      : [
+          ...new Set<TimelineField>([
+            ...EXPERIMENT_TIMELINE_FIELDS,
+            ...chunks.map((chunk) => chunk.field),
+          ]),
+        ];
   if (new Set(fields).size !== fields.length) throw new Error("Duplicate report field manifest");
   for (const chunk of chunks) {
     if (

@@ -1,3 +1,5 @@
+import { getCountryConfigForRuntime } from "@/lib/constants/countries";
+import { resolveCountryOfficeLayout } from "@/lib/countries/rules/officeLayout";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type {
@@ -486,6 +488,146 @@ describe("processElectionEntry", () => {
     expect(insertedNames).toContain("Incumbent");
     expect(insertedNames).toContain("First Slate Challenger");
     expect(insertedNames).toContain("Second Slate Challenger");
+  });
+
+  it("leaves a bound Duma cohort to atomic NPC slate admission", async () => {
+    const election = createTestElection({
+      countryId: "RU",
+      electionType: "dumaDeputy",
+      state: "CEN",
+      russianDumaRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        tier: "constituency",
+        registeredVoters: 1000,
+      },
+    });
+    const npp = createTestNpp({
+      countryId: "RU",
+      homeState: "CEN",
+      party: "1",
+      currentOffice: null,
+    });
+    db.collection("electionCandidates");
+    const ctx = buildContext(db, election, [npp], []);
+    ctx.preset = "1991-default";
+    expect(await processElectionEntry(ctx)).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("leaves first-round Bulgarian constituency replacements to atomic nominee admission", async () => {
+    const election = createTestElection({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG_SOF",
+      bulgarianFoundingRound: {
+        ruleVersion: "parallel-1990-v1",
+        receiptId: "BG:founding1990:0:partial:1:district",
+        round: 1,
+        rootElectionId: new ObjectId().toHexString(),
+        registeredVoters: 1000,
+        byElection: { parentReceiptId: "BG:founding1990:0", districtId: "district", generation: 1 },
+      },
+    });
+    const npp = createTestNpp({
+      countryId: "BG",
+      homeState: "BG_SOF",
+      party: "1",
+      currentOffice: null,
+    });
+    db.collection("electionCandidates");
+    expect(await processElectionEntry(buildContext(db, election, [npp], []))).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps unqualified NPC recruitment out of a Bulgarian founding runoff", async () => {
+    const election = createTestElection({
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG_SOF",
+      bulgarianFoundingRound: {
+        ruleVersion: "parallel-1990-v1",
+        receiptId: "BG:founding1990:0",
+        round: 2,
+        rootElectionId: new ObjectId().toHexString(),
+        registeredVoters: 1000,
+      },
+    });
+    const npp = createTestNpp({
+      countryId: "BG",
+      homeState: "BG_SOF",
+      party: "1",
+      currentOffice: null,
+    });
+    db.collection("electionCandidates");
+    expect(await processElectionEntry(buildContext(db, election, [npp], []))).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("leaves a bound Council cohort to atomic NPC slate admission", async () => {
+    const election = createTestElection({
+      countryId: "RU",
+      electionType: "federationCouncilMember",
+      state: "RU_CEN",
+      russianCouncilRound: {
+        cohortId: new ObjectId(),
+        mandateSinceTurn: 129,
+        registeredVoters: 100,
+        districtNumber: 1,
+      },
+    });
+    const npp = createTestNpp({ countryId: "RU", currentOffice: null, homeState: "RU_CEN" });
+    const ctx = buildContext(db, election, [npp], [], []);
+    db.collection("electionCandidates");
+    expect(await processElectionEntry(ctx)).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.bulkWrite).not.toHaveBeenCalled();
+  });
+  it("allows NPC candidates in a playable Russian first ballot but protects the runoff roster", async () => {
+    const president = createTestElection({
+      countryId: "RU",
+      electionType: "president",
+      state: "RU",
+      russianPresidentialRound: { round: 1, mandateSinceTurn: 72, registeredVoters: 100 },
+    });
+    const npp = createTestNpp({
+      countryId: "RU",
+      homeState: "RU_CEN",
+      party: "1",
+      currentOffice: null,
+    });
+    db.collection("countryGameStates");
+    db.collectionMocks.countryGameStates.findOne.mockResolvedValue({
+      _id: "RU",
+      enabledForPlayers: true,
+      status: "active",
+    });
+    const ctx = buildContext(db, president, [npp], []);
+    ctx.preset = "1991-default";
+    ctx.runtimeCountryOffices = new Map([
+      [
+        "RU",
+        resolveCountryOfficeLayout(
+          getCountryConfigForRuntime("RU", "1991-default", { ruSovietSuccessionSinceTurn: 48 })
+        ),
+      ],
+    ]);
+    ctx.nppElectionEligiblePartyKeys = new Set(["RU:1"]);
+    expect(await processElectionEntry(ctx)).toBe(1);
+    expect(db.collectionMocks.electionCandidates.insertOne.mock.calls[0]?.[0]).toMatchObject({
+      electionId: president._id,
+      nppId: npp._id,
+      countryId: "RU",
+    });
+    db.collectionMocks.electionCandidates.insertOne.mockClear();
+    const runoff = {
+      ...president,
+      _id: new ObjectId(),
+      russianPresidentialRound: { ...president.russianPresidentialRound!, round: 2 as const },
+    };
+    const next = buildContext(db, runoff, [npp], []);
+    expect(await processElectionEntry(next)).toBe(0);
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
 
   it("reserves an autonomous presidential candidate before regional races consume the pool", async () => {

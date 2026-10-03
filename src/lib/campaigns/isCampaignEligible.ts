@@ -35,7 +35,7 @@ const NON_PRESIDENTIAL_RACE_FAMILIES = new Set<string>([
 ]);
 
 export function isCampaignEligibleElection(
-  election: Pick<Partial<Election>, "countryId" | "electionType">
+  election: Pick<Partial<Election>, "countryId" | "electionType" | "russianPresidentialRound">
 ): boolean {
   const countryId = election.countryId;
   const electionType = election.electionType;
@@ -45,6 +45,16 @@ export function isCampaignEligibleElection(
   // Future-proof: kept identical to the pre-Phase-5.5 gate so behavior
   // stays the same for direct-election presidents.
   if (electionType === "president") {
+    if (countryId === "RU" && election.russianPresidentialRound) {
+      const binding = election.russianPresidentialRound;
+      return (
+        [1, 2].includes(binding.round) &&
+        Number.isSafeInteger(binding.mandateSinceTurn) &&
+        binding.mandateSinceTurn > 0 &&
+        Number.isSafeInteger(binding.registeredVoters) &&
+        binding.registeredVoters > 0
+      );
+    }
     return isDirectElection(getCountryConfig(countryId as CountryId));
   }
 

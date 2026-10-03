@@ -26,4 +26,16 @@ describe("getHeadOfGovernmentCharacterId", () => {
     expect(db.collection).not.toHaveBeenCalledWith("officials");
     expect(result?.toString()).toBe(charId.toString());
   });
+
+  it("resolves Romania's 2027 prime minister separately from its elected president", async () => {
+    const pmId = new ObjectId();
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({ preset: "2027-default" });
+    db.collection("governmentFormations").findOne.mockResolvedValue({ pmCharacterId: pmId });
+
+    const result = await getHeadOfGovernmentCharacterId(db as unknown as Db, "RO");
+
+    expect(result?.toString()).toBe(pmId.toString());
+    expect(db.collection("electedOfficials").findOne).not.toHaveBeenCalled();
+  });
 });

@@ -89,6 +89,13 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
+    if (corporation.federationPendingHeadquartersId) {
+      return NextResponse.json(
+        { error: "Choose this firm's new headquarters through its pending federation settlement." },
+        { status: 409 }
+      );
+    }
+
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 

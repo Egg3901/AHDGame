@@ -1,5 +1,7 @@
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
+import { bgParties2027 } from "./bgParties2027";
 export const bgParties: PartySeed[] = [
+  ...bgParties2027,
   {
     seedOrder: 1,
     countryId: "BG",

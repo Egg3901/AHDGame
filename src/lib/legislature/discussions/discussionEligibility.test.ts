@@ -79,3 +79,31 @@ describe("canPostBillDiscussion", () => {
     expect(ok).toBe(false);
   });
 });
+
+describe("appointed Council discussion eligibility", () => {
+  it.each(["regionalHeads", "regionalDelegates"] as const)("includes %s members", async (mode) => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+    });
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RU",
+      ruFederalAssemblySinceTurn: 145,
+      ruCouncilComposition: { mode },
+    });
+    db.collection("electedOfficials").findOne.mockResolvedValue({ _id: new ObjectId() });
+    expect(
+      await canPostBillDiscussion(db as never, character(), {
+        kind: "national",
+        countryId: "RU",
+        billId: new ObjectId().toString(),
+      })
+    ).toBe(true);
+    expect(db.collectionMocks.electedOfficials!.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "RU",
+        officeType: { $in: ["dumaDeputy", "federationCouncilMember"] },
+      })
+    );
+  });
+});

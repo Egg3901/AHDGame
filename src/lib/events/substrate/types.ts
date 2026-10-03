@@ -35,6 +35,12 @@ export interface EventResolveContext {
   reason: "player" | "timeout";
   /** Set when option.primaryStat is defined — the stat label and roll delta applied. */
   statAdjustment?: { stat: string; label: string; delta: number };
+  /**
+   * World's reset-preset id (e.g. `gameState.preset`). When set, currency
+   * routing resolves preset-aware (2027 euro members credit EUR); when
+   * omitted the legacy era-blind map applies, so 1991 behavior is unchanged.
+   */
+  preset?: string;
 }
 
 export interface EventOfferContext {

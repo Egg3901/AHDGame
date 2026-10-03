@@ -150,6 +150,9 @@ export interface BlendDetailInput {
   totalSeats: number | null;
   electionType: string;
   countryId: CountryId;
+  /** Active world preset for era-specific election methods. */
+  preset?: string;
+  cycle?: number;
   isEnded: boolean;
   regionName: string;
   /** Party abbreviation lookup, same contract as the region cards. */
@@ -181,7 +184,7 @@ function isMultiSeat(input: BlendDetailInput): boolean {
   ) {
     return true;
   }
-  const method = getElectionMethod(input.countryId, input.electionType);
+  const method = getElectionMethod(input.countryId, input.electionType, input.preset, input.cycle);
   if (!method) return (input.totalSeats ?? 1) > 1;
   return isMultiSeatMethod(method);
 }
@@ -191,7 +194,11 @@ function isMultiSeat(input: BlendDetailInput): boolean {
  * quota against a Sainte-Lague or AMS race would be a fabrication.
  */
 export function detailQuota(input: BlendDetailInput): number | null {
-  if (getElectionMethod(input.countryId, input.electionType) !== "pr_hareQuota") return null;
+  if (
+    getElectionMethod(input.countryId, input.electionType, input.preset, input.cycle) !==
+    "pr_hareQuota"
+  )
+    return null;
   const seats = input.totalSeats ?? 0;
   // Same listed-field denominator as the shares, so the quota the panel quotes
   // is the one the seat arithmetic below actually divides by.
@@ -288,19 +295,30 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
   const remSeats = split ? totalSeats - floorSeats : 0;
 
   // ── headline + standfirst
-  const headline = !counted
-    ? `No votes counted in ${input.regionName} yet`
-    : multiSeat && agg[0]
-      ? `${agg[0].abbr} ${input.isEnded ? "takes" : "on course for"} ${agg[0].seats} of ${totalSeats} seats`
-      : `${lead?.c.characterName ?? "The field"} ${input.isEnded ? "wins" : "leads"} ${input.regionName}`;
+  const nationalDhondt =
+    getElectionMethod(input.countryId, input.electionType, input.preset, input.cycle) ===
+    "pr_dhondt";
+  const allocationPending = nationalDhondt && input.seatsEstimate == null;
+  const headline =
+    allocationPending && counted
+      ? `National count pending for ${input.regionName}`
+      : !counted
+        ? `No votes counted in ${input.regionName} yet`
+        : multiSeat && agg[0]
+          ? `${agg[0].abbr} ${input.isEnded ? "takes" : "on course for"} ${agg[0].seats} of ${totalSeats} seats`
+          : `${lead?.c.characterName ?? "The field"} ${input.isEnded ? "wins" : "leads"} ${input.regionName}`;
 
   const standfirst = !counted
     ? "No ballots have been counted in this race."
-    : multiSeat
-      ? quota
-        ? `${totalSeats} seats, apportioned by share. A Hare quota of ${fmtInt(quota)} votes buys one seat; ${remSeats} of the ${totalSeats} were settled on largest remainder.`
-        : `${totalSeats} seats, apportioned by share of ${fmtInt(grand)} votes cast.`
-      : `A single seat, decided on plurality. ${lead?.c.characterName ?? "The leader"} ${input.isEnded ? "took" : "holds"} ${lead ? lead.pct.toFixed(1) : "0.0"}% against ${runnerUp ? runnerUp.pct.toFixed(1) : "0.0"}% for the nearest rival.`;
+    : allocationPending
+      ? "Regional votes are counted. Seat allocation awaits the complete nationwide count and party eligibility."
+      : nationalDhondt
+        ? `${totalSeats} regional mandates from a 240-seat national D'Hondt count. Parties qualify at 4% nationwide; district lists preserve the national allocation.`
+        : multiSeat
+          ? quota
+            ? `${totalSeats} seats, apportioned by share. A Hare quota of ${fmtInt(quota)} votes buys one seat; ${remSeats} of the ${totalSeats} were settled on largest remainder.`
+            : `${totalSeats} seats, apportioned by share of ${fmtInt(grand)} votes cast.`
+          : `A single seat, decided on plurality. ${lead?.c.characterName ?? "The leader"} ${input.isEnded ? "took" : "holds"} ${lead ? lead.pct.toFixed(1) : "0.0"}% against ${runnerUp ? runnerUp.pct.toFixed(1) : "0.0"}% for the nearest rival.`;
 
   const facts: BlendDetailFact[] = [];
   if (input.electorate && input.electorate.count > 0 && counted) {
@@ -419,7 +437,7 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
       pct: r.pct,
       pctStr: r.pct.toFixed(1),
       seats: multiSeat ? r.seats : null,
-      seatsCell: multiSeat ? String(r.seats) : won ? "WON" : "—",
+      seatsCell: allocationPending ? "Pending" : multiSeat ? String(r.seats) : won ? "WON" : "—",
       seatWord: r.seats === 1 ? "Seat" : "Seats",
       isWinner: won,
       mathNote,
@@ -433,7 +451,7 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
     headline,
     standfirst,
     facts,
-    isSeatRace: multiSeat && counted,
+    isSeatRace: multiSeat && counted && !allocationPending,
     allocLabel: input.isEnded ? "Final seat allocation" : "Projected seat allocation",
     hemiNote: quota
       ? `${totalSeats} seats · ${floorSeats} on whole quotas, ${remSeats} on remainders`

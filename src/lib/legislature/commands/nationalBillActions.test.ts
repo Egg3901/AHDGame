@@ -264,3 +264,109 @@ describe("performNationalBillAction - active_both", () => {
     expect((result.body as { error: string }).error).toMatch(/both chambers/i);
   });
 });
+
+describe("Russian runtime bill actions", () => {
+  it.each([
+    [{}, "unionCongress", "unionCongressDeputy"],
+    [{ ruSovietSuccessionSinceTurn: 4 }, "congressOfPeoplesDeputies", "congressDeputy"],
+    [{ ruFederalAssemblySinceTurn: 4 }, "stateDuma", "dumaDeputy"],
+    [{ ruFederalAssemblySinceTurn: 4 }, "federationCouncil", "federationCouncilMember"],
+    [
+      { ruFederalAssemblySinceTurn: 4, ruCouncilComposition: { mode: "regionalHeads" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
+    [
+      { ruFederalAssemblySinceTurn: 4, ruCouncilComposition: { mode: "regionalDelegates" } },
+      "federationCouncil",
+      "federationCouncilMember",
+    ],
+  ] as const)(
+    "accepts the current Russian deputy ballot for %j",
+    async (markers, chamber, officeType) => {
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValue({
+        currentTurn: 5,
+        preset: "1991-default",
+      } as never);
+      const db = createMockDb();
+      const characterId = new ObjectId();
+      db.collection("countryGameStates").findOne.mockResolvedValue({ _id: "RU", ...markers });
+      db.collection("electedOfficials").findOne.mockResolvedValue({
+        countryId: "RU",
+        officeType,
+        characterId,
+        seatsHeld: 1,
+      });
+      db.collection("bills").updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+      const result = await performNationalBillAction(db as unknown as Db, {
+        authUser: { userId: new ObjectId().toString(), isAdmin: false } as AuthUser,
+        character: { _id: characterId } as Character,
+        countryId: "RU",
+        bill: {
+          _id: new ObjectId(),
+          countryId: "RU",
+          status: "active",
+          currentChamber: chamber,
+          originChamber: chamber,
+          votingEndsOnTurn: 99,
+          votes: {},
+          provisions: [],
+        } as unknown as Bill,
+        input: { action: "vote", vote: "for" },
+      });
+      expect(result.status).toBe(200);
+      expect(db.collectionMocks.electedOfficials!.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ countryId: "RU", officeType })
+      );
+      vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
+    }
+  );
+  it.each(["vote", "cosponsor", "veto_override_vote", "filibuster"] as const)(
+    "blocks %s in a dissolved Congress",
+    async (action) => {
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValue({
+        currentTurn: 5,
+        preset: "1991-default",
+      } as never);
+      const db = createMockDb();
+      db.collection("countryGameStates").findOne.mockResolvedValue({
+        _id: "RU",
+        ruCongressDissolvedSinceTurn: 4,
+      });
+      const result = await performNationalBillAction(db as unknown as Db, {
+        authUser: { isAdmin: true } as AuthUser,
+        character: { _id: new ObjectId() } as Character,
+        countryId: "RU",
+        bill: {} as Bill,
+        input:
+          action === "vote" || action === "veto_override_vote"
+            ? { action, vote: "for" }
+            : { action },
+      });
+      expect(result.status).toBe(409);
+      expect(db.collection("bills").updateOne).not.toHaveBeenCalled();
+      vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
+    }
+  );
+  it("refuses an obsolete Union bill after Russian succession", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5, preset: "1991-default" } as never);
+    const db = createMockDb();
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "RU",
+      ruSovietSuccessionSinceTurn: 4,
+    });
+    const result = await performNationalBillAction(db as unknown as Db, {
+      authUser: {} as AuthUser,
+      character: { _id: new ObjectId() } as Character,
+      countryId: "RU",
+      bill: { status: "active", currentChamber: "unionCongress", votingEndsOnTurn: 99 } as Bill,
+      input: { action: "vote", vote: "for" },
+    });
+    expect(result.status).toBe(409);
+    expect(db.collection("bills").updateOne).not.toHaveBeenCalled();
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 5 } as never);
+  });
+});

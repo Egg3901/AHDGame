@@ -105,6 +105,22 @@ export interface Ticket {
    * for a window (default 15 min) to capture follow-ups first.
    */
   reviewAfter: Date;
+  /**
+   * Missing-context decision recorded at filing time (deterministic) and
+   * refined by the ops dashboard later. `needed` names the follow-up details
+   * still missing; the filer prompts the reporter immediately from these.
+   */
+  contextRequest?: {
+    version: 1;
+    needed: Array<"discord" | "corporation" | "page">;
+    key: string | null;
+    reason: string;
+    generatedAt: string;
+    generatedBy: string;
+    model?: string;
+    provider?: string;
+    error?: string;
+  };
   /** Read-only audit linkage (see `assessments` collection). */
   assessmentId?: ObjectId;
   assessedAt?: Date;

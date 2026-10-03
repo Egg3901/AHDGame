@@ -241,7 +241,7 @@ export function computeIdeologyForce(
  * Compliance gate - how strongly the NPP responds to whips. Mirrors the
  * existing personality model: loyal NPPs follow the whip, stubborn NPPs resist.
  */
-export function complianceMultiplier(npp: NPP): number {
+export function complianceMultiplier(npp: Pick<NPP, "personality">): number {
   const loyalty = (npp.personality?.loyalty ?? 50) / 100;
   const stubbornness = (npp.personality?.stubbornness ?? 50) / 100;
   return loyalty * 0.7 + (1 - stubbornness) * 0.3;
@@ -289,7 +289,10 @@ export function computeWhipForce(npp: NPP, whips: CrossPressureWhipInputs): numb
  * Call sites should only apply this when `applicableWhip === null` to avoid
  * double-counting alongside an explicit party whip.
  */
-export function computePartyLineForce(npp: NPP, sponsorParty: string | undefined): number {
+export function computePartyLineForce(
+  npp: Pick<NPP, "party" | "personality">,
+  sponsorParty: string | undefined
+): number {
   if (!sponsorParty || !npp.party || npp.party !== sponsorParty) return 0;
   return PARTY_LINE_BIAS_BASE * complianceMultiplier(npp);
 }

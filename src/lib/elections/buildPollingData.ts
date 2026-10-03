@@ -24,6 +24,7 @@ export function computeSeatEstimates(
   activeCandidateIdSet: Set<string>,
   countryId?: string
 ): Record<string, number> | null {
+  if (tally?.bgOrdinaryBallot || tally?.bulgarianFoundingBallot) return null;
   // Same gate as the engine (allocateSeats + the per-turn estimate in
   // tallyManagement): every MULTI_SEAT_TYPES race, plus a "senate" race that
   // carries more than one seat (Nigerian zones). A private copy of the list

@@ -72,7 +72,19 @@ describe("getGdpAnchorRate", () => {
       (c) => overrides[c]?.usdExchangeRate !== undefined
     );
     // Guard the guard, as above: an empty set would pass vacuously.
-    expect(authored.length).toBe(5);
+    expect(authored.sort()).toEqual([
+      "BG",
+      "CN",
+      "CS",
+      "DE",
+      "HU",
+      "IE",
+      "JP",
+      "PL",
+      "RO",
+      "UK",
+      "YU",
+    ]);
     for (const countryId of authored) {
       expect(getGdpAnchorRate(countryId, "1991-default"), countryId).toBe(
         overrides[countryId]!.usdExchangeRate

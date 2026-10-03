@@ -55,6 +55,22 @@ describe("getCountryState", () => {
       getCountryState(db as unknown as Db, "XX")
     ).rejects.toThrow(/unknown countryId "XX"/i);
   });
+
+  it("self-heals missing Hungarian state from the world's 1991 preset and caches it", async () => {
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+    });
+    db.collectionMocks.countryState.findOne.mockResolvedValue(null);
+
+    const state = await getCountryState(db as unknown as Db, "HU");
+    expect(state.governmentType).toBe("parliamentaryRepublic");
+    expect(db.collectionMocks.countryState.insertOne).toHaveBeenCalledWith(state);
+    expect(await getCountryState(db as unknown as Db, "HU")).toBe(state);
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.countryState.findOne).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("updateCountryState", () => {
