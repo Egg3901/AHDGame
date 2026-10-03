@@ -1,6 +1,6 @@
 # Hungarian modern campaign continuity qualification
 
-Issue: #2488. Executed 2026-10-03. Bounded normal-primary, vote-ledger and isolated-Mongo custody qualification.
+Issue: #2488. Runtime source: `74efb6f173fd8e4392d135fd765fe6d5f80fe6da`. Executed 2026-10-03. Bounded normal-primary, vote-ledger and isolated-Mongo custody qualification.
 
 Modern regional campaigns previously used the generic one-winner party primary, omitted the frozen register from vote accumulation and excluded withdrawn nominees from certification even when their cast votes remained. The native primary now advances all filed regional actors for the bounded individual slate. Binding preserves an existing earlier frozen register or calculates the new regional register from eligible population and registration pools, then carries the native ballot marker through primary tally initialization. Vacancy ballots are explicitly excluded from either general-cohort binder.
 
