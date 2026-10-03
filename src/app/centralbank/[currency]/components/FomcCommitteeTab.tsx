@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { CentralBankSection } from "./CentralBankSection";
 
 interface BoardSeat {
   seatId: string;
@@ -104,17 +105,8 @@ function formatUtcDeadline(value: string): string | null {
   return `${day} ${month} ${deadline.getUTCFullYear()}, ${hour}:${minute} UTC`;
 }
 
-function AlignmentChip({ alignment }: { alignment: "hawk" | "dove" }) {
-  const hawk = alignment === "hawk";
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-        hawk ? "bg-danger/10 text-danger" : "bg-primary/10 text-primary"
-      }`}
-    >
-      {hawk ? "Hawk" : "Dove"}
-    </span>
-  );
+function AlignmentLabel({ alignment }: { alignment: "hawk" | "dove" }) {
+  return <span className="text-body-sm text-muted">{alignment === "hawk" ? "Hawk" : "Dove"}</span>;
 }
 
 export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
@@ -262,15 +254,15 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
   const governanceDeadline = state.governance?.nextDeadline ?? null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-12 pb-16">
       {/* Understaffed board (ticket #1238): vacant seats make every motion fail
           on the full-board majority; surface why and who can fix it. When the
           board cannot carry a motion at all the chair holds the rate directly
           until nominations restore a working board. */}
       {vacantSeats > 0 && (
         <div className="rounded-xl border border-danger/30 bg-danger/10 px-5 py-4">
-          <h2 className="text-sm font-semibold text-danger">Board understaffed</h2>
-          <p className="mt-1 text-xs text-foreground">
+          <h2 className="text-body font-semibold text-danger">Board understaffed</h2>
+          <p className="mt-1 text-body-sm text-foreground">
             {vacantSeats} of {board.length} board seats are vacant. A motion needs {majorityNeeded}{" "}
             of the full board to pass
             {seatedCount < majorityNeeded
@@ -284,10 +276,10 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
       )}
 
       {/* Per-term budget + active meeting */}
-      <div className="rounded-xl border border-card-border bg-card shadow-sm">
-        <div className="border-b border-card-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-foreground">Federal Open Market Committee</h2>
-          <p className="mt-0.5 text-xs text-muted">
+      <CentralBankSection
+        title="Federal Open Market Committee"
+        meta={
+          <span className="block max-w-3xl">
             The committee votes on rate moves. A motion passes only on a majority of the full board;
             no-shows abstain. {budgetLeft} of {state.rateChangesPerTerm} rate changes remain this
             term.
@@ -295,23 +287,23 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               (turnsToTermEnd != null
                 ? ` The budget resets when the term ends in ${turnsToTermEnd} turn${turnsToTermEnd === 1 ? "" : "s"}.`
                 : " The budget resets when the term ends.")}
-          </p>
-        </div>
-
+          </span>
+        }
+      >
         {meeting ? (
-          <div className="px-5 py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-foreground">
+          <div>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="text-body-lg font-semibold text-foreground">
                 Motion: {MOTION_LABEL[meeting.motion]}
                 {meeting.motion !== "hold" &&
                   ` (${meeting.proposedDelta > 0 ? "+" : ""}${meeting.proposedDelta.toFixed(2)}pp)`}
               </span>
-              <span className="ml-auto text-xs text-muted">
+              <span className="ml-auto text-body-sm tabular-nums text-muted">
                 {meeting.agree} for / {meeting.disagree} against · {meeting.needed} needed
               </span>
             </div>
 
-            <p className="mt-2 text-xs text-muted">
+            <p className="mt-2 text-body-sm text-muted">
               Voting closes by turn {meeting.resolvesOnTurn}
               {wallClockDeadline ? ` or ${wallClockDeadline}` : ""}, whichever comes first. No-shows
               abstain.
@@ -320,28 +312,28 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
             {state.viewerSeatId && (
               <div className="mt-4">
                 {meeting.viewerHasVoted ? (
-                  <p className="text-xs text-muted">Your ballot is recorded.</p>
+                  <p className="text-body-sm text-muted">Your ballot is recorded.</p>
                 ) : (
                   <>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {(["hike", "cut", "hold"] as const).map((v) => (
                         <button
                           key={v}
                           disabled={voting || !canVote}
                           onClick={() => castVote(v)}
-                          className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-card-elevated/60 disabled:opacity-50"
+                          className="rounded-md border border-card-border px-3 py-1.5 text-body-sm font-semibold text-foreground transition-colors hover:bg-card-elevated disabled:opacity-50"
                         >
                           {MOTION_LABEL[v]}
                         </button>
                       ))}
                     </div>
-                    {voteReason && <p className="mt-2 text-xs text-muted">{voteReason}</p>}
+                    {voteReason && <p className="mt-2 text-body-sm text-muted">{voteReason}</p>}
                   </>
                 )}
               </div>
             )}
             {governanceDeadline && (
-              <p className="mt-2 text-xs text-muted">
+              <p className="mt-2 text-body-sm text-muted">
                 Next deadline: turn {governanceDeadline.turn} (
                 {governanceDeadline.kind === "meeting_deadline"
                   ? "this vote closes"
@@ -351,43 +343,38 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
             )}
           </div>
         ) : (
-          <div className="px-5 py-4">
-            <p className="text-sm text-muted">No meeting is currently in session.</p>
-            {sessionLine && <p className="mt-1 text-xs text-muted">{sessionLine}</p>}
+          <div>
+            <p className="text-body text-muted">No meeting is currently in session.</p>
+            {sessionLine && <p className="mt-1 text-body-sm text-muted">{sessionLine}</p>}
             {governanceDeadline && (
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-body-sm text-muted">
                 Next deadline: turn {governanceDeadline.turn} (next session opens).
               </p>
             )}
           </div>
         )}
-      </div>
+      </CentralBankSection>
 
-      {/* Senate confirmations — pending nominations the Senate votes on */}
+      {/* Senate confirmations: pending nominations the Senate votes on */}
       {(state.nominations?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-card-border bg-card">
-          <div className="border-b border-card-border px-5 py-3">
-            <h3 className="text-sm font-semibold text-foreground">Senate confirmations</h3>
-            <p className="mt-0.5 text-xs text-muted">
-              {state.viewerIsSenator
-                ? "Pending Fed nominations. As a Senator, cast your vote to confirm or reject."
-                : "Pending Fed nominations awaiting a Senate confirmation vote."}
-            </p>
-          </div>
-          <ul className="divide-y divide-card-border">
+        <CentralBankSection
+          title="Senate confirmations"
+          meta={
+            state.viewerIsSenator
+              ? "Pending Fed nominations. As a Senator, cast your vote to confirm or reject."
+              : "Pending Fed nominations awaiting a Senate confirmation vote."
+          }
+        >
+          <ul className="divide-y divide-card-border/60">
             {state.nominations!.map((n) => (
-              <li key={n.id} className="flex flex-wrap items-center gap-2 px-5 py-3">
+              <li key={n.id} className="flex flex-wrap items-center gap-2 py-3">
                 <div className="min-w-0">
-                  <span className="text-sm font-medium text-foreground">{n.nomineeName}</span>
-                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  <span className="text-body font-medium text-foreground">{n.nomineeName}</span>
+                  <span className="ml-2 text-body-sm text-muted">
                     {n.seatLabel}
+                    {n.occupantType === "npp" && " · NPP"}
                   </span>
-                  {n.occupantType === "npp" && (
-                    <span className="ml-1 rounded-full bg-muted/10 px-2 py-0.5 text-[10px] text-muted">
-                      NPP
-                    </span>
-                  )}
-                  <span className="mt-0.5 block text-[10px] text-muted">
+                  <span className="mt-0.5 block text-body-sm tabular-nums text-muted">
                     {n.votesFor} for / {n.votesAgainst} against / {n.votesAbstain} abstain
                     {n.votingEndsOnTurn != null ? ` · closes turn ${n.votingEndsOnTurn}` : ""}
                   </span>
@@ -395,20 +382,14 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 {state.viewerIsSenator && (
                   <div className="ml-auto flex items-center gap-1">
                     {n.viewerHasVoted ? (
-                      <span className="text-[10px] font-medium text-muted">Vote cast</span>
+                      <span className="text-body-sm text-muted">Vote cast</span>
                     ) : (
                       (["for", "against", "abstain"] as const).map((v) => (
                         <button
                           key={v}
                           disabled={voting}
                           onClick={() => confirmVote(n.id, v)}
-                          className={`rounded-md border px-2 py-1 text-[11px] font-medium capitalize transition-colors disabled:opacity-40 ${
-                            v === "for"
-                              ? "border-primary/40 text-primary hover:bg-primary/10"
-                              : v === "against"
-                                ? "border-danger/40 text-danger hover:bg-danger/10"
-                                : "border-card-border text-muted hover:bg-card-elevated"
-                          }`}
+                          className="rounded-md border border-card-border px-2.5 py-1 text-body-sm font-medium capitalize text-foreground transition-colors hover:bg-card-elevated disabled:opacity-40"
                         >
                           {v}
                         </button>
@@ -419,32 +400,25 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               </li>
             ))}
           </ul>
-        </div>
+        </CentralBankSection>
       )}
 
-      {/* Recent sessions — how past votes went */}
+      {/* Recent sessions: how past votes went */}
       {(state.meetingHistory?.length ?? 0) > 0 && (
-        <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-          <div className="border-b border-card-border px-5 py-4">
-            <h3 className="text-sm font-semibold text-foreground">Recent sessions</h3>
-            <p className="mt-0.5 text-xs text-muted">How the last votes went, newest first.</p>
-          </div>
-          <ul className="divide-y divide-card-border">
+        <CentralBankSection title="Recent sessions" meta="How the last votes went, newest first.">
+          <ul className="divide-y divide-card-border/60">
             {[...state.meetingHistory!].reverse().map((m, i) => (
-              <li
-                key={`${m.openedAtTurn}-${i}`}
-                className="flex flex-wrap items-center gap-2 px-5 py-3"
-              >
-                <span className="text-sm font-medium text-foreground">
+              <li key={`${m.openedAtTurn}-${i}`} className="flex flex-wrap items-center gap-2 py-3">
+                <span className="text-body font-medium text-foreground">
                   {MOTION_LABEL[m.motion]}
                   {m.motion !== "hold" &&
                     ` (${m.proposedDelta > 0 ? "+" : ""}${m.proposedDelta.toFixed(2)}pp)`}
                 </span>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  className={`text-body-sm font-medium ${
                     m.result === "passed" && m.executionOutcome !== "blocked"
-                      ? "bg-primary/10 text-primary"
-                      : "bg-danger/10 text-danger"
+                      ? "text-foreground"
+                      : "text-muted"
                   }`}
                 >
                   {m.executionOutcome === "blocked"
@@ -456,16 +430,16 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                         : "Resolved"}
                 </span>
                 {m.executionOutcome === "blocked" && (
-                  <span className="w-full text-xs text-muted">
+                  <span className="w-full text-body-sm text-muted">
                     {t(
                       `execution.reason.${m.executionBlockedReason && ["fx-committed", "command-economy", "term-cap", "cooldown", "delta-hike", "delta-cut", "out-of-range", "invalid-rate"].includes(m.executionBlockedReason) ? m.executionBlockedReason : "unknown"}`
                     )}
                   </span>
                 )}
-                <span className="ml-auto text-xs text-muted">
+                <span className="ml-auto text-body-sm tabular-nums text-muted">
                   {m.agree} for / {m.disagree} against / {m.abstain} abstain
                 </span>
-                <span className="w-full text-[10px] text-muted">
+                <span className="w-full text-body-sm text-muted">
                   Turn {m.openedAtTurn}
                   {m.resolvedAtTurn != null && m.resolvedAtTurn !== m.openedAtTurn
                     ? `, resolved turn ${m.resolvedAtTurn}`
@@ -474,33 +448,29 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               </li>
             ))}
           </ul>
-        </div>
+        </CentralBankSection>
       )}
 
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p className="text-body-sm text-danger">{error}</p>}
 
       {/* Nominate (executive only) */}
       {state.canNominate && (
-        <div className="rounded-xl border border-card-border bg-card shadow-sm">
-          <div className="border-b border-card-border px-5 py-4">
-            <h3 className="text-sm font-semibold text-foreground">Nominate a governor</h3>
-            <p className="mt-0.5 text-xs text-muted">
-              Choose a seat and temperament, then pick a player. The nominee goes to the Senate for
-              confirmation before taking the seat.
-            </p>
-          </div>
-          <div className="space-y-3 px-5 py-4">
+        <CentralBankSection
+          title="Nominate a governor"
+          meta="Choose a seat and temperament, then pick a player. The nominee goes to the Senate for confirmation before taking the seat."
+        >
+          <div className="max-w-2xl space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <label className="text-xs font-medium text-muted">
+              <label className="text-body-sm text-muted">
                 Seat{" "}
                 <select
                   value={nomSeatId || board[0]?.seatId}
                   onChange={(e) => setNomSeatId(e.target.value)}
-                  className="ml-1 rounded-md border border-card-border bg-card px-2 py-1 text-xs text-foreground"
+                  className="ml-1 rounded-md border border-card-border bg-background px-2 py-1 text-body text-foreground"
                 >
                   {board.map((s) => (
                     <option key={s.seatId} value={s.seatId}>
-                      {s.isChair ? "Chair - " : ""}
+                      {s.isChair ? "Chair: " : ""}
                       {s.name} ({s.alignment})
                     </option>
                   ))}
@@ -513,10 +483,10 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                     key={a}
                     type="button"
                     onClick={() => setNomAlignment(a)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
+                    className={`rounded-md border px-2.5 py-1 text-body-sm font-semibold ${
                       nomAlignment === a
-                        ? "bg-primary/10 text-primary"
-                        : "border border-card-border text-muted"
+                        ? "border-foreground/60 bg-card-elevated text-foreground"
+                        : "border-card-border text-muted"
                     }`}
                   >
                     {a === "hawk" ? "Hawk" : "Dove"}
@@ -524,13 +494,13 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 ))}
               </div>
 
-              <label className="flex items-center gap-1.5 text-xs font-medium text-muted">
+              <label className="flex items-center gap-1.5 text-body-sm text-muted">
                 <input
                   type="checkbox"
                   checked={nomMakeChair}
                   onChange={(e) => setNomMakeChair(e.target.checked)}
                 />
-                Appoint as Chair
+                Appoint as chair
               </label>
             </div>
 
@@ -540,41 +510,35 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               placeholder="Search for a player to nominate…"
             />
 
-            {nomStatus && <p className="text-xs text-primary">{nomStatus}</p>}
+            {nomStatus && <p className="text-body-sm text-foreground">{nomStatus}</p>}
           </div>
-        </div>
+        </CentralBankSection>
       )}
 
       {/* Board roster */}
-      <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-        <div className="border-b border-card-border px-5 py-4">
-          <h3 className="text-sm font-semibold text-foreground">Board of Governors</h3>
-        </div>
-        <ul className="divide-y divide-card-border">
+      <CentralBankSection title="Board of Governors">
+        <ul className="max-w-2xl divide-y divide-card-border/60">
           {board.map((seat) => (
-            <li key={seat.seatId} className="flex items-center gap-3 px-5 py-3">
-              <span className="text-sm font-medium text-foreground">{seat.name}</span>
-              {seat.isChair && (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                  Chair
-                </span>
-              )}
-              {seat.occupantType === "player" && (
-                <span className="rounded-full bg-card-elevated px-2 py-0.5 text-[10px] font-bold text-muted">
-                  Player
+            <li key={seat.seatId} className="flex items-center gap-3 py-2.5">
+              <span className="text-body font-medium text-foreground">{seat.name}</span>
+              {(seat.isChair || seat.occupantType === "player") && (
+                <span className="text-body-sm text-muted">
+                  {[seat.isChair ? "Chair" : null, seat.occupantType === "player" ? "Player" : null]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               )}
               <span className="ml-auto flex items-center gap-2">
                 {seat.occupantType === "vacant" ? (
-                  <span className="text-[10px] font-bold text-muted">Vacant</span>
+                  <span className="text-body-sm text-muted">Vacant</span>
                 ) : (
-                  <AlignmentChip alignment={seat.alignment} />
+                  <AlignmentLabel alignment={seat.alignment} />
                 )}
               </span>
             </li>
           ))}
         </ul>
-      </div>
+      </CentralBankSection>
     </div>
   );
 }

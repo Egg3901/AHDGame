@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
+import { CB_TH, CentralBankFigure, CentralBankSection } from "./CentralBankSection";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { LoanFundingSource, LocPaymentMode } from "@/lib/db/types/character";
 import {
@@ -302,77 +303,77 @@ export function CentralBankLoanTab({ countryId }: Props) {
   const policySpreadSign = policySpreadAdjustment >= 0 ? "+" : "";
   const policyPricingInProgress = (s.policyPricingProgress ?? 0) < 1;
   const usagePctText = (usedPct * 100).toFixed(0);
-  const usageColor = usedPct >= 0.9 ? "bg-error" : usedPct >= 0.7 ? "bg-warning" : "bg-primary";
+  const usageColor =
+    usedPct >= 0.9 ? "bg-error" : usedPct >= 0.7 ? "bg-warning" : "bg-foreground/50";
 
   return (
-    <div className="space-y-6">
-      {/* Stat strip - your rate, outstanding, available, system pool */}
-      <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-        <div className="grid grid-cols-2 sm:grid-cols-4 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
-          <StatCell
-            label="Your Rate"
-            value={`${effectiveRateHere.toFixed(2)}%`}
-            sub={
-              ioSurchargeActive
-                ? `prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + central-bank adjustment ${policySpreadSign}${policySpreadAdjustment.toFixed(2)}% + interest-only ${LOC_IO_SURCHARGE_PERCENT_POINTS.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
-                : `prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + central-bank adjustment ${policySpreadSign}${policySpreadAdjustment.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
-            }
-            tone="primary"
-          />
-          <StatCell
-            label="Outstanding"
-            value={formatAmount(s.outstandingInternal)}
-            sub={arrears > 0 ? `${formatNative(arrears, cbCurrency)} in arrears` : "no arrears"}
-            tone={arrears > 0 ? "warning" : "default"}
-          />
-          <StatCell
-            label="Available Credit"
-            value={noIncome && !equityOnlyMode ? "-" : formatAmount(s.perPlayerAvailableInternal)}
-            sub={
-              equityOnlyMode
-                ? "equity-backed only"
-                : noIncome
-                  ? "no income"
-                  : `${usagePctText}% of limit used`
-            }
-            tone={noIncome ? "warning" : "default"}
-          />
-          <StatCell
-            label="System Pool"
-            value={formatAmount(s.availableBorrowInternal)}
-            sub="shared across all borrowers"
-          />
-        </div>
+    <div className="space-y-12 pb-16">
+      {/* Figures: your rate, outstanding, available, system pool */}
+      <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4">
+        <CentralBankFigure
+          label="Your rate"
+          value={`${effectiveRateHere.toFixed(2)}%`}
+          hint={
+            ioSurchargeActive
+              ? `Prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + central-bank adjustment ${policySpreadSign}${policySpreadAdjustment.toFixed(2)}% + interest-only ${LOC_IO_SURCHARGE_PERCENT_POINTS.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
+              : `Prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + central-bank adjustment ${policySpreadSign}${policySpreadAdjustment.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
+          }
+          size="lg"
+        />
+        <CentralBankFigure
+          label="Outstanding"
+          value={formatAmount(s.outstandingInternal)}
+          hint={arrears > 0 ? `${formatNative(arrears, cbCurrency)} in arrears` : "No arrears"}
+          valueClassName={arrears > 0 ? "text-warning" : "text-foreground"}
+          size="lg"
+        />
+        <CentralBankFigure
+          label="Available credit"
+          value={noIncome && !equityOnlyMode ? "-" : formatAmount(s.perPlayerAvailableInternal)}
+          hint={
+            equityOnlyMode
+              ? "Equity-backed only"
+              : noIncome
+                ? "No income"
+                : `${usagePctText}% of limit used`
+          }
+          valueClassName={noIncome ? "text-warning" : "text-foreground"}
+          size="lg"
+        />
+        <CentralBankFigure
+          label="System pool"
+          value={formatAmount(s.availableBorrowInternal)}
+          hint="Shared across all borrowers"
+          size="lg"
+        />
       </div>
 
       {s.policyPricingActive && (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4">
-          <p className="text-sm font-semibold text-warning">Central-bank pricing update</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
-            LOCs currently include a {policySpreadSign}
-            {policySpreadAdjustment.toFixed(2)} percentage-point central-bank adjustment. The target
-            is +2.00 points over prime. Central-bank deposits currently receive an extra +
-            {policyDepositBonus.toFixed(2)} points, targeting +0.25 points
-            {policyPricingInProgress && (s.policyPricingTurnsRemaining ?? 0) > 0
-              ? ` over the next ${s.policyPricingTurnsRemaining} turns.`
-              : "."}
-          </p>
-        </div>
+        <p className="-mt-6 max-w-3xl text-body-sm leading-relaxed text-muted">
+          <span className="font-semibold text-foreground">Central-bank pricing update.</span> LOCs
+          currently include a {policySpreadSign}
+          {policySpreadAdjustment.toFixed(2)} percentage-point central-bank adjustment. The target
+          is +2.00 points over prime. Central-bank deposits currently receive an extra +
+          {policyDepositBonus.toFixed(2)} points, targeting +0.25 points
+          {policyPricingInProgress && (s.policyPricingTurnsRemaining ?? 0) > 0
+            ? ` over the next ${s.policyPricingTurnsRemaining} turns.`
+            : "."}
+        </p>
       )}
 
-      {/* Frozen / income callouts */}
+      {/* Frozen / income callouts: each needs the player to act. */}
       {s.drawFrozen && (
         <div className="rounded-xl border border-warning/30 bg-warning/10 p-4">
-          <p className="text-sm font-semibold text-warning">Draws frozen</p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="text-body font-semibold text-warning">Draws frozen</p>
+          <p className="mt-1 text-body-sm text-muted">
             Your missed interest has accrued as arrears. Repay the balance to unfreeze borrowing.
           </p>
         </div>
       )}
       {noIncome && (
         <div className="rounded-xl border border-warning/30 bg-warning/10 p-4">
-          <p className="text-sm font-semibold text-warning">No qualifying income detected</p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="text-body font-semibold text-warning">No qualifying income detected</p>
+          <p className="mt-1 text-body-sm text-muted">
             You need a recent history of bond coupons, CEO salary, or dividends before you can
             borrow. The bank now looks at your average recurring income over the last 48 turns, not
             just a single good hour.
@@ -380,28 +381,28 @@ export function CentralBankLoanTab({ countryId }: Props) {
         </div>
       )}
 
-      {/* Two-column layout: usage/account on left, actions on right */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Credit limit + account status (spans 2 cols) */}
-        <div className="space-y-4 lg:col-span-2">
-          <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-foreground">Credit limit</h3>
-              <span className="text-xs text-muted tabular-nums">
-                {formatAmount(s.outstandingInternal)} <span className="text-muted/60">/</span>{" "}
-                <span className="text-foreground font-medium">
+      {/* Two columns: limit and account on the left, borrow and repay on the right */}
+      <div className="grid gap-x-12 gap-y-12 lg:grid-cols-3">
+        <div className="space-y-10 lg:col-span-2">
+          <CentralBankSection
+            title="Credit limit"
+            action={
+              <span className="text-body tabular-nums text-muted">
+                {formatAmount(s.outstandingInternal)} /{" "}
+                <span className="font-semibold text-foreground">
                   {noIncome && !equityOnlyMode ? "-" : formatAmount(s.perPlayerLimitInternal)}
                 </span>
               </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-background">
+            }
+          >
+            <div className="h-2 w-full overflow-hidden rounded-full bg-track">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${usageColor}`}
+                className={`h-full rounded-full ${usageColor}`}
                 style={{ width: `${(usedPct * 100).toFixed(1)}%` }}
               />
             </div>
             {(!noIncome || equityOnlyMode) && (
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-muted tabular-nums">
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-body-sm tabular-nums text-muted">
                 <span>
                   Income cap:{" "}
                   <span
@@ -428,53 +429,39 @@ export function CentralBankLoanTab({ countryId }: Props) {
                 </span>
               </div>
             )}
-            <p className="mt-1.5 text-[10px] text-muted">
+            <p className="mt-2 max-w-3xl text-body-sm text-muted">
               {equityOnlyMode
                 ? "No income history yet, so you can only borrow against what you own. The income cap grows as bond coupons, salary, or dividends build up over the last 48 turns."
-                : "Your limit is the lower of the two caps below. The income cap grows as bond coupons, salary, or dividends build up over the last 48 turns."}
+                : "Your limit is the lower of the two caps above. The income cap grows as bond coupons, salary, or dividends build up over the last 48 turns."}
             </p>
-          </div>
+          </CentralBankSection>
 
-          <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <h3 className="text-sm font-semibold text-foreground">{cbCurrency} account</h3>
-              <div className="flex items-center gap-2">
+          {/* The account is interactive (open it, choose how it pays), so it keeps a card. */}
+          <div className="rounded-xl border border-card-border bg-card p-5">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-body-lg font-semibold text-foreground">{cbCurrency} account</h2>
+              <span className="text-body-sm text-muted">
                 {opened && <FundingBadge source={fundingSource} />}
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                    opened
-                      ? "bg-success/10 text-success border border-success/30"
-                      : "bg-card-elevated text-muted border border-card-border"
-                  }`}
-                >
-                  {opened ? "Open" : "Not opened"}
-                </span>
-              </div>
+                {opened ? "Open" : "Not opened"}
+              </span>
             </div>
             {opened ? (
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                    Principal
-                  </p>
-                  <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
-                    {formatNative(balance, cbCurrency)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                    Arrears
-                  </p>
-                  <p
-                    className={`mt-0.5 text-lg font-bold tabular-nums ${arrears > 0 ? "text-warning" : "text-foreground"}`}
-                  >
-                    {formatNative(arrears, cbCurrency)}
-                  </p>
-                </div>
+                <CentralBankFigure
+                  label="Principal"
+                  value={formatNative(balance, cbCurrency)}
+                  size="lg"
+                />
+                <CentralBankFigure
+                  label="Arrears"
+                  value={formatNative(arrears, cbCurrency)}
+                  valueClassName={arrears > 0 ? "text-warning" : "text-foreground"}
+                  size="lg"
+                />
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-muted">
+                <p className="text-body text-muted">
                   Open a {cbCurrency} loan account at {config.centralBank.abbreviation} to start
                   borrowing.
                 </p>
@@ -508,22 +495,20 @@ export function CentralBankLoanTab({ countryId }: Props) {
           </div>
         </div>
 
-        {/* Borrow + repay actions */}
-        <div className="space-y-4">
-          <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Borrow</h3>
+        {/* Borrow + repay forms */}
+        <div className="space-y-6">
+          <div className="rounded-xl border border-card-border bg-card p-5">
+            <h2 className="mb-3 text-body-lg font-semibold text-foreground">Borrow</h2>
             {!opened ? (
-              <p className="text-xs text-muted">Open the {cbCurrency} account first.</p>
+              <p className="text-body-sm text-muted">Open the {cbCurrency} account first.</p>
             ) : noIncome && !equityOnlyMode ? (
-              <p className="text-xs text-muted">Qualifying income required.</p>
+              <p className="text-body-sm text-muted">Qualifying income required.</p>
             ) : s.drawFrozen ? (
-              <p className="text-xs text-warning">Frozen. Clear your arrears first.</p>
+              <p className="text-body-sm text-warning">Frozen. Clear your arrears first.</p>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted font-medium block mb-1">
-                    Amount ({sym})
-                  </label>
+                  <label className="mb-1 block text-body-sm text-muted">Amount ({sym})</label>
                   <Input
                     placeholder={cbCurrency === "JPY" ? "500000" : "1000"}
                     value={drawAmt}
@@ -538,7 +523,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
                 >
                   Borrow to wallet
                 </Button>
-                <p className="text-[10px] text-muted">
+                <p className="text-body-sm text-muted">
                   {ioSurchargeActive
                     ? `Interest builds up every hour at ${effectiveRateHere.toFixed(2)}% a year. Auto-pay covers the interest only, so what you owe stays the same until you switch back to paying down the loan.`
                     : `Interest builds up every hour at ${effectiveRateHere.toFixed(2)}% a year and auto-pays from your income.`}
@@ -547,18 +532,16 @@ export function CentralBankLoanTab({ countryId }: Props) {
             )}
           </div>
 
-          <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Repay</h3>
+          <div className="rounded-xl border border-card-border bg-card p-5">
+            <h2 className="mb-3 text-body-lg font-semibold text-foreground">Repay</h2>
             {!opened ? (
-              <p className="text-xs text-muted">No account open.</p>
+              <p className="text-body-sm text-muted">No account open.</p>
             ) : balance <= 0 && arrears <= 0 ? (
-              <p className="text-xs text-muted">Nothing outstanding.</p>
+              <p className="text-body-sm text-muted">Nothing outstanding.</p>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted font-medium block mb-1">
-                    Amount ({sym})
-                  </label>
+                  <label className="mb-1 block text-body-sm text-muted">Amount ({sym})</label>
                   <Input
                     placeholder="Amount"
                     value={repayAmt}
@@ -574,7 +557,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
                 >
                   Repay
                 </Button>
-                <p className="text-[10px] text-muted">
+                <p className="text-body-sm text-muted">
                   Applied to arrears first, then principal. Funds drawn from your personal wallet.
                 </p>
               </div>
@@ -583,58 +566,68 @@ export function CentralBankLoanTab({ countryId }: Props) {
         </div>
       </div>
 
-      {/* Ledger */}
-      <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-        <div className="border-b border-card-border bg-card-elevated px-4 py-3">
-          <h3 className="text-sm font-semibold text-foreground">Transaction history</h3>
-          <p className="text-xs text-muted">Most recent {data.ledger.length} entries</p>
-        </div>
+      <CentralBankSection
+        title="Transaction history"
+        meta={`Most recent ${data.ledger.length} entries`}
+      >
         {data.ledger.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">No transactions yet.</p>
+          <p className="py-6 text-body text-muted">No transactions yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-card-elevated/40 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <table className="w-full text-left text-body">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Type</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                  <th className="px-4 py-2 text-right hidden md:table-cell">Interest</th>
-                  <th className="px-4 py-2 text-right hidden md:table-cell">Principal</th>
-                  <th className="px-4 py-2 text-right">Balance after</th>
-                  <th className="px-4 py-2 text-right hidden sm:table-cell">Turn</th>
+                  <th scope="col" className={CB_TH}>
+                    Type
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Amount
+                  </th>
+                  <th scope="col" className={`${CB_TH} hidden text-right md:table-cell`}>
+                    Interest
+                  </th>
+                  <th scope="col" className={`${CB_TH} hidden text-right md:table-cell`}>
+                    Principal
+                  </th>
+                  <th scope="col" className={`${CB_TH} text-right`}>
+                    Balance after
+                  </th>
+                  <th scope="col" className={`${CB_TH} hidden text-right sm:table-cell`}>
+                    Turn
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-card-border/50">
+              <tbody>
                 {data.ledger.map((row, i) => {
                   const c = row.currencyCode as CurrencyCode;
                   const isPayment =
                     row.type === "repay" ||
                     row.type === "auto_payment" ||
                     row.type === "garnishment";
-                  const negate = isPayment ? "−" : "+";
+                  const negate = isPayment ? "-" : "+";
                   const hasSplit =
                     (row.type === "repay" ||
                       row.type === "auto_payment" ||
                       row.type === "garnishment") &&
                     (row.interestPortion !== undefined || row.principalPortion !== undefined);
                   return (
-                    <tr key={`${row.createdAt}-${i}`} className="hover:bg-card-elevated/30">
-                      <td className="px-4 py-2">{formatLedgerType(row.type)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">
+                    <tr key={`${row.createdAt}-${i}`} className="border-b border-card-border/60">
+                      <td className="py-2 pr-4">{formatLedgerType(row.type)}</td>
+                      <td className="py-2 pr-4 text-right font-mono tabular-nums">
                         {negate}
                         {formatNative(row.amount, c)}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted hidden md:table-cell">
+                      <td className="hidden py-2 pr-4 text-right font-mono tabular-nums text-muted md:table-cell">
                         {hasSplit ? formatNative(row.interestPortion ?? 0, c) : "-"}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted hidden md:table-cell">
+                      <td className="hidden py-2 pr-4 text-right font-mono tabular-nums text-muted md:table-cell">
                         {hasSplit ? formatNative(row.principalPortion ?? 0, c) : "-"}
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted">
+                      <td className="py-2 pr-4 text-right font-mono tabular-nums text-muted">
                         {formatNative(row.balanceAfter, c)}
                       </td>
-                      <td className="px-4 py-2 text-right text-muted hidden sm:table-cell">
-                        {row.turn != null ? `T${row.turn}` : "-"}
+                      <td className="hidden py-2 pr-4 text-right font-mono tabular-nums text-muted sm:table-cell">
+                        {row.turn != null ? row.turn : "-"}
                       </td>
                     </tr>
                   );
@@ -643,63 +636,32 @@ export function CentralBankLoanTab({ countryId }: Props) {
             </table>
           </div>
         )}
-      </div>
+      </CentralBankSection>
 
-      <p className="text-center text-xs text-muted">
-        <Link href="/portfolio?section=loans" className="text-primary hover:underline">
-          View loans in portfolio →
+      <p className="text-body-sm text-muted">
+        <Link
+          href="/portfolio?section=loans"
+          className="font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
+        >
+          View loans in portfolio
         </Link>
       </p>
     </div>
   );
 }
 
-function StatCell({
-  label,
-  value,
-  sub,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "default" | "primary" | "warning";
-}) {
-  const valueClass =
-    tone === "primary" ? "text-primary" : tone === "warning" ? "text-warning" : "text-foreground";
-  return (
-    <div className="px-5 py-4">
-      <p className="text-[10px] uppercase tracking-widest text-muted font-semibold">{label}</p>
-      <p className={`mt-1 text-xl font-bold tabular-nums ${valueClass}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-muted">{sub}</p>}
-    </div>
-  );
-}
-
 function FundingBadge({ source }: { source: LoanFundingSource }) {
-  // Color coding mirrors the bank balance sheet's mental model: deposits = blue,
-  // reserves = amber, split = primary. Helps an admin scan many loans at a glance.
-  const meta: Record<LoanFundingSource, { label: string; cls: string }> = {
-    deposits: {
-      label: "Deposits",
-      cls: "bg-secondary/10 text-secondary border border-secondary/30",
-    },
-    reserves: {
-      label: "Reserves",
-      cls: "bg-warning/10 text-warning border border-warning/30",
-    },
-    both: {
-      label: "Split 50/50",
-      cls: "bg-primary/10 text-primary border border-primary/30",
-    },
+  const label: Record<LoanFundingSource, string> = {
+    deposits: "Deposits",
+    reserves: "Reserves",
+    both: "Split 50/50",
   };
-  const m = meta[source];
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${m.cls}`}
+      className="mr-2"
       title="Funding pool: where the money comes from when you borrow, and goes back to when you repay"
     >
-      Funded: {m.label}
+      Funded: {label[source]} ·
     </span>
   );
 }
@@ -746,15 +708,13 @@ function AdminFundingPicker({
   };
 
   return (
-    <div className="mt-4 rounded-lg border border-warning/30 bg-warning/5 p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-warning">
-        Admin · Funding source
-      </p>
-      <p className="mt-1 text-[11px] text-muted">
+    <div className="mt-4 border-t border-card-border pt-4">
+      <p className="text-body font-semibold text-foreground">Admin: funding source</p>
+      <p className="mt-1 text-body-sm text-muted">
         Sets which pool later borrowing and repayments flow through. Money already taken from a pool
         is not moved. Only future flows change.
       </p>
-      <div className="mt-2 inline-flex rounded-md border border-card-border bg-background p-0.5 text-[11px] font-semibold">
+      <div className="mt-2 inline-flex rounded-md border border-card-border bg-background p-0.5 text-body-sm font-semibold">
         {(["deposits", "reserves", "both"] as LoanFundingSource[]).map((opt) => (
           <button
             key={opt}
@@ -765,7 +725,7 @@ function AdminFundingPicker({
               value === opt ? "bg-primary text-white" : "text-muted hover:text-foreground"
             } ${busy || disabled ? "opacity-50" : ""}`}
           >
-            {opt === "both" ? "50/50" : opt}
+            {opt === "both" ? "50/50" : opt === "deposits" ? "Deposits" : "Reserves"}
           </button>
         ))}
       </div>
@@ -823,12 +783,10 @@ function PaymentModePicker({
   const disabled = busy || pending || onCooldown;
 
   return (
-    <div className="mt-4 rounded-lg border border-card-border bg-background/40 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-          Payment mode
-        </p>
-        <span className="text-[11px] text-muted">
+    <div className="mt-4 border-t border-card-border pt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-body font-semibold text-foreground">Payment mode</p>
+        <span className="text-body-sm text-muted">
           Current:{" "}
           <span className="font-semibold text-foreground">
             {mode === "pi" ? "Paying down the loan" : "Paying interest only"}
@@ -842,7 +800,7 @@ function PaymentModePicker({
         </span>
       </div>
       {confirming ? (
-        <div className="mt-2 rounded-md border border-warning/40 bg-warning/5 p-2 text-xs">
+        <div className="mt-2 text-body-sm">
           <p className="text-foreground">
             Switching <strong>{currency}</strong> to interest only. What you owe will stop going
             down, because every auto-payment goes to interest. Your rate at {bankAbbr} rises from{" "}
@@ -850,10 +808,10 @@ function PaymentModePicker({
             <strong>{effectiveRateHereIO.toFixed(2)}%</strong>. Locked for{" "}
             {LOC_PAYMENT_MODE_COOLDOWN_TURNS} turns after the switch.
           </p>
-          <div className="mt-2 flex justify-end gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
-              className="rounded border border-card-border bg-card px-2 py-0.5 text-[11px] font-semibold text-muted hover:text-foreground"
+              className="rounded-md border border-card-border px-3 py-1 text-body-sm font-semibold text-foreground hover:bg-card-elevated"
               onClick={() => setConfirming(false)}
               disabled={pending}
             >
@@ -861,7 +819,7 @@ function PaymentModePicker({
             </button>
             <button
               type="button"
-              className="rounded bg-warning px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-warning/90 disabled:opacity-60"
+              className="rounded-md bg-warning px-3 py-1 text-body-sm font-semibold text-white hover:bg-warning/90 disabled:opacity-60"
               onClick={() => void submit("io")}
               disabled={pending}
             >
@@ -870,7 +828,7 @@ function PaymentModePicker({
           </div>
         </div>
       ) : (
-        <div className="mt-2 inline-flex rounded-md border border-card-border bg-background p-0.5 text-[11px] font-semibold">
+        <div className="mt-2 inline-flex flex-wrap rounded-md border border-card-border bg-background p-0.5 text-body-sm font-semibold">
           <button
             type="button"
             disabled={disabled}
@@ -896,7 +854,7 @@ function PaymentModePicker({
           </button>
         </div>
       )}
-      <p className="mt-2 text-[10px] text-muted">
+      <p className="mt-2 text-body-sm text-muted">
         Paying down the loan is the default: each turn a set share of what you owe is paid off.
         Paying interest only covers the interest and nothing more, so the debt never shrinks. You
         must wait {LOC_PAYMENT_MODE_COOLDOWN_TURNS} turns between switches.

@@ -7,7 +7,7 @@
  * the ordering and the gating are the design, and both are worth testing without
  * mounting a page that fires half a dozen fetches.
  *
- * Every row degrades on its own. A missing figure renders a plain chevron, and a
+ * Every row degrades on its own. A missing figure renders no figure, and a
  * gated surface (SCOTUS, Command Economy, Conflicts) drops out of the list
  * entirely rather than linking to a redirect.
  */
@@ -111,7 +111,7 @@ function politicsRows(input: DirectoryInput): DirectoryRow[] {
     ...(race
       ? [
           {
-            label: "Presidential Election",
+            label: "Presidential election",
             href: `/elections/${race.seatId ?? race.id}`,
             available: true,
             figure: race.status === "upcoming" ? "upcoming" : "live",
@@ -185,14 +185,14 @@ function governmentRows(input: DirectoryInput, config: CountryConfig): Directory
         ]
       : []),
     {
-      label: "National Budget",
+      label: "National budget",
       href: budgetUrl(countryId),
       available: true,
       figure: budget.figure,
       figureTone: budget.tone,
     },
     {
-      label: "National Policy",
+      label: "National policy",
       href: policyUrl(countryId),
       available: true,
       figure: countFigure(input.lawCount, "law"),
@@ -212,7 +212,7 @@ function economyRows(input: DirectoryInput, currencyPrefix: string): DirectoryRo
       figure: counts?.gdpMillions ? formatGDP(counts.gdpMillions, currencyPrefix) : null,
     },
     {
-      label: "Stock Market",
+      label: "Stock market",
       href: stockmarketUrl(countryId),
       available: true,
     },
@@ -223,7 +223,7 @@ function economyRows(input: DirectoryInput, currencyPrefix: string): DirectoryRo
       figure: counts?.primeRate != null ? `${counts.primeRate.toFixed(2)}%` : null,
     },
     {
-      label: "Foreign Exchange",
+      label: "Foreign exchange",
       href: forexUrl(countryId),
       available: true,
     },
@@ -244,7 +244,7 @@ function economyRows(input: DirectoryInput, currencyPrefix: string): DirectoryRo
     ...(counts?.commandEconomy
       ? [
           {
-            label: "Command Economy",
+            label: "Command economy",
             href: `/country/${countryId.toLowerCase()}/command-economy`,
             available: true,
             figure: "plan" as string | null,
@@ -272,8 +272,8 @@ function nationRows(input: DirectoryInput, config: CountryConfig): DirectoryRow[
     // SP6: playables have one metrics product; non-playables keep the legacy
     // National Metrics page.
     hasPoliticalMetrics
-      ? { label: "Political Metrics", href: politicalMetricsUrl(countryId), available: true }
-      : { label: "National Metrics", href: metricsUrl(countryId), available: true },
+      ? { label: "Political metrics", href: politicalMetricsUrl(countryId), available: true }
+      : { label: "National metrics", href: metricsUrl(countryId), available: true },
     // The wiki is one hub for the whole game rather than per country, so this
     // links to the index. It earns a place here because "how does this work"
     // is the other question a player arrives on a country page with.
@@ -284,7 +284,7 @@ function nationRows(input: DirectoryInput, config: CountryConfig): DirectoryRow[
     ...(input.counts?.navairFormations
       ? [
           {
-            label: "Naval and Air Command",
+            label: "Naval and air command",
             href: navairUrl(countryId),
             available: true,
             figure: countFigure(input.counts.navairFormations, "formation"),
