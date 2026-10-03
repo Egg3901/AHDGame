@@ -890,6 +890,12 @@ const RUNTIME: CollectionEntry[] = [
       "Dropped with the world and recreated by the forced idempotent fund bootstrap migrations; definitions and runtime accounting cannot safely survive independently.",
   },
   { name: "indexFundPositions", category: "runtime" },
+  {
+    name: "fundFloatSettlements",
+    category: "runtime",
+    notes:
+      "Archived float settlement plans reference this world's funds and corporations; reset them with fund positions so prior-world recovery and undo records cannot survive.",
+  },
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },
   { name: "indexFundTransactions", category: "runtime" },

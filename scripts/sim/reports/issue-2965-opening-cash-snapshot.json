@@ -1,0 +1,39 @@
+{
+  "issue": 2965,
+  "runtimeSource": "b1ec98a60eecbe491bcba729ff51e742fea96781",
+  "runtimeFiles": [
+    "scripts/sim/runWorld.ts",
+    "scripts/sim/openingLedgerSnapshot.ts",
+    "scripts/sim/openingLedgerSnapshot.test.ts"
+  ],
+  "qualification": {
+    "memoryCases": 11,
+    "nativeMongoCases": 7,
+    "totalCases": 18,
+    "passed": 18,
+    "skipped": 0,
+    "nativeFixtureOnly": true,
+    "originalMissingBaselineControl": "stock skipped with null divergence",
+    "capturedOpeningControl": "actual BG treasury cash 2825 to 5650; unskipped stock reconciliation, zero divergences, green trial balance, no unattributed entries",
+    "resumeChangedCashControl": "original snapshot retained; one unexplained stock divergence remains visible",
+    "storageControls": [
+      "failure before persist refuses admission with unchanged cash",
+      "lost acknowledgement after persist recovers from stored snapshot",
+      "corrupt stored balances refused without replacement",
+      "persisted empty world distinguished from a failed write"
+    ],
+    "clockControls": 4
+  },
+  "limits": [
+    "No full-world acceptance is claimed by these focused native fixtures.",
+    "The completed twelve-turn diagnostic still contains later stock divergences.",
+    "No production database was reset or repaired.",
+    "No formula or monetary amount changed."
+  ],
+  "performance": {
+    "frequency": "once at run startup, outside processTurn",
+    "newTurnPathWork": 0,
+    "capture": "one initial lookup, existing batched snapshot capture/write, one confirming lookup",
+    "resume": "one existing snapshot lookup; no cash recapture"
+  }
+}

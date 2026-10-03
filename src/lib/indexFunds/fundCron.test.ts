@@ -4,13 +4,13 @@ import {
   refreshFundNavAfterBondDeployment,
   shouldRebalanceIndexFundConstituents,
   shouldRunCrossFundRebalancing,
-  executeFundShareBuy,
   rebalanceFundToTarget,
   rebalanceConstituents,
   processQueuedRedemptions,
 } from "./fundCron";
 import type { IndexFund, IndexFundRedemptionQueueEntry } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { INDEX_FUND_INITIAL_NAV } from "@/lib/indexFunds/unitAccounting";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
@@ -216,7 +216,7 @@ describe("fundCron: queued redemption claims", () => {
 
     await expect(processQueuedRedemptions(db as never, fund, false, 1)).resolves.toBe(0);
     expect(db.collectionMocks.indexFunds).toBeUndefined();
-    expect(db.collectionMocks.characters).toBeUndefined();
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
   });
 });
 
@@ -387,290 +387,8 @@ describe("fundCron — settled bond NAV", () => {
 });
 
 // ---------------------------------------------------------------------------
-// executeFundShareBuy — buy regression test
+// Float purchase recovery is covered by fundFloatTradeRecovery.integration.test.ts
 // ---------------------------------------------------------------------------
-
-describe("fundCron — executeFundShareBuy", () => {
-  const fundId = new ObjectId();
-  const corpId = new ObjectId();
-
-  const baseFund: IndexFund = {
-    _id: fundId,
-    slug: "us_top_25",
-    name: "US Top 25",
-    tickerSymbol: "US25",
-    scope: "country",
-    kind: "broad",
-    countryId: "US",
-    anchorCurrencyCode: "USD",
-    status: "active",
-    quotedNav: 100,
-    unitSupply: 500_000,
-    reserveUnits: 500_000,
-    cashAnchor: 10_000,
-    targetConstituents: [],
-    holdings: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  // EligibleCorpRow shape (subset used by executeFundShareBuy)
-  const baseCorp = {
-    _id: corpId,
-    countryId: "US" as const,
-    type: "tech" as const,
-    secondaryType: undefined,
-    sharePrice: 50,
-    fundamentalSharePrice: 50,
-    totalShares: 100_000,
-    liquidCurrencyCode: "USD" as const,
-    publicFloat: 500,
-    shareBuybackMode: undefined,
-  };
-
-  let mockDb: ReturnType<typeof buildMockDb>;
-
-  function buildMockDb(initialCashAnchor: number) {
-    // Simulates atomicallyDebitFundCashAnchor and refundFundCashAnchor via
-    // the indexFunds collection findOneAndUpdate / updateOne.
-    let cashAnchor = initialCashAnchor;
-    const publicFloat = baseCorp.publicFloat;
-    const fundTransactions: unknown[] = [];
-
-    const indexFundsColl = {
-      findOneAndUpdate: vi
-        .fn()
-        .mockImplementation(
-          (
-            filter: { cashAnchor?: { $gte: number } },
-            update: { $inc?: { cashAnchor?: number } }
-          ) => {
-            const required = filter.cashAnchor?.$gte ?? 0;
-            if (cashAnchor < required) return Promise.resolve(null);
-            cashAnchor += update.$inc?.cashAnchor ?? 0;
-            return Promise.resolve({ _id: fundId, cashAnchor, holdings: baseFund.holdings });
-          }
-        ),
-      updateOne: vi
-        .fn()
-        .mockImplementation((_filter: unknown, update: { $inc?: { cashAnchor?: number } }) => {
-          cashAnchor += update.$inc?.cashAnchor ?? 0;
-          return Promise.resolve({ matchedCount: 1 });
-        }),
-    };
-
-    const corporationsColl = {
-      findOne: vi.fn().mockResolvedValue({ _id: corpId, shareholders: [] }),
-      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
-    };
-
-    const fundTransactionsColl = {
-      insertOne: vi.fn().mockImplementation((doc: unknown) => {
-        fundTransactions.push(doc);
-        return Promise.resolve({ insertedId: new ObjectId() });
-      }),
-    };
-
-    return {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "indexFunds") return indexFundsColl;
-        if (name === "corporations") return corporationsColl;
-        if (name === "indexFundTransactions") return fundTransactionsColl;
-        return {
-          findOne: vi.fn().mockResolvedValue(null),
-          findOneAndUpdate: vi.fn(),
-          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
-          insertOne: vi.fn(),
-        };
-      }),
-      // Expose for assertions
-      _getCashAnchor: () => cashAnchor,
-      _getPublicFloat: () => publicFloat,
-      _getFundTransactions: () => fundTransactions,
-      _indexFundsColl: indexFundsColl,
-      _corporationsColl: corporationsColl,
-      _fundTransactionsColl: fundTransactionsColl,
-    };
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockDb = buildMockDb(baseFund.cashAnchor);
-  });
-
-  it("debits N × priceAnchor from cashAnchor, decrements publicFloat, appends public_float_buy tx", async () => {
-    const { insertFundTransaction } = await import("@/lib/indexFunds/fundQueries");
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-
-    const shares = 10;
-    const sharePriceAnchor = 50;
-
-    const result = await executeFundShareBuy(
-      mockDb as unknown as import("mongodb").Db,
-      baseFund,
-      baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-      shares,
-      sharePriceAnchor,
-      /* currentTurn */ 5
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.sharesBought).toBe(shares);
-    expect(result.anchorSpent).toBe(shares * sharePriceAnchor); // 500
-
-    // Cash debit: atomicallyDebitFundCashAnchor should have been called with 500
-    expect(mockDb._indexFundsColl.findOneAndUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ cashAnchor: { $gte: shares * sharePriceAnchor } }),
-      expect.objectContaining({ $inc: { cashAnchor: -(shares * sharePriceAnchor) } }),
-      expect.anything()
-    );
-
-    // Corp publicFloat decremented — creditSharesToFund called with correct args
-    expect(creditSharesToFund).toHaveBeenCalled();
-    const creditCall = vi.mocked(creditSharesToFund).mock.calls[0];
-    expect(creditCall[1].toString()).toBe(corpId.toString()); // corp._id
-    expect(creditCall[2].toString()).toBe(fundId.toString()); // fund._id
-    expect(creditCall[3]).toBe(shares);
-    expect(creditCall[4]).toBe(baseCorp.sharePrice);
-    expect(creditCall[5]).toMatchObject({ $inc: { publicFloat: -shares } });
-
-    // Fund transaction inserted with kind = "public_float_buy"
-    expect(insertFundTransaction).toHaveBeenCalled();
-    const txCall = vi.mocked(insertFundTransaction).mock.calls[0]!;
-    const txDoc = txCall[1]!;
-    expect(txDoc).toMatchObject({
-      kind: "public_float_buy",
-      shares,
-      navAnchor: sharePriceAnchor,
-      amountAnchor: shares * sharePriceAnchor,
-    });
-    expect(txDoc.corporationId!.toString()).toBe(corpId.toString());
-
-    // ── Real mock-DB state assertions ──────────────────────────────────────
-    // cashAnchor: started at 10_000, debited by shares × sharePriceAnchor = 500
-    expect(mockDb._getCashAnchor()).toBe(10_000 - shares * sharePriceAnchor); // 9_500
-
-    // publicFloat: the harness tracks the starting value but does not apply
-    // creditSharesToFund's update (that helper is fully mocked). We therefore
-    // assert the update payload passed to creditSharesToFund carries the right
-    // $inc instead.
-    expect(creditCall[5]).toMatchObject({ $inc: { publicFloat: -shares } }); // -10
-
-    // public_float_buy transaction recorded in the harness's captured inserts
-    // (insertFundTransaction is mocked at the module level, so we verify via
-    // the mock-call snapshot captured above — the harness's _getFundTransactions()
-    // only captures direct insertOne calls, which insertFundTransaction abstracts away)
-    expect(txDoc.shares).toBe(shares); // 10
-    expect(txDoc.amountAnchor).toBe(shares * sharePriceAnchor); // 500
-  });
-
-  it("returns ok=false and does not spend cash when creditSharesToFund fails", async () => {
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    vi.mocked(creditSharesToFund).mockResolvedValueOnce(false);
-
-    const result = await executeFundShareBuy(
-      mockDb as unknown as import("mongodb").Db,
-      baseFund,
-      baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-      10,
-      50,
-      5
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.sharesBought).toBe(0);
-    expect(result.anchorSpent).toBe(0);
-
-    // Refund should have been issued (updateOne with positive $inc cashAnchor)
-    expect(mockDb._indexFundsColl.updateOne).toHaveBeenCalled();
-    const refundCall = mockDb._indexFundsColl.updateOne.mock.calls[0];
-    expect(refundCall[0]._id.toString()).toBe(fundId.toString());
-    expect(refundCall[1].$inc.cashAnchor).toBe(500);
-  });
-
-  it("restores the standalone purchase when the holdings write fails and a retry applies once", async () => {
-    const { updateFundHoldings, insertFundTransaction } =
-      await import("@/lib/indexFunds/fundQueries");
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    const { applyFloatBuyCredit } = await import("@/lib/corporations/shareEscrowSettlement");
-    vi.mocked(updateFundHoldings).mockRejectedValueOnce(new Error("injected holdings failure"));
-
-    await expect(
-      executeFundShareBuy(
-        mockDb as unknown as import("mongodb").Db,
-        baseFund,
-        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-        10,
-        50,
-        5
-      )
-    ).rejects.toThrow("injected holdings failure");
-
-    expect(mockDb._getCashAnchor()).toBe(10_000);
-    expect(mockDb._corporationsColl.updateOne).toHaveBeenCalledTimes(2);
-    expect(insertFundTransaction).not.toHaveBeenCalled();
-
-    const retry = await executeFundShareBuy(
-      mockDb as unknown as import("mongodb").Db,
-      baseFund,
-      baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-      10,
-      50,
-      5
-    );
-
-    expect(retry.ok).toBe(true);
-    expect(mockDb._getCashAnchor()).toBe(9_500);
-    expect(creditSharesToFund).toHaveBeenCalledTimes(2);
-    expect(applyFloatBuyCredit).toHaveBeenCalledTimes(2);
-    expect(insertFundTransaction).toHaveBeenCalledTimes(1);
-  });
-
-  it("restores holdings and every economic leg when the audit insert fails", async () => {
-    const { updateFundHoldings, insertFundTransaction } =
-      await import("@/lib/indexFunds/fundQueries");
-    vi.mocked(insertFundTransaction).mockRejectedValueOnce(new Error("injected audit failure"));
-
-    await expect(
-      executeFundShareBuy(
-        mockDb as unknown as import("mongodb").Db,
-        baseFund,
-        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-        10,
-        50,
-        5
-      )
-    ).rejects.toThrow("injected audit failure");
-
-    expect(mockDb._getCashAnchor()).toBe(10_000);
-    expect(updateFundHoldings).toHaveBeenCalledTimes(1);
-    expect(mockDb._indexFundsColl.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: fundId }),
-      expect.objectContaining({ $set: expect.objectContaining({ holdings: baseFund.holdings }) })
-    );
-    expect(mockDb._corporationsColl.updateOne).toHaveBeenCalledTimes(2);
-  });
-
-  it("attempts every remaining reversal when one compensation step fails", async () => {
-    const { insertFundTransaction } = await import("@/lib/indexFunds/fundQueries");
-    vi.mocked(insertFundTransaction).mockRejectedValueOnce(new Error("injected audit failure"));
-    mockDb._indexFundsColl.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
-
-    await expect(
-      executeFundShareBuy(
-        mockDb as unknown as import("mongodb").Db,
-        baseFund,
-        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-        10,
-        50,
-        5
-      )
-    ).rejects.toThrow(AggregateError);
-
-    expect(mockDb._corporationsColl.updateOne).toHaveBeenCalledTimes(2);
-    expect(mockDb._getCashAnchor()).toBe(10_000);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // rebalanceFundToTarget tests
@@ -743,43 +461,19 @@ describe("fundCron — rebalanceFundToTarget", () => {
   ];
 
   function buildRebalanceMockDb() {
-    const indexFundsColl = {
-      findOneAndUpdate: vi
-        .fn()
-        .mockImplementation(
-          (
-            filter: { cashAnchor?: { $gte: number } },
-            update: { $inc?: { cashAnchor?: number } }
-          ) => {
-            // Simulate successful debit
-            const cashAnchor = (fundWithDrift.cashAnchor ?? 0) + (update.$inc?.cashAnchor ?? 0);
-            return Promise.resolve({ _id: fundId, cashAnchor, holdings: fundWithDrift.holdings });
-          }
-        ),
-      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
-    };
-    return {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "indexFunds") return indexFundsColl;
-        if (name === "indexFundTransactions") return { insertOne: vi.fn().mockResolvedValue({}) };
-        // shareOrders: return empty list for open bids so bid logic is a no-op in existing tests
-        if (name === "shareOrders")
-          return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
-        // Tranche 5+: the batched float-buy ledger flush reads thresholds and
-        // the turn cadence (findOne) plus FX rates (find) before the
-        // best-effort bulk insert. Nulls/empties drive the same defaults as
-        // an empty database.
-        return {
-          findOneAndUpdate: vi.fn(),
-          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
-          insertOne: vi.fn(),
-          insertMany: vi.fn().mockResolvedValue({}),
-          findOne: vi.fn().mockResolvedValue(null),
-          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-        };
-      }),
-      _indexFundsColl: indexFundsColl,
-    };
+    const memory = createInMemoryDb();
+    memory.seed("indexFunds", [{ ...fundWithDrift }]);
+    memory.seed(
+      "corporations",
+      candidateCorps.map((corp) => ({
+        ...corp,
+        name: "Synthetic issuer",
+        liquidCapital: 100000,
+        shareholders: [],
+      }))
+    );
+    memory.seed("gameConfig", [{ _id: "default", ledgerShadow: false, auditLog: false }]);
+    return memory;
   }
 
   beforeEach(() => {
@@ -825,9 +519,10 @@ describe("fundCron — rebalanceFundToTarget", () => {
       expect.objectContaining({ note: expect.stringContaining("Rebalance") })
     );
     expect(insertFundTransaction).not.toHaveBeenCalled();
-    // One bulk write for completed float buys, then the existing bid-audit bulk write.
-    expect(insertFundTransactionsBulk).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(insertFundTransactionsBulk).mock.calls[0]?.[1].length).toBe(result.buys);
+    // Float settlement owns its receipts; the remaining bulk belongs to bids.
+    expect(insertFundTransactionsBulk).toHaveBeenCalledTimes(1);
+    expect(result.buys).toBeGreaterThan(0);
+    expect(mockDb.collection("indexFundTransactions").docs).toHaveLength(result.buys);
   });
 
   it("returns { buys, sells } counts", async () => {
@@ -983,44 +678,20 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
   type DbArg = import("mongodb").Db;
 
   function buildBidMockDb(openOrders: import("mongodb").WithId<import("mongodb").Document>[] = []) {
-    let openOrdersList = [...openOrders];
-    const shareOrdersColl = {
-      find: vi.fn().mockImplementation(() => ({
-        toArray: vi.fn().mockImplementation(() => Promise.resolve([...openOrdersList])),
-      })),
-    };
-    const indexFundsColl = {
-      findOneAndUpdate: vi
-        .fn()
-        .mockImplementation((_filter: unknown, update: { $inc?: { cashAnchor?: number } }) => {
-          const cashAnchor = baseFund.cashAnchor + (update.$inc?.cashAnchor ?? 0);
-          return Promise.resolve({ _id: fundId, cashAnchor, holdings: [] });
-        }),
-      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
-    };
-    return {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "indexFunds") return indexFundsColl;
-        if (name === "shareOrders") return shareOrdersColl;
-        if (name === "indexFundTransactions") return { insertOne: vi.fn().mockResolvedValue({}) };
-        // Tranche 5+: the batched float-buy ledger flush reads thresholds and
-        // the turn cadence (findOne) plus FX rates (find) before the
-        // best-effort bulk insert. Nulls/empties drive the same defaults as
-        // an empty database.
-        return {
-          findOneAndUpdate: vi.fn(),
-          updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
-          insertOne: vi.fn(),
-          insertMany: vi.fn().mockResolvedValue({}),
-          findOne: vi.fn().mockResolvedValue(null),
-          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
-        };
-      }),
-      _shareOrdersColl: shareOrdersColl,
-      _setOpenOrders: (orders: import("mongodb").WithId<import("mongodb").Document>[]) => {
-        openOrdersList = [...orders];
+    const memory = createInMemoryDb();
+    memory.seed("indexFunds", [{ ...baseFund }]);
+    memory.seed("corporations", [
+      {
+        ...inBasketCorp,
+        publicFloat: 10000,
+        name: "Synthetic issuer",
+        liquidCapital: 1000,
+        shareholders: [],
       },
-    };
+    ]);
+    memory.seed("shareOrders", openOrders);
+    memory.seed("gameConfig", [{ _id: "default", ledgerShadow: false, auditLog: false }]);
+    return memory;
   }
 
   beforeEach(() => {

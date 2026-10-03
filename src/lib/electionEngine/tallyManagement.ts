@@ -77,6 +77,12 @@ import {
   deriveGroupLeans,
 } from "@/lib/uk/manifesto/electionManifestoResolver";
 import { buildCurrentRegistrationBaseline } from "./electionFormulaFactors";
+import {
+  castRankedBallots,
+  mergeRankedBallots,
+  countPrStv,
+  validateRankedBallots,
+} from "@/lib/turn/election/rules/prStv";
 
 // ─── Accumulate one turn of votes into a tally ───────────────────────────────
 
@@ -165,6 +171,12 @@ export async function accumulateVoteTurn(
   const election =
     options?.election ?? (await db.collection<Election>("elections").findOne({ _id: electionId }));
   if (!election || !election.endTime) return;
+  const isPrStv = tally.countingMethod === "pr_stv";
+  if (isPrStv) {
+    if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+    validateRankedBallots(tally.rankedBallots, tally.totalVotes);
+  }
 
   const stateId = election.state as string;
   let state: State | null;
@@ -438,10 +450,9 @@ export async function accumulateVoteTurn(
   // surge could still carry the race past the registered electorate. Ballots
   // already on the board (active candidates only, matching `newTotals`) plus
   // this slice may never exceed it.
-  const alreadyCast = candidates.reduce(
-    (sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0),
-    0
-  );
+  const alreadyCast = isPrStv
+    ? Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0)
+    : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
@@ -725,15 +736,22 @@ export async function accumulateVoteTurn(
   // Build new totals using ONLY active candidates — withdrawn candidates'
   // historical votes are excluded so vote share and seat projections are correct.
   const activeCandidateIds = new Set(enriched.map((ec) => ec.candidateId));
-  const newTotals: Record<string, number> = {};
+  const newTotals: Record<string, number> = isPrStv ? { ...tally.totalVotes } : {};
+  const increments: Record<string, number> = {};
   for (const ec of enriched) {
     const raw = votesPerCandidate[ec.candidateId] ?? 0;
     const multiplier = executiveEndorsedCandidateIds.has(ec.candidateId)
       ? EXECUTIVE_ENDORSEMENT_VOTE_BONUS
       : 1.0;
+    increments[ec.candidateId] = Math.round(raw * multiplier);
     newTotals[ec.candidateId] =
-      (tally.totalVotes[ec.candidateId] ?? 0) + Math.round(raw * multiplier);
+      (tally.totalVotes[ec.candidateId] ?? 0) + increments[ec.candidateId];
   }
+
+  const rankedBallots = isPrStv
+    ? mergeRankedBallots(tally.rankedBallots!, castRankedBallots(enriched, increments))
+    : undefined;
+  if (isPrStv) validateRankedBallots(rankedBallots, newTotals);
 
   // For house/stateSenate races, compute per-candidate seat estimates
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
@@ -742,6 +760,14 @@ export async function accumulateVoteTurn(
     const electionType = election.electionType as string;
     const totalSeats = election.totalSeats as number | undefined;
     if (!totalSeats || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
+    if (isPrStv) {
+      if (rankedBallots!.length === 0) return undefined;
+      return countPrStv(
+        enriched.map((c) => c.candidateId),
+        totalSeats,
+        rankedBallots!
+      ).seats;
+    }
     // Only count active candidates' votes for seat allocation
     const totalVotesCast = enriched.reduce((s, ec) => s + (newTotals[ec.candidateId] ?? 0), 0);
     if (totalVotesCast === 0) return undefined;
@@ -840,17 +866,32 @@ export async function accumulateVoteTurn(
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,
       ...(seatsEstimate ? { seatsEstimate } : {}),
+      ...(isPrStv
+        ? { rankedBallots, rankedPreferenceModel: "same_party_then_policy_distance_v1" as const }
+        : {}),
       updatedAt: now,
     },
     $push: { turnSnapshots: snapshot } as never,
   };
+  // STV totals and original ballots must commit together, and a concurrent
+  // replay must not overwrite another turn's ballot receipt.
+  const tallyFilter = isPrStv
+    ? {
+        electionId,
+        finalized: false,
+        "turnSnapshots.turn": { $ne: turnNumber },
+        turnSnapshots: { $size: tally.turnSnapshots.length },
+      }
+    : { electionId };
   if (options?.tallyWrites) {
-    options.tallyWrites.push({ updateOne: { filter: { electionId }, update: tallyUpdate } });
+    options.tallyWrites.push({ updateOne: { filter: tallyFilter, update: tallyUpdate } });
     return;
   }
-  await db
+  const write = await db
     .collection<ElectionVoteTally>("electionVoteTallies")
-    .updateOne({ electionId }, tallyUpdate);
+    .updateOne(tallyFilter, tallyUpdate);
+  if (isPrStv && write.matchedCount !== 1)
+    throw new Error("PR-STV accumulation lost its tally revision; retry from persisted ballots");
 }
 
 // ─── Initialize a blank tally for an election ────────────────────────────────
@@ -859,7 +900,8 @@ export async function initElectionVoteTally(
   electionId: ObjectId,
   candidates: ElectionCandidate[],
   state: string,
-  primaryResults?: PrimaryResults
+  primaryResults?: PrimaryResults,
+  options?: { countingMethod: "pr_stv" }
 ): Promise<void> {
   const db = await getDb();
   const now = new Date();
@@ -877,9 +919,33 @@ export async function initElectionVoteTally(
   // Primary ballots accrued during the primary window live on the same doc,
   // and this init runs replaceOne — carry them across or the general-phase
   // re-init silently erases the primary's entire count.
-  const existing = await db
-    .collection<ElectionVoteTally>("electionVoteTallies")
-    .findOne({ electionId }, { projection: { primaryVotes: 1 } });
+  const existing = await db.collection<ElectionVoteTally>("electionVoteTallies").findOne(
+    { electionId },
+    {
+      projection: {
+        primaryVotes: 1,
+        countingMethod: 1,
+        rankedBallots: 1,
+        finalized: 1,
+        updatedAt: 1,
+        totalVotes: 1,
+        "turnSnapshots.turn": 1,
+      },
+    }
+  );
+  const countingMethod = options?.countingMethod ?? existing?.countingMethod;
+  if (countingMethod === "pr_stv") {
+    if (
+      existing?.finalized ||
+      existing?.rankedBallots?.length ||
+      existing?.turnSnapshots?.length ||
+      Object.values(existing?.totalVotes ?? {}).some((votes) => votes > 0)
+    )
+      throw new Error("Cannot reinitialize a PR-STV tally after ballots were cast");
+    const election = await db.collection<Election>("elections").findOne({ _id: electionId });
+    if (election?.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
+      throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
+  }
 
   const doc: ElectionVoteTally = {
     // Preserve the matched doc's _id: legacy tallies carry an auto-generated
@@ -889,6 +955,7 @@ export async function initElectionVoteTally(
     electionId,
     state,
     totalVotes,
+    ...(countingMethod ? { countingMethod, rankedBallots: [] } : {}),
     candidateNames,
     candidateParties,
     turnSnapshots: [],
@@ -899,6 +966,28 @@ export async function initElectionVoteTally(
     updatedAt: now,
   };
 
+  if (countingMethod === "pr_stv") {
+    if (!existing) {
+      // A concurrent initializer can create or accrue the tally while this
+      // call validates the race. Never replace the document it produced.
+      await db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .updateOne({ electionId }, { $setOnInsert: doc }, { upsert: true });
+      return;
+    }
+    const replaced = await db.collection<ElectionVoteTally>("electionVoteTallies").replaceOne(
+      {
+        electionId,
+        finalized: false,
+        turnSnapshots: { $size: 0 },
+        updatedAt: existing.updatedAt,
+      },
+      doc
+    );
+    if (replaced.matchedCount !== 1)
+      throw new Error("Cannot reinitialize a PR-STV tally after its revision changed");
+    return;
+  }
   await db
     .collection<ElectionVoteTally>("electionVoteTallies")
     .replaceOne({ electionId }, doc, { upsert: true });
