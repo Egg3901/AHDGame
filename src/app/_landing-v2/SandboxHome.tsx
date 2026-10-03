@@ -34,6 +34,7 @@ import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorl
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
 import { BroadcastBackdrop, BroadcastHeadline, BroadcastTierKey } from "./BroadcastHero";
+import { EraExplainerLink } from "./EraExplainerLink";
 import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import type { GovernmentType } from "@/lib/constants/countries";
 import type { EraNation, EraTileKey } from "@/components/landing/eraThemes";
@@ -539,6 +540,10 @@ export function SandboxHome({
                 </p>
               </>
             )}
+            <EraExplainerLink
+              explainer={eraConfig.explainer}
+              tone={broadcast ? "onDark" : "theme"}
+            />
             {/* Three actions, one shape each: create an account, come back to
                 one, or look around first. The app download lives in the drawer
                 below — it is not a way into the game. */}

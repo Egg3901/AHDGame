@@ -64,6 +64,13 @@ describe("1991 broadcast lander content", () => {
     expect(ERA_CONFIGS["1991"].heroHeadline).toContain("1991");
   });
 
+  it("links the 1991 world explainer on the studio site", () => {
+    const explainer = ERA_CONFIGS["1991"].explainer!;
+    expect(new URL(explainer.href).origin).toBe("https://lakesidegames.net");
+    expect(new URL(explainer.href).pathname).toBe("/ahd-1991/");
+    expect(explainer.label).toContain("1991");
+  });
+
   it("keeps em and en dashes out of the copy players read", () => {
     const copy = [
       broadcast.orbitLabel,
@@ -72,6 +79,7 @@ describe("1991 broadcast lander content", () => {
         config.loginTagline,
         config.heroHeadline,
         config.heroDek,
+        config.explainer?.label ?? "",
       ]),
       ...HISTORICAL_CRISIS_SHOWCASE.flatMap((entry) => [entry.title, entry.description]),
     ];
