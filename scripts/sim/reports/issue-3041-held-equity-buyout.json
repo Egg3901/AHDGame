@@ -1,0 +1,36 @@
+{
+  "issue": 3041,
+  "runtimeSource": "e3bbf25bddaf84cba2918945587a45a4416d70f8",
+  "decision": "shares only; value the holdings in the buyout (owner, 2026-10-03)",
+  "fixture": {
+    "cashAnchor": 80000,
+    "heldEquityAnchor": 500,
+    "debtAnchor": 70000,
+    "tier": "discounted",
+    "poolBefore": 25000,
+    "poolAfter": 26250,
+    "nationalCorporationCashCredit": 0,
+    "entries": 8
+  },
+  "redWithBaseCode": "cash credit present and pool 25000",
+  "limits": [
+    "Held bonds remain outside the valuation.",
+    "No production database was reset or repaired."
+  ],
+  "qualification": {
+    "integration": {
+      "passed": 10,
+      "native": 5
+    },
+    "focusedSuites": {
+      "files": 56,
+      "passed": 475,
+      "skipped": 17,
+      "failed": 0
+    },
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  }
+}

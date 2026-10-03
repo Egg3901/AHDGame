@@ -928,12 +928,11 @@ describe("nationalizeWholeCorp", () => {
       avgCostPerShare: 150,
     });
 
-    // Verify that the National Corporation was credited with the value of the shares
+    // Shares only: the buyout pays the holders for them, so crediting their value
+    // to the National Corporation as cash too would create money (#3041).
     const creditCall = db.collectionMocks.corporations.updateOne.mock.calls.find(
       (c) => c[1]?.$inc?.liquidCapital != null && (c[0]?._id as ObjectId)?.equals(nationalCorpId)
     );
-    expect(creditCall).toBeTruthy();
-    // 100 shares * 200 CNY/share = 20,000 CNY
-    expect(creditCall![1].$inc.liquidCapital).toBe(20_000);
+    expect(creditCall).toBeUndefined();
   });
 });
