@@ -151,12 +151,6 @@ export async function materializeHu2011AssemblySeating(input: {
     const owner = (person.isNpc ? npcMap : playerMap).get(person.ownerId);
     const mirror = owner?.currentOffice;
     const officeType = typeof mirror === "string" ? mirror : mirror?.type;
-    const successor = candidates.find(
-      (row) =>
-        row.hungarianAssemblyNomination?.rootCandidateId === person.candidateId &&
-        row.status === "active"
-    );
-    const transferredToRunoff = candidate?.status === "withdrawn" && successor?.status === "active";
     const acceptable =
       !!candidate &&
       !!owner &&
@@ -165,9 +159,7 @@ export async function materializeHu2011AssemblySeating(input: {
       !!(person.isNpc ? candidate.nppId : candidate.characterId)?.equals(
         new ObjectId(person.ownerId)
       ) &&
-      (candidate.status === "active" ||
-        transferredToRunoff ||
-        receipt.legacyResolvedElectionIds.includes(candidate.electionId.toHexString())) &&
+      candidate.status === "active" &&
       (!officeType || ["assemblyDelegate", "assemblyDeputy", "primeMinister"].includes(officeType));
     if (!acceptable) unavailable.add(person.id);
   }

@@ -363,7 +363,11 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       commands = commandBytes = replyBytes = 0;
       expect(await resolveGeneralElections(NOW, [cast[0].electionId])).toBe(0);
       expect(await db.collection("electedOfficials").countDocuments()).toBe(386);
-      expect(await resolveGeneralElections(NOW)).toBe(6);
+      const resolutions = await Promise.all([
+        resolveGeneralElections(NOW),
+        resolveGeneralElections(NOW),
+      ]);
+      expect(resolutions.sort()).toEqual([0, 6]);
       console.info({
         fixture: "hu-2011-native-count-and-handover",
         commands,
