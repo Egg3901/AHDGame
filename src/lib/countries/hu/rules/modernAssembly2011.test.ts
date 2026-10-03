@@ -98,7 +98,25 @@ describe("Modern Hungarian whole-Assembly person plan", () => {
       expect(Object.values(result.installed.regionCapacity).reduce((a, b) => a + b, 0)).toBe(199);
     }
   );
-  it("rejects duplicate player or NPC owners across regional filings", () => {
+  it("permits regional NPC slates sharing two unchanged financial owners", () => {
+    const { candidates, plan } = fixture(true);
+    for (const row of candidates) if (row.isNpc) row.ownerId = `owner-${row.partyId}`;
+    const result = buildHuModernAssembly(plan, candidates)!;
+    expect(result.installed.mandates).toHaveLength(199);
+    expect(new Set(result.people.filter((row) => row.isNpc).map((row) => row.ownerId)).size).toBe(
+      2
+    );
+    expect(new Set(result.people.map((row) => row.id)).size).toBe(result.people.length);
+    expect(result.installed.candidateSeats.player).toBe(1);
+    expect(result.installed.partySeats).toEqual(plan.result.totalSeats);
+  });
+  it("rejects a player filing across regions", () => {
+    const { candidates, plan } = fixture(true);
+    const player = candidates.find((row) => !row.isNpc)!;
+    candidates[0] = { ...candidates[0], isNpc: false, ownerId: player.ownerId };
+    expect(() => buildHuModernAssembly(plan, candidates)).toThrow();
+  });
+  it("rejects duplicate owners within one regional filing", () => {
     const { candidates, plan } = fixture(true);
     candidates[0].ownerId = candidates[1].ownerId;
     expect(() => buildHuModernAssembly(plan, candidates)).toThrow();

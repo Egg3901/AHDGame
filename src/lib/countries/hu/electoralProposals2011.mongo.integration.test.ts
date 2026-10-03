@@ -258,6 +258,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
     "empty",
     "root-withdrawn",
     "re-entry",
+    "regional-owner",
   ])(
     "counts and seats the modern Assembly and protects constituency custody (%s)",
     async (kind) => {
@@ -349,6 +350,19 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           await db
             .collection("electionVoteTallies")
             .insertOne({ electionId, totalVotes: {}, candidateParties: {}, finalized: false });
+        }
+        let sharedOwner: ObjectId | undefined;
+        if (kind === "regional-owner") {
+          const first = await db
+            .collection("electionCandidates")
+            .findOne({ electionId: cast[0].electionId, isNPP: true, party: "1" });
+          sharedOwner = first!.nppId;
+          await db
+            .collection("electionCandidates")
+            .updateOne(
+              { electionId: cast[1].electionId, isNPP: true, party: "1" },
+              { $set: { nppId: sharedOwner, characterId: sharedOwner } }
+            );
         }
         let initialVacancies = 0;
         if (kind === "empty") {
@@ -560,6 +574,18 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         expect(await db.collection("npps").countDocuments()).toBe(12);
         expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
         expect((await db.collection("characters").findOne({ _id: playerId }))?.balance).toBe(777);
+        if (sharedOwner) {
+          const held = await db
+            .collection("electedOfficials")
+            .find({ nppId: sharedOwner })
+            .toArray();
+          expect(new Set(held.map((row) => row.state)).size).toBe(2);
+          const financialOwner = await db.collection("npps").findOne({ _id: sharedOwner });
+          expect(financialOwner?.seatsHeld).toBe(held.length);
+          expect(financialOwner?.currentOffice.seatsHeld).toBe(held.length);
+          expect(financialOwner?.balance).toBe(12345);
+        }
+
         expect(
           (await db.collection<StringRecord>("governmentFormations").findOne({ _id: "HU" }))
             ?.totalSeats
@@ -707,8 +733,8 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         expect(replacement?.termEnds).toEqual(departed!.termEnds);
         for (const owner of await db.collection("npps").find().toArray()) {
           const held = await db.collection("electedOfficials").countDocuments({ nppId: owner._id });
-          expect(owner.seatsHeld).toBe(held);
-          expect(owner.currentOffice.seatsHeld).toBe(held);
+          expect(owner.seatsHeld ?? 0).toBe(held);
+          expect(owner.currentOffice?.seatsHeld ?? 0).toBe(held);
         }
         expect(await db.collection("npps").countDocuments()).toBe(12);
         expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
@@ -1031,12 +1057,24 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         ).toBe(0);
         expect(await openHuModernByElections(db, 1128, NOW)).toEqual([]);
         for (const owner of await db.collection("npps").find().toArray()) {
-          expect(owner.seatsHeld).toBe(
+          expect(owner.seatsHeld ?? 0).toBe(
             await db.collection("electedOfficials").countDocuments({ nppId: owner._id })
           );
         }
         expect(await db.collection("npps").countDocuments({ balance: 12345 })).toBe(12);
         expect((await db.collection("characters").findOne({ _id: playerId }))?.balance).toBe(777);
+        if (sharedOwner) {
+          const held = await db
+            .collection("electedOfficials")
+            .find({ nppId: sharedOwner })
+            .toArray();
+          expect(new Set(held.map((row) => row.state)).size).toBe(2);
+          const financialOwner = await db.collection("npps").findOne({ _id: sharedOwner });
+          expect(financialOwner?.seatsHeld).toBe(held.length);
+          expect(financialOwner?.currentOffice.seatsHeld).toBe(held.length);
+          expect(financialOwner?.balance).toBe(12345);
+        }
+
         expect(
           await db.collection("electedOfficials").countDocuments({ characterId: challenger })
         ).toBe(1);

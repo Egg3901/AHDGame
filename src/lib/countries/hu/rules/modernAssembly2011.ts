@@ -19,7 +19,9 @@ export function buildHuModernAssembly(
   plan: HuMixedPlan,
   candidates: readonly HuModernCandidate[]
 ): { installed: Hu1991InstalledMandates; people: Hu1991Person[] } | null {
-  const ownerKeys = candidates.map((row) => `${row.isNpc ? "npc" : "player"}:${row.ownerId}`);
+  const ownerKeys = candidates.map((row) =>
+    row.isNpc ? `npc:${row.ownerId}:${row.regionId}` : `player:${row.ownerId}`
+  );
   if (
     new Set(candidates.map((row) => row.id)).size !== candidates.length ||
     new Set(ownerKeys).size !== candidates.length ||
