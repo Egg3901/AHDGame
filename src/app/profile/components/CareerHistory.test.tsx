@@ -45,7 +45,10 @@ describe("CareerHistory", () => {
   it("is a plain dated list, newest first, led by the office held now", () => {
     const { container } = renderHistory(history);
 
-    expect(screen.getByRole("heading", { name: "Career history" })).toBeTruthy();
+    // Secondary column: the smaller aside heading, never muted.
+    const heading = screen.getByRole("heading", { name: "Career history" });
+    expect(heading.className).toContain("text-body-lg");
+    expect(heading.className).toContain("text-foreground");
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(items).toHaveLength(3);
     expect(items[0].textContent).toContain("Incumbent");

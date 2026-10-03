@@ -81,7 +81,10 @@ describe("PoliticalStanding table", () => {
       .getAllByRole("columnheader")
       .map((cell) => cell.textContent);
     expect(headers).toEqual(["Measure", "Value", "Per turn", "Notes"]);
-    expect(screen.getByRole("heading", { name: "Political standing" })).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "Political standing" });
+    // A primary block: the large main heading, with no rule under it.
+    expect(heading.className).toContain("text-heading-lg");
+    expect(heading.parentElement?.className).not.toContain("border-b");
   });
 
   it("colours only gains, losses and penalties", () => {

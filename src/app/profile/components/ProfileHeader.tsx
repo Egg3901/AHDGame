@@ -85,7 +85,7 @@ export function ProfileHeader({
       </Link>
     </div>
   ) : wikiProfileHref ? (
-    <Link href={wikiProfileHref} className={`shrink-0 text-body ${PROFILE_LINK_CLASS}`}>
+    <Link href={wikiProfileHref} className={`shrink-0 text-body-sm ${PROFILE_LINK_CLASS}`}>
       {t("viewWikiProfile")}
     </Link>
   ) : null;
@@ -133,10 +133,10 @@ export function ProfileHeader({
 
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="min-w-0">
-            <h1 className="break-words font-sans text-heading-lg font-semibold tracking-tight text-foreground sm:text-display">
+            <h1 className="break-words font-sans text-[1.75rem] font-bold leading-tight tracking-tight text-foreground sm:text-[2.25rem]">
               {character.name}
             </h1>
-            <p className="mt-1 text-body-lg text-foreground/80">
+            <p className="mt-1 text-heading-sm font-medium text-foreground">
               {officeLabels.map((officeLabel, index) => (
                 <Fragment key={officeLabel}>
                   {index > 0 && ", "}
@@ -210,11 +210,11 @@ export function ProfileHeader({
 
           {!bioHidden &&
             (character.bio ? (
-              <p className="max-w-prose text-body leading-relaxed text-foreground/85">
+              <p className="max-w-[65ch] text-body-lg leading-relaxed text-foreground/90">
                 {character.bio}
               </p>
             ) : (
-              <p className="text-body text-muted">{t("noBio")}</p>
+              <p className="text-body-lg text-muted">{t("noBio")}</p>
             ))}
 
           {campaignSongUrl && (

@@ -21,7 +21,7 @@ export function ProfileSocial({
 
   return (
     <section>
-      <SectionHeader>{t("title")}</SectionHeader>
+      <SectionHeader level="aside">{t("title")}</SectionHeader>
       <div className="flex flex-wrap items-center gap-3">
         {discordId && (
           <DiscordBadge

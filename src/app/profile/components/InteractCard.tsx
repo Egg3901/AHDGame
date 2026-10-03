@@ -457,7 +457,7 @@ export function InteractCard({
   return (
     <div className="rounded-md border border-card-border p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-heading-sm font-semibold text-foreground">{t("title")}</h2>
+        <h2 className="text-body-lg font-semibold text-foreground">{t("title")}</h2>
         <div
           className="inline-flex rounded-md border border-card-border p-0.5"
           role="tablist"

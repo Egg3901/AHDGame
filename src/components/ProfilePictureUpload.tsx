@@ -17,7 +17,7 @@ const SIZE_CLASSES = {
   hero: `h-24 w-24 text-4xl rounded-2xl ring-2 ring-card-border shadow-xl hover:ring-primary/50 sm:h-36 sm:w-36 sm:text-6xl md:h-40 md:w-40 md:text-7xl lg:h-44 lg:w-44 ${PLACEHOLDER_GRADIENT}`,
   /** Profile identity block: neutral placeholder, hairline ring, no shadow. */
   header:
-    "h-20 w-20 text-3xl rounded-lg bg-card-elevated text-muted ring-1 ring-card-border hover:ring-foreground/40 sm:h-24 sm:w-24 sm:text-4xl",
+    "h-18 w-18 text-3xl rounded-lg bg-card-elevated text-muted ring-1 ring-card-border hover:ring-foreground/40 sm:h-24 sm:w-24 sm:text-4xl",
 } as const;
 
 export function ProfilePictureUpload({

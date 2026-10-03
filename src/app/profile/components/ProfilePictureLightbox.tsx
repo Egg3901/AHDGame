@@ -16,8 +16,8 @@ const THUMBNAIL_CLASSES = {
   /** Profile identity block: neutral placeholder, hairline ring, no shadow. */
   header: {
     frame:
-      "rounded-lg bg-card-elevated font-bold text-muted ring-1 ring-card-border h-20 w-20 text-3xl sm:h-24 sm:w-24 sm:text-4xl",
-    sizes: "(max-width: 640px) 80px, 96px",
+      "rounded-lg bg-card-elevated font-bold text-muted ring-1 ring-card-border h-18 w-18 text-3xl sm:h-24 sm:w-24 sm:text-4xl",
+    sizes: "(max-width: 640px) 72px, 96px",
   },
 } as const;
 

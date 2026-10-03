@@ -28,12 +28,13 @@ export function NewPlayerBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-card-border px-4 py-3">
-      <Link href="/actions/suggestions" className="group min-w-0 flex-1">
-        <p className="text-body font-semibold text-foreground underline-offset-4 group-hover:underline">
-          {t("newTitle")}
-        </p>
-        <p className="mt-0.5 text-body-sm text-muted">{t("newSubtitle")}</p>
+    <div className="flex items-center justify-between gap-4 rounded-md border border-card-border px-3 py-2">
+      <Link
+        href="/actions/suggestions"
+        className="min-w-0 flex-1 truncate text-body underline-offset-4 hover:underline"
+      >
+        <span className="font-medium text-foreground">{t("newTitle")}</span>
+        <span className="hidden text-muted sm:inline"> {t("newSubtitle")}</span>
       </Link>
       <button
         onClick={handleDismiss}

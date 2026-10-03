@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import profile from "@/../messages/en/profile.json";
 import { ProfileTabs } from "./ProfileTabs";
@@ -62,6 +62,27 @@ describe("profile role views", () => {
     expect(screen.getByText("Investor")).toBeTruthy();
     expect(screen.queryByText("Open portfolio")).toBeNull();
     expect(screen.queryByText("Equity portfolio value")).toBeNull();
+  });
+  it("puts the header and the tabs in one band and keeps lock reasons as hover text", () => {
+    render(
+      shell({
+        conflictsEnabled: false,
+        header: <h1>Identity block</h1>,
+        notices: <p>Onboarding notice</p>,
+      })
+    );
+    const band = screen.getByRole("heading", { name: "Identity block" }).closest(".bg-card");
+    expect(band).toBeTruthy();
+    expect(within(band as HTMLElement).getByRole("tablist")).toBeTruthy();
+
+    const military = screen.getByRole("tab", { name: /Military/ });
+    expect(military.getAttribute("title")).toBe("Military is disabled in this world.");
+    const reasonId = military.getAttribute("aria-describedby");
+    expect(reasonId).toBeTruthy();
+    expect(document.getElementById(reasonId ?? "")?.closest(".sr-only")).toBeTruthy();
+
+    expect(screen.getByText("Onboarding notice")).toBeTruthy();
+    expect(screen.getByText("Political content")).toBeTruthy();
   });
   it("supports keyboard navigation and resets when the subject changes", () => {
     const { rerender } = render(

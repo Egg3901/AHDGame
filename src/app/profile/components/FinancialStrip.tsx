@@ -437,18 +437,18 @@ export function FinancialStrip({
   );
 
   const donorValue = (
-    <span className="text-body font-semibold tabular-nums text-foreground">
+    <span className="text-heading font-semibold tabular-nums text-foreground">
       {t("level", { level: donorLevel })}
-      <span className="ml-1 text-body-sm font-normal text-muted">/ {maxDonorLevel}</span>
+      <span className="ml-1 text-body font-normal text-muted">/ {maxDonorLevel}</span>
     </span>
   );
   const campaignValue = (
-    <span className="text-body font-semibold tabular-nums text-foreground">
+    <span className="text-heading font-semibold tabular-nums text-foreground">
       {formatCurrencyFaceAmount(campaignFunds, currencyCode)}
     </span>
   );
   const personalValue = (
-    <span className="text-body font-semibold tabular-nums text-foreground">
+    <span className="text-heading font-semibold tabular-nums text-foreground">
       {formatAmountChip(personalCashAnchor, currencyCode)}
     </span>
   );
@@ -480,10 +480,9 @@ export function FinancialStrip({
 
   return (
     <div>
-      {/* Mobile: one row per figure, each breakdown directly under its row */}
-      <div className="divide-y divide-card-border/60 sm:hidden">
+      {/* Mobile: figures stacked, each breakdown directly under its figure */}
+      <div className="space-y-2 sm:hidden">
         <Figure
-          layout="row"
           label={t("donorNetwork")}
           tooltip={donorTooltip("tapIncomeBreakdown")}
           expandable={!!donorIncome}
@@ -493,7 +492,6 @@ export function FinancialStrip({
         />
         {donorPanel}
         <Figure
-          layout="row"
           label={t("campaignCash")}
           tooltip={campaignTooltip("tapHourlyBreakdown")}
           expandable={!!campaignIncome}
@@ -503,7 +501,6 @@ export function FinancialStrip({
         />
         {campaignPanel}
         <Figure
-          layout="row"
           label={t("personalCash")}
           tooltip={personalTooltip("tapHourlyBreakdown")}
           expandable={!!personalIncome}
@@ -516,9 +513,8 @@ export function FinancialStrip({
 
       {/* Desktop: three figures side by side, the open breakdown below them */}
       <div className="hidden sm:block">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-6">
           <Figure
-            layout="stack"
             label={t("donorNetwork")}
             tooltip={donorTooltip("clickIncomeBreakdown")}
             expandable={!!donorIncome}
@@ -527,7 +523,6 @@ export function FinancialStrip({
             value={donorValue}
           />
           <Figure
-            layout="stack"
             label={t("campaignCash")}
             tooltip={campaignTooltip("clickHourlyBreakdown")}
             expandable={!!campaignIncome}
@@ -536,7 +531,6 @@ export function FinancialStrip({
             value={campaignValue}
           />
           <Figure
-            layout="stack"
             label={t("personalCash")}
             tooltip={personalTooltip("clickHourlyBreakdown")}
             expandable={!!personalIncome}
@@ -554,11 +548,10 @@ export function FinancialStrip({
 }
 
 /**
- * One finance figure. When a breakdown exists the whole figure toggles it;
- * the label keeps its own explanatory tooltip.
+ * One finance figure: a small muted label above the amount. When a breakdown
+ * exists the whole figure toggles it; the label keeps its explanatory tooltip.
  */
 function Figure({
-  layout,
   label,
   tooltip,
   expandable,
@@ -566,7 +559,6 @@ function Figure({
   onToggle,
   value,
 }: {
-  layout: "row" | "stack";
   label: string;
   tooltip: React.ReactNode;
   expandable: boolean;
@@ -576,22 +568,16 @@ function Figure({
 }) {
   return (
     <div
-      className={`${
-        layout === "row"
-          ? "flex items-center justify-between gap-3 py-3"
-          : "flex flex-col items-start gap-1 py-2"
-      }${expandable ? " cursor-pointer select-none" : ""}`}
+      className={`flex flex-col items-start gap-0.5 py-1${expandable ? " cursor-pointer select-none" : ""}`}
       onClick={expandable ? onToggle : undefined}
       aria-expanded={open}
     >
       <InfoTooltip
         trigger={
           <span className="text-body-sm text-muted">
-            <span className="underline decoration-muted/50 decoration-dotted underline-offset-4">
-              {label}
-            </span>
+            {label}
             {expandable && (
-              <span aria-hidden className="ml-1.5 text-body-xs text-muted">
+              <span aria-hidden className="ml-1.5 text-body-xs">
                 {open ? "\u25B2" : "\u25BC"}
               </span>
             )}

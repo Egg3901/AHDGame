@@ -87,7 +87,13 @@ import { buildCharacterHref, parseCharacterId } from "@/lib/utils/profileUrls";
 import { playerWikiSlug } from "@/lib/wiki/playerPages";
 import type { CountryId } from "@/lib/constants/countries";
 import { SectionHeader } from "@/app/profile/components/ProfileMeters";
-import { PROFILE_LINK_CLASS } from "@/app/profile/components/profileStyles";
+import {
+  PROFILE_ASIDE_COLUMN_CLASS,
+  PROFILE_CONTAINER_CLASS,
+  PROFILE_GRID_CLASS,
+  PROFILE_LINK_CLASS,
+  PROFILE_MAIN_COLUMN_CLASS,
+} from "@/app/profile/components/profileStyles";
 import {
   COMPASS_PARTY_MARKER,
   COMPASS_SELF_DOT,
@@ -166,11 +172,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 interface CandidateElection {
   election: Election;
   candidacy: ElectionCandidate;
-}
-
-interface ProfileFocusItem {
-  label: string;
-  value: string;
 }
 
 interface OverviewStatItem {
@@ -255,31 +256,6 @@ function buildPublicSummary(args: {
   }
 
   return [currentRole, ...details].join(" ");
-}
-
-function buildHeroStatusLine(args: {
-  officeLabel: string;
-  partyName: string;
-  stateName: string;
-  hasOffice: boolean;
-  activeRaceCount: number;
-  electionWins: number;
-}) {
-  const { officeLabel, partyName, stateName, hasOffice, activeRaceCount, electionWins } = args;
-
-  if (hasOffice && activeRaceCount > 0) {
-    return `${officeLabel} from ${stateName}, currently running in ${activeRaceCount} ${activeRaceCount === 1 ? "active race" : "active races"}.`;
-  }
-  if (hasOffice) {
-    return `${officeLabel} representing ${stateName}.`;
-  }
-  if (activeRaceCount > 0) {
-    return `${partyName} politician from ${stateName}, currently running in ${activeRaceCount} ${activeRaceCount === 1 ? "active race" : "active races"}.`;
-  }
-  if (electionWins > 0) {
-    return `${partyName} politician from ${stateName} with ${electionWins} election ${electionWins === 1 ? "win" : "wins"}.`;
-  }
-  return `${partyName} politician from ${stateName}.`;
 }
 
 async function getCharacterById(characterId: string) {
@@ -863,14 +839,6 @@ export default async function CharacterPage({ params }: PageProps) {
     activeRaceCount: candidateElections.length,
   });
   const publicOverview = (!viewerHasBlocked && character.bio?.trim()) || publicSummary;
-  const heroStatusLine = buildHeroStatusLine({
-    officeLabel,
-    partyName: publicPartyName,
-    stateName,
-    hasOffice: Boolean(character.currentOffice),
-    activeRaceCount: candidateElections.length,
-    electionWins,
-  });
   const nationalPartyRole =
     party && character.party !== "independent"
       ? party.chairId?.equals(character._id)
@@ -897,33 +865,31 @@ export default async function CharacterPage({ params }: PageProps) {
       : candidateElections.length > 1
         ? `${candidateElections.length} active races`
         : null;
-  const focusItems: ProfileFocusItem[] = [];
-  if (character.currentOffice) {
-    focusItems.push({ label: "Serving", value: officeLabel });
-  }
-  if (currentRaceLabel) {
-    focusItems.push({ label: "Running", value: currentRaceLabel });
-  }
-  if (nationalPartyRole || statePartyRole) {
-    focusItems.push({ label: "Party role", value: nationalPartyRole ?? statePartyRole! });
-  }
-  if (chairBankRow) {
-    focusItems.push({ label: "Role", value: "Central Bank Chair" });
-  }
-  if (ceoCorporation) {
-    focusItems.push({ label: "Leading", value: ceoCorporation.name });
-  }
-  focusItems.push({ label: "Affiliation", value: publicPartyName });
-  focusItems.push({ label: "Home base", value: stateName });
-  const heroFocusItems = focusItems.slice(0, 4);
+  // One fact list for the public overview: office, current race, roles,
+  // affiliation, home state and record.
   const overviewStats: OverviewStatItem[] = [
     {
       label: character.currentOffice ? "Current office" : "Office",
       value: officeLabel,
     },
-    { label: "State", value: stateName },
-    { label: "Election wins", value: electionWins },
   ];
+  if (currentRaceLabel) {
+    overviewStats.push({ label: "Running", value: currentRaceLabel });
+  }
+  if (nationalPartyRole || statePartyRole) {
+    overviewStats.push({ label: "Party role", value: nationalPartyRole ?? statePartyRole! });
+  }
+  if (chairBankRow) {
+    overviewStats.push({ label: "Role", value: "Central Bank Chair" });
+  }
+  if (ceoCorporation) {
+    overviewStats.push({ label: "Leading", value: ceoCorporation.name });
+  }
+  overviewStats.push(
+    { label: "Affiliation", value: publicPartyName },
+    { label: "State", value: stateName },
+    { label: "Election wins", value: electionWins }
+  );
   if (appointments > 0) {
     overviewStats.push({ label: "Appointments", value: appointments });
   }
@@ -989,281 +955,158 @@ export default async function CharacterPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-16">
-      <main className="mx-auto max-w-7xl space-y-10 overflow-x-hidden px-4 py-8 sm:px-6">
-        <nav className="flex items-center gap-2 text-body-sm text-muted">
-          <span>Public profile</span>
-          <span aria-hidden>/</span>
-          <span className="text-foreground">{character.name}</span>
-        </nav>
-
-        {isBanned && (
-          <div className="rounded-md border border-error/40 px-4 py-3">
-            <h2 className="text-body font-semibold text-error">Account banned</h2>
-            <p className="mt-1 text-body-sm text-muted">
-              This user has been banned for violating the rules.
-            </p>
-          </div>
-        )}
-
-        <ProfileHeader
-          character={character}
-          party={party}
-          user={{ username, isAdmin, isModerator }}
-          memberSince={memberSince}
-          memberSinceIsApproximate={data.membership.isApproximate}
-          officeLabels={profileOfficeLabels}
-          stateLabel={stateName}
-          campaignSongUrl={viewerHasBlocked ? null : character.campaignSongUrl}
-          countrySlug={countrySlug}
-          patreonHighlightColor={patreonHighlightColor}
-          patreonTier={patreonTier}
-          patreonExpiresAt={patreonExpiresAt}
-          patreonSince={patreonSince}
-          patreonProfileBorder={patreonProfileBorder}
-          supporterProvider={supporterProvider}
-          wikiProfileHref={
-            typeof character.sequentialId === "number"
-              ? `/wiki/${playerWikiSlug(character.sequentialId)}`
-              : undefined
-          }
-          bioHidden={viewerHasBlocked}
-        />
-
-        <ProfileTabs
-          conflictsEnabled={conflictsEnabled}
-          adopted={doctrineAdopted}
-          general={general}
-          militaryService={militaryService}
-          business={businessProfileView(financialData, isOwnProfile)}
-          editable={isOwnProfile}
-          curEra={generalEra}
-          posting={generalPosting}
-          isCommandingGeneral={isCommandingGeneral}
-          subject={{
-            id: character._id.toString(),
-            name: character.name,
-            countryCode: character.countryId.toLowerCase(),
-          }}
-        >
-          <section>
-            <p className="text-body-lg text-foreground">{heroStatusLine}</p>
-            <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3">
-              {heroFocusItems.map((item) => (
-                <div key={`${item.label}:${item.value}`}>
-                  <dt className="text-body-sm text-muted">{item.label}</dt>
-                  <dd className="text-body font-medium text-foreground">{item.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          <div className="grid max-w-full gap-x-12 gap-y-10 lg:grid-cols-3">
-            {/* Left: standing, finances and stats (2/3) */}
-            <div className="min-w-0 space-y-10 lg:col-span-2">
-              <PoliticalStanding
-                character={character}
-                nationalRank={nationalNpiOrdinalRank}
-                homeState={homeState}
-                influence={influence}
-                nationalInfluence={nationalInfluence}
-                influenceDecay={influenceDecay}
-                nationalGainPerTurn={nationalGainPerTurn}
-                favorability={favorability}
-                favDecayDisplay={favDecayDisplay}
-                infamy={infamy}
-                infamyPenalty={infamyPenalty}
-                maxNPI={maxNPI}
-                baseActionsPerTurn={baseActionsPerTurn}
-                officeActionBonus={officeActionBonus}
-                chairActionBonus={chairActionBonus}
-                actionBreakdown={actionBreakdown}
-                totalActionsPerTurn={totalActionsPerTurn}
-                actionHoarding={actionHoarding}
-                partyInfluenceMaxBonus={partyInfluenceMaxBonus}
-                partyInfluenceNetGain={partyInfluenceNetGain}
-                bonusActionsFromParty={bonusActionsFromParty}
-                partyInfluenceShare={partyInfluenceShare}
-                isOwnProfile={isOwnProfile}
-              />
-
-              <section>
-                <SectionHeader>{t("finances.title")}</SectionHeader>
-                <p className="-mt-2 mb-3 text-body-sm text-muted">{t("finances.subtitle")}</p>
-                <FinancialStrip
-                  donorLevel={character.donorBaseLevel}
-                  maxDonorLevel={maxDonorLevel}
-                  campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
-                  cashOnHand={getTotalPersonalLiquidWealth(character, forexEnabled, fxRatesRecord)}
-                  currency={getHomeCurrency(character)}
-                  donorIncome={{
-                    passivePerHour: fundDistribution.donorBaseBonus,
-                    perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: fundraiseYieldLocal(
-                      character,
-                      forexEnabled,
-                      campaignRates,
-                      campaignPriceLevel
-                    ),
-                    populationTier,
-                    influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
-                  }}
-                  campaignIncome={{
-                    populationTier,
-                    baseGen: fundDistribution.baseGeneration,
-                    donorBonus: fundDistribution.donorBaseBonus,
-                    officeBonus: fundDistribution.officeBonus,
-                    unionContribution,
-                    totalTax: fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
-                    netIncome: fundDistribution.characterReceives + unionContribution,
-                  }}
-                  personalIncome={{
-                    ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,
-                    ceoSalaryCurrencyCode: corporation?.liquidCurrencyCode ?? null,
-                    bondIncomePerTurn,
-                    dividendIncomePerTurn,
-                    forexBalances: character.currencyBalances
-                      ? {
-                          personal: character.currencyBalances.personal,
-                          savings: character.currencyBalances.savings,
-                        }
-                      : undefined,
-                  }}
-                  portfolioHref={isOwnProfile ? "/portfolio" : undefined}
-                />
-              </section>
-
-              {rpgStatsEnabled && character.stats && (
-                <CharacterStatsPanel stats={character.stats} />
-              )}
-              {isOwnProfile && forexEnabled ? (
-                <LocWalletStrip countryId={countryIdResolved} />
-              ) : null}
+    <div className="min-h-screen overflow-x-hidden bg-background pb-16">
+      <ProfileTabs
+        conflictsEnabled={conflictsEnabled}
+        adopted={doctrineAdopted}
+        general={general}
+        militaryService={militaryService}
+        business={businessProfileView(financialData, isOwnProfile)}
+        editable={isOwnProfile}
+        curEra={generalEra}
+        posting={generalPosting}
+        isCommandingGeneral={isCommandingGeneral}
+        subject={{
+          id: character._id.toString(),
+          name: character.name,
+          countryCode: character.countryId.toLowerCase(),
+        }}
+        header={
+          <>
+            <nav className="mb-5 flex items-center gap-2 text-body-sm text-muted">
+              <span>Public profile</span>
+              <span aria-hidden>/</span>
+              <span className="text-foreground">{character.name}</span>
+            </nav>
+            <ProfileHeader
+              character={character}
+              party={party}
+              user={{ username, isAdmin, isModerator }}
+              memberSince={memberSince}
+              memberSinceIsApproximate={data.membership.isApproximate}
+              officeLabels={profileOfficeLabels}
+              stateLabel={stateName}
+              campaignSongUrl={viewerHasBlocked ? null : character.campaignSongUrl}
+              countrySlug={countrySlug}
+              patreonHighlightColor={patreonHighlightColor}
+              patreonTier={patreonTier}
+              patreonExpiresAt={patreonExpiresAt}
+              patreonSince={patreonSince}
+              patreonProfileBorder={patreonProfileBorder}
+              supporterProvider={supporterProvider}
+              wikiProfileHref={
+                typeof character.sequentialId === "number"
+                  ? `/wiki/${playerWikiSlug(character.sequentialId)}`
+                  : undefined
+              }
+              bioHidden={viewerHasBlocked}
+            />
+          </>
+        }
+        notices={
+          isBanned ? (
+            <div className="rounded-md border border-error/40 px-4 py-3">
+              <h2 className="text-body font-semibold text-error">Account banned</h2>
+              <p className="mt-1 text-body-sm text-muted">
+                This user has been banned for violating the rules.
+              </p>
             </div>
+          ) : undefined
+        }
+      >
+        <div className={PROFILE_GRID_CLASS}>
+          {/* Main: standing, finances, stats, achievements and overview (2/3) */}
+          <div className={PROFILE_MAIN_COLUMN_CLASS}>
+            <PoliticalStanding
+              character={character}
+              nationalRank={nationalNpiOrdinalRank}
+              homeState={homeState}
+              influence={influence}
+              nationalInfluence={nationalInfluence}
+              influenceDecay={influenceDecay}
+              nationalGainPerTurn={nationalGainPerTurn}
+              favorability={favorability}
+              favDecayDisplay={favDecayDisplay}
+              infamy={infamy}
+              infamyPenalty={infamyPenalty}
+              maxNPI={maxNPI}
+              baseActionsPerTurn={baseActionsPerTurn}
+              officeActionBonus={officeActionBonus}
+              chairActionBonus={chairActionBonus}
+              actionBreakdown={actionBreakdown}
+              totalActionsPerTurn={totalActionsPerTurn}
+              actionHoarding={actionHoarding}
+              partyInfluenceMaxBonus={partyInfluenceMaxBonus}
+              partyInfluenceNetGain={partyInfluenceNetGain}
+              bonusActionsFromParty={bonusActionsFromParty}
+              partyInfluenceShare={partyInfluenceShare}
+              isOwnProfile={isOwnProfile}
+            />
 
-            {/* Right: positions, roles, history and interactions (1/3) */}
-            <div className="min-w-0 space-y-10">
-              <PolicyDemographicsCard
-                economic={character.policies.economic}
-                social={character.policies.social}
-                dotColor={patreonHighlightColor ?? COMPASS_SELF_DOT}
-                markers={compassMarkers.length > 0 ? compassMarkers : undefined}
-                demographics={character.demographics}
-                startingCountryId={resolveStartingCountryId(character)}
-                currentCountryId={character.countryId}
-              />
-
-              {!isOwnProfile && ceoCorporation && (
-                <CeoCorporationCard
-                  corporationName={ceoCorporation.name}
-                  corporationRouteId={String(
-                    ceoCorporation.sequentialId ?? ceoCorporation._id.toString()
-                  )}
-                  logoUrl={ceoCorporation.logoUrl}
-                  isNationalEnterprise={
-                    Boolean(ceoCorporation.countryOwnerId) || Boolean(ceoCorporation.isNationalized)
-                  }
-                />
-              )}
-
-              <ProfileSocial
-                discordId={discordId}
-                discordUsername={discordUsername}
-                discordAvatar={discordAvatar}
-                lastActivity={lastActivity}
-              />
-
-              <CareerHistory
-                character={{
-                  careerHistory: character.careerHistory,
-                  currentOffice: character.currentOffice,
-                  countryId: character.countryId,
+            <section>
+              <SectionHeader>{t("finances.title")}</SectionHeader>
+              <p className="-mt-2 mb-4 text-body-sm text-muted">{t("finances.subtitle")}</p>
+              <FinancialStrip
+                donorLevel={character.donorBaseLevel}
+                maxDonorLevel={maxDonorLevel}
+                campaignFunds={character.currencyBalances?.campaign ?? character.funds ?? 0}
+                cashOnHand={getTotalPersonalLiquidWealth(character, forexEnabled, fxRatesRecord)}
+                currency={getHomeCurrency(character)}
+                donorIncome={{
+                  passivePerHour: fundDistribution.donorBaseBonus,
+                  perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
+                  fundraiseYield: fundraiseYieldLocal(
+                    character,
+                    forexEnabled,
+                    campaignRates,
+                    campaignPriceLevel
+                  ),
+                  populationTier,
+                  influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                 }}
-                partyNames={partyNames}
-                gameDateAnchor={gameDateAnchor}
-                partyHistory={partyHistory}
+                campaignIncome={{
+                  populationTier,
+                  baseGen: fundDistribution.baseGeneration,
+                  donorBonus: fundDistribution.donorBaseBonus,
+                  officeBonus: fundDistribution.officeBonus,
+                  unionContribution,
+                  totalTax: fundDistribution.stateTaxAmount + fundDistribution.nationalTaxAmount,
+                  netIncome: fundDistribution.characterReceives + unionContribution,
+                }}
+                personalIncome={{
+                  ceoSalaryPerHour: corporation ? corporation.ceoSalary / 24 : undefined,
+                  ceoSalaryCurrencyCode: corporation?.liquidCurrencyCode ?? null,
+                  bondIncomePerTurn,
+                  dividendIncomePerTurn,
+                  forexBalances: character.currencyBalances
+                    ? {
+                        personal: character.currencyBalances.personal,
+                        savings: character.currencyBalances.savings,
+                      }
+                    : undefined,
+                }}
+                portfolioHref={isOwnProfile ? "/portfolio" : undefined}
               />
+            </section>
 
-              {candidateElections.length > 0 && (
-                <section>
-                  <SectionHeader>Current elections</SectionHeader>
-                  <ul className="divide-y divide-card-border/60">
-                    {candidateElections.map(({ election, candidacy }) => (
-                      <li key={candidacy._id.toString()} className="py-2.5">
-                        <Link
-                          href={`/elections/${election._id.toString()}`}
-                          className={`text-body ${PROFILE_LINK_CLASS}`}
-                        >
-                          {formatElectionTypeLabel(election.electionType, character.countryId)}
-                          {election.electionType === "senate" && election.senateClass
-                            ? ` (Class ${election.senateClass})`
-                            : ""}
-                        </Link>
-                        <p className="mt-0.5 text-body-sm text-muted">
-                          {election.state} · {election.cycle} · {election.status}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+            {rpgStatsEnabled && character.stats && <CharacterStatsPanel stats={character.stats} />}
+            {isOwnProfile && forexEnabled ? <LocWalletStrip countryId={countryIdResolved} /> : null}
 
-              {!isOwnProfile && !isBanned && userData?.hasCharacter && (
-                <InteractCard
-                  targetId={character._id.toString()}
-                  targetName={character.name}
-                  targetInfluence={character.politicalInfluence || 0}
-                  myFunds={
-                    userData?.character
-                      ? // LOCAL home-currency balance (canonical source of truth).
-                        ((userData.character as Character).currencyBalances?.campaign ??
-                        (userData.character as Character).funds ??
-                        0)
-                      : 0
-                  }
-                  myCash={
-                    userData?.character
-                      ? getTotalPersonalLiquidWealth(userData.character as Character, forexEnabled)
-                      : 0
-                  }
-                  canInfluence={!!canInfluence}
-                />
-              )}
+            <ProfileAchievements
+              characterId={character._id.toString()}
+              characterHref={buildCharacterHref(character)}
+              isOwnProfile={isOwnProfile}
+            />
 
-              {userData && !isOwnProfile && (
-                <div>
-                  {viewerHasBlocked && (
-                    <p className="mb-3 text-body-sm text-muted">
-                      You blocked this player. Their bio, campaign song and mail are hidden from
-                      you.
-                    </p>
-                  )}
-                  <PlayerSafetyActions
-                    characterId={character._id.toString()}
-                    characterName={character.name}
-                    initiallyBlocked={viewerHasBlocked}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <ProfileAchievements
-            characterId={character._id.toString()}
-            characterHref={buildCharacterHref(character)}
-            isOwnProfile={isOwnProfile}
-          />
-
-          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <section>
               <SectionHeader>Public overview</SectionHeader>
-              <p className="max-w-prose text-body leading-relaxed text-foreground">
+              <p className="max-w-[65ch] text-body-lg leading-relaxed text-foreground/90">
                 {publicOverview}
               </p>
               {!viewerHasBlocked &&
                 character.bio?.trim() &&
                 character.bio.trim() !== publicSummary && (
-                  <p className="mt-3 max-w-prose text-body-sm leading-relaxed text-muted">
+                  <p className="mt-3 max-w-[65ch] text-body leading-relaxed text-muted">
                     {publicSummary}
                   </p>
                 )}
@@ -1278,13 +1121,118 @@ export default async function CharacterPage({ params }: PageProps) {
                 ))}
               </dl>
             </section>
+          </div>
+
+          {/* Aside: positions, roles, history and interactions (1/3) */}
+          <div className={PROFILE_ASIDE_COLUMN_CLASS}>
+            <PolicyDemographicsCard
+              economic={character.policies.economic}
+              social={character.policies.social}
+              dotColor={patreonHighlightColor ?? COMPASS_SELF_DOT}
+              markers={compassMarkers.length > 0 ? compassMarkers : undefined}
+              demographics={character.demographics}
+              startingCountryId={resolveStartingCountryId(character)}
+              currentCountryId={character.countryId}
+            />
+
+            {!isOwnProfile && ceoCorporation && (
+              <CeoCorporationCard
+                corporationName={ceoCorporation.name}
+                corporationRouteId={String(
+                  ceoCorporation.sequentialId ?? ceoCorporation._id.toString()
+                )}
+                logoUrl={ceoCorporation.logoUrl}
+                isNationalEnterprise={
+                  Boolean(ceoCorporation.countryOwnerId) || Boolean(ceoCorporation.isNationalized)
+                }
+              />
+            )}
+
+            <ProfileSocial
+              discordId={discordId}
+              discordUsername={discordUsername}
+              discordAvatar={discordAvatar}
+              lastActivity={lastActivity}
+            />
+
+            <CareerHistory
+              character={{
+                careerHistory: character.careerHistory,
+                currentOffice: character.currentOffice,
+                countryId: character.countryId,
+              }}
+              partyNames={partyNames}
+              gameDateAnchor={gameDateAnchor}
+              partyHistory={partyHistory}
+            />
+
+            {candidateElections.length > 0 && (
+              <section>
+                <SectionHeader level="aside">Current elections</SectionHeader>
+                <ul className="divide-y divide-card-border/60">
+                  {candidateElections.map(({ election, candidacy }) => (
+                    <li key={candidacy._id.toString()} className="py-2">
+                      <Link
+                        href={`/elections/${election._id.toString()}`}
+                        className={`text-body-sm ${PROFILE_LINK_CLASS}`}
+                      >
+                        {formatElectionTypeLabel(election.electionType, character.countryId)}
+                        {election.electionType === "senate" && election.senateClass
+                          ? ` (Class ${election.senateClass})`
+                          : ""}
+                      </Link>
+                      <p className="mt-0.5 text-body-sm text-muted">
+                        {election.state} · {election.cycle} · {election.status}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {!isOwnProfile && !isBanned && userData?.hasCharacter && (
+              <InteractCard
+                targetId={character._id.toString()}
+                targetName={character.name}
+                targetInfluence={character.politicalInfluence || 0}
+                myFunds={
+                  userData?.character
+                    ? // LOCAL home-currency balance (canonical source of truth).
+                      ((userData.character as Character).currencyBalances?.campaign ??
+                      (userData.character as Character).funds ??
+                      0)
+                    : 0
+                }
+                myCash={
+                  userData?.character
+                    ? getTotalPersonalLiquidWealth(userData.character as Character, forexEnabled)
+                    : 0
+                }
+                canInfluence={!!canInfluence}
+              />
+            )}
+
+            {userData && !isOwnProfile && (
+              <div>
+                {viewerHasBlocked && (
+                  <p className="mb-3 text-body-sm text-muted">
+                    You blocked this player. Their bio, campaign song and mail are hidden from you.
+                  </p>
+                )}
+                <PlayerSafetyActions
+                  characterId={character._id.toString()}
+                  characterName={character.name}
+                  initiallyBlocked={viewerHasBlocked}
+                />
+              </div>
+            )}
 
             <section>
-              <SectionHeader>Related pages</SectionHeader>
+              <SectionHeader level="aside">Related pages</SectionHeader>
               <ul className="divide-y divide-card-border/60">
                 {relatedLinks.map((link) => (
-                  <li key={link.href} className="py-2.5">
-                    <Link href={link.href} className={`text-body ${PROFILE_LINK_CLASS}`}>
+                  <li key={link.href} className="py-2">
+                    <Link href={link.href} className={`text-body-sm ${PROFILE_LINK_CLASS}`}>
                       {link.label}
                     </Link>
                     <p className="mt-0.5 text-body-sm leading-relaxed text-muted">
@@ -1295,17 +1243,17 @@ export default async function CharacterPage({ params }: PageProps) {
               </ul>
             </section>
           </div>
-        </ProfileTabs>
-
-        <div>
-          <Link
-            href="/map"
-            className="text-body-sm text-muted transition-colors hover:text-foreground"
-          >
-            ← Back to map
-          </Link>
         </div>
-      </main>
+      </ProfileTabs>
+
+      <div className={`${PROFILE_CONTAINER_CLASS} pt-12`}>
+        <Link
+          href="/map"
+          className="text-body-sm text-muted transition-colors hover:text-foreground"
+        >
+          ← Back to map
+        </Link>
+      </div>
     </div>
   );
 }

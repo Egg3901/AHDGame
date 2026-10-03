@@ -22,13 +22,13 @@ export function CeoCorporationCard({
 
   return (
     <section>
-      <SectionHeader>{t("title")}</SectionHeader>
+      <SectionHeader level="aside">{t("title")}</SectionHeader>
       <div className="flex gap-3">
         <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-card-border bg-card-elevated">
           <CorporationLogo logoUrl={logoUrl} name={corporationName} fill className="rounded-md" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="break-words text-body font-medium leading-snug text-foreground">
+          <p className="break-words text-body-sm font-medium leading-snug text-foreground">
             {corporationName}
           </p>
           {isNationalEnterprise && (

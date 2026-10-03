@@ -294,19 +294,19 @@ export function PoliticalStanding({
       >
         {t("title")}
       </SectionHeader>
-      <table className="w-full border-collapse text-body">
+      <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-card-border text-body-sm text-muted">
-            <th scope="col" className="py-2 pr-3 text-left font-medium">
+          <tr className="whitespace-nowrap border-b border-card-border text-body-sm text-muted">
+            <th scope="col" className="pb-2 pr-3 text-left font-medium">
               {t("colMeasure")}
             </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">
+            <th scope="col" className="px-3 pb-2 text-right font-medium">
               {t("colValue")}
             </th>
-            <th scope="col" className="py-2 pl-3 text-right font-medium md:pr-3">
+            <th scope="col" className="pb-2 pl-3 text-right font-medium md:pr-3">
               {t("colPerTurn")}
             </th>
-            <th scope="col" className="hidden w-2/5 py-2 pl-6 text-left font-medium md:table-cell">
+            <th scope="col" className="hidden w-2/5 pb-2 pl-6 text-left font-medium md:table-cell">
               {t("colNotes")}
             </th>
           </tr>
@@ -314,34 +314,32 @@ export function PoliticalStanding({
         <tbody>
           {rows.map((row) => (
             <tr key={row.key} className="border-b border-card-border/60 last:border-b-0">
-              <th scope="row" className="py-3 pr-3 text-left align-baseline font-medium">
+              <th scope="row" className="py-3 pr-3 text-left align-baseline">
                 <InfoTooltip
                   trigger={
-                    <span className="text-foreground underline decoration-muted/50 decoration-dotted underline-offset-4">
-                      {row.label}
-                    </span>
+                    <span className="text-[15px] font-medium text-foreground">{row.label}</span>
                   }
                 >
                   <div className="space-y-1 text-muted">{row.tooltip}</div>
                 </InfoTooltip>
                 {row.note && (
                   <span
-                    className={`mt-0.5 block text-body-sm font-normal md:hidden ${TONE_CLASS[row.noteTone]}`}
+                    className={`mt-0.5 block text-[13px] font-normal md:hidden ${TONE_CLASS[row.noteTone]}`}
                   >
                     {row.note}
                   </span>
                 )}
               </th>
-              <td className="whitespace-nowrap px-3 py-3 text-right align-baseline font-semibold tabular-nums text-foreground">
+              <td className="whitespace-nowrap px-3 py-3 text-right align-baseline text-heading-sm font-semibold tabular-nums text-foreground">
                 {row.value}
               </td>
               <td
-                className={`whitespace-nowrap py-3 pl-3 text-right align-baseline tabular-nums md:pr-3 ${TONE_CLASS[row.perTurnTone]}`}
+                className={`whitespace-nowrap py-3 pl-3 text-right align-baseline text-body tabular-nums md:pr-3 ${TONE_CLASS[row.perTurnTone]}`}
               >
                 {row.perTurn}
               </td>
               <td
-                className={`hidden py-3 pl-6 align-baseline text-body-sm md:table-cell ${TONE_CLASS[row.noteTone]}`}
+                className={`hidden py-3 pl-6 align-baseline text-[13px] md:table-cell ${TONE_CLASS[row.noteTone]}`}
               >
                 {row.note}
               </td>

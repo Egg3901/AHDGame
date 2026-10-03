@@ -26,14 +26,12 @@ export function CharacterStatsPanel({
       <SectionHeader action={canReallocate ? <StatReallocateControl /> : undefined}>
         {t("title")}
       </SectionHeader>
-      <div className="mb-3">
-        <p className="text-body text-foreground">
-          <span className="font-semibold">{statClass.name}</span>
-          <span className="ml-2 text-muted">{statClass.pillars.join(" · ")}</span>
-        </p>
-        <p className="mt-0.5 text-body-sm leading-snug text-muted">{statClass.description}</p>
+      <div className="mb-4">
+        <h3 className="text-body-lg font-semibold text-foreground">{statClass.name}</h3>
+        <p className="mt-0.5 text-body text-muted">{statClass.pillars.join(" · ")}</p>
+        <p className="text-body text-muted">{statClass.description}</p>
       </div>
-      <ul className="grid gap-x-8 sm:grid-cols-2">
+      <ul className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
         {STAT_KEYS.map((key) => {
           const value = Math.round(stats[key] ?? 1);
           const pct = (value / STAT_MAX) * 100;
@@ -50,7 +48,7 @@ export function CharacterStatsPanel({
                 detail: bonus.detail,
                 blurb,
               })}
-              className="group relative border-b border-card-border/60 py-2.5 outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
+              className="group relative py-2 outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
             >
               <div className="flex items-baseline gap-3">
                 <span className="flex-1 text-body text-foreground">{label}</span>
@@ -60,8 +58,11 @@ export function CharacterStatsPanel({
                   <span className="text-body-sm font-normal text-muted">/{STAT_MAX}</span>
                 </span>
               </div>
-              <div className="mt-2 h-1 w-full bg-card-border/60" aria-hidden>
-                <div className="h-full bg-foreground/60" style={{ width: `${pct}%` }} />
+              <div className="mt-2 h-1.5 w-full rounded-full bg-card-border" aria-hidden>
+                <div
+                  className="h-full rounded-full bg-foreground/70"
+                  style={{ width: `${pct}%` }}
+                />
               </div>
 
               {/* Tooltip */}

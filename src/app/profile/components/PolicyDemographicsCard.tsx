@@ -25,7 +25,9 @@ function FactRow({ label, children }: { label: string; children: React.ReactNode
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-card-border/60 py-2 last:border-b-0">
       <dt className="text-body-sm text-muted">{label}</dt>
-      <dd className="flex items-center gap-1.5 text-right text-body text-foreground">{children}</dd>
+      <dd className="flex items-center gap-1.5 text-right text-body-sm text-foreground">
+        {children}
+      </dd>
     </div>
   );
 }
@@ -55,6 +57,7 @@ export function PolicyDemographicsCard({
   return (
     <section>
       <SectionHeader
+        level="aside"
         action={
           <div
             className="inline-flex rounded-md border border-card-border p-0.5"

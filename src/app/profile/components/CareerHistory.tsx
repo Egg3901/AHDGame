@@ -92,11 +92,11 @@ function HistoryRow({
   emphasis?: boolean;
 }) {
   return (
-    <li className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-3 py-2.5">
+    <li className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3 py-2">
       <span className="text-body-sm tabular-nums text-muted">{date}</span>
       <div className="min-w-0">
         <p
-          className={`text-body leading-snug text-foreground ${emphasis ? "font-semibold" : "font-medium"}`}
+          className={`text-body-sm leading-snug text-foreground ${emphasis ? "font-semibold" : "font-medium"}`}
         >
           {title}
         </p>
@@ -390,7 +390,7 @@ export function CareerHistory({
 
   return (
     <section>
-      <SectionHeader>{t("title")}</SectionHeader>
+      <SectionHeader level="aside">{t("title")}</SectionHeader>
 
       {showTabs && (
         <TabStrip
