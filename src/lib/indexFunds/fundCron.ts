@@ -53,6 +53,7 @@ import {
   insertFundSnapshot,
   setFundStatus,
   insertFundTransactionsBulk,
+  insertFundTransaction,
 } from "@/lib/indexFunds/fundQueries";
 import { calculateBackingRatio } from "@/lib/indexFunds/unitAccounting";
 import {

@@ -49,6 +49,7 @@ function fixture(direction: "buy" | "sell") {
   const corp = {
     _id: corpId,
     name: "Synthetic issuer",
+    type: "tech" as const,
     countryId: "US" as const,
     liquidCurrencyCode: "USD" as const,
     shareBuybackMode: "instant" as const,

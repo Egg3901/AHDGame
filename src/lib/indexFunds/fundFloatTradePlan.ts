@@ -45,14 +45,8 @@ export async function loadFloatAuditContext(
 }
 type FloatCorp = Pick<
   Corporation,
-  | "_id"
-  | "name"
-  | "countryId"
-  | "liquidCurrencyCode"
-  | "shareBuybackMode"
-  | "publicFloat"
-  | "totalShares"
->;
+  "_id" | "countryId" | "liquidCurrencyCode" | "shareBuybackMode" | "publicFloat" | "totalShares"
+> & { name?: string };
 type CorpSnapshot = Pick<
   Corporation,
   | "_id"
@@ -349,7 +343,10 @@ function receipts(
           ? "corporation"
           : "system",
       ...(side.collection === "corporations" ? { subjectId: input.corp._id } : {}),
-      subjectName: side.collection === "corporations" ? input.corp.name : `Equity pool ${currency}`,
+      subjectName:
+        side.collection === "corporations"
+          ? (input.corp.name ?? "Public float issuer")
+          : `Equity pool ${currency}`,
       amount: -sign * side.amount,
       anchorAmount: (-sign * input.amountAnchor * side.amount) / totalLocal,
       currencyCode: currency,
