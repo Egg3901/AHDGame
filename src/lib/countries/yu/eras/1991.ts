@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * January 1991 SFRY institutions, before the federation broke apart.
@@ -21,6 +22,8 @@ import type { CountryEraOverride } from "../../contract";
 export const YU_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Regional GDP is stored in original local currency, not the accounting unit.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.YU!,
     executiveTitle: "Prime Minister",
     headOfStateTitle: "Chair of the Presidency",
     governmentType: "parliamentaryRepublic",

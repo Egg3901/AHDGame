@@ -216,11 +216,23 @@ describe("1953 era usdExchangeRate overrides", () => {
         expect(override?.usdExchangeRate).toBeUndefined();
       }
     }
-    // And 1991 authors exactly the five, so a sweep cannot quietly add more.
+    // The 1991 list includes the six successor bundles stored in original local currencies.
     const anchored1991 = Object.entries(ERA_COUNTRY_CONFIG_OVERRIDES["1991-default"] ?? {})
       .filter(([, override]) => override?.usdExchangeRate !== undefined)
       .map(([countryId]) => countryId)
       .sort();
-    expect(anchored1991).toEqual(["CN", "DE", "IE", "JP", "UK"]);
+    expect(anchored1991).toEqual([
+      "BG",
+      "CN",
+      "CS",
+      "DE",
+      "HU",
+      "IE",
+      "JP",
+      "PL",
+      "RO",
+      "UK",
+      "YU",
+    ]);
   });
 });

@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * Czechoslovakia's 1990 multiparty Federal Assembly. Each chamber elected
@@ -11,6 +12,8 @@ import type { CountryEraOverride } from "../../contract";
 export const CS_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Regional GDP is stored in original local currency, not the accounting unit.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.CS!,
     executiveTitle: "Prime Minister",
     headOfStateTitle: "President",
     governmentType: "parliamentaryRepublic",

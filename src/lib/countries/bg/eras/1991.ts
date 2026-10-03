@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * Bulgaria begins 1991 with the multiparty Seventh Grand National Assembly
@@ -15,6 +16,8 @@ import type { CountryEraOverride } from "../../contract";
 export const BG_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Regional GDP is stored in original local currency, not the accounting unit.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.BG!,
     executiveTitle: "Prime Minister",
     headOfStateTitle: "President",
     governmentType: "parliamentaryRepublic",
