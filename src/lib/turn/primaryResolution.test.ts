@@ -84,23 +84,43 @@ describe("resolvePrimariesIfNeeded", () => {
     expect(db.collectionMocks["electionCandidates"]!.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(["regional", "Russian presidency", "Duma list", "Council subject"])(
+  it.each(["regional", "Russian presidency", "Duma list", "Council subject", "Bulgarian founding"])(
     "records uncontested %s primary results without US delegates",
     async (kind) => {
       const electionId = new ObjectId();
       const election = {
         _id: electionId,
         electionType:
-          kind === "regional"
-            ? "senate"
-            : kind === "Duma list"
-              ? "dumaDeputy"
-              : kind === "Council subject"
-                ? "federationCouncilMember"
-                : "president",
+          kind === "Bulgarian founding"
+            ? "nationalAssembly"
+            : kind === "regional"
+              ? "senate"
+              : kind === "Duma list"
+                ? "dumaDeputy"
+                : kind === "Council subject"
+                  ? "federationCouncilMember"
+                  : "president",
         status: "active",
-        countryId: kind === "regional" ? "US" : "RU",
-        state: kind === "regional" ? "CA" : kind === "Council subject" ? "CEN" : "RU",
+        countryId: kind === "Bulgarian founding" ? "BG" : kind === "regional" ? "US" : "RU",
+        state:
+          kind === "Bulgarian founding"
+            ? "BG_SOF"
+            : kind === "regional"
+              ? "CA"
+              : kind === "Council subject"
+                ? "CEN"
+                : "RU",
+        ...(kind === "Bulgarian founding"
+          ? {
+              bulgarianFoundingRound: {
+                ruleVersion: "parallel-1990-v1",
+                receiptId: "BG:founding1990:0",
+                round: 1,
+                registeredVoters: 1000,
+                rootElectionId: electionId.toHexString(),
+              },
+            }
+          : {}),
         ...(kind === "Duma list"
           ? {
               seatId: "RU-duma-national-list",
@@ -142,7 +162,10 @@ describe("resolvePrimariesIfNeeded", () => {
       const candidate2 = {
         _id: new ObjectId(),
         electionId,
-        party: kind === "Duma list" || kind === "Council subject" ? "DEM" : "GOP",
+        party:
+          kind === "Duma list" || kind === "Council subject" || kind === "Bulgarian founding"
+            ? "DEM"
+            : "GOP",
         characterName: "Bob",
         characterId: secondOwner,
         isNPP: kind === "Duma list",
@@ -207,7 +230,7 @@ describe("resolvePrimariesIfNeeded", () => {
       expect(initPresidentVoteTally).not.toHaveBeenCalled();
       const primaryResults = vi.mocked(initElectionVoteTally).mock.calls[0][3];
       expect(primaryResults?.byParty?.DEM?.[0]?.won).toBe(true);
-      if (kind === "Duma list" || kind === "Council subject") {
+      if (kind === "Duma list" || kind === "Council subject" || kind === "Bulgarian founding") {
         expect(primaryResults?.byParty?.DEM).toHaveLength(2);
         expect(primaryResults?.byParty?.DEM?.every((row) => row.won)).toBe(true);
       } else expect(primaryResults?.byParty?.GOP?.[0]?.won).toBe(true);

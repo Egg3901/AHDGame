@@ -29,6 +29,7 @@ export async function removeWithdrawnCandidateFromTally(
   // stamp the ledger; older native tallies are identified with one projected read.
   let preserveCastVotes =
     tally.bgOrdinaryBallot === true ||
+    tally.bulgarianFoundingBallot === true ||
     tally.hungarianAssemblyBallot === true ||
     tally.russianDumaBallot !== undefined ||
     tally.russianCouncilBallot !== undefined;
@@ -36,6 +37,7 @@ export async function removeWithdrawnCandidateFromTally(
     !preserveCastVotes &&
     (tally.totalVotes[candidateId] ?? 0) > 0 &&
     (tally.state.startsWith("HU_") ||
+      tally.state.startsWith("BG_") ||
       tally.state === "RU" ||
       Object.prototype.hasOwnProperty.call(RU_1991_ECONOMIC_REGION_POPULATION, tally.state))
   ) {
@@ -48,12 +50,16 @@ export async function removeWithdrawnCandidateFromTally(
           russianDumaRound: 1,
           russianCouncilRound: 1,
           hungarianAssemblyRound: 1,
+          bulgarianFoundingRound: 1,
           hungarianModernAssembly: 1,
           hungarianModernByElection: 1,
         },
       }
     );
     preserveCastVotes =
+      (election?.countryId === "BG" &&
+        election.electionType === "nationalAssembly" &&
+        election.bulgarianFoundingRound?.ruleVersion === "parallel-1990-v1") ||
       (election?.countryId === "HU" &&
         election.electionType === "nationalAssembly" &&
         (election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1" ||

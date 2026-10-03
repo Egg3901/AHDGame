@@ -3,6 +3,17 @@
  * resolveGeneralElections certifies bound Duma cohorts together and defers
  * partial cohorts, preserving Congress until a separate chamber handover.
  */
+import { bindBgFoundingCampaigns } from "@/lib/countries/bg/foundingCampaignBinding1990";
+import {
+  certifyBgFoundingFirstCount,
+  BG_FOUNDING_COUNTS_COLLECTION,
+  type BgFoundingAssemblyRecord,
+} from "@/lib/countries/bg/foundingCount1990";
+import {
+  openBgFoundingRunoff,
+  certifyBgFoundingRunoff,
+} from "@/lib/countries/bg/foundingRunoff1990";
+import { seatBgFoundingAssembly } from "@/lib/countries/bg/foundingSeating1990";
 import { isBgOrdinaryCapacity } from "@/lib/countries/bg/rules/assemblyTransition";
 import {
   certifyHu2011Count,
@@ -128,6 +139,33 @@ export async function resolveGeneralElections(
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
   const tallyMap = new Map(tallies.map((t) => [t.electionId.toString(), t]));
+  const bgFoundingRaces =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (row) =>
+            row.countryId === "BG" &&
+            row.electionType === "nationalAssembly" &&
+            (row.bulgarianFoundingRound != null || !isBgOrdinaryCapacity(row.state, row.totalSeats))
+        )
+      : [];
+  const bgFoundingCycles = new Set(bgFoundingRaces.map((row) => row.cycle));
+  if (onlyElectionIds && bgFoundingCycles.size) {
+    const selected = new Set(onlyElectionIds.map((id) => id.toHexString()));
+    const peers = await db
+      .collection<Election>("elections")
+      .find(
+        {
+          countryId: "BG",
+          electionType: "nationalAssembly",
+          cycle: { $in: [...bgFoundingCycles] },
+        },
+        { projection: { cycle: 1 } }
+      )
+      .toArray();
+    for (const row of peers)
+      if (!selected.has(row._id.toHexString())) bgFoundingCycles.delete(row.cycle);
+  }
+  if (bgFoundingCycles.size) await bindBgFoundingCampaigns(db, now, [...bgFoundingCycles]);
   const bgOrdinaryRaces =
     gameStateDoc?.preset === "1991-default"
       ? completedElections.filter(
@@ -394,6 +432,38 @@ export async function resolveGeneralElections(
       logger.error("Turn", `Hungarian modern cycle ${cycle} remains unseated`, error);
     }
   }
+  for (const cycle of bgFoundingCycles) {
+    try {
+      const receipt = await certifyBgFoundingFirstCount(db, cycle, currentTurn, now);
+      if (!receipt) continue;
+      if (receipt.count.kind === "pending") {
+        await openBgFoundingRunoff(db, cycle, currentTurn, now);
+        await certifyBgFoundingRunoff(db, cycle, currentTurn, now);
+      }
+      if (await seatBgFoundingAssembly(db, cycle, currentTurn, now)) {
+        const settled = await db
+          .collection<BgFoundingAssemblyRecord>(BG_FOUNDING_COUNTS_COLLECTION)
+          .findOne({ _id: receipt._id });
+        if (!settled?.settled) throw new Error("Bulgarian committed founding receipt is missing");
+        resolved += settled.electionIds.length + (settled.runoffElectionIds?.length ?? 0);
+        resolvedElections.push(...bgFoundingRaces.filter((row) => row.cycle === cycle));
+        for (const [candidateId, seats] of Object.entries(settled.settled.candidateSeats)) {
+          if (seats <= 0) continue;
+          const nominee = settled.nominees.find((row) => row.id === candidateId)!;
+          allNewsOutcomes.push({
+            electionType: "nationalAssembly",
+            state: nominee.regionId,
+            countryId: "BG",
+            winnerName: nominee.name,
+            winnerParty: nominee.party,
+            isPlayer: !nominee.isNpc,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error("Turn", `Bulgarian founding cycle ${cycle} remains unseated`, error);
+    }
+  }
   for (const cycle of hu1991Cycles) {
     try {
       const receipt = await certifyHu1991FirstCount(db, cycle, currentTurn, now);
@@ -577,6 +647,7 @@ export async function resolveGeneralElections(
           try {
             if (
               bgOrdinaryRaces.includes(election) ||
+              bgFoundingRaces.includes(election) ||
               hu1991Races.includes(election) ||
               hu2011Races.includes(election) ||
               huByElectionRaces.includes(election) ||

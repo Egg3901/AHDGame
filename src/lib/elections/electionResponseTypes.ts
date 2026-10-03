@@ -108,6 +108,7 @@ export interface ElectionResponse {
   electionType: string;
   state: string;
   countryId: string;
+  bulgarianFoundingRound?: { ruleVersion: "parallel-1990-v1"; round: 1 | 2 };
   hungarianAssemblyRound?: {
     ruleVersion: "mixed-1989-v1";
     round: 1 | 2;

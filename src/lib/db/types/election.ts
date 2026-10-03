@@ -118,6 +118,8 @@ export interface Election {
   };
   /** Native 1991 Hungarian campaigns freeze a whole-country count and round. */
   hungarianAssemblyRound?: import("../../countries/hu/rules/assemblyCampaign1991").Hu1991CampaignBinding;
+  /** Founding Bulgarian two-ballot campaigns retain their whole-country receipt. */
+  bulgarianFoundingRound?: import("../../countries/bg/rules/foundingCampaign1990").BgFoundingCampaignBinding;
   /** The authorized modern law freezes before general ballots exist. */
   hungarianModernAssembly?: {
     /** Frozen regional register; absent only on earlier native saves. */
@@ -182,6 +184,11 @@ export interface ElectionCandidate {
   };
   /** One chosen 1991 Hungarian constituency; renewed rounds retain the root campaign actor. */
   hungarianAssemblyNomination?: { constituencyId?: string; rootCandidateId?: string };
+  bulgarianFoundingNomination?: {
+    constituencyId?: string;
+    listDistrictId?: string;
+    rootCandidateId?: string;
+  };
   /** Frozen individual Council nomination order. */
   russianCouncilNomination?: { registrationOrder: number };
   /** Server-created nominee identity for an NPC profile representing a bounded slate. */

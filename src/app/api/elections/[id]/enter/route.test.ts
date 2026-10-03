@@ -1122,3 +1122,116 @@ describe("Hungarian 1991 constituency filing route", () => {
     expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
   });
 });
+
+describe("Bulgarian founding constituency filing route", () => {
+  async function setupBulgaria(round: 1 | 2 = 1) {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const election = {
+      _id: electionOid,
+      countryId: "BG",
+      electionType: "nationalAssembly",
+      state: "BG_SOF",
+      cycle: 1,
+      status: "active",
+      primaryEndTurn: 90,
+      primaryEndTime: new Date("2026-04-02T00:00:00Z"),
+      bulgarianFoundingRound: {
+        ruleVersion: "parallel-1990-v1",
+        receiptId: "BG:founding1990:0",
+        round,
+        registeredVoters: 10000,
+      },
+    };
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({ ok: true, election } as never);
+    const character = {
+      _id: characterOid,
+      countryId: "BG",
+      name: "Synthetic Bulgarian player",
+      homeState: "BG_SOF",
+      party: "1",
+      currentOffice: null,
+      careerHistory: [],
+    };
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "synthetic-player", character },
+    } as never);
+    const { getGameTime } = await import("@/lib/time/gameTime");
+    vi.mocked(getGameTime).mockResolvedValue({
+      effectiveNow: new Date("2026-04-01T00:00:00Z"),
+      currentTurn: 50,
+    } as never);
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1991-default",
+      currentTurn: 50,
+    });
+    db.collection("countryState").findOne.mockResolvedValue({
+      _id: "BG",
+      governmentType: "parliamentaryRepublic",
+    });
+    db.collection("elections").findOne.mockResolvedValue(election);
+    db.collection("characters").findOne.mockResolvedValue(character);
+    db.collection("politicalParties").findOne.mockResolvedValue({
+      sequentialId: 1,
+      countryId: "BG",
+      regimeStatus: "legal",
+    });
+    db.collection("bgFoundingAssemblyFilingLocks").findOne.mockResolvedValue(null);
+    db.collection("bgFoundingAssemblyFilingLocks").find.mockReturnValue(emptyFindCursor());
+    return { db, election };
+  }
+  it("files an explicit Bulgarian constituency through the atomic writer", async () => {
+    const { db } = await setupBulgaria();
+    const { BG_1990_CONSTITUENCIES } =
+      await import("@/lib/countries/bg/data/foundingDistricts1990");
+    const district = BG_1990_CONSTITUENCIES.find((row) => row.regionId === "BG_SOF")!;
+    const response = await POST(
+      new Request("http://test/route", {
+        method: "POST",
+        body: JSON.stringify({ constituencyId: district.id }),
+      }),
+      { params: Promise.resolve({ id: electionOid.toHexString() }) }
+    );
+    expect(response.status).toBe(200);
+    expect(db.collection("electionCandidates").insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ bulgarianFoundingNomination: { constituencyId: district.id } }),
+      expect.objectContaining({ session: expect.anything() })
+    );
+    expect(db.collection("bgFoundingAssemblyFilingLocks").insertOne).toHaveBeenCalledTimes(2);
+  });
+  it("rejects malformed filings, foreign districts and ordinary entries into qualified runoffs", async () => {
+    const { db } = await setupBulgaria();
+    const parameters = { params: Promise.resolve({ id: electionOid.toHexString() }) };
+    expect(
+      (
+        await POST(
+          new Request("http://test/route", {
+            method: "POST",
+            body: JSON.stringify({ forgedField: "x" }),
+          }),
+          parameters
+        )
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await POST(
+          new Request("http://test/route", {
+            method: "POST",
+            body: JSON.stringify({ constituencyId: "HU-constituency-01-12" }),
+          }),
+          parameters
+        )
+      ).status
+    ).toBe(403);
+    await setupBulgaria(2);
+    expect((await POST(makeReq(), parameters)).status).toBe(403);
+    expect(db.collection("electionCandidates").insertOne).not.toHaveBeenCalled();
+  });
+});

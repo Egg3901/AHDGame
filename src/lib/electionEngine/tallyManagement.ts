@@ -455,7 +455,12 @@ export async function accumulateVoteTurn(
     (preset === "1991-default" &&
       election.countryId === "HU" &&
       (election.hungarianModernByElection != null || election.hungarianModernAssembly != null));
+  const isBgFounding =
+    election.countryId === "BG" &&
+    election.electionType === "nationalAssembly" &&
+    election.bulgarianFoundingRound?.ruleVersion === "parallel-1990-v1";
   const huRegisteredVoters =
+    election.bulgarianFoundingRound?.registeredVoters ??
     election.hungarianModernByElection?.registeredVoters ??
     election.hungarianModernAssembly?.registeredVoters ??
     election.hungarianAssemblyRound?.registeredVoters ??
@@ -476,13 +481,13 @@ export async function accumulateVoteTurn(
     : isBoundDuma
       ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
         (tally.russianDumaBallot?.againstAllVotes ?? 0)
-      : isHuBound
+      : isHuBound || isBgFounding
         ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0)
         : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
-    isHuBound
+    isHuBound || isBgFounding
       ? huRegisteredVoters!
       : scalePoolToRegistered(electorate, registrationPool?.unregistered)
   );
@@ -805,7 +810,7 @@ export async function accumulateVoteTurn(
         (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
   }
 
-  if (isBgOrdinary || isHuBound)
+  if (isBgOrdinary || isHuBound || isBgFounding)
     for (const [id, votes] of Object.entries(tally.totalVotes)) {
       if (!activeCandidateIds.has(id)) newTotals[id] = votes;
     }
@@ -823,7 +828,7 @@ export async function accumulateVoteTurn(
     });
   }
 
-  if (isHuBound) {
+  if (isHuBound || isBgFounding) {
     // The shared vote-ledger arithmetic preserves historical cast marks and
     // clamps only the new slice to the frozen registered electorate.
     newTotals = russianDumaVoteTotals({
@@ -878,7 +883,7 @@ export async function accumulateVoteTurn(
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
-    if (isBgOrdinary || isHuBound) return undefined;
+    if (isBgOrdinary || isHuBound || isBgFounding) return undefined;
     if (councilTotals) {
       const result = resolveRussianCouncilBallot({
         ...councilTotals.ballot,
@@ -1003,7 +1008,8 @@ export async function accumulateVoteTurn(
       !isBoundDuma &&
       !isBoundCouncil &&
       !isBgOrdinary &&
-      !isHuBound
+      !isHuBound &&
+      !isBgFounding
     ) {
       delete cleanedNames[key];
       delete cleanedParties[key];
@@ -1017,10 +1023,13 @@ export async function accumulateVoteTurn(
   }
 
   const tallyUpdate = {
-    ...(isBgOrdinary || isHuBound ? { $unset: { seatsEstimate: "" as const } } : {}),
+    ...(isBgOrdinary || isHuBound || isBgFounding
+      ? { $unset: { seatsEstimate: "" as const } }
+      : {}),
     $set: {
       ...(isBgOrdinary ? { bgOrdinaryBallot: true as const } : {}),
       ...(isHuBound ? { hungarianAssemblyBallot: true as const } : {}),
+      ...(isBgFounding ? { bulgarianFoundingBallot: true as const } : {}),
       totalVotes: newTotals,
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,
@@ -1075,7 +1084,10 @@ export async function initElectionVoteTally(
   // re-init silently erases the primary's entire count.
   const existing = await db
     .collection<ElectionVoteTally>("electionVoteTallies")
-    .findOne({ electionId }, { projection: { primaryVotes: 1, hungarianAssemblyBallot: 1 } });
+    .findOne(
+      { electionId },
+      { projection: { primaryVotes: 1, hungarianAssemblyBallot: 1, bulgarianFoundingBallot: 1 } }
+    );
 
   const doc: ElectionVoteTally = {
     // Preserve the matched doc's _id: legacy tallies carry an auto-generated
@@ -1092,6 +1104,7 @@ export async function initElectionVoteTally(
     ...(primaryResults && { primaryResults }),
     ...(existing?.primaryVotes && { primaryVotes: existing.primaryVotes }),
     ...(existing?.hungarianAssemblyBallot && { hungarianAssemblyBallot: true }),
+    ...(existing?.bulgarianFoundingBallot && { bulgarianFoundingBallot: true }),
     createdAt: now,
     updatedAt: now,
   };

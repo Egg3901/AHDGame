@@ -10,6 +10,7 @@ import {
 } from "@/lib/turn/perpetualElections/shared";
 import { bgElectionSeatsForPreset } from "./rules/assemblyTransition";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
+import { bindBgFoundingCampaigns } from "./foundingCampaignBinding1990";
 
 export function bgAssemblySeatMapForPreset(
   regions: Parameters<typeof seatsFromRegionField>[0],
@@ -62,6 +63,7 @@ export async function ensureBGElections(now: Date, inFlightTurn?: number): Promi
     now,
     inFlightTurn
   );
+  if (ctx.preset === "1991-default") await bindBgFoundingCampaigns(db, now);
 }
 
 /**

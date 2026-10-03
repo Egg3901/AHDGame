@@ -72,12 +72,15 @@ export interface ElectionVoteTally {
   bgOrdinaryBallot?: true;
   /** Native Hungarian marks survive withdrawal while statutory counts remain pending. */
   hungarianAssemblyBallot?: true;
+  /** Bulgarian founding marks survive withdrawal until native certification. */
+  bulgarianFoundingBallot?: true;
   seatsEstimate?: Record<string, number>;
   /** Actual non-presidential resolver receipt. Absent on historical tallies. */
   resolutionPath?:
     | "single_winner"
     | "hare_quota"
     | "bg_ordinary_national"
+    | "bg_founding_parallel"
     | "hu_statutory_mixed"
     | "districted_house"
     | "bloc_list"

@@ -746,7 +746,7 @@ export async function _enrichElection(
     gameState?.preset === "1991-default" &&
     election.countryId === "BG" &&
     election.electionType === "nationalAssembly" &&
-    election.cycle >= 1;
+    (election.cycle >= 1 || election.bulgarianFoundingRound != null);
   const isHu1991Pending =
     election.countryId === "HU" &&
     election.electionType === "nationalAssembly" &&
@@ -1396,6 +1396,14 @@ export async function _enrichElection(
     electionType: election.electionType,
     state: election.state,
     countryId,
+    ...(election.bulgarianFoundingRound
+      ? {
+          bulgarianFoundingRound: {
+            ruleVersion: election.bulgarianFoundingRound.ruleVersion,
+            round: election.bulgarianFoundingRound.round,
+          },
+        }
+      : {}),
     ...(election.hungarianAssemblyRound
       ? {
           hungarianAssemblyRound: {
