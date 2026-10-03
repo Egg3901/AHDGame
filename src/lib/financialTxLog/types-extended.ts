@@ -16,6 +16,12 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "corp_sector_founding",
   "org_cash",
   "org_tribute_mint",
+  "soe_remittance",
+  "soe_treasury_draw",
+  "soe_loss_backing",
+  "soe_capex_grant",
+  "nationalization_compensation",
+  "corp_starting_grant",
   "fund_credit", // legacy mixed source — still emitted by older paths
   "fund_debit",
   "office_income",
@@ -106,6 +112,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "party_transfer",
   "party_gotv_spend",
   "party_dues_received",
+  "party_org_building",
   "caucus_tax_debit",
 
   // ── Government & subsidies (gov_subsidy_paid / gov_grant_paid /
@@ -121,6 +128,8 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "gov_budget_transfer",
   "gov_defense_overdraft",
   "monetary_treasury_advance",
+  "monetary_qe",
+  "monetary_qt",
 
   // ── Crisis / events (deferred per Phase 3 commit — wired by the crisis
   //    system once it lands) ────────────────────────────────────────────
@@ -148,6 +157,12 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   corp_sector_founding: "Corporation Sector Founding",
   org_cash: "Organization Cash Settlement",
   org_tribute_mint: "Unmodeled Organization Tribute",
+  soe_remittance: "State Enterprise Profit Remittance",
+  soe_treasury_draw: "State Enterprise Treasury Draw",
+  soe_loss_backing: "State Enterprise Loss Backing",
+  soe_capex_grant: "State Capex Grant",
+  nationalization_compensation: "Nationalization Compensation",
+  corp_starting_grant: "Corporation Starting Grant",
   fund_credit: "Fund Credit (legacy)",
   fund_debit: "Fund Debit (legacy)",
   office_income: "Office Income",
@@ -233,6 +248,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   party_transfer: "Party Transfer",
   party_gotv_spend: "Party GOTV Spend",
   party_dues_received: "Party Dues",
+  party_org_building: "Party Organization Building",
   caucus_tax_debit: "Caucus Tax",
 
   gov_fiscal_accrual: "Govt Fiscal Accrual",
@@ -245,6 +261,8 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   gov_budget_transfer: "Govt Budget Transfer",
   gov_defense_overdraft: "Govt Defence Appropriation Overdraft",
   monetary_treasury_advance: "Central Bank Treasury Advance",
+  monetary_qe: "Central Bank Bond Purchase (QE)",
+  monetary_qt: "Central Bank Bond Sale (QT)",
 
   crisis_payout: "Crisis Payout",
   crisis_levy: "Crisis Levy",

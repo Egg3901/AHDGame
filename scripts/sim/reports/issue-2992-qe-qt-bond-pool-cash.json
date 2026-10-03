@@ -1,0 +1,35 @@
+{
+  "issue": 2992,
+  "runtimeSource": "0f76751e1d0fb5eec13bae26c0bc7385f93d5365",
+  "runtimeFiles": [
+    "src/lib/moneySupply/monetaryOperationJournal.ts",
+    "src/lib/db/types/financialTxLog.ts",
+    "src/lib/financialTxLog/types-extended.ts"
+  ],
+  "reproduction": {
+    "currency": "EUR",
+    "lifetimeQeIn": 2481099457,
+    "lifetimeQtOut": 233625006,
+    "lifetimePurchasesIn": 80167479,
+    "cumulativeDivergenceLocal": -2322233797,
+    "explainedRatio": { "EUR": 0.998, "ITL": 0.996, "NGN": 1.017 }
+  },
+  "qualification": {
+    "integrationCases": 6,
+    "nativeMongoCases": 3,
+    "memoryCases": 3,
+    "redWithoutWitness": "QE and QT cases fail with one divergence each",
+    "recoveryCases": "exactly one witness per completed operation across injected faults",
+    "focusedSuites": { "files": 80, "passed": 718, "skipped": 21, "failed": 0 },
+    "changedTypeScriptFiles": 5,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "limits": [
+    "Native fixtures qualify the central-bank pool boundary, not the whole world.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired."
+  ]
+}

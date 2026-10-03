@@ -309,7 +309,8 @@ describe("nationalizeSector", () => {
       "CN",
       20000, // valuation 4000 × fair × buyout premium (5)
       expect.anything(),
-      expect.any(Date)
+      expect.any(Date),
+      expect.objectContaining({ flow: "nationalization_compensation" })
     );
   });
 });

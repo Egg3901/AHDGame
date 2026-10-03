@@ -5,7 +5,7 @@ import { VIETNAM_RUNGS, type VietnamEscalationSummary } from "@/lib/crises/vietn
 import { defconColor } from "./defcon";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 /**
  * The Vietnam escalation ladder, on the conflicts hub.

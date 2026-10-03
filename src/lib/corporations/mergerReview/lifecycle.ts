@@ -261,7 +261,8 @@ export async function fineOverdueDivestitures(
       db,
       obligation.countryId as CountryId,
       corpLiquidCapitalToAnchor(fineLocal, corp, fxRate),
-      now
+      now,
+      { flow: "regulatory_fine" }
     );
     await emitTx(db, {
       type: "corp_fine",

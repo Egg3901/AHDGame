@@ -167,7 +167,7 @@ export function CorporationMasthead({
             />
           )}
           <div className="min-w-0">
-            <h1 className="corp-masthead-title truncate text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
+            <h1 className="truncate text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
               {corporation.name}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">

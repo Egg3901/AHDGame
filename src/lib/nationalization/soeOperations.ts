@@ -28,7 +28,14 @@ import {
   resolveSectorMandate,
   type MandateContribution,
 } from "./soeMandates";
+import * as Sentry from "@sentry/nextjs";
 import { coverSoeOperatingLoss, debitTreasurySoeCapex } from "./treasury";
+import {
+  resolveTreasuryCashOptions,
+  witnessTreasuryCash,
+  type TreasuryCashOptions,
+} from "./treasuryLedger";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import {
   resolveSectorHostCurrencyCode,
   fxRateForSectorHostFromMap,
@@ -386,7 +393,9 @@ export async function processSoeOperations(
   /** Game year — era-prices the state capex grant. Absent ⇒ the anchor year. */
   currentYear?: number | null,
   /** This turn's realized per-corp operating income (₳/turn) by corp id. Absent ⇒ estimate fallback. */
-  realizedIncomeAnchorByCorpId?: ReadonlyMap<string, number>
+  realizedIncomeAnchorByCorpId?: ReadonlyMap<string, number>,
+  /** Treasury cash accounting; omitted loads a context only when cash moves. */
+  ledger?: TreasuryCashOptions
 ): Promise<{ soeCorps: number; backing: SoeCorpBacking[] }> {
   // Match `isStateOwned` semantics at the DB layer: a state-owned corp has
   // `countryOwnerId` set OR `ownershipState: "stateOwned"`. The seeded NatCorps
@@ -424,6 +433,8 @@ export async function processSoeOperations(
     mergedMetrics.map((m) => [String(m._id), m] as const)
   );
   const corpById = new Map(soeCorps.map((c) => [c._id.toString(), c]));
+  let ledgerOptions: Promise<TreasuryCashOptions> | undefined;
+  const treasuryLedger = () => (ledgerOptions ??= resolveTreasuryCashOptions(db, ledger));
 
   // Group contributions per state (a state may host sectors from primary + split-offs).
   const contributionsByState = new Map<string, MandateContribution[]>();
@@ -521,7 +532,15 @@ export async function processSoeOperations(
   // and it never touches `liquidCapital`, so an SOE cannot divert it into a
   // build order of its own choosing. The P3b exploit stays closed.
   if (plantsEnabled) {
-    await applyStateCapexGrants(db, soeCorps, sectorsByCorpId, fxByCurrency, currentYear, now);
+    await applyStateCapexGrants(
+      db,
+      soeCorps,
+      sectorsByCorpId,
+      fxByCurrency,
+      currentYear,
+      now,
+      treasuryLedger
+    );
   }
 
   // Treasury-backing: an SOE with negative liquidCapital is covered — but only
@@ -592,6 +611,7 @@ export async function processSoeOperations(
   }
 
   const backingOps: AnyBulkWriteOperation<Corporation>[] = [];
+  const backingCredits: { corpId: string; currency: CurrencyCode; amount: number }[] = [];
   for (const b of backing) {
     if (!(b.coveredAnchor > 0)) continue; // nothing operating-related to comp
     // The OWNING treasury covers the loss — the same key the remittance,
@@ -601,7 +621,14 @@ export async function processSoeOperations(
     // the owner's books show the profit estimate (ticket #1269). The debit is
     // unconditional: an unaffordable cover pushes the treasury negative
     // (national debt) rather than being withheld — soft-budget semantics.
-    await coverSoeOperatingLoss(db, b.countryId, b.coveredAnchor, fxByCurrency, now);
+    await coverSoeOperatingLoss(
+      db,
+      b.countryId,
+      b.coveredAnchor,
+      fxByCurrency,
+      now,
+      await treasuryLedger()
+    );
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
     // is left negative by the residual it spent on capacity.
@@ -613,9 +640,36 @@ export async function processSoeOperations(
           : { $set: { liquidCapital: 0, updatedAt: now } },
       },
     });
+    const corp = corpById.get(b.corpId.toString());
+    const liquid = corp && Number.isFinite(corp.liquidCapital) ? corp.liquidCapital : 0;
+    backingCredits.push({
+      corpId: b.corpId.toString(),
+      currency: snapshotCorporationCurrency(corp ?? {}),
+      // Nothing earlier in this pass moves liquidCapital, so the zeroing write
+      // lands exactly the loaded hole.
+      amount: plantsEnabled ? b.coveredLocal : -liquid,
+    });
   }
   if (backingOps.length > 0) {
-    await db.collection<Corporation>("corporations").bulkWrite(backingOps);
+    const credited = await db.collection<Corporation>("corporations").bulkWrite(backingOps);
+    const options = await treasuryLedger();
+    // A partial write cannot say which credit landed; the treasury legs stay
+    // witnessed and the missed enterprise surfaces as a divergence.
+    if (options.context && (credited?.matchedCount ?? 0) !== backingOps.length) {
+      Sentry.captureException(new Error("SOE loss backing missed an enterprise credit"), {
+        extra: { expected: backingOps.length, matched: credited?.matchedCount },
+      });
+    } else if (options.context) {
+      for (const credit of backingCredits) {
+        await witnessTreasuryCash(db, options, {
+          flow: "soe_loss_backing",
+          account: { kind: "corporation", corpId: credit.corpId, currency: credit.currency },
+          amount: credit.amount,
+          now,
+          site: "soeOperations:backing",
+        });
+      }
+    }
   }
 
   return { soeCorps: soeCorps.length, backing };
@@ -828,7 +882,8 @@ async function applyStateCapexGrants(
   sectorsByCorpId: ReadonlyMap<string, CorporateSector[]>,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
   currentYear: number | null | undefined,
-  now: Date
+  now: Date,
+  treasuryLedger: () => Promise<TreasuryCashOptions>
 ): Promise<void> {
   const ops: AnyBulkWriteOperation<CorporateSector>[] = [];
   const grantByCountry = new Map<CountryId, number>();
@@ -859,6 +914,13 @@ async function applyStateCapexGrants(
   if (ops.length === 0) return;
   await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
   for (const [countryId, grantAnchor] of grantByCountry) {
-    await debitTreasurySoeCapex(db, countryId, grantAnchor, fxByCurrency, now);
+    await debitTreasurySoeCapex(
+      db,
+      countryId,
+      grantAnchor,
+      fxByCurrency,
+      now,
+      await treasuryLedger()
+    );
   }
 }

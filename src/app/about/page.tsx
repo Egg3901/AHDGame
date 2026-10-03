@@ -203,7 +203,7 @@ export default async function AboutPage() {
                   >
                     Vercel
                   </a>
-                  , and Lora by Cyreal, both distributed under the SIL Open Font License.
+                  , distributed under the SIL Open Font License.
                 </li>
                 <li>Built with Next.js, React, Tailwind CSS, and MongoDB. Hosted on Vercel.</li>
               </ul>

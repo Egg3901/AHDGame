@@ -5,6 +5,13 @@ export type FinancialTxType =
   | "corp_sector_founding" // exact NPP founding cash, including entry fee and starter build
   | "org_cash"
   | "org_tribute_mint"
+  // State-enterprise treasury cash (nationalization/treasuryLedger)
+  | "soe_remittance"
+  | "soe_treasury_draw"
+  | "soe_loss_backing"
+  | "soe_capex_grant"
+  | "nationalization_compensation" // treasury compensation for a taken sector, both legs
+  | "corp_starting_grant" // system-granted treasury of a spawned corporation
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat
   | "fund_debit"
@@ -137,6 +144,7 @@ export type FinancialTxType =
   | "party_transfer"
   | "party_gotv_spend"
   | "party_dues_received"
+  | "party_org_building" // org-building cash paid from a party or state-party treasury
   | "caucus_tax_debit"
 
   // Government & subsidies
@@ -150,6 +158,8 @@ export type FinancialTxType =
   | "gov_budget_transfer"
   | "gov_defense_overdraft"
   | "monetary_treasury_advance"
+  | "monetary_qe" // central bank buys bonds from the market pool with new money
+  | "monetary_qt" // central bank sells bonds to the market pool, withdrawing money
 
   // Crisis / events
   | "crisis_payout"

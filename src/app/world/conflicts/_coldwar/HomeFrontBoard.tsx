@@ -14,7 +14,7 @@ import {
 import type { Side } from "./proxyWar";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 /** Home Front (West) / Politburo (East) — the domestic politics of foreign policy. */
 export function HomeFrontBoard({ side }: { side: Side }) {

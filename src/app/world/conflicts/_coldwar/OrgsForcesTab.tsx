@@ -13,7 +13,7 @@ import {
 import type { Org } from "./orgs";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 export type Reaction = { who: string; color: string; text: string };
 

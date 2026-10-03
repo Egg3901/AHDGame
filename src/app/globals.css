@@ -479,16 +479,31 @@
   );
 }
 
-/* Typography scale */
-:root {
+/* Typography scale. Tailwind v4 builds a font-size utility for every --text-*
+   theme variable, so text-body, text-heading and the rest compile to real
+   rules, each setting a font size and its paired line height. Line heights are
+   unitless ratios, so they stay proportional when a size is overridden (the
+   16px coarse-pointer input rule below). Where a size matches a stock Tailwind
+   step it uses that step's line height too, so text-body and text-sm render
+   identically. `static` emits every variable even when no utility reads it,
+   because CSS modules and arbitrary values use var(--text-body-sm) directly. */
+@theme static {
   --text-body-xs: 0.625rem; /* 10px */
+  --text-body-xs--line-height: calc(0.875 / 0.625); /* 14px */
   --text-body-sm: 0.75rem; /* 12px */
+  --text-body-sm--line-height: calc(1 / 0.75); /* 16px */
   --text-body: 0.875rem; /* 14px */
+  --text-body--line-height: calc(1.25 / 0.875); /* 20px */
   --text-body-lg: 1rem; /* 16px */
+  --text-body-lg--line-height: calc(1.5 / 1); /* 24px */
   --text-heading-sm: 1.125rem; /* 18px */
+  --text-heading-sm--line-height: calc(1.75 / 1.125); /* 28px */
   --text-heading: 1.25rem; /* 20px */
+  --text-heading--line-height: calc(1.75 / 1.25); /* 28px */
   --text-heading-lg: 1.5rem; /* 24px */
+  --text-heading-lg--line-height: calc(2 / 1.5); /* 32px */
   --text-display: 1.875rem; /* 30px */
+  --text-display--line-height: calc(2.25 / 1.875); /* 36px */
 }
 
 @theme inline {
@@ -522,18 +537,12 @@
      fallback applies anywhere the wrapper isn't present. */
   --color-gov: var(--gov, #c9a24b);
   --color-gov-soft: var(--gov-soft, #e2c887);
+  /* One family for headings and body. font-serif and font-display are kept
+     only as aliases of the sans so existing markup renders in Geist. */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-lora);
-  --font-display: var(--font-fraunces);
-  --font-size-body-xs: var(--text-body-xs);
-  --font-size-body-sm: var(--text-body-sm);
-  --font-size-body: var(--text-body);
-  --font-size-body-lg: var(--text-body-lg);
-  --font-size-heading-sm: var(--text-heading-sm);
-  --font-size-heading: var(--text-heading);
-  --font-size-heading-lg: var(--text-heading-lg);
-  --font-size-display: var(--text-display);
+  --font-serif: var(--font-geist-sans);
+  --font-display: var(--font-geist-sans);
   /* Shadow utilities */
   --shadow-card: var(--shadow-sm);
   --shadow-panel: var(--shadow-md);
@@ -852,21 +861,6 @@ html {
   background: linear-gradient(-45deg, #dc2626, #1d4ed8, #dc2626, #1d4ed8);
   background-size: 400% 400%;
   animation: gradient-shift 15s ease infinite;
-}
-
-/* Serif display headings — apply to h1, .display-heading */
-h1 {
-  font-family: var(--font-lora), Georgia, serif;
-}
-
-/* The corporation page is a data surface: its title stays in the UI sans.
-   Unlayered, like the rule above, so it can win against it. */
-h1.corp-masthead-title {
-  font-family: var(--font-sans), system-ui, sans-serif;
-}
-
-[data-theme="command-1953"] h1.corp-masthead-title {
-  font-family: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
 }
 
 /* Glass card utility */

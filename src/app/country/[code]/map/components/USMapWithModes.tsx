@@ -594,7 +594,7 @@ export function USMapWithModes({
                 </Button>
               </div>
               <Input
-                className="!w-full sm:!w-52 !py-2 !text-body-sm"
+                className="!w-full sm:!w-52 !py-2 md:text-body-sm"
                 type="search"
                 aria-label={t("search")}
                 placeholder={t("searchPlaceholder")}

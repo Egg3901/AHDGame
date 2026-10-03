@@ -7,11 +7,17 @@ import {
   buildSoeBackingAuditEntry,
 } from "@/lib/nationalization/soeOperations";
 import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
+import {
+  loadTreasuryCashContext,
+  withTreasuryCashBatch,
+} from "@/lib/nationalization/treasuryLedger";
 import type { CorpSnapshot } from "./types";
 
 export interface SoeBackingSweepArgs {
   db: Db;
   now: Date;
+  /** Processing turn for treasury cash witnesses. Absent: the game clock. */
+  turn?: number;
   currentYear?: number | null;
   corpSnapshots: CorpSnapshot[];
   corpById: Map<string, Corporation>;
@@ -30,8 +36,9 @@ export interface SoeBackingSweepArgs {
  * turn's own snapshots (the same income that moved liquidCapital); it is the
  * coverable basis, with the margin estimate only as fallback (#2043).
  * Remittance runs after backing so it only acts on a positive balance.
- * Returns the deterministic aggregate audit row, or null when neither leg
- * moved anything.
+ * Both legs share one treasury cash accounting batch, flushed even if a later
+ * leg fails. Returns the deterministic aggregate audit row, or null when
+ * neither leg moved anything.
  */
 export async function runSoeBackingSweep(
   args: SoeBackingSweepArgs
@@ -39,15 +46,24 @@ export async function runSoeBackingSweep(
   const realizedIncomeAnchorByCorpId = new Map(
     args.corpSnapshots.map((snap) => [snap.corpId.toString(), snap.income])
   );
-  const { backing: soeBacking } = await processSoeOperations(
+  const context = await loadTreasuryCashContext(args.db, args.turn);
+  const { soeBacking, soeRemitted } = await withTreasuryCashBatch(
     args.db,
-    args.now,
-    args.currentYear,
-    realizedIncomeAnchorByCorpId
+    context,
+    async (ledger) => {
+      const { backing } = await processSoeOperations(
+        args.db,
+        args.now,
+        args.currentYear,
+        realizedIncomeAnchorByCorpId,
+        ledger
+      );
+      args.mark("soeOperations");
+      const { perCorp } = await processSoeRemittance(args.db, args.now, ledger);
+      args.mark("soeRemittance");
+      return { soeBacking: backing, soeRemitted: perCorp };
+    }
   );
-  args.mark("soeOperations");
-  const { perCorp: soeRemitted } = await processSoeRemittance(args.db, args.now);
-  args.mark("soeRemittance");
 
   // Fold both SOE cash legs into the in-memory snapshots/corp map BEFORE the
   // Phase 8 history persistence, so corporationHistory rows chart post-backing

@@ -781,6 +781,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const soeSweepAudit = await runSoeBackingSweep({
     db,
     now,
+    turn: turn ?? gameState?.currentTurn,
     currentYear,
     corpSnapshots,
     corpById: lookups.corpById,
