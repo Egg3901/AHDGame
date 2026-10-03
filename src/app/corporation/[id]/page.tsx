@@ -612,15 +612,22 @@ export default function CorporationDetailPage() {
             <Skeleton className="h-4 w-40" />
           </div>
 
-          {/* Masthead: name, identity line, quote and figures row */}
-          <div className="space-y-2">
-            <Skeleton className="h-7 w-64" />
-            <Skeleton className="h-3.5 w-[28rem] max-w-full" />
-            <div className="flex flex-wrap items-center gap-6 border-y border-card-border py-2">
-              <Skeleton className="h-6 w-24" />
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Skeleton key={i} className="h-3.5 w-20" />
-              ))}
+          {/* Masthead: name, identity line, then the quote beside the figures grid */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-72 max-w-full" />
+              <Skeleton className="h-3.5 w-[28rem] max-w-full" />
+            </div>
+            <div className="flex flex-col gap-x-10 gap-y-4 border-t border-card-border pt-4 lg:flex-row">
+              <Skeleton className="h-8 w-40" />
+              <div className="grid flex-1 grid-cols-3 gap-x-6 gap-y-3 md:grid-cols-5">
+                {Array.from({ length: 10 }, (_, i) => (
+                  <div key={i} className="space-y-1">
+                    <Skeleton className="h-3 w-12" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -795,7 +802,7 @@ export default function CorporationDetailPage() {
 
   return (
     <div className="min-h-screen bg-background pb-16" data-replay-block>
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-5 overflow-x-hidden">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6 overflow-x-hidden">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted" aria-label="Breadcrumb">
           <Link
