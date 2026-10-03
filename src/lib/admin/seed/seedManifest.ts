@@ -280,6 +280,8 @@ const RUNTIME: CollectionEntry[] = [
   { name: "bgFoundingAssemblyCounts", category: "runtime" },
   { name: "bgFoundingAssemblyFilingLocks", category: "runtime" },
   { name: "bgFoundingAssemblyOfficeArchives", category: "runtime" },
+  { name: "bg1991ListReplacements", category: "runtime" },
+  { name: "bgGrandConstituencyByElections", category: "runtime" },
   { name: "bgAssemblyOfficeArchives", category: "runtime" },
   { name: "russianAssemblyOfficeArchives", category: "runtime" },
   { name: "federationRatifications", category: "runtime" },

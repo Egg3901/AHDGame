@@ -145,6 +145,7 @@ export async function resolveGeneralElections(
           (row) =>
             row.countryId === "BG" &&
             row.electionType === "nationalAssembly" &&
+            !row.bulgarianFoundingRound?.byElection &&
             (row.bulgarianFoundingRound != null || !isBgOrdinaryCapacity(row.state, row.totalSeats))
         )
       : [];
@@ -280,6 +281,20 @@ export async function resolveGeneralElections(
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
   const resolvedElections: Election[] = [];
   let resolved = 0;
+  if (
+    gameStateDoc?.preset === "1991-default" &&
+    completedElections.some((row) => row.bulgarianFoundingRound?.byElection)
+  ) {
+    const { resolveBgGrandConstituencyByElections } =
+      await import("@/lib/countries/bg/constituencyByElections1991");
+    resolved += await resolveBgGrandConstituencyByElections(
+      db,
+      gameStateDoc,
+      currentTurn,
+      now,
+      onlyElectionIds
+    );
+  }
   for (const [cycle, plan] of bgPlans) {
     if (!plan) continue;
     try {

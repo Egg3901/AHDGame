@@ -78,6 +78,11 @@ export async function materializeBgFoundingPlayerFiling(input: {
   const election = await db
     .collection<Election>("elections")
     .findOne({ _id: electionId }, { session });
+  if (election?.bulgarianFoundingRound?.byElection) {
+    const { materializeBgGrandPartialPlayerFiling } =
+      await import("./constituencyByElectionPlayerFiling1991");
+    return materializeBgGrandPartialPlayerFiling(input);
+  }
   const game = await db
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { session, projection: { preset: 1, currentTurn: 1 } });

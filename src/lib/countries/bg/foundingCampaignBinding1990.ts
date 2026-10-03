@@ -36,6 +36,7 @@ export async function materializeBgFoundingCampaignBinding(input: {
         electionType: "nationalAssembly",
         cycle,
         "bulgarianFoundingRound.round": { $ne: 2 },
+        "bulgarianFoundingRound.byElection": { $exists: false },
       },
       {
         session,
