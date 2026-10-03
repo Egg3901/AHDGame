@@ -56,8 +56,8 @@ function world(country = "US") {
     nppId = new ObjectId();
   const fund = testFund(fundId),
     entry = nppEntry(fundId, nppId);
-  memory.seed("indexFunds", [fund]);
-  memory.seed("indexFundRedemptionQueue", [entry]);
+  memory.seed("indexFunds", [{ ...fund }]);
+  memory.seed("indexFundRedemptionQueue", [{ ...entry }]);
   memory.seed("npps", [{ _id: nppId, countryId: country, nppInvestmentCashAnchor: 50 }]);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
   return { memory, db: memory as unknown as Db, fundId, nppId, fund, entry };

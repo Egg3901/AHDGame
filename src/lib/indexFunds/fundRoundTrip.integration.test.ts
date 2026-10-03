@@ -17,6 +17,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { IndexFundRedemptionQueueEntry } from "@/lib/db/types";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { runIndexFundCron, rebalanceFundToTarget } from "@/lib/indexFunds/fundCron";
 import { fundBidLimitPriceLocal } from "@/lib/indexFunds/fundBidPolicy";
@@ -278,7 +279,10 @@ describe("index fund subscribe -> redeem round trip via fundCron (#2120)", () =>
     expect(nppPosition.units).toBeGreaterThan(0);
 
     // One bounded autonomous redemption was queued through enqueueRedemption.
-    const queue = state.collection("indexFundRedemptionQueue").docs;
+    const queue = await state.db
+      .collection<IndexFundRedemptionQueueEntry>("indexFundRedemptionQueue")
+      .find({})
+      .toArray();
     expect(queue).toHaveLength(1);
     const entry = queue[0]!;
     expect(entry).toMatchObject({

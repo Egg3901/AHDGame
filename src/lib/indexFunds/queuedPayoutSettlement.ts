@@ -1,6 +1,6 @@
 /** Queued redemptions freeze cash, units and receipts before either balance changes. */
 import { createHash } from "node:crypto";
-import { ObjectId, type Db, type Document } from "mongodb";
+import { ObjectId, type Db, type Document, type Filter } from "mongodb";
 import type { GameConfig, IndexFund, IndexFundRedemptionQueueEntry } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
@@ -15,6 +15,11 @@ import { prepareAuditRecord } from "@/lib/audit/recordAudit";
 import { redemptionEntryStatusAfterPayout } from "./fundRedemptionQueue";
 
 const QUEUE = "indexFundRedemptionQueue";
+type PayoutJournalRecord = {
+  _id: string;
+  status: string;
+  legs: { applied: boolean; refusal?: string }[];
+};
 export type ClaimedRedemption = IndexFundRedemptionQueueEntry & {
   settlementClaimId?: string;
   processingTurn?: number;
@@ -45,7 +50,9 @@ async function finish(db: Db, plan: BankingTransition) {
 /** Only a recorded credit refusal permits compensation; an unknown acknowledgement never does. */
 async function refundRefusedPayout(db: Db, entry: ClaimedRedemption): Promise<boolean> {
   const plan = entry.payoutPlan!;
-  const record = await db.collection(MONEY_MOVE_COLLECTION).findOne({ _id: plan.key });
+  const record = await db
+    .collection<PayoutJournalRecord>(MONEY_MOVE_COLLECTION)
+    .findOne({ _id: plan.key });
   if (!record?.legs?.[0]?.applied || !record?.legs?.[1]?.refusal) return false;
   const amount = plan.legs[0].amount;
   const units = entry.payoutPlan?.legacyUnitsBurned ?? 0;
@@ -113,7 +120,7 @@ async function refundRefusedPayout(db: Db, entry: ClaimedRedemption): Promise<bo
 
 async function rejectedWithoutCash(db: Db, key: string) {
   const record = await db
-    .collection(MONEY_MOVE_COLLECTION)
+    .collection<PayoutJournalRecord>(MONEY_MOVE_COLLECTION)
     .findOne({ _id: key }, { projection: { status: 1, legs: 1 } });
   return (
     record?.status === "rejected" && record.legs.every((leg: { applied: boolean }) => !leg.applied)
@@ -121,7 +128,7 @@ async function rejectedWithoutCash(db: Db, key: string) {
 }
 
 /** Old marker-less processing rows remain untouched; their cash outcome cannot be inferred. */
-const recoveryFilter = {
+const recoveryFilter: Filter<ClaimedRedemption> = {
   settlementClaimId: { $exists: true },
   $or: [{ status: "processing" }, { pendingSettlementProjection: { $exists: true } }],
 };
@@ -317,7 +324,7 @@ export async function settleQueuedPayout(
       },
       {
         collection: "financialTxLog",
-        insert: financial,
+        insert: { ...financial },
         note: "Original native and anchor cash witness",
       },
       ...(audit.shadow

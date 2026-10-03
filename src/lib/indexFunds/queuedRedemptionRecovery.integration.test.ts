@@ -37,7 +37,7 @@ function fixture() {
     createdAt: now,
     updatedAt: now,
   };
-  memory.seed("indexFunds", [fund]);
+  memory.seed("indexFunds", [{ ...fund }]);
   memory.seed("npps", [{ _id: nppId, countryId: "US", nppInvestmentCashAnchor: 50 }]);
   memory.seed("indexFundRedemptionQueue", [
     {
@@ -156,7 +156,10 @@ describe("queued payout receipt and claim boundaries", () => {
     await retryPayout(f);
     await retryPayout(f, 9);
     await assertPaidOnce(f);
-    const journal = f.memory.collection(MONEY_MOVE_COLLECTION).docs;
+    const journal = await f.db
+      .collection<{ _id: string; projections: { applied: boolean }[] }>(MONEY_MOVE_COLLECTION)
+      .find({})
+      .toArray();
     expect(journal).toHaveLength(1);
     expect(journal[0]).toMatchObject({ status: "applied" });
     expect(journal[0].projections.every((p: { applied: boolean }) => p.applied)).toBe(true);
