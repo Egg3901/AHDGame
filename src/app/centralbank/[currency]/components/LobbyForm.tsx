@@ -53,18 +53,16 @@ export function LobbyForm({
   };
 
   return (
-    <div className="rounded-lg border border-card-border/50 bg-card-muted p-3 space-y-3">
-      <p className="text-xs text-muted italic">
+    <div className="max-w-md space-y-3 pt-1">
+      <p className="text-body-sm text-muted">
         Your contribution will be spent on behalf of{" "}
         <span className="font-medium text-foreground">{targetName}</span>.
       </p>
 
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted">
-          Contribution amount ({lobbyCurrency})
-        </label>
+      <div className="space-y-1">
+        <label className="text-body-sm text-muted">Contribution amount ({lobbyCurrency})</label>
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-body text-muted">
             {lobbyCurrency === "USD"
               ? "$"
               : lobbyCurrency === "GBP"
@@ -79,7 +77,7 @@ export function LobbyForm({
             pattern="[0-9]*"
             value={amount.toLocaleString("en-US")}
             onChange={handleInputChange}
-            className="w-full rounded-lg border border-card-border bg-background pl-8 pr-3 py-2 text-sm text-foreground placeholder:text-muted/50 focus:border-primary/50 focus:outline-none tabular-nums"
+            className="w-full rounded-md border border-card-border bg-background py-2 pl-8 pr-3 text-body tabular-nums text-foreground placeholder:text-muted focus:border-primary/50 focus:outline-none"
             placeholder="0"
           />
         </div>
@@ -92,14 +90,14 @@ export function LobbyForm({
             type="button"
             onClick={() => quickFill(pct)}
             disabled={loading || lobbyLiquid < 1}
-            className="flex-1 min-w-[60px] rounded-md border border-card-border bg-card px-2 py-1.5 text-xs font-medium text-foreground hover:bg-card-elevated disabled:opacity-40"
+            className="min-w-[60px] flex-1 rounded-md border border-card-border px-2 py-1.5 text-body-sm font-medium text-foreground hover:bg-card-elevated disabled:opacity-40"
           >
             {pct === 1.0 ? "Max" : `${pct * 100}%`}
           </button>
         ))}
       </div>
 
-      <div className="space-y-1 text-xs text-muted">
+      <div className="space-y-1 text-body-sm text-muted">
         <p>
           <span className="font-medium text-foreground">{lobbyCurrency}</span> wallet (this bank):{" "}
           <span className="font-semibold tabular-nums text-foreground">
@@ -114,11 +112,10 @@ export function LobbyForm({
             </span>
             {autoConvertEnabled ? (
               <span className="text-muted">
-                {" "}
-                - auto-convert will top up {lobbyCurrency} if needed
+                . Auto-convert will top up {lobbyCurrency} if needed.
               </span>
             ) : (
-              <span className="text-warning"> - auto-convert off (exchange manually)</span>
+              <span className="text-warning">. Auto-convert is off, so exchange manually.</span>
             )}
           </p>
         )}
@@ -131,13 +128,13 @@ export function LobbyForm({
           isLoading={loading}
           disabled={loading || !canPay || amount < minAmt || amount > effectiveMax}
         >
-          Commit Funds
+          Commit funds
         </Button>
         <Button variant="ghost" onClick={onCancel} disabled={loading}>
           Cancel
         </Button>
       </div>
-      {error && <p className="text-xs text-error">{error}</p>}
+      {error && <p className="text-body-sm text-error">{error}</p>}
     </div>
   );
 }

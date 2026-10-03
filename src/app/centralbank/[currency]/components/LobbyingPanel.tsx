@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
-import { Button, EmptyState } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -15,6 +15,7 @@ import {
 import type { LobbyingTotal, Nomination } from "./centralBankTypes";
 import { LobbyForm } from "./LobbyForm";
 import { formatNativeCurrency } from "./centralBankUtils";
+import { CentralBankSection } from "./CentralBankSection";
 
 export function LobbyingPanel({
   lobbyingTotals,
@@ -105,27 +106,12 @@ export function LobbyingPanel({
       : null;
 
   return (
-    <div className="mt-6 rounded-xl border border-card-border bg-card p-5">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/20 text-warning">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-            />
-          </svg>
-        </div>
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Lobbying</h2>
-          <p className="text-xs text-muted">
-            Spend cash on hand to fund lobbying efforts for your preferred candidate.
-          </p>
-        </div>
-      </div>
-      <p className="mb-4 text-xs text-muted italic">
-        Lobbying increases a candidate&apos;s chances within their selection pool - but the outcome
+    <CentralBankSection
+      title="Lobbying"
+      meta="Spend cash on hand to fund lobbying efforts for your preferred candidate."
+    >
+      <p className="max-w-3xl text-body-sm text-muted">
+        Lobbying increases a candidate&apos;s chances within their selection pool, but the outcome
         is never guaranteed. You may back multiple candidates; each contribution is a separate
         transaction paid from{" "}
         <span className="font-medium text-foreground">{nationalCurrency ?? "-"}</span> liquid cash
@@ -134,12 +120,12 @@ export function LobbyingPanel({
       </p>
 
       {lobbyingTotals.length > 0 ? (
-        <div className="space-y-2">
+        <ul className="mt-4 divide-y divide-card-border/60">
           {lobbyingTotals.map((lt) => {
             const maxAmount = Math.max(...lobbyingTotals.map((t) => t.totalAmount));
             const barWidth = maxAmount > 0 ? (lt.totalAmount / maxAmount) * 100 : 0;
             return (
-              <div key={lt.characterId} className="space-y-1.5">
+              <li key={lt.characterId} className="space-y-2 py-3">
                 <div className="flex items-center gap-3">
                   <Avatar
                     url={lt.avatarUrl}
@@ -151,49 +137,39 @@ export function LobbyingPanel({
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/character/${lt.sequentialId ?? lt.characterId}`}
-                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                      className="text-body font-medium text-foreground underline-offset-4 hover:underline"
                     >
                       {lt.characterName}
                     </Link>
                   </div>
-                  <span className="text-sm font-semibold tabular-nums text-foreground">
+                  <span className="text-body font-semibold tabular-nums text-foreground">
                     {formatNativeCurrency(lt.totalAmount, nationalCurrency)}
                   </span>
                   <Button variant="secondary" onClick={() => resetLobby(lt.characterId)}>
                     Fund
                   </Button>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-background">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-track">
                   <div
-                    className="h-full rounded-full transition-all duration-500 bg-warning"
+                    className="h-full rounded-full bg-foreground/50"
                     style={{ width: `${Math.min(100, barWidth)}%` }}
                   />
                 </div>
                 {lobbyTargetId === lt.characterId && (
                   <LobbyForm targetName={lt.characterName} {...lobbyFormProps} />
                 )}
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       ) : (
-        <EmptyState
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-          }
-          title="No lobbying activity yet"
-          description="Be the first to back a candidate."
-        />
+        <p className="mt-4 text-body-sm text-muted">
+          <span className="font-medium text-foreground">No lobbying activity yet.</span> Be the
+          first to back a candidate.
+        </p>
       )}
 
-      {lobbySuccess && <p className="mt-3 text-xs text-success">{lobbySuccess}</p>}
+      {lobbySuccess && <p className="mt-3 text-body-sm text-success">{lobbySuccess}</p>}
 
       {lobbyEligibleCandidates.length > 0 && lobbyTargetId !== "standalone" && (
         <div className="mt-3">
@@ -204,10 +180,13 @@ export function LobbyingPanel({
       )}
 
       {lobbyTargetId !== null && !lobbyingTotals.some((lt) => lt.characterId === lobbyTargetId) && (
-        <div className="mt-3 rounded-lg border border-card-border/50 bg-card-muted p-4 space-y-3">
-          <p className="text-xs font-medium text-muted">Select a candidate to lobby for:</p>
+        <div className="mt-4 space-y-3 border-t border-card-border pt-4">
+          <label className="block text-body-sm text-muted" htmlFor="lobby-candidate">
+            Select a candidate to lobby for
+          </label>
           <select
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:outline-none"
+            id="lobby-candidate"
+            className="w-full max-w-md rounded-md border border-card-border bg-background px-3 py-2 text-body text-foreground focus:border-primary/50 focus:outline-none"
             value={selectedCandidate ? lobbyTargetId : ""}
             onChange={(e) => {
               if (e.target.value) resetLobby(e.target.value);
@@ -230,6 +209,6 @@ export function LobbyingPanel({
           )}
         </div>
       )}
-    </div>
+    </CentralBankSection>
   );
 }
