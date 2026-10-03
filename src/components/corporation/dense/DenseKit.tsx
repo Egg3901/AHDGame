@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { fillBandSentence, fillBandShort, formatFillPercent } from "../plantsPresentation";
@@ -358,20 +359,25 @@ export function MiniSparkline({
 }
 
 /**
- * Money formatting for figures stored in the corporation's own currency.
- * Every corp-side amount (revenue, budgets, cash) is local; display goes
- * through the anchor so the viewer's currency preference still applies.
+ * Money formatting for figures stored in the corporation's own currency, on top
+ * of `useLocalCurrency` (local -> anchor -> the viewer's display currency).
+ * Adds a signed amount for P&L lines, and share prices in the listing currency.
  */
 export function useCorpMoney(liquidCurrencyCode: string | null | undefined) {
-  const { formatAmount, formatFull, formatPriceIn, formatPrice, toInternalFrom } = useCurrency();
+  const { formatPriceIn, formatPrice } = useCurrency();
+  const local = useLocalCurrency(liquidCurrencyCode ?? undefined);
   const code = (liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;
-  const toAnchor = (local: number) => (code ? toInternalFrom(local, code) : local);
-  const fmt = (local: number) => formatAmount(toAnchor(local), code);
-  const fmtFull = (local: number) => formatFull(toAnchor(local), code);
-  const fmtSigned = (local: number) =>
-    `${local > 0 ? "+" : local < 0 ? "-" : ""}${formatAmount(toAnchor(Math.abs(local)), code)}`;
-  /** Share prices always render in the listing currency (see masthead note). */
-  const fmtPrice = (local: number) =>
-    code ? formatPriceIn(toAnchor(local), code) : formatPrice(local, code);
-  return { code, toAnchor, fmt, fmtFull, fmtSigned, fmtPrice };
+  const fmtSigned = (amount: number) =>
+    `${amount > 0 ? "+" : amount < 0 ? "-" : ""}${local.fmtAmount(Math.abs(amount))}`;
+  /** A share trades in its listing currency, whatever the viewer's display preference. */
+  const fmtPrice = (amount: number) =>
+    code ? formatPriceIn(local.toAnchor(amount), code) : formatPrice(amount, code);
+  return {
+    code,
+    toAnchor: local.toAnchor,
+    fmt: local.fmtAmount,
+    fmtFull: local.fmtFull,
+    fmtSigned,
+    fmtPrice,
+  };
 }
