@@ -52,7 +52,7 @@ export function Masthead({
   const delta = comparison ? Math.round(overall) - Math.round(comparison.value) : 0;
   return (
     <header className="overflow-hidden rounded-lg border border-card-border bg-card shadow-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border px-4 py-2 font-mono text-body-xs uppercase tracking-widest text-muted">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border px-4 py-2 font-mono text-body-sm text-muted">
         <span>{chrome.registry}</span>
         <span className="inline-flex items-center gap-2">
           <LiveDot color="success" />
@@ -67,7 +67,7 @@ export function Masthead({
           {chrome.glyph}
         </div>
         <div className="min-w-[220px] flex-1">
-          <h1 className="font-display text-display font-bold leading-tight text-foreground">
+          <h1 className="text-display font-bold leading-tight text-foreground">
             {countryDisplayName}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -97,9 +97,7 @@ export function Masthead({
           <Button variant="secondary" size="sm" onClick={onCompare}>
             ⇄ Compare
           </Button>
-          <span className="font-mono text-body-xs uppercase tracking-widest text-muted">
-            {chrome.seal}
-          </span>
+          <span className="font-mono text-body-sm text-muted">{chrome.seal}</span>
         </div>
       </div>
     </header>

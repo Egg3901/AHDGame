@@ -62,7 +62,7 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 function CountList({ title, rows }: { title: string; rows: CountRow[] }) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{title}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-muted">{title}</h3>
       <div className="space-y-1">
         {rows.slice(0, 8).map((row) => (
           <div key={row.key} className="flex items-center justify-between gap-3 text-xs">

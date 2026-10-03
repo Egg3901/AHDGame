@@ -390,9 +390,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
               <p className="text-sm text-muted mb-6 max-w-2xl">{description}</p>
 
               <section>
-                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted mb-4">
-                  Cabinet Positions
-                </h2>
+                <h2 className="text-sm font-semibold text-muted mb-4">Cabinet positions</h2>
                 <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {/* Render the API roster — it is year-resolved (era-gated
                       seats filtered, era names substituted), unlike the static

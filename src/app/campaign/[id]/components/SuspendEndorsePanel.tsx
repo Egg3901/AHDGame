@@ -72,7 +72,7 @@ export function SuspendEndorsePanel({
         <h3
           style={{
             margin: "0 0 10px",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 17,
             fontWeight: 600,
           }}
@@ -124,7 +124,7 @@ export function SuspendEndorsePanel({
         <h3
           style={{
             margin: "0 0 8px",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 17,
             fontWeight: 600,
           }}

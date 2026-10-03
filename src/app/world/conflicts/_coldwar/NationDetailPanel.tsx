@@ -1,7 +1,7 @@
 import { BLOC, nationActions, type BlocId, type BlocSide, type Nation } from "./blocs";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 function benefitsFor(bloc: BlocId): { k: string; v: string }[] {
   if (bloc === "west")
@@ -62,7 +62,7 @@ export function NationDetailPanel({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: serif,
+              fontFamily: headingFont,
               fontWeight: 700,
               fontSize: 18,
               color: "#f3f1ea",

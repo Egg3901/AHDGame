@@ -74,9 +74,7 @@ export function CompareView({
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-card-border bg-card p-4 shadow-card">
-        <h2 className="flex-1 font-display text-heading-lg font-bold text-foreground">
-          Country comparison
-        </h2>
+        <h2 className="flex-1 text-heading-lg font-bold text-foreground">Country comparison</h2>
         <div className="flex flex-wrap gap-2">
           {POLITICAL_METRIC_COUNTRY_IDS.map((id) => {
             const on = selected[id];
@@ -200,7 +198,7 @@ export function CompareView({
           <div className="mb-1 font-mono text-body-xs uppercase tracking-widest text-muted">
             Metric families — {openCatHome.displayName.toUpperCase()}
           </div>
-          <p className="mb-3 max-w-[80ch] text-body-xs leading-normal text-muted">
+          <p className="mb-3 max-w-[80ch] text-body-sm leading-normal text-muted">
             Metric names are country-specific: comparisons match shared metric families, not display
             names. Identical scores do not imply identical institutions — each country pursues these
             outcomes through its own system.

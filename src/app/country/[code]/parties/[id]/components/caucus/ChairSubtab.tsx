@@ -313,9 +313,7 @@ export function ChairSubtab({
     <div className="space-y-4">
       {/* Settings */}
       <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Caucus settings
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Caucus settings</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-[11px] uppercase tracking-widest text-muted">
             Name
@@ -407,9 +405,7 @@ export function ChairSubtab({
       <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-              Recruit NPP to Caucus
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Recruit NPP to caucus</h3>
             <p className="mt-2 text-sm text-muted">
               Caucus recruitment is gated by the Chair&apos;s relationship with that NPP.
               Relationship must be at least 60, and the caucus goes on a 12-hour cooldown after a
@@ -500,9 +496,7 @@ export function ChairSubtab({
       {/* Fund transfers */}
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Send to Caucus Member
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Send to caucus member</h3>
           <p className="text-sm text-muted">
             Move caucus funds directly to an active player member&apos;s campaign account.
           </p>
@@ -583,9 +577,7 @@ export function ChairSubtab({
         </div>
 
         <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Transfer to National Party
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Transfer to national party</h3>
           <p className="text-sm text-muted">
             Return caucus treasury funds to the parent National Party treasury.
           </p>
@@ -621,9 +613,7 @@ export function ChairSubtab({
 
       {/* Policy positions */}
       <div className="space-y-3 rounded-lg border border-card-border bg-card p-5">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Key policy positions
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Key policy positions</h3>
         {detail.positions.length === 0 ? (
           <p className="text-sm italic text-muted">
             No positions yet - add the caucus&apos;s stated stances below.

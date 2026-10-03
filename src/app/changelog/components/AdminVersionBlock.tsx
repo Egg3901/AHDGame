@@ -38,7 +38,7 @@ export function AdminVersionBlock({
             ? "border-primary/20 bg-primary/5 hover:bg-primary/8"
             : isCollapsed
               ? "border-transparent bg-background/40 hover:bg-background/80"
-              : "border-card-border bg-background/80 backdrop-blur-sm hover:bg-background"
+              : "border-card-border bg-background hover:bg-background"
         }`}
       >
         <div className="flex items-center gap-3">

@@ -24,7 +24,7 @@ import type { CommandChainView } from "@/lib/military/commandChain";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 
 const mono = MIL_FONT.mono;
-const serif = MIL_FONT.serif;
+const headingFont = MIL_FONT.heading;
 
 export interface ConflictRecordView {
   conflictId: number;
@@ -381,7 +381,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
               <h1
                 className="cw-front-title"
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 600,
                   color: MIL_COLOR.textStrong,
                   margin: 0,
@@ -519,7 +519,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
                       marginTop: 6,
                       paddingLeft: 8,
                       borderLeft: "2px solid #2c2836",
-                      font: `italic 400 12px ${serif}`,
+                      font: `italic 400 12px ${headingFont}`,
                       color: "#9a9aab",
                     }}
                   >
@@ -554,7 +554,7 @@ export function ConflictRecord({ conflict: c }: { conflict: ConflictRecordView }
             </div>
             <div
               style={{
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontSize: 23,
                 fontWeight: 600,
                 color: MIL_COLOR.textStrong,

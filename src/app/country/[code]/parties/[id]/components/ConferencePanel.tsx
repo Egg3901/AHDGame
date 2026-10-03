@@ -310,7 +310,7 @@ export function ConferencePanel({
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-body-xs text-muted">
+            <p className="mt-1 text-body-sm text-muted">
               Selected {selected.length}. The platform needs exactly the manifesto pledge count with
               no duplicates; replacing resets the vote.
             </p>

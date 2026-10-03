@@ -61,7 +61,7 @@ export default function CommoditiesGuidePage() {
               produce certain goods <strong className="text-foreground">add to supply</strong>;
               sectors that consume them <strong className="text-foreground">add to demand</strong>.
               When supply is short, buyers pay a margin penalty. When supply exceeds demand, buyers
-              get a bonus and sellers are squeezed. Only owned sectors participate - unowned sectors
+              get a bonus and sellers are squeezed. Only owned sectors participate; unowned sectors
               contribute nothing to either side.
             </p>
             <Callout>
@@ -329,7 +329,7 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
             <SectionHeader id="sector-demand">5. What each sector demands</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               These are the inputs each sector type consumes. The rates shown are per-unit fractions
-              of daily revenue - higher rates mean the sector is more sensitive to that
+              of daily revenue. Higher rates mean the sector is more sensitive to that
               commodity&apos;s price swings.
             </p>
             <div className="overflow-x-auto rounded-xl border border-card-border">
@@ -430,7 +430,7 @@ effective D/S = raw D/S up to 3x, softened beyond 3x
             <p className="text-sm text-muted leading-relaxed">
               Financial Services commodity demand has a built-in sensitivity to the central bank
               prime rate. Cheap money means more borrowing, M&amp;A activity, and mortgage
-              refinancing - all of which drive demand for financial sector output.
+              refinancing, all of which drive demand for financial sector output.
             </p>
             <FormulaBlock>{`Rate multiplier = 1 + (2.75 - primeRate) × 0.12
 
@@ -442,7 +442,7 @@ Examples:
   Prime rate 5%:   multiplier ≈ 0.73 → −27% financial services demand
   Prime rate 8%:   multiplier = 0.60 → −40% demand (floor)`}</FormulaBlock>
             <p className="text-sm text-muted leading-relaxed">
-              Additionally, government debt issuance drives latent financial services demand - more
+              Additionally, government debt issuance drives latent financial services demand: more
               bond issuance means more underwriting activity, which feeds into Financial Services
               commodity demand. A country running large deficits and issuing heavy bond supply will
               sustain elevated Financial Services demand independent of interest rates.
@@ -454,7 +454,7 @@ Examples:
             <SectionHeader id="strategies">8. Operating strategies</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each sector can switch between 2-3 operating strategies that change its commodity
-              supply and demand rates. Strategies have no direct margin modifier - all effects come
+              supply and demand rates. Strategies have no direct margin modifier; all effects come
               through commodity market prices. Choose a strategy based on which commodities are in
               shortage (supplies you can profit from) or oversupply (inputs you want to minimize).
             </p>
@@ -950,7 +950,7 @@ Examples:
                 ],
                 [
                   "Technology and Defense are in commodity competition.",
-                  "Both consume electronics and software. When Defense scales up (heavy government spending), it competes directly with Technology for electronics, driving up the price for both. Defense also supplies electronics at a lower rate than it consumes - it is a net electronics buyer.",
+                  "Both consume electronics and software. When Defense scales up (heavy government spending), it competes directly with Technology for electronics, driving up the price for both. Defense also supplies electronics at a lower rate than it consumes, so it is a net electronics buyer.",
                 ],
                 [
                   "Agriculture and Chemical Industries are linked.",

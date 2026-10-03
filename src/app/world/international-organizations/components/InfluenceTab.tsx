@@ -143,9 +143,9 @@ export function InfluenceTab({
               style={{ width: `${Math.round(view.blocStress.stress * 100)}%` }}
             />
           </div>
-          <p className="text-body-xs text-muted">
+          <p className="text-body-sm text-muted">
             {view.blocStress.effectiveness >= 1
-              ? "This bloc is settled — its plays land at full strength."
+              ? "This bloc is settled, so its plays land at full strength."
               : `Plays land at ${Math.round(view.blocStress.effectiveness * 100)}% strength while the bloc is stretched.`}
           </p>
           <ul className="mt-2 space-y-0.5 text-body-xs text-muted/80">
@@ -186,7 +186,7 @@ export function InfluenceTab({
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-body-xs text-muted">
+          <p className="mt-3 text-body-sm text-muted">
             A member whose share falls to {view.leaveShare} and stays there for {view.sustainTurns}{" "}
             turns leaves the bloc; a nation that reaches {view.joinShare} for as long asks to join
             one. Nations a player is steering are warned rather than moved.

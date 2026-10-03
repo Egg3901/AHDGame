@@ -177,7 +177,7 @@ export function TheaterWarRoom({
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <span
                   style={{
-                    fontFamily: MIL_FONT.serif,
+                    fontFamily: MIL_FONT.heading,
                     fontSize: 13,
                     fontWeight: 600,
                     color: MIL_COLOR.text,
@@ -297,7 +297,7 @@ export function TheaterWarRoom({
                   </div>
                   <div
                     style={{
-                      fontFamily: MIL_FONT.serif,
+                      fontFamily: MIL_FONT.heading,
                       fontSize: 17,
                       fontWeight: 700,
                       marginTop: 2,

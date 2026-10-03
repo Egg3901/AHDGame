@@ -165,7 +165,7 @@ function ImfHero({ data }: { data: OverviewResponse | null }) {
             {data?.imfCorp ? (
               <Link
                 href={`/corporation/${data.imfCorp.sequentialId ?? data.imfCorp.id}`}
-                className="ml-1 inline-flex items-center gap-1 rounded-full border border-white/30 bg-black/30 px-2.5 py-1 text-xs font-medium text-white/95 backdrop-blur-sm transition-colors hover:bg-black/50"
+                className="ml-1 inline-flex items-center gap-1 rounded-full border border-white/30 bg-black/70 px-2.5 py-1 text-xs font-medium text-white/95 transition-colors hover:bg-black/50"
                 title="Open IMF corporation page"
               >
                 <svg

@@ -3,9 +3,9 @@
 /**
  * Hero and Clock for the Blend detail view.
  *
- * The hero states the verdict in words before any table does: a serif
- * headline, a standfirst that explains how the seats were arrived at, and the
- * four figures that decide the race.
+ * The hero states the verdict in words before any table does: a headline, a
+ * standfirst that explains how the seats were arrived at, and the four figures
+ * that decide the race.
  */
 
 import type { BlendClockRow, BlendDetailModel } from "@/lib/elections/blendDetailViewModel";
@@ -39,12 +39,10 @@ export function BlendDetailHero({ model, countryName, regionName, year }: BlendD
           {countryName} · {regionName}
           {year ? ` · ${year}` : ""}
         </div>
-        <h1 className="mt-2 max-w-[900px] font-serif text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+        <h1 className="mt-2 max-w-[900px] text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
           {model.headline}
         </h1>
-        <p className="mt-3 max-w-[700px] font-serif text-lg leading-relaxed text-muted">
-          {model.standfirst}
-        </p>
+        <p className="mt-3 max-w-[700px] text-lg leading-relaxed text-muted">{model.standfirst}</p>
 
         {model.facts.length > 0 && (
           <div className="mt-5 flex flex-wrap gap-7 border-t border-card-border pt-4">
@@ -54,7 +52,7 @@ export function BlendDetailHero({ model, countryName, regionName, year }: BlendD
                   {f.key}
                 </div>
                 <div
-                  className="mt-0.5 font-serif text-2xl font-bold tabular-nums"
+                  className="mt-0.5 text-2xl font-bold tabular-nums"
                   style={f.color ? { color: f.color } : undefined}
                 >
                   {f.value}
@@ -84,7 +82,7 @@ export function BlendClock({ rows }: { rows: BlendClockRow[] }) {
             {r.label}
           </span>
           <span
-            className="font-serif text-[17px] font-bold tabular-nums"
+            className="text-[17px] font-bold tabular-nums"
             style={r.color ? { color: r.color } : undefined}
           >
             {r.value}

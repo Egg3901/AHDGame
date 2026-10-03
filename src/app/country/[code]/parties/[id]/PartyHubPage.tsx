@@ -855,7 +855,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       }
       headerExtra={
         party.majorDemotionWarning ? (
-          <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-body-xs text-warning">
+          <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-body-sm text-warning">
             <span className="font-semibold">Major Party status at risk.</span> Org has fallen below
             10% in two-thirds of regions. Regain 20% Org in at least a third of regions within{" "}
             <span className="font-semibold tabular-nums">
@@ -1132,9 +1132,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       {activeTab === "actions" && (
         <div className="space-y-6">
           <div className="rounded-xl border border-card-border bg-card p-6">
-            <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">
-              Party Resources
-            </h2>
+            <h2 className="text-sm font-semibold text-muted mb-4">Party resources</h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted">Treasury</span>

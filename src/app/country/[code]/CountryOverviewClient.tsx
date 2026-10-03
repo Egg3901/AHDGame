@@ -593,7 +593,7 @@ export default function CountryOverviewClient({
             Phase 9 will polish placement / styling alongside the full
             sovereign-default UI surface. */}
         <div>
-          <SectionLabel className="mb-4">Sovereign Debt</SectionLabel>
+          <SectionLabel className="mb-4">Sovereign debt</SectionLabel>
           <div className="space-y-3">
             <SovereignCrisisDecisionPanel countryCode={countryId} />
             <SovereignRecoveryProgressPanel countryCode={countryId} />

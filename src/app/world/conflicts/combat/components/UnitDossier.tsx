@@ -89,7 +89,7 @@ export function UnitDossier({
           <h2
             style={{
               margin: 0,
-              fontFamily: MIL_FONT.serif,
+              fontFamily: MIL_FONT.heading,
               fontSize: 22,
               fontWeight: 700,
               color: MIL_COLOR.textStrong,
@@ -130,7 +130,7 @@ export function UnitDossier({
               </div>
               <div
                 style={{
-                  fontFamily: MIL_FONT.serif,
+                  fontFamily: MIL_FONT.heading,
                   fontSize: 18,
                   fontWeight: 700,
                   marginTop: 2,
@@ -307,7 +307,7 @@ export function UnitDossier({
             >
               <div
                 style={{
-                  fontFamily: MIL_FONT.serif,
+                  fontFamily: MIL_FONT.heading,
                   fontSize: 13,
                   fontWeight: 600,
                   color: MIL_COLOR.text,

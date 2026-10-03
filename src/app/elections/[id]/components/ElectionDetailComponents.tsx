@@ -219,7 +219,6 @@ export function PartySection({
   return (
     <Card
       title={header}
-      accentColor={group.partyColor}
       padding="none"
       action={
         isGuaranteedAdvance ? (
@@ -339,7 +338,7 @@ export function PartySection({
       {/* Primary trend graph */}
       {!isPresident && group.hasCompetitivePrimary && inPrimary && snapshots.length >= 2 && (
         <div className="px-4 sm:px-5 pb-4 pt-1 border-t border-card-border">
-          <CardSubLabel>Primary Trend</CardSubLabel>
+          <CardSubLabel>Primary trend</CardSubLabel>
           <PrimaryLineGraph
             snapshots={snapshots}
             partyId={group.partyId}

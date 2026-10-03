@@ -423,15 +423,13 @@ export function InflationAdminPanel() {
                       <td colSpan={11} className="bg-card-elevated px-4 py-3">
                         <div className="grid gap-4 lg:grid-cols-2">
                           <div>
-                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                              Driver Breakdown (pp)
+                            <h3 className="mb-2 text-sm font-semibold text-muted">
+                              Driver breakdown (pp)
                             </h3>
                             <BreakdownBars breakdown={row.breakdown} />
                           </div>
                           <div>
-                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                              Inputs
-                            </h3>
+                            <h3 className="mb-2 text-sm font-semibold text-muted">Inputs</h3>
                             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs">
                               <dt className="text-muted">Unemployment</dt>
                               <dd className="text-right">{fmtPct(row.inputs.unemployment)}</dd>

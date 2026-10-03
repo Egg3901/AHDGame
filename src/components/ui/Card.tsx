@@ -1,10 +1,13 @@
 "use client";
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
-// The standard panel frame. Before this existed every page hand-rolled
+// The standard frame for a bounded object the player acts on as a unit. Before
+// this existed every page hand-rolled
 // `rounded-xl border border-card-border bg-card p-4 sm:p-5`, which drifted
-// section by section. Use `<Card>` for any bordered content block, and pass
-// `title` when the block needs a heading rather than nesting your own.
+// section by section. Group ordinary content with a heading, spacing and a rule
+// instead of a card, and pass `title` when a card needs a heading rather than
+// nesting your own. A card has no colored edge: show a party or phase color as
+// a small swatch beside the name it belongs to.
 
 import React from "react";
 
@@ -25,8 +28,6 @@ export interface CardProps {
   action?: React.ReactNode;
   /** Body padding. Use "none" when the child manages its own spacing. */
   padding?: CardPadding;
-  /** Accent stripe down the left edge — party colours, phase colours. */
-  accentColor?: string;
   /** Dashed border + centred text, for "nothing here yet" blocks. */
   variant?: "solid" | "dashed";
   className?: string;
@@ -37,16 +38,14 @@ export function Card({
   title,
   action,
   padding = "md",
-  accentColor,
   variant = "solid",
   className = "",
 }: CardProps) {
   const border =
     variant === "dashed" ? "border border-dashed border-card-border" : "border border-card-border";
-  const accent = accentColor ? { borderLeftWidth: 3, borderLeftColor: accentColor } : undefined;
 
   return (
-    <div className={`rounded-xl ${border} bg-card overflow-hidden ${className}`} style={accent}>
+    <div className={`rounded-xl ${border} bg-card overflow-hidden ${className}`}>
       {title !== undefined && (
         <div className="flex items-center justify-between gap-3 border-b border-card-border px-4 py-2.5 sm:px-5 sm:py-3">
           <div className="min-w-0 text-sm font-semibold">{title}</div>
@@ -58,9 +57,7 @@ export function Card({
   );
 }
 
-/** Small uppercase label used above a chart or sub-block inside a Card. */
+/** Small sentence-case label above a chart or sub-block inside a Card. */
 export function CardSubLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted/70">{children}</div>
-  );
+  return <div className="mb-2 text-xs font-medium text-muted">{children}</div>;
 }

@@ -499,12 +499,9 @@
      fallback applies anywhere the wrapper isn't present. */
   --color-gov: var(--gov, #c9a24b);
   --color-gov-soft: var(--gov-soft, #e2c887);
-  /* One family for headings and body. font-serif and font-display are kept
-     only as aliases of the sans so existing markup renders in Geist. */
+  /* One family for headings and body, and mono for figures. */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-geist-sans);
-  --font-display: var(--font-geist-sans);
   /* Shadow utilities */
   --shadow-card: var(--shadow-sm);
   --shadow-panel: var(--shadow-md);
@@ -604,9 +601,7 @@ body {
 [data-theme="command-1953"] h1,
 [data-theme="command-1953"] h2,
 [data-theme="command-1953"] h3,
-[data-theme="command-1953"] h4,
-[data-theme="command-1953"] .font-serif,
-[data-theme="command-1953"] .font-display {
+[data-theme="command-1953"] h4 {
   font-family: var(--font-jetbrains-mono), var(--font-geist-mono), monospace;
   letter-spacing: 0.055em;
   text-transform: uppercase;
@@ -1290,68 +1285,23 @@ html[data-high-contrast="true"] :focus-visible {
   top: 0;
   bottom: 0;
   left: 0;
-  width: 40vw;
-  border-radius: 0 2px 2px 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--primary) 75%, var(--background)) 35%,
-    color-mix(in srgb, var(--primary) 75%, var(--background)) 65%,
-    transparent 100%
-  );
-  box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 45%, var(--background));
-  will-change: transform, opacity;
-}
-
-.ahd-nav-flair-shimmer-alt {
-  opacity: 0.5;
   width: 30vw;
-  animation-delay: -0.4s !important;
-}
-
-/* Idle: always-present left-bleed base layer. Overlays (indeterminate, fill) render on top.
-   Uses relative color syntax for true alpha — color-mix(…, transparent) is unreliable. */
-.ahd-nav-flair-idle {
-  background: linear-gradient(
-    90deg,
-    rgb(from var(--primary) r g b / 0.65) 0%,
-    rgb(from var(--primary) r g b / 0.28) 38%,
-    rgb(from var(--primary) r g b / 0) 65%
-  );
+  background: var(--primary);
+  will-change: transform;
 }
 
 .ahd-nav-flair-fill-layer {
-  background: color-mix(in srgb, var(--primary) 75%, var(--background));
+  background: var(--primary);
   will-change: transform, opacity;
   position: relative;
 }
 
-.ahd-nav-flair-fill-layer::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 60px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--primary) 75%, var(--background))
-  );
-  filter: blur(6px);
-}
-
 @keyframes ahd-nav-flair-shimmer-sweep {
   0% {
-    transform: translate3d(-120%, 0, 0) skewX(-12deg);
-    opacity: 0.6;
-  }
-  40% {
-    opacity: 1;
+    transform: translate3d(-100%, 0, 0);
   }
   100% {
-    transform: translate3d(calc(100vw + 40%), 0, 0) skewX(-6deg);
-    opacity: 0.8;
+    transform: translate3d(calc(100vw + 100%), 0, 0);
   }
 }
 

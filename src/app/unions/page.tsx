@@ -265,9 +265,7 @@ export default function UnionsPage() {
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            {selectedCountryName} Unions
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">{selectedCountryName} unions</h2>
           {availableCountries.length > 1 && (
             <select
               value={selectedCountry ?? "__all__"}

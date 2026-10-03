@@ -57,7 +57,7 @@ export function MetricDetailView({
             <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
               {category.displayName} · {data.countryDisplayName}
             </div>
-            <h2 className="mt-1.5 font-display text-heading-lg font-bold leading-tight text-foreground">
+            <h2 className="mt-1.5 text-heading-lg font-bold leading-tight text-foreground">
               {metric.displayName}
             </h2>
             <p className="mt-2 max-w-[60ch] text-body-sm leading-relaxed text-muted">
@@ -120,7 +120,7 @@ export function MetricDetailView({
               </div>
               <div className="flex flex-col gap-2">
                 {metric.pos.map((d) => (
-                  <div key={d} className="border-l-2 border-success pl-2.5">
+                  <div key={d}>
                     <div className="text-body-sm font-semibold text-foreground">{d}</div>
                     <div className="mt-0.5 text-body-xs text-muted">
                       Structural condition · ongoing
@@ -135,7 +135,7 @@ export function MetricDetailView({
               </div>
               <div className="flex flex-col gap-2">
                 {metric.neg.map((d) => (
-                  <div key={d} className="border-l-2 border-error pl-2.5">
+                  <div key={d}>
                     <div className="text-body-sm font-semibold text-foreground">{d}</div>
                     <div className="mt-0.5 text-body-xs text-muted">
                       Structural condition · ongoing
@@ -158,7 +158,7 @@ export function MetricDetailView({
               </div>
             ))}
           </div>
-          <div className="mt-3 border-t border-dashed border-card-border pt-2.5 text-body-xs leading-normal text-muted">
+          <div className="mt-3 border-t border-dashed border-card-border pt-2.5 text-body-sm leading-normal text-muted">
             The headline metric is permanent; its component indicators shift with the era. Indicator
             readings arrive with the registry&apos;s live series.
           </div>
@@ -202,7 +202,7 @@ export function MetricDetailView({
               </div>
             ))}
           </div>
-          <p className="mt-2.5 text-body-xs leading-normal text-muted">
+          <p className="mt-2.5 text-body-sm leading-normal text-muted">
             National statistical series feeding this judgment. Full series on the Economy page.
           </p>
         </div>

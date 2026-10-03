@@ -38,7 +38,7 @@ export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
           marginBottom: 12,
         }}
       >
-        <h3 style={{ margin: 0, fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
+        <h3 style={{ margin: 0, fontFamily: FONT.sans, fontSize: 17, fontWeight: 600 }}>
           Campaign Room
         </h3>
         <span
@@ -105,7 +105,7 @@ function CardShell({ title, children }: { title: string; children: React.ReactNo
 
 function Muted({ children }: { children: React.ReactNode }) {
   return (
-    <p style={{ margin: 0, fontFamily: FONT.serif, fontSize: 13.5, color: BLEND.muted }}>
+    <p style={{ margin: 0, fontFamily: FONT.sans, fontSize: 13.5, color: BLEND.muted }}>
       {children}
     </p>
   );
@@ -138,7 +138,7 @@ function Row({ label, value }: { label: string; value: string }) {
     >
       <span
         style={{
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 13.5,
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -185,7 +185,7 @@ export function PathToVictoryCard({ path }: { path: CampaignBriefing["path"] }) 
       <CardShell title="Path to victory: delegates">
         <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
           <span style={BIG}>{path.won.toLocaleString("en-US")}</span>
-          <span style={{ fontFamily: FONT.serif, fontSize: 13.5, color: BLEND.muted }}>
+          <span style={{ fontFamily: FONT.sans, fontSize: 13.5, color: BLEND.muted }}>
             of {path.needed.toLocaleString("en-US")} needed
           </span>
         </div>
@@ -193,7 +193,7 @@ export function PathToVictoryCard({ path }: { path: CampaignBriefing["path"] }) 
         <p
           style={{
             margin: "7px 0 0",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 13,
             color: path.remaining > 0 ? BLEND.muted : BLEND.positive,
           }}
@@ -218,7 +218,7 @@ export function PathToVictoryCard({ path }: { path: CampaignBriefing["path"] }) 
     <CardShell title="Path to victory: electoral votes">
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <span style={BIG}>{path.evHave.toLocaleString("en-US")}</span>
-        <span style={{ fontFamily: FONT.serif, fontSize: 13.5, color: BLEND.muted }}>
+        <span style={{ fontFamily: FONT.sans, fontSize: 13.5, color: BLEND.muted }}>
           of {path.evNeeded.toLocaleString("en-US")} to win
         </span>
       </div>
@@ -269,7 +269,7 @@ export function CoalitionWeaknessCard({ buckets }: { buckets: BriefingCoalitionB
           <p
             style={{
               margin: "0 0 8px",
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 12.5,
               color: BLEND.mutedDim,
             }}

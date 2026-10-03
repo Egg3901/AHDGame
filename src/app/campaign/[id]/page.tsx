@@ -234,9 +234,8 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           <div
             style={{
               padding: "14px 18px",
-              borderLeft: `2px solid ${BLEND.negative}`,
               background: "rgba(255,255,255,.02)",
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 15,
               color: BLEND.negative,
             }}
@@ -318,7 +317,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           style={{
             paddingTop: 12,
             paddingBottom: 12,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 14,
             color: BLEND.muted,
           }}

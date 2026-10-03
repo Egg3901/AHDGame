@@ -755,7 +755,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <Wordmark
                 typed={typedWordmark}
                 className={`whitespace-nowrap text-base font-bold tracking-tight text-foreground ${
-                  typedWordmark ? "font-mono" : "font-serif"
+                  typedWordmark ? "font-mono" : ""
                 }`}
               />
             </Link>
@@ -1047,7 +1047,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <Wordmark
                 typed={typedWordmark}
                 className={`whitespace-nowrap text-[15px] font-bold tracking-tight text-foreground ${
-                  typedWordmark ? "font-mono" : "font-serif"
+                  typedWordmark ? "font-mono" : ""
                 }`}
               />
             </Link>
@@ -1193,7 +1193,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                 <div className="flex h-14 shrink-0 items-center justify-between border-b border-card-border px-4">
                   <span
                     className={`text-base font-semibold text-foreground ${
-                      typedWordmark ? "font-mono" : "font-serif"
+                      typedWordmark ? "font-mono" : ""
                     }`}
                   >
                     {WORDMARK}

@@ -274,9 +274,7 @@ export function PoliticalCompass({
 
   return (
     <div className="flex flex-col items-center rounded-2xl border border-card-border bg-card p-6 shadow-sm">
-      <h3 className="mb-6 text-xs font-bold uppercase tracking-widest text-muted">
-        Political alignment
-      </h3>
+      <h3 className="mb-6 text-sm font-bold text-muted">Political alignment</h3>
       {plot}
     </div>
   );

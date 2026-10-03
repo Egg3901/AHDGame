@@ -419,7 +419,7 @@ export function NewsPost({
               <button
                 type="button"
                 onClick={() => setEditImageUrl(null)}
-                className="absolute right-2 top-2 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm hover:bg-black/80"
+                className="absolute right-2 top-2 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white hover:bg-black/80"
               >
                 Remove image
               </button>

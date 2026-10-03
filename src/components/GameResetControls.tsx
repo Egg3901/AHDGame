@@ -92,11 +92,11 @@ const RESET_CONFIG: Record<ResetType, ResetActionConfig> = {
   fullReset: {
     title: "Delete All Data",
     description:
-      "Deletes player accounts and all characters. Admin accounts are preserved. This is irreversible.",
+      "Deletes player accounts and all characters. Admin, moderator, and banned accounts are kept. This is irreversible.",
     endpoint: "/api/admin/reset?deleteProfiles=true",
     confirmText: "DELETE ALL",
     warningLines: [
-      "Deletes all non-admin user accounts. Admin accounts are preserved.",
+      "Deletes all player accounts. Admin, moderator, and banned accounts are kept, so bans survive.",
       "Deletes all characters permanently (including admin characters).",
       "Clears gameplay state, logs, and elections.",
     ],
@@ -715,7 +715,7 @@ export function GameResetControls() {
       <div className="rounded-xl border border-red-500/50 bg-red-500/10 p-5 sm:p-6">
         <p className="mb-2 text-sm font-semibold text-red-400">Extreme Danger</p>
         <ul className="mb-4 space-y-1 text-sm text-red-300/80">
-          <li>• Deletes all non-admin user accounts (admin accounts preserved)</li>
+          <li>• Deletes all player accounts (admin, moderator, and banned accounts kept)</li>
           <li>• Deletes all characters permanently (including admin characters)</li>
           <li>• Clears all game data, logs, and elections</li>
           <li>• Cannot be undone</li>

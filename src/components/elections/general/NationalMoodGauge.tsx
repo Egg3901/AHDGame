@@ -86,9 +86,7 @@ export function NationalMoodGauge({ data }: { data?: NationalMoodData | null }) 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("nationalMood.title")}
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">{t("nationalMood.title")}</h3>
         <span className="tabular-nums text-sm font-bold" style={{ color: barColor }}>
           {signed(data.sharePts)} {t("nationalMood.pts")}
         </span>

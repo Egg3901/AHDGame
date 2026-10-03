@@ -193,9 +193,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
       </div>
 
       <div className="mt-4">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Suspended MPs
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Suspended MPs</h3>
         {loading ? (
           <p className="mt-2 text-sm text-muted" aria-live="polite">
             Loading suspensions...

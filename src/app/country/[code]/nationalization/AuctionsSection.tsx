@@ -284,12 +284,12 @@ function AuctionRow({
             </span>{" "}
             available
             {ownEscrow > 0 ? ` (incl. ${money(ownEscrow)} already escrowed)` : ""}
-            {hasAmount && canAfford && ownEscrow > 0 ? ` — this bid adds ${money(wouldPay)}` : ""}
-            {hasAmount && !canAfford ? " — bid exceeds it" : ""}.
+            {hasAmount && canAfford && ownEscrow > 0 ? `; this bid adds ${money(wouldPay)}` : ""}
+            {hasAmount && !canAfford ? "; the bid exceeds it" : ""}.
           </p>
         </div>
       ) : (
-        <p className="mt-3 rounded-md border border-card-border bg-card px-3 py-2 text-body-xs text-muted">
+        <p className="mt-3 rounded-md border border-card-border bg-card px-3 py-2 text-body-sm text-muted">
           Only residents of {countryName} may bid on this auction.
         </p>
       )}

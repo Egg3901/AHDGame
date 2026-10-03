@@ -51,7 +51,7 @@ function DiscordMemberStat({ stats, loading }: { stats: DiscordStats | null; loa
   return (
     <div className="mt-5">
       <div className="flex items-end gap-2">
-        <p className="font-display text-display font-semibold leading-none tracking-tight text-foreground">
+        <p className="text-display font-semibold leading-none tracking-tight text-foreground">
           {formatCount(stats.memberCount)}
         </p>
         <span className="mb-1 text-body-sm font-medium text-muted">members</span>

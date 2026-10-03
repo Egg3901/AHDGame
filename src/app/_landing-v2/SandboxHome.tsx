@@ -18,8 +18,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { cdnStatic, CDN_WORLD_GEO_URL } from "@/lib/images/cdnUrls";
-import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
+import { CDN_WORLD_GEO_URL } from "@/lib/images/cdnUrls";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { Badge } from "@/components/ui";
 import { getEraConfig } from "@/components/landing/eraThemes";
@@ -34,6 +33,7 @@ import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorl
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
 import { BroadcastBackdrop, BroadcastHeadline, BroadcastTierKey } from "./BroadcastHero";
+import { EraExplainerLink } from "./EraExplainerLink";
 import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
 import type { GovernmentType } from "@/lib/constants/countries";
 import type { EraNation, EraTileKey } from "@/components/landing/eraThemes";
@@ -229,70 +229,27 @@ const defaultTileBodies = (t: TFunc): Record<EraTileKey, string> => ({
   centralBanks: t("landing.tiles.centralBanksBody"),
 });
 
-const TILE_IMAGES = {
-  stateMetrics: "state-metrics",
-  ballot: "ballot-box",
-  bills: "legislative-combat",
-  industrial: "industrial-empires",
-  markets: "global-markets",
-  newsroom: "newsroom",
-  centralBanks: "central-banks",
-  world: "world-1979",
-} as const;
-
 /**
- * Bento tile with a frosted CDN hover image behind the content.
+ * Landing feature tile: a link with a title, a short description and an enter label.
  */
 function BentoTile({
   title,
   body,
   href,
-  imageSlug,
   className,
   enterLabel,
 }: {
   title: string;
   body: string;
   href: string;
-  imageSlug: string;
   className?: string;
   enterLabel: string;
 }) {
-  // This art is decorative (aria-hidden) and only ever visible on hover/focus,
-  // so it is mounted on first hover instead of at page load. The six tile
-  // images total ~888KB — on a touch device, where hover never fires, that was
-  // the largest single block of bytes on the page and nothing was ever shown
-  // for it. Desktop still gets the effect; the fade-in covers decode time.
-  // Perf audit 2026-07-26.
-  const [showArt, setShowArt] = useState(false);
-
   return (
     <Link
       href={href}
-      onMouseEnter={() => setShowArt(true)}
-      onFocus={() => setShowArt(true)}
       className={`group relative flex flex-col overflow-hidden rounded-lg border border-card-border bg-card p-5 shadow-card transition-colors duration-150 hover:border-muted/40 ${className ?? ""}`}
     >
-      {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
-      {showArt ? (
-        <Image
-          src={cdnStatic("landing", imageSlug)}
-          alt=""
-          aria-hidden="true"
-          fill
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          loading="lazy"
-          unoptimized={bypassNextImageOptimization(cdnStatic("landing", imageSlug))}
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-          className="pointer-events-none object-cover opacity-0 blur-[3px] transition-opacity duration-300 group-hover:opacity-100"
-        />
-      ) : null}
-      <div
-        className="absolute inset-0 bg-background/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        aria-hidden="true"
-      />
       <div className="relative z-10">
         <h3 className="mb-2 text-heading-sm font-semibold text-foreground">{title}</h3>
         <p className="text-body leading-relaxed text-muted">{body}</p>
@@ -351,7 +308,6 @@ export function SandboxHome({
   // deploy needed.
   const countdown = useCrtCountdown();
   // Deferred hover art for the wide world tile — see BentoTile.
-  const [showWorldArt, setShowWorldArt] = useState(false);
   const l = links(isSignedIn);
 
   // Signal-field star scatter: a full-viewport layer independent of the
@@ -531,7 +487,7 @@ export function SandboxHome({
               </>
             ) : (
               <>
-                <h1 className="font-display text-display font-bold leading-tight tracking-tight text-foreground">
+                <h1 className="text-display font-bold leading-tight tracking-tight text-foreground">
                   {eraConfig.heroHeadline}
                 </h1>
                 <p className="mt-5 max-w-lg text-body-lg leading-relaxed text-muted">
@@ -539,6 +495,10 @@ export function SandboxHome({
                 </p>
               </>
             )}
+            <EraExplainerLink
+              explainer={eraConfig.explainer}
+              tone={broadcast ? "onDark" : "theme"}
+            />
             {/* Three actions, one shape each: create an account, come back to
                 one, or look around first. The app download lives in the drawer
                 below — it is not a way into the game. */}
@@ -610,7 +570,6 @@ export function SandboxHome({
               title={t("landing.tiles.stateMetrics")}
               body={tileBody("stateMetrics")}
               href={l.tiles.stateMetrics}
-              imageSlug={TILE_IMAGES.stateMetrics}
               className="lg:row-span-2"
               enterLabel={t("landing.enter")}
             />
@@ -618,66 +577,37 @@ export function SandboxHome({
               title={t("landing.tiles.ballot")}
               body={tileBody("ballot")}
               href={l.tiles.ballot}
-              imageSlug={TILE_IMAGES.ballot}
               enterLabel={t("landing.enter")}
             />
             <BentoTile
               title={t("landing.tiles.bills")}
               body={tileBody("bills")}
               href={l.tiles.bills}
-              imageSlug={TILE_IMAGES.bills}
               enterLabel={t("landing.enter")}
             />
             <BentoTile
               title={t("landing.tiles.industrial")}
               body={tileBody("industrial")}
               href={l.tiles.industrial}
-              imageSlug={TILE_IMAGES.industrial}
               enterLabel={t("landing.enter")}
             />
             <BentoTile
               title={t("landing.tiles.markets")}
               body={tileBody("markets")}
               href={l.tiles.markets}
-              imageSlug={TILE_IMAGES.markets}
               enterLabel={t("landing.enter")}
             />
             <BentoTile
               title={t("landing.tiles.newsroom")}
               body={tileBody("newsroom")}
               href={l.tiles.newsroom}
-              imageSlug={TILE_IMAGES.newsroom}
               enterLabel={t("landing.enter")}
             />
             {/* Wide world tile with inline tier chips */}
             <div
               id="world"
-              onMouseEnter={() => setShowWorldArt(true)}
-              onFocus={() => setShowWorldArt(true)}
               className="group relative overflow-hidden rounded-lg border border-card-border bg-card p-5 shadow-card sm:col-span-2 lg:col-span-2"
             >
-              {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
-              {/* Hover-only decorative art — deferred to first hover, same as
-                  BentoTile above. Perf audit 2026-07-26. */}
-              {showWorldArt ? (
-                <Image
-                  src={cdnStatic("landing", TILE_IMAGES.world)}
-                  alt=""
-                  aria-hidden="true"
-                  fill
-                  sizes="(max-width: 640px) 100vw, 66vw"
-                  loading="lazy"
-                  unoptimized={bypassNextImageOptimization(cdnStatic("landing", TILE_IMAGES.world))}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                  className="pointer-events-none object-cover opacity-0 blur-[3px] transition-opacity duration-300 group-hover:opacity-100"
-                />
-              ) : null}
-              <div
-                className="absolute inset-0 bg-background/55 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                aria-hidden="true"
-              />
               <div className="relative z-10">
                 <h3 className="mb-3 text-heading-sm font-semibold text-foreground">
                   {t("landing.worldInYear", { year: eraConfig.year })}
@@ -738,7 +668,6 @@ export function SandboxHome({
               title={t("landing.tiles.centralBanks")}
               body={tileBody("centralBanks")}
               href={l.tiles.centralBanks}
-              imageSlug={TILE_IMAGES.centralBanks}
               className="lg:col-start-4 lg:row-start-2"
               enterLabel={t("landing.enter")}
             />
@@ -794,7 +723,7 @@ export function SandboxHome({
         {/* Closing CTA */}
         <section className="border-t border-card-border">
           <div className="mx-auto max-w-7xl px-5 py-16 text-center sm:px-8 sm:py-24">
-            <h2 className="font-display text-heading-lg font-semibold tracking-tight text-foreground sm:text-display">
+            <h2 className="text-heading-lg font-semibold tracking-tight text-foreground sm:text-display">
               {eraConfig.closingHeadline}
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-body-lg text-muted">{eraConfig.closingDek}</p>
@@ -852,9 +781,7 @@ export function SandboxHome({
             >
               {footer.map((col) => (
                 <div key={col.headingKey}>
-                  <h3 className="mb-2 text-body-xs font-semibold uppercase tracking-widest text-muted/80">
-                    {col.heading}
-                  </h3>
+                  <h3 className="mb-2 text-sm font-semibold text-muted/80">{col.heading}</h3>
                   <ul className="space-y-1.5">
                     {col.links.map((link) => (
                       <li key={link.href}>

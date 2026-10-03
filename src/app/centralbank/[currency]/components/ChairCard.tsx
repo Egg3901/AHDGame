@@ -85,9 +85,7 @@ export function ChairCard({
   // the caretaker still rendered, so the nominee never saw the buttons.
   return (
     <div className="min-w-0 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-3 break-words text-xs font-semibold uppercase tracking-widest text-muted">
-        {chairTitle}
-      </h2>
+      <h2 className="mb-3 break-words text-sm font-semibold text-muted">{chairTitle}</h2>
 
       {chairSelectionPending ? (
         <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-center">

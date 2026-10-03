@@ -3,7 +3,6 @@
 import { useReducer } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Input } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { perTurnInterestOn } from "@/lib/banking/rules/loans";
@@ -12,7 +11,8 @@ import type { ConsolePayload, Party, ShowToast } from "../types";
 import { mergeState, partyHref } from "../lib/helpers";
 import { PartySearch } from "../components/PartySearch";
 import { StatCell } from "../components/StatCell";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton, TableScroll, Td, Th } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 /**
  * Both desks on this panel share one in-flight flag, and the lend form clears
@@ -154,13 +154,12 @@ export function InterbankPanel({
     }
   };
 
+  const inputClass =
+    "h-8 w-full rounded-md border border-card-border bg-background px-2 font-mono text-[13px] text-foreground focus:border-foreground focus:outline-none";
+
   return (
-    <section className="space-y-4">
-      <Eyebrow kind="ceoControl" />
-      <h3 className="text-base font-semibold text-foreground">
-        Interbank &amp; central bank credit
-      </h3>
-      <div className="rounded-xl border border-card-border bg-card grid grid-cols-2 divide-x divide-card-border max-w-xl">
+    <BankPanel kind="ceoControl" title="Interbank and central bank credit">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 py-1.5 sm:max-w-xl">
         <StatCell
           label="Interbank debt"
           value={formatBankMoney(interbankDebt, currency)}
@@ -170,20 +169,23 @@ export function InterbankPanel({
         <StatCell
           label="Central bank credit line"
           value={formatBankMoney(cbMarginDebt, currency)}
-          sub={`secured on your investments · room ${formatBankMoney(marginHeadroom, currency)}`}
+          sub={`secured on your investments, room ${formatBankMoney(marginHeadroom, currency)}`}
           tooltip={t("tooltips.marginDebt")}
         />
       </div>
 
-      {depositTaking && canMutate && (
-        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3 max-w-2xl">
-          <p className="text-sm text-muted">Lend non-reserved deposits to an investment bank.</p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-1 text-xs text-muted sm:col-span-3">
+      <div className="grid gap-x-8 gap-y-5 pt-2 lg:grid-cols-2">
+        {depositTaking && canMutate && (
+          <div className="min-w-0 space-y-2">
+            <h3 className="border-b border-card-border pb-1 text-xs font-medium text-foreground">
+              Lend interbank
+            </h3>
+            <p className="text-xs text-muted">Lend non-reserved deposits to an investment bank.</p>
+            <div className="space-y-1 text-xs text-muted">
               Borrowing bank
               {borrower ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-foreground">{borrower.name}</span>
+                  <span className="text-[13px] text-foreground">{borrower.name}</span>
                   <button
                     type="button"
                     onClick={() => updateInterbankState({ borrower: null })}
@@ -201,128 +203,125 @@ export function InterbankPanel({
                 />
               )}
             </div>
-            <label className="block space-y-1 text-xs text-muted">
-              Amount
-              <Input
-                value={amount}
-                onChange={(e) => updateInterbankState({ amount: e.target.value })}
-                inputMode="decimal"
-                aria-label="Interbank lend amount"
-              />
-            </label>
-            <label className="block space-y-1 text-xs text-muted">
-              Rate %
-              <Input
-                value={rate}
-                onChange={(e) => updateInterbankState({ rate: e.target.value })}
-                inputMode="decimal"
-                aria-label="Interbank lend rate"
-              />
-            </label>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex w-40 flex-col gap-1 text-xs text-muted">
+                Amount
+                <input
+                  value={amount}
+                  onChange={(e) => updateInterbankState({ amount: e.target.value })}
+                  inputMode="decimal"
+                  aria-label="Interbank lend amount"
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex w-24 flex-col gap-1 text-xs text-muted">
+                Rate %
+                <input
+                  value={rate}
+                  onChange={(e) => updateInterbankState({ rate: e.target.value })}
+                  inputMode="decimal"
+                  aria-label="Interbank lend rate"
+                  className={inputClass}
+                />
+              </label>
+              <SmallButton tone="primary" onClick={() => void lend()} disabled={busy || !validLend}>
+                {busy ? "Working..." : "Lend interbank"}
+              </SmallButton>
+            </div>
+            {validLend && lendIncomePerTurn != null && (
+              <p className="text-[11px] text-muted">
+                Lending {formatBankMoney(lendAmount, currency)} at {lendRate.toFixed(2)}% earns
+                about {formatBankMoney(lendIncomePerTurn, currency)} each turn, has no fixed
+                maturity (interest-only until the borrower repays), and moves{" "}
+                {formatBankMoney(lendAmount, currency)} of cash out of reserves. Missed interest
+                counts arrears turns and can default the loan after 8 turns (about 8 hours).
+              </p>
+            )}
           </div>
-          {validLend && lendIncomePerTurn != null && (
-            <p className="text-[11px] text-muted">
-              Lending {formatBankMoney(lendAmount, currency)} at {lendRate.toFixed(2)}% earns about{" "}
-              {formatBankMoney(lendIncomePerTurn, currency)} each turn, has no fixed maturity
-              (interest-only until the borrower repays), and moves{" "}
-              {formatBankMoney(lendAmount, currency)} of cash out of reserves. Missed interest
-              counts arrears turns and can default the loan after 8 turns (about 8 hours).
-            </p>
-          )}
-          <Button type="button" onClick={() => void lend()} disabled={busy || !validLend}>
-            {busy ? "Working..." : "Lend interbank"}
-          </Button>
-        </div>
-      )}
+        )}
 
-      {canMutate && (
-        <div className="rounded-xl border border-card-border bg-card p-4 space-y-3 max-w-xl">
-          <p className="text-sm text-muted">
-            Draw or repay the central bank credit line. It lends against your own investments as
-            collateral: up to half their current value ({formatBankMoney(marginCap, currency)} on
-            investments worth {formatBankMoney(Math.max(0, propBookMarkValue), currency)}), priced
-            above prime. Arrears here draw supervisory attention.
-          </p>
-          <label className="block space-y-1 text-xs text-muted max-w-xs">
-            Amount
-            <Input
-              value={marginAmount}
-              onChange={(e) => updateInterbankState({ marginAmount: e.target.value })}
-              inputMode="decimal"
-              aria-label="Central bank credit line amount"
-            />
-          </label>
-          {Number.isFinite(enteredMargin) && enteredMargin > 0 && (
-            <p className="text-[11px] text-muted">
-              {validMarginDraw
-                ? `Drawing ${formatBankMoney(enteredMargin, currency)} leaves ${formatBankMoney(marginHeadroom - enteredMargin, currency)} of collateral room, and adds about ${formatBankMoney(perTurnInterestOn(Math.max(0, cbMarginDebt) + enteredMargin, cbMarginRatePercent(prime)), currency)} next turn. Interest accrues every turn (about every hour) until repaid.`
-                : `That draw exceeds the ${formatBankMoney(marginHeadroom, currency)} of collateral room left.`}
+        {canMutate && (
+          <div className="min-w-0 space-y-2">
+            <h3 className="border-b border-card-border pb-1 text-xs font-medium text-foreground">
+              Central bank credit line
+            </h3>
+            <p className="text-xs text-muted">
+              It lends against your own investments as collateral: up to half their current value (
+              {formatBankMoney(marginCap, currency)} on investments worth{" "}
+              {formatBankMoney(Math.max(0, propBookMarkValue), currency)}), priced above prime.
+              Arrears here draw supervisory attention.
             </p>
-          )}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              onClick={() => void margin("draw")}
-              disabled={busy || !validMarginDraw}
-              title={validMarginDraw ? undefined : "Enter an amount within the collateral room"}
-            >
-              Draw
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void margin("repay")}
-              disabled={busy}
-            >
-              Repay
-            </Button>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex w-40 flex-col gap-1 text-xs text-muted">
+                Amount
+                <input
+                  value={marginAmount}
+                  onChange={(e) => updateInterbankState({ marginAmount: e.target.value })}
+                  inputMode="decimal"
+                  aria-label="Central bank credit line amount"
+                  className={inputClass}
+                />
+              </label>
+              <SmallButton
+                tone="primary"
+                onClick={() => void margin("draw")}
+                disabled={busy || !validMarginDraw}
+                title={validMarginDraw ? undefined : "Enter an amount within the collateral room"}
+              >
+                Draw
+              </SmallButton>
+              <SmallButton onClick={() => void margin("repay")} disabled={busy}>
+                Repay
+              </SmallButton>
+            </div>
+            {Number.isFinite(enteredMargin) && enteredMargin > 0 && (
+              <p className="text-[11px] text-muted">
+                {validMarginDraw
+                  ? `Drawing ${formatBankMoney(enteredMargin, currency)} leaves ${formatBankMoney(marginHeadroom - enteredMargin, currency)} of collateral room, and adds about ${formatBankMoney(perTurnInterestOn(Math.max(0, cbMarginDebt) + enteredMargin, cbMarginRatePercent(prime)), currency)} next turn. Interest accrues every turn (about every hour) until repaid.`
+                  : `That draw exceeds the ${formatBankMoney(marginHeadroom, currency)} of collateral room left.`}
+              </p>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {loans.length > 0 && (
-        <div className="overflow-x-auto overflow-hidden rounded-xl border border-card-border bg-card">
-          <table className="w-full text-sm min-w-[520px]">
-            <thead>
-              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-widest text-muted">
-                <th className="px-4 py-3 font-semibold">Role</th>
-                <th className="px-4 py-3 font-semibold">Counterparty</th>
-                <th className="px-4 py-3 font-semibold text-right">Outstanding</th>
-                <th className="px-4 py-3 font-semibold text-right">Rate</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-card-border">
-              {loans.map((loan) => (
-                <tr key={loan.id}>
-                  <td className="px-4 py-3">
-                    <Badge color="default" variant="subtle">
-                      {loan.role}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    {loan.counterparty ? (
-                      <Link
-                        href={partyHref("corporation", loan.counterparty)}
-                        className="text-primary hover:opacity-80"
-                      >
-                        {loan.counterparty.name}
-                      </Link>
-                    ) : (
-                      <span className="text-muted">Unknown bank</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {formatBankMoney(loan.outstanding, currency)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">
-                    {formatRatePercent(loan.ratePercent)}
-                  </td>
+        <div className="pt-3">
+          <TableScroll>
+            <table className="w-full min-w-[520px] border-collapse">
+              <thead>
+                <tr>
+                  <Th>Role</Th>
+                  <Th>Counterparty</Th>
+                  <Th align="right">Outstanding</Th>
+                  <Th align="right">Rate</Th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loans.map((loan) => (
+                  <tr key={loan.id}>
+                    <Td className="text-muted">{loan.role}</Td>
+                    <Td>
+                      {loan.counterparty ? (
+                        <Link
+                          href={partyHref("corporation", loan.counterparty)}
+                          className="text-foreground hover:underline"
+                        >
+                          {loan.counterparty.name}
+                        </Link>
+                      ) : (
+                        <span className="text-muted">Unknown bank</span>
+                      )}
+                    </Td>
+                    <Td align="right">{formatBankMoney(loan.outstanding, currency)}</Td>
+                    <Td align="right">{formatRatePercent(loan.ratePercent)}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         </div>
       )}
-    </section>
+    </BankPanel>
   );
 }

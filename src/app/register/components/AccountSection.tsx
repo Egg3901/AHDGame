@@ -115,9 +115,7 @@ export function AccountSection({
     <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-panel">
       <div className="relative border-b border-card-border px-5 py-5 sm:px-7 sm:py-6">
         <SectionLabel as="p">{t("sectionLabel")}</SectionLabel>
-        <h2 className="mt-1 font-display text-heading font-semibold text-foreground">
-          {t("heading")}
-        </h2>
+        <h2 className="mt-1 text-heading font-semibold text-foreground">{t("heading")}</h2>
         <p className="mt-1 text-body-sm text-muted">
           {bothBlocked ? t("subBothBlocked") : t("subDefault")}
         </p>

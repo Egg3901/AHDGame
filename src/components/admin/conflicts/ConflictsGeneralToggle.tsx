@@ -71,7 +71,7 @@ export function ConflictsGeneralToggle() {
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="font-serif text-lg text-foreground">Conflicts</h3>
+          <h3 className="text-lg text-foreground">Conflicts</h3>
           <p className="mt-0.5 max-w-xl text-sm text-muted">
             Enable the Conflicts subsystem. While enabled, the{" "}
             <span className="font-medium text-foreground">Conflicts</span> link appears in the World

@@ -24,7 +24,7 @@ import {
 import type { Side } from "./proxyWar";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 type Wire = { who: string; c: string; t: string };
 
@@ -258,7 +258,7 @@ export function CrisisBoard({ side }: { side: Side }) {
             <h1
               style={{
                 margin: 0,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 32,
                 lineHeight: 1.05,
@@ -295,7 +295,7 @@ export function CrisisBoard({ side }: { side: Side }) {
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -325,7 +325,7 @@ export function CrisisBoard({ side }: { side: Side }) {
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -355,7 +355,14 @@ export function CrisisBoard({ side }: { side: Side }) {
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={{ fontSize: 24 }}>{out.icon}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 21, color: out.color }}>
+                <div
+                  style={{
+                    fontFamily: headingFont,
+                    fontWeight: 700,
+                    fontSize: 21,
+                    color: out.color,
+                  }}
+                >
                   {out.title}
                 </div>
                 <div style={{ font: `500 11px ${mono}`, color: "#9595a4", marginTop: 3 }}>

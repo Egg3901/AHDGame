@@ -75,7 +75,7 @@ export default function LegislatureHeader({
           {/* Top: chamber switcher (US only) */}
           {chamberSwitcher && (
             <div
-              className="flex rounded-lg overflow-hidden w-fit border border-white/30 backdrop-blur-sm"
+              className="flex rounded-lg overflow-hidden w-fit border border-white/30 bg-black/60"
               role="tablist"
               aria-label="Chamber"
             >

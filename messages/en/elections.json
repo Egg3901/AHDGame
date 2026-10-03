@@ -173,7 +173,7 @@
       "fullElectionNight": "Full election night →"
     },
     "primaryCalendar": {
-      "title": "Primary Calendar",
+      "title": "Primary calendar",
       "subtitle": "Past contests show winner; future shows wave timing",
       "empty": "No primary calendar data yet. The wave schedule populates once the primary enters its stagger window.",
       "voted": "Voted",

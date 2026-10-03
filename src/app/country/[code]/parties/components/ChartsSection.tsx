@@ -114,7 +114,7 @@ export function ChartsSection({
               <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
                 {leadingParty?.regimeStatus === "ruling" ? "Ruling party" : "Largest party"}
               </p>
-              <p className="mt-2 truncate text-heading-lg font-extrabold">
+              <p className="mt-2 line-clamp-2 break-words text-heading-lg font-extrabold">
                 {leadingParty?.name ?? "No leader"}
               </p>
               <p className="mt-1 text-body-sm text-muted">
@@ -131,7 +131,7 @@ export function ChartsSection({
               <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
                 Strongest momentum
               </p>
-              <p className="mt-2 truncate text-heading font-extrabold">
+              <p className="mt-2 line-clamp-2 break-words text-heading font-extrabold">
                 {biggestMover?.party.name ?? "Awaiting history"}
               </p>
               <p

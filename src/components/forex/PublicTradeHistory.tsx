@@ -88,7 +88,7 @@ export function PublicTradeHistory() {
   return (
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-card-border">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Trade Feed</h2>
+        <h2 className="text-sm font-bold text-foreground">Trade feed</h2>
         <p className="text-xs text-muted mt-0.5">
           All trades in the last 48 turns — {trades.length} shown
         </p>

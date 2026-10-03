@@ -137,7 +137,7 @@ export function StateEditor({
         >
           ← Map
         </Link>
-        <h1 className="font-serif text-xl text-foreground">
+        <h1 className="text-xl text-foreground">
           {state} · {era}
         </h1>
         <span className={`text-xs ${ed.dirty ? "text-warning" : "text-success"}`}>

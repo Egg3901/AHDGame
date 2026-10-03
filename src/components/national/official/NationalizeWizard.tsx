@@ -102,9 +102,7 @@ export function NationalizeWizard({ official }: { official: NatOfficialActions }
 
   return (
     <div className="rounded-xl border border-gold/30 bg-gold/5 p-5">
-      <h3 className="text-body-sm font-semibold uppercase tracking-wide text-gold">
-        Nationalize an asset
-      </h3>
+      <h3 className="text-body-sm font-semibold text-gold">Nationalize an asset</h3>
       <p className="mt-1 text-body-xs text-muted">
         Executive power reaches failing or NPC firms HQ&apos;d here. Solvent private corporations
         require legislation.
@@ -171,7 +169,7 @@ export function NationalizeWizard({ official }: { official: NatOfficialActions }
       </div>
 
       {/* Tier effects legend — what each tier pays and its consequences. */}
-      <div className="mt-3 space-y-1.5 rounded-lg border border-card-border bg-card-muted/40 p-3 text-body-xs">
+      <div className="mt-3 space-y-1.5 rounded-lg border border-card-border bg-card-muted/40 p-3 text-body-sm">
         {(Object.keys(TIER_INFO) as ExecTier[]).map((t) => (
           <div key={t} className={`flex gap-2 ${t === tier ? "text-foreground" : "text-muted"}`}>
             <span className="w-20 shrink-0 font-semibold">{TIER_INFO[t].label}</span>

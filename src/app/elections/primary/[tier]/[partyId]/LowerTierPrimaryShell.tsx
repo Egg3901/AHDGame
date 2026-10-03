@@ -124,7 +124,7 @@ export function LowerTierPrimaryShell({
       <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="rounded-xl border border-card-border bg-card p-3">
           <div className="mb-2 flex items-center justify-between px-1">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">
+            <h2 className="text-sm font-semibold text-muted">
               {tier === "senate"
                 ? "Senate primaries"
                 : tier === "stateSenate"

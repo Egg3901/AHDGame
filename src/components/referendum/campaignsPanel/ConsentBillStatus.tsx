@@ -36,9 +36,7 @@ export function ConsentBillStatus({
 
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-muted">
-        Consent in Parliament
-      </h2>
+      <h2 className="mb-1 text-sm font-semibold text-muted">Consent in Parliament</h2>
       <p className="mb-4 text-xs text-muted">{explainer}</p>
       <ul className="space-y-2">
         {bills.map((b) => {

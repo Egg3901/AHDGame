@@ -176,7 +176,7 @@ export function NavairCommandClient({
       {/* What this force is achieving, before any of the detail. A list of objects with
           dropdowns does not tell a commander what problem they are solving; this does. */}
       <section className="rounded border border-neutral-800 p-4">
-        <h2 className="text-xs uppercase tracking-wide text-neutral-400">Where you stand</h2>
+        <h2 className="text-sm text-neutral-400">Where you stand</h2>
         <ul className="mt-2 space-y-1 text-sm text-neutral-200">
           <li>
             {summary.holding.length > 0 ? (
@@ -232,7 +232,7 @@ export function NavairCommandClient({
 
       {[...byStation.entries()].map(([stationName, group]) => (
         <section key={stationName}>
-          <h2 className="text-xs uppercase tracking-wide text-neutral-400">{stationName}</h2>
+          <h2 className="text-sm text-neutral-400">{stationName}</h2>
           <ul className="mt-2 space-y-3">
             {group.map((f) => {
               const options = f.domain === "naval" ? navalMissions : airMissions;

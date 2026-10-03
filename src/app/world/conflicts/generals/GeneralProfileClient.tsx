@@ -28,7 +28,7 @@ import { EMPTY_POSTING, type GeneralPosting } from "@/lib/military/generalPostin
 import { TraitTree } from "./components/TraitTree";
 
 const mono = MIL_FONT.mono;
-const serif = MIL_FONT.serif;
+const headingFont = MIL_FONT.heading;
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -139,7 +139,7 @@ export function GeneralProfileClient({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontSize: 18,
                 fontWeight: 700,
                 color: MIL_COLOR.gold,
@@ -150,7 +150,7 @@ export function GeneralProfileClient({
             <div>
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 22,
                   color: MIL_COLOR.textStrong,
@@ -240,7 +240,7 @@ export function GeneralProfileClient({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontSize: 18,
                 fontWeight: 700,
                 color: spec.accent,
@@ -251,7 +251,7 @@ export function GeneralProfileClient({
             <div>
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 22,
                   color: MIL_COLOR.textStrong,
@@ -311,7 +311,7 @@ export function GeneralProfileClient({
                 </div>
                 <div
                   style={{
-                    fontFamily: serif,
+                    fontFamily: headingFont,
                     fontSize: 15,
                     fontWeight: 700,
                     marginTop: 2,

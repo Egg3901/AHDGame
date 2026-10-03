@@ -78,9 +78,7 @@ function UnauthorizedContent() {
 
         {/* Common restricted areas */}
         <div className="mt-4 rounded-xl border border-card-border bg-card p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
-            Common Reasons
-          </h3>
+          <h3 className="text-sm font-semibold text-muted mb-3">Common reasons</h3>
           <ul className="space-y-2 text-xs text-muted">
             <li className="flex items-start gap-2">
               <span className="text-warning shrink-0">•</span>

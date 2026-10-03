@@ -194,7 +194,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
                 {statusTone.label}
               </span>
             </div>
-            <h1 className="mt-3 font-serif text-2xl sm:text-4xl font-semibold leading-tight tracking-tight">
+            <h1 className="mt-3 text-2xl sm:text-4xl font-semibold leading-tight tracking-tight">
               {fund.name}
             </h1>
             <p className="mt-2.5 text-[13px] text-muted">

@@ -27,9 +27,7 @@ function BalanceRail({
           <div className="font-mono text-body-xs uppercase tracking-[0.18em] text-muted">
             {description}
           </div>
-          <div className={`mt-1 font-display text-heading font-semibold ${accentClass}`}>
-            {axis.label}
-          </div>
+          <div className={`mt-1 text-heading font-semibold ${accentClass}`}>{axis.label}</div>
         </div>
         <div className="font-mono text-heading-lg font-semibold tabular-nums text-foreground">
           {Math.round(axis.value)}
@@ -149,7 +147,7 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
         </div>
       </div>
 
-      <p className="mt-3 text-body-xs leading-relaxed text-muted">
+      <p className="mt-3 text-body-sm leading-relaxed text-muted">
         Chamber margins: −{competition.seatMarginPenalty.toFixed(1)}. Legislative continuity: −
         {competition.legislativeContinuityPenalty.toFixed(1)}. Executive continuity: −
         {competition.executiveContinuityPenalty.toFixed(1)}. Court packing: −
@@ -190,7 +188,7 @@ export function GovernanceStyleCard({
             </div>
             <h2
               id="governance-style-heading"
-              className="mt-3 font-display text-heading-lg font-bold leading-tight text-foreground"
+              className="mt-3 text-heading-lg font-bold leading-tight text-foreground"
             >
               {flavor.headline}
             </h2>

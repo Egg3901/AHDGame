@@ -53,7 +53,7 @@ export function CarveUpPanel({
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
+        <h3 className="text-sm font-semibold text-muted">
           {t("carveUp.title", { state: stateName })}
         </h3>
         <div className="flex items-center gap-2 text-[10px]">

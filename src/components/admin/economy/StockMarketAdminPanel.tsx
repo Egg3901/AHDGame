@@ -209,7 +209,7 @@ export function StockMarketAdminPanel() {
           return (
             <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
               <div className="px-5 py-3 border-b border-card-border">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
+                <h3 className="text-sm font-semibold text-muted">
                   <span className="text-warning">&#9650;</span> Flagged Corporations
                 </h3>
               </div>
@@ -263,9 +263,7 @@ export function StockMarketAdminPanel() {
       ) : (
         <>
           <div className="flex items-center gap-2 px-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
-              All Listed Corporations
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">All listed corporations</h3>
           </div>
           <ResponsiveTable
             columns={COLUMNS}

@@ -190,7 +190,7 @@ function RateHistoryChart({
     <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-5 py-3 border-b border-card-border">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider">Rate History</h3>
+          <h3 className="text-sm font-semibold">Rate history</h3>
           <p className="text-xs text-muted">% deviation from base · compare multiple currencies</p>
         </div>
         <div className="flex items-center gap-2">
