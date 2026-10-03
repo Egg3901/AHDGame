@@ -30,7 +30,7 @@ export function RosterSubtab({
               key={id}
               type="button"
               onClick={() => setFilter(id)}
-              className={`rounded border px-2.5 py-1 text-[11px] transition-colors ${
+              className={`rounded border px-2.5 py-1 text-body-sm transition-colors ${
                 filter === id
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-card-border text-muted hover:text-foreground"
@@ -51,12 +51,12 @@ export function RosterSubtab({
             <li key={entry.membershipId} className="flex items-center justify-between gap-3 py-2">
               <div>
                 <div className="text-sm font-medium">{entry.name}</div>
-                <div className="text-[11px] text-muted">
+                <div className="text-body-sm text-muted">
                   {entry.memberType === "character" ? "Player" : "NPP"} | {entry.homeState}
                   {entry.role !== "member" && ` | ${toRoleLabel(entry.role)}`}
                 </div>
               </div>
-              <div className="text-right text-[11px]">
+              <div className="text-right text-body-sm">
                 {entry.complianceScore >= 0 ? (
                   <span>Compliance {entry.complianceScore}%</span>
                 ) : (

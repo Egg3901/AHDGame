@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { CoalitionLogo } from "@/components/CoalitionLogo";
 import { DiscordInviteButton } from "@/components/DiscordInviteButton";
+import {
+  PARTY_LABEL_CLASS,
+  PARTY_LINK_CLASS,
+  PARTY_SMALL_VALUE_CLASS,
+  PartySwatch,
+} from "@/components/party/partyPageStyles";
 import type { CoalitionListItem } from "../coalitionTypes";
 
 interface CoalitionCardProps {
@@ -19,76 +25,73 @@ export function CoalitionCard({ coalition, effectiveCountry }: CoalitionCardProp
   );
 
   return (
-    <article className="group overflow-hidden rounded-xl border border-card-border bg-card shadow-card transition hover:border-primary/40 hover:shadow-panel">
-      <div className="h-1.5" style={{ backgroundColor: coalition.color }} />
-      <div className="p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <Link href={href} className="flex min-w-0 flex-1 items-center gap-3">
-            <CoalitionLogo
-              coalitionId={coalition.id}
-              coalitionColor={coalition.color}
-              size="h-12 w-12"
-              className="shrink-0"
-              logoUrl={coalition.logoUrl}
-              countryId={coalition.countryId}
-            />
-            <div className="min-w-0">
-              <h3 className="line-clamp-2 break-words text-heading-sm font-bold transition-colors group-hover:text-primary">
+    <article className="card-hover rounded-xl border border-card-border bg-card p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <Link href={href} className="group flex min-w-0 flex-1 items-center gap-3">
+          <CoalitionLogo
+            coalitionId={coalition.id}
+            coalitionColor={coalition.color}
+            size="h-12 w-12"
+            className="shrink-0"
+            logoUrl={coalition.logoUrl}
+            countryId={coalition.countryId}
+          />
+          <div className="min-w-0">
+            <h3 className="flex items-baseline gap-2 text-heading-sm font-semibold text-foreground">
+              <PartySwatch color={coalition.color} className="self-center" />
+              <span className="line-clamp-2 break-words group-hover:underline group-hover:underline-offset-4">
                 {coalition.name}
-              </h3>
-              <span className="text-body-sm font-bold" style={{ color: coalition.color }}>
-                {coalition.abbreviation}
               </span>
-            </div>
-          </Link>
-          <DiscordInviteButton inviteUrl={coalition.discordInviteUrl} entityName={coalition.name} />
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <div className="rounded-lg bg-card-muted/60 p-3">
-            <p className="text-body-xs text-muted">Member parties</p>
-            <p className="mt-1 text-heading font-bold tabular-nums">{coalition.partyCount}</p>
-          </div>
-          <div className="rounded-lg bg-card-muted/60 p-3">
-            <p className="text-body-xs text-muted">Combined members</p>
-            <p className="mt-1 text-heading font-bold tabular-nums">
-              {coalition.totalMembers.toLocaleString("en-US")}
+            </h3>
+            <p className="mt-0.5 text-body-sm font-medium text-foreground">
+              {coalition.abbreviation}
             </p>
           </div>
-        </div>
+        </Link>
+        <DiscordInviteButton inviteUrl={coalition.discordInviteUrl} entityName={coalition.name} />
+      </div>
 
-        <div className="mt-4 flex min-w-0 items-center justify-between gap-3 text-body-sm">
-          <span className="text-muted">Chair</span>
-          <span
-            className={`truncate font-semibold ${coalition.chairName ? "" : "italic text-muted"}`}
+      <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+        <div className="min-w-0">
+          <dt className={PARTY_LABEL_CLASS}>Member parties</dt>
+          <dd className={PARTY_SMALL_VALUE_CLASS}>{coalition.partyCount}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className={PARTY_LABEL_CLASS}>Combined members</dt>
+          <dd className={PARTY_SMALL_VALUE_CLASS}>
+            {coalition.totalMembers.toLocaleString("en-US")}
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className={PARTY_LABEL_CLASS}>Chair</dt>
+          <dd
+            className={`truncate text-body-lg ${
+              coalition.chairName ? "font-semibold text-foreground" : "text-muted"
+            }`}
           >
             {coalition.chairName ?? "Vacant"}
-          </span>
+          </dd>
         </div>
+      </dl>
 
-        {visibleMemberParties.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-1.5 border-t border-card-border pt-4">
-            {visibleMemberParties.map((party) => (
-              <span
-                key={party.partyId}
-                className="rounded-full border border-card-border bg-card-muted px-2 py-1 text-body-xs font-bold"
-                title={party.name}
-              >
-                <span style={{ color: party.color }}>{party.abbreviation}</span>
-              </span>
-            ))}
-            {hiddenPartyCount > 0 && (
-              <span className="rounded-full border border-card-border px-2 py-1 text-body-xs text-muted">
-                +{hiddenPartyCount} more
-              </span>
-            )}
-          </div>
-        )}
+      {visibleMemberParties.length > 0 && (
+        <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 text-body-sm">
+          {visibleMemberParties.map((party) => (
+            <li
+              key={party.partyId}
+              className="inline-flex items-center gap-1.5 font-medium text-foreground"
+              title={party.name}
+            >
+              <PartySwatch color={party.color} />
+              {party.abbreviation}
+            </li>
+          ))}
+          {hiddenPartyCount > 0 && <li className="text-muted">+{hiddenPartyCount} more</li>}
+        </ul>
+      )}
 
-        <Link
-          href={href}
-          className="mt-4 flex items-center justify-between rounded-lg border border-card-border bg-card-muted/30 px-3 py-2 text-body-sm font-semibold transition-colors hover:border-primary/40 hover:text-primary"
-        >
+      <div className="mt-5 border-t border-card-border pt-4">
+        <Link href={href} className={`text-body ${PARTY_LINK_CLASS}`}>
           Open coalition briefing <span aria-hidden>→</span>
         </Link>
       </div>

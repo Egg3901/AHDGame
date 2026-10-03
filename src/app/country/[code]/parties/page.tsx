@@ -16,13 +16,12 @@ import { CoalitionsTab } from "./components/CoalitionsTab";
 import { CreateCoalitionModal } from "./components/CreateCoalitionModal";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
 
 /**
- * Parties list redesign plan:
- * Palette: semantic card/background/status tokens, with party colors reserved for data identity.
- * Type: display for the page title, heading levels for balance-of-power headlines, body for detail.
- * Layout: compact hero and tabs → power briefing → ranked, drillable party/coalition cards.
- * Signature: one segmented balance bar paired with largest-party and momentum callouts.
+ * Parties list: a header band with the title, totals and tabs, then the balance
+ * of power, the charts and the ranked roster as plain sections. Party color
+ * appears only in the balance bar, the charts and a swatch beside each name.
  */
 
 export default function PartiesPage() {
@@ -255,7 +254,7 @@ export default function PartiesPage() {
             )}
 
             {loading && !error && (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 lg:grid-cols-2">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-card-border bg-card p-5">
                     <Skeleton className="h-12 w-12 rounded-full mb-3" />
@@ -291,18 +290,13 @@ export default function PartiesPage() {
                 );
                 return (
                   <section aria-labelledby="party-roster-title">
-                    <div className="mb-3 flex items-end justify-between gap-4">
-                      <div>
-                        <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-                          Ranked by membership
-                        </p>
-                        <h2 id="party-roster-title" className="text-heading-lg font-extrabold">
-                          Party roster
-                        </h2>
-                      </div>
-                      <span className="font-mono text-body-sm text-muted">
-                        {parties.length} total
-                      </span>
+                    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <h2 id="party-roster-title" className={PARTY_SECTION_HEADING_CLASS}>
+                        Party roster
+                      </h2>
+                      <p className="text-body-sm text-muted">
+                        {parties.length} total, ranked by membership
+                      </p>
                     </div>
                     <div className="grid gap-4 lg:grid-cols-2">
                       {sorted.map((party, index) => (
@@ -327,7 +321,7 @@ export default function PartiesPage() {
                   description="This country has no registered political parties yet."
                   {...(isInSameCountry
                     ? {
-                        actionLabel: "Create Party",
+                        actionLabel: "Create party",
                         onAction: () => router.push("/charters/new"),
                       }
                     : {})}

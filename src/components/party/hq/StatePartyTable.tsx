@@ -54,7 +54,7 @@ export function StatePartyTable({
     <div className="overflow-x-auto rounded-xl border border-card-border">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-card-border text-left text-xs uppercase tracking-wide text-muted">
+          <tr className="border-b border-card-border text-left text-xs text-muted">
             <th className="w-8 px-2 py-2">
               <input
                 type="checkbox"
@@ -129,7 +129,7 @@ export function StatePartyTable({
                       <span className="font-semibold" style={{ color: toneColor(t.tone) }}>
                         {r.organization.toFixed(1)}%
                       </span>
-                      <span className="text-[10px] text-muted">{t.label}</span>
+                      <span className="text-body-sm text-muted">{t.label}</span>
                     </span>
                     <span className="block h-1 w-full overflow-hidden rounded-full bg-card-border/40">
                       <span

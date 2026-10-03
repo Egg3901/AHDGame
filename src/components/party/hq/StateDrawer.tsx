@@ -84,7 +84,7 @@ export function StateDrawer({
         {/* Org readout */}
         <div className="mb-4 rounded-lg border border-card-border bg-background/50 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-muted">Organization</span>
+            <span className="text-xs text-muted">Organization</span>
             <span className="text-xl font-bold" style={{ color: toneColor(t.tone) }}>
               {row.organization.toFixed(1)}%
             </span>
@@ -114,7 +114,7 @@ export function StateDrawer({
 
         {/* Leadership */}
         <div className="mb-4">
-          <div className="mb-1 text-xs uppercase tracking-wide text-muted">Leadership</div>
+          <div className="mb-1 text-xs text-muted">Leadership</div>
           {row.chairName ? (
             <div className="text-sm">{row.chairName} · State Chair</div>
           ) : (
@@ -133,9 +133,7 @@ export function StateDrawer({
         {/* Fund */}
         {canManage && (
           <div className="mb-4">
-            <div className="mb-1 text-xs uppercase tracking-wide text-muted">
-              Fund this state party
-            </div>
+            <div className="mb-1 text-xs text-muted">Fund this state party</div>
             <div className="flex gap-2">
               <input
                 type="number"
@@ -214,7 +212,7 @@ export function StateDrawer({
 function Mini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-card-border bg-background/50 p-2">
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm text-muted">{label}</div>
       <div className="text-sm font-semibold tabular-nums">{value}</div>
     </div>
   );

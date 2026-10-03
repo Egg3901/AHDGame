@@ -359,7 +359,7 @@ export default function CrisisActionCard() {
                             </div>
                             <div className="text-xs text-muted mt-0.5">{option.description}</div>
                             {availability?.eligible === false && (
-                              <ul className="mt-2 space-y-0.5 text-[10px] text-error">
+                              <ul className="mt-2 space-y-0.5 text-body-sm text-error">
                                 {availability.reasons.map((reason) => (
                                   <li key={reason}>{reason}</li>
                                 ))}
@@ -396,7 +396,7 @@ export default function CrisisActionCard() {
             )}
 
             {error?.crisisId === crisis._id.toString() && (
-              <p className="text-xs text-rose-600 mt-2">{error.message}</p>
+              <p className="text-body-sm text-error mt-2">{error.message}</p>
             )}
           </div>
         );

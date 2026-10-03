@@ -31,21 +31,15 @@ export default function CategoryFilter({
             role="tab"
             aria-selected={active}
             onClick={() => onCategoryChange(cat)}
-            className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium transition-all whitespace-nowrap ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-1.5 text-body font-medium transition-colors ${
               active
-                ? "border-primary/50 bg-primary/10 text-primary shadow-sm"
-                : "border-card-border bg-card text-muted hover:border-primary/30 hover:text-foreground hover:bg-card-elevated"
+                ? "border-foreground/40 bg-card-elevated text-foreground"
+                : "border-card-border bg-card text-muted hover:bg-card-elevated hover:text-foreground"
             }`}
           >
-            {cat === "all" ? "All Operations" : CATEGORY_LABELS[cat]}
+            {cat === "all" ? "All operations" : CATEGORY_LABELS[cat]}
             {count !== undefined && (
-              <span
-                className={`rounded-full px-1.5 text-[10px] font-bold tabular-nums ${
-                  active ? "bg-primary/20 text-primary" : "bg-card-elevated text-muted"
-                }`}
-              >
-                {count}
-              </span>
+              <span className="text-body-sm tabular-nums text-muted">{count}</span>
             )}
           </button>
         );

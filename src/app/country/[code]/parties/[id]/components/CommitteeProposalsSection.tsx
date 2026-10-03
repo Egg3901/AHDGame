@@ -50,7 +50,7 @@ export function CommitteeProposalsSection({
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Committee Proposals</h2>
+        <h2 className="text-lg font-semibold">Committee proposals</h2>
         {canPropose && (
           <CreateProposalForm
             country={country}

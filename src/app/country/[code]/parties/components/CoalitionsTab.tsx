@@ -3,6 +3,11 @@
 import { EmptyState, Skeleton } from "@/components/ui";
 import { CoalitionCard } from "./CoalitionCard";
 import type { CoalitionListItem } from "../coalitionTypes";
+import {
+  PARTY_LABEL_CLASS,
+  PARTY_SECTION_HEADING_CLASS,
+  PARTY_VALUE_CLASS,
+} from "@/components/party/partyPageStyles";
 
 interface CoalitionsTabProps {
   coalitions: CoalitionListItem[];
@@ -41,45 +46,43 @@ export function CoalitionsTab({ coalitions, loading, effectiveCountry }: Coaliti
   const largestCoalition = [...coalitions].sort((a, b) => b.totalMembers - a.totalMembers)[0];
 
   return (
-    <section aria-labelledby="coalition-roster-title">
-      <div className="mb-4 grid overflow-hidden rounded-xl border border-card-border bg-card shadow-card sm:grid-cols-3">
-        <div className="p-5 sm:col-span-2">
-          <p className="text-body-xs font-bold uppercase tracking-widest text-muted">
-            Alliance landscape
-          </p>
-          <h2 className="mt-1 text-heading-lg font-extrabold">Coalition blocs</h2>
-          <p className="mt-2 max-w-2xl text-body-sm text-muted">
-            Coalitions unite party organizations and membership under a shared national banner.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 border-t border-card-border bg-card-muted/40 sm:border-l sm:border-t-0">
-          <div className="p-4">
-            <p className="text-body-xs text-muted">Largest bloc</p>
-            <p className="mt-1 truncate text-heading font-bold">{largestCoalition.abbreviation}</p>
-          </div>
-          <div className="border-l border-card-border p-4">
-            <p className="text-body-xs text-muted">Members</p>
-            <p className="mt-1 text-heading font-bold tabular-nums">
-              {totalMembers.toLocaleString("en-US")}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="mb-3 flex items-end justify-between gap-4">
-        <h2 id="coalition-roster-title" className="text-heading font-bold">
-          Active coalitions
+    <div className="space-y-12">
+      <section aria-labelledby="coalition-blocs-title">
+        <h2 id="coalition-blocs-title" className={PARTY_SECTION_HEADING_CLASS}>
+          Coalition blocs
         </h2>
-        <span className="font-mono text-body-sm text-muted">{coalitions.length} total</span>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {coalitions.map((coalition) => (
-          <CoalitionCard
-            key={coalition.id}
-            coalition={coalition}
-            effectiveCountry={effectiveCountry}
-          />
-        ))}
-      </div>
-    </section>
+        <p className="mt-1 max-w-2xl text-body text-muted">
+          Coalitions unite party organizations and membership under a shared national banner.
+        </p>
+        <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3">
+          <div className="min-w-0">
+            <dt className={PARTY_LABEL_CLASS}>Largest bloc</dt>
+            <dd className={`truncate ${PARTY_VALUE_CLASS}`}>{largestCoalition.abbreviation}</dd>
+          </div>
+          <div>
+            <dt className={PARTY_LABEL_CLASS}>Members</dt>
+            <dd className={PARTY_VALUE_CLASS}>{totalMembers.toLocaleString("en-US")}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section aria-labelledby="coalition-roster-title">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="coalition-roster-title" className={PARTY_SECTION_HEADING_CLASS}>
+            Active coalitions
+          </h2>
+          <p className="text-body-sm text-muted">{coalitions.length} total</p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {coalitions.map((coalition) => (
+            <CoalitionCard
+              key={coalition.id}
+              coalition={coalition}
+              effectiveCountry={effectiveCountry}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }

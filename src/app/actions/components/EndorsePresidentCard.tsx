@@ -91,9 +91,9 @@ export default function EndorsePresidentCard() {
 
   if (endorsedName) {
     return (
-      <div className="rounded-xl border border-success/30 bg-card p-5 shadow-card">
-        <h3 className="text-base font-semibold text-foreground">Endorsement recorded</h3>
-        <p className="mt-1 text-sm text-muted">
+      <div className="rounded-xl border border-card-border bg-card p-5">
+        <h3 className="text-body-lg font-semibold text-foreground">Endorsement recorded</h3>
+        <p className="mt-1 text-body text-muted">
           You have endorsed <span className="font-semibold text-foreground">{endorsedName}</span>{" "}
           for president. You can switch or withdraw it from the race page at any time.
         </p>
@@ -104,10 +104,10 @@ export default function EndorsePresidentCard() {
   if (!prompt || dismissed) return null;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-primary/30 bg-card shadow-card">
+    <div className="overflow-hidden rounded-xl border border-card-border bg-card">
       <div className="relative px-5 pt-5 pb-1">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="text-base font-semibold text-foreground">
+          <h3 className="text-body-lg font-semibold text-foreground">
             Endorse a candidate for president
             {prompt.year != null ? ` (${prompt.year})` : ""}
           </h3>
@@ -115,50 +115,49 @@ export default function EndorsePresidentCard() {
             type="button"
             onClick={() => setDismissed(true)}
             aria-label="Dismiss"
-            className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-muted hover:text-foreground"
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-body-sm text-muted hover:text-foreground"
           >
             ✕
           </button>
         </div>
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-1 text-body-sm text-muted">
           {prompt.inPrimary
             ? "You have not backed anyone in this cycle. During the primary you can only endorse candidates from your own party. An endorsement raises your pick's support and feeds their campaign each turn."
             : "You have not backed anyone in this cycle. An endorsement raises your pick's support and feeds their campaign each turn. You can switch or withdraw it later."}
         </p>
       </div>
 
-      <div className="space-y-2 p-5 pt-3">
-        {prompt.candidates.map((c) => (
-          <div
-            key={c.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-card-border bg-background px-3 py-2.5"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: c.partyColor }}
-                aria-hidden
-              />
-              <span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
-              <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted">
-                {c.partyAbbr}
-                {c.isNPP ? " · NPP" : ""}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => endorse(c)}
-              disabled={pendingId !== null}
-              className="shrink-0 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pendingId === c.id ? "Endorsing…" : "Endorse"}
-            </button>
-          </div>
-        ))}
+      <div className="p-5 pt-3">
+        <ul className="divide-y divide-card-border border-y border-card-border">
+          {prompt.candidates.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                  style={{ backgroundColor: c.partyColor }}
+                  aria-hidden
+                />
+                <span className="truncate text-body font-semibold text-foreground">{c.name}</span>
+                <span className="shrink-0 text-body-sm text-muted">
+                  {c.partyAbbr}
+                  {c.isNPP ? " · NPP" : ""}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => endorse(c)}
+                disabled={pendingId !== null}
+                className="shrink-0 rounded-lg border border-card-border bg-card-elevated px-3 py-1.5 text-body-sm font-semibold text-foreground transition-colors hover:bg-card-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pendingId === c.id ? "Endorsing…" : "Endorse"}
+              </button>
+            </li>
+          ))}
+        </ul>
 
         <Link
           href={`/elections/${prompt.electionId}`}
-          className="block pt-1 text-xs font-medium text-primary hover:underline"
+          className="mt-3 inline-block text-body-sm font-medium text-foreground underline decoration-card-border underline-offset-4 hover:decoration-foreground"
         >
           View the full race →
         </Link>
