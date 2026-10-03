@@ -17,7 +17,7 @@ import { loyaltyLabel } from "@/lib/market/brandLoyalty";
 import { CorpEconomicModelBadge } from "@/components/economy/CorpEconomicModelBadge";
 import { LocalTime } from "@/components/time/LocalTime";
 import { fetchJson } from "@/lib/observability/fetchJson";
-import { corpIncomeBasis } from "./financials/financialsModel";
+import { corpIncomeBasis, netMarginPct } from "./financials/financialsModel";
 import { CAPACITY_UNIT_LABEL, formatUnits } from "./plantsPresentation";
 import {
   DenseSection,
@@ -375,9 +375,7 @@ export default function OverviewTab({
   }, [corporation._id, corporation.sequentialId]);
 
   const basis = financials ? corpIncomeBasis(financials) : null;
-  const revenue = financials?.totalRevenue ?? null;
-  const netMarginPct =
-    basis && revenue != null && revenue > 0 ? (basis.netIncome / revenue) * 100 : null;
+  const netMargin = financials ? netMarginPct(financials) : null;
   const stateCount = new Set(sectors.map((s) => s.stateId)).size;
   const floatPct =
     corporation.totalShares > 0 ? (corporation.publicFloat / corporation.totalShares) * 100 : null;

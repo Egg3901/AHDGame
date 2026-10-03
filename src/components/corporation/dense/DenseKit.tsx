@@ -172,6 +172,80 @@ export function Td({
   );
 }
 
+/**
+ * Financial statement table: line, amount, share of revenue, note. The amount
+ * and share columns are figures (Geist Mono); the note column hides on small
+ * screens and the share column on phones.
+ */
+export function StatementTable({ children }: { children: ReactNode }) {
+  return (
+    <table className="w-full border-collapse">
+      <thead className="sr-only">
+        <tr>
+          <th>Line</th>
+          <th>Amount</th>
+          <th>Share of revenue</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>{children}</tbody>
+    </table>
+  );
+}
+
+export function StatementLine({
+  label,
+  amount,
+  pct,
+  note,
+  strong,
+  indent,
+  amountClass = "text-foreground",
+  title,
+}: {
+  label: ReactNode;
+  amount: ReactNode;
+  pct?: string | null;
+  note?: ReactNode;
+  strong?: boolean;
+  indent?: boolean;
+  amountClass?: string;
+  title?: string;
+}) {
+  return (
+    <tr className={strong ? "font-semibold" : undefined} title={title}>
+      <td
+        className={`border-b border-card-border/60 py-1.5 pr-2 text-[13px] ${
+          indent ? "pl-4 text-muted" : "text-foreground"
+        }`}
+      >
+        {label}
+      </td>
+      <td
+        className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right font-mono text-[13px] tabular-nums ${amountClass}`}
+      >
+        {amount}
+      </td>
+      <td className="hidden whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right font-mono text-xs tabular-nums text-muted sm:table-cell">
+        {pct ?? ""}
+      </td>
+      <td className="hidden border-b border-card-border/60 py-1.5 pl-2 text-xs text-muted md:table-cell">
+        {note}
+      </td>
+    </tr>
+  );
+}
+
+export function StatementGroup({ children }: { children: ReactNode }) {
+  return (
+    <tr>
+      <td colSpan={4} className="pb-1 pt-3 text-xs font-medium text-muted">
+        {children}
+      </td>
+    </tr>
+  );
+}
+
 /** Scroll wrapper so a wide table never widens the page on a phone. */
 export function TableScroll({ children }: { children: ReactNode }) {
   return <div className="-mx-2 overflow-x-auto px-2">{children}</div>;
