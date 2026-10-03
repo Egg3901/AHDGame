@@ -101,7 +101,7 @@ export default function ActionExecuteRow({
     executingKey === execKey || executingKey === execKey5 || executingKey === execKey10;
 
   const btnBase = compact
-    ? "rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-sm"
+    ? "rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
     : "rounded-lg px-3 py-2 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed";
 
   const primary = compact
@@ -110,10 +110,10 @@ export default function ActionExecuteRow({
       : "bg-primary hover:bg-primary-dark text-white"
     : isBusy && executingKey === execKey
       ? "bg-muted cursor-wait text-white"
-      : "bg-primary hover:bg-primary-dark hover:shadow-primary/20 text-white shadow-md";
+      : "bg-primary hover:bg-primary-dark text-white shadow-md";
 
   const batchIdle = compact
-    ? "border border-white/15 bg-white/10 text-white hover:bg-white/20 hover:border-white/30"
+    ? "border border-white/15 bg-neutral-900 text-white hover:bg-neutral-800 hover:border-white/30"
     : "border border-card-border bg-card-elevated text-foreground hover:bg-primary/10 hover:border-primary/30";
 
   const pendingConfirm = confirmCount === 5 ? sim5 : confirmCount === 10 ? sim10 : null;

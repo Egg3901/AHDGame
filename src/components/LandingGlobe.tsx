@@ -1498,10 +1498,7 @@ export function LandingGlobe({
       {gameDate && !isBroadsheet && !bare && (
         <div className="flex items-center gap-2 border-b border-card-border px-4 py-2.5 bg-card/80">
           {!hideLiveIndicator && (
-            <span className="relative flex h-1.5 w-1.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
-            </span>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
           )}
           <span className="text-xs font-semibold tracking-wide text-foreground">{gameDate}</span>
           {!hideLiveIndicator && (

@@ -228,15 +228,6 @@ export function PoliticalCompass({
             }}
           >
             <div
-              className="absolute inset-0 animate-ping rounded-full motion-reduce:animate-none"
-              style={{
-                backgroundColor: dotColor
-                  ? `${dotColor}40`
-                  : "var(--color-primary, oklch(65% 0.3 290))",
-                opacity: dotColor ? 1 : undefined,
-              }}
-            />
-            <div
               className="relative h-full w-full rounded-full border-2 border-background shadow-[0_0_0_1px_rgba(0,0,0,0.25)]"
               style={{
                 backgroundColor: dotColor ?? "var(--color-primary)",

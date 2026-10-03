@@ -91,7 +91,7 @@ export default function EndorsePresidentCard() {
 
   if (endorsedName) {
     return (
-      <div className="rounded-xl border border-success/30 bg-card/50 p-5 shadow-card backdrop-blur-sm">
+      <div className="rounded-xl border border-success/30 bg-card p-5 shadow-card">
         <h3 className="text-base font-semibold text-foreground">Endorsement recorded</h3>
         <p className="mt-1 text-sm text-muted">
           You have endorsed <span className="font-semibold text-foreground">{endorsedName}</span>{" "}
@@ -104,9 +104,8 @@ export default function EndorsePresidentCard() {
   if (!prompt || dismissed) return null;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-primary/30 bg-card/50 shadow-card backdrop-blur-sm">
+    <div className="overflow-hidden rounded-xl border border-primary/30 bg-card shadow-card">
       <div className="relative px-5 pt-5 pb-1">
-        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary/60 via-secondary/30 to-transparent" />
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-base font-semibold text-foreground">
             Endorse a candidate for president

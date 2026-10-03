@@ -5,16 +5,14 @@ interface ResultsProgressBarProps {
   totalUnits: number;
   unitsCalled: number;
   unitLabel: string;
-  isLive: boolean;
 }
 
-/** "38 of 51 states reporting" with an animated fill and called/too-close split. */
+/** "38 of 51 states reporting" with the fill and called/too-close split. */
 export function ResultsProgressBar({
   unitsReporting,
   totalUnits,
   unitsCalled,
   unitLabel,
-  isLive,
 }: ResultsProgressBarProps) {
   const reportingPct = totalUnits > 0 ? (unitsReporting / totalUnits) * 100 : 0;
   const calledPct = totalUnits > 0 ? (unitsCalled / totalUnits) * 100 : 0;
@@ -38,9 +36,7 @@ export function ResultsProgressBar({
         />
         {/* Called fill on top */}
         <div
-          className={`absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-1000 ease-out ${
-            isLive ? "animate-pulse" : ""
-          }`}
+          className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-1000 ease-out"
           style={{ width: `${calledPct}%` }}
         />
       </div>

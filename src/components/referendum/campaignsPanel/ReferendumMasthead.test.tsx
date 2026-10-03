@@ -57,7 +57,7 @@ describe("ReferendumMasthead", () => {
     expect(br?.getAttribute("style")).toContain("/api/flags/country/UK");
   });
 
-  it("renders the kind-aware seal, watermark, and viewing-as slot", () => {
+  it("renders the kind-aware seal and viewing-as slot, with no watermark", () => {
     render(
       <ReferendumMasthead
         countryId="UK"
@@ -66,13 +66,14 @@ describe("ReferendumMasthead", () => {
         title="Northern Ireland"
         accent="yes"
         emblemSeal={{ line1: "NORTHERN IRELAND", line2: "BORDER POLL" }}
-        watermark="NIR"
         viewingAs={<button type="button">Viewing as PM</button>}
         tiles={[{ label: "Reunify", value: "49%" }]}
       />
     );
     expect(screen.getByText("BORDER POLL")).toBeTruthy();
-    expect(screen.getByText("NIR")).toBeTruthy();
+    // The registry line is the only place the region code appears.
+    expect(screen.getByText("UK · NIR")).toBeTruthy();
+    expect(screen.queryByText("NIR")).toBeNull();
     expect(screen.getByRole("button", { name: /Viewing as PM/i })).toBeTruthy();
   });
 });

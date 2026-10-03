@@ -207,7 +207,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
           ) : card.href ? (
             <Link
               href={card.href}
-              className="inline-flex items-center justify-center gap-1 w-full sm:w-auto rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20 hover:border-white/30 transition-all backdrop-blur-sm"
+              className="inline-flex items-center justify-center gap-1 w-full sm:w-auto rounded-md border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 hover:border-white/30 transition-all"
             >
               View
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,7 +225,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                 <button
                   onClick={() => onFlipflopStepChange("axis")}
                   disabled={blocked || !!executing}
-                  className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30 transition-all backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                  className="rounded-md border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                 >
                   Flip-Flop
                 </button>
@@ -239,7 +239,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                         onFlipflopAxisChange(ax);
                         onFlipflopStepChange("direction");
                       }}
-                      className="rounded-md border border-white/15 bg-white/10 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-white/20 hover:border-white/30 transition-all backdrop-blur-sm flex-1 sm:flex-none"
+                      className="rounded-md border border-white/15 bg-neutral-900 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-neutral-800 hover:border-white/30 transition-all flex-1 sm:flex-none"
                     >
                       {ax.slice(0, 4)}
                     </button>
@@ -263,10 +263,10 @@ const ActionCardCompact = memo(function ActionCardCompact({
                     <button
                       key={dir}
                       onClick={() => onFlipflopDirChange(dir)}
-                      className={`rounded-md border px-2 py-1.5 text-[10px] font-bold uppercase transition-all backdrop-blur-sm flex-1 sm:flex-none ${
+                      className={`rounded-md border px-2 py-1.5 text-[10px] font-bold uppercase transition-all flex-1 sm:flex-none ${
                         flipflopDir === dir
                           ? "bg-red-500/30 border-red-500 text-red-300"
-                          : "border-white/15 bg-white/10 hover:bg-white/20"
+                          : "border-white/15 bg-neutral-900 hover:bg-neutral-800"
                       }`}
                     >
                       {label}
@@ -296,7 +296,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                 <button
                   onClick={() => onConvertCashOpenChange(true)}
                   disabled={blocked || !!executing}
-                  className="rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                  className="rounded-md border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                 >
                   Donate
                 </button>
@@ -331,7 +331,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
                           value={convertCashAmount}
                           onChange={(e) => onConvertCashAmountChange(e.target.value)}
                           placeholder="Amt"
-                          className="w-full sm:w-24 rounded-md border border-white/15 bg-white/10 pl-5 pr-2 py-1.5 text-[10px] font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/50 backdrop-blur-sm"
+                          className="w-full sm:w-24 rounded-md border border-white/15 bg-neutral-900 pl-5 pr-2 py-1.5 text-[10px] font-medium text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/50"
                         />
                       </div>
                       {valid && (

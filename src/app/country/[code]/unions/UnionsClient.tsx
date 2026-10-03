@@ -266,7 +266,7 @@ export function UnionsClient() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
             All Unions in {countryName}
           </h2>
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+          <div className="h-px flex-1 bg-card-border" />
           {!notEnabled && !isBannedHere && (
             <button
               type="button"

@@ -102,7 +102,6 @@ export function Masthead({
           </span>
         </div>
       </div>
-      <div className="h-0.5 bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
     </header>
   );
 }

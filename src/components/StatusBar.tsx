@@ -345,8 +345,6 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
       role="complementary"
       aria-label="Character stats and turn timer"
     >
-      {/* Subtle top glow line */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
       <div
         className={`relative mx-auto flex max-w-7xl items-center px-3 py-2 sm:px-6 ${statusBarRowClassName(layout)}`}
       >

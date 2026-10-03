@@ -104,13 +104,13 @@ function isEasternBloc(governmentType: GovernmentType | undefined): boolean {
 }
 
 const PRIMARY_BUTTON_CLASSES =
-  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4.5 h-11 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/25 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4.5 h-11 text-sm font-semibold text-white transition-all duration-150 hover:bg-primary-dark active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 const SECONDARY_BUTTON_CLASSES =
-  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-card-border bg-card/80 px-4.5 h-11 text-sm font-medium text-foreground backdrop-blur-sm transition-all duration-150 hover:bg-card hover:border-muted/40 active:scale-[0.98]";
+  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg border border-card-border bg-card px-4.5 h-11 text-sm font-medium text-foreground transition-all duration-150 hover:border-muted/40 active:scale-[0.98]";
 
 const GHOST_BUTTON_CLASSES =
-  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4.5 h-11 text-sm font-medium text-muted backdrop-blur-sm transition-all duration-150 hover:text-foreground active:scale-[0.98]";
+  "pointer-events-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4.5 h-11 text-sm font-medium text-muted transition-all duration-150 hover:text-foreground active:scale-[0.98]";
 
 /** Public sideload mirror for the Android beta build;  */
 const ANDROID_BETA_APK_URL = "https://ops.lakesidegames.net/downloads/a-house-divided-0.3.1.apk";
@@ -244,7 +244,6 @@ const TILE_IMAGES = {
  * Bento tile with a frosted CDN hover image behind the content.
  */
 function BentoTile({
-  index,
   title,
   body,
   href,
@@ -252,7 +251,6 @@ function BentoTile({
   className,
   enterLabel,
 }: {
-  index: number;
   title: string;
   body: string;
   href: string;
@@ -273,7 +271,7 @@ function BentoTile({
       href={href}
       onMouseEnter={() => setShowArt(true)}
       onFocus={() => setShowArt(true)}
-      className={`group relative flex flex-col overflow-hidden rounded-lg border border-card-border bg-card p-5 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg ${className ?? ""}`}
+      className={`group relative flex flex-col overflow-hidden rounded-lg border border-card-border bg-card p-5 shadow-card transition-colors duration-150 hover:border-muted/40 ${className ?? ""}`}
     >
       {/* unoptimized: static Cloudflare CDN art — routing through the Railway image optimizer would add egress */}
       {showArt ? (
@@ -296,12 +294,7 @@ function BentoTile({
         aria-hidden="true"
       />
       <div className="relative z-10">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="font-mono text-body-xs text-primary">
-            {String(index).padStart(2, "0")}
-          </span>
-          <h3 className="text-heading-sm font-semibold text-foreground">{title}</h3>
-        </div>
+        <h3 className="mb-2 text-heading-sm font-semibold text-foreground">{title}</h3>
         <p className="text-body leading-relaxed text-muted">{body}</p>
         <span className="mt-3 inline-flex items-center gap-1 text-body-sm font-medium text-primary transition-transform group-hover:translate-x-0.5">
           {enterLabel}
@@ -582,7 +575,7 @@ export function SandboxHome({
           <span className="text-body-xs uppercase tracking-widest text-muted">
             {t("landing.scrollCue")}
           </span>
-          <span className="block h-5 w-[1px] animate-pulse bg-muted/60" />
+          <span className="block h-5 w-[1px] bg-muted/60" aria-hidden />
         </div>
 
         {/* The tier key sits just above the drawer's 12vh overlap, so it is
@@ -614,7 +607,6 @@ export function SandboxHome({
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <BentoTile
-              index={1}
               title={t("landing.tiles.stateMetrics")}
               body={tileBody("stateMetrics")}
               href={l.tiles.stateMetrics}
@@ -623,7 +615,6 @@ export function SandboxHome({
               enterLabel={t("landing.enter")}
             />
             <BentoTile
-              index={2}
               title={t("landing.tiles.ballot")}
               body={tileBody("ballot")}
               href={l.tiles.ballot}
@@ -631,7 +622,6 @@ export function SandboxHome({
               enterLabel={t("landing.enter")}
             />
             <BentoTile
-              index={3}
               title={t("landing.tiles.bills")}
               body={tileBody("bills")}
               href={l.tiles.bills}
@@ -639,7 +629,6 @@ export function SandboxHome({
               enterLabel={t("landing.enter")}
             />
             <BentoTile
-              index={4}
               title={t("landing.tiles.industrial")}
               body={tileBody("industrial")}
               href={l.tiles.industrial}
@@ -647,7 +636,6 @@ export function SandboxHome({
               enterLabel={t("landing.enter")}
             />
             <BentoTile
-              index={5}
               title={t("landing.tiles.markets")}
               body={tileBody("markets")}
               href={l.tiles.markets}
@@ -655,7 +643,6 @@ export function SandboxHome({
               enterLabel={t("landing.enter")}
             />
             <BentoTile
-              index={6}
               title={t("landing.tiles.newsroom")}
               body={tileBody("newsroom")}
               href={l.tiles.newsroom}
@@ -692,12 +679,9 @@ export function SandboxHome({
                 aria-hidden="true"
               />
               <div className="relative z-10">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="font-mono text-body-xs text-primary">07</span>
-                  <h3 className="text-heading-sm font-semibold text-foreground">
-                    {t("landing.worldInYear", { year: eraConfig.year })}
-                  </h3>
-                </div>
+                <h3 className="mb-3 text-heading-sm font-semibold text-foreground">
+                  {t("landing.worldInYear", { year: eraConfig.year })}
+                </h3>
                 <p className="mb-4 text-body leading-relaxed text-muted">
                   {resolveEraCopy(eraConfig.worldSectionDek, world)}
                 </p>
@@ -751,7 +735,6 @@ export function SandboxHome({
               </div>
             </div>
             <BentoTile
-              index={8}
               title={t("landing.tiles.centralBanks")}
               body={tileBody("centralBanks")}
               href={l.tiles.centralBanks}
@@ -791,7 +774,7 @@ export function SandboxHome({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="group flex flex-col rounded-lg border border-card-border bg-card p-5 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg"
+                  className="group flex flex-col rounded-lg border border-card-border bg-card p-5 shadow-card transition-colors duration-150 hover:border-muted/40"
                 >
                   <h3 className="mb-2 text-heading-sm font-semibold text-foreground">
                     {item.title}

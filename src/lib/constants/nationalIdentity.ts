@@ -33,7 +33,7 @@ import { BAL_IDENTITY } from "@/lib/countries/bal/identity";
  * National-identity layer for state-owned / National Corporation surfaces.
  *
  * Source of truth for the per-country visual identity used by the
- * `NationalSeal` / `AuthoritySeal` / `NationalMasthead` components (the
+ * `NationalSeal` / `NationalMasthead` components (the
  * "state enterprise" look that diverges from the private/market corp page).
  *
  * Design origin: the Country Identity Kit in the nationalization UI design
@@ -68,7 +68,7 @@ export interface NationalIdentity {
   motif: SealMotif;
   /** Display name of the country's National Corporation. */
   name: string;
-  /** Original-language name, shown as a serif subtitle. */
+  /** Original-language name, shown as a subtitle. */
   native: string;
   /** Registry eyebrow line above the corp name. */
   registry: string;

@@ -2,12 +2,10 @@ import type { ReactNode } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalIdentity } from "@/lib/constants/nationalIdentity";
 import { NationalSeal } from "./NationalSeal";
-import { AuthoritySeal, type NationalRole } from "./AuthoritySeal";
 import { hexToRgba } from "./identityColor";
 
 interface NationalMastheadProps {
   country: CountryId;
-  role?: NationalRole;
   /**
    * Optional stat strip rendered under the banner — pass `HeroStatsStrip`
    * children (public-instrument metrics), or omit for a bare masthead.
@@ -24,29 +22,24 @@ interface NationalMastheadProps {
   className?: string;
 }
 
-const SERIF_CJK = "'Noto Serif SC', 'Noto Serif JP', 'Songti SC', serif";
-const SERIF_MONO = "'Playfair Display', Georgia, 'Times New Roman', serif";
-
 /**
- * The State Masthead — the National Corporation hero banner. Deliberately NOT a
+ * The State Masthead: the National Corporation hero banner. Deliberately NOT a
  * market header: no share price, no market cap. Foregrounds the corp as an
- * instrument of the state (seal chop, registry eyebrow, role stamp).
+ * instrument of the state (seal chop, registry line, ownership pills).
  *
- * The banner gradient + accent are the country's fixed brand identity; the card
- * frame, rule, and any stat strip inherit `ahd-design-system` tokens so the
+ * The banner gradient and accent are the country's fixed brand identity; the
+ * card frame and any stat strip inherit `ahd-design-system` tokens so the
  * masthead stays theme-native. Pass `statStrip` to attach a `HeroStatsStrip`.
  */
 export function NationalMasthead({
   country,
-  role = "public",
   statStrip,
   children,
   divisionName,
   className = "",
 }: NationalMastheadProps) {
   const id = getNationalIdentity(country);
-  const serif = id.serif === "cjk" ? SERIF_CJK : SERIF_MONO;
-  const bannerBg = `radial-gradient(120% 140% at 0% 0%, ${hexToRgba(id.accent, 0.14)} 0%, transparent 42%), linear-gradient(135deg, ${id.palette[0]} 0%, ${id.palette[1]} 46%, ${id.palette[2]} 100%)`;
+  const bannerBg = `linear-gradient(135deg, ${id.palette[0]} 0%, ${id.palette[1]} 46%, ${id.palette[2]} 100%)`;
 
   return (
     <header
@@ -57,15 +50,6 @@ export function NationalMasthead({
         className="relative overflow-hidden px-5 pt-5 pb-4 sm:px-7 sm:pt-6"
         style={{ background: bannerBg }}
       >
-        {/* Faint watermark glyph */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-6 -top-10 select-none font-black leading-none"
-          style={{ fontSize: 240, fontFamily: serif, color: hexToRgba(id.accentSoft, 0.06) }}
-        >
-          {id.glyph}
-        </div>
-
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
           <NationalSeal country={country} size={76} />
 
@@ -81,7 +65,7 @@ export function NationalMasthead({
             </h1>
             <div
               className="mt-0.5 flex flex-wrap items-center gap-2 text-base"
-              style={{ fontFamily: serif, color: hexToRgba(id.accentSoft, 0.92) }}
+              style={{ color: hexToRgba(id.accentSoft, 0.92) }}
             >
               {id.native}
             </div>
@@ -109,32 +93,19 @@ export function NationalMasthead({
               >
                 Wholly state-owned
               </span>
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-black/30 px-2.5 py-0.5 text-xs font-medium text-white/80">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-black px-2.5 py-0.5 text-xs font-medium text-white/80">
                 HQ {id.hqCity}
               </span>
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/10 bg-black/25 px-2.5 py-0.5 text-xs font-medium text-white/60">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/10 bg-black px-2.5 py-0.5 text-xs font-medium text-white/60">
                 Not listed · No tradable equity
               </span>
               {children}
             </div>
           </div>
-
-          {/* Role stamp */}
-          <div className="hidden shrink-0 sm:block">
-            <AuthoritySeal country={country} role={role} size={86} />
-          </div>
         </div>
       </div>
 
-      {/* Accent rule (country brand line) */}
-      <div
-        className="h-0.5"
-        style={{
-          background: `linear-gradient(90deg, transparent, ${id.accent} 18%, ${id.accentSoft} 50%, ${id.accent} 82%, transparent)`,
-          opacity: 0.85,
-        }}
-      />
-
+      {statStrip && <div aria-hidden className="h-px bg-card-border" />}
       {statStrip}
     </header>
   );

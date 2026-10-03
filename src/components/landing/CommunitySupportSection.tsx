@@ -29,12 +29,7 @@ function PatreonGlyph({ className }: { className?: string }) {
 }
 
 function LiveDot() {
-  return (
-    <span className="relative flex h-2 w-2" aria-hidden="true">
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
-      <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-    </span>
-  );
+  return <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden="true" />;
 }
 
 function formatCount(value: number): string {
@@ -83,15 +78,15 @@ function ExternalCta({
 }) {
   const accentClasses =
     accent === "discord"
-      ? "bg-secondary text-white hover:bg-secondary-dark hover:shadow-secondary/25 focus-visible:ring-secondary"
-      : "bg-gold text-background hover:bg-gold-muted hover:shadow-gold/25 focus-visible:ring-gold";
+      ? "bg-secondary text-white hover:bg-secondary-dark focus-visible:ring-secondary"
+      : "bg-gold text-background hover:bg-gold-muted focus-visible:ring-gold";
 
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={`group mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4.5 h-11 text-sm font-semibold transition-all duration-150 hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto ${accentClasses}`}
+      className={`group mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4.5 h-11 text-sm font-semibold transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto ${accentClasses}`}
     >
       {children}
       <span className="transition-transform group-hover:translate-x-0.5" aria-hidden="true">
@@ -160,23 +155,12 @@ export function CommunitySupportSection({
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Discord */}
-          <article className="group relative overflow-hidden rounded-xl border border-card-border bg-card p-6 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-secondary/35 hover:shadow-lg sm:p-7">
-            <div
-              className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-secondary"
-              aria-hidden="true"
-            />
-            <div
-              className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-secondary/10 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
-              aria-hidden="true"
-            />
-
-            <div className="relative z-10">
+          <article className="rounded-xl border border-card-border bg-card p-6 shadow-card sm:p-7">
+            <div>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2.5">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-secondary/30 bg-secondary/10 text-secondary">
-                      <DiscordGlyph className="h-5 w-5" />
-                    </span>
+                    <DiscordGlyph className="h-5 w-5 shrink-0 text-foreground" />
                     <div>
                       <h3 className="text-heading-sm font-semibold text-foreground">Discord</h3>
                       <p className="text-body-xs text-muted">Official server</p>
@@ -199,21 +183,10 @@ export function CommunitySupportSection({
           </article>
 
           {/* Patreon */}
-          <article className="store-purchase-cta group relative overflow-hidden rounded-xl border border-card-border bg-card p-6 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-gold/35 hover:shadow-lg sm:p-7">
-            <div
-              className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-gold"
-              aria-hidden="true"
-            />
-            <div
-              className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gold/10 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
-              aria-hidden="true"
-            />
-
-            <div className="relative z-10">
+          <article className="store-purchase-cta rounded-xl border border-card-border bg-card p-6 shadow-card sm:p-7">
+            <div>
               <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 text-gold">
-                  <PatreonGlyph className="h-5 w-5" />
-                </span>
+                <PatreonGlyph className="h-5 w-5 shrink-0 text-foreground" />
                 <div>
                   <h3 className="text-heading-sm font-semibold text-foreground">Patreon</h3>
                   <p className="text-body-xs text-muted">Support the project</p>

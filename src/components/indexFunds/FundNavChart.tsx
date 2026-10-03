@@ -203,7 +203,7 @@ export function FundNavChart({ history }: { history: Point[] }) {
                 }}
               />
               <div
-                className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-glow-sm"
+                className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
                 style={{
                   left: `${points[hoverIdx].x}%`,
                   top: `${points[hoverIdx].y}%`,

@@ -55,12 +55,7 @@ export default function ForgotPasswordPageClient() {
           <span className="text-body-lg font-semibold tracking-tight">A House Divided</span>
         </Link>
 
-        <section className="relative overflow-hidden rounded-xl border border-card-border bg-card/90 p-5 shadow-panel backdrop-blur-sm sm:p-8">
-          <div
-            aria-hidden="true"
-            className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary via-primary/40 to-transparent"
-          />
-
+        <section className="relative overflow-hidden rounded-xl border border-card-border bg-card p-5 shadow-panel sm:p-8">
           <div className="mb-7 border-b border-card-border pb-6">
             <SectionLabel as="p">Account</SectionLabel>
             <h1 className="mt-1 font-display text-display font-semibold tracking-tight text-foreground">
@@ -106,12 +101,7 @@ export default function ForgotPasswordPageClient() {
                   onExpire={() => setTurnstileToken("")}
                 />
 
-                <Button
-                  type="submit"
-                  isLoading={isLoading}
-                  size="lg"
-                  className="w-full shadow-glow-sm transition-shadow hover:shadow-glow"
-                >
+                <Button type="submit" isLoading={isLoading} size="lg" className="w-full">
                   Send reset link
                 </Button>
               </form>

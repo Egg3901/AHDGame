@@ -39,7 +39,7 @@ export function Avatar({
 
   const core = (
     <div
-      className={`relative flex items-center justify-center overflow-hidden ${shape} bg-gradient-to-br from-primary/20 to-secondary/20 text-xs font-bold shrink-0 ${size} ${hasBorder ? "" : className}`}
+      className={`relative flex items-center justify-center overflow-hidden ${shape} bg-muted/20 text-xs font-bold shrink-0 ${size} ${hasBorder ? "" : className}`}
     >
       {url && failedUrl !== url ? (
         <Image

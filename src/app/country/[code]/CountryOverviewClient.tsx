@@ -372,8 +372,8 @@ export default function CountryOverviewClient({
   const counts = useOverviewCounts(countryId);
   const bannerImage = config.overviewHeroImage ?? config.heroImage;
 
-  // Registration pill over the hero photo (always-dark backdrop, so the dark
-  // translucent shell is photo-anchored, not theme-surface-anchored).
+  // Registration pill over the hero photo (always-dark backdrop, so the solid
+  // black shell is photo-anchored, not theme-surface-anchored).
   const pill =
     availability.displayState === "econ-only"
       ? { border: "border-secondary/40", text: "text-secondary", dot: "bg-secondary" }
@@ -427,14 +427,9 @@ export default function CountryOverviewClient({
                 {/* Registration pill — replaces the stats-strip Registration tile.
                     ml-auto keeps it right-aligned even when BackButton renders nothing. */}
                 <span
-                  className={`ml-auto inline-flex items-center gap-2 rounded-full border bg-black/45 px-3.5 py-1.5 backdrop-blur-sm ${pill.border}`}
+                  className={`ml-auto inline-flex items-center gap-2 rounded-full border bg-black px-3.5 py-1.5 ${pill.border}`}
                 >
-                  <span className={`relative flex h-1.5 w-1.5`}>
-                    <span
-                      className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${pill.dot}`}
-                    />
-                    <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${pill.dot}`} />
-                  </span>
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${pill.dot}`} aria-hidden />
                   <span className={`text-xs font-semibold ${pill.text}`}>{availability.label}</span>
                 </span>
               </div>

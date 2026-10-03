@@ -19,7 +19,7 @@ interface BadgeProps {
   color?: BadgeColor;
   variant?: BadgeVariant;
   dot?: boolean; // small colored dot prefix
-  live?: boolean; // pulsing dot (overrides dot)
+  live?: boolean; // live-state dot (overrides dot)
   className?: string;
 }
 
@@ -121,7 +121,8 @@ export function Badge({
 }
 
 // ─── LiveDot ──────────────────────────────────────────────────────────────────
-// Pulsing indicator for active/in-progress states.
+// Static indicator for active/in-progress states. No animation: the word next
+// to it carries the state.
 
 interface LiveDotProps {
   color?: BadgeColor;
@@ -129,13 +130,10 @@ interface LiveDotProps {
 
 export function LiveDot({ color = "primary" }: LiveDotProps) {
   return (
-    <span className="relative inline-flex h-[7px] w-[7px] shrink-0">
-      <span
-        className={`absolute inset-0 rounded-full animate-ping opacity-70 ${dotColorMap[color]}`}
-        style={{ animationDuration: "1.8s" }}
-      />
-      <span className={`relative rounded-full h-full w-full ${dotColorMap[color]}`} />
-    </span>
+    <span
+      className={`inline-flex h-[7px] w-[7px] shrink-0 rounded-full ${dotColorMap[color]}`}
+      aria-hidden
+    />
   );
 }
 
