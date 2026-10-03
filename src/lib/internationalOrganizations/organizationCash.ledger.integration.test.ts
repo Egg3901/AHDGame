@@ -5,6 +5,7 @@ import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { collectBalances } from "@/lib/ledger/balanceSnapshot";
 import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { getDb } from "@/lib/mongodb";
 import { resetLedgerShadowFlagCache } from "@/lib/ledger/featureFlag";
 import {
@@ -28,7 +29,7 @@ function fixture(row: (typeof cases)[number]) {
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "2019-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "2019-default" }]);
   memory.seed("exchangeRates", [
     { currencyCode: row.currency, rate: row.rate },
     ...(row.currency === "USD" ? [] : [{ currencyCode: "USD", rate: 1 }]),
@@ -166,14 +167,17 @@ it("uses the processing turn and one batch for a whole member cohort", async () 
   const { db } = fixture(cases[0]);
   const insert = vi.spyOn(db.collection("ledgerEntries"), "insertMany");
   const config = vi.spyOn(db.collection("gameConfig"), "findOne");
-  await chargeOrganizationDues(
-    db,
-    "UN",
-    [
-      { countryId: "US", gdpUsd: 48000000 },
-      { countryId: "US", gdpUsd: 48000000 },
-    ],
-    { turn: TURN + 1 }
+  // The dues phase runs inside the turn's ledger scope, as processTurn does.
+  await runWithLedgerTurn(TURN + 1, () =>
+    chargeOrganizationDues(
+      db,
+      "UN",
+      [
+        { countryId: "US", gdpUsd: 48000000 },
+        { countryId: "US", gdpUsd: 48000000 },
+      ],
+      { turn: TURN + 1 }
+    )
   );
   const entries = await db.collection<LedgerEntry>("ledgerEntries").find({}).toArray();
   expect(entries).toHaveLength(3);

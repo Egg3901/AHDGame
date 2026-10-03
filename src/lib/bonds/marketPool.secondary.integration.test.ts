@@ -1,5 +1,6 @@
 /** Secondary bond cash uses the actual pooled counterparty, including refunds. */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { randomUUID } from "node:crypto";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
@@ -381,9 +382,12 @@ describe.skipIf(!nativeEnabled)("pool phase command budget", () => {
     };
     client!.on("commandStarted", record);
     try {
-      await withBondPoolLedgerSnapshot(db, 2, () =>
-        Promise.all(
-          Array.from({ length: count }, () => creditBondPool(db, "USD", 100, "purchasesIn"))
+      // A phase runs inside processTurn's ledger scope, so no clock read either.
+      await runWithLedgerTurn(2, () =>
+        withBondPoolLedgerSnapshot(db, 2, () =>
+          Promise.all(
+            Array.from({ length: count }, () => creditBondPool(db, "USD", 100, "purchasesIn"))
+          )
         )
       );
     } finally {
