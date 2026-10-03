@@ -26,3 +26,9 @@ The retained control ran at `89b20b09716801d3d952d9a3698ffe08b2d23b0a`. The acco
 The retained turn-24 residual is 1,146.32 anchor across 40 NPC accounts. It remains visible and needs its own writer evidence; this repair does not claim it resolved. Trial balance remains green and the unattributed bucket is empty in all three replayed turns. Original cash snapshots are unchanged.
 
 This is a scoped accounting replay, not a replacement full-world simulation. The preregistered issue exit gate remains at least 20% fewer raw divergent accounts in every one of 12 consecutive matched full-engine turns, with green trial balance and attribution throughout. The separately running prior treatment does not contain this repair. Broader accounting and release gates remain open.
+
+## Development delivery qualification
+
+The original repair merged into a rehearsal candidate. Development delivery at clean runtime `372aa39cc0cf7c625a9ec1fc1b13ab45cb624be5` retains the production writer exactly and includes later merged cash repairs. All 51 focused investment and dividend cases pass. Fresh isolated native USD and GBP writer fixtures repeat the 1,800 and 1,000 subscriptions above, with three entries each, green trial balance and attribution, zero stock-flow divergence and no additional investment or entries on retry. The fixtures preserve their evidence and do not advance a world.
+
+Issue #992 is already closed on its separately verified full-engine comparison. This delivery does not count a second closure or a new #2159 check. The historical retained replay above remains scoped to its recorded source; broader global conservation and final-release qualification remain open. Full hosted CI must pass on the final delivery head.
