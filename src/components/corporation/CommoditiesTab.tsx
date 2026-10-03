@@ -212,13 +212,20 @@ export default function CommoditiesTab({
                           : ""}
                       </Td>
                       <Td align="right" className="text-foreground" title={pooled || undefined}>
-                        {c.market.stockUnits != null ? fmtUnits(c.market.stockUnits) : ""}
-                        {pooled && <span className="ml-1 text-[10px] text-warning">*</span>}
+                        {pooled ? (
+                          <span className="cursor-help underline decoration-muted decoration-dotted underline-offset-2">
+                            {c.market.stockUnits != null ? fmtUnits(c.market.stockUnits) : "pooled"}
+                          </span>
+                        ) : c.market.stockUnits != null ? (
+                          fmtUnits(c.market.stockUnits)
+                        ) : (
+                          ""
+                        )}
                       </Td>
                       <Td align="right" className="text-foreground">
                         {c.market.coverTurns != null ? `${c.market.coverTurns.toFixed(1)}t` : ""}
                       </Td>
-                      <Td numeric={false} className="whitespace-normal text-xs">
+                      <Td numeric={false} wrap className="text-xs">
                         <span className="flex flex-wrap gap-x-2.5 gap-y-0.5">
                           <Link
                             href={`/commodity/${c.commodity}`}
@@ -319,7 +326,7 @@ export default function CommoditiesTab({
                           <span className="ml-1.5 text-[11px] text-muted">{r.region}</span>
                         )}
                       </Td>
-                      <Td className="whitespace-normal text-xs">
+                      <Td wrap className="text-xs">
                         {made.map((row, i) => (
                           <span key={row.commodity} className="text-foreground">
                             {row.label}{" "}
@@ -330,7 +337,7 @@ export default function CommoditiesTab({
                           </span>
                         ))}
                       </Td>
-                      <Td className="whitespace-normal text-xs">
+                      <Td wrap className="text-xs">
                         {used.map((row, i) => (
                           <span key={row.commodity} className="text-foreground">
                             {row.label}{" "}

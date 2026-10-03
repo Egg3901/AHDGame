@@ -42,7 +42,7 @@ export const CAPACITY_UNIT_LABEL = "units/day";
  * shape the money formatter uses, so the two columns scan alike.
  */
 export function formatUnits(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
+  if (value == null || !Number.isFinite(value)) return "n/a";
   const abs = Math.abs(value);
   if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -51,9 +51,9 @@ export function formatUnits(value: number | null | undefined): string {
   return Math.round(value).toLocaleString("en-US");
 }
 
-/** Fill rate as a whole-percent string. "—" when there is no fill rate. */
+/** Fill rate as a whole-percent string. "n/a" when there is no fill rate. */
 export function formatFillPercent(fill: number | null | undefined): string {
-  if (fill == null || !Number.isFinite(fill)) return "—";
+  if (fill == null || !Number.isFinite(fill)) return "n/a";
   return `${Math.round(fill * 100)}%`;
 }
 

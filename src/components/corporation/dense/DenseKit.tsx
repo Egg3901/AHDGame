@@ -154,6 +154,7 @@ export function Td({
   title,
   colSpan,
   numeric = align === "right",
+  wrap = false,
 }: {
   children?: ReactNode;
   align?: "left" | "right" | "center";
@@ -165,6 +166,8 @@ export function Td({
    * are figures unless they hold controls or words; pass false for those.
    */
   numeric?: boolean;
+  /** Let a cell of words or links wrap; figures stay on one line. */
+  wrap?: boolean;
 }) {
   const alignClass =
     align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
@@ -172,7 +175,7 @@ export function Td({
     <td
       title={title}
       colSpan={colSpan}
-      className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-[13px] tabular-nums ${numeric ? "font-mono" : ""} ${alignClass} ${className}`}
+      className={`${wrap ? "" : "whitespace-nowrap"} border-b border-card-border/60 px-2 py-1.5 text-[13px] tabular-nums ${numeric ? "font-mono" : ""} ${alignClass} ${className}`}
     >
       {children}
     </td>
@@ -253,9 +256,13 @@ export function StatementGroup({ children }: { children: ReactNode }) {
   );
 }
 
-/** Scroll wrapper so a wide table never widens the page on a phone. */
+/**
+ * Scroll wrapper so a wide table never widens the page on a phone. Positioned,
+ * so absolutely placed content inside (screen-reader-only labels) is clipped
+ * with the table instead of stretching the document.
+ */
 export function TableScroll({ children }: { children: ReactNode }) {
-  return <div className="-mx-2 overflow-x-auto px-2">{children}</div>;
+  return <div className="relative -mx-2 overflow-x-auto px-2">{children}</div>;
 }
 
 export function SmallButton({
