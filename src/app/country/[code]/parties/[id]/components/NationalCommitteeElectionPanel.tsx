@@ -19,7 +19,6 @@ function formatCooldownLabel(ms: number): string {
 
 export function NationalCommitteeElectionPanel({
   election,
-  partyColor,
   partyId,
   country,
   canVote,
@@ -31,7 +30,8 @@ export function NationalCommitteeElectionPanel({
   onRefresh,
 }: {
   election: CommitteeElection | null;
-  partyColor: string;
+  /** No longer drawn: party color appears only as a swatch beside the name. */
+  partyColor?: string;
   partyId: string;
   country: string;
   canVote: boolean;
@@ -144,16 +144,10 @@ export function NationalCommitteeElectionPanel({
 
       <div className="group rounded-xl border border-card-border bg-card overflow-hidden shadow-sm transition-all hover:shadow-md hover:border-card-border/80">
         <div className="relative border-b border-card-border/50 bg-card-muted/30 px-5 py-4">
-          {/* Color accent strip */}
-          <div
-            className="absolute left-0 top-0 bottom-0 w-1"
-            style={{ backgroundColor: partyColor }}
-          />
-
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-bold text-base text-foreground">{committeeLabel} Election</h3>
+                <h3 className="font-bold text-base text-foreground">{committeeLabel} election</h3>
                 {isVoting && (
                   <span className="h-2 w-2 rounded-full bg-red-500" title="Voting in progress" />
                 )}
@@ -164,11 +158,9 @@ export function NationalCommitteeElectionPanel({
             <div className="shrink-0 text-right">
               {isVoting ? (
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] uppercase tracking-wider font-semibold text-muted/70">
-                    Time Remaining
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Time remaining</span>
                   <span
-                    className={`font-mono text-lg font-bold tabular-nums leading-none mt-1 ${
+                    className={`text-lg font-bold tabular-nums leading-none mt-1 ${
                       remaining <= 24
                         ? "text-red-400"
                         : remaining <= 48
@@ -208,8 +200,7 @@ export function NationalCommitteeElectionPanel({
                   onClick={() => handleEnter(false)}
                   disabled={loading || cooldownActive}
                   title={cooldownActive ? cooldownLabel : undefined}
-                  className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:opacity-90 hover:shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                  style={{ backgroundColor: partyColor }}
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading
                     ? "Processing..."
@@ -225,7 +216,7 @@ export function NationalCommitteeElectionPanel({
                   disabled={loading}
                   className="inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                 >
-                  {loading ? "Processing..." : "Withdraw Campaign"}
+                  {loading ? "Processing..." : "Withdraw campaign"}
                 </button>
               )}
             </div>
@@ -238,9 +229,9 @@ export function NationalCommitteeElectionPanel({
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-muted flex items-center gap-2">
                   Candidates
-                  <span className="rounded-full bg-card-elevated px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <span className="rounded-full bg-card-elevated px-1.5 py-0.5 text-body-sm text-muted-foreground">
                     {election.candidates.length}
                   </span>
                 </h4>
@@ -283,10 +274,7 @@ export function NationalCommitteeElectionPanel({
                               {c.characterName}
                             </span>
                             {c.isCurrentCommittee && (
-                              <span
-                                className="inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-sm"
-                                style={{ backgroundColor: `${partyColor}20`, color: partyColor }}
-                              >
+                              <span className="inline-flex shrink-0 items-center text-body-sm text-muted">
                                 Current
                               </span>
                             )}
@@ -294,13 +282,12 @@ export function NationalCommitteeElectionPanel({
 
                           <div className="flex flex-wrap gap-2">
                             {isTop6 && election.status === "voting" && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-500">
-                                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                              <span className="inline-flex items-center text-body-sm text-muted">
                                 Top 6
                               </span>
                             )}
                             {isSelected && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-body-sm font-medium text-primary">
                                 <svg
                                   className="h-3 w-3"
                                   fill="none"
@@ -325,7 +312,7 @@ export function NationalCommitteeElectionPanel({
                             <div className="text-lg font-bold tabular-nums leading-none">
                               {c.voteCount}
                             </div>
-                            <div className="text-[10px] text-muted text-right mt-0.5">votes</div>
+                            <div className="text-body-sm text-muted text-right mt-0.5">votes</div>
                           </div>
 
                           {isVoting && canVote && (
@@ -365,10 +352,9 @@ export function NationalCommitteeElectionPanel({
               <button
                 onClick={handleVote}
                 disabled={loading}
-                className="w-full rounded-lg px-4 py-3 text-sm font-bold text-white shadow-md hover:opacity-90 hover:shadow-lg disabled:opacity-50 disabled:shadow-none transition-all transform active:scale-[0.99]"
-                style={{ backgroundColor: partyColor }}
+                className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
               >
-                {loading ? "Submitting Votes..." : `Submit Votes (${selectedVotes.size} selected)`}
+                {loading ? "Submitting votes..." : `Submit votes (${selectedVotes.size} selected)`}
               </button>
               <p className="text-center text-xs text-muted mt-2">
                 You can update your votes at any time before the election ends.
@@ -376,7 +362,7 @@ export function NationalCommitteeElectionPanel({
             </div>
           )}
 
-          <div className="flex items-center justify-between text-[10px] font-medium text-muted pt-4 border-t border-card-border">
+          <div className="flex items-center justify-between text-body-sm font-medium text-muted pt-4 border-t border-card-border">
             <span>
               Total voters: <span className="text-foreground">{election.totalVoters}</span>
             </span>

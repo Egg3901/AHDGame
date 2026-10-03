@@ -203,14 +203,14 @@ export function ProposalCard({
 
       {/* Vote summaries */}
       <div className="space-y-2">
-        <div className="text-xs text-muted uppercase tracking-wider">
+        <div className="text-xs text-muted">
           {proposal.type === "merge" ? "Proposing committee" : "Committee vote"}
         </div>
         <VoteBar {...proposal.proposingVoteSummary} />
 
         {proposal.type === "merge" && proposal.targetVoteSummary && (
           <div className="pt-1">
-            <div className="text-xs text-muted uppercase tracking-wider mb-1">Target committee</div>
+            <div className="text-xs text-muted mb-1">Target committee</div>
             <VoteBar {...proposal.targetVoteSummary} />
           </div>
         )}

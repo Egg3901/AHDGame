@@ -16,7 +16,6 @@ import { TreasurySuppressionControl } from "./TreasurySuppressionControl";
 import { TreasuryTransferControls } from "./TreasuryTransferControls";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { parseMoneyAmountInput } from "@/lib/utils/parseMoneyAmountInput";
-import { contrastTextColor } from "@/lib/utils/colorContrast";
 import { TreasuryPlanningCard } from "@/components/party/TreasuryPlanningCard";
 import { formatTreasuryReserveInputValue } from "@/lib/currency/treasuryReserveDisplay";
 import {
@@ -591,11 +590,9 @@ export function TreasuryPanel({
                   d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Donate to National Party
-              </div>
+              <div className="text-xs font-semibold text-muted">Donate to national party</div>
             </div>
-            <p className="text-[11px] text-muted/60 mb-3">
+            <p className="text-body-sm text-muted mb-3">
               Contribute your personal funds to the national party treasury. Funds support GOTV,
               state transfers, and other party operations.
             </p>
@@ -610,8 +607,7 @@ export function TreasuryPanel({
               <button
                 onClick={handleDonate}
                 disabled={donateForm.donating}
-                className="rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-                style={{ backgroundColor: party.color, color: contrastTextColor(party.color) }}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
               >
                 {donateForm.donating ? "Donating…" : "Donate"}
               </button>
@@ -724,14 +720,8 @@ export function TreasuryPanel({
                     d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z"
                   />
                 </svg>
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  National Tax Rate
-                </div>
-                {!canManageTax && (
-                  <span className="text-[10px] uppercase tracking-wider text-muted/60">
-                    view-only
-                  </span>
-                )}
+                <div className="text-xs font-semibold text-muted">National tax rate</div>
+                {!canManageTax && <span className="text-body-sm text-muted/60">view-only</span>}
               </div>
               <div className="flex items-center gap-4">
                 <Slider
@@ -752,8 +742,7 @@ export function TreasuryPanel({
                   <button
                     onClick={handleSaveTax}
                     disabled={taxForm.saving}
-                    className="rounded-lg px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-                    style={{ backgroundColor: party.color, color: contrastTextColor(party.color) }}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
                   >
                     {taxForm.saving ? "Saving…" : "Save"}
                   </button>
@@ -782,9 +771,7 @@ export function TreasuryPanel({
           {canManageBudgets && totalBudgetPct > 0 && (
             <div className="px-6 py-3 border-b border-card-border/40 bg-background/20">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Total Budget Allocation
-                </span>
+                <span className="text-xs font-semibold text-muted">Total budget allocation</span>
                 <span
                   className={`text-sm font-bold tabular-nums ${totalBudgetPct > 50 ? "text-error" : totalBudgetPct > 25 ? "text-warning" : "text-foreground"}`}
                 >
