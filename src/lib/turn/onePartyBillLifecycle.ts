@@ -50,6 +50,11 @@ import { getCountryState } from "@/lib/countryState";
 import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { runBillLifecycle } from "@/lib/turn/billLifecycle/engine";
 import { buildOnePartyBillConfig } from "@/lib/turn/billLifecycle/configs/oneParty";
+import {
+  BG_1991_PROPOSALS_COLLECTION,
+  type Bg1991ConstitutionalProposal,
+} from "@/lib/countries/bg/constitutionalProposals1991";
+import { passesBgConstitution1991 } from "@/lib/countries/bg/rules/constitutionalDecision1991";
 import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
 import type { CountryGameState } from "@/lib/db/types/gameState";
 import {
@@ -130,6 +135,29 @@ export async function processOnePartyBillLifecycleForCountry(
             );
           };
         }
+      }
+      if (countryId === "BG") {
+        const proposal = await db
+          .collection<Bg1991ConstitutionalProposal>(BG_1991_PROPOSALS_COLLECTION)
+          .findOne(
+            { _id: "1991-default:bg-constitutional:constitution1991", status: "open" },
+            { projection: { billId: 1, revision: 1, capacity: 1 } }
+          );
+        for (const stage of lifecycle.stages)
+          if (stage.kind === "chamberVote")
+            stage.passCheck = (bill, totals) => {
+              const mandate = bill.bulgarianConstitutionalMandate;
+              if (!mandate) return undefined;
+              return Boolean(
+                proposal &&
+                proposal.capacity === 400 &&
+                proposal.billId.equals(bill._id) &&
+                mandate.proposalId === proposal._id &&
+                mandate.revision === proposal.revision &&
+                mandate.kind === "constitution1991" &&
+                passesBgConstitution1991(totals, proposal.capacity)
+              );
+            };
       }
       if (countryId === "RO") {
         const proposal = await db

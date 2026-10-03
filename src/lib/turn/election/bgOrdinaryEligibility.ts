@@ -12,6 +12,10 @@ import type {
   ElectionVoteTally,
   NPP,
 } from "@/lib/db/types";
+import {
+  BG_ORDINARY_ASSEMBLY_SEATS,
+  BG_LEGACY_ORDINARY_ASSEMBLY_SEATS,
+} from "@/lib/countries/bg/rules/assemblyTransition";
 import { bgNationwideEligibleParties } from "@/lib/countries/bg/rules/ordinaryElection";
 
 /** Read the full 1991 slate once before any regional race is seated. */
@@ -88,12 +92,20 @@ export async function readBgOrdinaryElectionPlan(
     .collection<Election>("elections")
     .find(
       { countryId: "BG", electionType: "nationalAssembly", cycle },
-      { projection: { state: 1, status: 1 } }
+      { projection: { state: 1, status: 1, totalSeats: 1 } }
     )
     .toArray();
   if (
     elections.length !== 5 ||
     elections.some((row) => !["completed", "resolved"].includes(row.status))
+  )
+    return null;
+  // A rejected constitution retains400-seat campaigns. Only an actual frozen
+  // ordinary cohort enters the native240-seat count, including old recorded polls.
+  if (
+    ![BG_ORDINARY_ASSEMBLY_SEATS, BG_LEGACY_ORDINARY_ASSEMBLY_SEATS].some((capacities) =>
+      elections.every((row) => row.totalSeats === capacities[row.state])
+    )
   )
     return null;
   // Fully settled legacy cycles retain their result. A partly installed old

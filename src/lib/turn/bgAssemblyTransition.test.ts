@@ -52,11 +52,12 @@ describe("1991 Bulgarian ordinary Assembly transition", () => {
       )
     ).toBe(400);
     expect(
-      Object.values(bgElectionSeatsForPreset(startSeats, "1991-default", false)).reduce(
+      Object.values(bgElectionSeatsForPreset(startSeats, "1991-default", false, true)).reduce(
         (a, b) => a + b,
         0
       )
     ).toBe(240);
+    expect(bgElectionSeatsForPreset(startSeats, "1991-default", false)).toEqual(startSeats);
     expect(bgElectionSeatsForPreset(startSeats, "1979-default", false)).toEqual(startSeats);
   });
 

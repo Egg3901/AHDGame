@@ -1,3 +1,6 @@
+import type { CountryGameState } from "@/lib/db/types";
+import { getDb } from "@/lib/mongodb";
+import { getCurrentTurnAndCtx } from "@/lib/turn/perpetualElections/engine";
 import type { CountryElections } from "../contract";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import {
@@ -11,7 +14,8 @@ import { getElectionMethod } from "@/lib/elections/electionMethod";
 export function bgAssemblySeatMapForPreset(
   regions: Parameters<typeof seatsFromRegionField>[0],
   preset: string | undefined,
-  preIterationActive: boolean
+  preIterationActive: boolean,
+  authorized: boolean = false
 ): Record<string, number> {
   if (
     preset === "2027-default" &&
@@ -22,18 +26,33 @@ export function bgAssemblySeatMapForPreset(
   return bgElectionSeatsForPreset(
     seatsFromRegionField(regions, "houseDistricts"),
     preset,
-    preIterationActive
+    preIterationActive,
+    authorized
   );
 }
 
 /** Bulgaria's regional National Assembly election. */
 export async function ensureBGElections(now: Date, inFlightTurn?: number): Promise<void> {
+  const db = await getDb();
+  const { ctx } = await getCurrentTurnAndCtx(db);
+  const country =
+    ctx.preset === "1991-default"
+      ? await db
+          .collection<CountryGameState>("countryGameStates")
+          .findOne(
+            { _id: "BG" },
+            { projection: { bgConstitution1991SinceTurn: 1, bgOrdinaryAssemblySinceTurn: 1 } }
+          )
+      : null;
+  const authorized =
+    country?.bgConstitution1991SinceTurn != null || country?.bgOrdinaryAssemblySinceTurn != null;
   await ensureRegionalDelegateElections(
     {
       countryId: "BG",
       electionType: "nationalAssembly",
       seatsForRegions: (regions, preset, ctx) =>
-        bgAssemblySeatMapForPreset(regions, preset, ctx.preIterationActive === true),
+        bgAssemblySeatMapForPreset(regions, preset, ctx.preIterationActive === true, authorized),
+      preserveLiveSeatCounts: ctx.preset === "1991-default",
       openPrimaryImmediately: true,
       minPrimaryHours: 12,
       statusGated: true,

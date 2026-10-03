@@ -134,6 +134,26 @@
       },
       "npcReason": "The NPC government introduced this decision with governing majorities in both chambers. Legislators still vote on the bill.",
       "legislatorReason": "A legislator introduced this framework for parliamentary votes."
+    },
+    "bulgarianConstitution1991": {
+      "title": "Bulgarian 1991 constitution",
+      "help": "The July 1991 date opens a constituent decision. The government or President can introduce a draft. Approval authorizes later ordinary Assembly campaigns; rejection retains the Grand Assembly.",
+      "threshold": "At least 267 of all 400 constituent deputies must vote for adoption.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Introduce the constitution draft",
+      "revise": "Introduce a revised draft",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in July 1991.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "The constitution has been adopted. Untouched later campaigns can use the ordinary Assembly rules.",
+        "existing-settlement": "The ordinary Assembly is already seated; its existing settlement is preserved.",
+        "no-legislature": "The current political settlement has no eligible Bulgarian constituent Assembly."
+      },
+      "npcReason": "An autonomous government introduced this draft after finding a constituent majority.",
+      "legislatorReason": "The government or President introduced this draft."
     }
   }
 }

@@ -569,6 +569,12 @@ export interface Bill {
   /** Action points spent to propose — refunded if bill passes */
   proposalActionCost?: number;
   internationalAction?: BillInternationalAction;
+  /** Optional founding constituent authority, separately bound to its recorded draft. */
+  bulgarianConstitutionalMandate?: {
+    proposalId: string;
+    revision: number;
+    kind: "constitution1991";
+  };
   /** Romanian electoral authority requires a separately recorded bicameral enactment. */
   romanianElectoralMandate?: {
     proposalId: string;

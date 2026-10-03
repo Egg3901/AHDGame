@@ -7,6 +7,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { LegislatureSkeleton } from "./LegislatureSkeleton";
 import FederationDecisionPanel from "./FederationDecisionPanel";
 import RussianConstitutionalDecisionPanel from "./RussianConstitutionalDecisionPanel";
+import BulgarianConstitutionalDecisionPanel from "./BulgarianConstitutionalDecisionPanel";
 import RomanianElectoralDecisionPanel from "./RomanianElectoralDecisionPanel";
 import HungarianElectoralDecisionPanel from "./HungarianElectoralDecisionPanel";
 
@@ -73,6 +74,7 @@ interface Props {
   generic?: boolean;
   hungarianElectoralDecisions?: boolean;
   romanianElectoralDecision?: boolean;
+  bulgarianConstitutionalDecision?: boolean;
 }
 
 export default function LegislatureClient({
@@ -81,6 +83,7 @@ export default function LegislatureClient({
   generic,
   hungarianElectoralDecisions,
   romanianElectoralDecision,
+  bulgarianConstitutionalDecision,
 }: Props) {
   const config = COUNTRY_CONFIGS[countryId];
   const displayedName = legislatureName ?? config.legislature.name;
@@ -102,6 +105,9 @@ export default function LegislatureClient({
       </>
     );
   }
+
+  if (countryId === "BG" && bulgarianConstitutionalDecision)
+    return <BulgarianConstitutionalDecisionPanel />;
 
   if (countryId === "RO" && romanianElectoralDecision) return <RomanianElectoralDecisionPanel />;
 
