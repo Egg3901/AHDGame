@@ -8,7 +8,7 @@ import { fmtN } from "./orgForces";
 import { useTranslations } from "next-intl";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "Lora,Georgia,serif";
+const serif = "var(--font-geist-sans),system-ui,sans-serif";
 
 const BAND_COLOR: Record<TensionBand, string> = {
   DETENTE: "#86d978",

@@ -53,15 +53,24 @@ export function parseThemes(css) {
   return { themes, root };
 }
 
-/** @param {string} css @returns {Record<string, string>} */
-export function parseThemeInline(css) {
+/**
+ * Declarations from every `@theme` block, in source order. The colour, font
+ * and shadow tokens live in `@theme inline`; the type scale has its own
+ * `@theme static` block.
+ * @param {string} css @returns {Record<string, string>}
+ */
+export function parseThemeTokens(css) {
   const clean = stripComments(css);
-  const start = clean.indexOf("@theme inline");
-  if (start === -1)
-    throw new Error("parseThemeInline: no @theme inline block found in globals.css");
-  const open = clean.indexOf("{", start);
-  const close = clean.indexOf("}", open);
-  return parseDeclarations(clean.slice(open + 1, close));
+  const out = {};
+  const re = /@theme\b[^{;]*\{([^{}]*)\}/g;
+  let m;
+  let blocks = 0;
+  while ((m = re.exec(clean))) {
+    blocks += 1;
+    Object.assign(out, parseDeclarations(m[1]));
+  }
+  if (blocks === 0) throw new Error("parseThemeTokens: no @theme block found in globals.css");
+  return out;
 }
 
 export function resolveValue(decl, defaultTheme, root) {
@@ -72,6 +81,8 @@ export function resolveValue(decl, defaultTheme, root) {
 
 // ---------- Component inventory ----------
 
+// Hooks (`useDialogA11y`) are re-exported from the same index but are not
+// components, and they live in .ts files the inventory does not read.
 /** @param {string} indexSource @returns {Array<{ name: string, file: string }>} */
 export function parseComponentExports(indexSource) {
   const out = [];
@@ -81,7 +92,7 @@ export function parseComponentExports(indexSource) {
     const names = m[1]
       .split(",")
       .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith("type "));
+      .filter((s) => s.length > 0 && !s.startsWith("type ") && !/^use[A-Z]/.test(s));
     for (const name of names) out.push({ name, file: m[2] });
   }
   if (out.length === 0) {
@@ -109,7 +120,9 @@ export function tailwindUtilitiesFor(themeVar) {
     const n = themeVar.slice("--color-".length);
     return `bg-${n} · text-${n} · border-${n}`;
   }
-  if (themeVar.startsWith("--font-size-")) return `text-${themeVar.slice("--font-size-".length)}`;
+  if (themeVar.startsWith("--text-")) {
+    return `text-${themeVar.slice("--text-".length).replace(/--line-height$/, "")}`;
+  }
   if (themeVar.startsWith("--shadow-")) return `shadow-${themeVar.slice("--shadow-".length)}`;
   if (themeVar.startsWith("--font-")) return `font-${themeVar.slice("--font-".length)}`;
   return "—";
@@ -129,7 +142,7 @@ const THEME_NOTES = {
   retro: "Warm dark amber/olive retro feel",
   solarized: "Solarized teal dark with warm gradient body",
   cloakroom: "Muted, stately parliamentary dark",
-  broadsheet: "Light newsprint — serif, ink-on-paper",
+  broadsheet: "Light newsprint, ink on paper",
   coldwar: "Stark cold-war dark — olive and red",
   "command-1953": "Phosphor-green command console with radar-era scanlines",
 };
@@ -219,7 +232,7 @@ export function updateMarkedSection(doc, name, content) {
 
 export function buildDesignMd(existingDoc, { css, indexSource, readComponentSource }) {
   const { themes, root } = parseThemes(css);
-  const inline = parseThemeInline(css);
+  const inline = parseThemeTokens(css);
   const components = parseComponentExports(indexSource).map((c) => ({
     ...c,
     props: extractPropsBlock(readComponentSource(c.file), c.name),

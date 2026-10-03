@@ -176,7 +176,7 @@ export function Panel({ title, children }: { title?: string; children: ReactNode
         <h3
           style={{
             margin: "0 0 14px",
-            fontFamily: "var(--font-fraunces)",
+            fontFamily: "var(--font-geist-sans)",
             fontSize: 17,
             fontWeight: 600,
             color: "var(--foreground)",
@@ -329,7 +329,7 @@ export function TheCountRail({
         <span
           className="tabular-nums"
           style={{
-            fontFamily: "var(--font-fraunces)",
+            fontFamily: "var(--font-geist-mono)",
             fontSize: 30,
             fontWeight: 600,
             color: "var(--success)",
@@ -341,7 +341,7 @@ export function TheCountRail({
         <span
           className="tabular-nums"
           style={{
-            fontFamily: "var(--font-fraunces)",
+            fontFamily: "var(--font-geist-mono)",
             fontSize: 30,
             fontWeight: 600,
             color: "var(--error)",

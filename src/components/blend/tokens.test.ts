@@ -36,13 +36,16 @@ describe("BLEND palette", () => {
 
 describe("FONT stacks", () => {
   it("routes through the next/font CSS variables already registered in layout", () => {
-    expect(FONT.serif).toContain("var(--font-lora)");
     expect(FONT.mono).toContain("var(--font-jetbrains-mono)");
     expect(FONT.sans).toContain("var(--font-geist-sans)");
   });
 
+  it("sets headings and prose in the app sans, with no serif face", () => {
+    expect(FONT.serif).toBe(FONT.sans);
+    expect(Object.values(FONT).join(" ")).not.toMatch(/lora|fraunces|georgia/i);
+  });
+
   it("keeps a real fallback face on every stack", () => {
-    expect(FONT.serif).toContain("Georgia");
     expect(FONT.mono).toContain("monospace");
     expect(FONT.sans).toContain("sans-serif");
   });
