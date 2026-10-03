@@ -149,7 +149,7 @@ export function NationDropdown({
                   </svg>
                   {t("common.back")}
                 </button>
-                <p className="text-xs font-medium uppercase tracking-wider text-muted">
+                <p className="text-body-sm font-medium text-muted">
                   {t("countrySwitcher.selectNation")}
                 </p>
               </div>
@@ -187,7 +187,7 @@ export function NationDropdown({
             <div className="py-1">
               {/* Home Nation section */}
               <div className="mb-1 border-b border-card-border pb-1">
-                <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
+                <p className="px-4 pt-2 pb-1 text-body-sm font-medium text-muted">
                   {t("menus.nation.homeNation")}
                 </p>
                 <Link
@@ -270,7 +270,7 @@ export function NationDropdown({
               </div>
 
               {/* National Details — grouped sub-sections (Government / Politics / Economy / Other). */}
-              <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
+              <p className="px-4 pt-2 pb-1 text-body-sm font-medium text-muted">
                 {t("menus.nation.nationalDetailsFor", {
                   country: countryName(countryId),
                 })}
@@ -280,7 +280,7 @@ export function NationDropdown({
                   key={section.title}
                   title={t(section.titleKey)}
                   collapsible={section.collapsible}
-                  labelClassName="px-4 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/80"
+                  labelClassName="px-4 pt-2 pb-1 text-body-sm font-medium text-muted"
                 >
                   {section.items.map((item) => (
                     <Link

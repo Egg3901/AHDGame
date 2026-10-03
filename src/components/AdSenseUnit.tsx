@@ -64,7 +64,7 @@ export function AdSenseUnit({ slot, format = "auto", className = "", style }: Ad
 
   return (
     <div className="adsense-container" aria-label="Advertisement">
-      <span className="block text-[10px] uppercase tracking-wider text-muted-foreground/70 select-none">
+      <span className="block text-body-sm font-medium text-muted-foreground/70 select-none">
         Advertisement
       </span>
       <ins

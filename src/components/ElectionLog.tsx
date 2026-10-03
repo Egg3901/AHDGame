@@ -352,9 +352,7 @@ function ElectionCard({ entry }: { entry: ElectionLogEntry }) {
         {/* Primary results */}
         {hasPrimary && (
           <div>
-            <div className="text-[10px] font-medium text-muted uppercase tracking-wide mb-2">
-              Primary
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-2">Primary</div>
             <div className="space-y-2">
               {entry.primaryResults.map((r) => (
                 <PrimaryBlock key={r.party} result={r} />
@@ -366,9 +364,7 @@ function ElectionCard({ entry }: { entry: ElectionLogEntry }) {
         {/* General results */}
         {hasGeneral && entry.generalResult && (
           <div>
-            <div className="text-[10px] font-medium text-muted uppercase tracking-wide mb-2">
-              General Election
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-2">General election</div>
             <GeneralBlock result={entry.generalResult} totalSeats={entry.totalSeats} />
           </div>
         )}

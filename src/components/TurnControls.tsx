@@ -434,9 +434,7 @@ export function TurnControls() {
 
       {gameState?.pauseKind === "auto-drift" && (
         <div className="border-b border-card-border bg-error/5 px-6 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-error">
-            Cron auto-paused
-          </div>
+          <div className="text-body-sm font-medium text-error">Cron auto-paused</div>
           <div className="mt-1 text-sm text-error/90">{gameState.pauseReason}</div>
           {gameState.pausedAt && (
             <div className="mt-0.5 text-[11px] text-error/70">

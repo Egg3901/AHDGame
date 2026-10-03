@@ -110,7 +110,7 @@ export function PolicyShiftControl({
             ></div>
           </div>
 
-          <div className="mt-1 flex justify-between text-[10px] text-muted uppercase tracking-wider">
+          <div className="mt-1 flex justify-between text-body-sm font-medium text-muted">
             <span>{leftLabel}</span>
             <span>{rightLabel}</span>
           </div>

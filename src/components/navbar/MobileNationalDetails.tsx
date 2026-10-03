@@ -41,7 +41,7 @@ export function MobileNationalDetails({
             collapsible
             defaultOpen={false}
             className="mt-2"
-            labelClassName="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted/70"
+            labelClassName="px-3 pb-1 text-body-sm font-medium text-muted"
           >
             {section.items.map((item) => {
               const active = isActive(pathname, item.href);

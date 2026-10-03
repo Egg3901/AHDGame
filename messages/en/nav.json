@@ -70,10 +70,10 @@
         "suggestions": "Suggestions"
       },
       "nation": {
-        "homeNation": "Home Nation",
+        "homeNation": "Home nation",
         "homeSuffix": "(Home)",
         "nationalDetails": "National Details",
-        "nationalDetailsFor": "National Details: {country}",
+        "nationalDetailsFor": "National details: {country}",
         "cabinetOffice": "Cabinet Office",
         "myParty": "My Party",
         "myPoliticalOperations": "My Political Operations",
@@ -130,7 +130,7 @@
     "countrySwitcher": {
       "switchNationView": "Switch nation view",
       "switchNationViewCurrent": "Switch nation view: currently {country}",
-      "selectNation": "Select Nation",
+      "selectNation": "Select nation",
       "homeBadge": "\u2605 Home"
     },
     "notifications": {

@@ -174,8 +174,8 @@ export function DetailedPolicyDisplay({
       ? "rounded-lg border-0 bg-transparent p-0"
       : "rounded-2xl border border-card-border bg-card p-6";
   const titleClass = compact
-    ? "text-[10px] font-semibold uppercase tracking-widest text-muted mb-2"
-    : "text-[11px] font-semibold uppercase tracking-widest text-muted mb-4";
+    ? "text-sm font-semibold text-foreground mb-2"
+    : "text-sm font-semibold text-foreground mb-4";
   const spaceClass = compact ? "space-y-3" : "space-y-7";
   const rowClass = compact ? "mb-2" : "mb-3";
   const trackClass = compact ? "h-2" : "h-2.5";
@@ -189,7 +189,7 @@ export function DetailedPolicyDisplay({
 
   return (
     <div className={wrapperClass}>
-      {!compact && !omitHeading && <h3 className={titleClass}>Policy Positions</h3>}
+      {!compact && !omitHeading && <h3 className={titleClass}>Policy positions</h3>}
 
       <div className={spaceClass}>
         {/* Economic */}

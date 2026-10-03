@@ -408,7 +408,7 @@ export function GameResetControls() {
 
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold tracking-wider text-muted uppercase">Reset date</p>
+            <p className="text-body-sm font-medium text-muted">Reset date</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">
               {startYear} <span className="text-base text-muted">Week {startWeek}</span>
             </p>
@@ -482,9 +482,7 @@ export function GameResetControls() {
             })}
         </div>
 
-        <p className="mb-1.5 text-xs font-semibold tracking-wider text-muted uppercase">
-          Special conditions
-        </p>
+        <p className="mb-1.5 text-body-sm font-medium text-muted">Special conditions</p>
         <div className="flex flex-wrap gap-2">
           {variants.map((variant) => {
             const target = selectedYear !== null ? findPreset(selectedYear, variant) : undefined;

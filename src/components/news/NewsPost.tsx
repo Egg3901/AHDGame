@@ -347,7 +347,7 @@ export function NewsPost({
             {!post.isSystem && (
               <Link
                 href={`/news/post/${post._id}`}
-                className="text-[10px] font-medium uppercase tracking-wide text-muted hover:text-primary transition-colors"
+                className="text-body-sm font-medium text-muted hover:text-primary transition-colors"
               >
                 Permalink
               </Link>
@@ -356,7 +356,7 @@ export function NewsPost({
               <button
                 type="button"
                 onClick={startEditing}
-                className="text-[10px] font-semibold uppercase tracking-wide text-muted hover:text-primary transition-colors"
+                className="text-body-sm font-medium text-muted hover:text-primary transition-colors"
               >
                 Edit
               </button>
@@ -367,7 +367,7 @@ export function NewsPost({
                 type="button"
                 onClick={() => void handleModerationRemove()}
                 disabled={removing}
-                className="text-[10px] font-semibold uppercase tracking-wide text-muted hover:text-error disabled:opacity-50"
+                className="text-body-sm font-medium text-muted hover:text-error disabled:opacity-50"
               >
                 {removing ? "Removing…" : "Remove post"}
               </button>

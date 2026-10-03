@@ -11,8 +11,7 @@ export const NOTIFICATION_LIST_CLASS =
   "max-h-[calc(100dvh-8rem-env(safe-area-inset-bottom,0px))] overflow-y-auto";
 
 /** Shared label for sections inside desktop dropdown panels. */
-export const MENU_SECTION_LABEL_CLASS =
-  "px-2.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted/70";
+export const MENU_SECTION_LABEL_CLASS = "px-2.5 pb-1 pt-2.5 text-body-sm font-medium text-muted";
 
 /** Shared hairline divider between sections inside desktop dropdown panels. */
 export const MENU_DIVIDER_CLASS = "mx-2 my-1 border-t border-card-border/40";

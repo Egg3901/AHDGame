@@ -76,7 +76,7 @@ describe("NationDropdown — National Details sub-sections", () => {
     for (const h of ["Government", "Politics", "Other"]) {
       const header = screen
         .getAllByText(h)
-        .find((el) => el.tagName === "DIV" && el.className.includes("text-[11px]"));
+        .find((el) => el.tagName === "DIV" && el.className.includes("text-body-sm"));
       expect(header).toBeTruthy();
     }
     // Economy is a collapsible toggle, collapsed by default.

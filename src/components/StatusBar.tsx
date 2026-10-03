@@ -479,7 +479,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
           className={`flex shrink-0 items-center gap-1 sm:gap-1.5 ${isMinimalLayout ? "hidden" : ""}`}
         >
           {/* Profile label — desktop only; shrink-0 so mono themes cannot crush it into the online count */}
-          <span className="hidden sm:inline shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted/50 mr-0.5">
+          <span className="hidden sm:inline shrink-0 text-body-sm font-medium text-muted mr-0.5">
             Profile
           </span>
 
@@ -708,7 +708,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
               <div
                 className={`hidden sm:block w-px h-4 bg-card-border/60 ${isFullLayout ? "mx-2 sm:mx-3" : "mx-0.5"}`}
               />
-              <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-wide text-muted/50 mr-0.5">
+              <span className="hidden sm:inline text-body-sm font-medium text-muted mr-0.5">
                 Elections
               </span>
 
@@ -944,7 +944,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 className={`hidden sm:block w-px h-4 bg-card-border/60 ${isFullLayout ? "mx-2 sm:mx-3" : "mx-0.5"}`}
               />
               {/* Corp label — desktop only */}
-              <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-wide text-muted/50 mr-0.5">
+              <span className="hidden sm:inline text-body-sm font-medium text-muted mr-0.5">
                 Corp
               </span>
 

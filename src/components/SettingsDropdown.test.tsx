@@ -69,7 +69,7 @@ describe("SettingsDropdown", () => {
     fireEvent.click(screen.getByLabelText("User menu"));
     fireEvent.click(screen.getByText("Switch nation view"));
 
-    expect(screen.getByText("Select Nation")).toBeTruthy();
+    expect(screen.getByText("Select nation")).toBeTruthy();
 
     fireEvent.click(screen.getByText("Back"));
     expect(screen.getByText("Profile Settings")).toBeTruthy();

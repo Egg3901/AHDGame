@@ -29,8 +29,9 @@ describe("dropdownStyles", () => {
   });
 
   it("shares one section label, divider, icon, and row language across menus", () => {
-    expect(MENU_SECTION_LABEL_CLASS).toContain("uppercase");
-    expect(MENU_SECTION_LABEL_CLASS).toContain("tracking-wider");
+    expect(MENU_SECTION_LABEL_CLASS).toContain("text-body-sm");
+    expect(MENU_SECTION_LABEL_CLASS).toContain("font-medium");
+    expect(MENU_SECTION_LABEL_CLASS).not.toMatch(/\b(uppercase|tracking-\S+)/);
     expect(MENU_DIVIDER_CLASS).toContain("border-t");
     expect(MENU_ICON_CLASS).toContain("h-4 w-4");
     expect(MENU_ROW_BASE_CLASS).toContain("rounded-lg");
