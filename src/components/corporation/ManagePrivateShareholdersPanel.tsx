@@ -283,7 +283,7 @@ export function ManagePrivateShareholdersPanel({
                   <p className="text-body-sm text-foreground">
                     {isCeo ? (
                       <>
-                        <span className="font-medium">{inv.invitedCharacterName}</span> —{" "}
+                        <span className="font-medium">{inv.invitedCharacterName}</span>:{" "}
                         {inv.shares.toLocaleString("en-US")} shares @ {inv.currencyCode}{" "}
                         {inv.pricePerShare.toLocaleString("en-US")} = {inv.currencyCode}{" "}
                         {inv.totalCost.toLocaleString("en-US")}

@@ -755,8 +755,8 @@ export default function SharePurchaseModal({
       if (data.filled) {
         const detail =
           orderSide === "buy"
-            ? `Filled immediately — bought ${quantity.toLocaleString("en-US")} shares for ${formatAmount(data.cost ?? 0)}`
-            : `Filled immediately — sold ${quantity.toLocaleString("en-US")} shares for ${formatAmount(data.proceeds ?? 0)}`;
+            ? `Filled immediately: bought ${quantity.toLocaleString("en-US")} shares for ${formatAmount(data.cost ?? 0)}`
+            : `Filled immediately: sold ${quantity.toLocaleString("en-US")} shares for ${formatAmount(data.proceeds ?? 0)}`;
         setSuccessMsg(detail);
         onSuccess();
         requestCharacterStatsRefetch();

@@ -440,7 +440,7 @@ export default function BuildCapacityDialog({
                 </>
               ) : (
                 <>
-                  The market for what this sector makes is oversupplied — buyers are already taking
+                  The market for what this sector makes is oversupplied: buyers are already taking
                   all they need. Unclaimed share can still read above zero, because that counts
                   market nobody has built into rather than buyers waiting. Expect extra output to go
                   unsold unless you win share from a rival on price.

@@ -112,7 +112,7 @@ export function HostileTakeoverCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-foreground">
-            Hostile takeover — merge subsidiary
+            Hostile takeover: merge subsidiary
           </h3>
           <p className="text-xs text-muted mt-1">
             Your corporation holds {ownershipPct.toFixed(1)}% of outstanding shares. You can absorb

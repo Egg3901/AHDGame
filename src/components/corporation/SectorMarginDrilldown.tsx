@@ -191,7 +191,7 @@ export function SectorMarginDrilldown({
             <div className="flex items-center justify-between border-b border-card-border py-1 text-[12px]">
               <span className="text-foreground">Base sector margin</span>
               <span className="font-semibold tabular-nums text-foreground">
-                {base != null ? `${base.toFixed(1)}%` : "—"}
+                {base != null ? `${base.toFixed(1)}%` : "n/a"}
               </span>
             </div>
           </>
@@ -231,7 +231,7 @@ export function SectorMarginDrilldown({
               </div>
               <div className="flex items-center justify-between py-1 text-[12px]">
                 <span className="text-muted">
-                  Sprawl, dominance, subsidies &amp; more — see full breakdown
+                  Sprawl, dominance, subsidies &amp; more: see full breakdown
                 </span>
                 <span
                   className={`font-semibold tabular-nums ${otherFactors > 0 ? "text-success" : otherFactors < 0 ? "text-error" : "text-muted"}`}
@@ -304,8 +304,8 @@ export function SectorMarginDrilldown({
             <span className="font-semibold text-foreground">
               {policyTarget > 0 ? "+" : ""}
               {policyTarget}
-            </span>{" "}
-            — trending from {policyLevel > 0 ? "+" : ""}
+            </span>
+            , trending from {policyLevel > 0 ? "+" : ""}
             {policyLevel}.
           </div>
         )}
@@ -314,7 +314,7 @@ export function SectorMarginDrilldown({
           <div>
             <div className="text-[9px] uppercase tracking-wide text-muted">Workers</div>
             <div className="font-bold tabular-nums text-foreground">
-              {workers != null ? workers.toLocaleString("en-US") : "—"}
+              {workers != null ? workers.toLocaleString("en-US") : "n/a"}
             </div>
           </div>
           <div>

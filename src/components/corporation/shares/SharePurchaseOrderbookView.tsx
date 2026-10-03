@@ -134,7 +134,7 @@ export function SharePurchaseOrderbookView({
                 </div>
               )}
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-success">
-                For Sale — you can buy
+                For Sale: you can buy
               </p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {orderbookAsks.map((order) => (
@@ -214,7 +214,7 @@ export function SharePurchaseOrderbookView({
           {orderbookBids.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-error">
-                Wanted — you can sell
+                Wanted: you can sell
               </p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {orderbookBids.map((order) => (

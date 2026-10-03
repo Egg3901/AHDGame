@@ -147,7 +147,7 @@ export default function MarketPositionPanel({
       <h2 className="mb-4 text-lg font-bold text-foreground">
         {compact
           ? "Market Position"
-          : `Market Position — ${sector.sectorLabel} in ${sector.stateName}`}
+          : `Market Position: ${sector.sectorLabel} in ${sector.stateName}`}
       </h2>
 
       <div
@@ -306,7 +306,7 @@ export default function MarketPositionPanel({
               Your Revenue
             </span>
             <span className="text-sm font-bold tabular-nums text-success">
-              {financials ? fmtCorpSectorMoney(perTurn(financials.revenue)) : "—"}
+              {financials ? fmtCorpSectorMoney(perTurn(financials.revenue)) : "n/a"}
               <span className="text-[10px] font-normal text-muted">/turn</span>
             </span>
           </div>
@@ -329,8 +329,8 @@ export default function MarketPositionPanel({
       {(clearingEnabled || capitalEnabled) && (
         <p className="mt-3 border-t border-card-border/60 pt-2 text-[11px] leading-snug text-muted">
           {capitalEnabled
-            ? "Revenue — and therefore this sector's valuation and share price — is limited by how much your capacity produces and how much of it actually sells. "
-            : "Revenue — and therefore this sector's valuation and share price — reflects how much of your output actually sold this turn, not just your list price. "}
+            ? "Revenue (and therefore this sector's valuation and share price) is limited by how much your capacity produces and how much of it actually sells. "
+            : "Revenue (and therefore this sector's valuation and share price) reflects how much of your output actually sold this turn, not just your list price. "}
           See the {capitalEnabled ? "Capital and Pricing" : "Pricing"} panels for the drivers.
         </p>
       )}
