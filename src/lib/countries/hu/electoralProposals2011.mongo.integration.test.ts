@@ -335,6 +335,9 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       commands = commandBytes = replyBytes = 0;
       const receipt = await certifyHu2011Count(db, 6, 1120, NOW);
       expect(receipt?.installed.mandates).toHaveLength(199);
+      expect(receipt?.constituencies).toHaveLength(106);
+      expect(new Set(receipt?.constituencies?.map((row) => row.id)).size).toBe(106);
+      expect(new Set(receipt?.constituencies?.map((row) => row.regionId)).size).toBe(6);
       expect(receipt?.installed.mandates.filter((row) => !row.isNpc)).toHaveLength(1);
       const fail = new Proxy(db, {
         get(target, key) {

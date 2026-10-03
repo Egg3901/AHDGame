@@ -22,6 +22,8 @@ export interface Hu2011AssemblyRecord {
   _id: string;
   cycle: number;
   electionIds: string[];
+  /** Frozen modern district boundaries remain stable throughout this Assembly term. */
+  constituencies?: readonly { id: string; regionId: string }[];
   legacyResolvedElectionIds: string[];
   nominations: import("./rules/listVacancies1991").HuListNominations;
   nominees: Hu1991AssemblyRecord["nominees"];
@@ -160,6 +162,12 @@ export async function materializeHu2011Count(input: {
     cycle,
     electionIds: polls.map((row) => row._id.toHexString()),
     legacyResolvedElectionIds: [],
+    constituencies: Object.keys(plan.result.constituencyWinners)
+      .sort()
+      .map((districtId) => ({
+        id: districtId,
+        regionId: districtId.split(":")[0],
+      })),
     nominations: {
       people: assembly.people,
       territorial: [],
