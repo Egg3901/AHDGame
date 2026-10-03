@@ -1,6 +1,6 @@
 import { advanceHu1991ListVacancy } from "./listVacancies1991";
 import { getDb } from "@/lib/mongodb";
-import type { Election, GameState } from "@/lib/db/types";
+import type { CountryGameState, Election, GameState } from "@/lib/db/types";
 import { openHu1991ByElections } from "./constituencyByElections1991";
 import { bindHu1991Campaigns } from "./assemblyCampaignBinding1991";
 import {
@@ -8,16 +8,47 @@ import {
   ensureRegionalDelegateElections,
   seatsFromRegionField,
 } from "@/lib/turn/perpetualElections/shared";
-import { hu2014RegionSeats, HU_REFORM_YEAR } from "@/lib/turn/huAssemblyReform";
+import { hu2014RegionSeats } from "@/lib/turn/huAssemblyReform";
+
+import { bindHu2011Campaigns } from "./assemblyCampaignBinding2011";
+import { huAssemblyElectionSystem } from "./rules/electoralTransition2011";
+import { calendarTurn } from "@/lib/utils/gameDate";
 
 /** Hungary National Assembly. */
 export async function ensureHUElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
   const game = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { preset: 1, currentTurn: 1 } });
+    .findOne(
+      { _id: "current" },
+      {
+        projection: {
+          preset: 1,
+          currentTurn: 1,
+          huAssemblyReformedAtYear: 1,
+          preIteration: 1,
+          preIterationTurns: 1,
+        },
+      }
+    );
+  const country =
+    game?.preset === "1991-default"
+      ? await db
+          .collection<CountryGameState>("countryGameStates")
+          .findOne({ _id: "HU" }, { projection: { huElectoralSystem2011SinceTurn: 1 } })
+      : null;
+  const turn = inFlightTurn ?? game?.currentTurn ?? 1;
+  const modern =
+    game?.preset === "1991-default" &&
+    huAssemblyElectionSystem({
+      calendarTurn: calendarTurn(turn, {
+        preIterationActive: game.preIteration?.active,
+        preIterationTurns: game.preIterationTurns,
+      }),
+      authorizedTurn: country?.huElectoralSystem2011SinceTurn,
+      legacyModernAssemblyYear: game.huAssemblyReformedAtYear,
+    }) === "mixed-2011-v1";
   if (game?.preset === "1991-default") {
-    const turn = inFlightTurn ?? game.currentTurn;
     if (Number.isSafeInteger(turn) && turn > 0) await advanceHu1991ListVacancy(db, turn, now);
     // Completed first rounds and their second rounds still belong to the same
     // mandate. Wait for whole-Assembly handover before scheduling a new term.
@@ -27,11 +58,12 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
         electionType: "nationalAssembly",
         cycle: { $gte: 1 },
         status: "completed",
-        $or: [{ electionYear: { $lt: 2014 } }, { electionYear: { $exists: false } }],
+        hungarianModernAssembly: { $exists: false },
       },
       { projection: { _id: 1 } }
     );
     if (pending) {
+      await bindHu2011Campaigns(db, game, turn, now);
       await bindHu1991Campaigns(db, now);
       return;
     }
@@ -60,9 +92,9 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
     {
       countryId: "HU",
       electionType: "nationalAssembly",
-      seatsForRegions: (regions, preset, _ctx, currentYear) =>
+      seatsForRegions: (regions, preset) =>
         preset === "1991-default" &&
-        currentYear >= HU_REFORM_YEAR &&
+        modern &&
         regions.reduce((sum, region) => sum + (region.houseDistricts ?? 0), 0) !== 199
           ? hu2014RegionSeats(regions)
           : seatsFromRegionField(regions, "houseDistricts"),
@@ -75,6 +107,7 @@ export async function ensureHUElections(now: Date, inFlightTurn?: number): Promi
     inFlightTurn
   );
   if (game?.preset === "1991-default") {
+    await bindHu2011Campaigns(db, game, turn, now);
     await bindHu1991Campaigns(db, now);
     if (
       Number.isSafeInteger(inFlightTurn ?? game.currentTurn) &&

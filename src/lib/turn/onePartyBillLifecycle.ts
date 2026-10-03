@@ -58,6 +58,11 @@ import {
   type Hu1994ElectoralProposal,
 } from "@/lib/countries/hu/electoralProposals1994";
 
+import {
+  HU_2011_PROPOSALS_COLLECTION,
+  type Hu2011ElectoralProposal,
+} from "@/lib/countries/hu/electoralProposals2011";
+
 const DEMOCRATIC_1991_COUNTRIES: readonly CountryId[] = ["PL", "CS", "HU", "RO", "BG", "YU"];
 
 /**
@@ -90,25 +95,35 @@ export async function processOnePartyBillLifecycleForCountry(
       if (state?.dissolvedTurn != null) return { enacted: 0, failed: 0 };
       const lifecycle = buildConfiguredCountryBillLifecycle(countryId, preset);
       if (countryId === "HU") {
-        const proposal = await db
-          .collection<Hu1994ElectoralProposal>(HU_1994_PROPOSALS_COLLECTION)
-          .findOne(
-            { _id: "1991-default:hu-electoral:threshold1994", status: "open" },
-            { projection: { billId: 1, revision: 1 } }
-          );
+        const proposals = await Promise.all([
+          db
+            .collection<Hu1994ElectoralProposal>(HU_1994_PROPOSALS_COLLECTION)
+            .findOne(
+              { _id: "1991-default:hu-electoral:threshold1994", status: "open" },
+              { projection: { billId: 1, revision: 1 } }
+            ),
+          db
+            .collection<Hu2011ElectoralProposal>(HU_2011_PROPOSALS_COLLECTION)
+            .findOne(
+              { _id: "1991-default:hu-electoral:system2011", status: "open" },
+              { projection: { billId: 1, revision: 1 } }
+            ),
+        ]);
         for (const stage of lifecycle.stages) {
           if (stage.kind !== "chamberVote") continue;
-          stage.passCheck = (bill, totals) =>
-            bill.hungarianElectoralMandate
-              ? Boolean(
-                  proposal &&
-                  proposal.billId.equals(bill._id) &&
-                  bill.hungarianElectoralMandate.proposalId === proposal._id &&
-                  bill.hungarianElectoralMandate.revision === proposal.revision &&
-                  bill.hungarianElectoralMandate.kind === "threshold1994" &&
-                  passesHuElectoralAmendment(totals, 386)
-                )
-              : undefined;
+          stage.passCheck = (bill, totals) => {
+            const mandate = bill.hungarianElectoralMandate;
+            if (!mandate) return undefined;
+            const proposal = proposals[mandate.kind === "threshold1994" ? 0 : 1];
+            return Boolean(
+              proposal &&
+              proposal.billId.equals(bill._id) &&
+              mandate.proposalId === proposal._id &&
+              mandate.revision === proposal.revision &&
+              (mandate.kind === "threshold1994" || mandate.kind === "system2011") &&
+              passesHuElectoralAmendment(totals, 386)
+            );
+          };
         }
       }
       const result = await runBillLifecycle(db, lifecycle, now, currentTurn);

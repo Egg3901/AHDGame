@@ -94,6 +94,26 @@
       },
       "npcReason": "The NPC government proposed this amendment because its party holds more than five percent of Assembly seats. Parliament still decides.",
       "legislatorReason": "A deputy introduced this amendment for a parliamentary vote."
+    },
+    "hungarianElectoralReform2011": {
+      "title": "Hungarian 2011 electoral system",
+      "help": "Propose a parliamentary decision on a 199-seat Assembly with 106 constituency seats and 93 national-list seats. Approval applies to later untouched campaigns from January 2012; the sitting Assembly keeps its mandates until the new election is seated.",
+      "threshold": "Approval requires more than half of the 386 deputies attending and two-thirds of attending deputies voting for it. A date alone does not change the electoral system.",
+      "loadError": "Could not load the electoral decision.",
+      "openError": "Could not open the electoral bill. Your office or the decision may have changed.",
+      "open": "Propose amendment",
+      "revise": "Propose revised amendment",
+      "viewBill": "View and vote on the bill",
+      "billStatus": "Bill status: {status}",
+      "reasons": {
+        "before-date": "This decision opens in December 2011.",
+        "other-era": "This decision is available in a 1991 world.",
+        "already-authorized": "Parliament has authorized this amendment.",
+        "modern-law-in-force": "The modern Assembly already has its electoral settlement.",
+        "no-legislature": "The current political settlement has no eligible parliamentary Assembly."
+      },
+      "npcReason": "The NPC government introduced this decision with a two-thirds governing mandate. Deputies still vote on the bill.",
+      "legislatorReason": "A deputy introduced this amendment for a parliamentary vote."
     }
   }
 }

@@ -143,7 +143,8 @@ export async function resolveGeneralElections(
             row.electionType === "nationalAssembly" &&
             !row.hungarianAssemblyRound?.byElection &&
             row.cycle >= 1 &&
-            (row.electionYear ?? 1991) < 2014
+            row.hungarianModernAssembly == null &&
+            !(gameStateDoc.huAssemblyReformedAtYear != null && !row.hungarianAssemblyRound)
         )
       : [];
   const hu1991Cycles = new Set(hu1991Races.map((row) => row.cycle));
@@ -171,7 +172,8 @@ export async function resolveGeneralElections(
             (e) =>
               e.countryId === "HU" &&
               e.electionType === "nationalAssembly" &&
-              (e.electionYear ?? 0) >= 2014
+              (e.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1" ||
+                (gameStateDoc.huAssemblyReformedAtYear != null && !e.hungarianAssemblyRound))
           )
           .map((e) => e.cycle)
       : []

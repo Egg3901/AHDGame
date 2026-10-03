@@ -668,6 +668,8 @@ export interface CountryGameState {
   _id: CountryId;
   /** HU 1991: enacted 1994 electoral amendment, never inferred from the year. */
   huElectoralLaw1994SinceTurn?: number;
+  /** A bound parliamentary decision authorizes the later Hungarian electoral system. */
+  huElectoralSystem2011SinceTurn?: number;
   /** BG 1991: raw turn when the elected 240-seat ordinary Assembly replaced the Grand Assembly. */
   bgOrdinaryAssemblySinceTurn?: number;
   /** RO 1991 world: raw turn when the 341/143 parliament replaced the 396/119 constituent chambers. */

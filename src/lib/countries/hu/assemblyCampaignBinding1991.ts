@@ -43,7 +43,16 @@ export async function materializeHu1991CampaignBinding(input: {
         "hungarianAssemblyRound.round": { $ne: 2 },
         "hungarianAssemblyRound.byElection": { $exists: false },
       },
-      { session, projection: { state: 1, status: 1, electionYear: 1, hungarianAssemblyRound: 1 } }
+      {
+        session,
+        projection: {
+          state: 1,
+          status: 1,
+          electionYear: 1,
+          hungarianAssemblyRound: 1,
+          hungarianModernAssembly: 1,
+        },
+      }
     )
     .toArray();
   const regions = [...new Set(HU_1991_TERRITORIAL_DISTRICTS.map((row) => row.regionId))];
@@ -53,7 +62,7 @@ export async function materializeHu1991CampaignBinding(input: {
     elections.some(
       (row) =>
         !regions.includes(row.state) ||
-        (row.electionYear ?? 0) >= 2014 ||
+        row.hungarianModernAssembly != null ||
         row.status === "cancelled"
     ) ||
     elections.every((row) => row.status === "resolved")
@@ -173,7 +182,7 @@ export async function bindHu1991Campaigns(
         status: { $in: ["upcoming", "active", "completed"] },
         hungarianAssemblyRound: { $exists: false },
         ...(cycles ? { cycle: { $in: cycles } } : {}),
-        $or: [{ electionYear: { $lt: 2014 } }, { electionYear: { $exists: false } }],
+        hungarianModernAssembly: { $exists: false },
       },
       { projection: { cycle: 1 } }
     )

@@ -14,10 +14,20 @@ interface Decision {
     reason?: string;
   } | null;
 }
-const endpoint = "/api/country/hu/electoral-reform/proposal";
-
-export default function HungarianElectoralDecisionPanel() {
-  const t = useTranslations("worldConflicts.hungarianElectoralReform");
+export default function HungarianElectoralDecisionPanel({
+  kind = "threshold1994",
+}: {
+  kind?: "threshold1994" | "system2011";
+}) {
+  const endpoint =
+    kind === "system2011"
+      ? "/api/country/hu/electoral-reform/2011/proposal"
+      : "/api/country/hu/electoral-reform/proposal";
+  const t = useTranslations(
+    kind === "system2011"
+      ? "worldConflicts.hungarianElectoralReform2011"
+      : "worldConflicts.hungarianElectoralReform"
+  );
   const router = useRouter();
   const [decision, setDecision] = useState<Decision | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +46,7 @@ export default function HungarianElectoralDecisionPanel() {
     return () => {
       active = false;
     };
-  }, [t]);
+  }, [t, endpoint]);
   async function open() {
     setBusy(true);
     setError(null);
@@ -44,7 +54,7 @@ export default function HungarianElectoralDecisionPanel() {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "threshold1994" }),
+        body: JSON.stringify({ kind }),
       });
       const body = (await response.json()) as { billId?: string };
       if (!response.ok || !body.billId) {
@@ -77,7 +87,7 @@ export default function HungarianElectoralDecisionPanel() {
       {decision?.proposal?.reason && (
         <p>
           {t(
-            decision.proposal.reason === "npc_government_threshold_mandate"
+            decision.proposal.reason?.startsWith("npc_government_")
               ? "npcReason"
               : "legislatorReason"
           )}
