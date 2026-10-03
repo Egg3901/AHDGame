@@ -14,9 +14,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "campaign",
     label: "Campaign",
-    tagline: "Take to the streets",
+    tagline: "Raises Political Influence",
     flavor:
-      "Town halls, handshakes, precinct walks. The grassroots support that no advertising budget can manufacture — built one voter at a time.",
+      "Each use adds less once you are above 50% influence. It costs 1 action below 20% influence and 5 at 80% or more, and its money cost rises with your influence and your home state's GDP per head.",
     actionCost: 1,
     fundCost: () => null,
     fundLabel: () => "Loading…",
@@ -28,9 +28,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "advertise",
     label: "Run Advertisements",
-    tagline: "Own the airwaves",
+    tagline: "Raises Favorability",
     flavor:
-      "Hoardings, handbills, and paid airtime. When your name is on every corner, voters remember it on polling day.",
+      "It costs 5 actions below 30% favorability and 9 at 85% or more, and its money cost rises with your favorability and your home state's GDP per head.",
     actionCost: 5,
     fundCost: () => null,
     fundLabel: () => "Loading…",
@@ -44,9 +44,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "fundraise",
     label: "Fundraise",
-    tagline: "Work the room",
+    tagline: "Raises money from your donors",
     flavor:
-      "Your network picks up the telephone. The cheques follow. A formidable war chest doesn't just fund campaigns — it keeps opponents from running.",
+      "The amount grows with your donor level, Political Influence and Fundraising. It costs no money, but needs a donor level of at least 1.",
     // Single source of truth: the same rules quote the execute shell credits,
     // so the advertised yield (influence + fundraising-stat scaled) can never
     // drift from the credited result.
@@ -62,9 +62,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "buildDonorBase",
     label: "Build Donor Network",
-    tagline: "Invest in the long game",
+    tagline: "Adds one donor level",
     flavor:
-      "Subscription drives, major-donor cultivation, a finance operation that outlasts you. Costly now — but every future fundraise yields more.",
+      "Each level raises what every later Fundraise pays. It costs 4 actions at first, rising to 20 as your level grows, plus campaign money that rises with your level.",
     actionCost: 6,
     fundCost: () => null,
     fundLabel: () => "Loading…",
@@ -76,9 +76,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "convertCash",
     label: "Personal Campaign Donation",
-    tagline: "Write yourself a cheque",
+    tagline: "Puts your own cash into the campaign",
     flavor:
-      "Funnel your personal fortune into the campaign war chest. The ethics board won't love it, and the press will have questions — but money talks louder than headlines.",
+      "Half the money is lost in the transfer, and the donation adds Infamy that grows with its size. Infamy above 20 drains Favorability every turn.",
     // Canonical ConvertCash owner: the flat AP cost the shared rules quote
     // execution debits (quoteConvertCashAction). This card's actionCost
     // renders live (no page-level prop shadows it, unlike the
@@ -103,9 +103,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "poll",
     label: "Commission Poll",
-    tagline: "Topline intelligence",
+    tagline: "Quick read of your support",
     flavor:
-      "A quick read of the electorate — overall appeal and the five groups you're strongest and weakest with. Adjust before it costs you.",
+      "Shows your overall appeal in your state and the five voter groups you do best and worst with. A higher Intellect lowers the money cost.",
     // Canonical Poll owner: flat AP cost and unscaled ANCHOR base fund cost
     // from the shared rules quote execution debits (quotePollAction). The
     // card preview stays display-only: the intellect-scaled debit is quoted
@@ -122,9 +122,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "pollLarge",
     label: "Full Demographic Poll",
-    tagline: "The complete picture",
+    tagline: "Full breakdown of your support",
     flavor:
-      "A comprehensive breakdown across every demographic category in your state. Know who you're winning and losing — and exactly why.",
+      "Shows your appeal with every voter group in every demographic category in your state. A higher Intellect lowers the money cost.",
     // Same canonical owner as the quick poll, large tier.
     actionCost: getPollActionCost("large"),
     fundCost: () => getPollBaseFundCost("large"),
@@ -138,9 +138,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "targetedAds",
     label: "Targeted Ads",
-    tagline: "Reach your coalition",
+    tagline: "Vote bonus with groups you choose",
     flavor:
-      "Build a temporary bonus with voter groups in your home state. Presidential candidates can target other states.",
+      "Targets voter groups in your home state, and presidential candidates can target other states. The bonus is larger with groups that share your positions and halves every 24 turns.",
     actionCost: 1,
     fundCost: () => 100,
     fundLabel: () => "$100 per action",
@@ -153,9 +153,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "canvass",
     label: "Canvass Voters",
-    tagline: "Mobilize the base",
+    tagline: "Raises turnout in groups you choose",
     flavor:
-      "Door-knocking, telephone banks, community meetings. Target specific demographics in your home state — boost turnout where it counts most.",
+      "You canvass in your home state, or where you are campaigning if you run for president. Groups that share your positions respond more, and the gain halves every 6 turns.",
     actionCost: 1,
     fundCost: () => 100,
     fundLabel: () => "$100",
@@ -168,9 +168,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "flipflop",
     label: "Flip-Flop",
-    tagline: "Reverse course",
+    tagline: "Changes your policy position",
     flavor:
-      "The electorate never remembers last Tuesday. Quietly recalibrate — shift your economic or social position one step in either direction.",
+      "You pick the economic or social axis and move one step left or right. On top of the action cost, it adds 5 Infamy and cuts your influence by 5%.",
     actionCost: 15,
     fundCost: () => null,
     fundLabel: () => "Free",
@@ -182,9 +182,9 @@ export const CARDS: ActionCard[] = [
   {
     type: "debatePrep",
     label: "Debate Prep",
-    tagline: "Study the briefing books",
+    tagline: "Chance to raise Debate",
     flavor:
-      "Briefing binders, mock questions, and rehearsal. No war chest required — just focus. A sharp performance on stage starts here, one quiet evening at a time.",
+      "A successful roll raises your Debate skill by 1. It costs no money, and the action is spent whether or not the roll succeeds.",
     // Single source of truth: the same rules quote the execute shell gates
     // on, so the advertised cost and odds can never drift from the resolved
     // roll (the label previously advertised 10% while the roll resolved 15%).

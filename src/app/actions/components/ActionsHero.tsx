@@ -78,8 +78,7 @@ export default function ActionsHero({
             Campaign Operations
           </h1>
           <p className="mt-2 text-sm text-white/90 drop-shadow sm:text-base max-w-2xl">
-            Direct your political operation. Manage resources, expand your influence, and shape
-            public opinion.
+            Spend actions and campaign money on influence, favorability, fundraising and polls.
           </p>
         </div>
       </div>
