@@ -1,11 +1,11 @@
 {
-  "runtimeCommit": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+  "runtimeCommit": "9a15b23b9c87892fcd891eab7a81df576e319832",
   "nativeResolutions": 18,
   "beforeSeatingRefusals": 5,
   "selectedWorldStvEnabled": false,
   "releaseAcceptance": false,
   "native": {
-    "sourceCommit": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+    "sourceCommit": "9a15b23b9c87892fcd891eab7a81df576e319832",
     "development": false,
     "preset": "1991-default",
     "fixtureYear": 1993,
@@ -141,7 +141,7 @@
             },
             "performance": {
               "commands": 34,
-              "returnedBson": 6704
+              "returnedBson": 6692
             }
           },
           {
@@ -269,7 +269,7 @@
             },
             "performance": {
               "commands": 34,
-              "returnedBson": 6911
+              "returnedBson": 6899
             }
           },
           {
@@ -384,7 +384,7 @@
             },
             "performance": {
               "commands": 34,
-              "returnedBson": 6911
+              "returnedBson": 6899
             }
           }
         ],
@@ -520,7 +520,7 @@
             },
             "performance": {
               "commands": 42,
-              "returnedBson": 7674
+              "returnedBson": 7656
             }
           },
           {
@@ -648,7 +648,7 @@
             },
             "performance": {
               "commands": 42,
-              "returnedBson": 8470
+              "returnedBson": 8452
             }
           },
           {
@@ -763,7 +763,7 @@
             },
             "performance": {
               "commands": 42,
-              "returnedBson": 8935
+              "returnedBson": 8917
             }
           }
         ],
@@ -899,7 +899,7 @@
             },
             "performance": {
               "commands": 63,
-              "returnedBson": 10128
+              "returnedBson": 10098
             }
           },
           {
@@ -1027,7 +1027,7 @@
             },
             "performance": {
               "commands": 63,
-              "returnedBson": 13849
+              "returnedBson": 13819
             }
           },
           {
@@ -1142,7 +1142,7 @@
             },
             "performance": {
               "commands": 63,
-              "returnedBson": 16619
+              "returnedBson": 16589
             }
           }
         ],
@@ -1278,7 +1278,7 @@
             },
             "performance": {
               "commands": 51,
-              "returnedBson": 8572
+              "returnedBson": 8550
             }
           },
           {
@@ -1406,7 +1406,7 @@
             },
             "performance": {
               "commands": 51,
-              "returnedBson": 10530
+              "returnedBson": 10508
             }
           },
           {
@@ -1521,7 +1521,7 @@
             },
             "performance": {
               "commands": 52,
-              "returnedBson": 12177
+              "returnedBson": 12153
             }
           }
         ],
@@ -1846,8 +1846,9 @@
     "before": {
       "source": "093daeae41b152c61bb22ad352054ff8cd5cef2a",
       "mode": "legacy",
+      "electionType": "dail",
       "commands": 34,
-      "returnedBson": 6500,
+      "returnedBson": 6584,
       "byParty": {
         "1": 1,
         "2": 2
@@ -1867,10 +1868,11 @@
       "passed": true
     },
     "after": {
-      "source": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+      "source": "9a15b23b9c87892fcd891eab7a81df576e319832",
       "mode": "stv",
+      "electionType": "dail",
       "commands": 34,
-      "returnedBson": 6464,
+      "returnedBson": 6584,
       "byParty": {
         "1": 2,
         "2": 1
@@ -1889,15 +1891,14 @@
       "productionTouched": false,
       "passed": true
     },
-    "identicalFirstPreferences": true,
-    "identicalActorParties": true
+    "databaseNamespaceLengthsMatched": true
   },
   "localCouncil": {
-    "source": "42b4a6ccdb5b6894cdce80bc587cccab5a24b58b",
+    "source": "9a15b23b9c87892fcd891eab7a81df576e319832",
     "mode": "stv",
     "electionType": "localCouncil",
     "commands": 34,
-    "returnedBson": 6488,
+    "returnedBson": 6596,
     "byParty": {
       "1": 2,
       "2": 1

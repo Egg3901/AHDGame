@@ -4,7 +4,7 @@ Related issues: #2939 and #2159.
 
 ## Source and scope
 
-Executed clean runtime: `42b4a6ccdb5b6894cdce80bc587cccab5a24b58b`. [Measured results](issue-2939-ranked-pr-stv.json) contain 18 actual isolated-Mongo resolutions and five before-seating refusals. The [replay runner](../prStvReplay.ts) exercises the production vote accumulator, general resolver, office writes and shared UI projection helper with synthetic actors. The separate council fixture uses the same resolver with `localCouncil` rather than `dail`.
+Executed clean runtime: `9a15b23b9c87892fcd891eab7a81df576e319832`. [Measured results](issue-2939-ranked-pr-stv.json) contain 18 actual isolated-Mongo resolutions and five before-seating refusals. The [replay runner](../prStvReplay.ts) exercises the production vote accumulator, general resolver, office writes and shared UI projection helper with synthetic actors. The separate council fixture uses the same resolver with `localCouncil` rather than `dail`.
 
 The selected fixture profile is `1991-default` at a 1993 clock. Regional magnitudes, parties, actors, preference orders and demographics are explicit synthetic fixtures. This is not a historical bootstrap, a competitive campaign calibration or final release acceptance. No production database or external publication was used.
 
@@ -34,9 +34,9 @@ STV incumbency uses seats actually won rather than the first-preference vote pro
 
 ## Performance and checks
 
-A matching six-candidate, three-seat, NPP-only resolver fixture uses identical first preferences, parties and actor statistics. The legacy runtime `093daeae41b152c61bb22ad352054ff8cd5cef2a` measures **34 Mongo commands and 6,500 returned BSON bytes**. The ranked runtime measures **34 commands and 6,464 bytes**. Different elected people account for the small byte difference; this is not a claimed speed improvement or a worldwide phase-budget pass. The count adds no resolver database reads.
+A matching six-candidate, three-seat, NPP-only resolver fixture uses identical first preferences, parties and actor statistics. The legacy runtime `093daeae41b152c61bb22ad352054ff8cd5cef2a` measures **34 Mongo commands and 6,584 returned BSON bytes**. The ranked runtime measures **34 commands and 6,584 bytes**. Equal-length database namespaces remove cursor-envelope size differences; command counts and returned BSON bytes match. This is not a claimed speed improvement or a worldwide phase-budget pass. The count adds no resolver database reads.
 
-146 focused integration cases and the final 15 counter cases passed, covering 147 unique cases. The first local cold import of the primary-resolution module exceeded its 15-second test timeout; the complete focused integration pass uses a 30-second local timeout. Scoped ESLint and Prettier pass. Full repository CI is the separate delivery gate.
+146 focused integration cases and the final 15 counter cases passed, covering 147 unique cases. The first local cold import of the primary-resolution module exceeded its 15-second test timeout; the complete focused integration pass uses a 30-second local timeout. After extracting ballot-batch persistence to keep the primary module below the architecture size cap, 24 affected accumulator cases and all 18 native resolutions pass again on the clean runtime above. The local architecture audit, scoped ESLint and Prettier pass. Full repository CI is the separate delivery gate.
 
 ## Compatibility and remaining reset acceptance
 
