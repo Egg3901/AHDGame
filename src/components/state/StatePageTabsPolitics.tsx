@@ -152,14 +152,12 @@ export function PoliticsTab({
           {/* Economic axis */}
           <div className="space-y-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                Economic
-              </p>
+              <p className="text-body-sm font-medium text-muted mb-1">Economic</p>
               <PositionLabel
                 value={econ}
                 axis="economic"
                 countryId={state.countryId}
-                className="text-xs font-semibold"
+                className="text-body font-semibold"
               />
               <p className="text-[11px] font-mono text-muted">
                 {econ >= 0 ? `+${econ.toFixed(2)}` : econ.toFixed(2)}
@@ -196,10 +194,8 @@ export function PoliticsTab({
           {/* Social axis */}
           <div className="space-y-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                Social
-              </p>
-              <PositionLabel value={soc} axis="social" className="text-xs font-semibold" />
+              <p className="text-body-sm font-medium text-muted mb-1">Social</p>
+              <PositionLabel value={soc} axis="social" className="text-body font-semibold" />
               <p className="text-[11px] font-mono text-muted">
                 {soc >= 0 ? `+${soc.toFixed(2)}` : soc.toFixed(2)}
               </p>
@@ -422,21 +418,15 @@ export function PoliticsTab({
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Elected Officials
-          </span>
+          <span className="text-body-sm font-medium text-muted">Elected officials</span>
           <span className="text-lg font-bold tabular-nums text-foreground">{totalOfficials}</span>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Active Parties
-          </span>
+          <span className="text-body-sm font-medium text-muted">Active parties</span>
           <span className="text-lg font-bold tabular-nums text-primary">{activeParties}</span>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Political Lean
-          </span>
+          <span className="text-body-sm font-medium text-muted">Political lean</span>
           <div className="mt-0.5">
             <PositionLabel
               value={econ}
@@ -447,7 +437,7 @@ export function PoliticsTab({
           </div>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
+          <span className="text-body-sm font-medium text-muted">
             Players in {config.regionLabel}
           </span>
           <span className="text-lg font-bold tabular-nums text-foreground">{players.length}</span>

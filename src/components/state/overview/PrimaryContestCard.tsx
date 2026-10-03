@@ -18,9 +18,7 @@ export function ContestedPrimariesCard({ vm }: { vm: OverviewViewModel }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-        <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-          Contested Primaries
-        </div>
+        <div className="text-sm font-semibold text-foreground">Contested primaries</div>
         <div className="mt-2 text-sm opacity-70">
           No contested primaries in this state right now.
         </div>
@@ -36,9 +34,7 @@ export function ContestedPrimariesCard({ vm }: { vm: OverviewViewModel }) {
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-        Contested Primaries
-      </div>
+      <div className="text-sm font-semibold text-foreground">Contested primaries</div>
       <ul className="mt-2 space-y-1.5">
         {visible.map((row) => (
           <li key={`${row.electionId}-${row.partyId}`} className="flex items-center gap-2 text-sm">

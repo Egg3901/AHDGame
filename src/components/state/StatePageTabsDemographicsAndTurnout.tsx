@@ -175,7 +175,7 @@ function computeAvgTurnout(turnoutData: TurnoutResponse | null): number | null {
 function KpiCell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-3 shadow-card">
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-1 text-base font-bold text-foreground">{children}</div>
     </div>
   );
@@ -197,7 +197,7 @@ function KpiStrip({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       <KpiCell label="Population">{population !== null ? fmtPopulation(population) : "—"}</KpiCell>
-      <KpiCell label="Political Lean">
+      <KpiCell label="Political lean">
         {economicLean !== null || socialLean !== null ? (
           <div className="flex flex-wrap items-center gap-1">
             {economicLean !== null && (
@@ -220,7 +220,7 @@ function KpiStrip({
         )}
       </KpiCell>
       <KpiCell label="Turnout">{avgTurnout !== null ? `${avgTurnout.toFixed(1)}%` : "—"}</KpiCell>
-      <KpiCell label="Demographic Categories">{categoryCount}</KpiCell>
+      <KpiCell label="Demographic categories">{categoryCount}</KpiCell>
     </div>
   );
 }
@@ -272,9 +272,7 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
     return (
       <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-card">
         <div className="border-b border-card-border px-4 py-3">
-          <h4 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            {title}
-          </h4>
+          <h4 className="text-sm font-semibold text-foreground">{title}</h4>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -337,9 +335,7 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted">
-        {title}
-      </h4>
+      <h4 className="mb-3 text-sm font-semibold text-foreground">{title}</h4>
 
       {viewMode === "chart" ? (
         /* ── chart mode: donut left, legend right ── */
@@ -388,7 +384,7 @@ function CensusCard({ title, rows, viewMode }: CensusCardProps) {
           "turnout is zero" and it is not. */}
       {rows.some((r) => r.turnout) && (
         <div className="mt-3 pt-3 border-t border-card-border/50">
-          <div className="flex items-center justify-between gap-3 text-[10px] text-muted uppercase tracking-wider">
+          <div className="flex items-center justify-between gap-3 text-body-sm font-medium text-muted">
             <span className="shrink-0" title="Baseline turnout plus any GOTV swing">
               Turnout %
             </span>
@@ -460,9 +456,7 @@ function ElectorateBucketsSection({ profile }: { profile: BucketProfileSection[]
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-card-elevated/30 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Electorate
-          </span>
+          <span className="text-sm font-semibold text-foreground">Electorate</span>
           <span className="rounded-full bg-card-border/50 px-1.5 py-0.5 text-[10px] text-muted tabular-nums">
             {buckets.length} groups
           </span>
@@ -560,9 +554,7 @@ function ElectorateBucketsSection({ profile }: { profile: BucketProfileSection[]
 function NoElectorateSubstrateNotice() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">
-        Electorate
-      </p>
+      <p className="text-sm font-semibold text-foreground mb-2">Electorate</p>
       <p className="text-xs text-muted/80">
         No electorate breakdown for this region yet. It appears once the region has census data.
       </p>
@@ -779,7 +771,7 @@ export function DemographicsAndTurnoutTab({
             viewMode={viewMode}
           />
           <CensusCard
-            title={labels?.cardTitles.age ?? "Age Distribution"}
+            title={labels?.cardTitles.age ?? "Age distribution"}
             rows={ageRows}
             viewMode={viewMode}
           />
@@ -789,7 +781,7 @@ export function DemographicsAndTurnoutTab({
             viewMode={viewMode}
           />
           <CensusCard
-            title={labels?.cardTitles.income ?? "Household Income"}
+            title={labels?.cardTitles.income ?? "Household income"}
             rows={incomeRows}
             viewMode={viewMode}
           />
@@ -811,9 +803,7 @@ export function DemographicsAndTurnoutTab({
           {/* ── how to read ── */}
           {turnoutData && (
             <div className="rounded-xl border border-card-border bg-card-muted/30 p-4 shadow-card">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">
-                How to read turnout data
-              </p>
+              <p className="text-sm font-semibold text-foreground mb-2">How to read turnout data</p>
               <ul className="text-xs text-muted/80 space-y-1">
                 <li>
                   <strong>Turnout %</strong> = Baseline + GOTV modifier (expected turnout for this
@@ -969,11 +959,11 @@ export function DemographicsAndTurnoutTab({
 
         {/* ── census cards with integrated turnout ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <CensusCard title="Race / Ethnicity" rows={raceRows} viewMode={viewMode} />
+          <CensusCard title="Race / ethnicity" rows={raceRows} viewMode={viewMode} />
           <CensusCard title="Education" rows={eduRows} viewMode={viewMode} />
           <CensusCard title="Income" rows={wealthRows} viewMode={viewMode} />
           <CensusCard title="Age" rows={ageRows} viewMode={viewMode} />
-          <CensusCard title="Ideological Tendencies" rows={ideoRows} viewMode={viewMode} />
+          <CensusCard title="Ideological tendencies" rows={ideoRows} viewMode={viewMode} />
         </div>
 
         {/* ── electorate buckets + how-to-read grid ── */}
@@ -987,9 +977,7 @@ export function DemographicsAndTurnoutTab({
           {/* ── how to read ── */}
           {turnoutData && (
             <div className="rounded-xl border border-card-border bg-card-muted/30 p-4 shadow-card">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">
-                How to read turnout data
-              </p>
+              <p className="text-sm font-semibold text-foreground mb-2">How to read turnout data</p>
               <ul className="text-xs text-muted/80 space-y-1">
                 <li>
                   <strong>Turnout %</strong> = Baseline + GOTV modifier (expected turnout for this

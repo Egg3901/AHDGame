@@ -48,9 +48,7 @@ export function PoolLegend({ rows, countryId }: { rows: PoolLegendRow[]; country
             {r.label}
           </span>
           {r.abbr && (
-            <span className="shrink-0 text-[10px] uppercase tracking-wider text-[var(--muted)]">
-              {r.abbr}
-            </span>
+            <span className="shrink-0 text-body-sm font-medium text-[var(--muted)]">{r.abbr}</span>
           )}
           <span className="shrink-0 tabular-nums">{r.value.toFixed(1)}%</span>
         </li>

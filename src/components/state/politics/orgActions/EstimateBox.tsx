@@ -59,11 +59,11 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
 
   return (
     <div className="rounded-lg border border-card-border/40 bg-background/50 px-4 py-3 space-y-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">{title}</div>
+      <div className="text-body-sm font-medium text-muted">{title}</div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
-          <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-muted">
+          <div className="flex items-center text-body-sm font-medium text-muted">
             {costLabel}
             <Tooltip
               label="About Build Org cost"
@@ -84,7 +84,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
         </div>
 
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
-          <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-muted">
+          <div className="flex items-center text-body-sm font-medium text-muted">
             {gain.label.includes("Effect") ? "Effect" : "Org gain"}
             <Tooltip
               label="About Org gain"

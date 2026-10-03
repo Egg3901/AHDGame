@@ -10,7 +10,9 @@ import { concentrationStatus } from "@/lib/nationalization/concentrationStatus";
 import { SOCI_DANGER_ZONE } from "@/lib/nationalization/constants";
 import { natMoney as money } from "../natMoney";
 
-const LABEL = "text-[10px] font-semibold uppercase tracking-wide text-muted";
+const LABEL = "text-body-sm font-medium text-muted";
+/** Column headings of the desktop grid tables, styled like table headers. */
+const COLUMN_HEAD = "text-[10px] font-semibold uppercase tracking-wide text-muted";
 const PER_PAGE = 10;
 const TIER_TONE: Record<string, string> = {
   fair: "border-success/30 bg-success/10 text-success",
@@ -175,11 +177,11 @@ export function NatRegisterTab({ vm }: { vm: NationalCorporationViewModel }) {
         ) : (
           <>
             <div className="hidden grid-cols-12 gap-2 border-b border-card-border bg-card-muted px-4 py-2 lg:grid">
-              <div className={`col-span-3 ${LABEL}`}>Firm</div>
-              <div className={`col-span-2 ${LABEL}`}>Trigger</div>
-              <div className={`col-span-2 ${LABEL}`}>Method</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Compensation</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Debt assumed</div>
+              <div className={`col-span-3 ${COLUMN_HEAD}`}>Firm</div>
+              <div className={`col-span-2 ${COLUMN_HEAD}`}>Trigger</div>
+              <div className={`col-span-2 ${COLUMN_HEAD}`}>Method</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Compensation</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Debt assumed</div>
               <div className="col-span-1" />
             </div>
             {regRows.map((r) => (
@@ -207,11 +209,11 @@ export function NatRegisterTab({ vm }: { vm: NationalCorporationViewModel }) {
         ) : (
           <>
             <div className="hidden grid-cols-12 gap-2 border-b border-card-border bg-card-muted px-4 py-2 sm:grid">
-              <div className={`col-span-4 ${LABEL}`}>Original issuer</div>
-              <div className={`col-span-3 text-right ${LABEL}`}>Face value</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Coupon</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Matures</div>
-              <div className={`col-span-1 text-right ${LABEL}`}>Status</div>
+              <div className={`col-span-4 ${COLUMN_HEAD}`}>Original issuer</div>
+              <div className={`col-span-3 text-right ${COLUMN_HEAD}`}>Face value</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Coupon</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Matures</div>
+              <div className={`col-span-1 text-right ${COLUMN_HEAD}`}>Status</div>
             </div>
             {bondRows.map((b) => (
               <div
@@ -289,11 +291,11 @@ export function NatRegisterTab({ vm }: { vm: NationalCorporationViewModel }) {
         {rows.length > 0 && (
           <>
             <div className="hidden grid-cols-12 gap-2 bg-card-muted px-4 py-2 sm:grid">
-              <div className={`col-span-4 ${LABEL}`}>Taking</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Approval</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Legitimacy</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Unrest</div>
-              <div className={`col-span-2 text-right ${LABEL}`}>Confidence</div>
+              <div className={`col-span-4 ${COLUMN_HEAD}`}>Taking</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Approval</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Legitimacy</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Unrest</div>
+              <div className={`col-span-2 text-right ${COLUMN_HEAD}`}>Confidence</div>
             </div>
             {polRows.map((r) => (
               <div
@@ -525,7 +527,7 @@ function DetailCell({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className={LABEL}>{label}</div>
-      <div className="mt-0.5 text-[12px] text-foreground">{value}</div>
+      <div className="mt-0.5 text-body text-foreground">{value}</div>
     </div>
   );
 }

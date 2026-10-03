@@ -46,8 +46,8 @@ export function StateMacroHeader({
   return (
     <div className="flex flex-wrap items-center gap-x-7 gap-y-4 rounded-xl border border-card-border bg-card px-5 py-4 shadow-sm">
       <div className="min-w-[160px]">
-        <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-          {regionLabel} Economy · {stateName}
+        <div className="text-body-sm font-medium text-muted">
+          {regionLabel} economy · {stateName}
         </div>
         <div className="mt-0.5 font-mono text-2xl font-bold leading-tight tabular-nums text-foreground">
           {gdpDisplay}

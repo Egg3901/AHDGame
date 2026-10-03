@@ -124,25 +124,19 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Resources
-          </span>
+          <span className="text-body-sm font-medium text-muted">Resources</span>
           <span className="text-lg font-bold tabular-nums text-foreground">
             {data.summary.length}
           </span>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Total Output
-          </span>
+          <span className="text-body-sm font-medium text-muted">Total output</span>
           <span className="text-lg font-bold tabular-nums text-success">
             {totalOutput.toLocaleString("en-US", { maximumFractionDigits: 0 })}
           </span>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Avg Utilization
-          </span>
+          <span className="text-body-sm font-medium text-muted">Avg utilization</span>
           <span
             className={`text-lg font-bold tabular-nums ${
               avgUtilization >= 1
@@ -156,9 +150,7 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
           </span>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3.5">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-muted">
-            Active Contracts
-          </span>
+          <span className="text-body-sm font-medium text-muted">Active contracts</span>
           <span className="text-lg font-bold tabular-nums text-primary">{activeContracts}</span>
         </div>
       </div>
@@ -281,7 +273,7 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
 
         {data.prospectingEnabled && (
           <div className="mt-4 rounded-lg border border-card-border bg-card p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
+            <p className="mb-2 text-body-sm font-medium text-muted">
               Geological surveys in this state
             </p>
             <ProspectingSurveyList

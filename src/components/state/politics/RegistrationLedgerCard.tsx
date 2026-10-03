@@ -39,7 +39,7 @@ export function RegistrationLedgerCard({ regLedger }: { regLedger: StateRegLedge
           {headline.abbr}
         </span>
         <span className="text-2xl font-bold tabular-nums">{headline.regPct.toFixed(1)}%</span>
-        <span className="text-[10px] uppercase tracking-wider text-muted">Registration</span>
+        <span className="text-body-sm font-medium text-muted">Registration</span>
       </div>
       {movement.length >= 2 ? (
         <RegSparkline points={movement} color={headline.color} />

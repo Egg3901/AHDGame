@@ -317,7 +317,7 @@ export function BuildOrgPanel({
           )}
         </div>
         <div className="text-right shrink-0">
-          <div className="flex items-center justify-end text-[10px] uppercase tracking-wider text-muted">
+          <div className="flex items-center justify-end text-body-sm font-medium text-muted">
             {headerPoolLabel}
             <Tooltip label="About Political Strength" content={headerPoolTooltip} />
           </div>
@@ -367,7 +367,7 @@ function PoachLines({ poaches }: { poaches: PoachLine[] }) {
   const sorted = [...poaches].sort((a, b) => b.loss - a.loss);
   return (
     <div className="rounded-lg border border-card-border/40 bg-background/30 px-4 py-3">
-      <div className="flex items-center text-[10px] font-semibold uppercase tracking-wide text-muted">
+      <div className="flex items-center text-body-sm font-medium text-muted">
         Taken from rivals
         <Tooltip
           label="About rival poaching"

@@ -251,7 +251,7 @@ export function StateSenateSection({
                 <OfficialCard
                   key={senator._id}
                   official={senator}
-                  title="State Senator"
+                  title="State senator"
                   subtitle={seatLabel}
                   isVacant={!senator.characterId && !senator.nppId}
                   countryId={state.countryId}

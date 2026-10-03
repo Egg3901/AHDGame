@@ -73,7 +73,7 @@ function ForceBalanceBar({ boostTotal, dragTotal }: { boostTotal: number; dragTo
 
   return (
     <div className="space-y-2" aria-hidden="true">
-      <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider">
+      <div className="flex items-center justify-between gap-3 text-body-sm font-medium">
         <span className="font-semibold text-success">Tailwinds {signed(boostTotal)}</span>
         <span className="font-semibold text-error">Headwinds {signed(dragTotal)}</span>
       </div>
@@ -105,7 +105,7 @@ function ApprovalMeter({
     <div className="space-y-2">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted">Approval</div>
+          <div className="text-body-sm font-medium text-muted">Approval</div>
           <div
             className={`text-3xl font-bold tabular-nums leading-none ${approvalColor(approval)}`}
           >
@@ -115,7 +115,7 @@ function ApprovalMeter({
         <div className="text-right">
           {baseApproval != null && (
             <>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Base</div>
+              <div className="text-body-sm font-medium text-muted">Base</div>
               <div className="text-sm font-semibold tabular-nums text-foreground">
                 {baseApproval.toFixed(1)}%
               </div>
@@ -231,9 +231,7 @@ export function RegionalConditionsCard({
             aria-hidden
           />
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted">
-              Regional Conditions
-            </div>
+            <div className="text-sm font-semibold text-foreground">Regional conditions</div>
             {open ? (
               <p className="mt-0.5 max-w-prose text-xs text-muted">
                 The political weather: forces lifting or dragging government approval.
@@ -254,9 +252,9 @@ export function RegionalConditionsCard({
           </div>
         </div>
         {hasForces && (
-          <div className="flex gap-4 text-right text-xs">
+          <div className="flex gap-4 text-right text-body">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Net approval</div>
+              <div className="text-body-sm font-medium text-muted">Net approval</div>
               <div
                 className={`mt-0.5 font-semibold tabular-nums ${toneClass(netApproval, "text")}`}
               >
@@ -264,7 +262,7 @@ export function RegionalConditionsCard({
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Net margin</div>
+              <div className="text-body-sm font-medium text-muted">Net margin</div>
               <div className={`mt-0.5 font-semibold tabular-nums ${toneClass(netMargin, "text")}`}>
                 {signed(netMargin, "pp")}
               </div>
@@ -293,10 +291,10 @@ export function RegionalConditionsCard({
               <ForceBalanceBar boostTotal={forces.boostTotal} dragTotal={forces.dragTotal} />
 
               <div>
-                <div className="mb-2 text-[10px] uppercase tracking-wider text-muted">
+                <div className="mb-2 text-body-sm font-medium text-muted">
                   Top drivers
                   {remainder.length > 0 && (
-                    <span className="normal-case tracking-normal text-muted">
+                    <span className="text-muted">
                       {" "}
                       · showing {headline.length} of {modifiers.length}
                     </span>

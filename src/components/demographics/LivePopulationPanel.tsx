@@ -27,7 +27,7 @@ const fixed = (v: number | null, d = 0) => (v == null ? "—" : v.toFixed(d));
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
   return (
     <div>
-      <span className="block text-[10px] uppercase tracking-widest text-muted">{label}</span>
+      <span className="block text-body-sm font-medium text-muted">{label}</span>
       <span
         className={`text-sm font-bold tabular-nums ${
           tone === "up" ? "text-success" : tone === "down" ? "text-error" : "text-foreground"
@@ -89,9 +89,7 @@ export function LivePopulationPanel({
       )}
 
       <div className="rounded-lg border border-card-border bg-card p-4">
-        <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Live Population
-        </h4>
+        <h4 className="mb-3 text-sm font-semibold text-foreground">Live population</h4>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat
             label="Population"
@@ -102,11 +100,11 @@ export function LivePopulationPanel({
             value={pctSigned(m.populationGrowth)}
             tone={m.populationGrowth == null ? undefined : m.populationGrowth >= 0 ? "up" : "down"}
           />
-          <Stat label="Median Age" value={fixed(m.medianAge, 0)} />
-          <Stat label="Sex Ratio (♂%)" value={fixed(m.sexRatio, 1)} />
+          <Stat label="Median age" value={fixed(m.medianAge, 0)} />
+          <Stat label="Sex ratio (♂%)" value={fixed(m.sexRatio, 1)} />
           <Stat label="Dependency" value={fixed(m.dependencyRatio, 2)} />
           <Stat
-            label="Net Migration /yr"
+            label="Net migration /yr"
             value={pctSigned(m.realizedMigrationRate)}
             tone={
               m.realizedMigrationRate == null

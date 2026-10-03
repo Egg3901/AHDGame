@@ -29,7 +29,7 @@ export function EconomySummary({ vm }: { vm: OverviewViewModel }) {
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Economy</div>
+      <div className="text-sm font-semibold text-foreground">Economy</div>
 
       <div className="mt-2 text-2xl font-bold tabular-nums">
         {economy.gdp > 0 ? formatGDP(economy.gdp, getCurrencyPrefix(vm.countryId)) : "—"}
@@ -45,19 +45,15 @@ export function EconomySummary({ vm }: { vm: OverviewViewModel }) {
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-body">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-            Unemployment
-          </div>
+          <div className="text-body-sm font-medium text-[var(--muted)]">Unemployment</div>
           <div className="font-semibold tabular-nums">
             {economy.unemployment > 0 ? `${economy.unemployment.toFixed(1)}%` : "—"}
           </div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-            Top sectors
-          </div>
+          <div className="text-body-sm font-medium text-[var(--muted)]">Top sectors</div>
           {economy.topSectors.length > 0 ? (
             <ul className="mt-0.5 space-y-0.5 font-semibold">
               {economy.topSectors.map((s) => (

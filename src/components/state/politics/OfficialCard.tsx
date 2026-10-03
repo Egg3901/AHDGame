@@ -89,9 +89,7 @@ export function OfficialCard({
             {displayName}
           </span>
         )}
-        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">
-          {title}
-        </p>
+        <p className="mt-0.5 text-body-sm font-medium text-muted">{title}</p>
         {subtitle && <p className="text-[10px] text-muted/60">{subtitle}</p>}
 
         {/* Party badge */}

@@ -190,7 +190,7 @@ function PreviewButton({ label, sublabel }: { label: string; sublabel: string })
       title={`Coming in ${sublabel}`}
     >
       <span className="text-[11px] font-semibold">{label}</span>
-      <span className="text-[10px] uppercase tracking-wider text-muted">Coming · {sublabel}</span>
+      <span className="text-body-sm font-medium text-muted">Coming · {sublabel}</span>
     </button>
   );
 }

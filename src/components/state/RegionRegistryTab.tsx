@@ -90,7 +90,7 @@ export function RegionRegistryTab({
             </CardSkeleton>
           ))}
         </div>
-        <div className="text-center font-mono text-body-xs uppercase tracking-widest text-muted">
+        <div className="text-center text-body-sm font-medium text-muted">
           Retrieving {regionName} situation data…
         </div>
       </div>

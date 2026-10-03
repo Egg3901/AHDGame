@@ -211,32 +211,24 @@ export default function UKRegionClient({
           {/* Stats strip */}
           <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Population
-              </span>
+              <span className="text-body-sm font-medium text-muted">Population</span>
               <span className="text-base font-bold tabular-nums">
                 {formatPopulation(population)}
               </span>
             </div>
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                GDP
-              </span>
+              <span className="text-body-sm font-medium text-muted">GDP</span>
               <span className="text-base font-bold tabular-nums">
                 {gdp > 0 ? formatGDP(gdp, "£") : "—"}
               </span>
             </div>
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Constituencies
-              </span>
+              <span className="text-body-sm font-medium text-muted">Constituencies</span>
               <span className="text-base font-bold tabular-nums">{constituencies}</span>
             </div>
             {calculatedLeans && (
               <div className="flex flex-col px-5 py-3 min-w-max gap-1">
-                <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                  Political Lean
-                </span>
+                <span className="text-body-sm font-medium text-muted">Political lean</span>
                 <PositionBadges
                   economic={calculatedLeans.economicLean}
                   social={calculatedLeans.socialLean}
@@ -246,9 +238,7 @@ export default function UKRegionClient({
               </div>
             )}
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Government Approval
-              </span>
+              <span className="text-body-sm font-medium text-muted">Government approval</span>
               <span className="text-base font-bold tabular-nums">
                 {governmentApproval != null ? (
                   <span
@@ -274,9 +264,7 @@ export default function UKRegionClient({
             </div>
             {executiveLabel && (
               <div className="flex flex-col px-5 py-3 min-w-max">
-                <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                  {executiveLabel}
-                </span>
+                <span className="text-body-sm font-medium text-muted">{executiveLabel}</span>
                 <span className="text-base font-bold tabular-nums mt-0.5 flex items-center gap-2">
                   {executive && (executive.characterId || executive.nppId)
                     ? (executive.characterName ?? "Unknown")

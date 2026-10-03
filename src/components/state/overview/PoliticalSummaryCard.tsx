@@ -196,7 +196,7 @@ export function PoliticalSummaryCard({
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Org Pool</div>
+      <div className="text-sm font-semibold text-foreground">Org pool</div>
       {orgRows.length > 0 && <PoolLegend rows={orgRows} countryId={vm.countryId} />}
       <div className="mt-3 text-xs leading-snug text-[var(--muted)]">{standingLine}</div>
 

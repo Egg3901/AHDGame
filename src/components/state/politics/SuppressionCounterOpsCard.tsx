@@ -38,7 +38,7 @@ export function SuppressionCounterOpsCard({
         <span className="text-2xl font-bold tabular-nums">
           {budgetPercent != null ? `${budgetPercent.toFixed(1)}%` : "—"}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-muted">of hourly revenue</span>
+        <span className="text-body-sm font-medium text-muted">of hourly revenue</span>
       </div>
       {hasBudget && targetCategory && (
         <p className="mt-1 text-xs">

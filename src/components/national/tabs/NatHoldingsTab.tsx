@@ -154,7 +154,7 @@ function HoldingCard({
               />
               {s.mappedMetricLabels.length > 0 && (
                 <div className="col-span-2 flex flex-col justify-end">
-                  <div className="text-[9px] uppercase tracking-wide text-muted">
+                  <div className="text-body-sm font-medium text-muted">
                     {s.mappedMetricLabels[0]} (region)
                   </div>
                   <div className="mt-1">
@@ -212,18 +212,16 @@ function HoldingDetail({
         {/* Efficiency formula */}
         <div className="rounded-lg border border-card-border bg-card p-3.5">
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-gold">
-              Dynamic efficiency
-            </span>
+            <span className="text-body-sm font-medium text-gold">Dynamic efficiency</span>
             <span className="text-[10px] text-muted">replaces the flat −15%</span>
           </div>
           <div className="flex flex-wrap items-stretch gap-1.5">
             {terms.map((t, i) => (
               <div key={t.label} className="flex items-stretch gap-1.5">
                 <div className="flex-1 rounded-md bg-card-muted px-2 py-1.5 text-center">
-                  <div className="text-[8px] uppercase tracking-wide text-muted">{t.label}</div>
+                  <div className="text-body-sm font-medium text-muted">{t.label}</div>
                   <div
-                    className={`text-body-sm font-bold tabular-nums ${
+                    className={`text-body font-bold tabular-nums ${
                       t.val < 0 ? "text-error" : t.val > 0 ? "text-success" : "text-muted"
                     }`}
                   >
@@ -235,7 +233,7 @@ function HoldingDetail({
               </div>
             ))}
             <div className="flex-1 rounded-md border border-gold/40 bg-gold/10 px-2 py-1.5 text-center">
-              <div className="text-[8px] uppercase tracking-wide text-gold/80">Effective</div>
+              <div className="text-body-sm font-medium text-gold/80">Effective</div>
               <div className="text-body font-bold tabular-nums text-gold">{pp(e.total)}%</div>
             </div>
           </div>
@@ -249,7 +247,7 @@ function HoldingDetail({
 
         {/* SOE vs private */}
         <div className="rounded-lg border border-card-border bg-card p-3.5">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gold">
+          <div className="mb-2 text-body-sm font-medium text-gold">
             State enterprise vs. private operator
           </div>
           <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
@@ -344,10 +342,8 @@ function Cell({
             : "text-foreground";
   return (
     <div>
-      <div className="min-h-6 text-[9px] uppercase leading-tight tracking-wide text-muted">
-        {label}
-      </div>
-      <div className={`mt-0.5 text-[13px] font-bold tabular-nums ${t}`}>{value}</div>
+      <div className="min-h-6 text-body-sm font-medium leading-tight text-muted">{label}</div>
+      <div className={`mt-0.5 text-body font-bold tabular-nums ${t}`}>{value}</div>
     </div>
   );
 }
@@ -377,17 +373,15 @@ function CompareRow({
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-card-border py-1.5 last:border-0">
       <span
-        className={`text-right text-[12px] tabular-nums ${
+        className={`text-right text-body tabular-nums ${
           aBetter ? "font-semibold text-success" : "text-foreground"
         }`}
       >
         {a}
       </span>
-      <span className="px-1 text-center text-[8px] uppercase tracking-wide text-muted">
-        {label}
-      </span>
+      <span className="px-1 text-center text-body-sm font-medium text-muted">{label}</span>
       <span
-        className={`text-[12px] tabular-nums ${bBetter ? "font-semibold text-success" : "text-foreground"}`}
+        className={`text-body tabular-nums ${bBetter ? "font-semibold text-success" : "text-foreground"}`}
       >
         {b}
       </span>

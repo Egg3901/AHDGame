@@ -21,9 +21,7 @@ function RegistrationLegend({ vm }: { vm: OverviewViewModel }) {
   if (!registrationPool.seeded) {
     return (
       <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-        <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-          Registration Pool
-        </div>
+        <div className="text-sm font-semibold text-foreground">Registration pool</div>
         <div className="mt-2 text-sm opacity-70">Registration not yet seeded for this state.</div>
         <div className="mt-1 text-[10px] italic opacity-60">
           Once the bootstrap seed runs, this card shows party Reg shares plus the Independent /
@@ -58,9 +56,7 @@ function RegistrationLegend({ vm }: { vm: OverviewViewModel }) {
   ].filter((r) => r.value > 0);
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-        Registration Pool
-      </div>
+      <div className="text-sm font-semibold text-foreground">Registration pool</div>
       <PoolLegend rows={rows} countryId={vm.countryId} />
     </div>
   );
@@ -102,13 +98,11 @@ export function OverviewTab({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="flex min-w-0 flex-col items-center gap-2">
           <AllPartyOrgPie vm={vm} />
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Org Pool</div>
+          <div className="text-body-sm font-medium text-[var(--muted)]">Org pool</div>
         </div>
         <div className="flex min-w-0 flex-col items-center gap-2">
           <AllPartyRegPie vm={vm} />
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-            Registration Pool
-          </div>
+          <div className="text-body-sm font-medium text-[var(--muted)]">Registration pool</div>
         </div>
         <div className="col-span-2 min-w-0 sm:col-span-1">
           <PoliticalSummaryCard vm={vm} viewerPartyId={viewerPartyId} />

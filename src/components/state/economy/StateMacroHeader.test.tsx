@@ -17,7 +17,7 @@ describe("StateMacroHeader", () => {
         topSectorLabel="Energy"
       />
     );
-    expect(screen.getByText(/State Economy · Texas/)).toBeTruthy();
+    expect(screen.getByText(/State economy · Texas/)).toBeTruthy();
     expect(screen.getByText("$1.82T")).toBeTruthy();
     expect(screen.getByText(/\+1\.9%/)).toBeTruthy();
     // 1.9 − 2.1 = −0.2pp underperforming → down glyph
@@ -40,7 +40,7 @@ describe("StateMacroHeader", () => {
     const link = screen.getByRole("link", { name: /National Economic Outlook/ });
     expect(link.getAttribute("href")).toBe("/country/cn/economy");
     // CN regions are provinces, not states
-    expect(screen.getByText(/Province Economy · Guangdong/)).toBeTruthy();
+    expect(screen.getByText(/Province economy · Guangdong/)).toBeTruthy();
     // outperforming → up glyph on the vs-national chip
     expect(screen.getByText(/\+0\.6pp/)).toBeTruthy();
   });

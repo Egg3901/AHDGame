@@ -82,7 +82,7 @@ function MPCard({ mp, isVacant }: { mp: SerializedMP; isVacant: boolean }) {
             {displayName}
           </span>
         )}
-        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">MP</p>
+        <p className="mt-0.5 text-body-sm font-medium text-muted">MP</p>
         <p className="text-[10px] text-muted/60">
           {seatsHeld} {seatsHeld === 1 ? "seat" : "seats"}
         </p>
@@ -200,14 +200,12 @@ export function UKRegionPageTabsPolitics({
                 {/* Economic axis */}
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                      Economic
-                    </p>
+                    <p className="text-body-sm font-medium text-muted mb-1">Economic</p>
                     <PositionLabel
                       value={econ}
                       axis="economic"
                       countryId="UK"
-                      className="text-xs font-semibold"
+                      className="text-body font-semibold"
                     />
                     <p className="text-[11px] font-mono text-muted">
                       {econ >= 0 ? `+${econ.toFixed(2)}` : econ.toFixed(2)}
@@ -246,10 +244,8 @@ export function UKRegionPageTabsPolitics({
                 {/* Social axis */}
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                      Social
-                    </p>
-                    <PositionLabel value={soc} axis="social" className="text-xs font-semibold" />
+                    <p className="text-body-sm font-medium text-muted mb-1">Social</p>
+                    <PositionLabel value={soc} axis="social" className="text-body font-semibold" />
                     <p className="text-[11px] font-mono text-muted">
                       {soc >= 0 ? `+${soc.toFixed(2)}` : soc.toFixed(2)}
                     </p>

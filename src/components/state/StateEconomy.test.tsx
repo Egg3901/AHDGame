@@ -80,11 +80,13 @@ describe("StateEconomy", () => {
   it("renders the macro header and a sector-board tile per sector", async () => {
     render(<StateEconomy stateId="TX" countryId="US" />);
     await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
-    expect(screen.getByText(/State Economy · Texas/)).toBeTruthy();
+    expect(screen.getByText(/State economy · Texas/)).toBeTruthy();
     const tiles = document.querySelectorAll("[data-sector]");
     expect(tiles.length).toBe(2);
     // top sector chip reflects the largest market
-    expect(screen.getByText(/Top sector/)).toBeTruthy();
+    expect(screen.getAllByText(/Top sector/).some((el) => el.textContent?.includes("Energy"))).toBe(
+      true
+    );
     // sector-board tiles show average CURRENT growth (energy's lone corp is at +5)
     expect(screen.getAllByText("Avg. Growth").length).toBe(2);
     expect(screen.getByText("+5.00%")).toBeTruthy();
@@ -226,13 +228,13 @@ describe("StateEconomy market control under plants (ticket #1162)", () => {
         .mockResolvedValue({ ok: true, json: async () => ({ ...plantsPayload, ...overrides }) })
     );
 
-  it("labels the per-sector stat Largest Share rather than Market Control", async () => {
+  it("labels the per-sector stat Largest share rather than Market control", async () => {
     stubPlants();
     render(<StateEconomy stateId="TX" countryId="US" />);
     await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
 
-    expect(screen.getByText("Largest Share")).toBeTruthy();
-    expect(screen.queryByText("Market Control")).toBeNull();
+    expect(screen.getByText("Largest share")).toBeTruthy();
+    expect(screen.queryByText(/market control/i)).toBeNull();
   });
 
   it("shows the leading corporation's share for an occupied sector", async () => {
@@ -259,10 +261,10 @@ describe("StateEconomy market control under plants (ticket #1162)", () => {
   it("summarises the state as a count of sectors anyone operates in", async () => {
     stubPlants();
     render(<StateEconomy stateId="TX" countryId="US" />);
-    await waitFor(() => expect(screen.getByText("Active Sectors")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Active sectors")).toBeTruthy());
     // One of the two fixture sectors has an owner. Read the tile itself rather
     // than a bare "1", which matches growth figures elsewhere on the board.
-    const tile = screen.getByText("Active Sectors").parentElement!;
+    const tile = screen.getByText("Active sectors").parentElement!;
     expect(tile.textContent).toContain("1");
     expect(tile.textContent).toContain("of 2");
   });

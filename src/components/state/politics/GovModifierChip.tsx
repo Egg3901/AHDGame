@@ -65,7 +65,7 @@ export function GovModifierChip({
         >
           {abbr}
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-muted">{signLabel}</span>
+        <span className="text-body-sm font-medium text-muted">{signLabel}</span>
       </div>
       <p className="mt-2 text-[10px] italic opacity-60">
         Boosts {abbr} registration and down-ballot candidates in this state.

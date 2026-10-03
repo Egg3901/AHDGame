@@ -19,9 +19,7 @@ export function RaceWatchlist({ vm }: { vm: OverviewViewModel }) {
   if (vm.hotRaces.length === 0) {
     return (
       <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-        <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">
-          Race Watchlist
-        </div>
+        <div className="text-sm font-semibold text-foreground">Race watchlist</div>
         <div className="mt-2 text-sm opacity-70">No competitive races to watch yet.</div>
         <div className="mt-1 text-[10px] italic opacity-60">
           A race appears here once its general phase begins and the top-2 candidates&apos; vote
@@ -33,7 +31,7 @@ export function RaceWatchlist({ vm }: { vm: OverviewViewModel }) {
 
   return (
     <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card)] p-4 shadow-sm">
-      <div className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Race Watchlist</div>
+      <div className="text-sm font-semibold text-foreground">Race watchlist</div>
       <ul className="mt-2 divide-y divide-[var(--card-border)]">
         {vm.hotRaces.map((race) => (
           <RaceRow key={race.electionId} race={race} />

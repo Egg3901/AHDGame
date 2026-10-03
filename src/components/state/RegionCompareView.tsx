@@ -121,15 +121,13 @@ export function RegionCompareView({
         <Button variant="ghost" size="sm" onClick={onBack}>
           ← {home.regionName} overview
         </Button>
-        <span className="font-mono text-body-xs uppercase tracking-widest text-muted">
+        <span className="text-body-sm font-medium text-muted">
           Comparison · up to {MAX_PEERS} {home.regionLabelPlural.toLowerCase()}
         </span>
       </div>
 
       <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-        <div className="mb-2.5 font-mono text-body-xs uppercase tracking-widest text-muted">
-          Compare against
-        </div>
+        <div className="mb-2.5 text-body-sm font-medium text-muted">Compare against</div>
         <div className="flex flex-wrap gap-1.5">
           {siblings.map((s) => {
             const on = peers.includes(s.id);

@@ -135,7 +135,7 @@ describe("DemographicsAndTurnoutTab electorate dossier", () => {
     expect(screen.getAllByText("Black voters").length).toBeGreaterThan(0);
     expect(screen.queryByText("Test Archetype")).toBeNull();
     // Real projection band + preferred-party tile render in the default Simple view.
-    expect(screen.getByText("State Projection")).toBeTruthy();
+    expect(screen.getByText("State projection")).toBeTruthy();
     expect(screen.getByText("Leaning toward")).toBeTruthy();
     // Analyst-only detail is hidden until the view toggles.
     expect(screen.queryByText("Economic lean")).toBeNull();
