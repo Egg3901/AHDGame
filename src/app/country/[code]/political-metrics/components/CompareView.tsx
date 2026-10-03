@@ -8,21 +8,17 @@ import {
   POLITICAL_METRIC_COUNTRY_IDS,
   type PoliticalMetricsCountryId,
 } from "@/lib/politicalMetrics/types";
-import { CategoryIcon } from "./categoryIcons";
-import { LeanChip } from "./LeanChip";
-import { scoreTone } from "./tones";
+import { sentenceCase } from "./labels";
 
-const CATEGORY_ICONS: Record<string, string> = {
-  economy: "currency",
-  education: "cap",
-  health: "heart",
-  infrastructure: "building",
-  order: "scales",
-  environment: "globe",
-  society: "users",
-  governance: "library",
-  defense: "shield",
-};
+const LINK_CLASS =
+  "text-left underline decoration-card-border underline-offset-4 transition-colors hover:decoration-foreground";
+
+/** Shown on phones above a table that is wider than the screen. */
+function ScrollHint() {
+  return (
+    <p className="mb-2 text-body-sm text-muted sm:hidden">Scroll sideways to see every country.</p>
+  );
+}
 
 export function CompareView({
   home,
@@ -64,195 +60,219 @@ export function CompareView({
   const activeIds = POLITICAL_METRIC_COUNTRY_IDS.filter((id) => selected[id]);
   const loadedAll = activeIds.every((id) => byCountry[id] !== undefined);
   const openCatHome = openCategory ? home.categories.find((c) => c.id === openCategory) : undefined;
+  const nameOf = (id: PoliticalMetricsCountryId) => byCountry[id]?.countryDisplayName ?? id;
+  const toggleCategory = (id: string) => setOpenCategory(openCategory === id ? null : id);
 
   return (
-    <section className="mt-4 flex flex-col gap-4">
+    <section className="mt-8 flex flex-col gap-10">
       <div>
         <Button variant="ghost" size="sm" onClick={onBack}>
-          ← National overview
+          ← Overview
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-card-border bg-card p-4 shadow-card">
-        <h2 className="flex-1 text-heading-lg font-bold text-foreground">Country comparison</h2>
-        <div className="flex flex-wrap gap-2">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div>
+          <h2 className="text-heading-lg font-semibold tracking-tight text-foreground">
+            Country comparison
+          </h2>
+          <p className="mt-1 text-body text-muted">
+            Pick the countries to compare. At least one stays selected.
+          </p>
+        </div>
+        <div role="group" aria-label="Countries to compare" className="flex flex-wrap gap-2">
           {POLITICAL_METRIC_COUNTRY_IDS.map((id) => {
             const on = selected[id];
-            const name = byCountry[id]?.countryDisplayName ?? id;
             return (
               <button
                 key={id}
                 type="button"
+                aria-pressed={on}
                 onClick={() => {
                   const next = { ...selected, [id]: !on };
                   if (Object.values(next).some(Boolean)) setSelected(next);
                 }}
-                className={`cursor-pointer rounded-md border px-3 py-1 text-body-sm font-semibold transition-colors ${
+                className={`h-8 cursor-pointer rounded-md border px-3 text-body font-medium transition-colors ${
                   on
-                    ? "border-primary/60 bg-primary/10 text-foreground"
+                    ? "border-foreground bg-foreground text-background"
                     : "border-card-border text-muted hover:text-foreground"
                 }`}
               >
-                {name}
+                {nameOf(id)}
               </button>
             );
           })}
         </div>
-      </div>
+      </header>
 
       {!loadedAll ? (
-        <LoadingSpinner label="Retrieving registries…" centered />
+        <LoadingSpinner label="Loading countries…" centered />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-card-border bg-card p-0 shadow-card">
-          <div className="min-w-[640px]">
-            <div
-              className="grid border-b border-card-border px-4 py-2 font-mono text-body-xs uppercase tracking-wider text-muted"
-              style={{ gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)` }}
+        <section aria-labelledby="pm-compare-scores">
+          <h3 id="pm-compare-scores" className="text-heading-sm font-semibold text-foreground">
+            Scores by category
+          </h3>
+          <p className="mb-3 mt-1 text-body text-muted">
+            Open a category to compare its metric families.
+          </p>
+          <ScrollHint />
+          <div className="overflow-x-auto">
+            <table
+              aria-labelledby="pm-compare-scores"
+              className="w-full min-w-[36rem] border-collapse"
             >
-              <span>Category</span>
-              {activeIds.map((id) => (
-                <span key={id} className="text-center">
-                  {(byCountry[id]?.countryDisplayName ?? id).toUpperCase()}
-                </span>
-              ))}
-            </div>
-            <div
-              className="grid border-b border-dashed border-card-border bg-card-muted px-4 py-2"
-              style={{ gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)` }}
-            >
-              <span className="text-body-sm font-bold text-foreground">Overall national score</span>
-              {activeIds.map((id) => {
-                const c = byCountry[id];
-                if (!c)
-                  return (
-                    <span key={id} className="text-center text-body-sm italic text-muted">
-                      unavailable
-                    </span>
-                  );
-                const tone = scoreTone(c.overall);
-                return (
-                  <span key={id} className="text-center">
-                    <span className={`text-body-lg font-extrabold tabular-nums ${tone.text}`}>
-                      {Math.round(c.overall)}
-                    </span>
-                  </span>
-                );
-              })}
-            </div>
-            {home.categories.map((cat) => (
-              <div
-                key={cat.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setOpenCategory(openCategory === cat.id ? null : cat.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    setOpenCategory(openCategory === cat.id ? null : cat.id);
-                }}
-                className={`grid cursor-pointer items-center border-b border-dashed border-card-border px-4 py-2 ${
-                  openCategory === cat.id ? "bg-card-muted" : ""
-                }`}
-                style={{
-                  gridTemplateColumns: `minmax(190px,1.5fr) repeat(${activeIds.length},1fr)`,
-                }}
-              >
-                <span className="flex items-center gap-2 text-body-sm text-foreground">
-                  <span className="text-primary">
-                    <CategoryIcon
-                      icon={CATEGORY_ICONS[cat.id] ?? "library"}
-                      className="h-3.5 w-3.5"
-                    />
-                  </span>
-                  {cat.displayName}
-                  <span className="text-body-xs text-muted">
-                    {openCategory === cat.id ? "▲ close" : "▼ metrics"}
-                  </span>
-                </span>
-                {activeIds.map((id) => {
-                  const c = byCountry[id];
-                  const score = c?.categories.find((x) => x.id === cat.id)?.score;
-                  if (score === undefined)
-                    return (
-                      <span key={id} className="text-center text-body-sm italic text-muted">
-                        —
-                      </span>
+              <thead>
+                <tr className="border-b border-card-border text-left text-body-sm text-muted">
+                  <th scope="col" className="py-2 pr-3 font-medium">
+                    Category
+                  </th>
+                  {activeIds.map((id) => (
+                    <th key={id} scope="col" className="px-3 py-2 text-right font-medium">
+                      {nameOf(id)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-card-border">
+                  <th
+                    scope="row"
+                    className="py-2.5 pr-3 text-left text-body font-semibold text-foreground"
+                  >
+                    Overall national score
+                  </th>
+                  {activeIds.map((id) => {
+                    const c = byCountry[id];
+                    return c ? (
+                      <td
+                        key={id}
+                        className="px-3 py-2.5 text-right font-mono text-body-lg font-semibold tabular-nums text-foreground"
+                      >
+                        {Math.round(c.overall)}
+                      </td>
+                    ) : (
+                      <td key={id} className="px-3 py-2.5 text-right text-body text-muted">
+                        unavailable
+                      </td>
                     );
-                  const tone = scoreTone(score);
+                  })}
+                </tr>
+                {home.categories.map((cat) => {
+                  const open = openCategory === cat.id;
                   return (
-                    <span
-                      key={id}
-                      className={`text-center text-body font-bold tabular-nums ${tone.text}`}
+                    <tr
+                      key={cat.id}
+                      // Mouse convenience; the category name is the keyboard control.
+                      onClick={() => toggleCategory(cat.id)}
+                      className={`cursor-pointer border-b border-card-border/60 transition-colors hover:bg-card/60 ${
+                        open ? "bg-card/60" : ""
+                      }`}
                     >
-                      {Math.round(score)}
-                    </span>
+                      <th scope="row" className="py-2.5 pr-3 text-left font-normal">
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCategory(cat.id);
+                          }}
+                          className="text-left text-body text-foreground"
+                        >
+                          <span className={LINK_CLASS}>{cat.displayName}</span>
+                          <span className="ml-2 text-body-sm text-muted">
+                            {open ? "Hide metrics" : "Show metrics"}
+                          </span>
+                        </button>
+                      </th>
+                      {activeIds.map((id) => {
+                        const score = byCountry[id]?.categories.find((x) => x.id === cat.id)?.score;
+                        return score === undefined ? (
+                          <td key={id} className="px-3 py-2.5 text-right text-body text-muted">
+                            n/a
+                          </td>
+                        ) : (
+                          <td
+                            key={id}
+                            className="px-3 py-2.5 text-right font-mono text-body tabular-nums text-foreground"
+                          >
+                            {Math.round(score)}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
-              </div>
-            ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
       )}
 
       {loadedAll && openCatHome && (
-        <div className="rounded-lg border border-card-border bg-card p-4 shadow-card">
-          <div className="mb-1 font-mono text-body-xs uppercase tracking-widest text-muted">
-            Metric families — {openCatHome.displayName.toUpperCase()}
-          </div>
-          <p className="mb-3 max-w-[80ch] text-body-sm leading-normal text-muted">
+        <section aria-labelledby="pm-compare-families">
+          <h3 id="pm-compare-families" className="text-heading-sm font-semibold text-foreground">
+            Metric families in {openCatHome.displayName}
+          </h3>
+          <p className="mb-3 mt-1 max-w-[80ch] text-body text-muted">
             Metric names are country-specific: comparisons match shared metric families, not display
-            names. Identical scores do not imply identical institutions — each country pursues these
-            outcomes through its own system.
+            names. Identical scores do not imply identical institutions, because each country
+            pursues these outcomes through its own system.
           </p>
-          <div className="flex flex-col gap-2.5">
-            {openCatHome.metrics.map((m) => (
-              <div
-                key={m.id}
-                className="rounded-md border border-card-border bg-card-muted px-3 py-2.5"
-              >
-                <div className="mb-2 flex items-center gap-2.5">
-                  <LeanChip lean={m.lean} label={m.leanLabel} />
-                  <span className="text-body-xs text-muted">family</span>
-                </div>
-                <div
-                  className="grid gap-4"
-                  style={{ gridTemplateColumns: `repeat(${activeIds.length},1fr)` }}
-                >
-                  {activeIds.map((id) => {
-                    const c = byCountry[id];
-                    const cm = c?.categories
-                      .find((x) => x.id === openCatHome.id)
-                      ?.metrics.find((x) => x.id === m.id);
-                    if (!cm)
-                      return (
-                        <span key={id} className="text-body-sm italic text-muted">
-                          —
-                        </span>
-                      );
-                    const tone = scoreTone(cm.value);
-                    return (
-                      <div key={id} className="min-w-0">
-                        <div className="text-body-sm font-semibold leading-snug text-foreground">
-                          {cm.displayName}
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-track">
-                            <span
-                              className={`block h-full rounded-full ${tone.bg}`}
-                              style={{ width: `${cm.value}%` }}
-                            />
+          <ScrollHint />
+          <div className="overflow-x-auto">
+            <table
+              aria-labelledby="pm-compare-families"
+              className="w-full min-w-[40rem] border-collapse"
+            >
+              <thead>
+                <tr className="border-b border-card-border text-left text-body-sm text-muted">
+                  <th scope="col" className="py-2 pr-3 font-medium">
+                    Family lean
+                  </th>
+                  {activeIds.map((id) => (
+                    <th key={id} scope="col" className="px-3 py-2 font-medium">
+                      {nameOf(id)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {openCatHome.metrics.map((m) => (
+                  <tr
+                    key={m.id}
+                    className="border-b border-card-border/60 align-top last:border-b-0"
+                  >
+                    <th
+                      scope="row"
+                      className="whitespace-nowrap py-2.5 pr-3 text-left text-body font-normal text-muted"
+                    >
+                      {sentenceCase(m.leanLabel)}
+                    </th>
+                    {activeIds.map((id) => {
+                      const cm = byCountry[id]?.categories
+                        .find((x) => x.id === openCatHome.id)
+                        ?.metrics.find((x) => x.id === m.id);
+                      return cm ? (
+                        <td key={id} className="px-3 py-2.5">
+                          <span className="block text-body leading-snug text-foreground">
+                            {cm.displayName}
                           </span>
-                          <span className={`text-body-sm font-extrabold tabular-nums ${tone.text}`}>
+                          <span className="mt-0.5 block font-mono text-body font-semibold tabular-nums text-foreground">
                             {Math.round(cm.value)}
                           </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                        </td>
+                      ) : (
+                        <td key={id} className="px-3 py-2.5 text-body text-muted">
+                          n/a
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
       )}
     </section>
   );
