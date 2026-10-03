@@ -1,6 +1,6 @@
 # Hungarian modern constituency vacancy qualification
 
-Issue: #2488. Executed 2026-10-03. This is bounded rules, player filing and transactional custody qualification, not a whole-world simulation.
+Issue: #2488. Runtime source: `e32904eb175282cdc324394e32ba5051680f9391`. Executed 2026-10-03. This is bounded rules, player filing and transactional custody qualification, not a whole-world simulation.
 
 The authorized modern Assembly's frozen106 district identities now own vacancy ballots. The earlier176-district scheduler cannot reopen after the modern handover. Each departed direct deputy opens one single-seat plurality race, bound to the original certified chamber and remaining term. National-list awards are untouched. Equal or zero votes leave the seat vacant for a later fresh ballot. Withdrawal retains cast marks without seating an unavailable winner or awarding their seat to the runner-up.
 
@@ -18,6 +18,6 @@ Scoped TypeScript, changed-source lint and formatting and architecture audit are
 
 ## Read cost and boundaries
 
-A paired concurrent one-vacancy opening measured44 Mongo commands,25,933 command bytes and458,473 reply bytes. A paired resolution measured44 commands,21,718 command bytes and105,995 reply bytes. These include both requests and possible contention retries; they are not per-turn or per-call fixed costs. Reads of NPC and character financial owners are projected and batched. No phase budget was raised.
+A paired concurrent one-vacancy opening measured44 Mongo commands,25,933 command bytes and458,473 reply bytes. A paired resolution measured44 commands,21,677 command bytes and105,972 reply bytes. These include both requests and possible contention retries; they are not per-turn or per-call fixed costs. Reads of NPC and character financial owners are projected and batched. No phase budget was raised.
 
 The game's six campaign regions still project the106 frozen synthetic districts. This work does not claim a full historical2014 constituency boundary map or full statutory deadline simulation. Joint and linked lists, minority nominations, distinct constituency/list filing, legacy duplicate candidature reconciliation, wider country transitions and fresh source-pinned world horizons remain parent acceptance criteria. Integration into Track1 alone does not establish development or production delivery.
