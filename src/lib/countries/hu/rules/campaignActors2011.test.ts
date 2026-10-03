@@ -51,6 +51,21 @@ describe("Hungarian historical modern campaign re-entry", () => {
     ]);
     expect(result.actors).toEqual([{ ...first, votes: 30 }]);
   });
+  it("retains distinct regional NPC slates with one financial owner", () => {
+    const rows = [
+      actor("a", { isNpc: true, votes: 10 }),
+      actor("b", { isNpc: true, regionId: "HU_NOR", votes: 20 }),
+    ];
+    expect(coalesceHuModernCampaignActors(rows)).toEqual({ actors: rows, aliases: {} });
+  });
+  it("still rejects counted regional changes for a player", () => {
+    expect(() =>
+      coalesceHuModernCampaignActors([
+        actor("old", { status: "withdrawn", votes: 10 }),
+        actor("new", { regionId: "HU_NOR" }),
+      ])
+    ).toThrow("cannot move cast votes");
+  });
   it("keeps financial owners separate", () => {
     expect(
       coalesceHuModernCampaignActors([actor("a"), actor("b", { ownerId: "other" })]).actors

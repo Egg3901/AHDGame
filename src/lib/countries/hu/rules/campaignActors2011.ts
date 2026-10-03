@@ -30,7 +30,7 @@ export function coalesceHuModernCampaignActors(input: readonly HuModernCampaignA
     throw new Error("Invalid Hungarian modern campaign actor");
   const groups = new Map<string, HuModernCampaignActor[]>();
   for (const row of input) {
-    const key = `${row.isNpc ? "npc" : "player"}:${row.ownerId}`;
+    const key = row.isNpc ? `npc:${row.ownerId}:${row.regionId}` : `player:${row.ownerId}`;
     const group = groups.get(key) ?? [];
     group.push(row);
     groups.set(key, group);
