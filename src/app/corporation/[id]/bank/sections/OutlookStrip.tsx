@@ -4,35 +4,14 @@ import Link from "next/link";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ConsolePayload, OutlookPayload } from "../types";
-import { Eyebrow } from "../components/BankSection";
+import { BankPanel } from "../components/BankSection";
+import { StatCell } from "../components/StatCell";
 
 const BAND_TONE: Record<"green" | "amber" | "red", string> = {
-  green: "text-emerald-500",
-  amber: "text-amber-500",
-  red: "text-rose-500",
+  green: "text-success",
+  amber: "text-warning",
+  red: "text-error",
 };
-
-function OutlookCell({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: string;
-}) {
-  return (
-    <div className="px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</p>
-      <div className={`mt-1 text-sm font-semibold tabular-nums ${tone ?? "text-foreground"}`}>
-        {value}
-      </div>
-      {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
-    </div>
-  );
-}
 
 function flowText(outlook: OutlookPayload, currency: CurrencyCode): { value: string; sub: string } {
   if (outlook.depositFlow == null || outlook.depositDirection == null) {
@@ -66,62 +45,57 @@ export function OutlookStrip({ data }: { data: ConsolePayload }) {
   const reserveShort = outlook.projectedCash < outlook.projectedRequired;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-card-border bg-card">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-card-border px-4 py-2">
-        <div className="flex items-center gap-2">
-          <Eyebrow kind="monitor" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-            Next turn outlook
-          </span>
-        </div>
+    <BankPanel
+      kind="monitor"
+      title="Next turn outlook"
+      meta="if you change nothing"
+      actions={
         <Link
           href="/wiki/private-banking"
-          className="text-xs text-accent underline underline-offset-2"
+          className="text-xs text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
         >
           How banking works
         </Link>
-      </div>
-      <p className="border-b border-card-border px-4 py-2 text-xs text-muted">
-        If you change nothing. Household deposits are cash in the vault; player savings pointed at
-        the bank are pointers, not cash, and only bind the deposit ceiling.
+      }
+    >
+      <p className="py-1.5 text-xs text-muted">
+        Household deposits are cash in the vault; player savings pointed at the bank are pointers,
+        not cash, and only bind the deposit ceiling.
       </p>
-      <div className="border-b border-card-border bg-accent/5 px-4 py-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-          Recommended action
-        </p>
-        <p className="mt-1 text-sm text-foreground">{outlook.recommendation}</p>
-      </div>
-      <div className="grid grid-cols-2 divide-card-border sm:grid-cols-3 sm:divide-x lg:grid-cols-4">
-        <OutlookCell label="Deposit flow" value={flow.value} sub={flow.sub} />
-        <OutlookCell
+      <p className="pb-2 text-xs text-foreground">
+        <span className="font-medium">Recommended action</span>: {outlook.recommendation}
+      </p>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+        <StatCell label="Deposit flow" value={flow.value} sub={flow.sub} />
+        <StatCell
           label="New loan demand"
           value={formatBankMoney(outlook.newLoanDemand, currency)}
-          sub={`run-off ${formatBankMoney(outlook.loanRunoff, currency)} · capped at 2.5% of book per turn`}
+          sub={`run-off ${formatBankMoney(outlook.loanRunoff, currency)}, capped at 2.5% of book per turn`}
         />
-        <OutlookCell
+        <StatCell
           label="Expected defaults"
           value={formatBankMoney(outlook.expectedDefaults, currency)}
           sub="household book write-offs, from band default rates"
         />
-        <OutlookCell
+        <StatCell
           label="Reserves after the turn"
           value={formatBankMoney(outlook.projectedCash, currency)}
           sub={`required ${formatBankMoney(outlook.projectedRequired, currency)}`}
           tone={reserveShort ? "text-error" : "text-success"}
         />
-        <OutlookCell
+        <StatCell
           label="Confidence band"
           value={outlook.projectedBand}
           sub={outlook.bandReason ?? "holds where it is"}
           tone={BAND_TONE[outlook.projectedBand]}
         />
-        <OutlookCell
+        <StatCell
           label="Bottom line"
           value={formatBankMoney(outlook.projectedBottomLine, currency)}
-          sub={`earned ${formatBankMoney(outlook.projectedEarnedPerTurn, currency)} · paid ${formatBankMoney(outlook.projectedPaidPerTurn, currency)}`}
+          sub={`earned ${formatBankMoney(outlook.projectedEarnedPerTurn, currency)}, paid ${formatBankMoney(outlook.projectedPaidPerTurn, currency)}`}
           tone={outlook.projectedBottomLine < 0 ? "text-error" : "text-success"}
         />
-        <OutlookCell
+        <StatCell
           label="Net interest margin"
           value={
             outlook.netInterestMarginPercent == null
@@ -130,7 +104,7 @@ export function OutlookStrip({ data }: { data: ConsolePayload }) {
           }
           sub="annualised net interest over the loan book"
         />
-        <OutlookCell
+        <StatCell
           label="Cost of funds"
           value={
             outlook.costOfFundsPercent == null ? "n/a" : `${outlook.costOfFundsPercent.toFixed(2)}%`
@@ -138,6 +112,6 @@ export function OutlookStrip({ data }: { data: ConsolePayload }) {
           sub="annualised interest paid over deposits"
         />
       </div>
-    </section>
+    </BankPanel>
   );
 }
