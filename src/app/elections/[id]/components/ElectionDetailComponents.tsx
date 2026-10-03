@@ -68,9 +68,7 @@ function PresidentialPrimaryDelegateRace({ group }: { group: PartyGroup }) {
   return (
     <div className="px-4 sm:px-5 pb-4 pt-1 border-t border-card-border">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-xs text-muted/70 uppercase tracking-wide font-medium">
-          Projected Delegate Race
-        </div>
+        <div className="text-body-sm font-medium text-muted">Projected delegate race</div>
         <span className="text-[11px] text-muted">
           Awarded delegates locked, remaining states projected
         </span>

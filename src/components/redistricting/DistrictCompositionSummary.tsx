@@ -142,7 +142,7 @@ export function DistrictCompositionSummary({
   return (
     <div className="space-y-3 rounded-lg border border-card-border bg-card px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+        <span className="text-sm font-semibold text-foreground">
           {title ?? "Statewide composition"}
         </span>
         <span className="text-[11px] text-muted">
@@ -160,13 +160,13 @@ export function DistrictCompositionSummary({
 
       {beforeSummary && (
         <div className="space-y-1">
-          <span className="text-[10px] uppercase tracking-wide text-muted">Before</span>
+          <span className="text-body-sm font-medium text-muted">Before</span>
           <CategoryBar summary={beforeSummary} />
         </div>
       )}
       <div className="space-y-1">
         {beforeSummary && (
-          <span className="text-[10px] uppercase tracking-wide text-muted">{proposedLabel}</span>
+          <span className="text-body-sm font-medium text-muted">{proposedLabel}</span>
         )}
         <CategoryBar summary={summary} before={beforeSummary} />
       </div>

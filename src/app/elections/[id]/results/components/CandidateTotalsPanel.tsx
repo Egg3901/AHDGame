@@ -37,9 +37,7 @@ export function CandidateTotalsPanel({
                   style={{ backgroundColor: c.partyColor }}
                 />
                 {c.name}
-                {c.isNPP && (
-                  <span className="text-[10px] uppercase tracking-wide text-muted">NPP</span>
-                )}
+                {c.isNPP && <span className="text-body-sm font-medium text-muted">NPP</span>}
                 {projectedWinner === c.id && (
                   <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-success">
                     ✓ Projected winner

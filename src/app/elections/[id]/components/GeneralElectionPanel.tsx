@@ -559,7 +559,7 @@ export function GeneralElectionPanel({
             ) : (
               <>
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted">Amount</div>
+                  <div className="text-body-sm font-medium text-muted">Amount</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {supportClickOptions.map((opt) => {
                       const isActive =

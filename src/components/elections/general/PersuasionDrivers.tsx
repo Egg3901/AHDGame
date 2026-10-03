@@ -59,7 +59,7 @@ function CandidateSelect({
 }) {
   return (
     <label className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider text-muted">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <select
         aria-label={label}
         value={value}
@@ -198,7 +198,7 @@ export function PersuasionDrivers({
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-muted">{t("persuasion.title")}</h3>
-        <span className="text-[10px] uppercase tracking-wider text-muted">{stateId}</span>
+        <span className="text-body-sm font-medium text-muted">{stateId}</span>
       </div>
 
       {focus && opponent ? (
@@ -236,9 +236,7 @@ export function PersuasionDrivers({
         <p className="text-xs italic text-muted">{t("persuasion.empty", { state: stateName })}</p>
       ) : (
         <div className="flex flex-col gap-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted">
-            {t("persuasion.driversGroup")}
-          </div>
+          <div className="text-body-sm font-medium text-muted">{t("persuasion.driversGroup")}</div>
           {driverRows.map((d) => {
             // Ticket #1261: players mistook the Money row for treasury or
             // lifetime spend. It reads recent spend (this turn full weight,
@@ -266,7 +264,7 @@ export function PersuasionDrivers({
           ) : null}
           {coattailRows.length > 0 ? (
             <>
-              <div className="mt-1 border-t border-card-border pt-2 text-[10px] uppercase tracking-wider text-muted">
+              <div className="mt-1 border-t border-card-border pt-2 text-body-sm font-medium text-muted">
                 {t("persuasion.coattailsGroup")}
               </div>
               {coattailRows.map((d) => (

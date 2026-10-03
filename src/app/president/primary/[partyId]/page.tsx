@@ -417,7 +417,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
           </p>
         </div>
         <div className="text-right">
-          <div className="text-xs text-muted uppercase tracking-wider">Phase</div>
+          <div className="text-body-sm font-medium text-muted">Phase</div>
           <div className="text-sm font-semibold">
             {inStaggerWindow ? (
               <span className="text-amber-400">
@@ -508,7 +508,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
         waveHighlight={nextWave?.states}
         header={
           <div className="flex flex-wrap items-center gap-4 px-2">
-            <span className="text-xs text-muted uppercase tracking-wider">Delegate leaders:</span>
+            <span className="text-body-sm font-medium text-muted">Delegate leaders:</span>
             {standings.slice(0, 4).map((s, i) => (
               <div key={s.candidate._id.toString()} className="flex items-center gap-2">
                 <span
@@ -574,7 +574,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
 
       {candidates.length > 0 && (
         <div className="mt-6 rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-card-border bg-background text-xs font-medium uppercase tracking-wider text-muted">
+          <div className="px-4 py-2.5 border-b border-card-border bg-background text-sm font-semibold text-foreground">
             Standings
           </div>
           <div className="overflow-x-auto">

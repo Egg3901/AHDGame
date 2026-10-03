@@ -22,9 +22,7 @@ export function ViewingAsControl({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-[var(--ref-gold)]">
-        Viewing as
-      </span>
+      <span className="mr-1 text-body-sm font-medium text-[var(--ref-gold)]">Viewing as</span>
       {ROLES.map((r) => (
         <Link
           key={r.id}

@@ -742,9 +742,7 @@ export function LineGraph({
             transform: `${horizontal} translateY(${flipBelow ? "12px" : "calc(-100% - 12px)"})`,
           }}
         >
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">
-            {xLabel(active)}
-          </div>
+          <div className="mb-1 text-body-sm font-medium text-muted">{xLabel(active)}</div>
           {readout.length === 0 ? (
             <div className="text-xs text-muted italic">Nothing counted yet</div>
           ) : (

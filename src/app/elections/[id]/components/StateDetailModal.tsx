@@ -128,9 +128,7 @@ export function StateDetailModal({
 
         <div className="space-y-5 p-5">
           <div>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
-              Projected EV winner
-            </div>
+            <div className="mb-2 text-body-sm font-medium text-muted">Projected EV winner</div>
             <div className="rounded-xl border border-card-border bg-background p-3">
               {winnerName && (
                 <div className="flex items-center gap-2">
@@ -148,9 +146,7 @@ export function StateDetailModal({
           </div>
 
           <div>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
-              Vote split
-            </div>
+            <div className="mb-2 text-body-sm font-medium text-muted">Vote split</div>
             <div className="space-y-2">
               {sorted.map(([cid, votes]) => {
                 const pct = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
@@ -217,9 +213,7 @@ export function StateDetailModal({
 
           {snapshots.length >= 2 && (
             <div>
-              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
-                Vote share over time
-              </div>
+              <div className="mb-2 text-body-sm font-medium text-muted">Vote share over time</div>
               <div className="rounded-xl border border-card-border bg-background p-3">
                 <LineGraph
                   snapshots={snapshots}

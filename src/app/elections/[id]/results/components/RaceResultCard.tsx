@@ -74,21 +74,13 @@ export function RaceResultCard({ unit, candidatesById, index, weightLabel }: Rac
 
       <div className="mt-1.5">
         {unit.tied ? (
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-warning">
-            Tied
-          </span>
+          <span className="text-body-sm font-medium text-warning">Tied</span>
         ) : unit.called ? (
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-success">
-            ✓ Called
-          </span>
+          <span className="text-body-sm font-medium text-success">✓ Called</span>
         ) : notReporting ? (
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            Waiting
-          </span>
+          <span className="text-body-sm font-medium text-muted">Waiting</span>
         ) : (
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-warning">
-            Too close to call
-          </span>
+          <span className="text-body-sm font-medium text-warning">Too close to call</span>
         )}
       </div>
     </div>

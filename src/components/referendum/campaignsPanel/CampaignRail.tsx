@@ -87,7 +87,7 @@ export function CampaignRail(props: Props) {
             className="rounded-2xl border bg-card p-5 shadow-card"
             style={{ borderColor: "color-mix(in srgb, var(--ref-amber) 40%, var(--card-border))" }}
           >
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-amber)]">
+            <div className="mb-2 text-sm font-semibold text-[var(--ref-amber)]">
               Prime Minister&apos;s decision
             </div>
             <p className="mb-4 text-[12.5px] leading-relaxed text-muted">
@@ -154,7 +154,7 @@ export function CampaignRail(props: Props) {
       {/* actuating → admin convert/block */}
       {showAdminActuate && (
         <div className={card}>
-          <div className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--ref-amber)]">
+          <div className="mb-3 text-sm font-semibold text-[var(--ref-amber)]">
             Conversion window — admin
           </div>
           <div className="flex flex-col gap-2.5">

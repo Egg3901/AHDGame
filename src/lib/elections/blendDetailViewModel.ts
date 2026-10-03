@@ -428,7 +428,7 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
   });
 
   return {
-    phaseLabel: input.isEnded ? "Completed" : "General Phase",
+    phaseLabel: input.isEnded ? "Completed" : "General phase",
     reporting: !counted ? "Polls not open" : input.isEnded ? "Count closed" : "Counting",
     headline,
     standfirst,

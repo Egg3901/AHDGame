@@ -95,9 +95,7 @@ export function RegionApprovalClient({
             <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
               <div className="flex flex-wrap items-end gap-8">
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                    Base Score
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-1">Base score</p>
                   <p className="text-4xl font-bold tabular-nums text-foreground">
                     {data.governmentApprovalBase.toFixed(1)}%
                   </p>
@@ -105,9 +103,7 @@ export function RegionApprovalClient({
                 </div>
                 <div className="text-2xl text-muted font-light">&rarr;</div>
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                    Net Approval
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-1">Net approval</p>
                   <p
                     className={`text-4xl font-bold tabular-nums ${netApproval >= 0 ? "text-success" : "text-error"}`}
                   >
@@ -118,9 +114,7 @@ export function RegionApprovalClient({
                 </div>
                 <div className="text-2xl text-muted font-light">=</div>
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                    Approval
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-1">Approval</p>
                   <p
                     className={`text-5xl font-bold tabular-nums ${approvalColor(data.governmentApproval)}`}
                   >
@@ -134,11 +128,9 @@ export function RegionApprovalClient({
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <h2 className="text-sm font-semibold text-muted">Active effects</h2>
                 {modifiers.length > 0 && (
-                  <div className="flex gap-4 text-right text-xs">
+                  <div className="flex gap-4 text-right text-body">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net approval
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net approval</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -154,9 +146,7 @@ export function RegionApprovalClient({
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net margin
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net margin</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +

@@ -124,7 +124,7 @@ export function PrimaryCampaignControls({
       {/* Campaign-in-state badge + action */}
       <div className="flex items-center flex-wrap gap-3">
         <div className="flex-1 min-w-[200px]">
-          <div className="text-[10px] uppercase tracking-wider text-muted">Campaigning in</div>
+          <div className="text-body-sm font-medium text-muted">Campaigning in</div>
           {currentCampaignState ? (
             <div className="flex items-center gap-2 mt-1">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-sm font-semibold text-amber-400">
@@ -162,7 +162,7 @@ export function PrimaryCampaignControls({
       {homeState && (
         <div className="flex items-center flex-wrap gap-3 border-t border-card-border pt-3">
           <div className="flex-1 min-w-[200px]">
-            <div className="text-[10px] uppercase tracking-wider text-muted">Home-state surge</div>
+            <div className="text-body-sm font-medium text-muted">Home-state surge</div>
             <div className="text-sm text-foreground mt-1">
               {surgeUsed ? (
                 <span className="text-muted">Used this cycle ✓</span>

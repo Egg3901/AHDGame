@@ -154,18 +154,14 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
     <div className="space-y-3">
       {primaryGroups.length > 0 && (
         <div className="space-y-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            {t("card.primaryResults")}
-          </div>
+          <div className="text-body-sm font-medium text-muted">{t("card.primaryResults")}</div>
           <PrimaryCardGrid primaries={primaryGroups} countryId={election.countryId as CountryId} />
         </div>
       )}
 
       {generalEntries && generalEntries.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            {t("card.generalResults")}
-          </div>
+          <div className="text-body-sm font-medium text-muted">{t("card.generalResults")}</div>
           <div className="rounded-lg border border-card-border/60 px-3 py-3">
             <div className="flex gap-3">
               <div className="shrink-0 self-center">

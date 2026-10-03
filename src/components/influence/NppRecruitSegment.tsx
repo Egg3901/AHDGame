@@ -118,7 +118,7 @@ export function NppRecruitSegment({
 
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted">Slots</div>
+            <div className="text-body-sm font-medium text-muted">Slots</div>
             <div className="text-lg font-bold">
               {st.currentNPPs}{" "}
               <span className="text-xs font-normal text-muted">/ {st.maxSlots}</span>
@@ -126,12 +126,12 @@ export function NppRecruitSegment({
             <div className="text-[11px] text-muted">{avail} available</div>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted">Recruit quality</div>
+            <div className="text-body-sm font-medium text-muted">Recruit quality</div>
             <div className={`text-lg font-bold ${q.tone}`}>{q.label}</div>
             <div className="text-[11px] text-muted">driven by {st.stateOrg.toFixed(0)}% org</div>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted">Cost</div>
+            <div className="text-body-sm font-medium text-muted">Cost</div>
             <div className="text-lg font-bold">
               {st.actionCost} <span className="text-xs font-normal text-muted">AP</span>
             </div>

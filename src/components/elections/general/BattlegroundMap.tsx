@@ -75,7 +75,7 @@ export function HoverCard({ data }: { data: BattlegroundHoverCardData }) {
           </li>
         ))}
       </ul>
-      <div className="mt-1.5 border-t border-slate-700 pt-1 text-[10px] uppercase tracking-wider text-slate-400">
+      <div className="mt-1.5 border-t border-slate-700 pt-1 text-body-sm font-medium text-slate-400">
         {data.candidates[0]?.partyAbbr ?? "?"} +{data.marginPp.toFixed(1)}pp ·{" "}
         {TIER_LABEL[data.tier]}
       </div>
@@ -124,9 +124,7 @@ export function BattlegroundMap({
     <div className="rounded-xl border border-card-border bg-card p-3 sm:p-6 overflow-hidden shadow-panel">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted">{t("battleground.title")}</h3>
-        <span className="text-[10px] uppercase tracking-wider text-muted">
-          {t("battleground.subtitle")}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{t("battleground.subtitle")}</span>
       </div>
       <div
         className="w-full max-w-full rounded-lg bg-background p-2 sm:p-4 min-h-[240px] sm:min-h-[300px] overflow-hidden"
@@ -143,7 +141,7 @@ export function BattlegroundMap({
         <p className="mt-3 text-xs text-muted">{t("battleground.emptyHint")}</p>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {t("battleground.marginTiers")}
           </span>
           {tiersToShow.map((tier) => (

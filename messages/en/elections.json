@@ -47,8 +47,8 @@
       "partyHeader": "Party",
       "votesHeader": "Votes",
       "seatsHeader": "Seats",
-      "primaryResults": "Primary Results",
-      "generalResults": "General Results",
+      "primaryResults": "Primary results",
+      "generalResults": "General results",
       "polling": "Polling",
       "candidates": "Candidates",
       "noRegisteredCandidates": "No registered candidates",
@@ -69,8 +69,8 @@
       "generalEnds": "General ends <date></date>"
     },
     "phaseStrip": {
-      "primaryElection": "Primary Election",
-      "generalElection": "General Election",
+      "primaryElection": "Primary election",
+      "generalElection": "General election",
       "opensIn": "Opens in {time}",
       "endsIn": "Ends in {time}",
       "completed": "Completed"
@@ -183,7 +183,7 @@
       "chipUpcoming": "{state}: upcoming"
     },
     "tierSelector": {
-      "raceTier": "Race Tier",
+      "raceTier": "Race tier",
       "president": "Presidential",
       "senate": "Senate",
       "house": "House",

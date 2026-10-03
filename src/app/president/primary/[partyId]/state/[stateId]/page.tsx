@@ -391,7 +391,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
       {/* Status tiles */}
       <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Status</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Status</div>
           {waveFired ? (
             <div className="text-sm font-semibold text-green-400">Voted</div>
           ) : turnsUntilWave !== null ? (
@@ -403,19 +403,19 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
           )}
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Delegates</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Delegates</div>
           <div className="text-sm font-semibold" style={{ color: partyColor }}>
             {stateDelegates}
           </div>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Allocation</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Allocation</div>
           <div className="text-sm font-semibold">
             {allocationMethod === "PR" ? "Proportional" : "Winner-take-all"}
           </div>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Wave</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Wave</div>
           <div className="text-sm font-semibold">{wave ? wave.label : "—"}</div>
         </div>
       </div>
@@ -467,9 +467,9 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
 
       {/* Candidate breakdown */}
       <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-card-border bg-background text-xs font-medium uppercase tracking-wider text-muted flex items-center justify-between">
+        <div className="px-4 py-2.5 border-b border-card-border bg-background text-sm font-semibold text-foreground flex items-center justify-between">
           <span>Candidate breakdown</span>
-          <span className="text-xs normal-case text-muted/80">
+          <span className="text-xs font-normal text-muted">
             {hasVoted ? "Actual votes + delegates" : "Pre-vote projection"}
           </span>
         </div>

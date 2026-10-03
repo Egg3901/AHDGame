@@ -52,7 +52,7 @@ export function DeclarePositionControl({
 
   return (
     <div className={card}>
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+      <div className="mb-2 text-sm font-semibold text-foreground">
         Declare your party&apos;s position
       </div>
       {error && (

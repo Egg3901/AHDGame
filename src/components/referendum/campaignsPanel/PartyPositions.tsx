@@ -3,7 +3,7 @@ import { PartyChip, type PartyLite } from "./PartyChip";
 function Column({ title, tone, parties }: { title: string; tone: string; parties: PartyLite[] }) {
   return (
     <div className="flex-1">
-      <div className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${tone}`}>
+      <div className={`mb-2 text-body-sm font-medium ${tone}`}>
         {title} · {parties.length}
       </div>
       {parties.length ? (

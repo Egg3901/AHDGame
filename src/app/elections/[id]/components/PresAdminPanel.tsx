@@ -331,9 +331,7 @@ export function PresAdminPanel({
                 style={{ opacity: placeOptionsLoading ? 0.4 : 1 }}
               >
                 <div>
-                  <label className="mb-1 block text-[10px] text-muted uppercase tracking-wide">
-                    Type
-                  </label>
+                  <label className="mb-1 block text-body-sm font-medium text-muted">Type</label>
                   <select
                     value={placeType}
                     onChange={(e) => {
@@ -347,7 +345,7 @@ export function PresAdminPanel({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] text-muted uppercase tracking-wide">
+                  <label className="mb-1 block text-body-sm font-medium text-muted">
                     {placeType === "character" ? "Character" : "NPP"}
                   </label>
                   <select
@@ -364,9 +362,7 @@ export function PresAdminPanel({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] text-muted uppercase tracking-wide">
-                    Party
-                  </label>
+                  <label className="mb-1 block text-body-sm font-medium text-muted">Party</label>
                   <select
                     value={placeParty}
                     onChange={(e) => setPlaceParty(e.target.value)}

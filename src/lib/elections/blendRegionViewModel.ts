@@ -807,7 +807,7 @@ export function buildBlendRegionCards(input: BlendRegionInput): BlendRaceCard[] 
         ? `${totalSeats} ${totalSeats === 1 ? "seat" : "seats"}`
         : "1 seat";
 
-    const tierWord = tier === "regional" ? "REGIONAL" : "FEDERAL";
+    const tierWord = tier === "regional" ? "Regional" : "Federal";
     // The mockup's kicker repeated the seat count, because its race titles were
     // bare chamber names with no seat count in them. This app's
     // `electionRaceTitle` already ends in "· 10 seats", so repeating it here and
@@ -815,10 +815,10 @@ export function buildBlendRegionCards(input: BlendRegionInput): BlendRaceCard[] 
     // card. The kicker carries the method instead, which the card had nowhere
     // else to state.
     const kicker = presidentialEv
-      ? `${tierWord} · ${presidentialEv} ELECTORAL VOTES`
+      ? `${tierWord} · ${presidentialEv} electoral votes`
       : multiSeat
-        ? `${tierWord} · PROPORTIONAL`
-        : `${tierWord} · SINGLE WINNER`;
+        ? `${tierWord} · proportional`
+        : `${tierWord} · single winner`;
 
     // Suppress the header's seat line when the canonical title already states
     // the seat count.

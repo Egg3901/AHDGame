@@ -286,7 +286,7 @@ export function RunningMateSelector({
           </div>
 
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <p className="text-xs uppercase tracking-wide text-muted">Selected running mate</p>
+            <p className="text-body-sm font-medium text-muted">Selected running mate</p>
             <p className="mt-1 text-sm font-medium text-foreground">
               {selectedCharacter?.name ?? currentRunningMateName ?? "None selected"}
             </p>

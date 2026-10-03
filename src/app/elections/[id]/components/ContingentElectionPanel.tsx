@@ -95,9 +95,7 @@ export function ContingentElectionPanel({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-card-border bg-card/60 p-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
-            President — House ballot
-          </div>
+          <div className="text-body-sm font-medium text-muted mb-2">President — House ballot</div>
           <p className="text-sm font-semibold text-foreground mb-3">
             {presidentWinnerName} — {houseWinnerVotes} state delegation
             {houseWinnerVotes === 1 ? "" : "s"}
@@ -120,7 +118,7 @@ export function ContingentElectionPanel({
 
         {senateRows.length > 0 && (
           <div className="rounded-lg border border-card-border bg-card/60 p-4">
-            <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
+            <div className="text-body-sm font-medium text-muted mb-2">
               Vice President — Senate ballot
             </div>
             {vpWinnerName && contingentResult.vicePresidentWinnerId && (
@@ -150,9 +148,7 @@ export function ContingentElectionPanel({
 
       {delegationEntries.length > 0 && (
         <div className="rounded-lg border border-card-border bg-card/60 p-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted mb-3">
-            State delegation votes
-          </div>
+          <div className="text-body-sm font-medium text-muted mb-3">State delegation votes</div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
             {delegationEntries.map(([stateId, choiceId]) => {
               if (stateId === CONTINGENT_EXCLUDED_HOUSE_STATE) return null;

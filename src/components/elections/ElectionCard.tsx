@@ -436,9 +436,7 @@ export const ElectionCard = memo(function ElectionCard({
         {/* ── Primary Phase Display ── */}
         {primaryGroups.length > 0 && effectiveInPrimary && (
           <div className="space-y-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-              {t("card.primaryResults")}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{t("card.primaryResults")}</div>
             <PrimaryCardGrid
               primaries={primaryGroups.map((group) => ({
                 partyId: group.partyId,
@@ -464,9 +462,7 @@ export const ElectionCard = memo(function ElectionCard({
         {/* ── General Polling: Fallback (no tally data) ── */}
         {hasPolling && !isPrimaryPolling && generalEntries && !election.generalTally && (
           <div className="space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-              {t("card.polling")}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{t("card.polling")}</div>
             <div className="rounded-lg border border-card-border/60 px-3 py-3">
               {(() => {
                 const showSeats =
@@ -591,9 +587,7 @@ export const ElectionCard = memo(function ElectionCard({
           {/* Hide candidate badges when already shown in polling/tally rows above */}
           {!effectiveInPrimary && !(hasPolling && !isPrimaryPolling) && (
             <div className="flex-1 space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-                {t("card.candidates")}
-              </div>
+              <div className="text-body-sm font-medium text-muted">{t("card.candidates")}</div>
               {election.candidates.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {election.candidates.map((candidate) => (
@@ -628,9 +622,7 @@ export const ElectionCard = memo(function ElectionCard({
                         />
                         {candidate.characterName}
                         {candidate.isNPP && (
-                          <span className="opacity-60 text-[10px] uppercase tracking-wide ml-0.5">
-                            NPP
-                          </span>
+                          <span className="opacity-60 text-body-sm font-medium ml-0.5">NPP</span>
                         )}
                       </Link>
                     </div>

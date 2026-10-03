@@ -43,15 +43,13 @@ export function HubArena({
                 className="flex min-w-[64px] flex-col justify-center bg-[var(--ref-yes)] px-[18px] text-white transition-[width] duration-500"
                 style={{ width: `${yes}%` }}
               >
-                <div className="text-[9.5px] font-bold uppercase tracking-wider opacity-90">
-                  Yes
-                </div>
+                <div className="text-body-sm font-medium opacity-90">Yes</div>
                 <div className="font-mono text-[23px] font-black leading-none">
                   {Math.round(yes)}%
                 </div>
               </div>
               <div className="flex min-w-[64px] flex-1 flex-col items-end justify-center bg-[var(--ref-no)] px-[18px] text-white">
-                <div className="text-[9.5px] font-bold uppercase tracking-wider opacity-90">No</div>
+                <div className="text-body-sm font-medium opacity-90">No</div>
                 <div className="font-mono text-[23px] font-black leading-none">{no}%</div>
               </div>
             </div>

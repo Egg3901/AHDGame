@@ -451,7 +451,7 @@ function NppDrawer({
       <div className="mb-3 grid grid-cols-5 gap-2">
         {STAT_DEFS.map((s) => (
           <div key={s.key}>
-            <div className="text-[10px] uppercase tracking-wide text-muted">{s.abbr}</div>
+            <div className="text-body-sm font-medium text-muted">{s.abbr}</div>
             <StatBar value={npp.stats[s.key]} invert={s.invert} />
           </div>
         ))}
