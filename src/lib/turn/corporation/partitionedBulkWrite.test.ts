@@ -35,7 +35,7 @@ function apply(ops: readonly Op[], store: Map<string, number[]>): void {
     const id = idOf(op);
     const history = store.get(id) ?? [];
     history.push(
-      "deleteOne" in op ? -1 : (op.updateOne.update as { $set: { sequence: number } }).$set.sequence
+      "updateOne" in op ? (op.updateOne.update as { $set: { sequence: number } }).$set.sequence : -1
     );
     store.set(id, history);
   }
