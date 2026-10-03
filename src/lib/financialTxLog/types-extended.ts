@@ -111,6 +111,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "party_transfer",
   "party_gotv_spend",
   "party_dues_received",
+  "party_org_building",
   "caucus_tax_debit",
 
   // ── Government & subsidies (gov_subsidy_paid / gov_grant_paid /
@@ -243,6 +244,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   party_transfer: "Party Transfer",
   party_gotv_spend: "Party GOTV Spend",
   party_dues_received: "Party Dues",
+  party_org_building: "Party Organization Building",
   caucus_tax_debit: "Caucus Tax",
 
   gov_fiscal_accrual: "Govt Fiscal Accrual",

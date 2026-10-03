@@ -271,7 +271,9 @@ describe("nppBuildPartyOrg", () => {
         // US state rate 37,500 × 0.075 × 1 PS.
         amount: Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST),
       }),
-      expect.anything()
+      expect.anything(),
+      // No sweep cache here, so the command loads its own accounting context.
+      undefined
     );
   });
 

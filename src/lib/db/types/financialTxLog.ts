@@ -143,6 +143,7 @@ export type FinancialTxType =
   | "party_transfer"
   | "party_gotv_spend"
   | "party_dues_received"
+  | "party_org_building" // org-building cash paid from a party or state-party treasury
   | "caucus_tax_debit"
 
   // Government & subsidies

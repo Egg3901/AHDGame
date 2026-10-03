@@ -304,6 +304,16 @@ async function collectBalanceState(db: Db): Promise<{
  * pensionBenefits.ts, nppFundGeneration.ts), so the snapshot must use the same
  * map or leg and snapshot keys diverge by currency segment.
  */
+/** Currency of a `state_party:` account, backed by statePartyOrg.treasury. */
+export function snapshotStatePartyCurrency(countryId?: string): CurrencyCode {
+  return mapCurrency(countryId);
+}
+
+/** Currency of a national `party:` account, backed by politicalParties.treasury. */
+export function snapshotPartyCurrency(countryId?: string): CurrencyCode {
+  return countryCurrency(countryId);
+}
+
 function mapCurrency(countryId?: string): CurrencyCode {
   if (countryId) {
     const cur = (COUNTRY_CURRENCY_MAP as Record<string, CurrencyCode>)[countryId];
