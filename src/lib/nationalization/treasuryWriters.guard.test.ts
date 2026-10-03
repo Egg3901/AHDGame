@@ -87,7 +87,7 @@ const REGISTRY: Record<string, Registered> = {
   },
   "src/lib/indexFunds/petitions/service.ts": {
     writers: ["creditTreasuryProceedsFromAnchor"],
-    witness: [{ kind: "own-row", txTypes: ["index_listing_lobbying"] }],
+    witness: [{ kind: "flow", flows: ["index_listing_lobbying"] }],
   },
   "src/lib/nationalization/privatizeAsset.ts": {
     writers: ["creditTreasuryProceeds"],

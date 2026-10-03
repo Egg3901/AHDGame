@@ -97,6 +97,10 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // World event treasury and wallet payouts and charges have no in-world payer
   // or recipient.
   world_event_payout: "world_event",
+  // A petition paid to the treasury: the corporation's row sinks under the same
+  // reason the treasury witness mints, since government counterparties have no
+  // account id on the row.
+  index_listing_lobbying: "index_listing_lobbying",
   // Resource prospecting + extraction contracts. These are single-sided from
   // the payer's perspective — the survey cost / contract fee / royalty leaves
   // the corp (or government treasury) into the state/national budget, which is
@@ -331,6 +335,8 @@ export function deriveLedgerEntry(
   if (tx.type === "gov_bond_issuance" && tx.meta?.reconcile === true) return null;
   // The settlement already owns a durable multi-leg witness for this receipt.
   if (tx.type === "gov_bond_issuance" && tx.meta?.ledgerOwnedBySettlement === true) return null;
+  // The treasury writer witnesses a petition's treasury receipt; its row is the record.
+  if (tx.type === "index_listing_lobbying" && tx.meta?.ledgerOwnedByWitness === true) return null;
   // Charter vaults are separate from corporate liquid capital. These marked
   // receipts retain the native settlement without inventing a stock witness
   // for an account the balance snapshot does not currently include.
