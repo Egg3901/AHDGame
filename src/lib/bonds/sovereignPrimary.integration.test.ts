@@ -246,6 +246,56 @@ describe("sovereign primary settlement", () => {
     expect(principal(db)).toBe(9000);
   });
 
+  it("checks settlement status only for placements already recorded, and still refuses a pending one", async () => {
+    const db = world(1_000_000);
+    const ids = [new ObjectId(), new ObjectId()];
+    db.seed(
+      "bonds",
+      ids.map((_id, index) => ({
+        _id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        totalIssued: 0,
+        publicFloat: 0,
+        unsoldUnits: 500,
+        requestedUnits: 500,
+        couponRate: 5,
+        marketPrice: 1,
+        matured: false,
+        defaulted: false,
+        issuedAtTurn: TURN - 2 + index,
+      }))
+    );
+    const journal = db.collection("bankMoneyMoves");
+    const findOne = journal.findOne.bind(journal);
+    const statusChecks: unknown[] = [];
+    journal.findOne = (async (filter: Record<string, unknown>, options?: unknown) => {
+      const projection = (options as { projection?: Record<string, unknown> } | undefined)
+        ?.projection;
+      if (projection && "projectionsCompletedAt" in projection) statusChecks.push(filter._id);
+      return findOne(filter);
+    }) as typeof journal.findOne;
+
+    const first = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
+    expect(first.bondsTouched).toBe(2);
+    expect(statusChecks).toEqual([]);
+
+    // A retried turn: both keys are recorded, so each takes the status check.
+    expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
+    expect(statusChecks).toHaveLength(2);
+
+    // A recorded placement awaiting recovery still stops the pass.
+    await journal.updateOne(
+      { _id: `sovereign-primary:placement:${ids[0]}:${TURN + 1}` },
+      { $set: { status: "pending" } },
+      { upsert: true }
+    );
+    await expect(placeUnsoldBondUnits(db as unknown as Db, TURN + 1, NOW)).rejects.toThrow(
+      /awaits settlement recovery/
+    );
+  });
+
   it.each([
     { collection: "bondMarketPools", op: "updateOne" as const, onCall: 1, afterWrite: true },
     { collection: "federalBudget", op: "updateOne" as const, onCall: 1, afterWrite: true },
