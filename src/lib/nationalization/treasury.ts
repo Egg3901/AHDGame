@@ -4,6 +4,11 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
 import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
+import {
+  resolveTreasuryCashOptions,
+  witnessTreasuryCash,
+  type TreasuryCashOptions,
+} from "./treasuryLedger";
 
 /**
  * Government cash account for nationalization money flows.
@@ -23,16 +28,18 @@ import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
  * Every nationalization/SOE/privatization cash flow funnels through here as a
  * cash-only `$inc` (concurrent-safe). `debt.principal` belongs to the bond
  * ledger (see bonds/sovereignPrincipal.ts) and is correctly left alone (#1975).
+ * Returns whether a treasury matched, so callers witness only cash that landed.
  */
 async function incTreasuryBalance(
   db: Db,
   countryId: CountryId,
   delta: number,
   now: Date
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const result = await db
     .collection<FederalBudget>("federalBudget")
     .updateOne({ countryId }, { $inc: { treasuryBalance: delta }, $set: { updatedAt: now } });
+  return (result?.matchedCount ?? 0) > 0;
 }
 
 /**
@@ -137,13 +144,22 @@ export async function coverSoeOperatingLoss(
   countryId: CountryId,
   shortfallAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  ledger?: TreasuryCashOptions
 ): Promise<number> {
   if (shortfallAnchor <= 0) return 0;
   const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
   const rate = fxByCurrency.get(currency) ?? 1;
   const local = Math.round(writeGovBudgetLocal(shortfallAnchor, currency, rate));
-  await incTreasuryBalance(db, countryId, -local, now);
+  if (await incTreasuryBalance(db, countryId, -local, now)) {
+    await witnessTreasuryCash(db, ledger, {
+      flow: "soe_loss_backing",
+      account: { kind: "government", countryId },
+      amount: -local,
+      now,
+      site: "treasury:coverSoeOperatingLoss",
+    });
+  }
   return local;
 }
 
@@ -165,14 +181,23 @@ export async function debitTreasurySoeCapex(
   countryId: CountryId,
   grantAnchor: number,
   fxByCurrency: ReadonlyMap<CurrencyCode, number>,
-  now: Date
+  now: Date,
+  ledger?: TreasuryCashOptions
 ): Promise<number> {
   if (!(grantAnchor > 0)) return 0;
   const currency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
   const rate = fxByCurrency.get(currency) ?? 1;
   const local = Math.round(writeGovBudgetLocal(grantAnchor, currency, rate));
   if (local <= 0) return 0;
-  await incTreasuryBalance(db, countryId, -local, now);
+  if (await incTreasuryBalance(db, countryId, -local, now)) {
+    await witnessTreasuryCash(db, ledger, {
+      flow: "soe_capex_grant",
+      account: { kind: "government", countryId },
+      amount: -local,
+      now,
+      site: "treasury:debitTreasurySoeCapex",
+    });
+  }
   return local;
 }
 
@@ -186,19 +211,24 @@ export async function debitTreasurySoeCapex(
  */
 export async function drawFromTreasury(
   db: Db,
-  input: { countryId: CountryId; corpId: ObjectId; amountLocal: number },
-  now: Date
+  input: TreasuryTransferInput,
+  now: Date,
+  ledger?: TreasuryCashOptions
 ): Promise<{ ok: true; amount: number }> {
   const amount = Math.round(input.amountLocal);
   if (amount <= 0) return { ok: true, amount: 0 };
 
-  await incTreasuryBalance(db, input.countryId, -amount, now);
-  await db
+  const debited = await incTreasuryBalance(db, input.countryId, -amount, now);
+  const credited = await db
     .collection<Corporation>("corporations")
     .updateOne(
       { _id: input.corpId },
       { $inc: { liquidCapital: amount }, $set: { updatedAt: now } }
     );
+  await witnessTreasuryTransfer(db, ledger, "soe_treasury_draw", input, now, {
+    treasury: debited ? -amount : 0,
+    corporation: (credited?.matchedCount ?? 0) > 0 ? amount : 0,
+  });
   return { ok: true, amount };
 }
 
@@ -210,18 +240,59 @@ export async function drawFromTreasury(
  */
 export async function remitToTreasury(
   db: Db,
-  input: { countryId: CountryId; corpId: ObjectId; amountLocal: number },
-  now: Date
+  input: TreasuryTransferInput,
+  now: Date,
+  ledger?: TreasuryCashOptions
 ): Promise<number> {
   const amount = Math.round(input.amountLocal);
   if (amount <= 0) return 0;
 
-  await db
+  const debited = await db
     .collection<Corporation>("corporations")
     .updateOne(
       { _id: input.corpId },
       { $inc: { liquidCapital: -amount }, $set: { updatedAt: now } }
     );
-  await incTreasuryBalance(db, input.countryId, amount, now);
+  const credited = await incTreasuryBalance(db, input.countryId, amount, now);
+  await witnessTreasuryTransfer(db, ledger, "soe_remittance", input, now, {
+    corporation: (debited?.matchedCount ?? 0) > 0 ? -amount : 0,
+    treasury: credited ? amount : 0,
+  });
   return amount;
+}
+
+/** A treasury and enterprise transfer; `corpCurrency` is the enterprise's ledger account currency. */
+export interface TreasuryTransferInput {
+  countryId: CountryId;
+  corpId: ObjectId;
+  amountLocal: number;
+  corpCurrency: CurrencyCode;
+}
+
+/** Witness each landed leg of a transfer under one context and settlement reason. */
+async function witnessTreasuryTransfer(
+  db: Db,
+  ledger: TreasuryCashOptions | undefined,
+  flow: "soe_remittance" | "soe_treasury_draw",
+  input: TreasuryTransferInput,
+  now: Date,
+  landed: { treasury: number; corporation: number }
+): Promise<void> {
+  if (landed.treasury === 0 && landed.corporation === 0) return;
+  const options = await resolveTreasuryCashOptions(db, ledger);
+  const site = `treasury:${flow}`;
+  await witnessTreasuryCash(db, options, {
+    flow,
+    account: { kind: "corporation", corpId: input.corpId.toString(), currency: input.corpCurrency },
+    amount: landed.corporation,
+    now,
+    site,
+  });
+  await witnessTreasuryCash(db, options, {
+    flow,
+    account: { kind: "government", countryId: input.countryId },
+    amount: landed.treasury,
+    now,
+    site,
+  });
 }

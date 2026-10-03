@@ -71,8 +71,9 @@ describe("processSoeRemittance", () => {
     // 1000 × (1 - 0.40) = 600 remitted; 400 stays in liquidCapital.
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 600 },
-      now
+      { countryId: "CN", corpId, amountLocal: 600, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
@@ -88,8 +89,9 @@ describe("processSoeRemittance", () => {
 
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 250 },
-      now
+      { countryId: "CN", corpId, amountLocal: 250, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
@@ -120,8 +122,9 @@ describe("processSoeRemittance", () => {
     // Remits only what's actually on hand (100), not the estimated 600.
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 100 },
-      now
+      { countryId: "CN", corpId, amountLocal: 100, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
@@ -184,8 +187,9 @@ describe("processSoeRemittance", () => {
     // quantity `calculateCountryOwnedBudgetRevenue` books as the revenue line.
     expect(vi.mocked(remitToTreasury)).toHaveBeenCalledWith(
       db,
-      { countryId: "CN", corpId, amountLocal: 600 },
-      now
+      { countryId: "CN", corpId, amountLocal: 600, corpCurrency: "CNY" },
+      now,
+      undefined
     );
   });
 
