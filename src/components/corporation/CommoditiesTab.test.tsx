@@ -153,7 +153,7 @@ describe("CommoditiesTab private supply", () => {
 
     const link = await screen.findByRole("link", { name: "Supply deal" });
     expect(link.getAttribute("href")).toBe("/corporation/604?tab=commodities#supply-agreements");
-    expect(screen.getByRole("link", { name: "Commodities" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Supply agreements" }).getAttribute("href")).toBe(
       "/corporation/604?tab=commodities#supply-agreements"
     );
   });

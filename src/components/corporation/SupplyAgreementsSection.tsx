@@ -101,10 +101,10 @@ function fmtPremium(fraction: number): string {
 }
 
 const STATUS_STYLES: Record<SupplyAgreement["status"], string> = {
-  pending: "border-warning/40 bg-warning/10 text-warning",
-  active: "border-success/40 bg-success/10 text-success",
-  cancelling: "border-warning/40 bg-warning/10 text-warning",
-  cancelled: "border-card-border bg-card-elevated text-muted",
+  pending: "text-warning",
+  active: "text-success",
+  cancelling: "text-warning",
+  cancelled: "text-muted",
 };
 
 /**
@@ -417,7 +417,7 @@ export default function SupplyAgreementsSection({
         ? { id: a.buyerCorpId, name: a.buyerCorpName, ticker: a.buyerCorpTicker }
         : { id: a.supplierCorpId, name: a.supplierCorpName, ticker: a.supplierCorpTicker };
     return (
-      <div key={a._id} className="rounded-xl border border-card-border bg-card p-4 space-y-3">
+      <div key={a._id} className="space-y-2 border-b border-card-border/60 py-3 last:border-b-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
@@ -435,9 +435,7 @@ export default function SupplyAgreementsSection({
               </Link>
             </p>
           </div>
-          <span
-            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLES[a.status]}`}
-          >
+          <span className={`shrink-0 text-xs font-medium ${STATUS_STYLES[a.status]}`}>
             {a.status}
           </span>
         </div>
@@ -463,7 +461,7 @@ export default function SupplyAgreementsSection({
         </div>
 
         {a.status === "pending" && (
-          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted">
+          <div className="text-xs text-muted">
             <p className="font-semibold text-foreground">
               {t("negotiation.revision", {
                 revision: currentOffer.revision,
@@ -592,7 +590,7 @@ export default function SupplyAgreementsSection({
                 type="button"
                 disabled={busyId === a._id}
                 onClick={() => handleAction(a._id, "accept")}
-                className="rounded-lg bg-success px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
+                className="inline-flex h-7 items-center rounded-md border border-success bg-success px-2.5 text-xs font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
               >
                 {busyId === a._id ? t("negotiation.working") : t("negotiation.accept")}
               </button>
@@ -602,7 +600,7 @@ export default function SupplyAgreementsSection({
                 type="button"
                 disabled={busyId === a._id}
                 onClick={() => openCounter(a)}
-                className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-card-elevated disabled:opacity-50"
               >
                 {t("negotiation.counter")}
               </button>
@@ -612,7 +610,7 @@ export default function SupplyAgreementsSection({
                 type="button"
                 disabled={busyId === a._id}
                 onClick={() => handleAction(a._id, "cancel")}
-                className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:opacity-50"
+                className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-card-elevated disabled:opacity-50"
               >
                 {busyId === a._id ? t("negotiation.working") : t("negotiation.cancel")}
               </button>
@@ -623,7 +621,7 @@ export default function SupplyAgreementsSection({
         {counterOpenId === a._id && canCounter && (
           <form
             onSubmit={(event) => void handleCounter(event, a._id)}
-            className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3"
+            className="space-y-3 border-t border-card-border pt-3"
           >
             <p className="text-xs font-semibold text-foreground">{t("negotiation.yourCounter")}</p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -641,7 +639,7 @@ export default function SupplyAgreementsSection({
                       [a._id]: { ...current[a._id]!, volumeCap: event.target.value },
                     }))
                   }
-                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                  className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                 />
               </label>
               <label className="space-y-1 text-xs text-muted">
@@ -659,7 +657,7 @@ export default function SupplyAgreementsSection({
                       [a._id]: { ...current[a._id]!, premiumPct: event.target.value },
                     }))
                   }
-                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                  className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                 />
               </label>
               <label className="space-y-1 text-xs text-muted">
@@ -676,7 +674,7 @@ export default function SupplyAgreementsSection({
                       [a._id]: { ...current[a._id]!, durationTurns: event.target.value },
                     }))
                   }
-                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                  className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
                 />
               </label>
               <label className="flex items-center gap-2 self-end pb-2 text-xs text-muted">
@@ -698,14 +696,14 @@ export default function SupplyAgreementsSection({
               <button
                 type="button"
                 onClick={() => setCounterOpenId(null)}
-                className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
+                className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
               >
                 {t("negotiation.close")}
               </button>
               <button
                 type="submit"
                 disabled={busyId === a._id}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               >
                 {busyId === a._id ? t("negotiation.sending") : t("negotiation.sendCounter")}
               </button>
@@ -717,21 +715,16 @@ export default function SupplyAgreementsSection({
   }
 
   return (
-    <div
-      id="supply-agreements"
-      className="rounded-2xl border border-card-border bg-card-elevated p-5 sm:p-6 space-y-5"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div id="supply-agreements" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-card-border pb-1.5">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-muted">
-            Supply Agreements
-          </h2>
+          <h2 className="text-sm font-semibold text-foreground">Supply agreements</h2>
           <p className="mt-1 text-xs text-muted max-w-lg">{t("negotiation.intro")}</p>
         </div>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white transition-colors hover:bg-primary/90"
         >
           {showForm ? t("negotiation.close") : t("negotiation.proposeButton")}
         </button>
@@ -769,7 +762,7 @@ export default function SupplyAgreementsSection({
         <form
           id={`supply-proposal-${corpId}`}
           onSubmit={handlePropose}
-          className="rounded-xl border border-card-border bg-card p-4 space-y-4"
+          className="space-y-4 border-t border-card-border pt-3"
         >
           <div className="space-y-2">
             <p className="text-xs font-semibold text-foreground">
@@ -791,9 +784,9 @@ export default function SupplyAgreementsSection({
                     setBuyerQuery("");
                     setStateId("");
                   }}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`inline-flex h-7 items-center rounded-md border px-2.5 text-xs transition-colors ${
                     proposalRole === value
-                      ? "border-primary/50 bg-primary/10 text-primary"
+                      ? "border-foreground bg-foreground font-medium text-background"
                       : "border-card-border text-muted hover:text-foreground"
                   }`}
                 >
@@ -836,7 +829,7 @@ export default function SupplyAgreementsSection({
                   value={buyerQuery}
                   onChange={(e) => setBuyerQuery(e.target.value)}
                   placeholder={t("negotiation.searchPlaceholder")}
-                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                  className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
                 />
                 {buyerResults.length > 0 && (
                   <ul className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-card-border bg-card">
@@ -874,7 +867,7 @@ export default function SupplyAgreementsSection({
                   setCommodity(e.target.value as CommodityType);
                   setStateId("");
                 }}
-                className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none"
               >
                 {AGREEMENT_COMMODITIES.map((c) => (
                   <option key={c} value={c}>
@@ -892,7 +885,7 @@ export default function SupplyAgreementsSection({
                       value={stateId}
                       onChange={(e) => setStateId(e.target.value)}
                       disabled={stateOptions.length === 0}
-                      className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+                      className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none disabled:opacity-60"
                     >
                       <option value="">
                         {stateOptions.length === 0
@@ -912,7 +905,7 @@ export default function SupplyAgreementsSection({
                       onChange={(e) => setStateId(e.target.value.toUpperCase())}
                       placeholder={t("negotiation.statePlaceholder")}
                       maxLength={32}
-                      className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                      className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
                     />
                   )}
                   <p className="text-[11px] text-muted">{t("negotiation.freightHelp")}</p>
@@ -934,7 +927,7 @@ export default function SupplyAgreementsSection({
                 value={volumeCap}
                 onChange={(e) => setVolumeCap(e.target.value)}
                 placeholder={t("negotiation.volumePlaceholder")}
-                className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
               />
               <p className="text-[11px] text-muted">{t("negotiation.volumeHelp")}</p>
               {selectedCapacity && (
@@ -992,7 +985,7 @@ export default function SupplyAgreementsSection({
                 value={durationTurns}
                 onChange={(e) => setDurationTurns(e.target.value)}
                 placeholder={t("negotiation.openEnded")}
-                className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
               />
               <span className="block text-[11px]">
                 {t("negotiation.termHelp", { min: MIN_DURATION_TURNS, max: MAX_DURATION_TURNS })}
@@ -1022,31 +1015,35 @@ export default function SupplyAgreementsSection({
       )}
 
       {loading ? (
-        <p className="text-sm text-muted">Loading agreements…</p>
+        <p className="text-xs text-muted">Loading agreements…</p>
       ) : agreements.length === 0 ? (
-        <p className="rounded-xl border border-card-border bg-card p-6 text-center text-sm text-muted">
+        <p className="py-2 text-xs text-muted">
           No supply agreements yet. Propose one to lock in an off-market commodity deal.
         </p>
       ) : (
         <div className="space-y-6">
           {asSupplier.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted">As supplier</h3>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <h3 className="border-b border-card-border pb-1 text-xs font-medium text-muted">
+                As supplier
+              </h3>
+              <div className="grid gap-x-8 sm:grid-cols-2">
                 {asSupplier.map((a) => renderAgreement(a, "supplier"))}
               </div>
             </div>
           )}
           {asBuyer.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted">As buyer</h3>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <h3 className="border-b border-card-border pb-1 text-xs font-medium text-muted">
+                As buyer
+              </h3>
+              <div className="grid gap-x-8 sm:grid-cols-2">
                 {asBuyer.map((a) => renderAgreement(a, "buyer"))}
               </div>
             </div>
           )}
           {asSupplier.length === 0 && asBuyer.length === 0 && (
-            <p className="rounded-xl border border-card-border bg-card p-6 text-center text-sm text-muted">
+            <p className="py-2 text-xs text-muted">
               No active agreements. {cancelledCount > 0 && "Cancelled deals are hidden."}
             </p>
           )}
