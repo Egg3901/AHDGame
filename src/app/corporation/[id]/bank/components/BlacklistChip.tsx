@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-/** One removable entry on the blacklist. */
+/** One removable entry on the refusal list, as a list row. */
 export function BlacklistChip({
   label,
   href,
@@ -15,24 +15,24 @@ export function BlacklistChip({
   canMutate: boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-card-border bg-card-elevated py-1 pl-3 pr-1 text-sm">
+    <li className="flex items-center justify-between gap-2 border-b border-card-border/60 py-1 text-[13px]">
       {href ? (
-        <Link href={href} className="text-primary hover:opacity-80">
+        <Link href={href} className="min-w-0 truncate text-foreground hover:underline">
           {label}
         </Link>
       ) : (
-        <span>{label}</span>
+        <span className="min-w-0 truncate text-foreground">{label}</span>
       )}
       {canMutate && (
         <button
           type="button"
           onClick={onRemove}
           aria-label={`Remove ${label}`}
-          className="flex h-5 w-5 items-center justify-center rounded-full text-muted transition-colors hover:bg-error/15 hover:text-error"
+          className="shrink-0 text-[11px] text-muted hover:text-error"
         >
-          ×
+          Remove
         </button>
       )}
-    </span>
+    </li>
   );
 }

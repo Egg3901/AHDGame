@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useReducer } from "react";
-import { Button, Slider } from "@/components/ui";
+import { Slider } from "@/components/ui";
 import { effectiveBankRatesFromPrime } from "@/lib/banking/rules/rates";
 import type { Corridor, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 function corridorSentence(
   corridors: { deposit: Corridor; lending: Corridor },
@@ -99,70 +100,79 @@ export function RateOffsetEditor({
         ? "Below your current offset: loan demand grows, but each loan earns less."
         : "At your current offset: loan demand holds its course.";
 
+  const offsetControl = (
+    kind: "deposit" | "lending",
+    value: number,
+    corridor: Corridor,
+    rateLine: string,
+    direction: string
+  ) => (
+    <label className="block min-w-0 space-y-1.5">
+      <span className="flex justify-between text-xs text-muted">
+        <span>{kind === "deposit" ? "Deposit offset" : "Lending offset"}</span>
+        <span className="font-mono tabular-nums text-foreground">{value.toFixed(2)} pp</span>
+      </span>
+      <Slider
+        min={corridor.minOffset}
+        max={corridor.maxOffset}
+        step={step}
+        value={value}
+        disabled={!canMutate}
+        onChange={(e) => updateRateState({ [kind]: parseFloat(e.target.value) })}
+        aria-label={kind === "deposit" ? "Deposit rate offset" : "Lending rate offset"}
+      />
+      <span className="block text-xs text-foreground">{rateLine}</span>
+      <span className="block font-mono text-[11px] text-muted">
+        Legal rate limits [{corridor.minOffset}, {corridor.maxOffset}]
+      </span>
+      <span className="block text-[11px] text-muted">{direction}</span>
+    </label>
+  );
+
   return (
-    <section className="rounded-xl border border-card-border bg-card p-5 space-y-5 max-w-xl">
-      <div>
-        <Eyebrow kind="ceoControl" />
-        <h3 className="text-base font-semibold text-foreground">Rates</h3>
-        <p className="text-sm text-muted">
-          You pay {effective.depositRatePercent.toFixed(2)}% on deposits and charge{" "}
-          {effective.lendingRatePercent.toFixed(2)}% on loans. The spread between them,{" "}
-          <span className="font-semibold text-foreground">{spread.toFixed(2)} points</span>, is what
-          the loan book earns before losses and insurance.
+    <BankPanel
+      kind="ceoControl"
+      title="Rates"
+      actions={
+        canMutate ? (
+          <SmallButton tone="primary" onClick={() => void save()} disabled={busy}>
+            {busy ? "Saving..." : "Save rates"}
+          </SmallButton>
+        ) : undefined
+      }
+    >
+      <div className="space-y-1 py-1.5">
+        <p className="text-xs text-muted">
+          You pay{" "}
+          <span className="font-mono text-foreground">
+            {effective.depositRatePercent.toFixed(2)}%
+          </span>{" "}
+          on deposits and charge{" "}
+          <span className="font-mono text-foreground">
+            {effective.lendingRatePercent.toFixed(2)}%
+          </span>{" "}
+          on loans. The spread between them,{" "}
+          <span className="font-mono font-medium text-foreground">{spread.toFixed(2)} points</span>,
+          is what the loan book earns before losses and insurance.
         </p>
-        <p className="mt-2 text-xs text-muted">{corridorSentence(corridors, primeRate)}</p>
+        <p className="text-[11px] text-muted">{corridorSentence(corridors, primeRate)}</p>
       </div>
-      <label className="block space-y-2">
-        <div className="flex justify-between text-xs text-muted">
-          <span>Deposit offset</span>
-          <span className="font-mono tabular-nums">{deposit.toFixed(2)} pp</span>
-        </div>
-        <Slider
-          min={corridors.deposit.minOffset}
-          max={corridors.deposit.maxOffset}
-          step={step}
-          value={deposit}
-          disabled={!canMutate}
-          onChange={(e) => updateRateState({ deposit: parseFloat(e.target.value) })}
-          aria-label="Deposit rate offset"
-        />
-        <p className="text-xs text-foreground">
-          You pay {effective.depositRatePercent.toFixed(2)}% (prime {prime.toFixed(2)}% + offset{" "}
-          {deposit.toFixed(2)})
-        </p>
-        <p className="text-[10px] text-muted font-mono">
-          Legal rate limits [{corridors.deposit.minOffset}, {corridors.deposit.maxOffset}]
-        </p>
-        <p className="text-[11px] text-muted">{depositDirection}</p>
-      </label>
-      <label className="block space-y-2">
-        <div className="flex justify-between text-xs text-muted">
-          <span>Lending offset</span>
-          <span className="font-mono tabular-nums">{lending.toFixed(2)} pp</span>
-        </div>
-        <Slider
-          min={corridors.lending.minOffset}
-          max={corridors.lending.maxOffset}
-          step={step}
-          value={lending}
-          disabled={!canMutate}
-          onChange={(e) => updateRateState({ lending: parseFloat(e.target.value) })}
-          aria-label="Lending rate offset"
-        />
-        <p className="text-xs text-foreground">
-          You charge {effective.lendingRatePercent.toFixed(2)}% (prime {prime.toFixed(2)}% + offset{" "}
-          {lending.toFixed(2)})
-        </p>
-        <p className="text-[10px] text-muted font-mono">
-          Legal rate limits [{corridors.lending.minOffset}, {corridors.lending.maxOffset}]
-        </p>
-        <p className="text-[11px] text-muted">{lendingDirection}</p>
-      </label>
-      {canMutate && (
-        <Button type="button" onClick={() => void save()} disabled={busy}>
-          {busy ? "Saving..." : "Save rates"}
-        </Button>
-      )}
-    </section>
+      <div className="grid gap-x-8 gap-y-4 pt-2 md:grid-cols-2">
+        {offsetControl(
+          "deposit",
+          deposit,
+          corridors.deposit,
+          `You pay ${effective.depositRatePercent.toFixed(2)}% (prime ${prime.toFixed(2)}% + offset ${deposit.toFixed(2)})`,
+          depositDirection
+        )}
+        {offsetControl(
+          "lending",
+          lending,
+          corridors.lending,
+          `You charge ${effective.lendingRatePercent.toFixed(2)}% (prime ${prime.toFixed(2)}% + offset ${lending.toFixed(2)})`,
+          lendingDirection
+        )}
+      </div>
+    </BankPanel>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Input } from "@/components/ui";
 import type { ShowToast } from "../types";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 export function RevokeCharterForm({
   corporationId,
@@ -46,22 +46,25 @@ export function RevokeCharterForm({
   };
 
   return (
-    <section className="rounded-xl border border-error/30 bg-error/5 p-5 space-y-3 max-w-xl">
-      <Eyebrow kind="supervision" />
-      <h3 className="text-base font-semibold text-error">Revoke charter</h3>
-      <p className="text-sm text-muted">
-        Central bank chair of this currency, or an admin. The CEO cannot self-revoke.
-      </p>
-      <Input
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="Reason"
-        maxLength={500}
-        aria-label="Revocation reason"
-      />
-      <Button type="button" variant="destructive" onClick={() => void revoke()} disabled={busy}>
-        {busy ? "Revoking..." : "Revoke charter"}
-      </Button>
-    </section>
+    <BankPanel kind="supervision" title="Revoke charter" className="max-w-2xl">
+      <div className="space-y-2 py-1.5">
+        <p className="text-xs text-muted">
+          Central bank chair of this currency, or an admin. The CEO cannot self-revoke.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason"
+            maxLength={500}
+            aria-label="Revocation reason"
+            className="h-8 min-w-0 flex-1 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
+          />
+          <SmallButton tone="danger" onClick={() => void revoke()} disabled={busy}>
+            {busy ? "Revoking..." : "Revoke charter"}
+          </SmallButton>
+        </div>
+      </div>
+    </BankPanel>
   );
 }

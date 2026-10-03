@@ -6,7 +6,8 @@ import { EmptyState, Tooltip } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { assessCapital, borrowingsFromCharter } from "@/lib/banking/capitalAdequacy";
-import { Eyebrow } from "../components/BankSection";
+import { Segmented } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 import type { BankTab, ConsolePayload, ShowToast } from "../types";
 import { charterLabel } from "../lib/helpers";
 import { StatCell } from "../components/StatCell";
@@ -70,32 +71,30 @@ function LoanApprovalToggle({
     }
   };
   return (
-    <div className="space-y-2 rounded-xl border border-card-border bg-card p-4">
-      <Eyebrow kind="ceoControl" />
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-semibold text-foreground">Loan approval</div>
-          <p className="mt-1 text-xs text-muted">
-            {requireApproval
-              ? "New loan requests wait for you to approve or decline them in the loan book."
-              : "Loan requests are granted automatically when the borrower qualifies."}
-          </p>
-        </div>
-        <button
-          type="button"
+    <BankPanel
+      kind="ceoControl"
+      title="Loan approval"
+      actions={
+        <Segmented
+          ariaLabel="Loan approval"
+          options={[
+            { value: "auto", label: "Auto-approve" },
+            { value: "manual", label: "Approval required" },
+          ]}
+          value={requireApproval ? "manual" : "auto"}
+          onChange={(v) => {
+            if ((v === "manual") !== requireApproval) void toggle();
+          }}
           disabled={!canMutate || busy}
-          onClick={() => void toggle()}
-          aria-pressed={requireApproval}
-          className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-            requireApproval
-              ? "border-accent bg-accent/10 text-accent"
-              : "border-card-border text-muted hover:border-accent/50"
-          }`}
-        >
-          {requireApproval ? "Approval required" : "Auto-approve"}
-        </button>
-      </div>
-    </div>
+        />
+      }
+    >
+      <p className="py-1.5 text-xs text-muted">
+        {requireApproval
+          ? "New loan requests wait for you to approve or decline them in the loan book."
+          : "Loan requests are granted automatically when the borrower qualifies."}
+      </p>
+    </BankPanel>
   );
 }
 
@@ -128,73 +127,76 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
   const costOfFunds = depositBase > 0 ? (paid * TURNS_PER_YEAR * 100) / depositBase : null;
 
   return (
-    <section className="rounded-xl border border-card-border bg-card overflow-hidden">
-      <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
-        <Eyebrow kind="monitor" />
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+    <BankPanel
+      kind="monitor"
+      title={
+        <>
           Last turn earnings
-        </span>
-        <Tooltip
-          content={t("tooltips.netInterest")}
-          label={t("about", { label: "Last turn earnings" })}
-        />
-      </div>
-      <dl className="divide-y divide-card-border px-4">
-        <EarningsRow
-          label="Interest earned"
-          detail={`loans ${formatBankMoney(loanInterest, currency)} · interbank received ${formatBankMoney(ibReceived, currency)}`}
-          value={formatBankMoney(earned, currency)}
-          tooltip={t("tooltips.interestEarned")}
-          aboutLabel={t("about", { label: "Interest earned" })}
-        />
-        <EarningsRow
-          label="Interest paid"
-          detail={`deposits ${formatBankMoney(depositInterest, currency)} · interbank paid ${formatBankMoney(ibPaid, currency)} · central-bank facilities ${formatBankMoney(facility, currency)}${costOfFunds != null ? ` · cost of funds ${costOfFunds.toFixed(2)}%` : ""}`}
-          value={formatBankMoney(paid, currency)}
-          tooltip={t("tooltips.interestPaid")}
-          aboutLabel={t("about", { label: "Interest paid" })}
-        />
-        <EarningsRow
-          label="Net interest"
-          detail={
-            charter.lastBankingIncomeTurn != null
-              ? `banking pass T${charter.lastBankingIncomeTurn}${nim != null ? ` · margin ${nim.toFixed(2)}%` : ""}`
-              : "awaiting first banking pass"
-          }
-          value={formatBankMoney(net, currency)}
-          tone={net < 0 ? "text-error" : "text-success"}
-          tooltip={t("tooltips.netInterest")}
-          aboutLabel={t("about", { label: "Net interest" })}
-        />
-        <EarningsRow
-          label="Insurance and write-offs"
-          detail={`premium ${formatBankMoney(premium, currency)} · defaults ${formatBankMoney(writeoffs, currency)}`}
-          value={formatBankMoney(premium + writeoffs, currency)}
-          tooltip={t("tooltips.otherCharges")}
-          aboutLabel={t("about", { label: "Insurance and write-offs" })}
-        />
-        <EarningsRow
-          label="Bottom line"
-          detail="net interest minus insurance and write-offs"
-          value={formatBankMoney(charter.lastBankingIncome, currency)}
-          tone={charter.lastBankingIncome < 0 ? "text-error" : "text-success"}
-          tooltip={t("tooltips.otherCharges")}
-          aboutLabel={t("about", { label: "Bottom line" })}
-        />
-      </dl>
-      <div className="border-t border-card-border px-4 py-3">
-        <p className="text-xs text-muted">
-          {t("tooltips.takeProfits")}{" "}
-          <button
-            type="button"
-            onClick={onTreasury}
-            className="font-medium text-accent underline-offset-2 hover:underline"
-          >
-            Withdraw in Treasury
-          </button>
-        </p>
-      </div>
-    </section>
+          <Tooltip
+            content={t("tooltips.netInterest")}
+            label={t("about", { label: "Last turn earnings" })}
+          />
+        </>
+      }
+    >
+      <table className="w-full border-collapse">
+        <tbody>
+          <EarningsRow
+            label="Interest earned"
+            detail={`loans ${formatBankMoney(loanInterest, currency)}, interbank received ${formatBankMoney(ibReceived, currency)}`}
+            value={formatBankMoney(earned, currency)}
+            tooltip={t("tooltips.interestEarned")}
+            aboutLabel={t("about", { label: "Interest earned" })}
+          />
+          <EarningsRow
+            label="Interest paid"
+            detail={`deposits ${formatBankMoney(depositInterest, currency)}, interbank paid ${formatBankMoney(ibPaid, currency)}, central-bank facilities ${formatBankMoney(facility, currency)}${costOfFunds != null ? `, cost of funds ${costOfFunds.toFixed(2)}%` : ""}`}
+            value={formatBankMoney(paid, currency)}
+            tooltip={t("tooltips.interestPaid")}
+            aboutLabel={t("about", { label: "Interest paid" })}
+          />
+          <EarningsRow
+            label="Net interest"
+            detail={
+              charter.lastBankingIncomeTurn != null
+                ? `banking pass T${charter.lastBankingIncomeTurn}${nim != null ? `, margin ${nim.toFixed(2)}%` : ""}`
+                : "awaiting first banking pass"
+            }
+            value={formatBankMoney(net, currency)}
+            tone={net < 0 ? "text-error" : "text-success"}
+            tooltip={t("tooltips.netInterest")}
+            aboutLabel={t("about", { label: "Net interest" })}
+            strong
+          />
+          <EarningsRow
+            label="Insurance and write-offs"
+            detail={`premium ${formatBankMoney(premium, currency)}, defaults ${formatBankMoney(writeoffs, currency)}`}
+            value={formatBankMoney(premium + writeoffs, currency)}
+            tooltip={t("tooltips.otherCharges")}
+            aboutLabel={t("about", { label: "Insurance and write-offs" })}
+          />
+          <EarningsRow
+            label="Bottom line"
+            detail="net interest minus insurance and write-offs"
+            value={formatBankMoney(charter.lastBankingIncome, currency)}
+            tone={charter.lastBankingIncome < 0 ? "text-error" : "text-success"}
+            tooltip={t("tooltips.otherCharges")}
+            aboutLabel={t("about", { label: "Bottom line" })}
+            strong
+          />
+        </tbody>
+      </table>
+      <p className="pt-1.5 text-xs text-muted">
+        {t("tooltips.takeProfits")}{" "}
+        <button
+          type="button"
+          onClick={onTreasury}
+          className="text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
+        >
+          Withdraw in Treasury
+        </button>
+      </p>
+    </BankPanel>
   );
 }
 
@@ -205,6 +207,7 @@ function EarningsRow({
   tone,
   tooltip,
   aboutLabel,
+  strong = false,
 }: {
   label: string;
   detail: string;
@@ -212,20 +215,23 @@ function EarningsRow({
   tone?: string;
   tooltip: string;
   aboutLabel: string;
+  strong?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2.5">
-      <div className="min-w-0">
-        <dt className="text-sm font-medium text-foreground">
-          {label}
-          <Tooltip content={tooltip} label={aboutLabel} />
-        </dt>
-        <dd className="text-xs text-muted">{detail}</dd>
-      </div>
-      <dd className={`shrink-0 text-sm font-semibold tabular-nums ${tone ?? "text-foreground"}`}>
+    <tr className={strong ? "font-medium" : undefined}>
+      <td className="border-b border-card-border/60 py-1.5 pr-2 text-[13px] text-foreground">
+        {label}
+        <Tooltip content={tooltip} label={aboutLabel} />
+      </td>
+      <td className="hidden border-b border-card-border/60 px-2 py-1.5 text-xs text-muted md:table-cell">
+        {detail}
+      </td>
+      <td
+        className={`whitespace-nowrap border-b border-card-border/60 py-1.5 pl-2 text-right font-mono text-[13px] tabular-nums ${tone ?? "text-foreground"}`}
+      >
         {value}
-      </dd>
-    </div>
+      </td>
+    </tr>
   );
 }
 
@@ -328,7 +334,7 @@ export function ActiveCharterPanel({
         />
       )}
 
-      <div className="flex flex-wrap gap-1 border-b border-card-border">
+      <nav className="flex flex-wrap items-center gap-1" aria-label="Bank console">
         {tabs.map((tabItem) => (
           <button
             key={tabItem.id}
@@ -336,15 +342,15 @@ export function ActiveCharterPanel({
             onClick={() => setTab(tabItem.id)}
             aria-current={tab === tabItem.id ? "page" : undefined}
             title={tabItem.hint}
-            className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] transition-colors ${
               tab === tabItem.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted hover:text-foreground"
+                ? "bg-card-elevated font-medium text-foreground"
+                : "text-muted hover:bg-card-elevated/60 hover:text-foreground"
             }`}
           >
             {tabItem.label}
             {tabItem.badge != null && (
-              <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-accent">
+              <span className="font-mono text-[11px] tabular-nums text-warning">
                 {tabItem.badge}
               </span>
             )}
@@ -356,20 +362,21 @@ export function ActiveCharterPanel({
             )}
           </button>
         ))}
-      </div>
+      </nav>
 
       {tab === "overview" && (
         <>
           <OutlookStrip data={data} />
-          <section className="rounded-xl border border-card-border bg-card overflow-hidden">
-            <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
-              <Eyebrow kind="monitor" />
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+          <BankPanel
+            kind="monitor"
+            title={
+              <>
                 {t("position")}
-              </span>
-              <Tooltip content={t("tooltips.position")} label={t("aboutPosition")} />
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
+                <Tooltip content={t("tooltips.position")} label={t("aboutPosition")} />
+              </>
+            }
+          >
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 pt-1 sm:grid-cols-3 lg:grid-cols-6">
               <StatCell
                 label="Posted capital"
                 value={formatBankMoney(charter.postedCapital, charter.currency)}
@@ -431,7 +438,7 @@ export function ActiveCharterPanel({
                 action={{ label: t("actions.adjustRates"), onClick: () => setTab("deposits") }}
               />
             </div>
-          </section>
+          </BankPanel>
           <EarningsBreakdown data={data} onTreasury={() => setTab("treasury")} />
         </>
       )}
@@ -561,15 +568,16 @@ export function ActiveCharterPanel({
 
       {tab === "charter" && (
         <div className="space-y-6">
-          <section className="space-y-2 rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
-            <Eyebrow kind="reference" />
-            <h3 className="text-base font-semibold text-foreground">Charter</h3>
-            <p className="mt-1">
+          <BankPanel kind="reference" title="Charter">
+            <p className="py-1.5 text-xs text-muted">
               {charterLabel(charter.type)} charter in {charter.currency}, granted on turn{" "}
               {charter.charteredTurn}. Posted capital{" "}
-              {formatBankMoney(charter.postedCapital, charter.currency)}.
+              <span className="font-mono text-foreground">
+                {formatBankMoney(charter.postedCapital, charter.currency)}
+              </span>
+              .
             </p>
-          </section>
+          </BankPanel>
           <CharterSwitchForm
             data={data}
             canMutate={canMutate}
@@ -583,7 +591,7 @@ export function ActiveCharterPanel({
               showToast={showToast}
             />
           ) : (
-            <p className="text-sm text-muted">
+            <p className="text-xs text-muted">
               Only the chartering currency&apos;s central bank chair or an admin can revoke a
               charter.
             </p>
