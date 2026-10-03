@@ -43,7 +43,7 @@
  * perpetual-election system can spawn the next cycle.
  */
 
-import { frozenBgAssemblyTurns } from "@/lib/countries/bg/rules/assemblyClock1991";
+import { frozenNativeCampaignTurns1991 } from "@/lib/elections/rules/nativeCampaignClock1991";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -102,7 +102,7 @@ export function canonicalTurns(
   ctx: CycleAnchorContext = DEFAULT_CYCLE_ANCHOR_CONTEXT
 ): { endTurn: number; primaryEndTurn: number; startTurn: number } | null {
   if (ctx.preset === "1991-default") {
-    const frozen = frozenBgAssemblyTurns(election);
+    const frozen = frozenNativeCampaignTurns1991(election);
     if (frozen !== undefined) return frozen;
   }
   const { electionType, senateClass, cycle, state } = election;
@@ -180,7 +180,8 @@ export function shouldReactivatePrematureElection(
   ctx: CycleAnchorContext = DEFAULT_CYCLE_ANCHOR_CONTEXT
 ): boolean {
   if (election.cycle == null || !election.electionType) return false;
-  if (ctx.preset === "1991-default" && frozenBgAssemblyTurns(election) !== undefined) return false;
+  if (ctx.preset === "1991-default" && frozenNativeCampaignTurns1991(election) !== undefined)
+    return false;
   const canonical = canonicalTurns(election, undefined, ctx);
   if (!canonical) return false;
   if (canonical.endTurn <= currentTurn) return false;
@@ -346,7 +347,7 @@ export async function POST() {
 
       function expectedCycleForTurn(election: Election): number | null {
         if (election.cycle == null || !election.electionType) return null;
-        if (ctx.preset === "1991-default" && frozenBgAssemblyTurns(election) !== undefined)
+        if (ctx.preset === "1991-default" && frozenNativeCampaignTurns1991(election) !== undefined)
           return election.cycle;
         // For lower-chamber types where a snap has resolved, the cycle math
         // is anchored to the snap's endTurn, not the bootstrap — don't use
@@ -600,7 +601,7 @@ export async function POST() {
         continue;
       }
 
-      if (ctx.preset === "1991-default" && frozenBgAssemblyTurns(election) !== undefined) {
+      if (ctx.preset === "1991-default" && frozenNativeCampaignTurns1991(election) !== undefined) {
         // Native owners retain status, cycle and all turn bounds. Only repair
         // the derived wall-clock dates, including an upcoming filing window.
         ops.push({

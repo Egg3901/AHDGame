@@ -1,3 +1,4 @@
+import { ObjectId } from "mongodb";
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -216,4 +217,214 @@ describe("Bulgarian native timer custody", () => {
       canonicalTurns(e("nationalAssembly", 1, { countryId: "BG" }), undefined, ctx)?.endTurn
     ).toBe(38);
   });
+});
+
+describe("Hungarian and Russian native timer custody", () => {
+  const ctx = { preset: "1991-default", startingYear: 1991 };
+  const families: Array<[string, Partial<Election>]> = [
+    [
+      "Hungarian first round",
+      {
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        hungarianAssemblyRound: {
+          ruleVersion: "mixed-1989-v1",
+          round: 1,
+          receiptId: "HU:mixed1989:7",
+          registeredVoters: 100,
+        },
+      },
+    ],
+    [
+      "Hungarian runoff",
+      {
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        hungarianAssemblyRound: {
+          ruleVersion: "mixed-1989-v1",
+          round: 2,
+          receiptId: "HU:mixed1989:7",
+          registeredVoters: 100,
+          rootElectionId: "root",
+        },
+      },
+    ],
+    [
+      "Hungarian legacy vacancy",
+      {
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        hungarianAssemblyRound: {
+          ruleVersion: "mixed-1989-v1",
+          round: 1,
+          receiptId: "vacancy",
+          registeredVoters: 100,
+          byElection: { parentReceiptId: "parent", districtIds: ["district"], generation: 1 },
+        },
+      },
+    ],
+    [
+      "Hungarian modern round",
+      {
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        hungarianModernAssembly: {
+          ruleVersion: "mixed-2011-v1",
+          reason: "parliamentary_decision",
+          authorizedOnTurn: 8,
+        },
+      },
+    ],
+    [
+      "Hungarian modern vacancy",
+      {
+        countryId: "HU",
+        electionType: "nationalAssembly",
+        hungarianModernByElection: {
+          receiptId: "vacancy",
+          parentReceiptId: "parent",
+          districtId: "district",
+          registeredVoters: 100,
+        },
+      },
+    ],
+    [
+      "Russian first presidential round",
+      {
+        countryId: "RU",
+        electionType: "president",
+        russianPresidentialRound: { round: 1, mandateSinceTurn: 8, registeredVoters: 100 },
+      },
+    ],
+    [
+      "Russian presidential runoff",
+      {
+        countryId: "RU",
+        electionType: "president",
+        russianPresidentialRound: { round: 2, mandateSinceTurn: 8, registeredVoters: 100 },
+      },
+    ],
+    [
+      "Russian Duma constituency",
+      {
+        countryId: "RU",
+        electionType: "dumaDeputy",
+        russianDumaRound: {
+          cohortId: new ObjectId(),
+          mandateSinceTurn: 8,
+          registeredVoters: 100,
+          tier: "constituency",
+          generation: 3,
+        },
+      },
+    ],
+    [
+      "Russian Duma list",
+      {
+        countryId: "RU",
+        electionType: "dumaDeputy",
+        russianDumaRound: {
+          cohortId: new ObjectId(),
+          mandateSinceTurn: 8,
+          registeredVoters: 100,
+          tier: "list",
+          electoralLaw: "law1995",
+        },
+      },
+    ],
+    [
+      "Russian Council repeat",
+      {
+        countryId: "RU",
+        electionType: "federationCouncilMember",
+        russianCouncilRound: {
+          cohortId: new ObjectId(),
+          mandateSinceTurn: 8,
+          registeredVoters: 100,
+          districtNumber: 1,
+          generation: 3,
+        },
+      },
+    ],
+  ];
+  it.each(families)(
+    "keeps %s bounds and never reactivates its completed poll",
+    (_name, binding) => {
+      const election = e(binding.electionType!, 9, {
+        ...binding,
+        startTurn: 20,
+        primaryEndTurn: 20,
+        endTurn: 22,
+        status: "completed",
+      });
+      expect(canonicalTurns(election, 999, ctx)).toEqual({
+        startTurn: 20,
+        primaryEndTurn: 20,
+        endTurn: 22,
+      });
+      expect(shouldReactivatePrematureElection(election, 10, new Set(), new Set(), ctx)).toBe(
+        false
+      );
+    }
+  );
+  it.each(families)("skips malformed %s bounds without releasing custody", (_name, binding) => {
+    const election = e(binding.electionType!, 9, {
+      ...binding,
+      startTurn: 20,
+      primaryEndTurn: 24,
+      endTurn: 22,
+      status: "completed",
+    });
+    expect(canonicalTurns(election, undefined, ctx)).toBeNull();
+    expect(shouldReactivatePrematureElection(election, 10, new Set(), new Set(), ctx)).toBe(false);
+  });
+  it.each([
+    { startTurn: undefined },
+    { primaryEndTurn: undefined },
+    { endTurn: undefined },
+    { startTurn: -1 },
+    { startTurn: 1.5 },
+    { primaryEndTurn: Number.NaN },
+    { endTurn: Number.POSITIVE_INFINITY },
+    { endTurn: Number.MAX_SAFE_INTEGER + 1 },
+    { startTurn: 21, primaryEndTurn: 20 },
+    { endTurn: 20 },
+  ])("retains native custody with invalid bounds %j", (bounds) => {
+    const election = e("president", 9, {
+      countryId: "RU",
+      status: "completed",
+      startTurn: 20,
+      primaryEndTurn: 20,
+      endTurn: 22,
+      ...bounds,
+      russianPresidentialRound: { round: 2, mandateSinceTurn: 8, registeredVoters: 100 },
+    });
+    expect(canonicalTurns(election, undefined, ctx)).toBeNull();
+    expect(shouldReactivatePrematureElection(election, 10, new Set(), new Set(), ctx)).toBe(false);
+  });
+  it("does not freeze an unrelated country or election type carrying a foreign marker", () => {
+    const marker = { round: 1 as const, mandateSinceTurn: 8, registeredVoters: 100 };
+    for (const election of [
+      e("president", 1, { countryId: "US", russianPresidentialRound: marker }),
+      e("governor", 1, { countryId: "RU", russianPresidentialRound: marker }),
+    ]) {
+      expect(canonicalTurns(election, undefined, ctx)?.endTurn).not.toBe(22);
+    }
+  });
+  it.each(["1953-default", "1979-default", "2019-default", "2027-default"])(
+    "retains generic calendar behavior for %s",
+    (preset) => {
+      const election = e("president", 1, {
+        countryId: "RU",
+        startTurn: 20,
+        primaryEndTurn: 20,
+        endTurn: 22,
+        russianPresidentialRound: { round: 1, mandateSinceTurn: 8, registeredVoters: 100 },
+      });
+      expect(
+        canonicalTurns(election, undefined, { preset, startingYear: Number(preset.slice(0, 4)) })
+          ?.endTurn
+      ).not.toBe(22);
+    }
+  );
 });
