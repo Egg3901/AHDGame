@@ -511,6 +511,8 @@ export interface FederalBudget {
    * the bond stock is untouched).
    */
   treasuryBalance: number;
+  /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
+  disasterFiscalReceipts?: string[];
   /**
    * Negotiated indemnity receipts already applied to this treasury.
    *

@@ -640,6 +640,12 @@ const RUNTIME: CollectionEntry[] = [
   // Sovereign / crisis
   { name: "crises", category: "runtime" },
   {
+    name: "climateFeedbackState",
+    category: "runtime",
+    notes:
+      "Accumulated world climate pressure derived from regional emissions. Wiped with the world and rebuilt annually during play.",
+  },
+  {
     name: "livingConflicts",
     category: "runtime",
     notes:

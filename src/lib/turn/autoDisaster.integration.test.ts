@@ -245,6 +245,7 @@ describe("auto-disaster end-to-end: spawner → margin penalty → expiry", () =
     });
     db.collectionMocks["crises"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["states"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
       toArray: vi
         .fn()
         .mockResolvedValue([{ _id: STATE_ID, countryId: COUNTRY_ID, regionType: "region" }]),
@@ -294,6 +295,7 @@ describe("auto-disaster end-to-end: spawner → margin penalty → expiry", () =
     });
     db.collectionMocks["crises"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["states"]!.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
       toArray: vi
         .fn()
         .mockResolvedValue([{ _id: STATE_ID, countryId: COUNTRY_ID, regionType: "region" }]),
