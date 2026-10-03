@@ -59,6 +59,8 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   soe_treasury_draw: "soe_treasury_draw",
   soe_loss_backing: "soe_loss_backing",
   soe_capex_grant: "soe_capex_grant",
+  // A spawned corporation's system-granted treasury has no in-world payer.
+  corp_starting_grant: "corporation_starting_grant",
   gov_bond_maturity_payment: "bond_settlement",
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",
