@@ -13,6 +13,7 @@ import type {
   ElectionVoteTally,
 } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
+import { TALLY_WITH_LATEST_SNAPSHOT_ONLY } from "@/lib/electionEngine/tallyProjections";
 import { calendarTurn } from "@/lib/utils/gameDate";
 import {
   passesRoElectoralAmendment,
@@ -208,7 +209,11 @@ export async function authorizeRo1992ElectoralProposal(
     },
     {
       session,
-      projection: { romanianElectoralMandate: 1, voteSnapshot: 1, otherChamberVoteSnapshot: 1 },
+      projection: {
+        romanianElectoralMandate: 1,
+        "voteSnapshot.totals": 1,
+        "otherChamberVoteSnapshot.totals": 1,
+      },
     }
   );
   if (
@@ -319,7 +324,7 @@ async function rebindRo1992PrimaryCohort(db: Db, turn: number, now: Date, sessio
     .collection<ElectionVoteTally>("electionVoteTallies")
     .find(
       { electionId: { $in: polls.map((row) => row._id) } },
-      { session, projection: { electionId: 1, totalVotes: 1, finalized: 1 } }
+      { session, projection: TALLY_WITH_LATEST_SNAPSHOT_ONLY }
     )
     .toArray();
   const byPoll = new Map(tallies.map((row) => [row.electionId.toHexString(), row]));
@@ -335,12 +340,18 @@ async function rebindRo1992PrimaryCohort(db: Db, turn: number, now: Date, sessio
           ? row.primaryEndTurn <= turn ||
               !tally ||
               tally.finalized ||
-              Object.values(tally.totalVotes ?? {}).some((votes) => votes > 0)
+              Object.values(tally.totalVotes ?? {}).some((votes) => votes !== 0) ||
+              Object.values(tally.turnSnapshots?.[0]?.cumulativeVotes ?? {}).some(
+                (votes) => votes !== 0
+              )
           : !row.primaryEndTime ||
               row.primaryEndTime <= now ||
               !tally ||
               tally.finalized ||
-              Object.values(tally.totalVotes ?? {}).some((votes) => votes > 0);
+              Object.values(tally.totalVotes ?? {}).some((votes) => votes !== 0) ||
+              Object.values(tally.turnSnapshots?.[0]?.cumulativeVotes ?? {}).some(
+                (votes) => votes !== 0
+              );
       })
     )
       return [];

@@ -333,6 +333,7 @@ describe.skipIf(!uri)("Romanian1992 decision on isolated Mongo", () => {
   it.each([
     [199, 60, true, "untouched"],
     [199, 60, true, "counted"],
+    [199, 60, true, "snapshot"],
     [199, 60, true, "late"],
     [198, 60, false, "untouched"],
     [199, 59, false, "untouched"],
@@ -359,6 +360,8 @@ describe.skipIf(!uri)("Romanian1992 decision on isolated Mongo", () => {
             electionId: row._id,
             finalized: false,
             totalVotes: mode === "counted" && index === 0 ? { prior: 1 } : {},
+            turnSnapshots:
+              mode === "snapshot" && index === 0 ? [{ cumulativeVotes: { prior: 1 } }] : [],
           }))
         );
         const proposal = await openRo1992ElectoralProposal({
