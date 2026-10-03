@@ -1,5 +1,6 @@
 /**
  * Under V5, seated NPPs age each game year and can be replaced after death.
+ * Native slate financial owners retain their filed people and accounts.
  * This shell applies country gates, persists retirement, and updates office references.
  * @see processNppMortality
  */
@@ -96,6 +97,24 @@ export async function processNppMortality(
     })
     .toArray();
 
+  // A shared financial owner is not each person on its filed slate. Random
+  // owner replacement would bypass statutory succession and rewrite mandate
+  // custody without changing the original nomination receipt.
+  const nativeCandidates = candidates.filter(
+    (row) => ["BG", "HU"].includes(row.countryId ?? "US") && isEligibleNppForMortality(row)
+  );
+  const nativeOwners = nativeCandidates.length
+    ? await db.collection<ElectedOfficial>("electedOfficials").distinct("nppId", {
+        nppId: { $in: nativeCandidates.map((row) => row._id) },
+        seatsHeld: 1,
+        $or: [
+          { countryId: "BG", "bulgarianFoundingMandate.receiptId": { $exists: true } },
+          { countryId: "HU", "hungarianAssemblyMandate.receiptId": { $exists: true } },
+        ],
+      })
+    : [];
+  const nativeOwnerIds = new Set(nativeOwners.flatMap((id) => (id ? [id.toHexString()] : [])));
+
   // Per-country V5 gate, resolved once per country per pass.
   const v5ByCountry = new Map<string, boolean>();
   const isV5 = async (countryId: CountryId): Promise<boolean> => {
@@ -114,7 +133,13 @@ export async function processNppMortality(
   for (const npp of candidates) {
     // Belt-and-braces with the query filter above. The pure eligibility rule
     // keeps this shell safe if the query projection or filter changes later.
-    if (!isEligibleNppForMortality(npp)) continue;
+    if (
+      !isEligibleNppForMortality({
+        ...npp,
+        representsNativeSlate: nativeOwnerIds.has(npp._id.toHexString()),
+      })
+    )
+      continue;
     const countryId = (npp.countryId ?? "US") as CountryId;
     if (!(await isV5(countryId))) continue;
     const age = nppAgeAtYear(npp, year);
