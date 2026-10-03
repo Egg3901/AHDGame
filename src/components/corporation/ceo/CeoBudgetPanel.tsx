@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { flushSync } from "react-dom";
 import {
   MONEY_PERIODS,
@@ -29,7 +29,16 @@ import {
 } from "@/lib/constants/corporations";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationDetail, Financials } from "../CorporationPageTypes";
-import { DenseSection, Segmented, SmallButton, signTone, useCorpMoney } from "../dense/DenseKit";
+import {
+  DenseSection,
+  Segmented,
+  SmallButton,
+  StatementGroup,
+  StatementLine,
+  StatementTable,
+  signTone,
+  useCorpMoney,
+} from "../dense/DenseKit";
 
 /**
  * Whole-number amounts typed digit by digit can pass Number's safe range (a
@@ -69,60 +78,6 @@ interface CeoBudgetPanelProps {
 }
 
 const PERIOD_OPTIONS = MONEY_PERIODS.map((p) => ({ value: p, label: MONEY_PERIOD_LABEL[p] }));
-
-/** Statement line: label, amount, share of revenue, and a note column. */
-function Line({
-  label,
-  amount,
-  pct,
-  note,
-  strong,
-  indent,
-  amountClass = "text-foreground",
-  title,
-}: {
-  label: ReactNode;
-  amount: ReactNode;
-  pct?: string | null;
-  note?: ReactNode;
-  strong?: boolean;
-  indent?: boolean;
-  amountClass?: string;
-  title?: string;
-}) {
-  return (
-    <tr className={strong ? "font-semibold" : undefined} title={title}>
-      <td
-        className={`border-b border-card-border/60 py-1.5 pr-2 text-[13px] ${
-          indent ? "pl-4 text-muted" : "text-foreground"
-        }`}
-      >
-        {label}
-      </td>
-      <td
-        className={`whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right font-mono text-[13px] tabular-nums ${amountClass}`}
-      >
-        {amount}
-      </td>
-      <td className="hidden whitespace-nowrap border-b border-card-border/60 px-2 py-1.5 text-right font-mono text-xs tabular-nums text-muted sm:table-cell">
-        {pct ?? ""}
-      </td>
-      <td className="hidden border-b border-card-border/60 py-1.5 pl-2 text-xs text-muted md:table-cell">
-        {note}
-      </td>
-    </tr>
-  );
-}
-
-function GroupHeader({ children }: { children: ReactNode }) {
-  return (
-    <tr>
-      <td colSpan={4} className="pb-1 pt-3 text-xs font-medium text-muted">
-        {children}
-      </td>
-    </tr>
-  );
-}
 
 /**
  * The CEO's income statement with the operating budgets edited in place.
@@ -293,254 +248,244 @@ export default function CeoBudgetPanel({
         />
       }
     >
-      <table className="w-full border-collapse">
-        <thead className="sr-only">
-          <tr>
-            <th>Line</th>
-            <th>Amount</th>
-            <th>Share of revenue</th>
-            <th>Effect</th>
-          </tr>
-        </thead>
-        <tbody>
-          <Line
-            label="Gross revenue"
-            amount={money.fmt(scale(revenue))}
-            pct={revenue > 0 ? "100%" : null}
-            strong
-          />
-          <Line
+      <StatementTable>
+        <StatementLine
+          label="Gross revenue"
+          amount={money.fmt(scale(revenue))}
+          pct={revenue > 0 ? "100%" : null}
+          strong
+        />
+        <StatementLine
+          indent
+          label="Sector maintenance"
+          amount={cost(financials.maintenanceCosts)}
+          amountClass={financials.maintenanceCosts < 0 ? "text-success" : "text-foreground"}
+          pct={pctOfRevenue(financials.maintenanceCosts)}
+        />
+        {financials.laborCosts > 0 && (
+          <StatementLine
             indent
-            label="Sector maintenance"
-            amount={cost(financials.maintenanceCosts)}
-            amountClass={financials.maintenanceCosts < 0 ? "text-success" : "text-foreground"}
-            pct={pctOfRevenue(financials.maintenanceCosts)}
+            label="Wages"
+            amount={cost(financials.laborCosts)}
+            pct={pctOfRevenue(financials.laborCosts)}
           />
-          {financials.laborCosts > 0 && (
-            <Line
-              indent
-              label="Wages"
-              amount={cost(financials.laborCosts)}
-              pct={pctOfRevenue(financials.laborCosts)}
-            />
-          )}
-          {financials.growthCosts > 0 && (
-            <Line
-              indent
-              label="Growth investment"
-              amount={cost(financials.growthCosts)}
-              pct={pctOfRevenue(financials.growthCosts)}
-            />
-          )}
-          <Line
-            label="Gross profit"
-            amount={money.fmtSigned(scale(grossProfit))}
-            amountClass={signTone(grossProfit)}
-            pct={pctOfRevenue(grossProfit)}
-            strong
+        )}
+        {financials.growthCosts > 0 && (
+          <StatementLine
+            indent
+            label="Growth investment"
+            amount={cost(financials.growthCosts)}
+            pct={pctOfRevenue(financials.growthCosts)}
           />
+        )}
+        <StatementLine
+          label="Gross profit"
+          amount={money.fmtSigned(scale(grossProfit))}
+          amountClass={signTone(grossProfit)}
+          pct={pctOfRevenue(grossProfit)}
+          strong
+        />
 
-          <GroupHeader>
-            Operating budgets{dirty ? <span className="ml-2 text-foreground">unsaved</span> : null}
-          </GroupHeader>
-          <Line
-            indent
-            label="Marketing"
-            amount={budgetInput("marketing", "Marketing")}
-            pct={pctOfRevenue(daily.marketing)}
-            note={
-              daily.marketing > 0
-                ? `+${msGain.toFixed(3)} strength/turn (now ${Math.round(currentMs)}, diminishing above ${MARKETING_DIMINISHING_THRESHOLD})`
-                : `Strength ${Math.round(currentMs)}, no spend`
-            }
-          />
-          <Line
-            indent
-            label="Logistics and operations"
-            amount={budgetInput("logistics", "Logistics")}
-            pct={pctOfRevenue(daily.logistics)}
-            note={
-              <>
-                {daily.logistics > 0 ? (
-                  <>
-                    {lsNet >= 0 ? "+" : ""}
-                    {lsNet.toFixed(2)}/turn, settles near {Math.round(lsEquilibrium)}
-                  </>
-                ) : currentLs > 0 ? (
-                  <span className="text-warning">
-                    Decaying {(currentLs * LOGISTICS_DECAY_RATE).toFixed(2)}/turn
-                  </span>
-                ) : (
-                  "No spend"
-                )}
-                {". "}
-                <span className={sectorCount > sprawlCap ? "text-warning" : undefined}>
-                  {sectorCount} of {Math.floor(sprawlCap)} sectors before sprawl
-                  {sectorCount > sprawlCap ? `, margin penalty ${sprawlPenalty.toFixed(1)}%` : ""}
-                </span>
-              </>
-            }
-          />
-          <Line
-            indent
-            label="R&D"
-            amount={budgetInput("rd", "R&D")}
-            pct={pctOfRevenue(daily.rd)}
-            note={
-              daily.rd > 0 ? (
-                `${rdNet >= 0 ? "+" : ""}${rdNet.toFixed(2)}/turn (now ${Math.round(currentRd)}). Innovation ${innovationPct.toFixed(0)}% every ${RD_INNOVATION_INTERVAL} turns; diminishing above ${RD_DIMINISHING_THRESHOLD}`
-              ) : currentRd > 0 ? (
+        <StatementGroup>
+          Operating budgets{dirty ? <span className="ml-2 text-foreground">unsaved</span> : null}
+        </StatementGroup>
+        <StatementLine
+          indent
+          label="Marketing"
+          amount={budgetInput("marketing", "Marketing")}
+          pct={pctOfRevenue(daily.marketing)}
+          note={
+            daily.marketing > 0
+              ? `+${msGain.toFixed(3)} strength/turn (now ${Math.round(currentMs)}, diminishing above ${MARKETING_DIMINISHING_THRESHOLD})`
+              : `Strength ${Math.round(currentMs)}, no spend`
+          }
+        />
+        <StatementLine
+          indent
+          label="Logistics and operations"
+          amount={budgetInput("logistics", "Logistics")}
+          pct={pctOfRevenue(daily.logistics)}
+          note={
+            <>
+              {daily.logistics > 0 ? (
+                <>
+                  {lsNet >= 0 ? "+" : ""}
+                  {lsNet.toFixed(2)}/turn, settles near {Math.round(lsEquilibrium)}
+                </>
+              ) : currentLs > 0 ? (
                 <span className="text-warning">
-                  Decaying {(currentRd * RD_DECAY_RATE).toFixed(2)}/turn
+                  Decaying {(currentLs * LOGISTICS_DECAY_RATE).toFixed(2)}/turn
                 </span>
               ) : (
                 "No spend"
-              )
-            }
-          />
-          <Line
-            indent
-            label="CEO salary"
-            amount={budgetInput("ceo", "CEO salary")}
-            pct={pctOfRevenue(daily.ceo)}
-            note={`Capped at 1.25x revenue (${money.fmt(scale(maxCeoSalary))}${suffix})`}
-          />
-          <Line
-            indent
-            label="Total overhead"
-            amount={
-              <span className={isOverCap ? "text-error" : undefined}>
-                ({money.fmt(scale(combined))})
+              )}
+              {". "}
+              <span className={sectorCount > sprawlCap ? "text-warning" : undefined}>
+                {sectorCount} of {Math.floor(sprawlCap)} sectors before sprawl
+                {sectorCount > sprawlCap ? `, margin penalty ${sprawlPenalty.toFixed(1)}%` : ""}
               </span>
-            }
-            pct={revenue > 0 ? `${overheadPct.toFixed(1)}%` : null}
-            note={
-              <span className={isOverCap ? "text-error" : undefined}>
-                Cap 150% of revenue, {money.fmt(scale(maxOverhead))}
-                {suffix}
-                {isOverCap
-                  ? revenue > 0
-                    ? ". Lower a budget to save."
-                    : ". No revenue, so no positive budgets."
-                  : ""}
+            </>
+          }
+        />
+        <StatementLine
+          indent
+          label="R&D"
+          amount={budgetInput("rd", "R&D")}
+          pct={pctOfRevenue(daily.rd)}
+          note={
+            daily.rd > 0 ? (
+              `${rdNet >= 0 ? "+" : ""}${rdNet.toFixed(2)}/turn (now ${Math.round(currentRd)}). Innovation ${innovationPct.toFixed(0)}% every ${RD_INNOVATION_INTERVAL} turns; diminishing above ${RD_DIMINISHING_THRESHOLD}`
+            ) : currentRd > 0 ? (
+              <span className="text-warning">
+                Decaying {(currentRd * RD_DECAY_RATE).toFixed(2)}/turn
               </span>
-            }
+            ) : (
+              "No spend"
+            )
+          }
+        />
+        <StatementLine
+          indent
+          label="CEO salary"
+          amount={budgetInput("ceo", "CEO salary")}
+          pct={pctOfRevenue(daily.ceo)}
+          note={`Capped at 1.25x revenue (${money.fmt(scale(maxCeoSalary))}${suffix})`}
+        />
+        <StatementLine
+          indent
+          label="Total overhead"
+          amount={
+            <span className={isOverCap ? "text-error" : undefined}>
+              ({money.fmt(scale(combined))})
+            </span>
+          }
+          pct={revenue > 0 ? `${overheadPct.toFixed(1)}%` : null}
+          note={
+            <span className={isOverCap ? "text-error" : undefined}>
+              Cap 150% of revenue, {money.fmt(scale(maxOverhead))}
+              {suffix}
+              {isOverCap
+                ? revenue > 0
+                  ? ". Lower a budget to save."
+                  : ". No revenue, so no positive budgets."
+                : ""}
+            </span>
+          }
+        />
+        {dirty && (
+          <StatementLine
+            indent
+            label="Change from edits"
+            amount={money.fmtSigned(scale(storedCombined - combined))}
+            amountClass={signTone(storedCombined - combined)}
+            note="To operating income once saved, before tax."
           />
-          {dirty && (
-            <Line
-              indent
-              label="Change from edits"
-              amount={money.fmtSigned(scale(storedCombined - combined))}
-              amountClass={signTone(storedCombined - combined)}
-              note="To operating income once saved, before tax."
-            />
-          )}
-          <tr>
-            <td colSpan={4} className="border-b border-card-border/60 py-2">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <SmallButton
-                  onClick={reset}
-                  disabled={saving || (!dirty && Object.keys(drafts).length === 0)}
-                >
-                  Reset
-                </SmallButton>
-                <SmallButton
-                  tone="primary"
-                  disabled={saving || isOverCap}
-                  onClick={() => {
-                    flushSync(() => commitAll());
-                    onSaveSettings();
-                  }}
-                >
-                  {saving ? "Saving" : "Save budgets"}
-                </SmallButton>
-              </div>
-            </td>
-          </tr>
+        )}
+        <tr>
+          <td colSpan={4} className="border-b border-card-border/60 py-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <SmallButton
+                onClick={reset}
+                disabled={saving || (!dirty && Object.keys(drafts).length === 0)}
+              >
+                Reset
+              </SmallButton>
+              <SmallButton
+                tone="primary"
+                disabled={saving || isOverCap}
+                onClick={() => {
+                  flushSync(() => commitAll());
+                  onSaveSettings();
+                }}
+              >
+                {saving ? "Saving" : "Save budgets"}
+              </SmallButton>
+            </div>
+          </td>
+        </tr>
 
-          {financials.regulatoryBurden > 0 && (
-            <Line
-              indent
-              label="Regulatory compliance"
-              amount={cost(financials.regulatoryBurden)}
-              pct={pctOfRevenue(financials.regulatoryBurden)}
-            />
-          )}
-          {financials.pensionContributionCost > 0 && (
-            <Line
-              indent
-              label="Pension contributions"
-              amount={cost(financials.pensionContributionCost)}
-              pct={pctOfRevenue(financials.pensionContributionCost)}
-            />
-          )}
-          {financials.pensionTopUpCost > 0 && (
-            <Line
-              indent
-              label="Pension deficit top-up"
-              amount={cost(financials.pensionTopUpCost)}
-              pct={pctOfRevenue(financials.pensionTopUpCost)}
-            />
-          )}
-          <Line
-            label="Operating income"
-            amount={money.fmtSigned(scale(financials.operatingIncome))}
-            amountClass={signTone(financials.operatingIncome)}
-            pct={pctOfRevenue(financials.operatingIncome)}
-            strong
-            title="Earnings before interest and tax, at the saved budgets."
+        {financials.regulatoryBurden > 0 && (
+          <StatementLine
+            indent
+            label="Regulatory compliance"
+            amount={cost(financials.regulatoryBurden)}
+            pct={pctOfRevenue(financials.regulatoryBurden)}
           />
-          {tax > 0 && (
-            <Line indent label="Corporate tax" amount={cost(tax)} pct={pctOfRevenue(tax)} />
-          )}
-          {financials.bondInterestCost > 0 && (
-            <Line indent label="Bond interest" amount={cost(financials.bondInterestCost)} />
-          )}
-          {financials.governmentBondSubsidy > 0 && (
-            <Line
-              indent
-              label="Government bond subsidy"
-              amount={money.fmt(scale(financials.governmentBondSubsidy))}
-            />
-          )}
-          {financials.imfFacilityPaymentDaily > 0 && (
-            <Line
-              indent
-              label="IMF facility payment"
-              amount={cost(financials.imfFacilityPaymentDaily)}
-            />
-          )}
-          {financials.bondCouponIncome > 0 && (
-            <Line
-              indent
-              label="Bond coupon income"
-              amount={money.fmt(scale(financials.bondCouponIncome))}
-            />
-          )}
-          {financials.imfFacilityReceiptsDaily > 0 && (
-            <Line
-              indent
-              label="IMF facility receipts"
-              amount={money.fmt(scale(financials.imfFacilityReceiptsDaily))}
-            />
-          )}
-          {financials.dividendIncomeReceived > 0 && (
-            <Line
-              indent
-              label="Dividend income"
-              amount={money.fmt(scale(financials.dividendIncomeReceived))}
-            />
-          )}
-          <Line
-            label="Net income"
-            amount={money.fmtSigned(scale(financials.income))}
-            amountClass={signTone(financials.income)}
-            pct={pctOfRevenue(financials.income)}
-            strong
-            title="Projected from the saved budgets and current rates."
+        )}
+        {financials.pensionContributionCost > 0 && (
+          <StatementLine
+            indent
+            label="Pension contributions"
+            amount={cost(financials.pensionContributionCost)}
+            pct={pctOfRevenue(financials.pensionContributionCost)}
           />
-        </tbody>
-      </table>
+        )}
+        {financials.pensionTopUpCost > 0 && (
+          <StatementLine
+            indent
+            label="Pension deficit top-up"
+            amount={cost(financials.pensionTopUpCost)}
+            pct={pctOfRevenue(financials.pensionTopUpCost)}
+          />
+        )}
+        <StatementLine
+          label="Operating income"
+          amount={money.fmtSigned(scale(financials.operatingIncome))}
+          amountClass={signTone(financials.operatingIncome)}
+          pct={pctOfRevenue(financials.operatingIncome)}
+          strong
+          title="Earnings before interest and tax, at the saved budgets."
+        />
+        {tax > 0 && (
+          <StatementLine indent label="Corporate tax" amount={cost(tax)} pct={pctOfRevenue(tax)} />
+        )}
+        {financials.bondInterestCost > 0 && (
+          <StatementLine indent label="Bond interest" amount={cost(financials.bondInterestCost)} />
+        )}
+        {financials.governmentBondSubsidy > 0 && (
+          <StatementLine
+            indent
+            label="Government bond subsidy"
+            amount={money.fmt(scale(financials.governmentBondSubsidy))}
+          />
+        )}
+        {financials.imfFacilityPaymentDaily > 0 && (
+          <StatementLine
+            indent
+            label="IMF facility payment"
+            amount={cost(financials.imfFacilityPaymentDaily)}
+          />
+        )}
+        {financials.bondCouponIncome > 0 && (
+          <StatementLine
+            indent
+            label="Bond coupon income"
+            amount={money.fmt(scale(financials.bondCouponIncome))}
+          />
+        )}
+        {financials.imfFacilityReceiptsDaily > 0 && (
+          <StatementLine
+            indent
+            label="IMF facility receipts"
+            amount={money.fmt(scale(financials.imfFacilityReceiptsDaily))}
+          />
+        )}
+        {financials.dividendIncomeReceived > 0 && (
+          <StatementLine
+            indent
+            label="Dividend income"
+            amount={money.fmt(scale(financials.dividendIncomeReceived))}
+          />
+        )}
+        <StatementLine
+          label="Net income"
+          amount={money.fmtSigned(scale(financials.income))}
+          amountClass={signTone(financials.income)}
+          pct={pctOfRevenue(financials.income)}
+          strong
+          title="Projected from the saved budgets and current rates."
+        />
+      </StatementTable>
     </DenseSection>
   );
 }

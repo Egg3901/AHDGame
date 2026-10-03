@@ -29,8 +29,12 @@ type SponsoredFund = {
   countryId: string | null;
 };
 
-const sponsoredFundHref = (f: SponsoredFund) =>
-  `/stockmarket/${f.scope === "global" || !f.countryId ? "global" : f.countryId.toLowerCase()}/fund/${f.slug}`;
+// The country segment comes from a form select and the slug from the API, so
+// both are encoded rather than trusted to stay URL-clean.
+const fundPageHref = (scope: string, countryId: string | null, slug: string) =>
+  `/stockmarket/${encodeURIComponent(scope === "global" || !countryId ? "global" : countryId.toLowerCase())}/fund/${encodeURIComponent(slug)}`;
+
+const sponsoredFundHref = (f: SponsoredFund) => fundPageHref(f.scope, f.countryId, f.slug);
 
 /**
  * Funds this corporation already sponsors. Before this, a chartered fund
@@ -159,9 +163,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
     }
   }
 
-  const fundHref = chartered
-    ? `/stockmarket/${scope === "global" ? "global" : countryId.toLowerCase()}/fund/${chartered.slug}`
-    : "";
+  const fundHref = chartered ? fundPageHref(scope, countryId, chartered.slug) : "";
 
   return (
     <section className="min-w-0 space-y-2">

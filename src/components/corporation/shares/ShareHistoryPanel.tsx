@@ -86,7 +86,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
     <div className="mt-3 grid gap-4 rounded-md border border-card-border/50 bg-card-elevated/40 p-3 md:grid-cols-2">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-          Before — {sc.oldTotalShares.toLocaleString("en-US")} shares
+          Before: {sc.oldTotalShares.toLocaleString("en-US")} shares
           {ccy && ` @ ${sc.oldSharePriceLocal.toLocaleString("en-US")} ${ccy}`}
         </p>
         <table className="w-full border-collapse">
@@ -99,7 +99,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
       </div>
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-          After — {sc.newTotalShares.toLocaleString("en-US")} shares
+          After: {sc.newTotalShares.toLocaleString("en-US")} shares
           {ccy && ` @ ${sc.newSharePriceLocal.toLocaleString("en-US")} ${ccy}`}
         </p>
         <table className="w-full border-collapse">
@@ -245,10 +245,10 @@ export default function ShareHistoryPanel({ corpId }: ShareHistoryPanelProps) {
                           : e.shares.toLocaleString("en-US")}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono text-muted">
-                        {isStructureChange ? "—" : fmtAnchor(e.pricePerShareAnchor)}
+                        {isStructureChange ? "" : fmtAnchor(e.pricePerShareAnchor)}
                       </td>
                       <td className="py-2 text-right font-mono">
-                        {isStructureChange ? "—" : fmtAnchor(e.totalAnchor)}
+                        {isStructureChange ? "" : fmtAnchor(e.totalAnchor)}
                       </td>
                     </tr>
                     {isStructureChange && e.structureChange && (
