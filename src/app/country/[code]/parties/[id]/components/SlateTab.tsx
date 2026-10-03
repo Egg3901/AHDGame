@@ -13,7 +13,7 @@ import type { StateMapData } from "@/components/USAMapPaths";
 import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
 import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssignmentCap";
 import { AssignmentPicker } from "./SlateAssignmentPicker";
-import { formatSlateLabel } from "./slateFormatting";
+import { formatSlateLabel, formatSlateRaceTitle } from "./slateFormatting";
 
 const MapFallback = () => (
   <div className="h-full w-full animate-pulse rounded-md bg-card-elevated" />
@@ -243,31 +243,6 @@ function getAcceptanceChip(
     label: "Likely to Accept",
     className: ACCEPTANCE_LIKELIHOOD_STYLES.likely,
   };
-}
-
-function formatSlateRaceTitle(
-  item: Pick<SlateOverviewItem, "electionType" | "senateClass" | "chamberClass">
-): string {
-  const baseLabel = formatSlateLabel(item.electionType);
-  const chamberClass = item.senateClass ?? item.chamberClass;
-  if (!chamberClass) {
-    return `${baseLabel} Race`;
-  }
-
-  return `${baseLabel} Race · Class ${toRomanNumeral(chamberClass)}`;
-}
-
-function toRomanNumeral(value: number): string {
-  switch (value) {
-    case 1:
-      return "I";
-    case 2:
-      return "II";
-    case 3:
-      return "III";
-    default:
-      return String(value);
-  }
 }
 
 function isPreTurnSlateAssignment(

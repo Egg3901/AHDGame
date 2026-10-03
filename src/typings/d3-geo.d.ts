@@ -37,6 +37,10 @@ declare module "d3-geo" {
    */
   export function geoBounds(object: GeoPermissibleObjects): [[number, number], [number, number]];
   export function geoGraticule10(): GeoPermissibleObjects;
+  /** The rotation a projection applies, as a function of `[lon, lat]`. */
+  export function geoRotation(
+    angles: [number, number] | [number, number, number]
+  ): (point: [number, number]) => [number, number];
 
   export const geoEqualEarthRaw: RawProjection;
   export const geoOrthographicRaw: RawProjection;

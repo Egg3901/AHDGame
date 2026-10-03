@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import { MergerNppWarning } from "./MergerNppWarning";
 
 type ProposalType =
   | "rename"
@@ -542,6 +543,9 @@ export function CreateProposalForm({
           <p className="text-xs text-muted mt-1">
             Both committees must pass for the merge to take effect.
           </p>
+          <div className="mt-3">
+            <MergerNppWarning />
+          </div>
         </div>
       )}
 
