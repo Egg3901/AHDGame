@@ -1,6 +1,6 @@
 # Bulgarian founding parallel election qualification
 
-Qualified runtime source: `d6cb5d599b4952d06fecff09aefc8b5c409836c0`.
+Qualified runtime source: `1705fa23cf8cb478a59e232741d17bde40060596`.
 
 The 400-seat Grand Assembly previously used a regional approximation of a compensatory mixed election. Founding campaigns now bind to one native count: 200 constituency mandates and 200 independent party-list mandates. This includes the bootstrap cycle and later founding campaigns when constitutional reform has not passed. Fully resolved historical campaigns retain their settlement. Ordinary 240-seat campaigns keep their existing national allocation.
 
@@ -12,12 +12,12 @@ Existing campaign actors supply distinct NPC nominees without creating financial
 
 The electorate binds before counting. First ballots, nominations and list quotas freeze in a receipt. Runoffs create new campaigns only for qualified constituency actors. They move existing campaign rows and balances, retain first-round list votes and use actual renewed totals. Generic NPC recruitment cannot add unqualified runoff actors. The national handover installs individual offices, aggregate financial-owner mirrors, results, chamber capacities, notifications and the receipt in one required transaction. No regional office changes while a peer is missing.
 
-Qualification passes 163 checks across 12 suites, including five real replica-set Mongo journeys and the three existing ordinary Assembly journeys. The native journeys exercise cycle-zero resolution with 400 mandates and one human seat, missing-peer deferral, late-write rollback, concurrent retry, funded renewed runoffs, concurrent filing and re-entry. Bank accounts remain identical and the NPC collection gains no financial actors. The API validates chosen constituencies, malformed filings, foreign districts and qualified runoff entry. A rendered selector restricts choices to the character's campaign region. Primary continuation and the NPC runoff admission guard receive separate focused qualification.
+Qualification passes 164 checks across 12 suites, including six real replica-set Mongo journeys and the three existing ordinary Assembly journeys. The native journeys exercise cycle-zero resolution with 400 mandates and one human seat, missing-peer deferral, late-write rollback, concurrent retry, funded renewed runoffs, concurrent filing and re-entry. Bank accounts remain identical and the NPC collection gains no financial actors. The API validates chosen constituencies, malformed filings, foreign districts and qualified runoff entry. A rendered selector restricts choices to the character's campaign region. Primary continuation and the NPC runoff admission guard receive separate focused qualification.
 
 | Normal native count and chamber handover | Commands | Request bytes | Response bytes |
 | ---------------------------------------- | -------: | ------------: | -------------: |
-| Five founding regional campaigns         |       43 |        664168 |         671215 |
+| Five founding regional campaigns         |       43 |        664189 |         671372 |
 
-This measures the isolated normal resolver, not a whole turn. Reads of NPC owners are projected and batched. Scoped TypeScript passes. Touched lint has no errors and one existing client-effect warning. Architecture reports zero blockers and 66 existing warnings. New count, filing and archive collections belong to runtime seed/reset ownership. CI runs the actual Mongo journeys.
+This measures the isolated normal resolver, not a whole turn. Reads of NPC owners are projected and batched. Ordinary campaigns take two projected reads and no founding transaction on steady turns. Scoped TypeScript passes. Touched lint has no errors and one existing client-effect warning. Architecture reports zero blockers and 66 existing warnings. New count, filing and archive collections belong to runtime seed/reset ownership. CI runs the actual Mongo journeys.
 
 Migration is additive. Unsettled 400-seat cohorts bind on their normal scheduling or resolution path; wholly resolved cohorts are not recounted. Founding and ordinary receipts remain distinct. Reopening nominations after a failed single-candidate first round, statutory vacancy continuation, the Grand Assembly's separate dissolution or continuation decision, later early-election decisions and the current integrated whole-world horizon remain work in the parent repair program.
