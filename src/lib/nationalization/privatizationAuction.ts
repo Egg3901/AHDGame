@@ -138,7 +138,8 @@ export async function placeAuctionBid(db: Db, params: PlaceBidParams): Promise<v
   const outbid = auction.bids.filter((b) => !isMine(b));
   const additional = amount - myPrior;
   const now = new Date();
-  const ledger: TreasuryCashOptions = { context: await loadTreasuryCashContext(db, params.turn) };
+  // A bid is a request: its cash lands in the turn the clock is accumulating.
+  const ledger: TreasuryCashOptions = { context: await loadTreasuryCashContext(db) };
   const bidder = isCorp
     ? { corporationId: params.asCorporationId, escrowCurrency: currency }
     : { characterId: params.characterId, escrowCurrency: currency };

@@ -31,7 +31,7 @@ it.each(cases)("reconciles actual modeled upkeep in $currency", async ({ currenc
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal: 100, targetCashLocal: 500 }]);
   memory.seed("moneySupplySnapshots", [{ currencyCode: currency, m2: 10000, turn: 24 }]);
@@ -55,7 +55,7 @@ it.each(cases)("reconciles actual coupon receipts in $currency", async ({ curren
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal: 100, targetCashLocal: 500 }]);
   const opening = await collectBalances(db);
@@ -78,7 +78,7 @@ function fixture(currency: "USD" | "GBP" = "USD", rate = 1, cashLocal = 100, ena
     db = memory as unknown as Db;
   vi.mocked(getDb).mockResolvedValue(db);
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: enabled }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: TURN, preset: "1991-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: TURN - 1, preset: "1991-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("bondMarketPools", [{ _id: currency, cashLocal, targetCashLocal: 500 }]);
   memory.seed("moneySupplySnapshots", [{ currencyCode: currency, m2: 10000, turn: TURN - 1 }]);

@@ -680,7 +680,9 @@ export async function nationalizeWholeCorp(
   //       taking deepens the treasury's debt rather than being blocked. The pool
   //       passes through the seized corporation, where every holder row settles. ──
   const ledger: TreasuryCashOptions = {
-    context: await loadTreasuryCashContext(db, params.consequence.turn),
+    // The consequence turn is the clock on the executive route, so the context
+    // resolves the turn whose snapshot will hold this cash on every path.
+    context: await loadTreasuryCashContext(db),
   };
   await debitTreasuryCompensation(db, params.countryId, payoutPoolAnchor, fxByCurrency, now, {
     flow: "nationalization_buyout_pool",
@@ -691,7 +693,7 @@ export async function nationalizeWholeCorp(
   // ── 3. Pay shareholders pro-rata (counterparty of the treasury debit). ──
   if (payoutPoolAnchor > 0) {
     await payShareholders(db, target, payoutPoolAnchor, fxByCurrency, now, {
-      turn: params.consequence.turn,
+      turn: ledger.context?.turn ?? params.consequence.turn,
       kind: "nationalize_whole",
       treasury: ledger,
     });

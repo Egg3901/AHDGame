@@ -8,6 +8,7 @@ import type { Db, ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
+import { ledgerTurnFromClock } from "@/lib/ledger/ledgerTurn";
 
 export async function witnessCorporationStartingGrant(
   db: Db,
@@ -16,7 +17,7 @@ export async function witnessCorporationStartingGrant(
     /** Exactly the `liquidCapital` inserted, in `currencyCode`. */
     amountLocal: number;
     currencyCode: CurrencyCode;
-    /** Processing turn when the spawn runs inside a turn; else the game clock. */
+    /** Processing turn when the spawn runs inside a turn; else the turn the clock is accumulating. */
     turn?: number;
     now: Date;
   }
@@ -37,7 +38,9 @@ export async function witnessCorporationStartingGrant(
         .collection<{ currencyCode: string; rate: number }>("exchangeRates")
         .findOne({ currencyCode: input.currencyCode }, { projection: { rate: 1 } }),
     ]);
-    const turn = input.turn ?? state?.currentTurn;
+    const turn =
+      input.turn ??
+      (state?.currentTurn === undefined ? undefined : ledgerTurnFromClock(state.currentTurn));
     if (turn === undefined || !Number.isInteger(turn)) {
       throw new Error("Corporation starting grant witness requires a turn");
     }

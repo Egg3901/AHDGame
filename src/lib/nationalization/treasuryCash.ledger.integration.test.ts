@@ -58,10 +58,10 @@ async function world(
   await db
     .collection<{ _id: string; ledgerShadow: boolean }>("gameConfig")
     .insertOne({ _id: "default", ledgerShadow: options.shadow ?? true });
-  // Direct writers stamp the game clock; phases pass their processing turn.
+  // Direct writers stamp the turn the clock is accumulating; phases pass their processing turn.
   await db
     .collection<{ _id: string; currentTurn: number; preset: string }>("gameState")
-    .insertOne({ _id: "current", currentTurn: options.clock ?? 2, preset: "1991-default" });
+    .insertOne({ _id: "current", currentTurn: options.clock ?? 1, preset: "1991-default" });
   await db.collection("exchangeRates").insertMany([
     { currencyCode: "GBP", rate: 0.5 },
     { currencyCode: "USD", rate: 1 },

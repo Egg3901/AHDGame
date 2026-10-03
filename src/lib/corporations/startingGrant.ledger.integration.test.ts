@@ -61,7 +61,7 @@ async function world(native: boolean, options: { shadow?: boolean; clock?: numbe
     .insertOne({ _id: "default", ledgerShadow: options.shadow ?? true });
   await db
     .collection<{ _id: string; currentTurn: number; preset: string }>("gameState")
-    .insertOne({ _id: "current", currentTurn: options.clock ?? 2, preset: "2019-default" });
+    .insertOne({ _id: "current", currentTurn: options.clock ?? 1, preset: "2019-default" });
   await db.collection("exchangeRates").insertMany([
     { currencyCode: "GBP", rate: 0.5 },
     { currencyCode: "USD", rate: 1 },
@@ -113,7 +113,7 @@ for (const native of [false, true]) {
         ]);
       });
 
-      it("keeps an explicit capital literal and stamps the game clock without a turn", async () => {
+      it("keeps an explicit capital literal and stamps the turn the clock is accumulating", async () => {
         const db = await world(native);
         await writeBalanceSnapshot(db, 1);
         const spawned = await spawnNppCorporation(db, {
