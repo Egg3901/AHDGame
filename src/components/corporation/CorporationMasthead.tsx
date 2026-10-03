@@ -38,6 +38,8 @@ interface CorporationMastheadProps {
   onRefresh: () => void;
   /** Opens the trade ticket. Omitted when the viewer cannot trade here. */
   onTrade?: () => void;
+  /** Show the CEO-uploaded banner strip (the page passes true on Overview only). */
+  showBanner?: boolean;
 }
 
 /** Inline "label value" pair for the figures row. */
@@ -88,6 +90,7 @@ export function CorporationMasthead({
   ceoIsInactive,
   onRefresh,
   onTrade,
+  showBanner = false,
 }: CorporationMastheadProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const money = useCorpMoney(corporation.liquidCurrencyCode);
@@ -136,9 +139,9 @@ export function CorporationMasthead({
 
   return (
     <header className="space-y-2">
-      {/* A CEO-uploaded banner is the corp's own identity, so it stays, as a
-          plain strip with nothing printed over it. */}
-      {corporation.headerImageUrl && (
+      {/* A CEO-uploaded banner is the corp's own identity, so it stays on the
+          Overview, as a plain strip with nothing printed over it. */}
+      {showBanner && corporation.headerImageUrl && (
         <div className="relative h-14 overflow-hidden rounded-md border border-card-border sm:h-20">
           <HeroImage
             src={corporation.headerImageUrl}

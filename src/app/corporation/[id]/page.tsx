@@ -832,6 +832,7 @@ export default function CorporationDetailPage() {
           ceoIsInactive={ceoIsInactive}
           onRefresh={fetchCorporation}
           onTrade={canTrade ? openTrade : undefined}
+          showBanner={activeTab === "overview"}
         />
 
         <NationalizationStatusCard corpId={id} />

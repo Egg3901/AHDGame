@@ -20,7 +20,9 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("next/image", () => ({ default: () => null }));
-vi.mock("@/components/HeroImage", () => ({ HeroImage: () => null }));
+vi.mock("@/components/HeroImage", () => ({
+  HeroImage: ({ src }: { src: string }) => <span data-testid="banner" data-src={src} />,
+}));
 vi.mock("@/components/Avatar", () => ({ Avatar: () => null }));
 vi.mock("./ceo/CeoCorporationSettingsModal", () => ({
   CeoCorporationSettingsModal: ({ open }: { open: boolean }) =>
@@ -147,5 +149,13 @@ describe("CorporationMasthead", () => {
     expect(screen.getByText(/eligible for nationalization in 3 turns/)).toBeTruthy();
     expect(screen.getByText(/whole corporation/)).toBeTruthy();
     expect(screen.getByText(/taking in 2 turns/)).toBeTruthy();
+  });
+
+  it("shows an uploaded banner only where the page asks for it", () => {
+    const { unmount } = renderMasthead({ headerImageUrl: "https://cdn.example/banner.png" });
+    expect(screen.queryByTestId("banner")).toBeNull();
+    unmount();
+    renderMasthead({ headerImageUrl: "https://cdn.example/banner.png" }, { showBanner: true });
+    expect(screen.getByTestId("banner")).toBeTruthy();
   });
 });
