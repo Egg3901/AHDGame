@@ -52,6 +52,9 @@ export async function computeCurrencyVolumes(
 
   const rateByCode = new Map<string, number>(rates.map((r) => [r.currencyCode, r.rate]));
 
+  // Each trader's signed net per currency, for how broad the net flow is.
+  const netByTrader = new Map<string, Map<string, number>>();
+
   // Initialize all active currencies with zero volume
   const volumes: CurrencyVolumeMap = {} as CurrencyVolumeMap;
   for (const code of FOREX_ACTIVE_CURRENCIES) {
@@ -78,7 +81,45 @@ export async function computeCurrencyVolumes(
     if (volumes[to]) {
       volumes[to].buyVolume24 += internalValue;
     }
+
+    const trader = trade.buyerCharacterId ? String(trade.buyerCharacterId) : "system";
+    addTraderNet(netByTrader, from, trader, -internalValue);
+    addTraderNet(netByTrader, to, trader, internalValue);
+  }
+
+  for (const [code, byTrader] of netByTrader) {
+    const entry = volumes[code as CurrencyCode];
+    if (!entry) continue;
+    const breadth = effectiveTraderCount(byTrader.values());
+    if (breadth != null) entry.effectiveTraders = breadth;
   }
 
   return volumes;
+}
+
+function addTraderNet(
+  netByTrader: Map<string, Map<string, number>>,
+  currency: string,
+  trader: string,
+  delta: number
+): void {
+  const byTrader = netByTrader.get(currency) ?? new Map<string, number>();
+  byTrader.set(trader, (byTrader.get(trader) ?? 0) + delta);
+  netByTrader.set(currency, byTrader);
+}
+
+/**
+ * How many traders effectively stand behind a currency's net flow: the inverse
+ * Herfindahl index of the contributions pointing the same way as the net. One
+ * holder supplying nearly all of it reads as about 1, however many others
+ * traded crumbs alongside. Null when the net flow is zero.
+ */
+export function effectiveTraderCount(traderNets: Iterable<number>): number | null {
+  const nets = [...traderNets].filter((n) => Number.isFinite(n) && n !== 0);
+  const total = nets.reduce((sum, n) => sum + n, 0);
+  if (total === 0) return null;
+  const aligned = nets.filter((n) => Math.sign(n) === Math.sign(total)).map(Math.abs);
+  const sum = aligned.reduce((acc, n) => acc + n, 0);
+  const sumSquares = aligned.reduce((acc, n) => acc + n * n, 0);
+  return sumSquares > 0 ? (sum * sum) / sumSquares : null;
 }

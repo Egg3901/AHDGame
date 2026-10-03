@@ -209,7 +209,7 @@ export async function topUpPersonalBalanceInCurrency(
  * Auto-convert helper for purchases requiring foreign currency.
  *
  * When a player lacks sufficient foreign currency for a purchase (stock, bond),
- * this helper converts the shortfall from their home currency at market maker rate (0.275%).
+ * this helper converts the shortfall from their home currency at the plain market-maker spread.
  *
  * Flow:
  * 1. Check if player has enough of requiredCurrency -> no-op if sufficient
