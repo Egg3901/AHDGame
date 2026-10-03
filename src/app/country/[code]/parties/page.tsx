@@ -254,7 +254,7 @@ export default function PartiesPage() {
             )}
 
             {loading && !error && (
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 lg:grid-cols-2">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="rounded-xl border border-card-border bg-card p-5">
                     <Skeleton className="h-12 w-12 rounded-full mb-3" />
