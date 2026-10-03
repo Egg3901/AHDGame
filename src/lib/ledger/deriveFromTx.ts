@@ -53,6 +53,12 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   corp_sector_founding: "sector_founding_cash",
   org_cash: "organization_fund_cash",
   org_tribute_mint: "organization_tribute_unmodeled",
+  // State-enterprise treasury flows: both sides of a transfer share the flow's
+  // reason; a capex grant sinks into the plant it buys.
+  soe_remittance: "soe_remittance",
+  soe_treasury_draw: "soe_treasury_draw",
+  soe_loss_backing: "soe_loss_backing",
+  soe_capex_grant: "soe_capex_grant",
   gov_bond_maturity_payment: "bond_settlement",
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",

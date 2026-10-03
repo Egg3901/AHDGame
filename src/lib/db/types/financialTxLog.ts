@@ -5,6 +5,11 @@ export type FinancialTxType =
   | "corp_sector_founding" // exact NPP founding cash, including entry fee and starter build
   | "org_cash"
   | "org_tribute_mint"
+  // State-enterprise treasury cash (nationalization/treasuryLedger)
+  | "soe_remittance"
+  | "soe_treasury_draw"
+  | "soe_loss_backing"
+  | "soe_capex_grant"
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat
   | "fund_debit"
