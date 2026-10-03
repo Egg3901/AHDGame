@@ -12,10 +12,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
-function show() {
+function show(kind?: "threshold1994" | "system2011") {
   render(
     <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
-      <HungarianElectoralDecisionPanel />
+      <HungarianElectoralDecisionPanel kind={kind} />
     </NextIntlClientProvider>
   );
 }
@@ -91,5 +91,24 @@ describe("Hungarian electoral decision controls", () => {
     await waitFor(() =>
       expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(false)
     );
+  });
+  it("opens the modern decision through its own bound bill endpoint", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ decision: { available: true, reason: "available", proposal: null } })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ billId: "modern-bill" }), { status: 201 })
+      );
+    vi.stubGlobal("fetch", fetcher);
+    show("system2011");
+    expect(await screen.findByText("Hungarian 2011 electoral system")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Propose amendment" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/congress/bills/modern-bill"));
+    expect(fetcher.mock.calls[1][0]).toBe("/api/country/hu/electoral-reform/2011/proposal");
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ kind: "system2011" });
   });
 });

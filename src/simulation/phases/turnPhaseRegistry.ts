@@ -1192,7 +1192,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
-        if (currentYear >= 2014 && context.gameState.preset === "1991-default") {
+        if (currentYear >= 2012 && context.gameState.preset === "1991-default") {
           await runtime.runPhase("huAssemblyReform", () =>
             runHuAssemblyReform(db, currentYear, gameNow)
           );
@@ -1231,6 +1231,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const { processHu1994ElectoralNpcProposal } =
             await import("@/lib/countries/hu/electoralNpcProposals1994");
           await processHu1994ElectoralNpcProposal(db, context.gameState, newTurn, gameNow);
+          const { processHu2011ElectoralMandate } =
+            await import("@/lib/countries/hu/electoralProposals2011");
+          await processHu2011ElectoralMandate(db, context.gameState, newTurn, gameNow);
+          const { processHu2011ElectoralNpcProposal } =
+            await import("@/lib/countries/hu/electoralNpcProposals2011");
+          await processHu2011ElectoralNpcProposal(db, context.gameState, newTurn, gameNow);
           const { openRussianPresidentialElection } =
             await import("@/lib/countries/ru/presidentialElectionOpening");
           await openRussianPresidentialElection({

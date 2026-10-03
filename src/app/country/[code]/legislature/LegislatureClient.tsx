@@ -101,7 +101,13 @@ export default function LegislatureClient({
   }
 
   // Countries without a dedicated legislature component
-  if (countryId === "HU" && hungarianElectoralDecisions) return <HungarianElectoralDecisionPanel />;
+  if (countryId === "HU" && hungarianElectoralDecisions)
+    return (
+      <div className="space-y-6">
+        <HungarianElectoralDecisionPanel />
+        <HungarianElectoralDecisionPanel kind="system2011" />
+      </div>
+    );
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">

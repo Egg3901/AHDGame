@@ -54,7 +54,7 @@ import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independen
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
 import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
-import { apportionSeats as apportionCandidateSeats } from "@/lib/country/seatApportionment";
+import { allocateHuModernPeople } from "@/lib/countries/hu/rules/modernMandates2011";
 import type { ElectionNewsOutcome } from "./electionNotifications";
 import { voidDebateSessionsForElection } from "@/lib/debate/debateSessionLifecycle";
 import {
@@ -665,21 +665,20 @@ export async function resolveOneGeneralElection(
             const party = rawParty === "independent" ? `independent@${candidateId}` : rawParty;
             wantedByParty[party] = (wantedByParty[party] ?? 0) + seats;
           }
-          for (const [party, seats] of Object.entries(wantedByParty)) {
-            const eligible = ranked.filter(
-              (candidate) =>
-                (candidate.party === "independent"
+          const assigned = allocateHuModernPeople({
+            quotas: wantedByParty,
+            people: ranked.map((candidate) => ({
+              id: candidate.id,
+              partyId:
+                candidate.party === "independent"
                   ? `independent@${candidate.id}`
-                  : candidate.party) === party
-            );
-            if (eligible.length === 0) continue; // a vacant bloc, never seat an ineligible holder
-            const shares = apportionCandidateSeats(
-              Object.fromEntries(eligible.map((candidate) => [candidate.id, candidate.votes])),
-              seats
-            );
-            for (const [candidateId, count] of Object.entries(shares))
-              seatsEstimate[candidateId] = count;
-          }
+                  : (candidate.party ?? ""),
+              votes: candidate.votes,
+              isNpc: candidateMap.get(candidate.id)?.isNPP === true,
+            })),
+          });
+          if (!assigned) throw new Error("Hungary modern mandate has insufficient viable people");
+          Object.assign(seatsEstimate, assigned);
           return {
             isMultiSeat: true,
             authoritativeSeats: totalSeats,

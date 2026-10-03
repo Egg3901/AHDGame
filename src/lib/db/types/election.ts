@@ -109,6 +109,12 @@ export interface Election {
   };
   /** Native 1991 Hungarian campaigns freeze a whole-country count and round. */
   hungarianAssemblyRound?: import("../../countries/hu/rules/assemblyCampaign1991").Hu1991CampaignBinding;
+  /** The authorized modern law freezes before general ballots exist. */
+  hungarianModernAssembly?: {
+    ruleVersion: "mixed-2011-v1";
+    authorizedOnTurn?: number;
+    reason: "parliamentary_decision" | "legacy_settlement";
+  };
   /** Campaign Here boosts: districtIndex → partySeqId → active boost % (0..7.5). */
   districtCampaignBoosts?: Record<string, Record<string, number>>;
   /**

@@ -573,7 +573,7 @@ export interface Bill {
   hungarianElectoralMandate?: {
     proposalId: string;
     revision: number;
-    kind: "threshold1994";
+    kind: "threshold1994" | "system2011";
   };
   /** Optional for older saves; bound to a separately recorded Russian decision. */
   russianConstitutionalMandate?: {

@@ -514,7 +514,7 @@ describe("electionResolution", () => {
     });
   });
 
-  describe("Hungary 2014 resolution", () => {
+  describe("Hungary legacy modern settlement resolution", () => {
     it("resolves six regional races from one 106-district and 93-list national plan", async () => {
       vi.clearAllMocks();
       const elections = huRegions1991.map((region) => ({
@@ -552,7 +552,13 @@ describe("electionResolution", () => {
           if (name === "states")
             return { find: () => ({ toArray: async () => huRegions1991 }), bulkWrite: stateWrites };
           if (name === "gameState")
-            return { findOne: async () => ({ currentTurn: 1123, preset: "1991-default" }) };
+            return {
+              findOne: async () => ({
+                currentTurn: 1123,
+                preset: "1991-default",
+                huAssemblyReformedAtYear: 2014,
+              }),
+            };
           return {};
         }),
       };
@@ -607,7 +613,13 @@ describe("electionResolution", () => {
           if (name === "electionCandidates") return { find: () => ({ toArray: async () => [] }) };
           if (name === "states") return { find: () => ({ toArray: async () => huRegions1991 }) };
           if (name === "gameState")
-            return { findOne: async () => ({ currentTurn: 1123, preset: "1991-default" }) };
+            return {
+              findOne: async () => ({
+                currentTurn: 1123,
+                preset: "1991-default",
+                huAssemblyReformedAtYear: 2014,
+              }),
+            };
           return {};
         }),
       };

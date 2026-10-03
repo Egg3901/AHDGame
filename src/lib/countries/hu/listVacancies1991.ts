@@ -36,8 +36,11 @@ function stableId(key: string): ObjectId {
 async function readContext(db: Db, turn: number, session?: ClientSession) {
   const game = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { session, projection: { preset: 1 } });
-  if (game?.preset !== "1991-default") return null;
+    .findOne(
+      { _id: "current" },
+      { session, projection: { preset: 1, huAssemblyReformedAtYear: 1 } }
+    );
+  if (game?.preset !== "1991-default" || game.huAssemblyReformedAtYear != null) return null;
   const parent = await db.collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION).findOne(
     { seatedAtTurn: { $exists: true } },
     {
