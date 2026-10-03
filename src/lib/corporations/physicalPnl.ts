@@ -46,11 +46,11 @@
  * the new model reproduces the old one byte-for-byte at the switchover, then
  * let it diverge for reasons you can name.
  *
- * The residual is also where the margin modifiers that are NOT physical keep
- * living. They are carried as a multiplicative drift factor on the anchor
- * (`otherOpexDriftFactor`), normalized to 1 at calibration — so subsidies,
- * tariffs, macro drag and the rest still move cost, but through one named
- * channel instead of being the whole cost model.
+ * The margin modifiers that are NOT physical (subsidies, tariffs, macro drag
+ * and the rest) ride one named line, `policyCredit`, worth revenue × pp/100,
+ * so they still move cost without being the whole cost model. Anchors solved
+ * before that line existed still contain the calibration-time stack; see
+ * `legacyAnchorPolicyCharge`.
  *
  * Every function here is pure. Money is ₳ (economic anchor), per TURN (hourly),
  * matching `hourlyRevenue` in `sectorTurn`. Units are output units per turn.
@@ -303,40 +303,46 @@ export function solveOtherOpexPerUnit(args: {
 }
 
 /**
- * The drift factor applied to a held `otherOpexPerUnitAnchor`.
+ * The calibration-time policy stack still inside a legacy
+ * `otherOpexPerUnitAnchor`, as ₳ this turn.
  *
- * HISTORY: this ratio originally carried the whole non-physical margin stack
- * (subsidies, tariffs, tech margin bonuses, …) every turn. That inverted on
- * any sector whose residual anchor was negative — the stack shrank a CREDIT,
- * so a margin bonus raised cost. Those modifiers now ride `policyCredit` on
- * the revenue side (see `PhysicalPnl.policyCredit`), and this factor is only
- * a one-time REBASE of legacy anchors: callers pass the policy-neutral basis
- * (`1 − baseMargin/100`) as `currentMarginBasis`, so anchors stamped under the
- * old discipline (whose stored basis includes calibration-time modifiers) are
- * scaled onto the neutral basis using the model's own proportionality
- * assumption. Anchors stamped after the change store the neutral basis and
- * the factor is 1.
+ * Anchors stamped before the policy stack moved to `policyCredit` were solved
+ * against a margin cost that already contained the stack (their stored basis
+ * is `1 − (base + stack)/100`), and `policyCredit` now credits the live stack
+ * on top. The residual is whatever cost is left after the named bills, so the
+ * stack sits in it as an AMOUNT, revenue × stack/100, not as a proportion of
+ * it:
  *
- *     drift = basis_neutral ÷ basis_at_calibration
+ *     anchor_neutral × units = anchor_legacy × units
+ *                              + revenue × (basis_neutral − basis_at_calibration)
  *
- * A degenerate basis (a sector calibrated at exactly 100% margin, i.e. zero
- * cost) leaves the anchor undriven at 1 rather than dividing by ~0.
+ * Charging that amount back makes the stack count once. Revenue is this
+ * turn's, the base `policyCredit` uses, so on the calibration state the two
+ * lines cancel and the flip identity holds; afterwards only the CHANGE in the
+ * stack since calibration moves profit. Anchors stamped at the neutral basis
+ * return 0. A negative result (a stack of penalties at calibration) is a
+ * credit: those sectors were paying the penalty twice.
+ *
+ * HISTORY: the rebase used to MULTIPLY the anchor by `basis_neutral ÷
+ * basis_at_calibration`. That equals the amount above only for a sector with
+ * no inputs and no labour; every real sector was under-charged by
+ * stack × (inputs + labour) ÷ basis_at_calibration, and on a negative anchor
+ * the factor grew the credit. Measured live at prod turn 1310: 2,059 legacy
+ * sectors mis-costed, 15 of them booking profit equal to revenue (a technology
+ * plant whose 44.1M of inputs and 17.1M of labour a day netted to zero cost),
+ * while bloc sectors calibrated under penalties paid them twice.
  */
-export function otherOpexDriftFactor(args: {
-  currentMarginBasis: number;
+export function legacyAnchorPolicyCharge(args: {
+  hourlyRevenue: number;
+  neutralBasis: number;
   anchorMarginBasis: number | null | undefined;
 }): number {
-  const { currentMarginBasis, anchorMarginBasis } = args;
-  if (
-    typeof anchorMarginBasis !== "number" ||
-    !Number.isFinite(anchorMarginBasis) ||
-    Math.abs(anchorMarginBasis) < 1e-9 ||
-    !Number.isFinite(currentMarginBasis)
-  ) {
-    return 1;
-  }
-  const factor = currentMarginBasis / anchorMarginBasis;
-  return Number.isFinite(factor) ? factor : 1;
+  const { hourlyRevenue, neutralBasis, anchorMarginBasis } = args;
+  if (typeof anchorMarginBasis !== "number" || !Number.isFinite(anchorMarginBasis)) return 0;
+  if (!Number.isFinite(neutralBasis) || !Number.isFinite(hourlyRevenue)) return 0;
+  const stack = neutralBasis - anchorMarginBasis;
+  if (Math.abs(stack) < 1e-9) return 0;
+  return hourlyRevenue * stack;
 }
 
 /**
