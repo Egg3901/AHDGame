@@ -1,6 +1,6 @@
 # Bulgarian constitutional handover custody
 
-Qualified runtime source: pending final source pin.
+Qualified runtime source: `66820bfb9590068e5d4afb933e60d33bbac8d632`.
 
 An enacted constitution could resize an untouched five-region cohort to240 seats while leaving its native400-seat election and tally flags in place. A renewed poll with no new votes could also be mistaken for an untouched first round. The handover now clears both founding flags with the complete capacity change, inside the same required transaction as constitutional authorization.
 
