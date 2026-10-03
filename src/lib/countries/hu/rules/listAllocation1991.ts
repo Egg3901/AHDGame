@@ -5,6 +5,8 @@
  * https://njt.jog.gov.hu/jogszabaly/1989-34-00-00.0
  * https://njt.jog.gov.hu/jogszabaly/1989-84-40-00
  */
+import { huMixedElectoralLaw, type HuMixedElectoralLaw } from "./electoralLaw";
+
 export interface Hu1991ListVote {
   partyId: string;
   votes: number;
@@ -42,11 +44,17 @@ function validLists(lists: readonly Hu1991ListVote[]): bigint {
   return total;
 }
 
-/** A list must exceed four percent; an exact four-percent list is ineligible. */
-export function eligibleHu1991Parties(lists: readonly Hu1991ListVote[]): string[] {
+/** Strict four percent under 1989 or five percent under an enacted 1994 amendment. */
+export function eligibleHu1991Parties(
+  lists: readonly Hu1991ListVote[],
+  law?: HuMixedElectoralLaw
+): string[] {
+  const { thresholdPercent } = huMixedElectoralLaw(law);
   const total = validLists(lists);
   if (total === BigInt(0)) return [];
-  return lists.filter((row) => BigInt(row.votes) * BigInt(25) > total).map((row) => row.partyId);
+  return lists
+    .filter((row) => BigInt(row.votes) * BigInt(100) > total * BigInt(thresholdPercent))
+    .map((row) => row.partyId);
 }
 
 export function countHu1991TerritorialList(

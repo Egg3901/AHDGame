@@ -4,7 +4,13 @@
  * an incomplete legacy cohort remains pending rather than changing counting rules.
  */
 import { type ClientSession, type Db } from "mongodb";
-import type { Election, GameState, State, StateRegistrationPool } from "@/lib/db/types";
+import type {
+  CountryGameState,
+  Election,
+  GameState,
+  State,
+  StateRegistrationPool,
+} from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
 import { scalePoolToRegistered } from "@/lib/electionEngine/rules/registration";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
@@ -68,6 +74,13 @@ export async function materializeHu1991CampaignBinding(input: {
       throw new Error("Hungarian frozen campaign cohort is incomplete or changed");
     return false;
   }
+  const country = await db
+    .collection<CountryGameState>("countryGameStates")
+    .findOne({ _id: "HU" }, { session, projection: { huElectoralLaw1994SinceTurn: 1 } });
+  const electoralLaw =
+    country?.huElectoralLaw1994SinceTurn != null
+      ? ("mixed-1994-v1" as const)
+      : ("mixed-1989-v1" as const);
   const states = await db
     .collection<State>("states")
     .find(
@@ -115,6 +128,7 @@ export async function materializeHu1991CampaignBinding(input: {
           $set: {
             hungarianAssemblyRound: {
               ruleVersion: "mixed-1989-v1" as const,
+              ...(electoralLaw === "mixed-1994-v1" ? { electoralLaw } : {}),
               receiptId,
               round: 1 as const,
               registeredVoters: register.get(row.state)!,

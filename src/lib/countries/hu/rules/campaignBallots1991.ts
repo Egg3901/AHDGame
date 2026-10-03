@@ -213,6 +213,7 @@ export function projectHu1991CampaignBallots(
   });
   return {
     constituencies: constituency,
+    ...(nominations.electoralLaw ? { electoralLaw: nominations.electoralLaw } : {}),
     territorial,
     nationalLists: nominations.national.map((row, index) => ({
       partyId: row.partyId,

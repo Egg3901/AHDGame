@@ -4,6 +4,7 @@
  * final mandates wait for the country's complete mixed-election count.
  */
 export interface Hu1991CampaignBinding {
+  electoralLaw?: import("./electoralLaw").HuMixedElectoralLaw;
   ruleVersion: "mixed-1989-v1";
   receiptId: string;
   round: 1 | 2;

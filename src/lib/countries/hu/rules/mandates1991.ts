@@ -8,6 +8,7 @@ import {
   HU_1991_TERRITORIAL_DISTRICTS,
 } from "../data/electoralDistricts1991";
 import type { Hu1991MixedCount } from "./mixedElection1991";
+import { huMixedElectoralLaw, type HuMixedElectoralLaw } from "./electoralLaw";
 
 export interface Hu1991Person {
   id: string;
@@ -19,6 +20,7 @@ export interface Hu1991Person {
   regionId: string;
 }
 export interface Hu1991Nominations {
+  electoralLaw?: HuMixedElectoralLaw;
   people: readonly Hu1991Person[];
   constituencies: readonly { id: string; candidateIds: readonly string[] }[];
   territorial: readonly {
@@ -47,6 +49,7 @@ export interface Hu1991InstalledMandates {
 
 /** Validate filed people before ballots or withdrawals can alter a list. */
 export function validateHu1991Nominations(nominations: Hu1991Nominations): void {
+  const { listMultiplier } = huMixedElectoralLaw(nominations.electoralLaw);
   const people = new Map(nominations.people.map((row) => [row.id, row]));
   const playerOwners = new Set<string>();
   const candidateOwners = new Map<string, string>();
@@ -117,7 +120,7 @@ export function validateHu1991Nominations(nominations: Hu1991Nominations): void 
         list.partyId === "independent" ||
         parties.has(list.partyId) ||
         list.candidateIds.length === 0 ||
-        list.candidateIds.length > 2 * county.territorialSeats
+        list.candidateIds.length > listMultiplier * county.territorialSeats
       )
         throw new Error("Invalid Hungarian territorial list identity or capacity");
       parties.add(list.partyId);
@@ -149,7 +152,7 @@ export function validateHu1991Nominations(nominations: Hu1991Nominations): void 
       list.partyId === "independent" ||
       nationalParties.has(list.partyId) ||
       list.candidateIds.length === 0 ||
-      list.candidateIds.length > 116 ||
+      list.candidateIds.length > listMultiplier * 58 ||
       (filedCounties.get(list.partyId) ?? 0) < 7
     )
       throw new Error("Invalid Hungarian national list identity, capacity or territorial filings");

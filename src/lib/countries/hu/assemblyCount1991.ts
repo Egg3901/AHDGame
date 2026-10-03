@@ -16,6 +16,7 @@ import {
   type Hu1991MixedCount,
 } from "./rules/mixedElection1991";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
+import { huMixedElectoralLaw } from "./rules/electoralLaw";
 
 export const HU_1991_COUNTS_COLLECTION = "hu1991AssemblyCounts";
 export interface Hu1991AssemblyRecord {
@@ -111,6 +112,8 @@ export async function materializeHu1991FirstCount(input: {
       (row) =>
         row.hungarianAssemblyRound?.receiptId !== receiptId ||
         row.hungarianAssemblyRound?.ruleVersion !== "mixed-1989-v1" ||
+        huMixedElectoralLaw(row.hungarianAssemblyRound?.electoralLaw).version !==
+          huMixedElectoralLaw(elections[0].hungarianAssemblyRound?.electoralLaw).version ||
         !Number.isSafeInteger(row.hungarianAssemblyRound?.registeredVoters) ||
         (row.hungarianAssemblyRound?.registeredVoters ?? 0) < 1
     )
@@ -171,7 +174,8 @@ export async function materializeHu1991FirstCount(input: {
       isNpc: !!row.isNPP,
       filingOrder: row.enteredAt.getTime(),
       constituencyId: row.hungarianAssemblyNomination?.constituencyId,
-    }))
+    })),
+    elections[0].hungarianAssemblyRound!.electoralLaw
   );
   const campaigns = elections.map((election) => {
     const tally = byTally.get(election._id.toHexString())!;

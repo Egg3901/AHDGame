@@ -16,6 +16,7 @@ import {
   type Hu1991FragmentVote,
   type Hu1991ListVote,
 } from "./listAllocation1991";
+import type { HuMixedElectoralLaw } from "./electoralLaw";
 
 export interface Hu1991TerritorialRound {
   registeredVoters: number;
@@ -23,6 +24,7 @@ export interface Hu1991TerritorialRound {
   lists: readonly Hu1991ListVote[];
 }
 export interface Hu1991MixedBallots {
+  electoralLaw?: HuMixedElectoralLaw;
   constituencies: readonly {
     id: string;
     first: Hu1991ConstituencyRound;
@@ -211,7 +213,8 @@ export function countHuMixed1991(ballots: Hu1991MixedBallots): Hu1991MixedCount 
       partyId,
       votes,
       ballotOrder: index + 1,
-    }))
+    })),
+    ballots.electoralLaw
   );
   const territorialSeats: Record<string, Record<string, number>> = {};
   const partySeats = { ...constituencySeats };

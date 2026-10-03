@@ -84,7 +84,14 @@ export default async function LegislaturePage({ params }: PageProps) {
   if (!COUNTRY_CONFIGS[id]) notFound();
   const bgName = id === "BG" ? (await bgLegislaturePresentation()).name : undefined;
   const ru = id === "RU" ? await ruLegislaturePresentation() : undefined;
+  const hungarianElectoralDecisions =
+    id === "HU" && (await getGameStatePreset(await getDb())) === "1991-default";
   return (
-    <LegislatureClient countryId={id} legislatureName={ru?.name ?? bgName} generic={ru?.generic} />
+    <LegislatureClient
+      countryId={id}
+      legislatureName={ru?.name ?? bgName}
+      generic={ru?.generic}
+      hungarianElectoralDecisions={hungarianElectoralDecisions}
+    />
   );
 }
