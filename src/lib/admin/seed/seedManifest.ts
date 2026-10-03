@@ -364,6 +364,10 @@ const RUNTIME: CollectionEntry[] = [
   // Elections + officials
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
+  { name: "hu1991AssemblyCounts", category: "runtime" },
+  { name: "hu1991AssemblyOfficeArchives", category: "runtime" },
+  { name: "hu1991ConstituencyByElections", category: "runtime" },
+  { name: "hu1991AssemblyFilingLocks", category: "runtime" },
   { name: "electionVoteTallies", category: "runtime" },
   {
     name: "electionResultSnapshots",
