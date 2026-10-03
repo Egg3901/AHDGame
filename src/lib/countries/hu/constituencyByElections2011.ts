@@ -22,6 +22,7 @@ import type {
   StateRegistrationPool,
 } from "@/lib/db/types";
 import { runRequiredTransaction } from "@/lib/db/runRequiredTransaction";
+import { yearOfTurn } from "@/lib/utils/gameDate";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { scalePoolToRegistered } from "@/lib/electionEngine/rules/registration";
 import { apportionSeats } from "@/lib/seeds/reference/rules/apportionSeats";
@@ -96,12 +97,13 @@ export async function materializeHuModernByElectionOpening(input: {
 }): Promise<string[]> {
   const { db, session, turn, now } = input;
   assertTransaction(session, turn, now);
-  const game = await db
-    .collection<GameState>("gameState")
-    .findOne(
-      { _id: "current" },
-      { session, projection: { preset: 1, huAssemblyReformedAtYear: 1 } }
-    );
+  const game = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      session,
+      projection: { preset: 1, huAssemblyReformedAtYear: 1 },
+    }
+  );
   if (game?.preset !== "1991-default" || game.huAssemblyReformedAtYear == null) return [];
   const parent = await db.collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION).findOne(
     { seatedAtTurn: { $exists: true } },
@@ -241,6 +243,10 @@ export async function materializeHuModernByElectionOpening(input: {
     state: district.regionId,
     seatId: district.id,
     cycle: parent.cycle,
+    electionYear: yearOfTurn(turn, 1991, {
+      preIterationActive: game.preIteration?.active,
+      preIterationTurns: game.preIterationTurns,
+    }),
     totalSeats: 1,
     status: "active",
     startTurn: turn,
@@ -386,7 +392,7 @@ export async function materializeHuModernByElectionResolution(input: {
     { _id: "current" },
     {
       session,
-      projection: { preset: 1, huAssemblyReformedAtYear: 1 },
+      projection: { preset: 1, huAssemblyReformedAtYear: 1, preIteration: 1, preIterationTurns: 1 },
     }
   );
   if (

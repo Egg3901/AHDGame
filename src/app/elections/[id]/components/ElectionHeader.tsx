@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { PhaseTag, electionPageTitle } from "./ElectionDetailHelpers";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 
@@ -29,6 +30,7 @@ export function ElectionHeader({
   onEnter,
   onWithdraw,
 }: ElectionHeaderProps) {
+  const t = useTranslations("elections.huModernByElection");
   const titleText = electionPageTitle(election, electionYear);
 
   return (
@@ -42,6 +44,11 @@ export function ElectionHeader({
             isUpcoming={localIsUpcoming}
           />
         </div>
+        {election.hungarianModernByElection && (
+          <p className="text-sm text-muted">
+            {t("description", { district: election.hungarianModernByElection.districtId })}
+          </p>
+        )}
       </div>
       {election.myCharId && !localIsEnded && (
         <div className="shrink-0">

@@ -1406,6 +1406,9 @@ export async function _enrichElection(
           },
         }
       : {}),
+    ...(election.hungarianModernByElection
+      ? { hungarianModernByElection: { districtId: election.hungarianModernByElection.districtId } }
+      : {}),
     ...(election.russianDumaRound
       ? {
           russianDumaRound: {

@@ -246,7 +246,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       await db.dropDatabase();
     }
   });
-  it.each(["elected", "withdrawn", "expired", "superseded"])(
+  it.each(["elected", "paired", "withdrawn", "expired", "superseded"])(
     "counts and seats all199 modern mandates and protects constituency custody (%s)",
     async (kind) => {
       const { db, yes, no } = await fixture();
@@ -547,18 +547,31 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           isNPP: true,
         });
         await db.collection("electedOfficials").deleteOne({ _id: direct!._id });
+        const vacancyCount = kind === "paired" ? 2 : 1;
+        if (kind === "paired") {
+          const second = await db.collection("electedOfficials").findOne({
+            seatSource: "direct",
+            state: direct!.state,
+            isNPP: true,
+          });
+          expect(second).not.toBeNull();
+          await db.collection("electedOfficials").deleteOne({ _id: second!._id });
+        }
         const lists = await db
           .collection("electedOfficials")
           .find({ seatSource: "list" })
           .sort({ _id: 1 })
           .toArray();
+        await db
+          .collection<StringRecord>("gameState")
+          .updateOne({ _id: "current" }, { $set: { preIterationTurns: 48 } });
         commands = commandBytes = replyBytes = 0;
         const openings = await Promise.all([
           openHuModernByElections(db, 1123, NOW),
           openHuModernByElections(db, 1123, NOW),
         ]);
         expect(openings[0]).toEqual(openings[1]);
-        expect(openings[0]).toHaveLength(1);
+        expect(openings[0]).toHaveLength(vacancyCount);
         process.stdout.write(
           JSON.stringify({
             fixture: "hu-modern-by-election-opening-concurrent",
@@ -571,6 +584,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           .collection("elections")
           .findOne({ _id: new ObjectId(openings[0][0]) });
         expect(vacancyPoll?.totalSeats).toBe(1);
+        expect(vacancyPoll?.electionYear).toBe(2013);
         expect(vacancyPoll?.hungarianModernByElection).toMatchObject({
           parentReceiptId: receipt!._id,
           districtId: direct!.constituencyId,
@@ -680,9 +694,46 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         await db
           .collection("elections")
           .updateOne({ _id: vacancyPoll!._id }, { $set: { status: "completed" } });
+        if (kind === "paired") {
+          const secondId = new ObjectId(openings[0][1]);
+          const secondCandidates = await db
+            .collection("electionCandidates")
+            .find({ electionId: secondId })
+            .toArray();
+          await db.collection("electionVoteTallies").updateOne(
+            { electionId: secondId },
+            {
+              $set: {
+                totalVotes: Object.fromEntries(
+                  secondCandidates.map((row, index) => [
+                    row._id.toHexString(),
+                    index === 0 ? 30 : 10,
+                  ])
+                ),
+                candidateParties: Object.fromEntries(
+                  secondCandidates.map((row) => [row._id.toHexString(), row.party])
+                ),
+              },
+            }
+          );
+          await db
+            .collection("elections")
+            .updateOne({ _id: secondId }, { $set: { status: "completed" } });
+        }
         await db
           .collection<StringRecord>("gameState")
           .updateOne({ _id: "current" }, { $set: { currentTurn: 1127 } });
+        if (kind === "paired") {
+          expect(await resolveGeneralElections(NOW, [vacancyPoll!._id])).toBe(0);
+          expect(await db.collection("electedOfficials").countDocuments()).toBe(197);
+          expect(
+            (
+              await db.collection(HU_2011_BY_ELECTIONS_COLLECTION).findOne({
+                _id: vacancyPoll!.hungarianModernByElection.receiptId,
+              })
+            )?.completedAtTurn
+          ).toBeUndefined();
+        }
         if (kind === "expired" || kind === "superseded") {
           if (kind === "superseded")
             await db.collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION).insertOne({
@@ -767,7 +818,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
             NOW
           )
         ).rejects.toThrow("injected modern constituency journal failure");
-        expect(await db.collection("electedOfficials").countDocuments()).toBe(198);
+        expect(await db.collection("electedOfficials").countDocuments()).toBe(199 - vacancyCount);
         expect(await db.collection("npps").find().sort({ _id: 1 }).toArray()).toEqual(
           beforeVacancy
         );
@@ -776,7 +827,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           resolveGeneralElections(NOW),
           resolveGeneralElections(NOW),
         ]);
-        expect(resolvedVacancy.sort()).toEqual([0, 1]);
+        expect(resolvedVacancy.sort()).toEqual([0, vacancyCount]);
         process.stdout.write(
           JSON.stringify({
             fixture: "hu-modern-by-election-resolution-concurrent",

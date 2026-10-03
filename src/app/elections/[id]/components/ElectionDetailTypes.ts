@@ -196,6 +196,7 @@ export interface ElectionDetail {
   electionType: ElectionType;
   state: string;
   countryId: string;
+  hungarianModernByElection?: { districtId: string };
   hungarianAssemblyRound?: {
     ruleVersion: "mixed-1989-v1";
     round: 1 | 2;
