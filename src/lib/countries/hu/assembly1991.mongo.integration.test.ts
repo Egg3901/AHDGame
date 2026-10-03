@@ -1013,10 +1013,18 @@ describe.skipIf(!uri)(
                 HU_1991_COUNTS_COLLECTION
               )
               .insertOne({ ...original!, _id: "HU:mixed1989:2", cycle: 2, seatedAtTurn: 103 });
-          else
+          else {
+            const listSeat = await db.collection("electedOfficials").findOne({
+              "hungarianAssemblyMandate.tier": "national",
+              isNPP: true,
+            });
+            await db.collection("electedOfficials").deleteOne({ _id: listSeat!._id });
+            expect(await loadHu1991ListVacancies(db, 103)).toHaveLength(1);
             await db
               .collection<StringRecord>("gameState")
               .updateOne({ _id: "current" }, { $set: { huAssemblyReformedAtYear: 2014 } });
+            expect(await loadHu1991ListVacancies(db, 103)).toEqual([]);
+          }
           const held = await db.collection("electedOfficials").find().sort({ _id: 1 }).toArray();
           if (successor === "modern-opening")
             expect(await openHu1991ByElections(db, 104, now)).toEqual([]);
