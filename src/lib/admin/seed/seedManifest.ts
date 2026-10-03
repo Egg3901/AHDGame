@@ -374,6 +374,7 @@ const RUNTIME: CollectionEntry[] = [
   { name: "hu2011ElectoralProposals", category: "runtime" },
   { name: "ro1992ElectoralProposals", category: "runtime" },
   { name: "bg1991ConstitutionalProposals", category: "runtime" },
+  { name: "bg1991ConstitutionalInitiatives", category: "runtime" },
   { name: "hu2011AssemblyCounts", category: "runtime" },
   { name: "hu2011ConstituencyByElections", category: "runtime" },
   { name: "hu2011AssemblyOfficeArchives", category: "runtime" },

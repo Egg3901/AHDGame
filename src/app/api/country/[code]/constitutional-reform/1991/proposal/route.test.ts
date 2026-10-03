@@ -82,6 +82,41 @@ describe("Bulgarian electoral proposal routes", () => {
       "bgConstitution1991SinceTurn"
     );
   });
+  it("collects one authenticated deputy signature without inventing a bill", async () => {
+    mem.collection("electedOfficials").docs[0].officeType = "assemblyDeputy";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await POST(request({ kind: "constitution1991", action: "endorse" }), params);
+      expect(response.status).toBe(202);
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(await response.json()).toMatchObject({
+        initiative: { support: 1, required: 100, canIntroduce: false },
+      });
+    }
+    expect(mem.collection("bills").docs).toHaveLength(0);
+    expect(mem.collection("bg1991ConstitutionalInitiatives").docs).toHaveLength(1);
+    expect(
+      (await (await GET(new Request("http://localhost"), params)).json()).decision.initiative
+        .support
+    ).toBe(1);
+    expect(
+      (
+        await POST(
+          request({ kind: "constitution1991", action: "endorse", signatures: ["invented"] }),
+          params
+        )
+      ).status
+    ).toBe(400);
+  });
+  it("requires an actual deputy for endorsement even for an administrator", async () => {
+    mocks.requireBasicAuth.mockResolvedValue({
+      ok: true,
+      user: { userId: new ObjectId().toHexString(), isAdmin: true },
+    });
+    expect(
+      (await POST(request({ kind: "constitution1991", action: "endorse" }), params)).status
+    ).toBe(403);
+    expect(mem.collection("bg1991ConstitutionalInitiatives").docs).toHaveLength(0);
+  });
   it("rejects a premature date and invented authorization fields", async () => {
     expect((await POST(request({ kind: "constitution1991", approved: true }), params)).status).toBe(
       400
