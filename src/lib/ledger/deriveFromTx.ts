@@ -1,4 +1,10 @@
-import { counterpartyAccount, mintSinkAccount, subjectAccount } from "@/lib/ledger/accounts";
+import {
+  accountCurrency,
+  counterpartyAccount,
+  mintSinkAccount,
+  subjectAccount,
+} from "@/lib/ledger/accounts";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { LedgerEntryInput, LedgerLeg } from "@/lib/ledger/types";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 
@@ -238,7 +244,10 @@ const FUND_MIRROR_TX_TYPES: ReadonlySet<string> = new Set([
  * does not evidence the fund side. Fail-closed: the fund account key must
  * carry the fund's own anchor currency, and the row must be denominated in
  * exactly that currency — otherwise the mirror would book against a key the
- * snapshot never holds (e.g. a GBP scheme buying a USD fund).
+ * snapshot never holds (e.g. a GBP scheme buying a USD fund). The exception is
+ * an anchor-backed NPP holder: its row states the ₳ value outright in both
+ * fields, which is exactly the fund's credit, so it settles against the fund's
+ * own currency key with no exchange-rate guess.
  */
 export function fundMirrorAccount(tx: DerivableTx): string | null {
   if (!FUND_MIRROR_TX_TYPES.has(tx.type)) return null;
@@ -252,8 +261,14 @@ export function fundMirrorAccount(tx: DerivableTx): string | null {
   const fundId = meta?.fundId;
   const fundCurrency = meta?.fundCurrency;
   if (typeof fundId !== "string" || fundId.length === 0) return null;
-  if (typeof fundCurrency !== "string" || fundCurrency !== tx.currencyCode) return null;
-  return `fund:${fundId}:${tx.currencyCode}`;
+  if (typeof fundCurrency !== "string" || fundCurrency.length === 0) return null;
+  if (fundCurrency === tx.currencyCode) return `fund:${fundId}:${tx.currencyCode}`;
+  return isAnchorStatedNppRow(tx) ? `fund:${fundId}:${fundCurrency}` : null;
+}
+
+/** NPP investment cash is ₳-denominated; its rows carry the same value in both fields. */
+function isAnchorStatedNppRow(tx: DerivableTx): boolean {
+  return tx.subjectType === "npp" && Number.isFinite(tx.amount) && tx.amount === tx.anchorAmount;
 }
 
 /**
@@ -413,7 +428,9 @@ function deriveFundMirrorEntry(
       {
         account: fundAccount,
         amount: -anchor,
-        currencyCode: tx.currencyCode,
+        // The fund key's own currency; equal to the row's except for an
+        // anchor-stated NPP holder of a fund in another currency.
+        currencyCode: accountCurrency(fundAccount) as CurrencyCode,
         anchorAmount: -anchor,
         role: "primary",
       },
