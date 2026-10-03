@@ -107,7 +107,7 @@ describe("buildCountryDirectory", () => {
       activePresidentElection: { id: "abc", seatId: "us-pres", status: "active" },
     });
     const politics = groups.find((g) => g.label === "Politics")!;
-    expect(politics.rows[0].label).toBe("Presidential Election");
+    expect(politics.rows[0].label).toBe("Presidential election");
     expect(politics.rows[0].highlight).toBe(true);
     expect(politics.rows[0].href).toBe("/elections/us-pres");
   });
@@ -132,15 +132,15 @@ describe("buildCountryDirectory", () => {
     ).not.toContain("Supreme Court");
   });
 
-  it("shows the Command Economy dashboard only for a flag-on planned economy", () => {
+  it("shows the command economy dashboard only for a flag-on planned economy", () => {
     expect(allLabels(buildCountryDirectory({ countryId: "RU", counts: EMPTY }))).not.toContain(
-      "Command Economy"
+      "Command economy"
     );
     const planned = buildCountryDirectory({
       countryId: "RU",
       counts: { ...EMPTY, commandEconomy: true },
     });
-    expect(labelsIn(planned, "Economy")).toContain("Command Economy");
+    expect(labelsIn(planned, "Economy")).toContain("Command economy");
   });
 
   it("shows the Cold War entry only when a DEFCON is served", () => {
@@ -163,11 +163,11 @@ describe("buildCountryDirectory", () => {
       "Parties",
       "Politicians",
       "Approval",
-      "National Budget",
-      "National Policy",
+      "National budget",
+      "National policy",
       "Economy",
-      "Stock Market",
-      "Foreign Exchange",
+      "Stock market",
+      "Foreign exchange",
       "Unions",
       "Nationalization",
       "Map",
@@ -179,8 +179,8 @@ describe("buildCountryDirectory", () => {
 
   it("offers exactly one metrics surface per country", () => {
     const us = allLabels(buildCountryDirectory({ countryId: "US", counts: EMPTY }));
-    expect(us).toContain("Political Metrics");
-    expect(us).not.toContain("National Metrics");
+    expect(us).toContain("Political metrics");
+    expect(us).not.toContain("National metrics");
   });
 
   it("never repeats a label or a destination", () => {
@@ -204,7 +204,7 @@ describe("buildCountryDirectory", () => {
     const byLabel = new Map(
       groups.flatMap((g) => g.rows).map((r) => [r.label, r.figure ?? null] as const)
     );
-    expect(byLabel.get("National Policy")).toBe("2 laws");
+    expect(byLabel.get("National policy")).toBe("2 laws");
     expect(byLabel.get("Parties")).toBe("6 active");
     expect(byLabel.get("Approval")).toBe("47%");
     expect(byLabel.get("Unions")).toBe("12 unions");
