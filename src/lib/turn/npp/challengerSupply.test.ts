@@ -329,7 +329,7 @@ describe("processChallengerGeneration: concurrent regional chamber floor (#2098)
   });
 });
 
-describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () => {
+describe("processChallengerGeneration: qualification coverage (#2072)", () => {
   let db: MockDb;
 
   beforeEach(async () => {
@@ -339,6 +339,12 @@ describe("processChallengerGeneration: 2027 qualification coverage (#2072)", () 
   });
 
   it.each([
+    ["HU", "nationalAssembly", "HU_BUD"],
+    ["BG", "nationalAssembly", "BG_SOF"],
+    ["PL", "sejm", "PL_MAZ"],
+    ["PL", "senat", "PL_MAZ"],
+    ["RO", "chamberOfDeputies", "RO_BUC"],
+    ["RO", "senat", "RO_BUC"],
     ["DE", "ministerPresident", "BY"],
     ["ES", "congresoDiputados", "ES_MAD"],
     ["ES", "senado", "ES_MAD"],

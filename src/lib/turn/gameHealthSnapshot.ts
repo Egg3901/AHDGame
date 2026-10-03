@@ -226,10 +226,53 @@ async function runIntegrityChecks(
     });
   }
 
-  // 3. Parties with zero members
-  const partiesWithoutMembers = await db
+  // 3. Parties with neither human nor active NPC members. memberCount is
+  // the human cache; NPC affiliations use the party sequentialId string.
+  const partiesWithoutHumanMembers = await db
     .collection("politicalParties")
     .countDocuments({ memberCount: 0 });
+  const npcBackedParties =
+    partiesWithoutHumanMembers > 0
+      ? await db
+          .collection("politicalParties")
+          .aggregate<{ count: number }>([
+            { $match: { memberCount: 0 } },
+            { $project: { sequentialId: 1, countryId: 1 } },
+            {
+              $lookup: {
+                from: "npps",
+                let: {
+                  partyId: { $toString: "$sequentialId" },
+                  countryId: { $ifNull: ["$countryId", "US"] },
+                },
+                pipeline: [
+                  {
+                    $match: {
+                      retiredAt: null,
+                      $expr: {
+                        $and: [
+                          { $ne: ["$$partyId", null] },
+                          { $eq: ["$party", "$$partyId"] },
+                          { $eq: [{ $ifNull: ["$countryId", "US"] }, "$$countryId"] },
+                        ],
+                      },
+                    },
+                  },
+                  { $project: { _id: 1 } },
+                  { $limit: 1 },
+                ],
+                as: "npcMembers",
+              },
+            },
+            { $match: { "npcMembers.0": { $exists: true } } },
+            { $count: "count" },
+          ])
+          .toArray()
+      : [];
+  const partiesWithoutMembers = Math.max(
+    0,
+    partiesWithoutHumanMembers - (npcBackedParties[0]?.count ?? 0)
+  );
   if (partiesWithoutMembers > 0) {
     issues.push({
       category: "emptyParty",
