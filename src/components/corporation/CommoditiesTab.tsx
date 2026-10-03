@@ -225,8 +225,8 @@ export default function CommoditiesTab({
                       <Td align="right" className="text-foreground">
                         {c.market.coverTurns != null ? `${c.market.coverTurns.toFixed(1)}t` : ""}
                       </Td>
-                      <Td numeric={false} wrap className="text-xs">
-                        <span className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+                      <Td numeric={false} className="text-xs">
+                        <span className="inline-flex gap-x-2.5">
                           <Link
                             href={`/commodity/${c.commodity}`}
                             className="text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
