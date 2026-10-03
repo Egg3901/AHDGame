@@ -1,61 +1,12 @@
 /**
- * Era-aware monetary baselines.
- *
- * `MONETARY_BASELINES` in `constants/currencies.ts` carries a single global
- * table whose values for several countries are calibrated to the late-1970s
- * (FR 10%, IT 15%, ES 16%, SE 8%, TR 20% inflation targets — see the inline
- * comments there). Those anchors are correct for 1979 worlds but wildly wrong
- * for 1953 worlds, where they pinned domestic CPI at the 15% model cap for the
- * whole run (sim evidence: 1953-default all-NPP 250-turn run, IT/ES/TR
- * min=max=15.0).
- *
- * This module layers per-era overrides on top of the modern table WITHOUT
- * touching it: resolvers return an override only when the CURRENT in-game
- * year (`gameState.currentYear`) falls inside an era span (1953-era until
- * 1979, 1979-era until 1991, 1991-era until 1999), so worlds at 1999+ — and
- * any caller that does not pass a year — resolve byte-identically to the
- * existing constants.
- *
- * KEYING (2026-07-17 correction): these are RUNTIME per-turn anchors, so they
- * key on the current in-game year, NOT the frozen seed year. A long-lived
- * world GRADUATES through the eras as its clock advances: a 1953-default
- * world uses the 1953 anchors while its year is < 1979, the 1979 anchors
- * through 1979-1990, the 1991 anchors through 1991-1998, and the modern table
- * from 1999 on. The live 1991-default world at in-game ~2015 therefore
- * resolves the modern anchors (its pre-era-table behavior). Seed-time
- * selections (initial rates, budgets, census, seeded metric values) stay
- * keyed on preset/startingYear elsewhere — only per-turn behavior graduates.
- *
- * 1979 worlds: the late-1970s values in the global table (FR 10, IT 15, ES 16,
- * SE 8, TR 20) ARE the 1979 calibration — the 1979 table repeats them verbatim
- * (plus authored trend growth) and adds honest stagflation-era anchors for the
- * countries the global table holds at modern values (US/UK/JP/DE/IE/BR/NG/RU).
- * Historically those anchors did not exist as entries; 1979 CPI was instead
- * manufactured by a cost-of-living lever in `inflation.ts` (neutral CoL index
- * 50 vs 100-centered seed data → permanent +12.5pp housing term). That lever
- * is gone — see `getCostOfLivingNeutralIndex` — so these targets are now the
- * sole, explicit source of era inflation.
- *
- * 1991 worlds: moderate early-90s disinflation anchors (real 1991-97 CPI:
- * US 4.2→2.3, UK 5.9→3, JP 3.3→0.5, DE 4→1.5). Same lever-removal story: a
- * 300-turn 1991-default sim on the old lever held US/UK/JP/DE/CN CPI at
- * 6.5-8.6%/yr sustained (sandbox ahd_sim_s1991-base-a), roughly double the
- * era's real path.
- *
- * Countries absent from an era table intentionally fall through to the modern
- * baseline (US/UK/IE/CN 2.0-target / ~3-4 neutral are already era-plausible
- * for 1953; CN's administered-price 2.0 works for 1979 too).
- *
- * Trend GDP growth: layer-1 countries (no national stateMetrics doc — not in
- * `NATIONAL_SCOPE`) have no sector-driven growth dynamics; every consumer used
- * to fall back to a hardcoded 2.5. `trendGdpGrowth` lets an era author the
- * structural growth rate the engine should assume for them instead (e.g. the
- * RU 1953 overlay authors 6.0 — forced industrialization + post-war
- * reconstruction, see `seeds/ru/ruMetricPresets1953.ts`).
+ * Historical monetary calibration preserves authored start-year values and
+ * interpolates reference rates between them. getEraMonetaryBaseline uses the
+ * current game year; modern worlds and missing dates retain their fallbacks.
  */
 
 import type { CountryId } from "./countries";
-import type { MonetaryBaseline } from "./currencies";
+import { MONETARY_BASELINES, type MonetaryBaseline } from "./currencies";
+import { interpolateMonetaryCalibration } from "@/lib/currency/rules/monetaryCalibration";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 import { US_ECONOMY } from "@/lib/countries/us/economy";
 import { UK_ECONOMY } from "@/lib/countries/uk/economy";
@@ -303,54 +254,46 @@ export const MONETARY_BASELINES_1971: Partial<Record<CountryId, EraMonetaryBasel
  */
 export const MODERN_ERA_START_YEAR = 1999;
 
-/**
- * Era spans, most historical first: an in-game year strictly before a span's
- * `untilYear` (and not claimed by an earlier span) resolves that span's table.
- * There is no era before 1953, so the 1953 table also covers any earlier
- * year. Years ≥ `MODERN_ERA_START_YEAR` (and callers passing no year) resolve
- * the modern `MONETARY_BASELINES` byte-identically to the pre-era-table
- * behavior. For the exact preset years (1953/1979/1991/1999+) this resolves
- * the same table the old seed-year windows (≤1953/≤1979/≤1991) did.
- */
-const ERA_TABLES: ReadonlyArray<{
-  untilYear: number;
+/** Authored calibration points; integer-year callers advance annually. */
+const ERA_ANCHORS: ReadonlyArray<{
+  year: number;
   table: Partial<Record<CountryId, EraMonetaryBaseline>>;
 }> = [
-  { untilYear: 1971, table: MONETARY_BASELINES_1953 },
-  // A 1953 world runs ~48 turns per in-game year, so a 1000-turn run reaches
-  // ~1973 — past the Aug-1971 Nixon Shock. Without this span the whole
-  // post-Bretton-Woods period still resolved 1953 anchors (DE 2.0/3.5,
-  // FR 2.0/4.0, JP 2.0/5.5), i.e. Bretton-Woods price stability persisting years
-  // after the system it depended on ended.
-  { untilYear: 1979, table: MONETARY_BASELINES_1971 },
-  { untilYear: 1991, table: MONETARY_BASELINES_1979 },
-  { untilYear: MODERN_ERA_START_YEAR, table: MONETARY_BASELINES_1991 },
+  { year: 1953, table: MONETARY_BASELINES_1953 },
+  { year: 1971, table: MONETARY_BASELINES_1971 },
+  { year: 1979, table: MONETARY_BASELINES_1979 },
+  { year: 1991, table: MONETARY_BASELINES_1991 },
+  { year: MODERN_ERA_START_YEAR, table: {} },
 ];
 
-function resolveEraTable(
-  currentYear: number | null | undefined
-): Partial<Record<CountryId, EraMonetaryBaseline>> | undefined {
-  if (typeof currentYear !== "number" || !Number.isFinite(currentYear)) return undefined;
-  for (const era of ERA_TABLES) {
-    if (currentYear < era.untilYear) return era.table;
-  }
-  return undefined;
-}
-
-/**
- * Returns the era override for a country, or undefined when the era has no
- * override for it (callers fall through to `MONETARY_BASELINES`).
- *
- * `currentYear` is the CURRENT in-game year (`gameState.currentYear`) — not
- * the frozen seed year — so anchors graduate as a world's clock advances.
- * Passing no year (or a modern one, ≥ 1999) always returns undefined, the
- * fail-safe modern behavior.
- */
+/** Missing historical entries use the same modern fallback as exact anchors. */
 export function getEraMonetaryBaseline(
   countryId: CountryId,
   currentYear?: number | null
 ): EraMonetaryBaseline | undefined {
-  return resolveEraTable(currentYear)?.[countryId];
+  if (
+    typeof currentYear !== "number" ||
+    !Number.isFinite(currentYear) ||
+    currentYear >= MODERN_ERA_START_YEAR
+  )
+    return undefined;
+  if (currentYear <= ERA_ANCHORS[0].year) return ERA_ANCHORS[0].table[countryId];
+  for (let i = 0; i < ERA_ANCHORS.length - 1; i++) {
+    const left = ERA_ANCHORS[i];
+    const right = ERA_ANCHORS[i + 1];
+    if (currentYear === left.year) return left.table[countryId];
+    if (currentYear < right.year) {
+      const a = left.table[countryId];
+      const b = right.table[countryId];
+      if (!a && !b) return undefined;
+      return interpolateMonetaryCalibration(
+        a ?? MONETARY_BASELINES[countryId],
+        b ?? MONETARY_BASELINES[countryId],
+        (currentYear - left.year) / (right.year - left.year)
+      );
+    }
+  }
+  return undefined;
 }
 
 /**
