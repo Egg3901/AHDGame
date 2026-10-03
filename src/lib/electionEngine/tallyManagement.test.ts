@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { initElectionVoteTally, accumulateVoteTurn } from "./tallyManagement";
 import { MongoClient, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
@@ -220,8 +221,6 @@ function injectReplaceOne(db: MockDb): ReturnType<typeof vi.fn> {
 
 describe("initElectionVoteTally", () => {
   it("calls replaceOne with a zeroed tally document for each candidate", async () => {
-    const { initElectionVoteTally } = await import("./tallyManagement");
-
     const replaceOne = injectReplaceOne(db);
     const electionId = new ObjectId();
     const c1 = makeCandidate({ _id: new ObjectId(), characterName: "Alice", party: "democrat" });
@@ -250,8 +249,6 @@ describe("initElectionVoteTally", () => {
   });
 
   it("includes primaryResults in the tally when provided", async () => {
-    const { initElectionVoteTally } = await import("./tallyManagement");
-
     const replaceOne = injectReplaceOne(db);
     const electionId = new ObjectId();
     const candidate = makeCandidate();
@@ -278,8 +275,6 @@ describe("initElectionVoteTally", () => {
   });
 
   it("works with an empty candidate list (blank tally)", async () => {
-    const { initElectionVoteTally } = await import("./tallyManagement");
-
     const replaceOne = injectReplaceOne(db);
     const electionId = new ObjectId();
     await initElectionVoteTally(electionId, [], "NY");
@@ -295,8 +290,6 @@ describe("initElectionVoteTally", () => {
 
 describe("accumulateVoteTurn — early exits", () => {
   it("returns without updating when tally is missing", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(null);
     db.collectionMocks.electionCandidates.find.mockReturnValue({
@@ -309,8 +302,6 @@ describe("accumulateVoteTurn — early exits", () => {
   });
 
   it("returns without updating when there are no active candidates", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(makeTally(electionId));
     // No active candidates
@@ -324,8 +315,6 @@ describe("accumulateVoteTurn — early exits", () => {
   });
 
   it("returns without updating when the election document is missing", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
 
@@ -341,8 +330,6 @@ describe("accumulateVoteTurn — early exits", () => {
   });
 
   it("returns without updating when election has no endTime", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
     const election = makeElection({ _id: electionId, endTime: undefined });
@@ -359,7 +346,6 @@ describe("accumulateVoteTurn — early exits", () => {
   });
 
   it("returns without updating when state document is missing", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { resolveTurnout } = await import("./resolvedTurnout");
     const { getStateApprovalForElection } = await import("@/lib/utils/getStateApprovalForElection");
 
@@ -401,8 +387,48 @@ describe("accumulateVoteTurn — vote accumulation", () => {
    * Wires all the happy-path mocks required for accumulateVoteTurn to proceed
    * past guards and reach the updateOne call.
    */
+  it("caps modern Hungarian district increments and preserves withdrawn cast votes", async () => {
+    const electionId = new ObjectId();
+    const active = makeCandidate({ electionId, countryId: "HU" });
+    const withdrawn = new ObjectId().toHexString();
+    const election = makeElection({
+      _id: electionId,
+      countryId: "HU",
+      electionType: "nationalAssembly",
+      state: "HU_BUD",
+      totalSeats: 1,
+      hungarianModernByElection: {
+        receiptId: "HU:mixed2011:6:by-election:1",
+        parentReceiptId: "HU:mixed2011:6",
+        districtId: "HU_BUD:1",
+        registeredVoters: 100,
+      },
+    });
+    await setupHappyPath({
+      electionId,
+      election,
+      candidates: [active],
+      existingTallyVotes: { [withdrawn]: 60, [active._id.toHexString()]: 30 },
+      voteResult: { [active._id.toHexString()]: 100 },
+    });
+    db.collection("gameState").findOne.mockResolvedValue({
+      preset: "1991-default",
+      currentYear: 2014,
+      currentTurn: 1126,
+      startingYear: 1991,
+    });
+    const previous = await db.collectionMocks.electionVoteTallies.findOne();
+    previous.candidateNames[withdrawn] = "Withdrawn district nominee";
+    previous.candidateParties[withdrawn] = "2";
+    await accumulateVoteTurn(electionId, 1, new Date("2024-01-01T00:00:00Z"));
+    const update = db.collectionMocks.electionVoteTallies.updateOne.mock.calls[0][1];
+    expect(update.$set.totalVotes).toEqual({ [withdrawn]: 60, [active._id.toHexString()]: 40 });
+    expect(update.$set.candidateNames[withdrawn]).toBe("Withdrawn district nominee");
+    expect(update.$set.candidateParties[withdrawn]).toBe("2");
+    expect(update.$set.hungarianAssemblyBallot).toBe(true);
+    expect(update.$unset.seatsEstimate).toBe("");
+  });
   it("prices Russian campaign strength inside the frozen direct-voter ceiling", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const electionId = new ObjectId();
     const a = makeCandidate({ electionId, countryId: "RU" });
     const b = makeCandidate({ electionId, countryId: "RU" });
@@ -439,7 +465,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   it.each(["list", "constituency"] as const)(
     "preserves counted Duma withdrawals and caps %s participation without a presidential strength query",
     async (tier) => {
-      const { accumulateVoteTurn } = await import("./tallyManagement");
       const electionId = new ObjectId();
       const active = makeCandidate({ electionId, countryId: "RU" });
       const withdrawn = new ObjectId().toHexString();
@@ -486,7 +511,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   it.each(["new", "withdrawn", "against-all"])(
     "counts native Council %s ballots separately from marks",
     async (kind) => {
-      const { accumulateVoteTurn } = await import("./tallyManagement");
       const electionId = new ObjectId();
       const candidates = Array.from({ length: 3 }, (_, order) =>
         makeCandidate({
@@ -618,7 +642,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
         persistenceDb.collection = (name: string) =>
           name === "electionVoteTallies" ? tallies : db.collection(name);
         vi.mocked(getDb).mockResolvedValue(persistenceDb);
-        const { accumulateVoteTurn } = await import("./tallyManagement");
         const now = new Date("2024-01-01T00:00:00Z");
         await expect(accumulateVoteTurn(electionId, 1, now)).rejects.toMatchObject({ code: 121 });
         const rejected = await tallies.findOne({ electionId });
@@ -712,8 +735,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   }
 
   it("appends a VoteTurnSnapshot to turnSnapshots", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
     const election = makeElection({ _id: electionId });
@@ -734,8 +755,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("appends the identical update to tallyWrites instead of writing when a collector is given (#2695)", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
     const election = makeElection({ _id: electionId });
@@ -757,7 +776,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("passes election.countryId into candidate enrichment so OPS banned-party weights apply", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
 
     const electionId = new ObjectId();
@@ -783,7 +801,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     // constant (Date path would put both calls in the early band), but the turn
     // fields put turn 146 in the final-4 surge band of a 48-turn race. The
     // engine must hand the distribution a much larger turn pool for that turn.
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
     const electionId = new ObjectId();
@@ -821,7 +838,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     // pool is now capped at the electorate — makeState() has population
     // 1,000,000 and no votingEligiblePopulation, so the ceiling is 1,000,000 —
     // and the per-turn slice rescales proportionally.
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
     const electionId = new ObjectId();
@@ -861,7 +877,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     // cleared and the turn re-run twice under the same number; every open
     // general accrued three slices of turn 460. The tally already holding
     // this turn's snapshot is the tell.
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
     const electionId = new ObjectId();
@@ -902,7 +917,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("counts the turn that reaches endTurn and releases exactly the pool across the window", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
     const electionId = new ObjectId();
@@ -939,7 +953,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("never carries cumulative ballots past the electorate", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
     const electionId = new ObjectId();
@@ -970,8 +983,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("accumulates votes on top of existing totals", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
     const candidateId = candidate._id.toString();
@@ -996,7 +1007,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("preserves counted Bulgarian withdrawals and suppresses regional seat projections", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const electionId = new ObjectId(),
       withdrawn = new ObjectId().toHexString();
     const candidate = makeCandidate({ electionId, countryId: "BG", party: "1" });
@@ -1032,7 +1042,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("excludes withdrawn candidates from totalVotes", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
     const { distributeVotesByGroupLevelAllocation } = await import("./voteDistribution");
 
@@ -1100,8 +1109,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("snapshot cumulativeVotes reflects the new totalVotes (not the pre-existing amounts)", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
     const candidateId = candidate._id.toString();
@@ -1126,8 +1133,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("passes sharesPct from vote distribution into the snapshot", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
     const candidateId = candidate._id.toString();
@@ -1149,7 +1154,6 @@ describe("accumulateVoteTurn — vote accumulation", () => {
   });
 
   it("coattail gate uses parties in the race, not StatePartyOrg rows (2026-07-09 fix)", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
     const electionId = new ObjectId();
@@ -1267,8 +1271,6 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
   }
 
   it("produces seatsEstimate that sums exactly to totalSeats", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const { labelToId: _labelToId } = await setupMultiSeat({
       electionId,
@@ -1294,8 +1296,6 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
   });
 
   it("gives the candidate with the most votes the most seats", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     // 75% vs 25% split over 5 seats → Leader gets 3-4, Runner gets 1-2
     const { labelToId } = await setupMultiSeat({
@@ -1317,8 +1317,6 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
   });
 
   it("excludes a candidate below the 3-seat House threshold", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     // Fringe gets 5% of 100k, below the capped 20% gate for a 3-seat delegation.
     const { labelToId } = await setupMultiSeat({
@@ -1343,8 +1341,6 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
   });
 
   it("includes a party above the derived 5-seat House threshold (#2466)", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     const { labelToId } = await setupMultiSeat({
       electionId,
@@ -1364,8 +1360,6 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
   });
 
   it("does not write seatsEstimate for single-seat races (senate)", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
-
     const electionId = new ObjectId();
     await setupMultiSeat({
       electionId,
@@ -1382,7 +1376,6 @@ describe("accumulateVoteTurn — Hamilton seat allocation for multi-seat races",
   });
 
   it("does not write seatsEstimate when totalSeats is missing", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
     const { distributeVotesByGroupLevelAllocation } = await import("./voteDistribution");
     await import("./voteDistributionSwingFlow");
@@ -1492,7 +1485,6 @@ describe("accumulateVoteTurn — preload option", () => {
 
 describe("accumulateVoteTurn — approvalMap option", () => {
   it("uses approval from the map rather than calling getStateApprovalForElection", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
     const { distributeVotesByGroupLevelAllocation } = await import("./voteDistribution");
     await import("./voteDistributionSwingFlow");
@@ -1853,7 +1845,6 @@ describe("accumulateVoteTurn — granular electorate substrate", () => {
   }
 
   it("flag ON: engine receives the granular-cell substrate (PA has a Layer-1 census)", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesByGroupLevelAllocation } = await import("./voteDistribution");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 
@@ -1879,7 +1870,6 @@ describe("accumulateVoteTurn — granular electorate substrate", () => {
   });
 
   it("a state with no Layer-1 census passes its fixtures through untouched", async () => {
-    const { accumulateVoteTurn } = await import("./tallyManagement");
     const { distributeVotesByGroupLevelAllocation } = await import("./voteDistribution");
     const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
 

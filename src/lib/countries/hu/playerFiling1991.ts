@@ -75,17 +75,22 @@ export async function materializeHu1991PlayerFiling(input: {
     .findOne({ _id: electionId }, { session });
   const game = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { session, projection: { preset: 1, currentTurn: 1 } });
+    .findOne(
+      { _id: "current" },
+      { session, projection: { preset: 1, currentTurn: 1, huAssemblyReformedAtYear: 1 } }
+    );
+  const modern = election?.hungarianModernByElection;
   if (
     !election ||
     game?.preset !== "1991-default" ||
-    !isHu1991AssemblyCampaign(election) ||
+    (!isHu1991AssemblyCampaign(election) &&
+      (!modern || election.countryId !== "HU" || election.electionType !== "nationalAssembly")) ||
     !candidate.electionId.equals(electionId) ||
     candidate.isNPP
   )
     return reject("invalid-ballot");
   if (
-    election.hungarianAssemblyRound!.round !== 1 ||
+    (!modern && election.hungarianAssemblyRound!.round !== 1) ||
     !["active", "upcoming"].includes(election.status) ||
     (election.primaryEndTurn != null
       ? Math.max(turn, game.currentTurn) >= election.primaryEndTurn
@@ -119,7 +124,7 @@ export async function materializeHu1991PlayerFiling(input: {
   )
     return reject("incompatible-office");
   if (
-    election.hungarianAssemblyRound!.byElection &&
+    (modern || election.hungarianAssemblyRound!.byElection) &&
     (await db.collection("electedOfficials").findOne(
       {
         countryId: "HU",
@@ -146,38 +151,77 @@ export async function materializeHu1991PlayerFiling(input: {
     );
     if (!party || party.regimeStatus === "banned") return reject("unregistered-party");
   }
-  const receiptId = election.hungarianAssemblyRound!.receiptId;
-  const byElection = election.hungarianAssemblyRound!.byElection;
-  const expectedReceipt = byElection
-    ? `${byElection.parentReceiptId}:by-election:${byElection.generation}`
-    : `HU:mixed1989:${election.cycle}`;
-  if (
-    receiptId !== expectedReceipt ||
-    (byElection && byElection.parentReceiptId !== `HU:mixed1989:${election.cycle}`)
-  )
-    return reject("invalid-ballot");
-  if (byElection) {
+  let districts: readonly { id: string; regionId: string }[] | undefined;
+  const receiptId = modern?.receiptId ?? election.hungarianAssemblyRound!.receiptId;
+  let byElection = election.hungarianAssemblyRound?.byElection;
+  if (modern) {
     const job = await db
-      .collection<import("./constituencyByElections1991").Hu1991ByElectionRecord>(
-        "hu1991ConstituencyByElections"
+      .collection<import("./constituencyByElections2011").HuModernByElectionRecord>(
+        "hu2011ConstituencyByElections"
       )
       .findOne({ _id: receiptId }, { session });
     const parent = await db
-      .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>("hu1991AssemblyCounts")
+      .collection<import("./assemblyCount2011").Hu2011AssemblyRecord>("hu2011AssemblyCounts")
       .findOne(
         { seatedAtTurn: { $exists: true } },
         { session, sort: { seatedAtTurn: -1 }, projection: { _id: 1 } }
       );
     if (
       !job ||
-      job.round !== 1 ||
+      game.huAssemblyReformedAtYear == null ||
       job.completedAtTurn != null ||
-      !job.activeElectionIds.includes(electionId.toHexString()) ||
       job.parentReceiptId !== parent?._id ||
-      Math.max(turn, game.currentTurn) >= job.termEndTurn ||
-      JSON.stringify(job.districtIds) !== JSON.stringify(byElection.districtIds)
+      job.parentReceiptId !== modern.parentReceiptId ||
+      job.parentReceiptId !== `HU:mixed2011:${election.cycle}` ||
+      receiptId !== `${job.parentReceiptId}:by-election:${job.generation}` ||
+      !job.electionIds.includes(electionId.toHexString()) ||
+      !job.districtIds.includes(modern.districtId) ||
+      Math.max(turn, game.currentTurn) >= job.termEndTurn
     )
       return reject("invalid-ballot");
+    const chamberLock = await db
+      .collection<{ _id: string; hu1991MandateGeneration?: number }>("governmentFormations")
+      .updateOne({ _id: "HU" }, { $inc: { hu1991MandateGeneration: 1 } }, { session });
+    if (chamberLock.matchedCount !== 1)
+      throw new Error("Hungarian filing lost its chamber authority");
+    districts = job.constituencies;
+    byElection = {
+      parentReceiptId: job.parentReceiptId,
+      generation: job.generation,
+      districtIds: [modern.districtId],
+    };
+  } else {
+    const expectedReceipt = byElection
+      ? `${byElection.parentReceiptId}:by-election:${byElection.generation}`
+      : `HU:mixed1989:${election.cycle}`;
+    if (
+      receiptId !== expectedReceipt ||
+      (byElection && byElection.parentReceiptId !== `HU:mixed1989:${election.cycle}`)
+    )
+      return reject("invalid-ballot");
+    if (byElection) {
+      const job = await db
+        .collection<import("./constituencyByElections1991").Hu1991ByElectionRecord>(
+          "hu1991ConstituencyByElections"
+        )
+        .findOne({ _id: receiptId }, { session });
+      const parent = await db
+        .collection<import("./assemblyCount1991").Hu1991AssemblyRecord>("hu1991AssemblyCounts")
+        .findOne(
+          { seatedAtTurn: { $exists: true } },
+          { session, sort: { seatedAtTurn: -1 }, projection: { _id: 1 } }
+        );
+      if (
+        !job ||
+        job.round !== 1 ||
+        job.completedAtTurn != null ||
+        !job.activeElectionIds.includes(electionId.toHexString()) ||
+        job.parentReceiptId !== parent?._id ||
+        Math.max(turn, game.currentTurn) >= job.termEndTurn ||
+        JSON.stringify(job.districtIds) !== JSON.stringify(byElection.districtIds)
+      )
+        return reject("invalid-ballot");
+    }
   }
   const locks = db.collection<FilingLock>(HU_1991_FILING_LOCKS_COLLECTION);
   const ownerId = candidate.characterId.toHexString();
@@ -230,10 +274,14 @@ export async function materializeHu1991PlayerFiling(input: {
     return reject("party-changed");
   const peers = await locks.find({ electionId, party: candidate.party }, { session }).toArray();
   const district = chooseHu1991PlayerDistrict({
+    districts,
     personId: ownerId,
     regionId: election.state,
     partyId: candidate.party,
-    requestedId: prior?.hungarianAssemblyNomination?.constituencyId ?? requestedDistrictId,
+    requestedId:
+      prior?.hungarianAssemblyNomination?.constituencyId ??
+      requestedDistrictId ??
+      modern?.districtId,
     allowedDistrictIds: byElection?.districtIds,
     otherFilings: peers.map((row) => ({
       personId: row.ownerId,
@@ -297,7 +345,8 @@ export async function registerHu1991PlayerFiling(
       error.code === 11000 &&
       error.message.includes(HU_1991_FILING_LOCKS_COLLECTION) &&
       typeof error.keyValue?._id === "string" &&
-      error.keyValue._id.startsWith("HU:mixed1989:")
+      (error.keyValue._id.startsWith("HU:mixed1989:") ||
+        error.keyValue._id.startsWith("HU:mixed2011:"))
     ) {
       return {
         allowed: false as const,

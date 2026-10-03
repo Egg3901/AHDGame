@@ -750,7 +750,8 @@ export async function _enrichElection(
   const isHu1991Pending =
     election.countryId === "HU" &&
     election.electionType === "nationalAssembly" &&
-    election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1";
+    (election.hungarianAssemblyRound?.ruleVersion === "mixed-1989-v1" ||
+      election.hungarianModernByElection != null);
   let seatsEstimate =
     seatedAllocation ??
     (isBgOrdinary || isHu1991Pending

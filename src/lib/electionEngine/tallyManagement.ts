@@ -450,7 +450,14 @@ export async function accumulateVoteTurn(
     election.countryId === "BG" &&
     election.electionType === "nationalAssembly" &&
     election.cycle >= 1;
-  const isHu1991 = isHu1991AssemblyCampaign(election);
+  const isHuBound =
+    isHu1991AssemblyCampaign(election) ||
+    (preset === "1991-default" &&
+      election.countryId === "HU" &&
+      election.hungarianModernByElection != null);
+  const huRegisteredVoters =
+    election.hungarianModernByElection?.registeredVoters ??
+    election.hungarianAssemblyRound?.registeredVoters;
   const isBoundDuma =
     election.countryId === "RU" &&
     election.electionType === "dumaDeputy" &&
@@ -464,14 +471,14 @@ export async function accumulateVoteTurn(
     : isBoundDuma
       ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0) +
         (tally.russianDumaBallot?.againstAllVotes ?? 0)
-      : isHu1991
+      : isHuBound
         ? Object.values(tally.totalVotes).reduce((sum, count) => sum + count, 0)
         : candidates.reduce((sum, c) => sum + (tally.totalVotes[c._id.toString()] ?? 0), 0);
   effEffectiveTurnPool = capTurnSliceToRemainingElectorate(
     effEffectiveTurnPool,
     alreadyCast,
-    isHu1991
-      ? election.hungarianAssemblyRound!.registeredVoters
+    isHuBound
+      ? huRegisteredVoters!
       : scalePoolToRegistered(electorate, registrationPool?.unregistered)
   );
   // Determine if we are in the general election phase (after primary end).
@@ -793,7 +800,7 @@ export async function accumulateVoteTurn(
         (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
   }
 
-  if (isBgOrdinary || isHu1991)
+  if (isBgOrdinary || isHuBound)
     for (const [id, votes] of Object.entries(tally.totalVotes)) {
       if (!activeCandidateIds.has(id)) newTotals[id] = votes;
     }
@@ -811,11 +818,11 @@ export async function accumulateVoteTurn(
     });
   }
 
-  if (isHu1991) {
+  if (isHuBound) {
     // The shared vote-ledger arithmetic preserves historical cast marks and
     // clamps only the new slice to the frozen registered electorate.
     newTotals = russianDumaVoteTotals({
-      registeredVoters: election.hungarianAssemblyRound!.registeredVoters,
+      registeredVoters: huRegisteredVoters!,
       priorVotes: tally.totalVotes,
       rawVotes: Object.fromEntries(
         enriched.map((candidate) => [
@@ -866,7 +873,7 @@ export async function accumulateVoteTurn(
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
-    if (isBgOrdinary || isHu1991) return undefined;
+    if (isBgOrdinary || isHuBound) return undefined;
     if (councilTotals) {
       const result = resolveRussianCouncilBallot({
         ...councilTotals.ballot,
@@ -991,7 +998,7 @@ export async function accumulateVoteTurn(
       !isBoundDuma &&
       !isBoundCouncil &&
       !isBgOrdinary &&
-      !isHu1991
+      !isHuBound
     ) {
       delete cleanedNames[key];
       delete cleanedParties[key];
@@ -1005,10 +1012,10 @@ export async function accumulateVoteTurn(
   }
 
   const tallyUpdate = {
-    ...(isBgOrdinary || isHu1991 ? { $unset: { seatsEstimate: "" as const } } : {}),
+    ...(isBgOrdinary || isHuBound ? { $unset: { seatsEstimate: "" as const } } : {}),
     $set: {
       ...(isBgOrdinary ? { bgOrdinaryBallot: true as const } : {}),
-      ...(isHu1991 ? { hungarianAssemblyBallot: true as const } : {}),
+      ...(isHuBound ? { hungarianAssemblyBallot: true as const } : {}),
       totalVotes: newTotals,
       candidateNames: cleanedNames,
       candidateParties: cleanedParties,

@@ -8,6 +8,11 @@ import {
   HU_2011_COUNTS_COLLECTION,
   type Hu2011AssemblyRecord,
 } from "@/lib/countries/hu/assemblyCount2011";
+import {
+  resolveHuModernByElection,
+  HU_2011_BY_ELECTIONS_COLLECTION,
+  type HuModernByElectionRecord,
+} from "@/lib/countries/hu/constituencyByElections2011";
 import { seatHu2011Assembly } from "@/lib/countries/hu/assemblySeating2011";
 import { bindHu1991Campaigns } from "@/lib/countries/hu/assemblyCampaignBinding1991";
 import {
@@ -132,6 +137,15 @@ export async function resolveGeneralElections(
   for (const cycle of new Set(bgOrdinaryRaces.map((row) => row.cycle))) {
     bgPlans.set(cycle, await readBgOrdinaryElectionPlan(db, cycle, now));
   }
+  const huModernByElectionRaces =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (row) =>
+            row.countryId === "HU" &&
+            row.electionType === "nationalAssembly" &&
+            row.hungarianModernByElection != null
+        )
+      : [];
   const huByElectionRaces =
     gameStateDoc?.preset === "1991-default"
       ? completedElections.filter(
@@ -201,6 +215,7 @@ export async function resolveGeneralElections(
               e.countryId === "HU" &&
               e.electionType === "nationalAssembly" &&
               e.hungarianModernAssembly == null &&
+              e.hungarianModernByElection == null &&
               gameStateDoc.huAssemblyReformedAtYear != null &&
               !e.hungarianAssemblyRound
           )
@@ -253,6 +268,57 @@ export async function resolveGeneralElections(
       }
     } catch (error) {
       logger.error("Turn", `Bulgarian ordinary cycle ${cycle} remains unseated`, error);
+    }
+  }
+  for (const receiptId of new Set(
+    huModernByElectionRaces.map((row) => row.hungarianModernByElection!.receiptId)
+  )) {
+    try {
+      if (onlyElectionIds) {
+        const job = await db
+          .collection<HuModernByElectionRecord>(HU_2011_BY_ELECTIONS_COLLECTION)
+          .findOne({ _id: receiptId }, { projection: { electionIds: 1 } });
+        const selected = new Set(onlyElectionIds.map((id) => id.toHexString()));
+        if (!job || job.electionIds.some((id) => !selected.has(id))) continue;
+      }
+      const completed = await resolveHuModernByElection(db, receiptId, currentTurn, now);
+      resolved += completed;
+      if (completed) {
+        resolvedElections.push(
+          ...huModernByElectionRaces.filter(
+            (row) => row.hungarianModernByElection!.receiptId === receiptId
+          )
+        );
+        const job = await db
+          .collection<HuModernByElectionRecord>(HU_2011_BY_ELECTIONS_COLLECTION)
+          .findOne({ _id: receiptId }, { projection: { officialIds: 1 } });
+        if (job?.officialIds?.length) {
+          const winners = await db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find(
+              { _id: { $in: job.officialIds } },
+              {
+                projection: { state: 1, characterName: 1, party: 1, isNPP: 1 },
+              }
+            )
+            .toArray();
+          for (const winner of winners)
+            allNewsOutcomes.push({
+              electionType: "nationalAssembly",
+              state: winner.state!,
+              countryId: "HU",
+              winnerName: winner.characterName ?? "Deputy",
+              winnerParty: winner.party!,
+              isPlayer: !winner.isNPP,
+            });
+        }
+      }
+    } catch (error) {
+      logger.error(
+        "Turn",
+        `Modern Hungarian constituency receipt ${receiptId} remains unseated`,
+        error
+      );
     }
   }
   for (const receiptId of new Set(
@@ -508,7 +574,8 @@ export async function resolveGeneralElections(
               bgOrdinaryRaces.includes(election) ||
               hu1991Races.includes(election) ||
               hu2011Races.includes(election) ||
-              huByElectionRaces.includes(election)
+              huByElectionRaces.includes(election) ||
+              huModernByElectionRaces.includes(election)
             ) {
               return { election, result: null };
             }
