@@ -386,7 +386,6 @@ export default async function ReferendumDetailPage({
         tiles={ref.status === "campaigning" ? campaigningTiles : terminalTiles}
         accent={ref.status === "campaigning" ? "yes" : "neutral"}
         emblemSeal={emblemSeal}
-        watermark={regionId.toUpperCase()}
         viewingAs={
           isAdmin ? (
             <ViewingAsControl active={role} hrefFor={(r) => makeHref({ as: r })} />

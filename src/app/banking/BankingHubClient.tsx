@@ -418,17 +418,7 @@ function BankingHero({
   onNavigate: (tab: HubTab) => void;
 }) {
   return (
-    <header className="relative overflow-hidden rounded-3xl border border-card-border bg-gradient-to-br from-card via-card to-card-elevated shadow-lg">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-10 -top-16 h-72 w-72 rounded-full bg-primary/10 blur-3xl"
-      />
-      <Landmark
-        aria-hidden
-        className="pointer-events-none absolute -right-6 top-0 h-52 w-52 text-foreground/[0.035] sm:right-6"
-        strokeWidth={0.7}
-      />
-
+    <header className="relative overflow-hidden rounded-3xl border border-card-border bg-card shadow-lg">
       <div className="relative px-5 pb-6 pt-7 sm:px-8 sm:pb-8 sm:pt-9">
         <div
           className={`grid gap-6 ${hasCharacter ? "xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]" : ""}`}
@@ -478,7 +468,7 @@ function BankingHero({
         </div>
 
         {primary && (
-          <div className="mt-7 overflow-hidden rounded-2xl border border-primary/25 bg-background/55 backdrop-blur-sm">
+          <div className="mt-7 overflow-hidden rounded-2xl border border-primary/25 bg-background">
             <div className="grid lg:grid-cols-[1fr_auto]">
               <div className="flex items-center gap-4 p-4 sm:p-5">
                 <div className="flex h-11 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-card-border bg-card-elevated shadow-sm">
@@ -594,7 +584,7 @@ function YourFundsPanel({
   return (
     <aside
       aria-label="Your balances"
-      className="self-start overflow-hidden rounded-2xl border border-primary/25 bg-background/55 backdrop-blur-sm"
+      className="self-start overflow-hidden rounded-2xl border border-primary/25 bg-background"
     >
       <p className="border-b border-card-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
         Your balances

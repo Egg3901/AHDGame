@@ -407,7 +407,7 @@ export default function MetricsPage() {
                     onClick={() => setActiveCategory(tab.id)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                       activeCategory === tab.id
-                        ? "bg-primary text-white shadow-glow-sm"
+                        ? "bg-primary text-white"
                         : "bg-card-muted text-muted hover:bg-card-elevated hover:text-foreground"
                     }`}
                   >

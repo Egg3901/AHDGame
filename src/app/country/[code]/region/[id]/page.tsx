@@ -538,12 +538,12 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
             className="relative rounded-t-2xl px-5 pb-5 pt-4 sm:px-7 sm:pt-5"
             style={{
               background:
-                "radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 44%), linear-gradient(135deg, color-mix(in srgb, var(--card) 90%, var(--primary)) 0%, var(--card) 55%, var(--background) 100%)",
+                "linear-gradient(135deg, color-mix(in srgb, var(--card) 90%, var(--primary)) 0%, var(--card) 55%, var(--background) 100%)",
             }}
           >
-            {/* Decorative art (banner wash + watermark) is clipped by its own
-                wrapper so the masthead itself keeps no `overflow-hidden` — that
-                clip was hiding the RegionDropdown menu (#915). */}
+            {/* The banner wash is clipped by its own wrapper so the masthead
+                itself keeps no `overflow-hidden`; that clip was hiding the
+                RegionDropdown menu (#915). */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-t-2xl">
               {/* banner photo, faded into the coloration gradient (like the Cabinet
                   Office hero): the gradient is the container background and the
@@ -561,17 +561,6 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
                   />
                 ) : null;
               })()}
-              {/* giant faded region-abbreviation watermark */}
-              <div
-                aria-hidden
-                className="absolute -right-3 -top-10 select-none font-black leading-none"
-                style={{
-                  fontSize: 190,
-                  color: "color-mix(in srgb, var(--foreground) 6%, transparent)",
-                }}
-              >
-                {state._id}
-              </div>
             </div>
 
             <div className="relative">
@@ -642,16 +631,7 @@ async function renderGenericRegion(countryId: CountryId, regionCode: string) {
             </div>
           </div>
 
-          {/* accent divider rule */}
-          <div
-            aria-hidden
-            className="h-0.5"
-            style={{
-              background:
-                "linear-gradient(90deg, transparent, var(--primary) 16%, color-mix(in srgb, var(--primary) 55%, white) 50%, var(--primary) 84%, transparent)",
-              opacity: 0.85,
-            }}
-          />
+          <div aria-hidden className="h-px bg-card-border" />
 
           {/* Fused stat strip — responsive grid (2-col mobile, 4-col sm, 6-col lg).
               No horizontal scroll; wraps naturally on narrow viewports. */}

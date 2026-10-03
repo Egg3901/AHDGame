@@ -49,7 +49,7 @@ export function OfficialCard({
   const partyColor = official?.partyColor ?? "#888888";
 
   return (
-    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-card-border bg-card px-3 pb-4 pt-1 transition-colors card-hover hover:border-primary/30 hover:bg-card-elevated">
+    <div className="relative flex flex-col items-center overflow-hidden rounded-xl border border-card-border bg-card px-3 pb-4 pt-1 transition-colors hover:border-primary/30 hover:bg-card-elevated">
       {/* Party-color top accent */}
       {!isVacant && official?.partyColor && (
         <div

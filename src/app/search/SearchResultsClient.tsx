@@ -88,14 +88,6 @@ export function SearchResultsClient({ initialQuery }: { initialQuery: string }) 
     <main className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 sm:py-9">
         <header className="relative isolate overflow-hidden rounded-2xl border border-card-border bg-card shadow-panel">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-primary/10 blur-3xl"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-secondary/10 blur-3xl"
-          />
           <div className="relative px-5 py-7 sm:px-8 sm:py-9">
             <div className="mb-3 flex items-center gap-2 text-[length:var(--text-body-sm)] font-semibold uppercase tracking-[0.16em] text-primary">
               {t("search.eyebrow")}

@@ -10,7 +10,6 @@
   --g0: #16233f;
   --g1: #101a30;
   --g2: #0c1018;
-  --font-dossier-cjk: "Noto Serif SC", serif;
 }
 
 [data-cabinet-dossier] .dossier-label {
@@ -23,37 +22,14 @@
   font-variant-numeric: tabular-nums;
 }
 [data-cabinet-dossier] .mono {
-  font-family: var(--font-dossier-mono), ui-monospace, monospace;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 [data-cabinet-dossier] .masthead {
-  background:
-    radial-gradient(
-      120% 150% at 0% 0%,
-      color-mix(in srgb, var(--gov) 16%, transparent) 0%,
-      transparent 44%
-    ),
-    linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%);
-}
-[data-cabinet-dossier] .gov-rule {
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--gov) 16%,
-    var(--gov-soft) 50%,
-    var(--gov) 84%,
-    transparent
-  );
-  opacity: 0.85;
-}
-[data-cabinet-dossier] .gov-glow {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--gov) 25%, transparent),
-    0 12px 34px -14px color-mix(in srgb, var(--gov) 45%, transparent);
+  background: linear-gradient(135deg, var(--g0) 0%, var(--g1) 52%, var(--g2) 100%);
 }
 [data-cabinet-dossier] .gov-panel {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--gov) 7%, transparent), transparent);
+  background: color-mix(in srgb, var(--gov) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--gov) 26%, transparent);
 }
 
@@ -79,11 +55,7 @@
   border: 1px solid color-mix(in srgb, var(--gov-soft) 40%, transparent);
   border-radius: 5px;
 }
-[data-cabinet-dossier] .chop.cjk {
-  font-family: var(--font-dossier-cjk);
-}
 [data-cabinet-dossier] .chop.mono-seal {
-  font-family: var(--font-dossier-serif), serif;
   letter-spacing: -0.02em;
 }
 

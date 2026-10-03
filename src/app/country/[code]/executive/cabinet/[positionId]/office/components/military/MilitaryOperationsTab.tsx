@@ -53,10 +53,7 @@ export function MilitaryOperationsTab({
       {forward.length > 0 && (
         <div className="gov-panel rounded-xl p-4">
           <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning/60" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning" />
-            </span>
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-warning" aria-hidden />
             <span className="text-[13px] font-semibold text-gov-soft">
               {forward.length} unit{forward.length === 1 ? "" : "s"} forward-deployed or on high
               alert

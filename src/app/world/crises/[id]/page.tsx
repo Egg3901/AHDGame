@@ -324,20 +324,20 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
                 </h1>
                 <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                   <span
-                    className={`text-xs px-2 py-0.5 rounded-full border font-medium backdrop-blur-sm ${
+                    className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
                       isActive
                         ? "border-emerald-300/40 bg-emerald-500/15 text-emerald-100"
-                        : "border-white/25 bg-white/10 text-zinc-200"
+                        : "border-white/25 bg-black text-zinc-200"
                     }`}
                   >
                     {isActive ? "Active" : "Resolved"}
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full border border-white/25 bg-white/10 text-zinc-100 font-medium backdrop-blur-sm">
+                  <span className="text-xs px-2 py-0.5 rounded-full border border-white/25 bg-black text-zinc-100 font-medium">
                     {scopeWord}
                   </span>
                   {isActive && (
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full border font-medium backdrop-blur-sm ${sev.badge}`}
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium ${sev.badge}`}
                     >
                       {sev.label}
                     </span>
@@ -376,10 +376,7 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
             {wireOnStart && (
               <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4">
                 <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-1.5">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75 animate-ping" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-orange-400" />
-                  </span>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" aria-hidden />
                   Breaking Wire
                   <Tooltip content={CRISIS_TOOLTIPS.wire} />
                 </p>

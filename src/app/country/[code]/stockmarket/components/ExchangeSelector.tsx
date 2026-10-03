@@ -56,14 +56,14 @@ export function ExchangeSelector({
             className={`rounded-lg px-3 py-1.5 border text-xs font-bold uppercase tracking-wider transition-colors ${
               compareOpen
                 ? "bg-primary/20 border-primary/40 text-white"
-                : "bg-black/50 border-white/10 text-white/70 hover:text-white"
+                : "bg-black border-white/10 text-white/70 hover:text-white"
             }`}
           >
             Compare
           </button>
         )}
         {/* Desktop: inline pill row */}
-        <div className="hidden sm:flex bg-black/50 backdrop-blur-sm rounded-lg p-1 border border-white/10">
+        <div className="hidden sm:flex bg-black rounded-lg p-1 border border-white/10">
           {entries.map(([key, val]) => (
             <button
               key={key}
@@ -89,7 +89,7 @@ export function ExchangeSelector({
       </div>
 
       {compareOpen && (
-        <div className="w-full min-w-64 rounded-lg border border-white/15 bg-black/85 backdrop-blur-md shadow-xl py-1">
+        <div className="w-full min-w-64 rounded-lg border border-white/15 bg-black shadow-xl py-1">
           {compareLoading && (
             <p className="px-3 py-2 text-xs text-white/60">Loading exchange sizes…</p>
           )}
@@ -226,7 +226,7 @@ function MobileExchangeDropdown({
         right: position.right,
         maxHeight: position.maxHeight,
       }}
-      className="z-[60] min-w-[10rem] overflow-y-auto rounded-lg border border-white/15 bg-black/85 backdrop-blur-md shadow-xl py-1"
+      className="z-[60] min-w-[10rem] overflow-y-auto rounded-lg border border-white/15 bg-black shadow-xl py-1"
     >
       {entries.map(([key, val]) => {
         const label = key === "global" ? "Global" : val.title;
@@ -261,7 +261,7 @@ function MobileExchangeDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Exchange filter, currently ${currentLabel}`}
-        className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-white/10 text-xs font-bold uppercase tracking-wider text-white"
+        className="flex items-center gap-1.5 bg-black rounded-lg px-3 py-1.5 border border-white/10 text-xs font-bold uppercase tracking-wider text-white"
       >
         <span>{currentLabel}</span>
         <svg
