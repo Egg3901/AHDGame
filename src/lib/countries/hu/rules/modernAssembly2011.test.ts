@@ -70,6 +70,27 @@ describe("Modern Hungarian whole-Assembly person plan", () => {
     expect(result.installed.mandates).toHaveLength(199);
     expect(result.installed.partySeats).toEqual(plan.result.totalSeats);
   });
+  it("installs an incomplete direct chamber and retains tied constituencies for fresh ballots", () => {
+    const { candidates, plan } = fixture();
+    const [district, winner] = Object.entries(plan.result.constituencyWinners)[0];
+    const region = district.split(":")[0];
+    const owner = candidates.find((row) => row.partyId === winner && row.regionId === region)!;
+    plan.result.constituencyWinners[district] = null;
+    plan.result.constituencySeats[winner!]--;
+    plan.result.totalSeats[winner!]--;
+    plan.candidateSeatsByElection[region][owner.id]--;
+    const result = buildHuModernAssembly(plan, candidates)!;
+    expect(result.installed.mandates).toHaveLength(198);
+    expect(result.installed.mandates.filter((row) => row.tier === "national")).toHaveLength(93);
+    expect(result.installed.vacancies).toEqual([
+      { tier: "constituency", districtId: district, partyId: null },
+    ]);
+    expect(result.installed.partySeats).toEqual(plan.result.totalSeats);
+    expect(settleHuModernAssembly(result.installed, result.people, new Set()).vacancies).toEqual(
+      result.installed.vacancies
+    );
+    expect(Object.values(result.installed.regionCapacity).reduce((a, b) => a + b, 0)).toBe(199);
+  });
   it("rejects duplicate player or NPC owners across regional filings", () => {
     const { candidates, plan } = fixture(true);
     candidates[0].ownerId = candidates[1].ownerId;

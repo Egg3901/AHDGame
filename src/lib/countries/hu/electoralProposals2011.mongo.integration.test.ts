@@ -32,6 +32,7 @@ import {
   HU_1991_LIST_REPLACEMENTS_COLLECTION,
 } from "./listVacancies1991";
 import { processHu2011ElectoralNpcProposal } from "./electoralNpcProposals2011";
+import { buildHuMixedPlan } from "./rules/mixedElectionPlan";
 import { bindHu2011Campaigns } from "./assemblyCampaignBinding2011";
 import { HU_1991_TERRITORIAL_DISTRICTS } from "./data/electoralDistricts1991";
 
@@ -246,7 +247,7 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
       await db.dropDatabase();
     }
   });
-  it.each(["elected", "paired", "withdrawn", "expired", "superseded"])(
+  it.each(["elected", "paired", "withdrawn", "expired", "superseded", "tied"])(
     "counts and seats all199 modern mandates and protects constituency custody (%s)",
     async (kind) => {
       const { db, yes, no } = await fixture();
@@ -332,6 +333,29 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
             .collection("electionVoteTallies")
             .insertOne({ electionId, totalVotes: {}, candidateParties: {}, finalized: false });
         }
+        let initialVacancies = 0;
+        if (kind === "tied") {
+          for (let votes = 40; votes <= 200 && initialVacancies === 0; votes++) {
+            const target = cast[1];
+            for (const id of Object.keys(target.totalVotes)) target.totalVotes[id] = votes;
+            const plan = buildHuMixedPlan(
+              huRegions1991.map((row) => ({ id: String(row._id), population: row.population })),
+              cast.map((row, index) => ({
+                electionId: row.electionId.toHexString(),
+                regionId: String(huRegions1991[index]._id),
+                candidates: Object.entries(row.totalVotes).map(([candidateId, count]) => ({
+                  candidateId,
+                  partyId: row.candidateParties[candidateId],
+                  votes: count,
+                })),
+              }))
+            );
+            initialVacancies = Object.values(plan.result.constituencyWinners).filter(
+              (row) => row === null
+            ).length;
+          }
+          expect(initialVacancies).toBeGreaterThan(0);
+        }
         expect(await bindHu2011Campaigns(db, GAME as never, 1009, NOW)).toBe(true);
         for (const row of cast)
           await db
@@ -345,7 +369,8 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           .updateMany({ cycle: 6 }, { $set: { status: "completed" } });
         commands = commandBytes = replyBytes = 0;
         const receipt = await certifyHu2011Count(db, 6, 1120, NOW);
-        expect(receipt?.installed.mandates).toHaveLength(199);
+        expect(receipt?.installed.mandates).toHaveLength(199 - initialVacancies);
+        expect(receipt?.installed.vacancies).toHaveLength(initialVacancies);
         expect(receipt?.constituencies).toHaveLength(106);
         expect(new Set(receipt?.constituencies?.map((row) => row.id)).size).toBe(106);
         expect(new Set(receipt?.constituencies?.map((row) => row.regionId)).size).toBe(6);
@@ -402,13 +427,13 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
           await db
             .collection("electedOfficials")
             .countDocuments({ countryId: "HU", officeType: "assemblyDelegate" })
-        ).toBe(199);
+        ).toBe(199 - initialVacancies);
         expect(
           await db.collection("electedOfficials").countDocuments({ characterId: playerId })
         ).toBe(1);
         expect(
           await db.collection("electedOfficials").countDocuments({ seatSource: "direct" })
-        ).toBe(106);
+        ).toBe(106 - initialVacancies);
         expect(await db.collection("electedOfficials").countDocuments({ seatSource: "list" })).toBe(
           93
         );
@@ -425,6 +450,20 @@ describe.skipIf(!uri)("Hungarian 2011 amendment on isolated Mongo", () => {
         ).toBe(2014);
         expect(await db.collection("notifications").countDocuments()).toBe(1);
         expect(await seatHu2011Assembly(db, 6, 1121, NOW)).toBe(false);
+        if (kind === "tied") {
+          const stored = await db
+            .collection<Hu2011AssemblyRecord>(HU_2011_COUNTS_COLLECTION)
+            .findOne({ _id: receipt!._id });
+          expect(stored?.settled?.vacancies).toEqual(receipt!.installed.vacancies);
+          expect(await openHuModernByElections(db, 1123, NOW)).toHaveLength(initialVacancies);
+          expect(await db.collection("electedOfficials").countDocuments()).toBe(
+            199 - initialVacancies
+          );
+          expect(
+            await db.collection("electedOfficials").countDocuments({ seatSource: "list" })
+          ).toBe(93);
+          return;
+        }
         const departed = await db
           .collection("electedOfficials")
           .findOne({ countryId: "HU", seatSource: "list", isNPP: true, party: "1" });
