@@ -64,6 +64,8 @@ import { getGameState } from "@/lib/gameState";
 import { sumSectorBookValueAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { readStateOwnershipConcentration, sociMultiplier } from "./concentration";
 import { creditTreasuryProceeds, debitTreasuryCompensation } from "./treasury";
+import { resolveTreasuryCashOptions, witnessTreasuryCash } from "./treasuryLedger";
+import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import type { CompensationTier } from "./constants";
 import { NATIONALIZATION_REVENUE_HAIRCUT } from "./constants";
 import { applyNationalizationConsequences } from "./consequences/apply";
@@ -468,7 +470,11 @@ export async function nationalizeSector(
   // Debit the treasury BEFORE any mutation. The debit is unconditional — an
   // unaffordable payout pushes the treasury into the hole rather than blocking
   // the taking. Seizure (0 payout) moves nothing.
-  await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now);
+  const compensationLedger = payoutAnchor > 0 ? await resolveTreasuryCashOptions(db) : undefined;
+  await debitTreasuryCompensation(db, params.countryId, payoutAnchor, fxByCurrency, now, {
+    flow: "nationalization_compensation",
+    ledger: compensationLedger,
+  });
 
   // Snapshot the SOCI escalation multiplier at taking time so the transition
   // shock is fixed to today's concentration, not retroactively deepened later.
@@ -499,10 +505,23 @@ export async function nationalizeSector(
   let compensationPaid = 0;
   if (payoutAnchor > 0) {
     compensationPaid = Math.round(anchorToCorpLiquidCapital(payoutAnchor, donor, donorFxRate));
-    await corps.updateOne(
+    const credited = await corps.updateOne(
       { _id: donor._id },
       { $inc: { liquidCapital: compensationPaid }, $set: { updatedAt: now } }
     );
+    if ((credited?.matchedCount ?? 0) > 0) {
+      await witnessTreasuryCash(db, compensationLedger, {
+        flow: "nationalization_compensation",
+        account: {
+          kind: "corporation",
+          corpId: donor._id.toString(),
+          currency: snapshotCorporationCurrency(donor),
+        },
+        amount: compensationPaid,
+        now,
+        site: "ownershipTransition:compensation",
+      });
+    }
   }
 
   // Politics + investor-confidence (spec §12). Compensation here is in ₳ already.

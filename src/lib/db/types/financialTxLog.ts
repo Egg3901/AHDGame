@@ -10,6 +10,7 @@ export type FinancialTxType =
   | "soe_treasury_draw"
   | "soe_loss_backing"
   | "soe_capex_grant"
+  | "nationalization_compensation" // treasury compensation for a taken sector, both legs
   | "corp_starting_grant" // system-granted treasury of a spawned corporation
   // Character / imperial cash
   | "fund_credit" // legacy mixed-source entry — keep for back-compat

@@ -65,6 +65,9 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   soe_treasury_draw: "soe_treasury_draw",
   soe_loss_backing: "soe_loss_backing",
   soe_capex_grant: "soe_capex_grant",
+  nationalization_compensation: "nationalization_compensation",
+  // A fine leaves the corporation into the treasury, which witnesses the same reason.
+  corp_fine: "regulatory_fine",
   // A spawned corporation's system-granted treasury has no in-world payer.
   corp_starting_grant: "corporation_starting_grant",
   gov_bond_maturity_payment: "bond_settlement",
