@@ -3,6 +3,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { CountryState } from "@/lib/db/types/countryState";
 import { getCountryStateCollection } from "@/lib/db/collections/countryState";
+import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { seedCountryStateFromConfig } from "./seed";
 import {
   getCachedCountryState,
@@ -70,7 +71,7 @@ export async function getCountryState(db: Db, countryId: CountryId): Promise<Cou
   if (!COUNTRY_CONFIGS[countryId]) {
     throw new Error(`getCountryState: unknown countryId "${countryId}"`);
   }
-  const seed = seedCountryStateFromConfig(countryId, new Date());
+  const seed = seedCountryStateFromConfig(countryId, new Date(), await getGameStatePreset(db));
   setCachedCountryState(db, seed);
   // Best-effort persist so future reads see the same row. Wrapped in
   // try/catch (not just .catch) so MockDbs that don't stub insertOne

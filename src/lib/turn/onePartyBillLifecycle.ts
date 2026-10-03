@@ -50,17 +50,20 @@ import { getCountryState } from "@/lib/countryState";
 import { getCountryStateCollection } from "@/lib/db/collections/countryState";
 import { runBillLifecycle } from "@/lib/turn/billLifecycle/engine";
 import { buildOnePartyBillConfig } from "@/lib/turn/billLifecycle/configs/oneParty";
+import { buildConfiguredCountryBillLifecycle } from "@/lib/turn/billLifecycle/configs/configuredCountry";
+import type { CountryGameState } from "@/lib/db/types/gameState";
+
+const DEMOCRATIC_1991_COUNTRIES: readonly CountryId[] = ["PL", "CS", "HU", "RO", "BG", "YU"];
 
 /**
- * Process expired lower-chamber bills for a single one-party country.
- * This is the per-country entry point used by the COUNTRY_BILL_PHASES
- * registry — each one-party country (today: CN) registers its own
- * binding to this function.
+ * Process the registry's one-party countries and their authored democratic
+ * 1991 counterparts. Democratic countries use their configured chamber graph
+ * without one-party confidence or regime drift.
  *
  * Runtime gating: reads governmentType from the countryState collection,
  * not COUNTRY_CONFIGS, so a country that has been converted out of
- * onePartyState (Stage-4 collapse / convention ratification) stops
- * processing immediately.
+ * onePartyState (Stage-4 collapse / convention ratification) keeps its existing
+ * stop guard unless this is one of the six democratic 1991 configurations.
  */
 export async function processOnePartyBillLifecycleForCountry(
   countryId: CountryId,
@@ -69,15 +72,33 @@ export async function processOnePartyBillLifecycleForCountry(
   if (!COUNTRY_CONFIGS[countryId]) return { enacted: 0, failed: 0 };
   const db = await getDb();
   const runtime = await getCountryState(db, countryId);
-  if (runtime.governmentType !== "onePartyState") {
-    return { enacted: 0, failed: 0 };
-  }
   const gameState = await getGameState();
   const currentTurn = gameState?.currentTurn ?? 1;
+  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
+  if (runtime.governmentType !== "onePartyState") {
+    // These registry entries also host the democratic 1991 institutions.
+    // Other converted one-party countries keep their existing conversion guard.
+    if (preset === "1991-default" && DEMOCRATIC_1991_COUNTRIES.includes(countryId)) {
+      const state = await db
+        .collection<CountryGameState>("countryGameStates")
+        .findOne({ _id: countryId }, { projection: { dissolvedTurn: 1 } });
+      if (state?.dissolvedTurn != null) return { enacted: 0, failed: 0 };
+      const result = await runBillLifecycle(
+        db,
+        buildConfiguredCountryBillLifecycle(countryId, preset),
+        now,
+        currentTurn
+      );
+      return {
+        enacted: result.transitionedTo.signed ?? 0,
+        failed: result.transitionedTo.failed ?? 0,
+      };
+    }
+    return { enacted: 0, failed: 0 };
+  }
   // Era-resolved, not the flat table: legislature SHAPE is preset-dependent, and this
   // config decides `upperKey` — and therefore `originChambers`, which every stage's
   // expired-filter scopes on.
-  const preset = typeof gameState?.preset === "string" ? gameState.preset : undefined;
   const config = getCountryConfig(countryId, preset);
   return processCountryBills(db, config, now, currentTurn, preset);
 }

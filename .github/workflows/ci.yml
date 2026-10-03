@@ -125,7 +125,7 @@ jobs:
           done
           test "$federation_ready" = 1
       - name: Qualify federation transactions
-        run: npx vitest run src/lib/turn/federationSettlements.mongo.integration.test.ts src/lib/countries/ru/dumaElections.mongo.integration.test.ts src/lib/countries/ru/assemblySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyVacancySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyCampaigns.mongo.integration.test.ts src/lib/countries/ru/dumaConvocations.mongo.integration.test.ts src/lib/countries/ru/councilComposition.mongo.integration.test.ts src/lib/countries/bg/ordinaryAssemblySeating.mongo.integration.test.ts src/lib/countries/hu/assembly1991.mongo.integration.test.ts src/lib/admin/seed/indexes/boundedNpcCandidates.mongo.integration.test.ts --maxWorkers=1
+        run: npx vitest run src/lib/turn/federationSettlements.mongo.integration.test.ts src/lib/turn/democratic1991Bills.mongo.integration.test.ts src/lib/countries/ru/dumaElections.mongo.integration.test.ts src/lib/countries/ru/assemblySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyVacancySeating.mongo.integration.test.ts src/lib/countries/ru/assemblyCampaigns.mongo.integration.test.ts src/lib/countries/ru/dumaConvocations.mongo.integration.test.ts src/lib/countries/ru/councilComposition.mongo.integration.test.ts src/lib/countries/bg/ordinaryAssemblySeating.mongo.integration.test.ts src/lib/countries/hu/assembly1991.mongo.integration.test.ts src/lib/admin/seed/indexes/boundedNpcCandidates.mongo.integration.test.ts --maxWorkers=1
         env:
           FEDERATION_TEST_MONGO_URI: mongodb://127.0.0.1:27991/?replicaSet=federationQualification&directConnection=true
       - name: Stop isolated Mongo
