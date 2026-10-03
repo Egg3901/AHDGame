@@ -1,0 +1,46 @@
+{
+  "issue": 2986,
+  "runtimeSource": "ea4b3cce13be0d65d443d903af0d7f75af4554de",
+  "runtimeFiles": [
+    "src/lib/admin/spawnNppCorporation.ts",
+    "src/lib/corporations/startingGrantLedger.ts",
+    "src/lib/db/types/financialTxLog.ts",
+    "src/lib/financialTxLog/types-extended.ts",
+    "src/lib/ledger/deriveFromTx.ts"
+  ],
+  "reproduction": {
+    "worldSignature": "every spawned corporation diverges by its whole starting treasury on its founding turn; about 2M anchor each, about 312M anchor for a Nigerian spawn (#2985)",
+    "foundingExpenseAlreadyWitnessed": true
+  },
+  "qualification": {
+    "integrationCases": 8,
+    "nativeMongoCases": 4,
+    "memoryCases": 4,
+    "redWithoutWitness": "both cash cases fail with one divergence each",
+    "focusedSuites": {
+      "files": 22,
+      "passed": 288,
+      "skipped": 12,
+      "failed": 0
+    },
+    "changedTypeScriptFiles": 6,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0,
+    "nativeRun": {
+      "files": 2,
+      "passed": 24,
+      "failed": 0
+    }
+  },
+  "cost": {
+    "perSpawn": "one configuration read; when shadow accounting is on, one exchange-rate read, one game-state read only without an explicit turn, and one ledger insert"
+  },
+  "limits": [
+    "Native fixtures qualify the spawn boundary, not the whole world.",
+    "The grant size is unchanged; its conversion bug is tracked in #2985.",
+    "This does not clear #968 or the global cash gate in #2159.",
+    "No production database was reset or repaired."
+  ]
+}

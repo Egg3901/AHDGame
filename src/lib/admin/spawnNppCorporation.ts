@@ -44,6 +44,7 @@ import {
   generateTickerSymbol,
   insertCorporationWithTickerRetry,
 } from "@/lib/corporations/tickerSymbol";
+import { witnessCorporationStartingGrant } from "@/lib/corporations/startingGrantLedger";
 import {
   computeUnownedHeadroomUnits,
   unownedHeadroomUnitsPerAnchor,
@@ -484,6 +485,13 @@ export async function spawnNppCorporation(
   };
 
   await insertCorporationWithTickerRetry(db, corpDoc as Corporation);
+  await witnessCorporationStartingGrant(db, {
+    corporationId: corpId,
+    amountLocal: startingCapital,
+    currencyCode,
+    turn: input.foundedAtTurn,
+    now,
+  });
 
   // ─── Plants: the founding sector is GRANTED capacity, not a revenue line ──
   //
