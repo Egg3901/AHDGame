@@ -111,7 +111,7 @@ export async function materializeHu2011ElectoralProposal(input: {
     stateId: "hu_national",
     title: "Hungarian 2011 Electoral System Decision",
     summary:
-      "Authorize 106 single-round constituency seats and 93 national-list seats for later untouched campaigns, from January 2012. National list eligibility is at least five percent, with joint-list barriers of ten or fifteen percent and winner-surplus compensation. Two-thirds of attending deputies must approve, with more than half the 386-seat Assembly attending. The existing Assembly keeps its mandates until a complete new election is seated. Existing general ballots and certified results retain their frozen rules.",
+      "Authorize 106 single-round constituency seats and 93 national-list seats for later untouched campaigns, from January 2012. Single-party national-list eligibility is at least five percent, with winner-surplus compensation. Two-thirds of attending deputies must approve, with more than half the 386-seat Assembly attending. The existing Assembly keeps its mandates until a complete new election is seated. Existing general ballots and certified results retain their frozen rules.",
     originChamber: "nationalAssembly",
     currentChamber: "nationalAssembly",
     sponsorId: input.sponsor?._id ?? null,
