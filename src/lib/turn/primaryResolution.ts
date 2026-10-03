@@ -75,6 +75,7 @@ import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilte
 import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { createVoteTurnMemo } from "@/lib/electionEngine/tallyManagement";
+import { writeVoteTallies } from "./election/writeVoteTallies";
 import { loadFundsByPartyForElections } from "@/lib/electionEngine/fundsByParty";
 import { resolveTurnWindow } from "@/lib/electionEngine/voteCalculations";
 import { eraYearContextFromGameState } from "@/lib/era/context";
@@ -1981,15 +1982,12 @@ export async function accumulateGeneralElectionVotes(
       }
     } catch (err) {
       logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);
+      if (tallyByElection.get(election._id.toString())?.countingMethod === "pr_stv") throw err;
     }
   }
-  if (tallyWrites.length > 0) {
-    try {
-      await db
-        .collection<ElectionVoteTally>("electionVoteTallies")
-        .bulkWrite(tallyWrites, { ordered: false });
-    } catch (err) {
-      logger.error("Turn", `Error writing ${tallyWrites.length} election vote tallies`, err);
-    }
-  }
+  await writeVoteTallies(
+    db,
+    tallyWrites,
+    orderedElections.some((e) => tallyByElection.get(e._id.toString())?.countingMethod === "pr_stv")
+  );
 }

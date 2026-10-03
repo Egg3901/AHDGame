@@ -236,6 +236,8 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
     ? rawArgs.map((a) => evalExpr(a, doc))
     : [evalExpr(rawArgs, doc)];
   switch (op) {
+    case "$toString":
+      return args[0] === undefined || args[0] === null ? null : String(args[0]);
     case "$and":
       return args.every(Boolean);
     case "$or":
@@ -768,7 +770,9 @@ class InMemoryCollection {
                       ? Object.fromEntries(
                           Object.entries(idSpec).map(([k, v]) => [k, evalExpr(v, row)])
                         )
-                      : idSpec;
+                      : isPlainObject(idSpec)
+                        ? evalExpr(idSpec, row)
+                        : idSpec;
               const key = JSON.stringify(id === undefined ? null : id);
               let group = groups.get(key);
               if (!group) {
