@@ -202,12 +202,12 @@ it("preserves cash outcomes with shadow disabled", async () => {
   expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
 });
 
-it("does not infer duplicate primary placement or secondary trade legs", async () => {
+it("keeps primary placement journal-owned while witnessing secondary trades", async () => {
   const { db } = fixture();
   await creditBondPool(db, "USD", 20, "purchasesIn", NOW);
   await debitBondPoolGated(db, "USD", 20, "issuanceOut", NOW);
   await debitBondPoolGated(db, "USD", 20, "salesOut", NOW);
-  expect(await db.collection("ledgerEntries").countDocuments()).toBe(0);
+  expect(await db.collection("ledgerEntries").countDocuments()).toBe(2);
 });
 
 it("uses the processing turn rather than a stale game clock", async () => {

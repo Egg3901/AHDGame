@@ -4,6 +4,7 @@
  * fund cashAnchor); the fund cron redeploys cash into bonds to maintain 25%.
  */
 
+import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import { ObjectId, type Db } from "mongodb";
 import type { Bond, IndexFund, IndexFundTransaction } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -206,6 +207,17 @@ export async function loadBondFundCandidates(
  * sovereign paper).
  */
 export async function deployBondReserveFromCash(
+  db: Db,
+  fund: IndexFund,
+  bondPrincipalAnchor: number,
+  options?: Parameters<typeof deployBondReserve>[3]
+): Promise<DeployBondReserveResult> {
+  return withBondPoolLedgerSnapshot(db, options?.turn, () =>
+    deployBondReserve(db, fund, bondPrincipalAnchor, options)
+  );
+}
+
+async function deployBondReserve(
   db: Db,
   fund: IndexFund,
   bondPrincipalAnchor: number,

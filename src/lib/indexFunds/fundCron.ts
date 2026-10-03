@@ -15,6 +15,7 @@
  * entry point; it is not registered in `src/lib/cron.ts`.
  */
 
+import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import { recoverAllQueuedPayouts } from "./queuedPayoutSettlement";
 import {
   claimFundFloatPlan,
@@ -671,6 +672,10 @@ export async function runIndexFundCron(
   db: Db,
   options?: { currentTurn?: number }
 ): Promise<FundCronResult> {
+  return withBondPoolLedgerSnapshot(db, options?.currentTurn, () => runFundCron(db, options));
+}
+
+async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<FundCronResult> {
   const result: FundCronResult = {
     fundsProcessed: 0,
     navUpdates: 0,
