@@ -975,17 +975,15 @@ export async function initElectionVoteTally(
         .updateOne({ electionId }, { $setOnInsert: doc }, { upsert: true });
       return;
     }
-    const replaced = await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .replaceOne(
-        {
-          electionId,
-          finalized: false,
-          turnSnapshots: { $size: 0 },
-          updatedAt: existing.updatedAt,
-        },
-        doc
-      );
+    const replaced = await db.collection<ElectionVoteTally>("electionVoteTallies").replaceOne(
+      {
+        electionId,
+        finalized: false,
+        turnSnapshots: { $size: 0 },
+        updatedAt: existing.updatedAt,
+      },
+      doc
+    );
     if (replaced.matchedCount !== 1)
       throw new Error("Cannot reinitialize a PR-STV tally after its revision changed");
     return;
