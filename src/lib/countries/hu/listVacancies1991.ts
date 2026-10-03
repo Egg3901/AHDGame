@@ -38,24 +38,22 @@ async function readContext(db: Db, turn: number, session?: ClientSession) {
     .collection<GameState>("gameState")
     .findOne({ _id: "current" }, { session, projection: { preset: 1 } });
   if (game?.preset !== "1991-default") return null;
-  const parent = await db
-    .collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION)
-    .findOne(
-      { seatedAtTurn: { $exists: true } },
-      {
-        session,
-        sort: { seatedAtTurn: -1 },
-        projection: {
-          nominations: 1,
-          settled: 1,
-          nominees: 1,
-          seatedAt: 1,
-          seatedAtTurn: 1,
-          cycle: 1,
-          listReplacementGeneration: 1,
-        },
-      }
-    );
+  const parent = await db.collection<Hu1991AssemblyRecord>(HU_1991_COUNTS_COLLECTION).findOne(
+    { seatedAtTurn: { $exists: true } },
+    {
+      session,
+      sort: { seatedAtTurn: -1 },
+      projection: {
+        nominations: 1,
+        settled: 1,
+        nominees: 1,
+        seatedAt: 1,
+        seatedAtTurn: 1,
+        cycle: 1,
+        listReplacementGeneration: 1,
+      },
+    }
+  );
   if (!parent?.settled || parent.seatedAtTurn == null || turn >= parent.seatedAtTurn + 192)
     return null;
   const held = await db
