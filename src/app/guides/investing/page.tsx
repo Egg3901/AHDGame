@@ -6,6 +6,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
+import {
+  DIRECT_TRADE_SPREAD,
+  LIMIT_ORDER_SPREAD,
+  MARKET_MAKER_SPREAD,
+} from "@/lib/constants/currencies";
+
+const pct = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Investing Guide | A House Divided",
@@ -416,19 +423,19 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
                   {[
                     [
                       "Market Maker",
-                      "0.275%",
+                      pct(MARKET_MAKER_SPREAD),
                       "Instant, always available",
                       "You need execution now",
                     ],
                     [
                       "Public Limit Order",
-                      "0.175%",
+                      pct(LIMIT_ORDER_SPREAD),
                       "Triggers when rate hits your price",
                       "You have a target rate in mind",
                     ],
                     [
                       "Direct Player Trade",
-                      "0.10%",
+                      pct(DIRECT_TRADE_SPREAD),
                       "Accepted by the counterparty",
                       "Large trades, lowest cost",
                     ],
@@ -444,10 +451,11 @@ Noise: ±0.1-0.3% per turn`}</FormulaBlock>
               </table>
             </div>
             <Callout variant="info">
-              Your own trades contribute to volume pressure on the rate. Large market-maker buys
-              push the rate up slightly (capped at +1% cumulative from player volume). This is both
-              a tool and a risk. Buying into an appreciating currency accelerates the move; selling
-              into a declining one worsens it.
+              Your own trades add a little to volume pressure on the rate, but only broad buying or
+              selling across many traders moves it much; one trader alone gets a fifth of the push.
+              Large trades also pay a size fee that rises toward 20%, counted across everything you
+              converted in the last 24 turns, so trying to move a currency yourself costs more than
+              it earns.
             </Callout>
           </section>
 

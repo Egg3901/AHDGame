@@ -19,6 +19,8 @@ import {
 } from "@/lib/constants/currencies";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
+import { playerTradeFeeRate, recentVolumeAnchorOf } from "@/lib/currency/tradeFees";
+import { isPlayerTradeSource, loadTraderRecentForexAnchor } from "@/lib/currency/traderForexVolume";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import {
@@ -196,7 +198,8 @@ function resolveMarketMakerSpend(
 }
 
 /**
- * Execute an instant market maker trade at current rates + 0.275% spread.
+ * Execute an instant market maker trade at current rates plus the spread (and,
+ * for a player's own trade, the size and liquidity fee from tradeFees.ts).
  * - Deducts fromCurrency from character's personal balance
  * - Credits toCurrency to character's personal balance
  * - Records trade in tradeHistory
@@ -323,10 +326,24 @@ async function executeMarketMakerTradeInner(
   // The source currency chair's spread-strength (0.5–1.5×) scales the fee; read
   // from the already-loaded fromExRate doc so the hot path takes no extra query.
   const spreadStrength = clampForexSpreadStrength(fromExRate.forexSpreadStrength);
-  const spreadFee =
-    fixedCrossRate == null
-      ? calculateSpreadFee(spendAmount, MARKET_MAKER_SPREAD * spreadStrength)
-      : 0;
+  // A player's own trade also pays for its size (measured across their whole
+  // lookback, so splitting does not help) and for how quiet the two currencies
+  // are. Conversions the game makes for them (dividends, coupons, purchases)
+  // keep the plain spread.
+  const tradeAnchor =
+    fixedCrossRate == null && fromExRate.rate > 0 ? spendAmount / fromExRate.rate : undefined;
+  let feeRate = MARKET_MAKER_SPREAD * spreadStrength;
+  if (fixedCrossRate == null && tradeAnchor !== undefined && isPlayerTradeSource(source)) {
+    feeRate = playerTradeFeeRate({
+      baseSpread: feeRate,
+      tradeAnchor,
+      priorAnchor: await loadTraderRecentForexAnchor(db, characterId, turn),
+      // The stored documents carry the volumes; a resolved euro quote does not.
+      fromVolumeAnchor: recentVolumeAnchorOf(rawFromExRate),
+      toVolumeAnchor: recentVolumeAnchorOf(rawToExRate),
+    });
+  }
+  const spreadFee = fixedCrossRate == null ? calculateSpreadFee(spendAmount, feeRate) : 0;
   const netAmount = spendAmount - spreadFee;
   const crossRate = fixedCrossRate ?? getCrossRate(fromExRate.rate, toExRate.rate);
   // Whole ledger units round down within the union so repeated conversions
@@ -379,6 +396,7 @@ async function executeMarketMakerTradeInner(
           amount: spendAmount,
           rate: crossRate,
           spread: spreadFee,
+          ...(tradeAnchor !== undefined ? { anchorAmount: tradeAnchor } : {}),
           turn,
           createdAt: new Date(),
           source: source ?? "manual",
@@ -420,6 +438,7 @@ async function executeMarketMakerTradeInner(
     amount: spendAmount,
     rate: crossRate,
     spread: spreadFee,
+    ...(tradeAnchor !== undefined ? { anchorAmount: tradeAnchor } : {}),
     turn,
     createdAt: new Date(),
     source: source ?? "manual",

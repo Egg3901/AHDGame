@@ -308,6 +308,12 @@ const RUNTIME: CollectionEntry[] = [
       "Current and 48-turn retained NPP market-entry outcomes with one exclusive reason per corporation.",
   },
   {
+    name: "ledgerTurnoverByTurn",
+    category: "runtime",
+    notes:
+      "Cached per-turn, per-account primary-leg ledger turnover for completed turns, summed for the economic vital signs window. Keyed by turn; wiped with the world.",
+  },
+  {
     name: "ledgerReconciliations",
     category: "runtime",
     notes:

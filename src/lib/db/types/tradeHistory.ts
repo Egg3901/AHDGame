@@ -31,6 +31,11 @@ export interface TradeHistoryEntry {
   rate: number;
   /** Spread charged on this trade */
   spread: number;
+  /**
+   * The trade's size in ₳ at execution, for the trader's size fee over the
+   * volume lookback. Absent on rows written before it existed.
+   */
+  anchorAmount?: number;
   turn: number;
   createdAt: Date;
   /** Why the trade happened. Optional for backward compat — legacy rows are "manual". */

@@ -3,15 +3,17 @@
  * sets the target: a higher prime rate, faster GDP growth and trade growth
  * strengthen a currency, inflation above its target weakens it. applyDrift closes
  * 5% of the gap per turn (about a game year to 90%), applyVolumePressure adds
- * player buy and sell pressure capped at +/-5%, applyNoise adds jitter, and
- * clampRate holds the rate within +/-50% of base.
+ * a small push from traded flow and a larger one from central-bank intervention,
+ * applyNoise adds jitter, and clampRate holds the rate within +/-50% of base.
  */
 /**
  * Pure exchange rate math — no DB access.
  *
  * Three components combine each turn to produce an updated rate:
  * 1. Macro fundamental drift — rate gravitates toward a target derived from economic indicators
- * 2. Player volume pressure — net buy/sell activity creates short-term offsets (capped +/-5%)
+ * 2. Volume pressure: traded flow nudges the rate a little (smoothly saturating,
+ *    scaled by how many traders are behind it); central-bank intervention keeps
+ *    the stronger original channel
  * 3. Random noise — small jitter prevents perfectly predictable movement
  *
  * Guardrails clamp the final rate to +/-50% of base rate.
@@ -33,6 +35,9 @@ import {
   VOLUME_PRESSURE_SENSITIVITY,
   VOLUME_PRESSURE_CAP,
   VOLUME_DIRECTION_WEIGHT,
+  ORGANIC_VOLUME_HALF_PRESSURE_ANCHOR,
+  ORGANIC_VOLUME_DIRECTION_WEIGHT,
+  ORGANIC_FULL_BREADTH_TRADERS,
   ECONOMIC_BASELINES,
   MONETARY_BASELINES,
 } from "@/lib/constants/currencies";
@@ -49,8 +54,22 @@ export interface MacroInputs {
 
 /** Volume data computed by the volume tracker for a single currency */
 export interface VolumeInputs {
+  /** Traded (organic) ₳ volume buying this currency over the lookback. */
   buyVolume24: number;
+  /** Traded (organic) ₳ volume selling this currency over the lookback. */
   sellVolume24: number;
+  /**
+   * How many traders effectively stand behind the net flow (inverse Herfindahl
+   * of their contributions in the net direction). One holder moving a fortune
+   * reads as about 1. Absent means unknown and is treated as full breadth.
+   */
+  effectiveTraders?: number;
+  /**
+   * Signed central-bank intervention volume in internal units (positive buys
+   * the currency). Kept apart from traded flow because intervention keeps the
+   * original, stronger channel.
+   */
+  syntheticNet?: number;
 }
 
 // ── 1. Macro fundamental target ─────────────────────────────────────────────
@@ -158,26 +177,60 @@ export function applyDrift(
 
 // ── 3. Volume pressure ──────────────────────────────────────────────────────
 
+function clampToCap(value: number, cap: number): number {
+  return Math.max(-cap, Math.min(cap, value));
+}
+
 /**
- * Compute the volume pressure multiplier from net buy/sell activity.
+ * Share of the full push a traded flow earns from the traders behind it. One
+ * holder alone gets 1 / ORGANIC_FULL_BREADTH_TRADERS of it, so a single fortune
+ * cannot move a currency by itself.
+ */
+export function breadthFactor(effectiveTraders: number | undefined): number {
+  if (effectiveTraders == null || !Number.isFinite(effectiveTraders)) return 1;
+  const floor = 1 / ORGANIC_FULL_BREADTH_TRADERS;
+  return Math.min(1, Math.max(floor, effectiveTraders / ORGANIC_FULL_BREADTH_TRADERS));
+}
+
+/**
+ * Raw pressure (within +/-VOLUME_PRESSURE_CAP) from traded flow. Saturates
+ * smoothly: half the cap at ORGANIC_VOLUME_HALF_PRESSURE_ANCHOR of net ₳, so
+ * everyday conversions barely register and only large, broad flows approach it.
+ */
+export function computeOrganicVolumePressure(volumes: VolumeInputs): number {
+  const net = volumes.buyVolume24 - volumes.sellVolume24;
+  if (!Number.isFinite(net) || net === 0) return 0;
+  const saturating = net / (Math.abs(net) + ORGANIC_VOLUME_HALF_PRESSURE_ANCHOR);
+  return VOLUME_PRESSURE_CAP * saturating * breadthFactor(volumes.effectiveTraders);
+}
+
+/** Raw pressure (within +/-VOLUME_PRESSURE_CAP) from central-bank intervention. */
+export function computeInterventionVolumePressure(syntheticNet: number | undefined): number {
+  if (syntheticNet == null || !Number.isFinite(syntheticNet) || syntheticNet === 0) return 0;
+  return clampToCap(syntheticNet * VOLUME_PRESSURE_SENSITIVITY, VOLUME_PRESSURE_CAP);
+}
+
+/**
+ * The per-turn push volume puts on the rate, already weighted against macro
+ * drift. Positive = net buying, which strengthens the currency (lowers the rate).
  *
- * Heavy buying pushes the rate above fundamentals temporarily.
- * As volume normalizes, macro drift pulls it back — classic overshoot/correction.
- * Capped at +/-5% to prevent extreme swings from outsized trades.
+ * Traded flow is weighted by ORGANIC_VOLUME_DIRECTION_WEIGHT and intervention by
+ * VOLUME_DIRECTION_WEIGHT; together they never exceed what intervention alone
+ * could do (VOLUME_PRESSURE_CAP * VOLUME_DIRECTION_WEIGHT).
  */
 export function computeVolumePressure(volumes: VolumeInputs): number {
-  const netVolume = volumes.buyVolume24 - volumes.sellVolume24;
-  const rawPressure = netVolume * VOLUME_PRESSURE_SENSITIVITY;
-  return Math.max(-VOLUME_PRESSURE_CAP, Math.min(VOLUME_PRESSURE_CAP, rawPressure));
+  const combined =
+    computeOrganicVolumePressure(volumes) * ORGANIC_VOLUME_DIRECTION_WEIGHT +
+    computeInterventionVolumePressure(volumes.syntheticNet) * VOLUME_DIRECTION_WEIGHT;
+  return clampToCap(combined, VOLUME_PRESSURE_CAP * VOLUME_DIRECTION_WEIGHT);
 }
 
 /**
  * Apply volume pressure as a multiplicative offset to the drifted rate.
  */
 export function applyVolumePressure(driftedRate: number, volumes: VolumeInputs): number {
-  const pressure = computeVolumePressure(volumes);
   // Positive pressure = net buying. Buying a currency strengthens it (lowers rate).
-  return driftedRate * (1 - pressure);
+  return driftedRate * (1 - computeVolumePressure(volumes));
 }
 
 // ── 4. Random noise ─────────────────────────────────────────────────────────
@@ -281,10 +334,10 @@ export function computeRateUpdate(
 ): RateUpdateResult {
   const macroTarget = computeMacroTarget(baseRate, macro, countryId, currentYear);
   const drifted = applyDrift(currentRate, macroTarget, DRIFT_SPEED * driftMultiplier);
+  // Already weighted against macro drift (see computeVolumePressure). Positive
+  // pressure = net buying, which strengthens the currency (lowers the rate).
   const volumePressure = computeVolumePressure(volumes);
-  // Blend 80% macro direction + 20% trade volume direction.
-  // Positive pressure = net buying → strengthens currency (lowers rate), hence 1 - pressure.
-  const withVolume = drifted * (1 - volumePressure * VOLUME_DIRECTION_WEIGHT);
+  const withVolume = drifted * (1 - volumePressure);
   const withCycle = applyCyclePressure(withVolume, cyclePressure);
   const withNoise = applyNoise(withCycle, noise, volatilityMultiplier);
   const clamped = clampRate(withNoise, baseRate, band);
