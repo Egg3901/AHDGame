@@ -17,6 +17,11 @@ import {
   openRussianCouncilFormationProposal,
 } from "./councilFormationProposals";
 
+import {
+  loadRussianDuma1995Decisions,
+  openRussianDuma1995Proposal,
+} from "./dumaElectoralProposals1995";
+
 export async function processRussianConstitutionalNpcProposals(
   db: Db,
   game: RussianConstitutionalCalendar,
@@ -27,6 +32,7 @@ export async function processRussianConstitutionalNpcProposals(
   const decisions = [
     ...(await loadRussianConstitutionalDecisions(db, game, turn)),
     ...(await loadRussianCouncilFormationDecisions(db, game, turn)),
+    ...(await loadRussianDuma1995Decisions(db, game, turn)),
   ];
   const pending = decisions.filter((decision) => decision.available && !decision.proposal);
   if (!pending.length) return 0;
@@ -59,6 +65,8 @@ export async function processRussianConstitutionalNpcProposals(
         mode: decision.kind,
         sponsor: null,
       });
+    else if (decision.kind === "law1995")
+      await openRussianDuma1995Proposal({ db, game, turn, now, sponsor: null });
     else
       await openRussianConstitutionalProposal({
         db,

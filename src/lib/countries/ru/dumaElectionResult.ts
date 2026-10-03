@@ -3,6 +3,7 @@
  * materializeRussianDumaElectionResult freezes one complete cohort atomically,
  * validates owners in batches and preserves Congress until a separate handover.
  */
+import { russianDumaElectoralLaw } from "./rules/dumaElectoralLaw";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type {
   CountryGameState,
@@ -132,6 +133,8 @@ export async function materializeRussianDumaElectionResult(input: {
         !Number.isSafeInteger(row.endTurn) ||
         row.endTurn! > turn ||
         row.russianDumaRound?.mandateSinceTurn !== country.ruFederalAssemblyMandateSinceTurn ||
+        russianDumaElectoralLaw(row.russianDumaRound?.electoralLaw) !==
+          russianDumaElectoralLaw(authority.record?.electoralLaw) ||
         row.totalSeats !== (row.russianDumaRound?.tier === "list" ? 225 : 1)
     )
   )

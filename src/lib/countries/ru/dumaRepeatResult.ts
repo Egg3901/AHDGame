@@ -4,6 +4,7 @@
  * its immutable combined receipt together, without activating the Assembly.
  */
 import { type ClientSession, type Db, type ObjectId } from "mongodb";
+import { russianDumaElectoralLaw } from "./rules/dumaElectoralLaw";
 import type {
   CountryGameState,
   Election,
@@ -168,6 +169,10 @@ export async function materializeRussianDumaRepeatResult(input: {
         !Number.isSafeInteger(row.endTurn) ||
         row.endTurn! > turn ||
         row.russianDumaRound?.generation !== generation ||
+        russianDumaElectoralLaw(row.russianDumaRound?.electoralLaw) !==
+          russianDumaElectoralLaw(oldBySeat.get(row.seatId!)?.law) ||
+        russianDumaElectoralLaw(row.russianDumaRound?.electoralLaw) !==
+          russianDumaElectoralLaw(authority.record?.electoralLaw) ||
         !row.russianDumaRound.rootCohortId?.equals(rootCohortId) ||
         row.russianDumaRound.mandateSinceTurn !== opening.mandateSinceTurn ||
         row.russianDumaRound.predecessorElectionId?.toHexString() !==

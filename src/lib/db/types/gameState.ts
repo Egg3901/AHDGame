@@ -694,6 +694,13 @@ export interface CountryGameState {
   ruFederalAssemblyMandateSinceTurn?: number;
   /** Bound first-Duma election cohort; opening it does not retire Congress. */
   ruFirstDumaElectionCohortId?: ObjectId;
+  /** Optional enacted Duma electoral law; existing and repeat ballots stay frozen. */
+  ruDumaElectoralMandate?: {
+    law: "law1995";
+    proposalId: string;
+    revision: number;
+    sinceTurn: number;
+  };
   /** Optional enacted Council formation law; existing first roots remain immutable. */
   ruCouncilFormationMandate?: {
     mode: "regionalHeads" | "regionalDelegates";

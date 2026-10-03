@@ -45,6 +45,24 @@ function scenario(): RussianDumaCohortBallot[] {
   ];
 }
 describe("Complete first-Duma cohort certification", () => {
+  it("refuses mixed laws and a changed law in repeat generations", () => {
+    const ballots = scenario();
+    ballots[0].law = "law1995";
+    expect(() => resolve(ballots)).toThrow("mix frozen");
+    delete ballots[0].law;
+    ballots[0].candidates[0].votes = 0;
+    const replacement = {
+      ...ballots[0],
+      id: "new-id",
+      law: "law1995" as const,
+      candidates: [
+        { ...ballots[0].candidates[0], id: "new-candidate", votes: ballots[0].registeredVoters },
+      ],
+    };
+    expect(() => repeat({ previousBallots: ballots, replacements: [replacement] })).toThrow(
+      "original ballot"
+    );
+  });
   it("certifies 225 individual winners and 225 list mandates from the same frozen register", () => {
     const result = resolve(scenario());
     expect(result.constituencyResults.filter((row) => row.winner)).toHaveLength(225);

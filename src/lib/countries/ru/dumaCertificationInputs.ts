@@ -200,6 +200,15 @@ export async function loadRussianDumaCertificationInputs(input: {
       tier: election.russianDumaRound!.tier,
       registeredVoters: election.russianDumaRound!.registeredVoters,
       againstAllVotes,
+      ...(election.russianDumaRound!.electoralLaw != null
+        ? { law: election.russianDumaRound!.electoralLaw }
+        : {}),
+      ...(tally.russianDumaBallot?.invalidBallots != null
+        ? { invalidBallots: tally.russianDumaBallot.invalidBallots }
+        : {}),
+      ...(tally.russianDumaBallot?.issuedBallots != null
+        ? { issuedBallots: tally.russianDumaBallot.issuedBallots }
+        : {}),
       invalidated: tally.russianDumaBallot?.invalidated === true,
       candidates: roster.map((row) => {
         const ownerId = row.isNPP ? row.nppId! : row.characterId;

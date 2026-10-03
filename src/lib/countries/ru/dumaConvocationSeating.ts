@@ -3,6 +3,7 @@
  * materializeRussianDumaConvocationSeating preserves Council and money records,
  * then fills later vacancies through receipt-backed deltas inside the same term.
  */
+import { russianDumaElectoralLaw } from "./rules/dumaElectoralLaw";
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type {
   Character,
@@ -185,7 +186,9 @@ export async function materializeRussianDumaConvocationSeating(input: {
       poll.state !== ballot.regionId ||
       poll.seatId !== ballot.seatId ||
       round.tier !== ballot.tier ||
-      round.registeredVoters !== ballot.registeredVoters
+      round.registeredVoters !== ballot.registeredVoters ||
+      russianDumaElectoralLaw(round.electoralLaw) !== russianDumaElectoralLaw(ballot.law) ||
+      russianDumaElectoralLaw(ballot.law) !== russianDumaElectoralLaw(opening.electoralLaw)
     )
       throw new Error("Ordinary Duma receipt disagrees with its resolved ballots");
   }

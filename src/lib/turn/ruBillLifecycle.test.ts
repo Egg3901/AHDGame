@@ -282,4 +282,39 @@ describe("Council formation statutory voting", () => {
       expect(bill.status).toBe(pass ? "enrolled" : "failed");
     }
   );
+  it.each([
+    ["stateDuma", "dumaDeputy", 225, false],
+    ["stateDuma", "dumaDeputy", 226, true],
+    ["federationCouncil", "federationCouncilMember", 89, false],
+    ["federationCouncil", "federationCouncilMember", 90, true],
+  ] as const)(
+    "requires full-capacity1995 consent in %s with%s votes",
+    async (chamber, office, support, pass) => {
+      const { mem, db } = scenario(
+        {
+          ruSovietSuccessionSinceTurn: 48,
+          ruPresidencySinceTurn: 60,
+          ruFederalAssemblySinceTurn: 145,
+        },
+        chamber,
+        office
+      );
+      const bill = mem.collection("bills").docs[0];
+      bill.russianDumaElectoralMandate = {
+        proposalId: "1991-default:ru-duma:law1995",
+        kind: "law1995",
+        revision: 1,
+      };
+      if (office === "federationCouncilMember") {
+        bill.status = "active_other";
+        bill.otherChamberVotes = bill.votes;
+        bill.otherChamberVotingEndsOnTurn = 49;
+      }
+      mem.collection("electedOfficials").docs[0].seatsHeld = support;
+      await processRussian1991Bills(db, new Date(100000000), 213);
+      expect(bill.status).toBe(
+        pass ? (office === "dumaDeputy" ? "active_other" : "enrolled") : "failed"
+      );
+    }
+  );
 });

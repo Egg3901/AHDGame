@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 interface Decision {
-  kind: "presidency" | "federalAssembly" | "regionalHeads" | "regionalDelegates";
+  kind: "presidency" | "federalAssembly" | "regionalHeads" | "regionalDelegates" | "law1995";
   threshold?: "majority";
   available: boolean;
   reason: string;
