@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type ClientSession, type Db } from "mongodb";
+vi.mock("@/lib/db/runRequiredTransaction", () => ({
+  runRequiredTransaction: (body: (session: ClientSession) => Promise<unknown>) =>
+    body({ inTransaction: () => true } as ClientSession),
+}));
+const holderIds = [new ObjectId(), new ObjectId(), new ObjectId()];
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { roRegions1991 } from "@/lib/countries/ro/data/roRegions1991";
 import {
@@ -17,7 +22,11 @@ function readyDb() {
     _id: "RO",
     roElectoralLaw1992SinceTurn: 73,
   });
+  db.collection("gameState").findOne.mockResolvedValue({ _id: "current", preset: "1991-default" });
   db.collection("states").find.mockReturnValue(cursor(roRegions1991));
+  db.collection("npps").find.mockReturnValue(
+    cursor(holderIds.map((_id) => ({ _id, countryId: "RO", currentOffice: null })))
+  );
   db.collection("elections").find.mockReturnValue(
     cursor(
       (
@@ -37,9 +46,9 @@ function readyDb() {
   );
   db.collection("electedOfficials").find.mockReturnValue(
     cursor([
-      { _id: "dep-a", state: "RO_BUC", officeType: "deputy", seatsHeld: 30 },
-      { _id: "dep-b", state: "RO_BUC", officeType: "deputy", seatsHeld: 10 },
-      { _id: "sen-a", state: "RO_BUC", officeType: "senator", seatsHeld: 10 },
+      { _id: "dep-a", state: "RO_BUC", officeType: "deputy", nppId: holderIds[0], seatsHeld: 30 },
+      { _id: "dep-b", state: "RO_BUC", officeType: "deputy", nppId: holderIds[1], seatsHeld: 10 },
+      { _id: "sen-a", state: "RO_BUC", officeType: "senator", nppId: holderIds[2], seatsHeld: 10 },
     ])
   );
   return db;
@@ -60,6 +69,7 @@ describe("Romania's 1992 parliamentary seat transition", () => {
     });
     db.collection("countryGameStates").updateOne.mockImplementation(async () => {
       writes.push("marker");
+      return { modifiedCount: 1 };
     });
     expect(
       await processRoParliamentTransition(db as unknown as Db, { preset: "1991-default" }, 96, NOW)
