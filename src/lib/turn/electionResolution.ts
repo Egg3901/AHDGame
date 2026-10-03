@@ -10,7 +10,13 @@ import {
   type Hu1991AssemblyRecord,
 } from "@/lib/countries/hu/assemblyCount1991";
 import { openHu1991Runoff, certifyHu1991Runoff } from "@/lib/countries/hu/assemblyRunoff1991";
+import {
+  resolveHu1991ByElection,
+  HU_1991_BY_ELECTIONS_COLLECTION,
+  type Hu1991ByElectionRecord,
+} from "@/lib/countries/hu/constituencyByElections1991";
 import { seatHu1991Assembly } from "@/lib/countries/hu/assemblySeating1991";
+import type { ElectedOfficial } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import {
@@ -120,12 +126,22 @@ export async function resolveGeneralElections(
   for (const cycle of new Set(bgOrdinaryRaces.map((row) => row.cycle))) {
     bgPlans.set(cycle, await readBgOrdinaryElectionPlan(db, cycle, now));
   }
+  const huByElectionRaces =
+    gameStateDoc?.preset === "1991-default"
+      ? completedElections.filter(
+          (row) =>
+            row.countryId === "HU" &&
+            row.electionType === "nationalAssembly" &&
+            row.hungarianAssemblyRound?.byElection
+        )
+      : [];
   const hu1991Races =
     gameStateDoc?.preset === "1991-default"
       ? completedElections.filter(
           (row) =>
             row.countryId === "HU" &&
             row.electionType === "nationalAssembly" &&
+            !row.hungarianAssemblyRound?.byElection &&
             row.cycle >= 1 &&
             (row.electionYear ?? 1991) < 2014
         )
@@ -206,6 +222,49 @@ export async function resolveGeneralElections(
       }
     } catch (error) {
       logger.error("Turn", `Bulgarian ordinary cycle ${cycle} remains unseated`, error);
+    }
+  }
+  for (const receiptId of new Set(
+    huByElectionRaces.map((row) => row.hungarianAssemblyRound!.receiptId)
+  )) {
+    try {
+      if (onlyElectionIds) {
+        const job = await db
+          .collection<Hu1991ByElectionRecord>(HU_1991_BY_ELECTIONS_COLLECTION)
+          .findOne({ _id: receiptId });
+        const selected = new Set(onlyElectionIds.map((id) => id.toHexString()));
+        if (!job || job.electionIds.some((id) => !selected.has(id))) continue;
+      }
+      const completed = await resolveHu1991ByElection(db, receiptId, currentTurn, now);
+      resolved += completed;
+      if (completed) {
+        resolvedElections.push(
+          ...huByElectionRaces.filter((row) => row.hungarianAssemblyRound!.receiptId === receiptId)
+        );
+        const job = await db
+          .collection<Hu1991ByElectionRecord>(HU_1991_BY_ELECTIONS_COLLECTION)
+          .findOne({ _id: receiptId }, { projection: { officialIds: 1 } });
+        if (job?.officialIds?.length) {
+          const winners = await db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find(
+              { _id: { $in: job.officialIds } },
+              { projection: { state: 1, characterName: 1, party: 1, isNPP: 1 } }
+            )
+            .toArray();
+          for (const winner of winners)
+            allNewsOutcomes.push({
+              electionType: "nationalAssembly",
+              state: winner.state!,
+              countryId: "HU",
+              winnerName: winner.characterName ?? "Assembly Deputy",
+              winnerParty: winner.party!,
+              isPlayer: !winner.isNPP,
+            });
+        }
+      }
+    } catch (error) {
+      logger.error("Turn", `Hungarian by-election ${receiptId} remains unseated`, error);
     }
   }
   for (const cycle of hu1991Cycles) {
@@ -389,7 +448,11 @@ export async function resolveGeneralElections(
       const chunkResults = await Promise.all(
         chunk.map(async (election) => {
           try {
-            if (bgOrdinaryRaces.includes(election) || hu1991Races.includes(election)) {
+            if (
+              bgOrdinaryRaces.includes(election) ||
+              hu1991Races.includes(election) ||
+              huByElectionRaces.includes(election)
+            ) {
               return { election, result: null };
             }
             const huPlan = huMixedPlans.get(election.cycle);

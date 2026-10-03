@@ -35,6 +35,7 @@ export async function materializeHu1991CampaignBinding(input: {
         electionType: "nationalAssembly",
         cycle,
         "hungarianAssemblyRound.round": { $ne: 2 },
+        "hungarianAssemblyRound.byElection": { $exists: false },
       },
       { session, projection: { state: 1, status: 1, electionYear: 1, hungarianAssemblyRound: 1 } }
     )

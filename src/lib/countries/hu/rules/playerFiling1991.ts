@@ -9,11 +9,16 @@ export function chooseHu1991PlayerDistrict(input: {
   regionId: string;
   partyId: string;
   requestedId?: string;
+  allowedDistrictIds?: readonly string[];
   otherFilings: readonly { personId: string; partyId: string; constituencyId: string }[];
 }):
   | { allowed: true; constituencyId: string }
   | { allowed: false; reason: "invalid-residence" | "outside-region" | "party-slot-full" } {
-  const local = HU_1991_CONSTITUENCIES.filter((row) => row.regionId === input.regionId);
+  const local = HU_1991_CONSTITUENCIES.filter(
+    (row) =>
+      row.regionId === input.regionId &&
+      (!input.allowedDistrictIds || input.allowedDistrictIds.includes(row.id))
+  );
   if (!input.personId || !input.partyId || local.length === 0)
     return { allowed: false, reason: "invalid-residence" };
   const occupied = new Set(

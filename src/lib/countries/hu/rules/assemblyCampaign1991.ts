@@ -9,6 +9,7 @@ export interface Hu1991CampaignBinding {
   round: 1 | 2;
   registeredVoters: number;
   rootElectionId?: string;
+  byElection?: { parentReceiptId: string; districtIds: string[]; generation: number };
 }
 export function isHu1991AssemblyCampaign(election: {
   countryId?: string;

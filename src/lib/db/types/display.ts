@@ -38,7 +38,11 @@ export interface ElectionDisplay {
     | (string & {});
   state: string;
   countryId: string;
-  hungarianAssemblyRound?: { ruleVersion: "mixed-1989-v1"; round: 1 | 2 };
+  hungarianAssemblyRound?: {
+    ruleVersion: "mixed-1989-v1";
+    round: 1 | 2;
+    vacancyDistrictIds?: string[];
+  };
   /** Frozen first-Duma binding, used to show national list filing. */
   russianDumaRound?: { cohortId: string; mandateSinceTurn: number; tier: "constituency" | "list" };
   senateClass?: number;

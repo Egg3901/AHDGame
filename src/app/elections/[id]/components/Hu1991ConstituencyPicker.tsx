@@ -8,15 +8,20 @@ import {
 
 export function Hu1991ConstituencyPicker({
   regionId,
+  allowedDistrictIds,
   value,
   onChange,
 }: {
   regionId: string;
+  allowedDistrictIds?: readonly string[];
   value: string;
   onChange: (id: string) => void;
 }) {
   const t = useTranslations("elections.hu1991");
-  const local = HU_1991_CONSTITUENCIES.filter((row) => row.regionId === regionId);
+  const local = HU_1991_CONSTITUENCIES.filter(
+    (row) =>
+      row.regionId === regionId && (!allowedDistrictIds || allowedDistrictIds.includes(row.id))
+  );
   const counties = new Map(HU_1991_TERRITORIAL_DISTRICTS.map((row) => [row.id, row.label]));
   return (
     <div className="mb-4 rounded-lg border border-border bg-card p-4">

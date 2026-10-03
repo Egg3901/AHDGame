@@ -378,6 +378,7 @@ export async function materializeHu1991AssemblySeating(input: {
     { _id: "HU" },
     {
       $set: { totalSeats: 386, majorityThreshold: 194, updatedAt: now },
+      $inc: { hu1991MandateGeneration: 1 },
     },
     { session }
   );
