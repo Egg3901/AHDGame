@@ -50,12 +50,14 @@ const REGISTRY: Record<string, Registered> = {
   "src/lib/nationalization/ownershipTransition.ts": {
     writers: ["debitTreasuryCompensation", "creditTreasuryProceeds"],
     witness: [
-      { kind: "flow", flows: ["nationalization_compensation"] },
-      { kind: "own-row", txTypes: ["share_buyout_payout"] },
       {
-        kind: "gap",
-        issue: "#2983",
-        note: "whole-corporation payout pool and recouped corporate cash",
+        kind: "flow",
+        flows: [
+          "nationalization_compensation",
+          "nationalization_buyout_pool",
+          "nationalization_buyout_float",
+          "corporation_liquidation",
+        ],
       },
     ],
   },
@@ -89,11 +91,11 @@ const REGISTRY: Record<string, Registered> = {
   },
   "src/lib/nationalization/privatizeAsset.ts": {
     writers: ["creditTreasuryProceeds"],
-    witness: [{ kind: "gap", issue: "#2983", note: "IPO float proceeds" }],
+    witness: [{ kind: "flow", flows: ["privatization_ipo"] }],
   },
   "src/lib/nationalization/privatizationAuction.ts": {
     writers: ["creditTreasuryProceeds"],
-    witness: [{ kind: "gap", issue: "#2983", note: "auction proceeds from escrow" }],
+    witness: [{ kind: "flow", flows: ["privatization_auction_proceeds"] }],
   },
 };
 
