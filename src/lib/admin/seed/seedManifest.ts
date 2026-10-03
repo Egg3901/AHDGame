@@ -1300,6 +1300,12 @@ const PRESERVED: CollectionEntry[] = [
     category: "preserved",
     notes: "Build-time code quality history for the admin dashboard. Not world state.",
   },
+  {
+    name: "officeHistoryArchive",
+    category: "preserved",
+    notes:
+      "Wiki office tenures from finished worlds. resetGameWorld writes each generated office page's tenure list here before the sweep drops the office tables it is computed from; the office pages read it back as earlier iterations.",
+  },
 ];
 
 // ─── Known inconsistencies ───────────────────────────────────────────────────
