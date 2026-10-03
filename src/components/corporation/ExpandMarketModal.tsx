@@ -1141,7 +1141,7 @@ export default function ExpandMarketModal({
                           </Link>
                         ) : (
                           <Link
-                            href={`${regionUrl(activeSuggestion.countryId, activeSuggestion.stateId)}?tab=economy&sector=${selectedType}`}
+                            href={`${regionUrl(activeSuggestion.countryId, activeSuggestion.stateId)}?tab=economy&sector=${encodeURIComponent(selectedType)}`}
                             onClick={onClose}
                             className="block w-full rounded-lg border border-card-border bg-card-elevated/50 px-4 py-2 text-center text-sm font-medium text-foreground hover:bg-card-elevated transition-colors"
                           >
