@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   CORPORATION_TYPES,
   CORPORATION_TYPE_LABELS,
@@ -25,25 +25,22 @@ import { SectorTableHeader, sectorTableGrid } from "./SectorTableHeader";
 import { SectorRow } from "./SectorRow";
 import {
   sortSectors,
-  sortOptionsFor,
   sumSectorDisplayRevenue,
   type SectorSortKey,
   type SortDir,
 } from "./sectorSortUtils";
 import { CAPACITY_UNIT_LABEL, FillChip, formatUnits } from "./plantsPresentation";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
-import { hexAlpha, sectorTypePalette } from "@/lib/constants/sectorTypeDossier";
 import {
   buildOnePhrase,
   capitalizeFacility,
   facilityPlural,
 } from "@/lib/constants/facilityVocabulary";
+import { facilitiesFromUnits } from "@/lib/constants/facilityQuantum";
 import { SectorTypeDossier } from "./SectorTypeDossier";
 import { SectorStrategyPanel } from "./SectorStrategyPanel";
 import type { SectorTypeMetricContext } from "./sectorTypeMetrics";
-
-const SELECT_CLASSES =
-  "min-w-[11rem] max-w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+import { DenseSection, InlineStatus, Segmented, SmallButton, signTone } from "./dense/DenseKit";
 
 interface SectorsTabProps {
   sectors: SectorDetail[];
@@ -126,8 +123,8 @@ export default function SectorsTab({
   // ₳-anchored amounts (e.g. for-sale listing price) skip the local→anchor pre-conversion.
   const fmtAnchor = (val: number) => formatAmount(val, liquidCode);
 
-  const sortOptions = sortOptionsFor(plantsMode);
   const tableGrid = sectorTableGrid(plantsMode);
+  const typeSelectId = useId();
   const [sortKey, setSortKey] = useState<SectorSortKey>("location");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterText, setFilterText] = useState("");
@@ -258,7 +255,7 @@ export default function SectorsTab({
   // "Extraction mines" reads, "Extraction & Mining mines" does not.
   const dossierHeading = activeTypeFilter
     ? `${(CORPORATION_TYPE_LABELS[activeTypeFilter as CorporationType] ?? activeTypeFilter).split(" &")[0]} ${dossierPlural}`
-    : "Owned Sectors";
+    : "Owned sectors";
 
   const sortedSectors = useMemo(() => {
     let list = sectors;
@@ -275,10 +272,27 @@ export default function SectorsTab({
     return sortSectors(list, sortKey, sortDir);
   }, [sectors, filterText, activeTypeFilter, sortKey, sortDir]);
 
-  const toggleSortDir = () => setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+  // A heading click sorts by that column; a second click on the same heading
+  // reverses it. Names start A to Z, figures start largest first.
+  const handleSort = (key: SectorSortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "location" || key === "type" ? "asc" : "desc");
+    }
+  };
+
+  const buildLabel = dossierType
+    ? capitalizeFacility(buildOnePhrase(dossierType))
+    : plantsMode
+      ? "New sector"
+      : "Expand into new market";
+
+  const cellNum = "font-mono tabular-nums";
 
   return (
-    <>
+    <div className="space-y-6">
       {expandModalOpen && isCeo && (
         <ExpandMarketModal
           corpId={corpId}
@@ -292,67 +306,40 @@ export default function SectorsTab({
         />
       )}
 
-      {/* Type rail. One chip per type the corporation actually owns, so a corp
-          running mines and newsrooms can read them as the separate businesses
-          they are instead of one undifferentiated table. */}
-      {sectorTypes.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-1.5" role="tablist" aria-label="Sector type">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!activeTypeFilter}
-            onClick={() => setFilterType("")}
-            className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-2.5 text-[11px] font-semibold transition-colors ${
-              activeTypeFilter
-                ? "border-card-border text-muted hover:text-foreground"
-                : "border-muted/50 bg-card-elevated text-foreground"
-            }`}
-          >
-            All sectors
-            <span className="rounded-full bg-card-muted px-1.5 text-[10px] font-medium tabular-nums text-muted">
-              {sectors.length}
-            </span>
-          </button>
-          {sectorTypes.map((t) => {
-            const palette = sectorTypePalette(t.value);
-            const on = activeTypeFilter === t.value;
-            return (
-              <button
-                key={t.value}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                onClick={() => setFilterType(on ? "" : t.value)}
-                className="inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-2.5 text-[11px] font-semibold transition-colors"
-                style={{
-                  borderColor: on ? hexAlpha(palette.c500, 0.5) : "var(--card-border)",
-                  background: on ? hexAlpha(palette.c500, 0.15) : "transparent",
-                  color: on ? palette.c400 : "var(--muted)",
-                }}
-              >
-                <span
-                  className="inline-block h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: palette.c500 }}
-                  aria-hidden
-                />
-                {t.label}
-                <span
-                  className="rounded-full px-1.5 text-[10px] font-medium tabular-nums"
-                  style={{
-                    background: on ? hexAlpha(palette.c500, 0.25) : "var(--card-muted)",
-                    color: on ? "var(--foreground)" : "var(--muted)",
-                  }}
-                >
-                  {t.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* One control picks the division, so a corp running mines and
+          newsrooms can read them as the separate businesses they are. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {sectorTypes.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <label htmlFor={typeSelectId} className="text-xs text-muted">
+              Sector type
+            </label>
+            <select
+              id={typeSelectId}
+              value={activeTypeFilter}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="h-7 rounded-md border border-card-border bg-background px-2 text-xs text-foreground focus:border-foreground focus:outline-none"
+            >
+              <option value="">All types ({sectors.length})</option>
+              {sectorTypes.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label} ({t.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <span />
+        )}
+        {isCeo && (
+          <SmallButton tone="primary" onClick={() => openExpandModal(dossierType ?? undefined)}>
+            + {buildLabel}
+          </SmallButton>
+        )}
+      </div>
 
       {dossierType && (
-        <div className="mb-8 flex flex-col gap-8">
+        <div className="flex flex-col gap-6">
           <SectorTypeDossier
             sectorType={dossierType}
             sectors={dossierSectors}
@@ -374,194 +361,81 @@ export default function SectorsTab({
         </div>
       )}
 
-      <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-        {/* Header with inline filters */}
-        <div className="flex items-center justify-between p-6 pb-4 flex-wrap gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-lg font-bold text-foreground">{dossierHeading}</h2>
-            {isCeo && (
-              <button
-                type="button"
-                onClick={() => openExpandModal(dossierType ?? undefined)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
-              >
-                <span>+</span>
-                {dossierType
-                  ? capitalizeFacility(buildOnePhrase(dossierType))
-                  : plantsMode
-                    ? "New sector"
-                    : "Expand Into New Market"}
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="inline-flex rounded-lg border border-card-border overflow-hidden text-[11px] font-medium"
-              title={MONEY_PERIOD_HELP}
-              role="group"
-              aria-label="Money figures shown per"
-            >
-              {MONEY_PERIODS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setTimeScale(p)}
-                  aria-pressed={timeScale === p}
-                  className={`px-2.5 py-1 transition-colors ${timeScale === p ? "bg-primary/15 text-primary" : "text-muted hover:text-foreground"}`}
-                >
-                  {MONEY_PERIOD_LABEL[p]}
-                </button>
-              ))}
-            </div>
-            {/* The type rail above owns this choice once a division is open;
-                two controls for one filter is how they drift apart. */}
-            {!activeTypeFilter && (
-              <select
-                className="rounded-lg border border-card-border bg-card px-2 py-1.5 text-xs text-foreground"
-                value={activeTypeFilter}
-                onChange={(e) => setFilterType(e.target.value)}
-                aria-label="Filter by sector type"
-              >
-                <option value="">All types</option>
-                {sectorTypes.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            )}
+      <DenseSection
+        title={dossierHeading}
+        meta={
+          filterText
+            ? `${sortedSectors.length} of ${filteredTypeSectors.length}`
+            : `${filteredTypeSectors.length} ${filteredTypeSectors.length === 1 ? "sector" : "sectors"}`
+        }
+        actions={
+          <>
+            <Segmented
+              ariaLabel="Money figures shown per"
+              options={MONEY_PERIODS.map((p) => ({
+                value: p,
+                label: MONEY_PERIOD_LABEL[p],
+                title: MONEY_PERIOD_HELP,
+              }))}
+              value={timeScale}
+              onChange={setTimeScale}
+            />
             <input
               type="search"
-              placeholder="Filter…"
+              placeholder="Filter"
+              aria-label="Filter sectors by name or state"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              className="rounded-lg border border-card-border bg-card px-2 py-1.5 text-xs text-foreground placeholder:text-muted/50 w-24"
+              className="h-7 w-28 rounded-md border border-card-border bg-background px-2 text-xs text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
             />
-            {/* Clears the text search only. An open division is closed from the
-                All sectors chip, not from a control that looks like a filter
-                reset and would silently take the dossier with it. */}
-            {filterText && (
-              <button
-                type="button"
-                onClick={() => setFilterText("")}
-                className="rounded border border-card-border px-1.5 py-1 text-[10px] text-muted hover:text-foreground"
-                title="Clear the text filter"
-              >
-                ✕ {sortedSectors.length}/{filteredTypeSectors.length}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Logistics sprawl explainer */}
+          </>
+        }
+      >
+        {/* Logistics sprawl */}
         {totalSectors >= SPRAWL_SECTOR_THRESHOLD - 2 && (
-          <div className="mx-6 mb-4 rounded-lg border border-card-border bg-card-elevated/30 px-4 py-3">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-foreground">
-                    Logistics & Operations Sprawl Penalty
-                  </span>
-                  {currentSprawlPenalty < 0 && (
-                    <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-error/15 text-error border border-error/20">
-                      {currentSprawlPenalty.toFixed(1)}% active
-                    </span>
-                  )}
-                  {currentSprawlPenalty === 0 && totalSectors >= SPRAWL_SECTOR_THRESHOLD && (
-                    <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-success/15 text-success border border-success/20">
-                      Logistics & Operations offset
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted">
-                  Penalty begins at sector {SPRAWL_SECTOR_THRESHOLD + 1}. Every 2 sectors over the
-                  threshold reduces all sector margins by{" "}
-                  {Math.abs(SPRAWL_PENALTY_PER_PAIR * (hasSecondaryType ? 2 : 1)).toFixed(1)}%
-                  {hasSecondaryType ? " (doubled because you have a secondary type)" : ""}.
-                  Logistics & Operations strength raises the threshold (currently{" "}
-                  <span className="font-medium text-foreground">{effectiveThreshold}</span>) and
-                  reduces the penalty rate (max 50% reduction at LS {LOGISTICS_MAX_SPRAWL_EFFECT}+)
-                  to{" "}
-                  <span className="font-medium text-foreground">
-                    {Math.abs(effectivePenaltyPerPair).toFixed(2)}% per pair
-                  </span>
-                  .
-                </p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-xs text-muted">{totalSectors} sectors</p>
-                <p className="text-xs text-muted">Threshold: {effectiveThreshold}</p>
-              </div>
-            </div>
-          </div>
+          <p className="py-1.5 text-xs text-muted">
+            <span className="font-medium text-foreground">Sprawl. </span>
+            {currentSprawlPenalty < 0 ? (
+              <span className="font-medium text-error">
+                {currentSprawlPenalty.toFixed(1)}% on every sector margin now.{" "}
+              </span>
+            ) : totalSectors >= SPRAWL_SECTOR_THRESHOLD ? (
+              <span className="text-success">Offset by Logistics &amp; Operations. </span>
+            ) : null}
+            The penalty begins at sector {SPRAWL_SECTOR_THRESHOLD + 1}. Every 2 sectors over the
+            threshold reduce all sector margins by{" "}
+            {Math.abs(SPRAWL_PENALTY_PER_PAIR * (hasSecondaryType ? 2 : 1)).toFixed(1)}%
+            {hasSecondaryType ? " (doubled because you have a secondary type)" : ""}. Logistics
+            &amp; Operations strength raises the threshold (now{" "}
+            <span className={`${cellNum} text-foreground`}>{effectiveThreshold}</span>, with{" "}
+            <span className={`${cellNum} text-foreground`}>{totalSectors}</span> owned) and cuts the
+            rate (at most by half, at LS {LOGISTICS_MAX_SPRAWL_EFFECT}+) to{" "}
+            <span className={`${cellNum} text-foreground`}>
+              {Math.abs(effectivePenaltyPerPair).toFixed(2)}%
+            </span>{" "}
+            per pair.
+          </p>
         )}
 
-        {sectorsMessage && (
-          <div
-            className={`mx-6 mb-4 rounded-lg border px-4 py-3 text-sm ${
-              sectorsMessage.type === "error"
-                ? "border-error/30 bg-error/10 text-error"
-                : "border-success/30 bg-success/10 text-success"
-            }`}
-          >
-            {sectorsMessage.text}
-          </div>
-        )}
+        <InlineStatus
+          message={sectorsMessage?.text}
+          tone={sectorsMessage?.type === "error" ? "error" : "success"}
+          className="py-1"
+        />
 
         {sectors.length === 0 ? (
-          <div className="p-6 text-center text-muted text-sm">No sectors yet.</div>
+          <p className="py-2 text-xs text-muted">No sectors yet.</p>
         ) : (
           <>
-            {/* Sort row */}
-            <div className="mx-6 mb-3 flex items-end gap-3 flex-wrap">
-              <div className="flex flex-col gap-1 min-w-0 sm:min-w-[12rem]">
-                <label
-                  htmlFor="sector-sort"
-                  className="text-xs font-bold uppercase tracking-widest text-muted"
-                >
-                  Sort by
-                </label>
-                <select
-                  id="sector-sort"
-                  className={SELECT_CLASSES}
-                  value={sortKey}
-                  onChange={(e) => setSortKey(e.target.value as SectorSortKey)}
-                >
-                  {sortOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-bold uppercase tracking-widest text-muted">
-                  Order
-                </span>
-                <button
-                  type="button"
-                  onClick={toggleSortDir}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-card-border bg-card-muted/30 px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated/80 transition-colors"
-                  aria-pressed={sortDir === "desc"}
-                  title={
-                    sortDir === "asc"
-                      ? "Currently A→Z / low→high. Click for reverse."
-                      : "Currently Z→A / high→low. Click for reverse."
-                  }
-                >
-                  <span className="tabular-nums text-muted text-xs uppercase tracking-wide">
-                    {sortDir === "asc" ? "Asc" : "Desc"}
-                  </span>
-                  <span className="text-primary" aria-hidden>
-                    {sortDir === "asc" ? "↑" : "↓"}
-                  </span>
-                </button>
-              </div>
-            </div>
+            <SectorTableHeader
+              timeScale={timeScale}
+              plantsMode={plantsMode}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
 
-            <SectorTableHeader timeScale={timeScale} plantsMode={plantsMode} />
-
-            <ul className="list-none divide-y divide-card-border/40" aria-label="Sectors list">
+            <ul className="list-none divide-y divide-card-border/60" aria-label="Sectors list">
               {sortedSectors.map((sector, index) => (
                 <SectorRow
                   key={sector._id}
@@ -591,7 +465,7 @@ export default function SectorsTab({
               ))}
             </ul>
 
-            {/* Summary rows — desktop only */}
+            {/* Totals, desktop only */}
             {plantsMode &&
               sortedSectors.length > 1 &&
               (() => {
@@ -601,7 +475,7 @@ export default function SectorsTab({
                 // (mean capacity, mean margin) are not decisions anyone makes.
                 //
                 // Corp fill is Σsold ÷ Σproduced, not the mean of the row
-                // ratios — a mean lets one small plant at 5% drag the headline
+                // ratios: a mean lets one small plant at 5% drag the headline
                 // for a corporation selling everything it makes.
                 const financialsRedacted = sortedSectors.some((s) => s.revenue == null);
                 const totalRev = sumSectorDisplayRevenue(sortedSectors);
@@ -611,6 +485,13 @@ export default function SectorsTab({
                   (sum, s) => sum + (s.capacityUnits ?? 0),
                   0
                 );
+                const totalSites = sortedSectors.reduce(
+                  (sum, s) =>
+                    sum +
+                    (s.plantCount ??
+                      facilitiesFromUnits(s.sectorType as CorporationType, s.capacityUnits ?? 0)),
+                  0
+                );
                 const totalProduced = sortedSectors.reduce(
                   (sum, s) => sum + (s.producedUnits ?? 0),
                   0
@@ -618,44 +499,44 @@ export default function SectorsTab({
                 const totalSold = sortedSectors.reduce((sum, s) => sum + (s.soldUnits ?? 0), 0);
                 const corpFill = computeFillRate(totalProduced, totalSold);
                 // A viewer who holds no exact per-row fill cannot be handed an
-                // exact corp fill either — that would be the fogged rows
+                // exact corp fill either: that would be the fogged rows
                 // averaging back into the number the banding withholds.
                 const hasExactFill = sortedSectors.some((s) => s.fillRate != null);
                 const n = sortedSectors.length;
 
                 return (
-                  <div className="hidden lg:block border-t border-card-border bg-card-muted/20">
-                    <div
-                      className={`grid ${tableGrid} gap-x-3 px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-muted`}
+                  <div
+                    className={`hidden lg:grid ${tableGrid} items-center gap-x-3 border-t border-card-border px-2 py-1.5 text-[13px] font-medium`}
+                  >
+                    <span className="text-xs text-muted">Total, {n} sectors</span>
+                    <span></span>
+                    <span></span>
+                    <span
+                      className={`${cellNum} text-right text-foreground`}
+                      title={CAPACITY_UNIT_LABEL}
                     >
-                      <span>Total ({n} sectors)</span>
-                      <span></span>
-                      <span></span>
-                      <span className="text-right tabular-nums text-foreground normal-case tracking-normal">
-                        {formatUnits(totalCapacity)}
-                        <span className="block text-[10px] font-normal text-muted/70">
-                          {CAPACITY_UNIT_LABEL}
-                        </span>
-                      </span>
-                      <span className="flex justify-end">
-                        <FillChip
-                          fill={hasExactFill ? corpFill : null}
-                          band={fillRateBand(corpFill)}
-                        />
-                      </span>
-                      <span className="text-right text-success tabular-nums">
-                        {financialsRedacted ? "—" : fmtMoney(totalRev * scaleFactor)}
-                      </span>
-                      <span
-                        className={`text-right tabular-nums ${totalProfit >= 0 ? "text-success" : "text-error"}`}
-                      >
-                        {fmtMoney(totalProfit * scaleFactor)}
-                      </span>
-                      <span className="text-right tabular-nums text-foreground normal-case tracking-normal font-medium">
-                        {financialsRedacted ? "—" : totalWorkers.toLocaleString("en-US")}
-                      </span>
-                      <span></span>
-                    </div>
+                      {formatUnits(totalCapacity)}
+                    </span>
+                    <span className={`${cellNum} text-right text-muted`}>
+                      {totalSites.toLocaleString("en-US")}
+                    </span>
+                    <span className="flex justify-end">
+                      <FillChip
+                        fill={hasExactFill ? corpFill : null}
+                        band={fillRateBand(corpFill)}
+                      />
+                    </span>
+                    <span className={`${cellNum} text-right text-foreground`}>
+                      {financialsRedacted ? "n/a" : fmtMoney(totalRev * scaleFactor)}
+                    </span>
+                    <span></span>
+                    <span className={`${cellNum} text-right ${signTone(totalProfit)}`}>
+                      {fmtMoney(totalProfit * scaleFactor)}
+                    </span>
+                    <span className={`${cellNum} text-right text-xs text-foreground`}>
+                      {financialsRedacted ? "n/a" : totalWorkers.toLocaleString("en-US")}
+                    </span>
+                    <span></span>
                   </div>
                 );
               })()}
@@ -664,7 +545,7 @@ export default function SectorsTab({
               sortedSectors.length > 1 &&
               (() => {
                 // revenue & workers are stripped for outsider-viewed private
-                // corps (redactPrivateSectorRow); avoid NaN totals and show "—".
+                // corps (redactPrivateSectorRow); avoid NaN totals and show n/a.
                 const financialsRedacted = sortedSectors.some((s) => s.revenue == null);
                 // Same realized-preferring basis every sector ROW renders
                 // (SectorRow `financialRevenue ?? revenue`, #3001/#3002). This
@@ -690,55 +571,49 @@ export default function SectorsTab({
                 const n = sortedSectors.length;
 
                 return (
-                  <div className="hidden lg:block border-t border-card-border bg-card-muted/20">
-                    <div
-                      className={`grid ${tableGrid} gap-x-3 px-6 py-2 text-[11px] font-bold uppercase tracking-wider text-muted`}
-                    >
-                      <span>Total ({n} sectors)</span>
+                  <div className="hidden border-t border-card-border text-[13px] font-medium lg:block">
+                    <div className={`grid ${tableGrid} items-center gap-x-3 px-2 py-1.5`}>
+                      <span className="text-xs text-muted">Total, {n} sectors</span>
                       <span></span>
                       <span></span>
                       <span></span>
                       <span></span>
-                      <span className="text-right text-success tabular-nums">
-                        {financialsRedacted ? "—" : fmtMoney(totalRev * scaleFactor)}
+                      <span className={`${cellNum} text-right text-foreground`}>
+                        {financialsRedacted ? "n/a" : fmtMoney(totalRev * scaleFactor)}
                       </span>
                       <span></span>
-                      <span
-                        className={`text-right tabular-nums ${totalProfit >= 0 ? "text-success" : "text-error"}`}
-                      >
+                      <span className={`${cellNum} text-right ${signTone(totalProfit)}`}>
                         {fmtMoney(totalProfit * scaleFactor)}
                       </span>
-                      <span className="text-right tabular-nums text-foreground normal-case tracking-normal font-medium">
-                        {financialsRedacted ? "—" : totalWorkers.toLocaleString("en-US")}
+                      <span className={`${cellNum} text-right text-xs text-foreground`}>
+                        {financialsRedacted ? "n/a" : totalWorkers.toLocaleString("en-US")}
                       </span>
                       <span></span>
                     </div>
                     <div
-                      className={`grid ${tableGrid} gap-x-3 px-6 py-2 border-t border-card-border/30 text-[11px] tracking-wider text-muted`}
+                      className={`grid ${tableGrid} items-center gap-x-3 border-t border-card-border/60 px-2 py-1.5 font-normal`}
                     >
-                      <span className="uppercase font-bold">Average</span>
+                      <span className="text-xs text-muted">Average</span>
                       <span></span>
                       <span></span>
-                      <span className="text-right tabular-nums text-primary font-medium">
+                      <span className={`${cellNum} text-right text-foreground`}>
                         {avgGrowth.toFixed(1)}%
                       </span>
-                      <span className="text-right tabular-nums text-foreground font-medium">
+                      <span className={`${cellNum} text-right text-foreground`}>
                         {avgActiveGrowth.toFixed(1)}%
                       </span>
-                      <span className="text-right text-success tabular-nums font-medium">
-                        {financialsRedacted ? "—" : fmtMoney((totalRev / n) * scaleFactor)}
+                      <span className={`${cellNum} text-right text-foreground`}>
+                        {financialsRedacted ? "n/a" : fmtMoney((totalRev / n) * scaleFactor)}
                       </span>
-                      <span className="text-right tabular-nums text-foreground font-medium">
+                      <span className={`${cellNum} text-right text-foreground`}>
                         {avgMargin.toFixed(1)}%
                       </span>
-                      <span
-                        className={`text-right tabular-nums font-medium ${totalProfit / n >= 0 ? "text-success" : "text-error"}`}
-                      >
+                      <span className={`${cellNum} text-right ${signTone(totalProfit / n)}`}>
                         {fmtMoney((totalProfit / n) * scaleFactor)}
                       </span>
-                      <span className="text-right tabular-nums text-foreground normal-case tracking-normal font-medium">
+                      <span className={`${cellNum} text-right text-xs text-foreground`}>
                         {financialsRedacted
-                          ? "—"
+                          ? "n/a"
                           : Math.round(totalWorkers / n).toLocaleString("en-US")}
                       </span>
                       <span></span>
@@ -748,7 +623,7 @@ export default function SectorsTab({
               })()}
           </>
         )}
-      </div>
-    </>
+      </DenseSection>
+    </div>
   );
 }

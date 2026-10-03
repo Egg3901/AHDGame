@@ -5,7 +5,12 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
-import { fillBandSentence, fillBandShort, formatFillPercent } from "../plantsPresentation";
+import {
+  FILL_BAND_TEXT,
+  fillBandSentence,
+  fillBandShort,
+  formatFillPercent,
+} from "../plantsPresentation";
 
 /**
  * Shared building blocks for the corporation page's tabular layout.
@@ -363,12 +368,6 @@ export function signTone(value: number | null | undefined): string {
   return value > 0 ? "text-success" : "text-error";
 }
 
-const FILL_BAND_TEXT: Record<FillRateBand, string> = {
-  high: "text-success",
-  medium: "text-warning",
-  low: "text-error",
-};
-
 /**
  * Fill rate as table text. The band colour is the one thing a CEO scans a
  * long sector list for, so it is the only coloured cell in the row. Rivals
@@ -384,7 +383,7 @@ export function FillText({
   if (band == null) {
     return (
       <span className="text-muted" title="Produced nothing last turn, so there is no fill rate.">
-        —
+        n/a
       </span>
     );
   }

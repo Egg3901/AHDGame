@@ -58,17 +58,16 @@ export function formatFillPercent(fill: number | null | undefined): string {
 }
 
 /**
- * Semantic token classes for a fill band.
+ * Text colour per fill band.
  *
- * This is where the surface spends its boldness: across twenty rows the band
- * colour is the only thing a CEO needs to scan to find the plant that is
- * making things nobody is buying. Everything else on the row stays neutral so
- * this reads.
+ * This is where the surface spends its colour: across twenty rows the band is
+ * the only thing a CEO needs to scan to find the plant that is making things
+ * nobody is buying. Everything else on the row stays neutral so this reads.
  */
-export const FILL_BAND_CLASSES: Record<FillRateBand, string> = {
-  high: "border-success/30 bg-success/10 text-success",
-  medium: "border-warning/30 bg-warning/10 text-warning",
-  low: "border-error/30 bg-error/10 text-error",
+export const FILL_BAND_TEXT: Record<FillRateBand, string> = {
+  high: "text-success",
+  medium: "text-warning",
+  low: "text-error",
 };
 
 /** Explanatory sentence for a band, for tooltips and the rival view. */
@@ -101,17 +100,17 @@ export function FillChip({
   if (band == null) {
     return (
       <span
-        className={`text-xs tabular-nums text-muted/60 ${className}`.trim()}
+        className={`text-xs tabular-nums text-muted ${className}`.trim()}
         title="This sector produced nothing last turn, so it has no fill rate."
       >
-        —
+        n/a
       </span>
     );
   }
   const exact = fill != null && Number.isFinite(fill);
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums ${FILL_BAND_CLASSES[band]} ${className}`.trim()}
+      className={`font-mono text-[13px] font-medium tabular-nums ${FILL_BAND_TEXT[band]} ${className}`.trim()}
       title={
         exact
           ? `${fillBandSentence(band)}. Fill rate is the share of what this sector produced that it actually sold.`
@@ -165,12 +164,12 @@ export function DeliveryLimitedPill({
   // verb go on the face, because the tooltip does not exist on touch at all.
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-warning ${className}`.trim()}
+      className={`inline-flex items-center gap-1 text-[11px] font-medium text-warning ${className}`.trim()}
       title={`${label} limited. ${formatFillPercent(fraction)} of this sector's output could not reach buyers outside this state. ${explanation} ${action} Cutting production is not the fix.`}
     >
       {label}
-      <span className="tabular-nums">{formatFillPercent(fraction)}</span>
-      <span className="font-normal opacity-80">stuck</span>
+      <span className="font-mono tabular-nums">{formatFillPercent(fraction)}</span>
+      <span className="font-normal">stuck</span>
     </span>
   );
 }
@@ -206,7 +205,7 @@ export function BuildQueueBadge({
   const turns = queue.turnsRemaining;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] font-semibold tabular-nums text-primary ${className}`.trim()}
+      className={`inline-flex items-center gap-1 text-[11px] font-medium tabular-nums text-primary ${className}`.trim()}
       aria-label={buildQueueBadgeLabel(queue)}
       title={buildQueueBadgeLabel(queue)}
     >
@@ -242,7 +241,7 @@ export function MothballedPill({
   const sites = facilityPlural(sectorType);
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-card-border bg-card-muted/60 px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider text-muted ${className}`.trim()}
+      className={`inline-flex items-center text-[11px] font-medium text-muted ${className}`.trim()}
       title={`Mothballed. ${capitalizeFacility(sites)} here produce nothing and pay reduced upkeep. Reactivating is free.`}
     >
       Mothballed
