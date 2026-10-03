@@ -71,10 +71,9 @@ export function allocateHungaryMixed2014(
       }
       ballotParties.add(vote.partyId);
     }
-    if (ranked[0].votes === 0) throw new Error("Hungarian constituency has no valid votes");
     // A tied plurality elects nobody. Every ballot becomes a wasted vote and
     // the mandate waits for a constituency by-election (Act CCIII §§15, 19).
-    if (ranked[1]?.votes === ranked[0].votes) {
+    if (ranked[0].votes === 0 || ranked[1]?.votes === ranked[0].votes) {
       constituencyWinners[constituency.id] = null;
       for (const vote of ranked) {
         compensationVotes[vote.partyId] = (compensationVotes[vote.partyId] ?? 0) + vote.votes;

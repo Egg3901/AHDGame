@@ -70,6 +70,34 @@ describe("Modern Hungarian whole-Assembly person plan", () => {
     expect(result.installed.mandates).toHaveLength(199);
     expect(result.installed.partySeats).toEqual(plan.result.totalSeats);
   });
+  it.each([1, 106])(
+    "installs valid awards while retaining %i tied seats for fresh ballots",
+    (count) => {
+      const { candidates, plan } = fixture();
+      const failed = Object.entries(plan.result.constituencyWinners).slice(0, count);
+      for (const [district, winner] of failed) {
+        const region = district.split(":")[0];
+        const owner = candidates.find((row) => row.partyId === winner && row.regionId === region)!;
+        plan.result.constituencyWinners[district] = null;
+        plan.result.constituencySeats[winner!]--;
+        plan.result.totalSeats[winner!]--;
+        plan.candidateSeatsByElection[region][owner.id]--;
+      }
+      const result = buildHuModernAssembly(plan, candidates)!;
+      expect(result.installed.mandates).toHaveLength(199 - count);
+      expect(result.installed.mandates.filter((row) => row.tier === "national")).toHaveLength(93);
+      expect(result.installed.vacancies).toEqual(
+        failed.map(([districtId]) => ({ tier: "constituency", districtId, partyId: null }))
+      );
+      expect(result.installed.partySeats).toEqual(
+        Object.fromEntries(Object.entries(plan.result.totalSeats).filter(([, seats]) => seats > 0))
+      );
+      expect(settleHuModernAssembly(result.installed, result.people, new Set()).vacancies).toEqual(
+        result.installed.vacancies
+      );
+      expect(Object.values(result.installed.regionCapacity).reduce((a, b) => a + b, 0)).toBe(199);
+    }
+  );
   it("rejects duplicate player or NPC owners across regional filings", () => {
     const { candidates, plan } = fixture(true);
     candidates[0].ownerId = candidates[1].ownerId;

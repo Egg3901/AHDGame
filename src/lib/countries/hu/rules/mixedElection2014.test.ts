@@ -73,6 +73,16 @@ describe("Hungary's 2014 mixed parliamentary formula", () => {
     expect(Object.values(constituencyTie.totalSeats).reduce((a, b) => a + b, 0)).toBe(93);
   });
 
+  it("keeps zero-vote constituency seats vacant while counting valid national ballots", () => {
+    const result = allocateHungaryMixed2014(districts([{ partyId: "a", votes: 0 }]), [
+      { partyId: "a", votes: 1000 },
+    ]);
+    expect(result.constituencySeats).toEqual({});
+    expect(Object.values(result.constituencyWinners)).toEqual(Array(106).fill(null));
+    expect(result.listSeats).toEqual({ a: 93 });
+    expect(result.compensationVotes).toEqual({ a: 0 });
+  });
+
   it("uses a stable party ID tie break in the D'Hondt list", () => {
     const result = allocateHungaryMixed2014(districts([{ partyId: "a", votes: 1 }]), [
       { partyId: "z", votes: 100 },

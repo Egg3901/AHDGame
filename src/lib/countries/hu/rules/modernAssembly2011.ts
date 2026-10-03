@@ -56,13 +56,22 @@ export function buildHuModernAssembly(
         });
     }
   }
-  if (people.length !== 199) return null;
+  const vacancies: Hu1991InstalledMandates["vacancies"] = Object.entries(
+    plan.result.constituencyWinners
+  )
+    .filter(([, winner]) => winner === null)
+    .map(([districtId]) => ({
+      tier: "constituency",
+      districtId,
+      partyId: null,
+    }));
+  if (people.length + vacancies.length !== 199) return null;
   const remaining = [...people].sort((a, b) => a.id.localeCompare(b.id));
   const mandates: Hu1991InstalledMandates["mandates"] = [];
   for (const [district, party] of Object.entries(plan.result.constituencyWinners).sort(([a], [b]) =>
     a.localeCompare(b)
   )) {
-    if (!party) return null;
+    if (!party) continue;
     const region = district.split(":")[0];
     const index = remaining.findIndex(
       (row) =>
@@ -124,7 +133,7 @@ export function buildHuModernAssembly(
     people: filedPeople,
     installed: {
       mandates,
-      vacancies: [],
+      vacancies,
       candidateSeats,
       partySeats,
       regionCapacity: { ...plan.regionCapacity },
@@ -139,7 +148,9 @@ export function settleHuModernAssembly(
   unavailable: ReadonlySet<string>
 ): Hu1991InstalledMandates {
   const mandates: Hu1991InstalledMandates["mandates"] = [];
-  const vacancies: Hu1991InstalledMandates["vacancies"] = [];
+  const vacancies: Hu1991InstalledMandates["vacancies"] = original.vacancies.map((row) => ({
+    ...row,
+  }));
   const used = new Set<string>();
   const reserved = new Set(
     original.mandates.filter((row) => !unavailable.has(row.personId)).map((row) => row.personId)
