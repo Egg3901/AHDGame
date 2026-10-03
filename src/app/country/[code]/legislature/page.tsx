@@ -19,11 +19,23 @@ async function bgLegislaturePresentation(): Promise<{ name: string; seats: numbe
   const [preset, country, seats] = await Promise.all([
     getGameStatePreset(db),
     db
-      .collection<{ _id: string; bgOrdinaryAssemblySinceTurn?: number }>("countryGameStates")
-      .findOne({ _id: "BG" }, { projection: { bgOrdinaryAssemblySinceTurn: 1 } }),
+      .collection<{
+        _id: string;
+        bgOrdinaryAssemblySinceTurn?: number;
+        bgGrandAssemblyContinuationSinceTurn?: number;
+        bgConstitution1991SinceTurn?: number;
+        bgGrandAssemblyDissolutionSinceTurn?: number;
+      }>("countryGameStates")
+      .findOne(
+        { _id: "BG" },
+        { projection: { bgOrdinaryAssemblySinceTurn: 1, bgGrandAssemblyContinuationSinceTurn: 1 } }
+      ),
     getLiveLowerChamberSeats(db, "BG"),
   ]);
-  return { name: bgAssemblyName(preset, country?.bgOrdinaryAssemblySinceTurn), seats };
+  return {
+    name: bgAssemblyName(preset, country?.bgOrdinaryAssemblySinceTurn, country ?? undefined),
+    seats,
+  };
 }
 
 async function ruLegislaturePresentation(): Promise<{

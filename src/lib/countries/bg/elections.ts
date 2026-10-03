@@ -11,7 +11,7 @@ import {
 import { bgElectionSeatsForPreset } from "./rules/assemblyTransition";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
 import { bindBgFoundingCampaigns } from "./foundingCampaignBinding1990";
-import { bgAssemblyCohortCanSpawn } from "./rules/assemblyClock1991";
+import { bgAssemblyCohortCanSpawn, bgGrandAssemblyRegularAnchor } from "./rules/assemblyClock1991";
 import { loadBgGrandAssemblyClock } from "./grandAssemblyClock1991";
 import { buildBg1991AssemblySpawn } from "./assemblyClock1991";
 
@@ -41,18 +41,28 @@ export async function ensureBGElections(now: Date, inFlightTurn?: number): Promi
   const { ctx, currentTurn } = await getCurrentTurnAndCtx(db);
   const country =
     ctx.preset === "1991-default"
-      ? await db
-          .collection<CountryGameState>("countryGameStates")
-          .findOne(
-            { _id: "BG" },
-            { projection: { bgConstitution1991SinceTurn: 1, bgOrdinaryAssemblySinceTurn: 1 } }
-          )
+      ? await db.collection<CountryGameState>("countryGameStates").findOne(
+          { _id: "BG" },
+          {
+            projection: {
+              bgConstitution1991SinceTurn: 1,
+              bgOrdinaryAssemblySinceTurn: 1,
+              bgGrandAssemblyContinuationSinceTurn: 1,
+              bgGrandAssemblyDissolutionSinceTurn: 1,
+            },
+          }
+        )
       : null;
   const authorized =
     country?.bgConstitution1991SinceTurn != null || country?.bgOrdinaryAssemblySinceTurn != null;
-  const nativeGrandAnchorTurn = authorized
-    ? undefined
-    : await loadBgGrandAssemblyClock(db, ctx, inFlightTurn ?? currentTurn, now);
+  const continued =
+    country?.bgGrandAssemblyContinuationSinceTurn != null &&
+    country?.bgGrandAssemblyDissolutionSinceTurn == null &&
+    country?.bgOrdinaryAssemblySinceTurn == null;
+  const nativeGrandAnchorTurn =
+    authorized && !continued
+      ? undefined
+      : await loadBgGrandAssemblyClock(db, ctx, inFlightTurn ?? currentTurn, now);
   await ensureRegionalDelegateElections(
     {
       countryId: "BG",
@@ -63,7 +73,14 @@ export async function ensureBGElections(now: Date, inFlightTurn?: number): Promi
       openPrimaryImmediately: true,
       minPrimaryHours: 12,
       canSpawnCohort: ctx.preset === "1991-default" ? bgAssemblyCohortCanSpawn : undefined,
-      buildSpawn: (input) => buildBg1991AssemblySpawn(input, { authorized, nativeGrandAnchorTurn }),
+      buildSpawn: (input) =>
+        buildBg1991AssemblySpawn(input, {
+          authorized,
+          nativeGrandAnchorTurn,
+          firstOrdinaryEndTurn: continued
+            ? (nativeGrandAnchorTurn ?? bgGrandAssemblyRegularAnchor(ctx))
+            : undefined,
+        }),
       statusGated: true,
       electionsLiveGate: easternBlocElectionsLive,
       label: "National Assembly",

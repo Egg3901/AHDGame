@@ -158,7 +158,20 @@
       "legislatorReason": "The government or President introduced this draft.",
       "endorse": "Endorse the collective draft",
       "initiativeProgress": "Collective initiative: {support} of {required} required deputy signatures.",
-      "initiativeReason": "A quarter of constituent deputies endorsed this draft. NPC co-partisans decide whether to endorse using their existing party loyalty and stubbornness."
+      "initiativeReason": "A quarter of constituent deputies endorsed this draft. NPC co-partisans decide whether to endorse using their existing party loyalty and stubbornness.",
+      "transitionLabel": "Transitional clause",
+      "dispositions": {
+        "dissolve": "Dissolve the Grand Assembly after adoption",
+        "continue": "Alternate draft: continue the 400 deputies until the original term ends"
+      },
+      "continuationHelp": "This alternate transitional draft retains the elected 400 deputies as an ordinary chamber until the original four-year term ends. A separate ordinary vote can dissolve it sooner. Adoption still requires 267 constituent votes.",
+      "dissolutionHelp": "The historical transitional draft dissolves the constituent chamber after adoption and opens a 240-seat election. Sitting deputies retain caretaker functions until their successors take office.",
+      "continuedDissolution": {
+        "title": "End the continued Assembly mandate",
+        "help": "This separate motion advances the 240-seat election under the adopted continuation clause. More than 200 of the 400 deputies must participate, and a majority present must support it. Recorded ballots keep their rules.",
+        "open": "Introduce the dissolution motion",
+        "revise": "Introduce a revised dissolution motion"
+      }
     }
   }
 }

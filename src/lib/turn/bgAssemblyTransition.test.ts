@@ -50,6 +50,15 @@ describe("1991 Bulgarian ordinary Assembly transition", () => {
     expect(bgAssemblyName("1991-default", undefined)).toBe("Grand National Assembly");
     expect(bgAssemblyName("1991-default", 41)).toBe("National Assembly");
     expect(bgAssemblyName("1979-default", undefined)).toBe("National Assembly");
+    expect(
+      bgAssemblyName("1991-default", undefined, { bgGrandAssemblyContinuationSinceTurn: 26 })
+    ).toBe("Continued National Assembly");
+    expect(bgAssemblyName("1991-default", 41, { bgGrandAssemblyContinuationSinceTurn: 26 })).toBe(
+      "National Assembly"
+    );
+    expect(bgAssemblyName("1991-default", undefined, { bgConstitution1991SinceTurn: 26 })).toBe(
+      "Caretaker National Assembly"
+    );
     expect(Object.values(BG_ORDINARY_ASSEMBLY_SEATS).reduce((sum, seats) => sum + seats, 0)).toBe(
       240
     );

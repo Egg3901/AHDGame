@@ -164,4 +164,52 @@ describe("Bulgarian constitutional decision controls", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Endorse the collective draft" }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/congress/bills/collective-bill"));
   });
+  it("submits an explicitly selected alternate transitional draft", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ decision: { available: true, proposal: null } }))
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ billId: "continued-draft" }), { status: 201 })
+      );
+    vi.stubGlobal("fetch", fetcher);
+    show();
+    fireEvent.change(await screen.findByRole("combobox", { name: "Transitional clause" }), {
+      target: { value: "continue" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Introduce the constitution draft" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/congress/bills/continued-draft"));
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
+      kind: "constitution1991",
+      disposition: "continue",
+    });
+  });
+  it("offers a separate normal dissolution motion after an enacted continuation", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            decision: {
+              available: false,
+              reason: "already-authorized",
+              proposal: null,
+              dissolution: { available: true, proposal: null },
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ billId: "dissolution-motion" }), { status: 201 })
+      );
+    vi.stubGlobal("fetch", fetcher);
+    show();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Introduce the dissolution motion" })
+    );
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/congress/bills/dissolution-motion"));
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ kind: "dissolution1991" });
+    expect(screen.queryByRole("button", { name: "Introduce the constitution draft" })).toBeNull();
+  });
 });

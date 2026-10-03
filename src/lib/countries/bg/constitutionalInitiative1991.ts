@@ -2,15 +2,21 @@
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type { ElectedOfficial, NPP } from "@/lib/db/types";
 import { computePartyLineForce, verdictFromForces } from "@/lib/turn/npp/crossPressure";
+import {
+  bg1991ConstituentDisposition,
+  type Bg1991ConstituentDisposition,
+} from "./rules/constitutionalDecision1991";
 import { bg1991InitiativeSupport } from "./rules/constitutionalInitiative1991";
 
 export const BG_1991_INITIATIVES_COLLECTION = "bg1991ConstitutionalInitiatives";
 export class Bg1991InitiativeConflict extends Error {}
-const id = (revision: number) => `1991-default:bg-constitutional:initiative:${revision}`;
+const id = (revision: number, disposition: Bg1991ConstituentDisposition = "dissolve") =>
+  `1991-default:bg-constitutional:initiative:${revision}${disposition === "continue" ? ":continue" : ""}`;
 type Signature = { signedOnTurn: number; reason: "personal_choice" | "npc_party_line" };
 interface Initiative {
   _id: string;
   revision: number;
+  disposition?: Bg1991ConstituentDisposition;
   signatures: Record<string, Signature>;
 }
 type Deputy = Pick<ElectedOfficial, "characterId" | "nppId" | "seatsHeld" | "party">;
@@ -39,12 +45,24 @@ function support(rows: Deputy[], signatures: Record<string, Signature>) {
     400
   );
 }
-export async function loadBg1991Initiative(db: Db, revision: number, session?: ClientSession) {
+export async function loadBg1991Initiative(
+  db: Db,
+  revision: number,
+  session?: ClientSession,
+  disposition: Bg1991ConstituentDisposition = "dissolve"
+) {
   const journal = await db
     .collection<Initiative>(BG_1991_INITIATIVES_COLLECTION)
-    .findOne({ _id: id(revision) }, { session, projection: { revision: 1, signatures: 1 } });
+    .findOne(
+      { _id: id(revision, disposition) },
+      { session, projection: { revision: 1, disposition: 1, signatures: 1 } }
+    );
   if (!journal) return { support: 0, required: 100, canIntroduce: false };
-  if (journal.revision !== revision) throw new Error("Constituent initiative revision changed");
+  if (
+    journal.revision !== revision ||
+    bg1991ConstituentDisposition(journal.disposition) !== disposition
+  )
+    throw new Error("Constituent initiative draft changed");
   const rows = await deputies(db, session);
   return support(rows, journal.signatures);
 }
@@ -54,8 +72,10 @@ export async function signBg1991Initiative(input: {
   revision: number;
   turn: number;
   characterId: ObjectId;
+  disposition?: Bg1991ConstituentDisposition;
 }) {
   const { db, session, revision, turn, characterId } = input;
+  const disposition = bg1991ConstituentDisposition(input.disposition);
   if (
     !session.inTransaction() ||
     !Number.isSafeInteger(revision) ||
@@ -70,8 +90,12 @@ export async function signBg1991Initiative(input: {
     throw new Bg1991InitiativeConflict("A seated constituent deputy must endorse this initiative");
   const journal = await db
     .collection<Initiative>(BG_1991_INITIATIVES_COLLECTION)
-    .findOne({ _id: id(revision) }, { session });
-  if (journal && journal.revision !== revision)
+    .findOne({ _id: id(revision, disposition) }, { session });
+  if (
+    journal &&
+    (journal.revision !== revision ||
+      bg1991ConstituentDisposition(journal.disposition) !== disposition)
+  )
     throw new Error("Constituent initiative revision changed");
   const currentActors = new Set(rows.map(actor));
   const signatures: Record<string, Signature> = {
@@ -107,9 +131,37 @@ export async function signBg1991Initiative(input: {
   await db
     .collection<Initiative>(BG_1991_INITIATIVES_COLLECTION)
     .updateOne(
-      { _id: id(revision) },
-      { $set: { revision, signatures } },
+      { _id: id(revision, disposition) },
+      { $set: { revision, disposition, signatures } },
       { session, upsert: true }
     );
+  return result;
+}
+
+/** Both draft variants share a projected mandate read, but never their signatures. */
+export async function loadBg1991Initiatives(db: Db, revision: number, session?: ClientSession) {
+  const variants = ["dissolve", "continue"] as const;
+  const journals = await db
+    .collection<Initiative>(BG_1991_INITIATIVES_COLLECTION)
+    .find(
+      { _id: { $in: variants.map((variant) => id(revision, variant)) } },
+      { session, projection: { revision: 1, disposition: 1, signatures: 1 } }
+    )
+    .toArray();
+  const rows = journals.length ? await deputies(db, session) : [];
+  const result = {
+    dissolve: { support: 0, required: 100, canIntroduce: false },
+    continue: { support: 0, required: 100, canIntroduce: false },
+  };
+  for (const variant of variants) {
+    const journal = journals.find((row) => row._id === id(revision, variant));
+    if (!journal) continue;
+    if (
+      journal.revision !== revision ||
+      bg1991ConstituentDisposition(journal.disposition) !== variant
+    )
+      throw new Error("Constituent initiative draft changed");
+    result[variant] = support(rows, journal.signatures);
+  }
   return result;
 }

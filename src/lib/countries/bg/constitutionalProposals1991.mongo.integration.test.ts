@@ -10,6 +10,12 @@ import {
   processBg1991ConstitutionalMandate,
   BG_1991_PROPOSALS_COLLECTION,
 } from "./constitutionalProposals1991";
+import {
+  openBg1991AssemblyDissolution,
+  processBg1991AssemblyDissolution,
+  loadBg1991AssemblyDissolutionDecision,
+  BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID,
+} from "./assemblyDissolution1991";
 import { processBg1991ConstitutionalNpcProposal } from "./constitutionalNpcProposals1991";
 import { bgRegions1991 } from "./data/bgRegions1991";
 import { BG_ORDINARY_ASSEMBLY_SEATS } from "./rules/assemblyTransition";
@@ -108,6 +114,9 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
     [267, true, "bound"],
     [267, true, "runoff"],
     [267, true, "certified"],
+    [267, true, "continuation"],
+    [266, false, "continuation"],
+    [267, true, "continuation-counted"],
   ] as const)(
     "uses actual constituent vote%d with approval%s and frozen%s campaigns",
     async (support, approved, mode) => {
@@ -145,7 +154,8 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
             electionId: row._id,
             finalized: false,
             bulgarianFoundingBallot: ["bound", "runoff", "certified"].includes(mode),
-            totalVotes: mode === "counted" && i === 0 ? { prior: 1 } : {},
+            totalVotes:
+              ["counted", "continuation-counted"].includes(mode) && i === 0 ? { prior: 1 } : {},
             turnSnapshots:
               mode === "snapshot" && i === 0 ? [{ cumulativeVotes: { prior: 1 } }] : [],
           }))
@@ -158,6 +168,7 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
           turn: 25,
           now: NOW,
           sponsor: null,
+          disposition: mode.startsWith("continuation") ? "continue" : "dissolve",
         });
         await processOnePartyBillLifecycleForCountry("BG", NOW);
         expect(await processBg1991ConstitutionalMandate(db, GAME, 25, NOW)).toBe(false);
@@ -177,7 +188,7 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
         expect((await db.collection("bills").findOne({ _id: proposal.billId }))?.status).toBe(
           approved ? "signed" : "failed"
         );
-        if (approved && ["untouched", "bound"].includes(mode)) {
+        if (approved && ["untouched", "bound", "continuation"].includes(mode)) {
           const failing = new Proxy(db, {
             get(target, key) {
               if (key !== "collection") {
@@ -213,7 +224,7 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
           ).toBeUndefined();
         }
         commands = requestBytes = replyBytes = 0;
-        const concurrent = approved && ["untouched", "bound"].includes(mode);
+        const concurrent = approved && ["untouched", "bound", "continuation"].includes(mode);
         const outcomes = concurrent
           ? await Promise.all([
               processBg1991ConstitutionalMandate(db, GAME, 26, NOW),
@@ -227,7 +238,7 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
         expect(commands).toBeLessThanOrEqual(concurrent ? 40 : 18);
         process.stdout.write(`BG1991 ${support}/${mode}: ${JSON.stringify(measure)}\n`);
         const after = await db.collection("elections").find().toArray();
-        if (approved && ["untouched", "bound"].includes(mode)) {
+        if (approved && ["untouched", "bound", "continuation"].includes(mode)) {
           expect(Object.fromEntries(after.map((row) => [row.state, row.totalSeats]))).toEqual(
             BG_ORDINARY_ASSEMBLY_SEATS
           );
@@ -236,9 +247,9 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
             after.every(
               (row) =>
                 row.startTurn === 26 &&
-                row.primaryEndTurn === 30 &&
-                row.endTurn === 32 &&
-                row.shiftedScheduleEndTurn === 32
+                row.primaryEndTurn === (mode === "continuation" ? 166 : 30) &&
+                row.endTurn === (mode === "continuation" ? 168 : 32) &&
+                row.shiftedScheduleEndTurn === (mode === "continuation" ? 168 : 32)
             )
           ).toBe(true);
           expect(
@@ -252,6 +263,10 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
           (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
             ?.bgConstitution1991SinceTurn
         ).toBe(approved ? 26 : undefined);
+        expect(
+          (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
+            ?.bgGrandAssemblyContinuationSinceTurn
+        ).toBe(approved && mode.startsWith("continuation") ? 26 : undefined);
         expect(
           (await db.collection<Row>("states").find().toArray()).reduce(
             (n, row) => n + Number(row.houseDistricts),
@@ -273,6 +288,145 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
       }
     }
   );
+  it.each([
+    [201, 199, true, false],
+    [200, 200, false, false],
+    [101, 100, true, false],
+    [100, 101, false, false],
+    [200, 0, false, false],
+    [201, 199, true, true],
+  ] as const)(
+    "resolves separate dissolution by ordinary quorum and majority %d/%d",
+    async (forVotes, againstVotes, approved, recorded) => {
+      const { db, ids } = await fixture();
+      try {
+        await db
+          .collection<Row>("countryGameStates")
+          .updateOne(
+            { _id: "BG" },
+            { $set: { bgConstitution1991SinceTurn: 25, bgGrandAssemblyContinuationSinceTurn: 25 } }
+          );
+        const polls = bgRegions1991.map((region) => ({
+          _id: new ObjectId(),
+          countryId: "BG",
+          electionType: "nationalAssembly",
+          state: region._id,
+          cycle: 1,
+          status: "active",
+          totalSeats: BG_ORDINARY_ASSEMBLY_SEATS[region._id],
+          startTurn: 25,
+          primaryEndTurn: 166,
+          endTurn: 168,
+          shiftedScheduleEndTurn: 168,
+          startTime: NOW,
+          primaryEndTime: NOW,
+          endTime: NOW,
+          updatedAt: NOW,
+        }));
+        await db.collection("elections").insertMany(polls);
+        await db.collection("electionVoteTallies").insertMany(
+          polls.map((row) => ({
+            electionId: row._id,
+            finalized: false,
+            totalVotes: recorded ? { existingBallot: 1 } : {},
+            turnSnapshots: [],
+          }))
+        );
+        const proposal = await openBg1991AssemblyDissolution({
+          db,
+          turn: 25,
+          now: NOW,
+          sponsor: null,
+        });
+        await processOnePartyBillLifecycleForCountry("BG", NOW);
+        await db.collection("bills").updateOne(
+          { _id: proposal.billId },
+          {
+            $set: {
+              votes: Object.fromEntries(
+                ids
+                  .slice(0, forVotes + againstVotes)
+                  .map((id, i) => [`npp_${id}`, i < forVotes ? "for" : "against"])
+              ),
+              votingEndsOnTurn: 26,
+            },
+          }
+        );
+        await clock(26);
+        await processOnePartyBillLifecycleForCountry("BG", NOW);
+        expect((await db.collection("bills").findOne({ _id: proposal.billId }))?.status).toBe(
+          approved ? "signed" : "failed"
+        );
+        const before = await db.collection("elections").find().toArray();
+        if (approved) {
+          await db.command({
+            collMod: BG_1991_PROPOSALS_COLLECTION,
+            validator: {
+              $or: [
+                { _id: { $ne: BG_CONTINUED_ASSEMBLY_DISSOLUTION_ID } },
+                { status: { $ne: "authorized" } },
+              ],
+            },
+          });
+          await expect(processBg1991AssemblyDissolution(db, GAME, 26, NOW)).rejects.toThrow();
+          expect(await db.collection("elections").find().toArray()).toEqual(before);
+          expect(
+            (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
+              ?.bgGrandAssemblyDissolutionSinceTurn
+          ).toBeUndefined();
+          await db.command({ collMod: BG_1991_PROPOSALS_COLLECTION, validator: {} });
+        }
+        commands = requestBytes = replyBytes = 0;
+        const outcomes = approved
+          ? await Promise.all([
+              processBg1991AssemblyDissolution(db, GAME, 26, NOW),
+              processBg1991AssemblyDissolution(db, GAME, 26, NOW),
+            ])
+          : [await processBg1991AssemblyDissolution(db, GAME, 26, NOW)];
+        process.stdout.write(
+          `BGcontinuedDissolution ${forVotes}/${againstVotes}: ${JSON.stringify({ commands, requestBytes, replyBytes })}\n`
+        );
+        expect(commands).toBeLessThanOrEqual(50);
+        expect(outcomes.slice().sort()).toEqual(approved ? [false, true] : [false]);
+        const after = await db.collection("elections").find().toArray();
+        if (approved) {
+          if (recorded) expect(after).toEqual(before);
+          else
+            expect(
+              after.every(
+                (row) =>
+                  row.cycle === 1 &&
+                  row.primaryEndTurn === 30 &&
+                  row.endTurn === 32 &&
+                  row.shiftedScheduleEndTurn === 32
+              )
+            ).toBe(true);
+          expect(
+            (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
+              ?.bgGrandAssemblyDissolutionSinceTurn
+          ).toBe(26);
+          expect(await processBg1991AssemblyDissolution(db, GAME, 27, NOW)).toBe(false);
+          expect(await db.collection("elections").find().toArray()).toEqual(after);
+        } else {
+          expect(after).toEqual(before);
+          expect((await loadBg1991AssemblyDissolutionDecision(db, 26)).proposal?.canRevise).toBe(
+            true
+          );
+          const revised = await openBg1991AssemblyDissolution({
+            db,
+            turn: 27,
+            now: NOW,
+            sponsor: null,
+          });
+          expect(revised.revision).toBe(2);
+          expect(await db.collection("bills").countDocuments()).toBe(2);
+        }
+      } finally {
+        await db.dropDatabase();
+      }
+    }
+  );
+
   it.each([false, true])(
     "introduces once only for a sufficient NPC government, human=%s",
     async (human) => {

@@ -202,6 +202,47 @@ describe.skipIf(!uri)("Bulgarian collective initiative on actual Mongo", () => {
       await f.db.dropDatabase();
     }
   });
+
+  it("never combines signatures for different transitional drafts", async () => {
+    const f = await fixture();
+    try {
+      expect((await f.endorse()).initiative.support).toBe(99);
+      await f.addSecond();
+      const continued = await endorseBg1991ConstitutionalInitiative({
+        db: f.db,
+        game,
+        turn: 25,
+        now,
+        sponsor: f.second,
+        disposition: "continue",
+      });
+      expect(continued.initiative.support).toBe(99);
+      expect(continued.proposal).toBeNull();
+      expect(await f.db.collection("bills").countDocuments()).toBe(0);
+      const selected = await loadBg1991ConstitutionalDecision(f.db, game, 25);
+      expect(selected?.initiatives).toMatchObject({
+        dissolve: { support: 99 },
+        continue: { support: 99 },
+      });
+      const result = await endorseBg1991ConstitutionalInitiative({
+        db: f.db,
+        game,
+        turn: 25,
+        now,
+        sponsor: f.first,
+        disposition: "continue",
+      });
+      expect(result.proposal?.disposition).toBe("continue");
+      expect(
+        (await f.db.collection("bills").findOne({ _id: result.proposal!.billId }))
+          ?.bulgarianConstitutionalMandate
+      ).toMatchObject({ disposition: "continue", kind: "constitution1991" });
+      expect(await f.db.collection("npps").find().toArray()).toEqual(f.owners);
+    } finally {
+      await f.db.dropDatabase();
+    }
+  });
+
   it("uses current mandate custody and the canonical pre-iteration calendar", async () => {
     const f = await fixture();
     try {

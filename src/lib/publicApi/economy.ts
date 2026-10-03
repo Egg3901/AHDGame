@@ -6,7 +6,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
-import { bgAssemblyName } from "@/lib/countries/bg/rules/assemblyTransition";
+import { bgAssemblyName, bgAssemblyPartySeats } from "@/lib/countries/bg/rules/assemblyTransition";
 import { getCountryState } from "@/lib/countryState";
 import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
@@ -38,7 +38,10 @@ export async function queryCountrySummary(db: Db, country: string) {
       .toArray(),
     db
       .collection<ElectedOfficial>("electedOfficials")
-      .find({ countryId: country } as Filter<ElectedOfficial>)
+      .find({
+        countryId: country,
+        ...(country === "BG" ? { officeType: "assemblyDeputy" } : {}),
+      } as Filter<ElectedOfficial>)
       .toArray(),
     getGovernmentFormationsCollection(db).findOne({ countryId: country as CountryId }),
   ]);
@@ -53,11 +56,15 @@ export async function queryCountrySummary(db: Db, country: string) {
 
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
 
-  const seatCounts = new Map<string, number>();
-  for (const official of officials) {
-    if (official.party) seatCounts.set(official.party, (seatCounts.get(official.party) ?? 0) + 1);
-  }
-  const totalSeats = officials.length;
+  const seatCounts =
+    country === "BG"
+      ? new Map(Object.entries(bgAssemblyPartySeats(officials)))
+      : new Map<string, number>();
+  if (country !== "BG")
+    for (const official of officials) {
+      if (official.party) seatCounts.set(official.party, (seatCounts.get(official.party) ?? 0) + 1);
+    }
+  const totalSeats = country === "BG" ? await getLiveLowerChamberSeats(db, "BG") : officials.length;
 
   const legislatureComposition = [...seatCounts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -219,15 +226,34 @@ export async function queryLegislature(db: Db, country: string) {
       ? await Promise.all([
           getGameStatePreset(db),
           db
-            .collection<{ _id: string; bgOrdinaryAssemblySinceTurn?: number }>("countryGameStates")
-            .findOne({ _id: "BG" }, { projection: { bgOrdinaryAssemblySinceTurn: 1 } }),
+            .collection<{
+              _id: string;
+              bgOrdinaryAssemblySinceTurn?: number;
+              bgGrandAssemblyContinuationSinceTurn?: number;
+              bgConstitution1991SinceTurn?: number;
+              bgGrandAssemblyDissolutionSinceTurn?: number;
+            }>("countryGameStates")
+            .findOne(
+              { _id: "BG" },
+              {
+                projection: {
+                  bgOrdinaryAssemblySinceTurn: 1,
+                  bgGrandAssemblyContinuationSinceTurn: 1,
+                  bgConstitution1991SinceTurn: 1,
+                  bgGrandAssemblyDissolutionSinceTurn: 1,
+                },
+              }
+            ),
         ])
       : null;
 
   const [officials, parties, pendingBills, recentlyPassed] = await Promise.all([
     db
       .collection<ElectedOfficial>("electedOfficials")
-      .find({ countryId: country } as Filter<ElectedOfficial>)
+      .find({
+        countryId: country,
+        ...(country === "BG" ? { officeType: "assemblyDeputy" } : {}),
+      } as Filter<ElectedOfficial>)
       .toArray(),
     db
       .collection<PoliticalParty>("politicalParties")
@@ -254,10 +280,14 @@ export async function queryLegislature(db: Db, country: string) {
   ]);
 
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
-  const seatCounts = new Map<string, number>();
-  for (const official of officials) {
-    if (official.party) seatCounts.set(official.party, (seatCounts.get(official.party) ?? 0) + 1);
-  }
+  const seatCounts =
+    country === "BG"
+      ? new Map(Object.entries(bgAssemblyPartySeats(officials)))
+      : new Map<string, number>();
+  if (country !== "BG")
+    for (const official of officials) {
+      if (official.party) seatCounts.set(official.party, (seatCounts.get(official.party) ?? 0) + 1);
+    }
   const totalSeats = country === "BG" ? await getLiveLowerChamberSeats(db, "BG") : officials.length;
 
   const composition = [...seatCounts.entries()]
@@ -276,7 +306,11 @@ export async function queryLegislature(db: Db, country: string) {
     found: true,
     countryId: country,
     chamber: bgAssembly
-      ? bgAssemblyName(bgAssembly[0], bgAssembly[1]?.bgOrdinaryAssemblySinceTurn)
+      ? bgAssemblyName(
+          bgAssembly[0],
+          bgAssembly[1]?.bgOrdinaryAssemblySinceTurn,
+          bgAssembly[1] ?? undefined
+        )
       : (chamberName?.lowerChamber?.name ?? "Legislature"),
     totalSeats,
     composition,

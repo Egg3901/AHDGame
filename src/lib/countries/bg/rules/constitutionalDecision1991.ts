@@ -29,3 +29,63 @@ export function passesBgConstitution1991(
   const present = BigInt(totals.for) + BigInt(totals.against) + BigInt(totals.abstain);
   return present <= BigInt(seats) && BigInt(totals.for) * BigInt(3) >= BigInt(seats) * BigInt(2);
 }
+
+export type Bg1991ConstituentDisposition = "dissolve" | "continue";
+/** Existing drafts retain their original immediate-dissolution transition. */
+export function bg1991ConstituentDisposition(
+  value?: Bg1991ConstituentDisposition
+): Bg1991ConstituentDisposition {
+  if (value == null) return "dissolve";
+  if (value !== "dissolve" && value !== "continue")
+    throw new Error("Invalid Bulgarian constituent transition");
+  return value;
+}
+
+/** The alternate continuation clause permits a later ordinary self-dissolution vote. */
+export function passesBgContinuedAssemblyDissolution(
+  totals: { for: number; against: number; abstain: number },
+  capacity: number
+): boolean {
+  if (
+    capacity !== 400 ||
+    Object.values(totals).some((value) => !Number.isSafeInteger(value) || value < 0)
+  )
+    return false;
+  const present = BigInt(totals.for) + BigInt(totals.against) + BigInt(totals.abstain);
+  return (
+    present <= BigInt(capacity) &&
+    present * BigInt(2) > BigInt(capacity) &&
+    BigInt(totals.for) * BigInt(2) > present
+  );
+}
+
+export function bgContinuedAssemblyDissolutionAvailability(input: {
+  preset?: string;
+  founding?: boolean;
+  turn: number;
+  constitutionTurn?: number;
+  continuationTurn?: number;
+  dissolutionTurn?: number;
+  ordinaryTurn?: number;
+  hasParliament?: boolean;
+}) {
+  if (input.preset !== "1991-default") return { available: false, reason: "other-era" };
+  if (input.hasParliament === false) return { available: false, reason: "no-legislature" };
+  if (!Number.isSafeInteger(input.turn) || input.turn < 1)
+    throw new Error("Invalid Bulgarian dissolution turn");
+  if (
+    input.founding ||
+    input.constitutionTurn == null ||
+    input.continuationTurn == null ||
+    !Number.isSafeInteger(input.constitutionTurn) ||
+    input.constitutionTurn < 1 ||
+    !Number.isSafeInteger(input.continuationTurn) ||
+    input.continuationTurn < 1 ||
+    input.constitutionTurn > input.turn ||
+    input.continuationTurn > input.turn
+  )
+    return { available: false, reason: "not-continued" };
+  if (input.dissolutionTurn != null || input.ordinaryTurn != null)
+    return { available: false, reason: "already-dissolved" };
+  return { available: true, reason: "available" };
+}

@@ -28,6 +28,7 @@ export function planBg1991AssemblyClock(input: {
   authorized: boolean;
   previous?: Pick<Election, "status" | "cycle" | "endTurn" | "shiftedScheduleEndTurn">;
   previousOrdinary: boolean;
+  firstOrdinaryEndTurn?: number;
 }):
   | { kind: "blocked" }
   | { kind: "founding" }
@@ -52,14 +53,26 @@ export function planBg1991AssemblyClock(input: {
   if (input.preIterationActive)
     return previous?.status === "resolved" ? { kind: "blocked" } : { kind: "founding" };
   if (!input.authorized) return { kind: "canonical-grand" };
+  if (
+    input.firstOrdinaryEndTurn != null &&
+    (!Number.isSafeInteger(input.firstOrdinaryEndTurn) || input.firstOrdinaryEndTurn < 1)
+  )
+    throw new Error("Invalid Bulgarian continuation clock");
   const cycle = (previous?.cycle ?? 0) + 1;
   if (!previous || !input.previousOrdinary) {
     return {
       kind: "ordinary-first",
       cycle,
       startTurn: currentTurn,
-      primaryEndTurn: currentTurn + BG_FIRST_ORDINARY_PRIMARY_TURNS,
-      endTurn: currentTurn + BG_FIRST_ORDINARY_PRIMARY_TURNS + BG_FIRST_ORDINARY_GENERAL_TURNS,
+      primaryEndTurn:
+        Math.max(
+          currentTurn + BG_FIRST_ORDINARY_PRIMARY_TURNS + BG_FIRST_ORDINARY_GENERAL_TURNS,
+          input.firstOrdinaryEndTurn ?? 0
+        ) - BG_FIRST_ORDINARY_GENERAL_TURNS,
+      endTurn: Math.max(
+        currentTurn + BG_FIRST_ORDINARY_PRIMARY_TURNS + BG_FIRST_ORDINARY_GENERAL_TURNS,
+        input.firstOrdinaryEndTurn ?? 0
+      ),
     };
   }
   if (previous.shiftedScheduleEndTurn == null) return { kind: "canonical-ordinary" };
