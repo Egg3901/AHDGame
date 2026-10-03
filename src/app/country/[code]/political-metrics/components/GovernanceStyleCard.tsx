@@ -30,15 +30,15 @@ function Measure({
 }) {
   const value = Math.round(axis.value);
   const position = Math.max(0, Math.min(100, axis.value));
+  // dt and both dd elements are direct children of the group, as a dl requires;
+  // the grid puts the name and value on one line and the track under both.
   return (
-    <div>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <dt className="text-body text-muted">{name}</dt>
-        <dd className={`text-body-lg font-semibold ${valueClass}`}>
-          {axis.label} <span className="tabular-nums">{value}</span>
-        </dd>
-      </div>
-      <dd className="mt-3">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4">
+      <dt className="text-body text-muted">{name}</dt>
+      <dd className={`text-right text-body-lg font-semibold ${valueClass}`}>
+        {axis.label} <span className="tabular-nums">{value}</span>
+      </dd>
+      <dd className="col-span-2 mt-3">
         <div
           role="img"
           aria-label={`${value} on a scale from ${low} at 0 to ${high} at 100`}
