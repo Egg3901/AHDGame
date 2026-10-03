@@ -40,7 +40,7 @@ export async function generateMetadata({
   if (!corp || !sector) return {};
 
   const sectorLabel = sector.displayName || sector.sectorType;
-  const title = `${sectorLabel} — ${corp.name} | A House Divided`;
+  const title = `${sectorLabel} | ${corp.name} | A House Divided`;
   const description = `${sectorLabel} sector operated by ${corp.name} in ${sector.stateId}. Production, financials, and market position.`;
   const url = `${getSiteUrl()}/corporation/${id}/sector/${sectorId}`;
   const image = corp.logoUrl || CDN_LOGO_URL;

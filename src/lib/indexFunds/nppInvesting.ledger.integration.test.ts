@@ -25,7 +25,7 @@ it.each([
   const nppId = new ObjectId(),
     fundId = new ObjectId();
   memory.seed("gameConfig", [{ _id: "default", ledgerShadow: true }]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: 16, preset: "2019-default" }]);
+  memory.seed("gameState", [{ _id: "current", currentTurn: 15, preset: "2019-default" }]);
   memory.seed("exchangeRates", [{ currencyCode: currency, rate }]);
   memory.seed("npps", [
     {

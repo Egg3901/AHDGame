@@ -11,13 +11,13 @@ import { facilityVocabulary } from "@/lib/constants/facilityVocabulary";
 
 /** Format a unit count for display. Capacity is fractional but reads as whole. */
 export function fmtUnits(n: number | null | undefined, digits = 0): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "n/a";
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: digits }).format(n);
 }
 
 /** Format a 0–1 share as a whole percent. */
 export function fmtPct(n: number | null | undefined, digits = 0): string {
-  if (n == null || !Number.isFinite(n)) return "—";
+  if (n == null || !Number.isFinite(n)) return "n/a";
   return `${(n * 100).toFixed(digits)}%`;
 }
 

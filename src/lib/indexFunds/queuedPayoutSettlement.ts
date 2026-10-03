@@ -7,6 +7,7 @@ import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { buildTxDocs, loadTxThresholds, type TxInput } from "@/lib/financialTxLog/emit";
 import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
@@ -26,16 +27,19 @@ export type ClaimedRedemption = IndexFundRedemptionQueueEntry & {
   payoutPlan?: BankingTransition & { legacyUnitsBurned?: number };
 };
 export async function loadQueuedPayoutAuditContext(db: Db) {
-  const [thresholds, turnLength, config] = await Promise.all([
+  const [thresholds, turnLength, config, ledgerTurn] = await Promise.all([
     loadTxThresholds(db),
     loadTurnLengthMinutes(db),
     db.collection<GameConfig>("gameConfig").findOne({ _id: "default" }),
+    resolveLedgerTurn(db),
   ]);
   return {
     thresholds,
     turnLength,
     shadow: config?.ledgerShadow === true,
     auditEnabled: config?.auditLog !== false,
+    /** The turn whose closing snapshot holds cash settled under this context (#3022). */
+    ledgerTurn,
   };
 }
 type AuditContext = Awaited<ReturnType<typeof loadQueuedPayoutAuditContext>>;
@@ -330,7 +334,10 @@ export async function settleQueuedPayout(
       ...(audit.shadow
         ? deriveLedgerEntries([financial]).map((row, index) => ({
             collection: "ledgerEntries",
-            insert: { ...finalizeLedgerEntry(row), _id: receiptId(key, `ledger:${index}`) },
+            insert: {
+              ...finalizeLedgerEntry({ ...row, turn: audit.ledgerTurn ?? row.turn }),
+              _id: receiptId(key, `ledger:${index}`),
+            },
             note: "Original payout ledger witness",
           }))
         : []),

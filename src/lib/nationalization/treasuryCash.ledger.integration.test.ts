@@ -8,6 +8,7 @@ import { resetLedgerShadowFlagCache } from "@/lib/ledger/featureFlag";
 import { writeBalanceSnapshot, writePreForexBalanceCheckpoint } from "@/lib/ledger/balanceSnapshot";
 import { reconcileTurn } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { debitTreasurySoeCapex, drawFromTreasury, remitToTreasury } from "./treasury";
 import { loadTreasuryCashContext, withTreasuryCashBatch } from "./treasuryLedger";
 import { processSoeOperations } from "./soeOperations";
@@ -113,15 +114,18 @@ for (const native of [false, true]) {
       it("nets a remittance from the enterprise into the treasury in GBP", async () => {
         const { db, corpId } = await world(native, { clock: 9 });
         await writeBalanceSnapshot(db, 1);
-        const context = await loadTreasuryCashContext(db, 2);
-        await withTreasuryCashBatch(db, context, (ledger) =>
-          remitToTreasury(
-            db,
-            { countryId: "UK", corpId, amountLocal: 150_000.4, corpCurrency: "GBP" },
-            NOW,
-            ledger
-          )
-        );
+        // A phase: processTurn runs it inside the turn's ledger scope.
+        await runWithLedgerTurn(2, async () => {
+          const context = await loadTreasuryCashContext(db, 2);
+          await withTreasuryCashBatch(db, context, (ledger) =>
+            remitToTreasury(
+              db,
+              { countryId: "UK", corpId, amountLocal: 150_000.4, corpCurrency: "GBP" },
+              NOW,
+              ledger
+            )
+          );
+        });
         expect(await cash(db, corpId)).toEqual({ corp: 50_000, treasury: 1_150_000 });
         await close(db, 2);
         const id = corpId.toString();
@@ -235,15 +239,17 @@ for (const native of [false, true]) {
       it("the corporation sweep witnesses backing at the processing turn", async () => {
         const { db, corpId } = await world(native, { liquidCapital: -800, clock: 9 });
         await writeBalanceSnapshot(db, 1);
-        await runSoeBackingSweep({
-          db,
-          now: NOW,
-          turn: 2,
-          currentYear: 1991,
-          corpSnapshots: [],
-          corpById: new Map(),
-          mark: () => {},
-        });
+        await runWithLedgerTurn(2, () =>
+          runSoeBackingSweep({
+            db,
+            now: NOW,
+            turn: 2,
+            currentYear: 1991,
+            corpSnapshots: [],
+            corpById: new Map(),
+            mark: () => {},
+          })
+        );
         expect((await cash(db, corpId)).corp).toBe(0);
         await close(db, 2);
         const turns = await db.collection<LedgerEntry>("ledgerEntries").distinct("turn");

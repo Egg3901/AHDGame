@@ -37,6 +37,7 @@ import {
 } from "@/lib/banking/rules/boundary";
 import { accountId, mintSinkAccount } from "@/lib/ledger/accounts";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { treasuryAnchorValuation } from "@/lib/budget/rules/treasuryAccrual";
@@ -228,8 +229,10 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
         preset: state?.preset ?? DEFAULT_SEED_PRESET,
         observedRate: rate?.rate,
       });
+      // Planned once and replayed from the receipt: the turn whose closing
+      // snapshot holds this cash, not the route's clock (#3022).
       const entry = finalizeLedgerEntry({
-        turn: command.turn,
+        turn: (await resolveLedgerTurn(db)) ?? command.turn,
         createdAt: now,
         txType: "monetary_treasury_advance",
         legs: [
@@ -398,11 +401,12 @@ async function prepare(db: Db, command: Command): Promise<Receipt> {
     // Same valuation and missing-rate fallback as the snapshot's bond_pool account.
     const anchorAmount = amount / (quote?.rate && quote.rate > 0 ? quote.rate : 1);
     const reason = command.type === "qe" ? "central_bank_qe" : "central_bank_qt";
+    const ledgerTurn = (await resolveLedgerTurn(db)) ?? command.turn;
     receipt.witnesses.push({
       collection: "ledgerEntries",
       insert: {
         ...finalizeLedgerEntry({
-          turn: command.turn,
+          turn: ledgerTurn,
           createdAt: now,
           txType: command.type === "qe" ? "monetary_qe" : "monetary_qt",
           legs: [

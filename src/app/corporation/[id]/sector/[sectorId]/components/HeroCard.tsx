@@ -68,7 +68,7 @@ export default function HeroCard({
       <p className="text-muted">{hiddenCopy.body}</p>
     </InfoTooltip>
   ) : (
-    "—"
+    "n/a"
   );
   const { formatAmount, toInternalFrom } = useCurrency();
   const liquidCode = (corporation.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined;

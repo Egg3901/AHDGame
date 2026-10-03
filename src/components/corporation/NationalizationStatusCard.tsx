@@ -72,13 +72,13 @@ export function NationalizationStatusCard({ corpId }: { corpId: string }) {
       {t && (
         <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm">
           <span className="font-medium text-warning">
-            Pending nationalization — {t.turnsLeft} turn{t.turnsLeft === 1 ? "" : "s"} left
+            Pending nationalization: {t.turnsLeft} turn{t.turnsLeft === 1 ? "" : "s"} left
           </span>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-body-xs text-muted">
             <span>
               {t.isSector ? "sector taking" : "whole-corp"} · {t.tier} · {t.method}
             </span>
-            <span>cited: {t.triggers.join(", ") || "—"}</span>
+            <span>cited: {t.triggers.join(", ") || "none"}</span>
             {t.curableTriggers.length > 0 && (
               <span className="text-warning">
                 clear {t.curableTriggers.join(", ")} before turn {t.deadlineTurn} to cancel
@@ -101,7 +101,7 @@ export function NationalizationStatusCard({ corpId }: { corpId: string }) {
             href={`/congress/bills/${b.billId}`}
             className="block rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-body-sm transition-colors hover:bg-error/15"
           >
-            <span className="font-medium text-error">Nationalization bill in voting — {scope}</span>
+            <span className="font-medium text-error">Nationalization bill in voting: {scope}</span>
             <div className="mt-0.5 truncate text-body-xs text-muted">{b.title} →</div>
           </Link>
         );
@@ -111,7 +111,7 @@ export function NationalizationStatusCard({ corpId }: { corpId: string }) {
         <div className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-body-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-medium text-gold">
-              Privatization auction — {status.auction.turnsLeft} turn
+              Privatization auction: {status.auction.turnsLeft} turn
               {status.auction.turnsLeft === 1 ? "" : "s"} left
             </span>
             <Link
@@ -127,7 +127,7 @@ export function NationalizationStatusCard({ corpId }: { corpId: string }) {
               highest{" "}
               {status.auction.highestBid > 0
                 ? natMoney(status.auction.highestBid, status.auction.currency)
-                : "—"}
+                : "none"}
             </span>
             <span>
               {status.auction.bidCount} bid{status.auction.bidCount === 1 ? "" : "s"}

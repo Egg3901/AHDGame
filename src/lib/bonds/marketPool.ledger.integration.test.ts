@@ -7,6 +7,7 @@ import { resetLedgerShadowFlagCache } from "@/lib/ledger/featureFlag";
 import { collectBalances } from "@/lib/ledger/balanceSnapshot";
 import { reconcileLedger } from "@/lib/ledger/reconcile";
 import type { LedgerEntry } from "@/lib/ledger/types";
+import { runWithLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { processBondMarketPoolTurn } from "./marketPoolTurn";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { deriveLedgerEntry } from "@/lib/ledger/deriveFromTx";
@@ -238,8 +239,11 @@ it("reuses a loaded context without a flag, clock or FX query per receipt", asyn
   const configRead = vi.spyOn(db.collection("gameConfig"), "findOne");
   const fxRead = vi.spyOn(db.collection("exchangeRates"), "find");
   const stateRead = vi.spyOn(db.collection("gameState"), "findOne");
-  await creditBondPool(db, "USD", 2.35, "couponsIn", NOW, { ledgerContext: context });
-  await creditBondPool(db, "USD", 100, "maturitiesIn", NOW, { ledgerContext: context });
+  // The bond turn runs inside the turn's ledger scope, so no clock read either.
+  await runWithLedgerTurn(TURN, async () => {
+    await creditBondPool(db, "USD", 2.35, "couponsIn", NOW, { ledgerContext: context });
+    await creditBondPool(db, "USD", 100, "maturitiesIn", NOW, { ledgerContext: context });
+  });
   expect(configRead).not.toHaveBeenCalled();
   expect(fxRead).not.toHaveBeenCalled();
   expect(stateRead).not.toHaveBeenCalled();
