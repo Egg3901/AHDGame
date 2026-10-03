@@ -196,7 +196,7 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
     fn: processDDBillLifecycle,
     emptyResult: { enacted: 0, failed: 0 },
   },
-  // Eastern bloc Tier-1 — unicameral one-party lifecycle (DD/CN pattern).
+  // One-party baseline or the country's democratic 1991 chamber lifecycle.
   PL: {
     phaseName: "plBillLifecycle",
     fn: processPLBillLifecycle,

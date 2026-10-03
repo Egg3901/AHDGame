@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { seedCountryStateFromConfig } from "@/lib/countryState/seed";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/discordWebhooks", () => ({
@@ -1340,6 +1341,11 @@ describe("appointPrimeMinister — same-holder announce guard", () => {
     const pmId = new ObjectId();
     const outgoingId = new ObjectId();
     setupAppointMocks(outgoingId);
+    // An existing runtime state needs no preset recovery from the unavailable clock.
+    db.collection("countryState");
+    db.collectionMocks.countryState.findOne.mockResolvedValue(
+      seedCountryStateFromConfig("UK", new Date(), "1991-default")
+    );
     db.collectionMocks.gameState.findOne.mockRejectedValue(
       new Error("Telemetry clock unavailable")
     );
