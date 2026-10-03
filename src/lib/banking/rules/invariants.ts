@@ -21,7 +21,7 @@
  * explicit doors in it can be checked with one sum.
  */
 
-export type ValueLegKind = "debit" | "credit" | "mint" | "burn";
+export type ValueLegKind = "debit" | "credit" | "mint" | "burn" | "asset";
 
 /** One side of a value movement, reduced to what the invariants need. */
 export interface ValueLeg {
@@ -36,6 +36,7 @@ export interface ValueLeg {
 export const NET_TOLERANCE = 1e-6;
 
 export function legSign(kind: ValueLegKind): number {
+  if (kind === "asset") return 0;
   return kind === "debit" || kind === "mint" ? -1 : 1;
 }
 
@@ -119,7 +120,11 @@ export function checkBalancedTransfer(
 ): InvariantViolation[] {
   const out: InvariantViolation[] = [];
   legs.forEach((leg, i) => {
-    if (!Number.isFinite(leg.amount) || leg.amount < 0) {
+    if (
+      !Number.isFinite(leg.amount) ||
+      leg.amount < 0 ||
+      (leg.kind === "asset" && leg.amount !== 0)
+    ) {
       out.push({
         invariant: "balanced_transfer",
         detail: `leg ${i} carries a non-finite or negative amount (${String(leg.amount)})`,

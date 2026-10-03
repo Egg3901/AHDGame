@@ -192,8 +192,8 @@ export async function settleTransition(
   }
   for (const leg of transition.legs) {
     if (
-      (leg.kind === "debit" || leg.kind === "credit") &&
-      (!leg.collection || !leg.path || !leg.filter)
+      (leg.kind === "debit" || leg.kind === "credit" || leg.kind === "asset") &&
+      (!leg.collection || (leg.kind !== "asset" && !leg.path) || !leg.filter)
     ) {
       return { ...result, status: "rejected", error: `leg "${leg.note}" is missing a target` };
     }
