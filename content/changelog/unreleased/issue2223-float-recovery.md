@@ -1,0 +1,8 @@
+---
+title: "Fund trade recovery"
+badges: [patch]
+areas: [backend, engine]
+tags: [funds, settlement, recovery]
+---
+
+Index fund purchases and holding sales now resume an interrupted settlement using its original cash, share custody and receipts. Repeated recovery preserves the original trade and explicit redemption reversals retain matching history.

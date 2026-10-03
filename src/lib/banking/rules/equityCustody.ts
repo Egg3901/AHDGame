@@ -17,9 +17,17 @@ export function validEquityCustodyMutation(input: {
     return false;
   if (!input.filter || !input.set || Object.keys(input.set).some((path) => !allowed.has(path)))
     return false;
-  function total(value: Record<string, unknown>): number | undefined {
-    const float = value.publicFloat,
-      holders = value.shareholders;
+  function absent(value: unknown): boolean {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      Object.keys(value).length === 1 &&
+      Reflect.get(value, "$exists") === false
+    );
+  }
+  function total(value: Record<string, unknown>, guard = false): number | undefined {
+    const float = guard && absent(value.publicFloat) ? 0 : value.publicFloat,
+      holders = guard && absent(value.shareholders) ? [] : value.shareholders;
     if (
       typeof float !== "number" ||
       !Number.isFinite(float) ||
@@ -41,7 +49,7 @@ export function validEquityCustodyMutation(input: {
     }
     return Number.isFinite(sum) ? sum : undefined;
   }
-  const before = total(input.filter),
+  const before = total(input.filter, true),
     after = total(input.set);
   return before !== undefined && after !== undefined && Math.abs(before - after) <= 1e-6;
 }

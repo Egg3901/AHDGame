@@ -30,6 +30,7 @@ export type FundFloatPlan = {
   inverseCustody: TransitionLeg;
   reversalProjections?: TransitionProjection[];
   compensation?: BankingTransition;
+  undoRequested?: boolean;
 };
 export type SettlementFund = IndexFund & {
   floatSettlementPlan?: FundFloatPlan;
@@ -40,6 +41,7 @@ type FloatJournal = {
   _id: string;
   status: string;
   legs: MoneyMoveRecordLeg[];
+  reversedBy?: string;
 };
 
 /** Journal calls participate in an existing caller transaction when one is supplied. */
@@ -94,6 +96,17 @@ const completed = (result: SettlementResult) =>
 /** A fresh quote cannot supersede a pending plan or an unacknowledged target outcome. */
 export async function claimFundFloatPlan(db: Db, fund: SettlementFund, plan: FundFloatPlan) {
   const generation = fund.floatSettlementGeneration;
+  // Retain completed quotes before a later trade replaces the fund's active plan.
+  // A multi-sale redemption can then undo its own trades in reverse order.
+  const previous = fund.floatSettlementPlan;
+  if (previous && previous.state !== "pending")
+    await db
+      .collection<{ _id: string; fundId: ObjectId; plan: FundFloatPlan }>("fundFloatSettlements")
+      .updateOne(
+        { _id: previous.key },
+        { $setOnInsert: { fundId: fund._id, plan: previous } },
+        { upsert: true }
+      );
   const claimed = await db.collection<SettlementFund>("indexFunds").findOneAndUpdate(
     {
       _id: fund._id,
@@ -205,7 +218,8 @@ async function compensateRefusal(
       "floatSettlementPlan.compensation": { $exists: false },
       ...(reverseCompleted
         ? {
-            "floatSettlementPlan.state": "completed",
+            "floatSettlementPlan.state": { $in: ["completed", "pending"] },
+            "floatSettlementPlan.undoRequested": true,
             pendingSettlementProjection: { $exists: false },
           }
         : {}),
@@ -248,6 +262,11 @@ export async function settleFundFloatPlan(db: Db, fundId: ObjectId, plan: FundFl
       throw new Error(refunded.error ?? "Fund float refund requires reconciliation");
     return false;
   }
+  if (plan.undoRequested) {
+    if (!(await compensateRefusal(db, fundId, plan, true)))
+      throw new Error("The completed fund trade lacks reversal proof");
+    return false;
+  }
   // A single lost acknowledgement can be resolved immediately from protected target proof.
   let result = await finish(db, plan.transition);
   if (!completed(result) && result.status !== "rejected")
@@ -259,19 +278,57 @@ export async function settleFundFloatPlan(db: Db, fundId: ObjectId, plan: FundFl
 
 /** A caller reversing its own completed trade retains inverse cash and audit witnesses. */
 export async function reverseCompletedFundFloatPlan(db: Db, fundId: ObjectId, plan: FundFloatPlan) {
-  const original = await db
+  const proof = await db.collection<FloatJournal>(MONEY_MOVE_COLLECTION).findOne({ _id: plan.key });
+  if (proof?.reversedBy) {
+    const result = await resumeSettlement(db, proof.reversedBy);
+    if (!completed(result)) throw new Error(result.error ?? "Fund trade reversal is incomplete");
+    return false;
+  }
+  const current = await db
     .collection<SettlementFund>("indexFunds")
     .findOne(
-      { _id: fundId, "floatSettlementPlan.key": plan.key },
-      { projection: { floatSettlementPlan: 1 } }
+      { _id: fundId },
+      { projection: { floatSettlementPlan: 1, holdings: 1, floatSettlementGeneration: 1 } }
     );
-  if (!original?.floatSettlementPlan)
+  if (!current?.floatSettlementPlan)
     throw new Error("The original completed fund trade is unavailable");
-  const frozen = original.floatSettlementPlan;
-  if (frozen.compensation) return settleFundFloatPlan(db, fundId, frozen);
-  if (frozen.state !== "completed" || !(await compensateRefusal(db, fundId, frozen, true)))
+  const active = current.floatSettlementPlan;
+  if (active.key === plan.key && (active.compensation || active.undoRequested))
+    return settleFundFloatPlan(db, fundId, active);
+  const archived =
+    active.key === plan.key
+      ? active
+      : (
+          await db
+            .collection<{ _id: string; fundId: ObjectId; plan: FundFloatPlan }>(
+              "fundFloatSettlements"
+            )
+            .findOne({ _id: plan.key, fundId })
+        )?.plan;
+  if (
+    !archived ||
+    archived.state !== "completed" ||
+    !proof ||
+    proof.status !== "applied" ||
+    !proof.legs.every((leg) => leg.applied)
+  )
     throw new Error("The fund trade cannot be reversed without its completed settlement proof");
-  return false;
+  const requested = { ...archived, state: "pending" as const, undoRequested: true };
+  const claimed = await db.collection<SettlementFund>("indexFunds").findOneAndUpdate(
+    {
+      _id: fundId,
+      "floatSettlementPlan.key": active.key,
+      "floatSettlementPlan.state": { $in: ["completed", "cancelled"] },
+      floatSettlementGeneration: current.floatSettlementGeneration,
+      holdings: archived.holdingsAfter,
+      pendingMoneyMoveReceipt: { $exists: false },
+      pendingSettlementProjection: { $exists: false },
+    },
+    { $set: { floatSettlementPlan: requested }, $inc: { floatSettlementGeneration: 1 } },
+    { returnDocument: "after" }
+  );
+  if (!claimed) throw new Error("The completed fund trade changed before reversal");
+  return settleFundFloatPlan(db, fundId, requested);
 }
 
 /** Recovery precedes pricing, rebalancing and queued payouts in the ordinary cron. */

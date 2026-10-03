@@ -127,7 +127,7 @@ export function checkBalancedTransfer(
     ) {
       out.push({
         invariant: "balanced_transfer",
-        detail: `leg ${i} carries a non-finite or negative amount (${String(leg.amount)})`,
+        detail: `leg ${i} carries an invalid amount (${String(leg.amount)}); cash must be nonnegative and equity custody must carry zero`,
         subject,
       });
     }

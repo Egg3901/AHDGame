@@ -3,11 +3,16 @@
  * prepareFundFloatTrade records cash, custody and read models for recovery.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { ObjectId, type Db, type Document } from "mongodb";
-import type { Corporation, IndexFund, IndexFundHolding, EquityMarketPool } from "@/lib/db/types";
+import { ObjectId, type Db, type Document, type ClientSession } from "mongodb";
+import type { Corporation, GameConfig, IndexFundHolding, EquityMarketPool } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { TransitionLeg, TransitionProjection } from "@/lib/banking/rules/boundary";
-import { buildAuditEnvelope, buildTxDocs, type TxInput } from "@/lib/financialTxLog/emit";
+import {
+  buildAuditEnvelope,
+  buildTxDocs,
+  loadTxThresholds,
+  type TxInput,
+} from "@/lib/financialTxLog/emit";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
 import { prepareAuditRecord } from "@/lib/audit/recordAudit";
@@ -15,11 +20,29 @@ import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
 import { equityPoolCurrency } from "@/lib/equities/marketPool";
 import { quoteFloatCustody } from "./rules/floatCustody";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
+import { loadTurnLengthMinutes } from "@/lib/financialTxLog/expiresAt";
 import { loadQueuedPayoutAuditContext } from "./queuedPayoutSettlement";
 import { type FundFloatPlan, type SettlementFund } from "./fundFloatSettlement";
 
 export type FloatAuditContext = Awaited<ReturnType<typeof loadQueuedPayoutAuditContext>>;
-export const loadFloatAuditContext = loadQueuedPayoutAuditContext;
+export async function loadFloatAuditContext(
+  db: Db,
+  session?: ClientSession,
+  preloadedThresholds?: TxThresholds
+): Promise<FloatAuditContext> {
+  if (!session && !preloadedThresholds) return loadQueuedPayoutAuditContext(db);
+  // Existing transactions require sequential commands on their session.
+  const thresholds = preloadedThresholds ?? (await loadTxThresholds(db));
+  const turnLength = await loadTurnLengthMinutes(db);
+  const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
+  return {
+    thresholds,
+    turnLength,
+    shadow: config?.ledgerShadow === true,
+    auditEnabled: config?.auditLog !== false,
+  };
+}
 type FloatCorp = Pick<
   Corporation,
   | "_id"
@@ -42,7 +65,7 @@ type CorpSnapshot = Pick<
   | "orderFlowWindowSellValue"
 >;
 type Input = {
-  fund: IndexFund;
+  fund: SettlementFund;
   corp: FloatCorp;
   direction: "buy" | "sell";
   shares: number;
@@ -54,6 +77,7 @@ type Input = {
   issuerFunded?: boolean;
   note?: string;
   audit: FloatAuditContext;
+  expectedGeneration?: number;
   holdingsAfter: (holdings: IndexFundHolding[]) => IndexFundHolding[];
 };
 type CashSide = {
@@ -100,8 +124,8 @@ function custody(input: Input, snapshot: CorpSnapshot, ipoShares: number) {
   if (!own && quote.fundShares > 0) after.push(updatedHolder);
   const guard: Document = {
     _id: input.corp._id,
-    shareholders: before,
-    publicFloat: snapshot.publicFloat ?? 0,
+    shareholders: originalField(snapshot, "shareholders"),
+    publicFloat: originalField(snapshot, "publicFloat"),
   };
   const set: Document = { shareholders: after, publicFloat: quote.publicFloat };
   const undo: Document = { shareholders: before, publicFloat: snapshot.publicFloat ?? 0 };
@@ -480,34 +504,34 @@ export async function prepareFundFloatTrade(db: Db, input: Input) {
     input.shares <= 0
   )
     return undefined;
-  const [fundRow, snapshot] = await Promise.all([
-    db.collection<SettlementFund>("indexFunds").findOne(
-      { _id: input.fund._id },
-      {
-        projection: {
-          cashAnchor: 1,
-          holdings: 1,
-          floatSettlementPlan: 1,
-          floatSettlementGeneration: 1,
-        },
-      }
-    ),
-    db.collection<CorpSnapshot>("corporations").findOne(
-      { _id: input.corp._id },
-      {
-        projection: {
-          shareholders: 1,
-          publicFloat: 1,
-          pendingShareIssuance: 1,
-          shareEscrowBalance: 1,
-          liquidCapital: 1,
-          orderFlowWindowBuyValue: 1,
-          orderFlowWindowSellValue: 1,
-        },
-      }
-    ),
-  ]);
+  const fundRow = await db.collection<SettlementFund>("indexFunds").findOne(
+    { _id: input.fund._id },
+    {
+      projection: {
+        cashAnchor: 1,
+        holdings: 1,
+        floatSettlementPlan: 1,
+        floatSettlementGeneration: 1,
+      },
+    }
+  );
+  const snapshot = await db.collection<CorpSnapshot>("corporations").findOne(
+    { _id: input.corp._id },
+    {
+      projection: {
+        shareholders: 1,
+        publicFloat: 1,
+        pendingShareIssuance: 1,
+        shareEscrowBalance: 1,
+        liquidCapital: 1,
+        orderFlowWindowBuyValue: 1,
+        orderFlowWindowSellValue: 1,
+      },
+    }
+  );
   if (!fundRow || !snapshot || fundRow.floatSettlementPlan?.state === "pending") return undefined;
+  const expected = input.expectedGeneration ?? input.fund.floatSettlementGeneration ?? 0;
+  if ((fundRow.floatSettlementGeneration ?? 0) !== expected) return undefined;
   const fund = { ...input.fund, ...fundRow };
   if (input.direction === "buy" && fund.cashAnchor < input.amountAnchor) return undefined;
   const currency = equityPoolCurrency(input.corp);
