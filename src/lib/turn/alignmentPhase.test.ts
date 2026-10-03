@@ -802,11 +802,60 @@ describe("processAlignmentTurn", () => {
 
     const set = (
       db.collection("alignmentPlays").updateOne.mock.calls[0]![1] as {
-        $set: { resolvedTurn: number; appliedPoints: number };
+        $set: { resolvedTurn: number; appliedPoints: number; effectivePoints: number };
       }
     ).$set;
     expect(set.resolvedTurn).toBe(7);
     expect(set.appliedPoints).toBeGreaterThan(0);
+    expect(set.effectivePoints).toBeCloseTo(written().shares.WEST! - 22, 2);
+    expect(set).toMatchObject({ effectivePoleId: "WEST" });
+  });
+
+  it("stamps effective zero without refunding canceled pressure", async () => {
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        shares: { WEST: 22, EAST: 50 },
+        nonAligned: 28,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play(), play({ _id: "p2", organizationId: "WARSAW_PACT", sponsorCountryId: "RU" })]);
+    const result = await processAlignmentTurn(db as unknown as Db, 4);
+    const updates = db.collection("alignmentPlays").updateOne.mock.calls;
+    expect(updates).toHaveLength(2);
+    for (const [, update] of updates) {
+      expect(update).toMatchObject({
+        $set: { appliedPoints: 10, effectivePoints: 0, refunded: false },
+      });
+    }
+    expect(result.playsRefunded).toBe(0);
+    expect(creditOrganizationFund).not.toHaveBeenCalled();
+  });
+
+  it("shares the actual gain across stacked plays without adding database writes", async () => {
+    alignments([
+      {
+        entityId: "YU",
+        eraKey: "cold-war",
+        shares: { WEST: 22, EAST: 50 },
+        nonAligned: 28,
+        previous: null,
+        turn: 3,
+      },
+    ]);
+    plays([play(), play({ _id: "p2" })]);
+    await processAlignmentTurn(db as unknown as Db, 4);
+    expect(written().shares.WEST).toBe(27);
+    const updates = db.collection("alignmentPlays").updateOne.mock.calls;
+    expect(updates).toHaveLength(2);
+    for (const [, update] of updates) {
+      expect(update).toMatchObject({
+        $set: { appliedPoints: 10, effectivePoints: 2.5, refunded: false },
+      });
+    }
   });
 
   it("resolves a play whose target has no row rather than leaking it forever", async () => {
@@ -858,6 +907,7 @@ describe("processAlignmentTurn", () => {
       }
     ).$set;
     expect(set.appliedPoints).toBe(0);
+    expect(set).toMatchObject({ effectivePoints: 0 });
   });
 
   /** A NATO member whose alignment has collapsed, below the gate since turn 1. */
