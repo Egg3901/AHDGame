@@ -744,6 +744,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-white p-0.5 ring-1 ring-white/10">
                 <Image
                   src={CDN_LOGO_URL}
+                  priority
                   unoptimized
                   alt="A House Divided"
                   width={30}
@@ -1035,6 +1036,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white p-0.5">
                 <Image
                   src={CDN_LOGO_URL}
+                  priority
                   unoptimized
                   alt="A House Divided"
                   width={28}

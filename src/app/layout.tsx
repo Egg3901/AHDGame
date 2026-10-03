@@ -453,9 +453,13 @@ export default async function RootLayout({
                                   />
                                 </>
                               ) : null}
+                              {/* The canonical host. The old analytics.ahousedividedgame.com
+                                  308s here, which serves the script but breaks every event:
+                                  the tracker posts to its own origin, and a CORS preflight
+                                  cannot follow a redirect. */}
                               <Script
                                 id="umami-analytics"
-                                src="https://analytics.ahousedividedgame.com/script.js"
+                                src="https://analytics.lakesidegames.net/script.js"
                                 data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
                                 strategy="afterInteractive"
                               />

@@ -54,6 +54,11 @@ describe("isMaintenanceBypassPath", () => {
     expect(isMaintenanceBypassPath("/retired/507f1f77bcf86cd799439011")).toBe(true);
   });
 
+  it("keeps robots.txt and the sitemap readable by crawlers", () => {
+    expect(isMaintenanceBypassPath("/robots.txt")).toBe(true);
+    expect(isMaintenanceBypassPath("/sitemap.xml")).toBe(true);
+  });
+
   it("still gates character creation while maintenance is on", () => {
     // Re-viewing history is allowed; starting a new run is not.
     expect(isMaintenanceBypassPath("/create-character")).toBe(false);
