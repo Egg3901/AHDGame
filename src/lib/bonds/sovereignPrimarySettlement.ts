@@ -4,6 +4,7 @@
  * recovery worker; callers never reconstruct a second cash move after a crash.
  */
 import { createHash } from "node:crypto";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { ObjectId, type Db } from "mongodb";
 import {
   COUNTRY_CURRENCY_MAP,
@@ -25,6 +26,8 @@ export interface PrimaryAccountingContext {
   rates: Map<string, number>;
   /** World preset, for the authored era rate of a currency with no exchangeRates row. */
   preset?: string;
+  /** The turn whose closing snapshot holds cash settled under this context (#3022). */
+  ledgerTurn?: number | null;
 }
 
 /**
@@ -50,7 +53,7 @@ export function primaryFinancingRate(
 }
 
 export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingContext> {
-  const [config, rates, gameState] = await Promise.all([
+  const [config, rates, gameState, ledgerTurn] = await Promise.all([
     db
       .collection<{ _id: string; ledgerShadow?: boolean; turnLengthMinutes?: number }>("gameConfig")
       .findOne({ _id: "default" }, { projection: { ledgerShadow: 1, turnLengthMinutes: 1 } }),
@@ -61,12 +64,14 @@ export async function loadPrimaryAccounting(db: Db): Promise<PrimaryAccountingCo
     db
       .collection<{ _id: string; preset?: string }>("gameState")
       .findOne({ _id: "current" }, { projection: { preset: 1 } }),
+    resolveLedgerTurn(db),
   ]);
   return {
     ledgerShadow: config?.ledgerShadow === true,
     turnLengthMinutes: config?.turnLengthMinutes ?? DEFAULT_TURN_LENGTH_MINUTES,
     rates: new Map(rates.map((r) => [r.currencyCode, r.rate])),
     preset: gameState?.preset ?? "",
+    ledgerTurn,
   };
 }
 
@@ -181,7 +186,7 @@ export async function commitSovereignPrimary(
       note: "Primary financing stock-flow witness",
       insert: {
         _id: primaryDocumentId(`${input.key}:ledger`),
-        turn: input.turn,
+        turn: accounting.ledgerTurn ?? input.turn,
         createdAt: input.now,
         txType: "gov_bond_issuance",
         legs,

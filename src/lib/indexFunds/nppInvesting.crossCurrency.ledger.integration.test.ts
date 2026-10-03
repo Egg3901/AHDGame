@@ -56,7 +56,7 @@ for (const native of [false, true]) {
           .insertOne({ _id: "default", ledgerShadow: true });
         await db
           .collection<{ _id: string; currentTurn: number; preset: string }>("gameState")
-          .insertOne({ _id: "current", currentTurn: 16, preset: "2019-default" });
+          .insertOne({ _id: "current", currentTurn: 15, preset: "2019-default" });
         await db.collection("exchangeRates").insertMany([
           { currencyCode: "GBP", rate: 0.8 },
           { currencyCode: "USD", rate: 1 },

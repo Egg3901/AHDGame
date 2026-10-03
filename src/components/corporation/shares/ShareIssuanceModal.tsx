@@ -264,7 +264,7 @@ export default function ShareIssuanceModal({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-xs text-muted">
-                    Issuance size —{" "}
+                    Issuance size:{" "}
                     <span className="text-foreground font-medium">{issuePercent.toFixed(1)}%</span>{" "}
                     of outstanding
                   </label>
@@ -339,7 +339,7 @@ export default function ShareIssuanceModal({
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <label className="text-xs text-muted">
-                    Shares to purchase —{" "}
+                    Shares to purchase:{" "}
                     <span className="text-foreground font-medium">
                       {ceoShares.toLocaleString("en-US")}
                     </span>{" "}
@@ -432,7 +432,7 @@ export default function ShareIssuanceModal({
           {/* Cooldown notice */}
           {issuanceOnCooldown && (
             <div className="rounded-lg border border-card-border bg-card-elevated/40 px-3 py-2.5 text-xs text-muted">
-              Issuance limited to once per 24 hours — available again in{" "}
+              Issuance limited to once per 24 hours. Available again in{" "}
               <span className="text-foreground font-medium">{cooldownHours}h</span>.
             </div>
           )}

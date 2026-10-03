@@ -15,6 +15,7 @@ import {
 } from "@/lib/financialTxLog/emit";
 import { deriveLedgerEntries } from "@/lib/ledger/deriveFromTx";
 import { finalizeLedgerEntry } from "@/lib/ledger/emit";
+import { resolveLedgerTurn } from "@/lib/ledger/ledgerTurn";
 import { prepareAuditRecord } from "@/lib/audit/recordAudit";
 import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
@@ -41,6 +42,7 @@ export async function loadFloatAuditContext(
     turnLength,
     shadow: config?.ledgerShadow === true,
     auditEnabled: config?.auditLog !== false,
+    ledgerTurn: await resolveLedgerTurn(db),
   };
 }
 type FloatCorp = Pick<
@@ -382,7 +384,10 @@ function receipts(
     projections.push(
       ...deriveLedgerEntries(financial).map((row, i): TransitionProjection => ({
         collection: "ledgerEntries",
-        insert: { ...finalizeLedgerEntry(row), _id: receiptId(key, `ledger:${i}`) },
+        insert: {
+          ...finalizeLedgerEntry({ ...row, turn: input.audit.ledgerTurn ?? row.turn }),
+          _id: receiptId(key, `ledger:${i}`),
+        },
         note: "Original authoritative cash witness",
       }))
     );
@@ -454,7 +459,10 @@ function receipts(
     reversal.push(
       ...deriveLedgerEntries(reverseFinancial).map((row, i): TransitionProjection => ({
         collection: "ledgerEntries",
-        insert: { ...finalizeLedgerEntry(row), _id: receiptId(undoKey, `ledger:${i}`) },
+        insert: {
+          ...finalizeLedgerEntry({ ...row, turn: input.audit.ledgerTurn ?? row.turn }),
+          _id: receiptId(undoKey, `ledger:${i}`),
+        },
         note: "Explicit inverse authoritative cash witness",
       }))
     );

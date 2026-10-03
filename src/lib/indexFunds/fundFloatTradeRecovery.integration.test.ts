@@ -68,7 +68,8 @@ function fixture(direction: "buy" | "sell") {
   memory.seed("gameConfig", [
     { _id: "default", ledgerShadow: true, auditLog: true, indexFundsMode: "full" },
   ]);
-  memory.seed("gameState", [{ _id: "current", currentTurn: 7 }]);
+  // Turn 6 is processed; turn 7 is accumulating.
+  memory.seed("gameState", [{ _id: "current", currentTurn: 6 }]);
   vi.mocked(getDb).mockResolvedValue(db);
   const execute = () =>
     selling
