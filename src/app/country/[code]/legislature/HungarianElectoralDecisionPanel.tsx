@@ -7,7 +7,12 @@ import { useTranslations } from "next-intl";
 interface Decision {
   available: boolean;
   reason: string;
-  proposal: { billId: string; billStatus: string | null; canRevise: boolean } | null;
+  proposal: {
+    billId: string;
+    billStatus: string | null;
+    canRevise: boolean;
+    reason?: string;
+  } | null;
 }
 const endpoint = "/api/country/hu/electoral-reform/proposal";
 
@@ -67,6 +72,15 @@ export default function HungarianElectoralDecisionPanel() {
           <a className="underline" href={`/congress/bills/${decision.proposal.billId}`}>
             {t("viewBill")}
           </a>
+        </p>
+      )}
+      {decision?.proposal?.reason && (
+        <p>
+          {t(
+            decision.proposal.reason === "npc_government_threshold_mandate"
+              ? "npcReason"
+              : "legislatorReason"
+          )}
         </p>
       )}
       {decision?.available && (!decision.proposal || decision.proposal.canRevise) && (

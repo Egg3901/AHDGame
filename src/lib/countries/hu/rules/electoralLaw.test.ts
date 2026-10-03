@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { hu1994DecisionAvailability, passesHuElectoralAmendment } from "./electoralLaw";
+import {
+  hu1994DecisionAvailability,
+  passesHuElectoralAmendment,
+  supportsHu1994NpcAmendment,
+} from "./electoralLaw";
 import { eligibleHu1991Parties } from "./listAllocation1991";
 import { buildHu1991Slates } from "./slates1991";
 import {
@@ -36,6 +40,15 @@ describe("Hungarian electoral law decisions", () => {
     expect(hu1994DecisionAvailability({ ...base, preset: "1953-default" }).reason).toBe(
       "other-era"
     );
+    expect(hu1994DecisionAvailability({ ...base, hasParliament: false }).reason).toBe(
+      "no-legislature"
+    );
+  });
+  it("bounds NPC support to a party above its proposed threshold", () => {
+    expect(supportsHu1994NpcAmendment(19)).toBe(false);
+    expect(supportsHu1994NpcAmendment(20)).toBe(true);
+    expect(supportsHu1994NpcAmendment(386)).toBe(true);
+    expect(supportsHu1994NpcAmendment(387)).toBe(false);
   });
 
   it("keeps exact five percent ineligible under 1994 and four percent ineligible under 1989", () => {

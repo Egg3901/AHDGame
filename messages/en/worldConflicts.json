@@ -91,7 +91,9 @@
         "already-authorized": "Parliament has authorized this amendment.",
         "modern-law-in-force": "The modern Assembly already has its electoral settlement.",
         "no-legislature": "The current political settlement has no eligible parliamentary Assembly."
-      }
+      },
+      "npcReason": "The NPC government proposed this amendment because its party holds more than five percent of Assembly seats. Parliament still decides.",
+      "legislatorReason": "A deputy introduced this amendment for a parliamentary vote."
     }
   }
 }

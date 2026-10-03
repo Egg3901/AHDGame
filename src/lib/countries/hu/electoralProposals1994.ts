@@ -49,7 +49,7 @@ async function availability(db: Db, game: Calendar, turn: number, session?: Clie
     .collection<CountryGameState>("countryGameStates")
     .findOne({ _id: "HU" }, { session, projection: { huElectoralLaw1994SinceTurn: 1 } });
   return hu1994DecisionAvailability({
-    preset: current?.preset ?? game.preset,
+    preset: current?.preset,
     calendarTurn: calendarTurn(turn, {
       preIterationActive: game.preIteration?.active,
       preIterationTurns: game.preIterationTurns,
@@ -84,6 +84,8 @@ export async function materializeHu1994ElectoralProposal(input: {
   const proposals = db.collection<Hu1994ElectoralProposal>(HU_1994_PROPOSALS_COLLECTION);
   const prior = await proposals.findOne({ _id: ID }, { session });
   if (prior) {
+    if (!Number.isSafeInteger(prior.revision) || prior.revision < 1)
+      throw new Hu1994ElectoralConflict("Invalid electoral proposal revision");
     const bill = await db
       .collection<Bill>("bills")
       .findOne(
@@ -170,6 +172,14 @@ export async function authorizeHu1994ElectoralProposal(
   const proposals = db.collection<Hu1994ElectoralProposal>(HU_1994_PROPOSALS_COLLECTION);
   const proposal = await proposals.findOne({ _id: ID, status: "open" }, { session });
   if (!proposal || !(await availability(db, game, turn, session)).available) return false;
+  if (
+    !Number.isSafeInteger(proposal.revision) ||
+    proposal.revision < 1 ||
+    !Number.isSafeInteger(turn) ||
+    turn < 1 ||
+    !Number.isFinite(now.getTime())
+  )
+    throw new Hu1994ElectoralConflict("Invalid electoral authorization revision or clock");
   const bill = await db.collection<Bill>("bills").findOne(
     {
       _id: proposal.billId,
@@ -248,7 +258,7 @@ async function rebindHu1994PrimaryCohorts(db: Db, turn: number, now: Date, sessi
   });
   if (!candidates.length) return;
   const receipts = await db
-    .collection("hu1991AssemblyCounts")
+    .collection<{ _id: string }>("hu1991AssemblyCounts")
     .find(
       {
         _id: { $in: candidates.map((row) => row.hungarianAssemblyRound!.receiptId) },
