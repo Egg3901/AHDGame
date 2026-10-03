@@ -45,7 +45,7 @@ export default function BulgarianConstitutionalDecisionPanel() {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, action }),
+        body: JSON.stringify(action === "introduce" ? { kind } : { kind, action }),
       });
       const body = (await response.json()) as {
         billId?: string;

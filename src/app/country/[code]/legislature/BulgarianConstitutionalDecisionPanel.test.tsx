@@ -93,7 +93,75 @@ describe("Bulgarian constitutional decision controls", () => {
     await screen.findByRole("alert");
     expect(push).not.toHaveBeenCalled();
     await waitFor(() =>
-      expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(false)
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Introduce the constitution draft",
+          }) as HTMLButtonElement
+        ).disabled
+      ).toBe(false)
     );
+  });
+  it("shows pending collective signature progress without navigating to a nonexistent bill", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            decision: {
+              available: true,
+              reason: "available",
+              proposal: null,
+              initiative: { support: 98, required: 100, canIntroduce: false },
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ initiative: { support: 99, required: 100, canIntroduce: false } }),
+          { status: 202 }
+        )
+      );
+    vi.stubGlobal("fetch", fetcher);
+    show();
+    await screen.findByText("Collective initiative: 98 of 100 required deputy signatures.");
+    fireEvent.click(await screen.findByRole("button", { name: "Endorse the collective draft" }));
+    await screen.findByText("Collective initiative: 99 of 100 required deputy signatures.");
+    expect(push).not.toHaveBeenCalled();
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
+      kind: "constitution1991",
+      action: "endorse",
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("opens the normal bill when the collective signature reaches its threshold", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            decision: {
+              available: true,
+              reason: "available",
+              proposal: null,
+              initiative: { support: 99, required: 100, canIntroduce: false },
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            billId: "collective-bill",
+            initiative: { support: 100, required: 100, canIntroduce: true },
+          }),
+          { status: 201 }
+        )
+      );
+    vi.stubGlobal("fetch", fetcher);
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Endorse the collective draft" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/congress/bills/collective-bill"));
   });
 });
