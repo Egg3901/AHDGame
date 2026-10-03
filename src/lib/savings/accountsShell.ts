@@ -16,6 +16,7 @@ import type { SavingsHolder } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
+import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { DEPOSIT_INSURANCE_SPENDING_KEY } from "@/lib/banking/depositBookReturn";
@@ -125,12 +126,23 @@ export async function loadHolderSnapshot(
   options: { ownerId?: ObjectId; withCeiling?: boolean } = {}
 ): Promise<HolderSnapshot | { error: string; code?: "missing_bank" }> {
   if (!isBankHolder(holder)) {
+    // Savings held at the central bank are paid out of its household pool, so
+    // the rules need that figure to refuse an oversized withdrawal up front
+    // instead of failing at the guarded debit (ticket 1364).
+    const centralBank = await db
+      .collection<CentralBank>("centralBanks")
+      .findOne(
+        { _id: getBankId(getCountryIdForCurrency(currency)) },
+        { projection: { externalBroadMoney: 1 } }
+      );
+    const pool = centralBank?.externalBroadMoney;
     return {
       holder: CENTRAL_BANK_HOLDER,
       cash: 0,
       acceptsDeposits: true,
       playerDeposits: 0,
       active: true,
+      ...(typeof pool === "number" && Number.isFinite(pool) ? { payoutCapacity: pool } : {}),
     };
   }
   if (!ObjectId.isValid(holder) || holder.length !== 24)
