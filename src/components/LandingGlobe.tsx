@@ -1724,7 +1724,7 @@ export function LandingGlobe({
           </div>
         </>
       ) : (
-        <div className="border-t border-card-border bg-card/50 p-4 backdrop-blur-sm">
+        <div className="border-t border-card-border bg-card p-4">
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs text-muted">
             {TIER_ORDER.map((tier) => (
               <TierLegendSwatch key={tier} tier={tier} />
@@ -1796,7 +1796,7 @@ export function LandingGlobe({
             aria-live="polite"
             aria-labelledby={`showcase-${showcaseEntry.id}`}
           >
-            <div className="overflow-hidden rounded-xl border border-card-border bg-card/90 shadow-2xl backdrop-blur-md">
+            <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-2xl">
               <div className="relative h-20 w-full overflow-hidden">
                 <Image
                   src={cdnStatic("landing", showcaseEntry.imageSlug ?? "newsroom")}

@@ -105,9 +105,7 @@ export function ElectionTimerForm({
   return (
     <div className="mb-3 rounded-lg border border-primary/30 bg-card p-3">
       <div className="mb-3 flex items-center gap-2">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-primary">
-          Modify Timers
-        </h3>
+        <h3 className="text-sm font-semibold text-primary">Modify timers</h3>
         <span className="rounded bg-primary/15 px-2 py-0.5 text-[9px] text-primary">
           {isGlobal ? "Applies to all countries" : `${COUNTRY_CONFIGS[selectedCountry]?.name} only`}
         </span>

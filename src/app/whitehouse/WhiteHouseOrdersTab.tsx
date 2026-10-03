@@ -216,7 +216,7 @@ export function WhiteHouseOrdersTab({ countryId }: Props) {
 
       {data.history.length > 0 && (
         <section className="pt-2">
-          <h3 className="text-xs uppercase tracking-widest text-muted mb-2">Recent orders</h3>
+          <h3 className="text-sm text-muted mb-2">Recent orders</h3>
           <ul className="space-y-1.5">
             {data.history.map((o) => (
               <li

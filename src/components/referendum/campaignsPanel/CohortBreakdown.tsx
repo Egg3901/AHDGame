@@ -72,9 +72,7 @@ export function CohortBreakdown({
   return (
     <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          Where the votes are
-        </h2>
+        <h2 className="text-sm font-semibold text-muted">Where the votes are</h2>
         <span className="text-[11px] text-muted">tap a group to target your spend</span>
       </div>
       {rows.length === 0 ? (

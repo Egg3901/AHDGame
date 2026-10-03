@@ -60,9 +60,7 @@ export function RegionReferendumCampaign({
 
   return (
     <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-amber-600">
-        {noun} Referendum — Public Campaign
-      </h2>
+      <h2 className="text-sm font-semibold text-amber-600">{noun} referendum: public campaign</h2>
       <div className="mt-3 space-y-2">
         <div className="flex justify-between text-xs text-muted">
           <span>Yes {yes}%</span>

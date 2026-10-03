@@ -145,9 +145,7 @@ export function CurrencyWallet({ wallet, variant, onSavingsUpdated }: Props) {
   return (
     <div className="rounded-xl border border-card-border bg-card shadow-sm">
       <div className="flex flex-col gap-2 border-b border-card-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-          Currency Wallet
-        </h3>
+        <h3 className="text-sm font-bold text-foreground">Currency wallet</h3>
         {showPnlChrome && hasLiveRates && baseRates && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted">

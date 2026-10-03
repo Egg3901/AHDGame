@@ -53,23 +53,12 @@ export function SeatOutcomeHeadline({
         ? `${leader.candidate.characterName} ${isEnded ? "won" : "leads with"} ${leader.seats} of ${totalSeats} seat${totalSeats === 1 ? "" : "s"}`
         : `${totalSeats} seat${totalSeats === 1 ? "" : "s"} up for election`;
 
-  const accent = you
-    ? (colorMap.get(you.id) ?? "#888")
-    : leader
-      ? (colorMap.get(leader.candidate.id) ?? "#888")
-      : undefined;
-
   return (
-    <Card className="mb-4" accentColor={accent}>
-      <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
+    <Card className="mb-4">
+      <div className="text-xs font-medium text-muted">
         {isEnded ? "Final seat allocation" : "Projected seat allocation"}
       </div>
-      <div
-        className="mt-1 text-2xl font-bold sm:text-3xl"
-        style={accent ? { color: accent } : undefined}
-      >
-        {headline}
-      </div>
+      <div className="mt-1 text-2xl font-bold sm:text-3xl">{headline}</div>
 
       <div className="mt-4 flex gap-0.5" role="img" aria-label={headline}>
         {blocks.map((b) => (

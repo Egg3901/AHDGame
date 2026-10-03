@@ -61,9 +61,7 @@ export function CategoryDetailView({
           <CategoryIcon icon={CATEGORY_ICONS[category.id] ?? "library"} className="h-6 w-6" />
         </span>
         <div className="min-w-[200px] flex-1">
-          <h2 className="font-display text-heading-lg font-bold text-foreground">
-            {category.displayName}
-          </h2>
+          <h2 className="text-heading-lg font-bold text-foreground">{category.displayName}</h2>
           <div className="mt-0.5 text-body-sm text-muted">
             {data.countryDisplayName} · seven metrics spanning the ideological range
           </div>
@@ -161,7 +159,7 @@ export function CategoryDetailView({
               <span>Mixed</span>
               <span>Strong Right</span>
             </div>
-            <p className="mt-2.5 text-body-xs leading-normal text-muted">
+            <p className="mt-2.5 text-body-sm leading-normal text-muted">
               Position marks each metric&apos;s political association. Bar height and color mark its
               objective performance — the two are independent.
             </p>

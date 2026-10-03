@@ -115,9 +115,7 @@ export function ReferendumConsentCard({
 
   return (
     <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-amber-600">
-        Referendums
-      </h2>
+      <h2 className="text-sm font-semibold text-amber-600">Referendums</h2>
       {error && (
         <div className="mt-3 rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
           {error}

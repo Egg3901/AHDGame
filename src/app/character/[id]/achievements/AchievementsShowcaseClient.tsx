@@ -116,7 +116,7 @@ export function AchievementsShowcaseClient({
             <p className="text-body-sm font-semibold uppercase tracking-widest text-primary">
               Achievement showcase
             </p>
-            <h1 className="mt-1 font-display text-display text-foreground">
+            <h1 className="mt-1 text-display text-foreground">
               {characterName}&apos;s achievements
             </h1>
             <p className="mt-2 text-muted">
@@ -144,7 +144,7 @@ export function AchievementsShowcaseClient({
 
       {nearlyThere.length > 0 && (
         <section>
-          <h2 className="font-display text-heading-lg text-foreground">Nearly there</h2>
+          <h2 className="text-heading-lg text-foreground">Nearly there</h2>
           <p className="mt-1 text-body text-muted">The closest achievements still in reach.</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {nearlyThere.map((item) => {
@@ -188,7 +188,7 @@ export function AchievementsShowcaseClient({
         if (!categoryItems.length) return null;
         return (
           <section key={category}>
-            <h2 className="font-display text-heading-lg text-foreground">{LABELS[category]}</h2>
+            <h2 className="text-heading-lg text-foreground">{LABELS[category]}</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {categoryItems.map((item) => {
                 const hidden = !item.earned && item.isHidden;

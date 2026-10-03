@@ -368,7 +368,7 @@ function WikiFullListSection({
     <section id={id} className="scroll-mt-24">
       <div className="mb-3 flex items-end justify-between gap-3 border-b border-card-border pb-2">
         <div>
-          <h3 className="font-serif text-lg font-bold text-foreground">{title}</h3>
+          <h3 className="text-lg font-bold text-foreground">{title}</h3>
           <p className="mt-1 text-sm text-muted">{description}</p>
         </div>
         <span className="shrink-0 text-xs text-muted tabular-nums">
@@ -503,9 +503,7 @@ export default async function WikiOverviewPage({
           <aside className="hidden lg:block space-y-6">
             <div className="sticky top-20 space-y-6">
               <nav className="space-y-1">
-                <h3 className="mb-3 px-3 text-xs font-bold uppercase tracking-wider text-muted">
-                  Game Content
-                </h3>
+                <h3 className="mb-3 px-3 text-sm font-bold text-muted">Game content</h3>
                 {officialCategories.map((category) => (
                   <Link
                     key={category.id}
@@ -525,9 +523,7 @@ export default async function WikiOverviewPage({
                 {communityCategories.length > 0 && (
                   <>
                     <div className="pt-3 pb-1">
-                      <h3 className="px-3 text-xs font-bold uppercase tracking-wider text-muted">
-                        Community
-                      </h3>
+                      <h3 className="px-3 text-sm font-bold text-muted">Community</h3>
                     </div>
                     {communityCategories.map((category) => (
                       <Link
@@ -557,7 +553,7 @@ export default async function WikiOverviewPage({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="section-label mb-3">Documentation</p>
-                  <h1 className="mb-2 font-serif text-3xl font-bold tracking-tight text-foreground">
+                  <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">
                     Game wiki
                   </h1>
                 </div>
@@ -583,7 +579,7 @@ export default async function WikiOverviewPage({
             <section className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
               <div className="mb-4">
                 <p className="section-label mb-1">Start with a route</p>
-                <h2 className="font-serif text-xl font-bold text-foreground">Learning paths</h2>
+                <h2 className="text-xl font-bold text-foreground">Learning paths</h2>
                 <p className="mt-1 text-sm text-muted">
                   Ordered reading lists for your first campaign, economic play, advanced politics,
                   and war.
@@ -610,7 +606,7 @@ export default async function WikiOverviewPage({
 
             {/* Spotlight */}
             <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
-              <h2 className="mb-4 font-serif text-base font-bold text-foreground">Spotlight</h2>
+              <h2 className="mb-4 text-base font-bold text-foreground">Spotlight</h2>
               <div className="grid gap-6 sm:grid-cols-2">
                 {/* Recently Added */}
                 <div>
@@ -650,7 +646,7 @@ export default async function WikiOverviewPage({
               className="scroll-mt-24 rounded-xl border border-card-border bg-card p-6 shadow-sm"
             >
               <div className="mb-4 flex items-center justify-between gap-4">
-                <h2 className="font-serif text-base font-bold text-foreground">Guides</h2>
+                <h2 className="text-base font-bold text-foreground">Guides</h2>
                 <span className="text-xs text-muted">
                   Task-first walkthroughs: what to click, in what order
                 </span>
@@ -682,7 +678,7 @@ export default async function WikiOverviewPage({
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="section-label mb-1">Your pages</p>
-                  <h2 className="mb-1 font-serif text-xl font-bold text-foreground">
+                  <h2 className="mb-1 text-xl font-bold text-foreground">
                     Write a wiki page for yourself or your corporation
                   </h2>
                   <p className="max-w-2xl text-sm text-muted">
@@ -749,7 +745,7 @@ export default async function WikiOverviewPage({
 
             {/* Browse Topics */}
             <div>
-              <h2 className="mb-4 font-serif text-lg font-bold text-foreground border-b border-card-border pb-2">
+              <h2 className="mb-4 text-lg font-bold text-foreground border-b border-card-border pb-2">
                 Browse topics
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -776,7 +772,7 @@ export default async function WikiOverviewPage({
             {/* Full Page Index */}
             <div className="space-y-8">
               <div className="border-b border-card-border pb-2">
-                <h2 className="font-serif text-lg font-bold text-foreground">Full page list</h2>
+                <h2 className="text-lg font-bold text-foreground">Full page list</h2>
                 <p className="mt-1 text-sm text-muted">
                   Every wiki entry grouped by how it is maintained.
                 </p>

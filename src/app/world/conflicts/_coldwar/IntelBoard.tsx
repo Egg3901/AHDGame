@@ -19,7 +19,7 @@ import {
 import type { Side } from "./proxyWar";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 type Cable = { c: string; t: string };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -182,7 +182,7 @@ export function IntelBoard({ side }: { side: Side }) {
             <h1
               style={{
                 margin: 0,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 32,
                 lineHeight: 1,
@@ -225,7 +225,7 @@ export function IntelBoard({ side }: { side: Side }) {
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -259,7 +259,7 @@ export function IntelBoard({ side }: { side: Side }) {
               <div
                 style={{
                   marginTop: 6,
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontWeight: 700,
                   fontSize: 24,
                   lineHeight: 1,
@@ -477,7 +477,7 @@ function Dossier({
           <h2
             style={{
               margin: 0,
-              fontFamily: serif,
+              fontFamily: headingFont,
               fontWeight: 700,
               fontSize: 22,
               color: "#f3f1ea",

@@ -66,7 +66,7 @@ const GUIDES = [
     href: "/guides/bonds",
     title: "Bonds",
     description:
-      "How bonds work from the ground up - face value, coupons, maturity, the price/rate relationship, sovereign vs corporate bonds, credit ratings, and defaults.",
+      "How bonds work from the ground up: face value, coupons, maturity, the price/rate relationship, sovereign vs corporate bonds, credit ratings, and defaults.",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
@@ -83,7 +83,7 @@ const GUIDES = [
     href: "/guides/commodities",
     title: "Commodities",
     description:
-      "How the 28-commodity market works - supply/demand pricing, margin effects, what every sector produces and consumes, operating strategies, and chain dependencies.",
+      "How the 28-commodity market works: supply/demand pricing, margin effects, what every sector produces and consumes, operating strategies, and chain dependencies.",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path

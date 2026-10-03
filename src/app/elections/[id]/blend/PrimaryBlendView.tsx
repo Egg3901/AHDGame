@@ -55,14 +55,13 @@ function PartyButton({ p, onSelect }: { p: PrimaryPartyVM; onSelect: () => void 
         }}
       />
       <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-        <span style={{ display: "block", fontFamily: FONT.serif, fontSize: 14, fontWeight: 600 }}>
+        <span style={{ display: "block", fontFamily: FONT.sans, fontSize: 14, fontWeight: 600 }}>
           {p.name}
         </span>
         <span
           style={{
             display: "block",
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
+            fontFamily: FONT.sans,
             fontSize: 12,
             color: BLEND.mutedDim,
           }}
@@ -222,7 +221,7 @@ function CalendarWaves({
               padding: "10px 0",
             }}
           >
-            <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{k.label}</span>
+            <span style={{ fontFamily: FONT.sans, fontSize: 14 }}>{k.label}</span>
             <span
               style={{
                 fontFamily: FONT.mono,
@@ -427,7 +426,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               <span
                 style={{
                   display: "block",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 17,
                   fontWeight: 600,
                   color: c.advancing ? BLEND.ink : BLEND.muted,
@@ -439,8 +438,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                 style={{
                   display: "block",
                   marginTop: 1,
-                  fontFamily: FONT.serif,
-                  fontStyle: "italic",
+                  fontFamily: FONT.sans,
                   fontSize: 13,
                   color: BLEND.mutedDim,
                 }}
@@ -451,7 +449,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
           </span>
           <span
             style={{
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 13,
               fontWeight: 600,
               color: c.advancing ? BLEND.positive : BLEND.mutedDim,
@@ -526,7 +524,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               justifyContent: "space-between",
               paddingBottom: 9,
               borderBottom: `1px solid ${BLEND.hairline}`,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 10,
               letterSpacing: ".2em",
               textTransform: "uppercase",
@@ -541,7 +539,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
           <div
             style={{
               marginTop: 11,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 22,
               fontWeight: 600,
               letterSpacing: "-0.02em",
@@ -568,7 +566,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
             <p
               style={{
                 margin: "0 0 18px",
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 13.5,
                 lineHeight: 1.55,
                 color: BLEND.muted,
@@ -583,7 +581,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               <h2
                 style={{
                   margin: "0 0 12px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -599,7 +597,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               <h2
                 style={{
                   margin: "24px 0 4px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -609,7 +607,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               <p
                 style={{
                   margin: "0 0 12px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 13.5,
                   lineHeight: 1.55,
                   color: BLEND.muted,
@@ -630,7 +628,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               <h2
                 style={{
                   margin: "24px 0 8px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -652,7 +650,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
           ) : null}
 
           <h2
-            style={{ margin: "24px 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+            style={{ margin: "24px 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
           >
             The field
           </h2>
@@ -669,7 +667,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                   gap: 8,
                 }}
               >
-                <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600 }}>
+                <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>
                   {c.name}
                 </span>
                 <span style={{ fontFamily: FONT.mono, fontSize: 14 }}>{c.pct}%</span>
@@ -694,7 +692,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                   color: BLEND.mutedDim,
                 }}
               >
-                <span style={{ fontFamily: FONT.serif }}>{c.statusText}</span>
+                <span style={{ fontFamily: FONT.sans }}>{c.statusText}</span>
                 <span style={{ fontFamily: FONT.mono }}>
                   {c.delegates
                     ? `${c.delegates} proj.${c.delegatesAwarded ? ` · ${c.delegatesAwarded} won` : ""}`
@@ -780,7 +778,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                     <div
                       style={{
                         marginTop: 3,
-                        fontFamily: FONT.serif,
+                        fontFamily: FONT.sans,
                         fontSize: 15,
                         fontWeight: 600,
                         color: vm.you.statusColor,
@@ -803,7 +801,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                         { k: "Delegates", v: vm.you.delegates ?? "—", c: undefined },
                       ].map((r) => (
                         <div key={r.k} style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontFamily: FONT.serif, color: BLEND.muted }}>{r.k}</span>
+                          <span style={{ fontFamily: FONT.sans, color: BLEND.muted }}>{r.k}</span>
                           <span style={{ fontFamily: FONT.mono, color: r.c }}>{r.v}</span>
                         </div>
                       ))}
@@ -816,7 +814,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                             borderTop: `1px solid ${BLEND.hairline}`,
                           }}
                         >
-                          <span style={{ fontFamily: FONT.serif, color: BLEND.muted }}>
+                          <span style={{ fontFamily: FONT.sans, color: BLEND.muted }}>
                             To clinch
                           </span>
                           <span style={{ fontFamily: FONT.mono }}>{vm.you.toClinch}</span>
@@ -828,7 +826,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                   <p
                     style={{
                       margin: "10px 0 0",
-                      fontFamily: FONT.serif,
+                      fontFamily: FONT.sans,
                       fontSize: 13.5,
                       lineHeight: 1.55,
                       color: BLEND.muted,

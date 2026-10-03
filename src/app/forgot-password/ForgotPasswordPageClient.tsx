@@ -58,7 +58,7 @@ export default function ForgotPasswordPageClient() {
         <section className="relative overflow-hidden rounded-xl border border-card-border bg-card p-5 shadow-panel sm:p-8">
           <div className="mb-7 border-b border-card-border pb-6">
             <SectionLabel as="p">Account</SectionLabel>
-            <h1 className="mt-1 font-display text-display font-semibold tracking-tight text-foreground">
+            <h1 className="mt-1 text-display font-semibold tracking-tight text-foreground">
               Forgot password
             </h1>
             <p className="mt-2 text-body text-muted">

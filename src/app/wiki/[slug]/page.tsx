@@ -333,9 +333,7 @@ function GeneratedOfficeWikiPage({
         <div className="space-y-8">
           {page.tenureGroups.map((group) => (
             <div key={`${group.iteration.type}-${group.iteration.number}`}>
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">
-                {group.label}
-              </h3>
+              <h3 className="mb-3 text-sm font-semibold text-primary">{group.label}</h3>
               {group.entries.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[680px] text-sm">
@@ -466,9 +464,7 @@ async function RelatedPagesFooter({
 
   return (
     <footer className="mt-12 border-t border-card-border pt-6">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
-        Related pages
-      </h3>
+      <h3 className="mb-3 text-sm font-semibold text-muted">Related pages</h3>
       <div className="flex flex-wrap gap-2">
         {scored.map(({ slug, title }) => (
           <Link

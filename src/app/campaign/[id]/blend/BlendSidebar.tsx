@@ -94,7 +94,7 @@ export function RunningMateBlock({
           gap: 10,
         }}
       >
-        <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600, minWidth: 0 }}>
+        <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600, minWidth: 0 }}>
           {vm.ticket.runningMateName ?? "No running mate named"}
         </span>
         {canManageTicket ? (
@@ -121,8 +121,7 @@ export function RunningMateBlock({
       <div
         style={{
           marginTop: 2,
-          fontFamily: FONT.serif,
-          fontStyle: "italic",
+          fontFamily: FONT.sans,
           fontSize: 13,
           color: BLEND.mutedDim,
         }}
@@ -163,8 +162,7 @@ export function SupportBlock({
       <div
         style={{
           marginTop: 3,
-          fontFamily: FONT.serif,
-          fontStyle: "italic",
+          fontFamily: FONT.sans,
           fontSize: 12.5,
           color: BLEND.mutedDim,
         }}
@@ -178,7 +176,7 @@ export function SupportBlock({
       <div
         style={{
           marginTop: 2,
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 12.5,
           lineHeight: 1.5,
           color: BLEND.mutedDim,
@@ -293,8 +291,7 @@ export function SupportBlock({
             <div
               style={{
                 marginTop: 7,
-                fontFamily: FONT.serif,
-                fontStyle: "italic",
+                fontFamily: FONT.sans,
                 fontSize: 12.5,
                 color: BLEND.mutedDim,
               }}
@@ -359,7 +356,7 @@ export function ManagersBlock({
       <p
         style={{
           margin: "6px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 12.5,
           lineHeight: 1.5,
           color: BLEND.mutedDim,
@@ -372,8 +369,7 @@ export function ManagersBlock({
         <p
           style={{
             margin: "8px 0 0",
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
+            fontFamily: FONT.sans,
             fontSize: 13,
             color: BLEND.mutedDim,
           }}
@@ -394,9 +390,7 @@ export function ManagersBlock({
                 padding: "5px 9px",
               }}
             >
-              <span style={{ fontFamily: FONT.serif, fontSize: 13, fontWeight: 600 }}>
-                {m.name}
-              </span>
+              <span style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 600 }}>{m.name}</span>
               {canManageTicket ? (
                 <button
                   type="button"
@@ -522,7 +516,7 @@ export function BlendSidebar({
             >
               {vm.strength.strength}
             </span>
-            <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
+            <span style={{ fontFamily: FONT.sans, fontSize: 14, color: BLEND.muted }}>
               +{vm.strength.boostPct}% votes
             </span>
           </div>
@@ -535,7 +529,7 @@ export function BlendSidebar({
           <p
             style={{
               margin: "10px 0 14px",
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 13.5,
               lineHeight: 1.5,
               color: BLEND.muted,

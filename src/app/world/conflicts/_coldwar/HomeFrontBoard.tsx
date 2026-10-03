@@ -14,7 +14,7 @@ import {
 import type { Side } from "./proxyWar";
 
 const mono = "'IBM Plex Mono',monospace";
-const serif = "var(--font-geist-sans),system-ui,sans-serif";
+const headingFont = "var(--font-geist-sans),system-ui,sans-serif";
 
 /** Home Front (West) / Politburo (East) — the domestic politics of foreign policy. */
 export function HomeFrontBoard({ side }: { side: Side }) {
@@ -123,7 +123,7 @@ export function HomeFrontBoard({ side }: { side: Side }) {
             <h1
               style={{
                 margin: 0,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 32,
                 lineHeight: 1,
@@ -160,7 +160,7 @@ export function HomeFrontBoard({ side }: { side: Side }) {
             <div
               style={{
                 marginTop: 5,
-                fontFamily: serif,
+                fontFamily: headingFont,
                 fontWeight: 700,
                 fontSize: 34,
                 lineHeight: 1,
@@ -206,7 +206,9 @@ export function HomeFrontBoard({ side }: { side: Side }) {
               >
                 {s.label}
               </div>
-              <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 22, color: s.color }}>
+              <div
+                style={{ fontFamily: headingFont, fontWeight: 700, fontSize: 22, color: s.color }}
+              >
                 {s.value}
                 {s.suffix && <span style={{ fontSize: 12, color: "#8a8a9a" }}>{s.suffix}</span>}
               </div>

@@ -67,7 +67,7 @@ function EmbeddedParliamentaryResultsReady({
   return (
     <div className="mb-6 space-y-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">{title}</h2>
+        <h2 className="text-sm font-semibold text-muted">{title}</h2>
         <Link
           href={`/elections/${electionId}/results`}
           className="text-xs font-medium text-primary hover:underline"

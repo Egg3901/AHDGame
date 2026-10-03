@@ -64,7 +64,7 @@ export function PartyOverviewPanel({ party }: PartyOverviewPanelProps) {
                       />
                       <Link
                         href={`/character/${leader.sequentialId ?? leader.id}`}
-                        className="min-w-0 truncate text-heading-sm font-bold transition-colors group-hover:text-primary"
+                        className="min-w-0 line-clamp-2 break-words text-heading-sm font-bold transition-colors group-hover:text-primary"
                       >
                         {leader.name}
                       </Link>

@@ -438,8 +438,8 @@ export default function MetricsPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
-                        Interest Rate ({centralBankData.abbreviation})
+                      <h3 className="text-sm font-semibold text-muted">
+                        Interest rate ({centralBankData.abbreviation})
                       </h3>
                       <div className="mt-1 text-2xl font-bold tabular-nums text-foreground">
                         {(centralBankData.primeRate ?? 0).toFixed(2)}%
@@ -465,9 +465,7 @@ export default function MetricsPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
-                        Inflation Rate
-                      </h3>
+                      <h3 className="text-sm font-semibold text-muted">Inflation rate</h3>
                       <div
                         className={`mt-1 text-2xl font-bold tabular-nums ${
                           (centralBankData.currentInflation ?? 0) > 4

@@ -90,7 +90,7 @@ export function FiscalMechanicsNote({
           </p>
         </div>
       </div>
-      <p className="mt-3 border-t border-card-border pt-3 text-body-xs leading-relaxed text-muted">
+      <p className="mt-3 border-t border-card-border pt-3 text-body-sm leading-relaxed text-muted">
         Tax and spending settings change through enacted laws. Tax-rate changes move by at most{" "}
         {TAX_RATE_PHASE_IN_MAX_STEP_PP} percentage point
         {TAX_RATE_PHASE_IN_MAX_STEP_PP === 1 ? "" : "s"} per turn, so larger changes phase in rather

@@ -41,7 +41,7 @@ export function GotvDriveCard({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">GOTV Drive</h3>
+      <h3 className="text-sm font-semibold text-muted">GOTV drive</h3>
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-2xl font-bold tabular-nums">
           {budgetPercent != null ? `${budgetPercent.toFixed(1)}%` : "—"}

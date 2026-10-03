@@ -96,9 +96,7 @@ export function CabinetAdminTab({
   return (
     <div data-testid="cabinet-admin-tab" className="space-y-6">
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          Direct Appointment (Admin)
-        </h2>
+        <h2 className="text-sm font-semibold text-muted">Direct appointment (admin)</h2>
         <p className="mt-1 text-sm text-muted">
           Seats the character immediately, bypassing the normal appointment flow. Replaces the
           current holder if the seat is filled.
@@ -160,9 +158,7 @@ export function CabinetAdminTab({
       </section>
 
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          Seats (Admin)
-        </h2>
+        <h2 className="text-sm font-semibold text-muted">Seats (admin)</h2>
         <p className="mt-1 text-sm text-muted">
           Admin removal carries no cooldown. Reset Cooldown clears the 24-turn appointment cooldown
           on a seat so it can be filled again immediately.

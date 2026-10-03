@@ -927,7 +927,7 @@ export default function CreateCharacterPage() {
         header={header}
       />
 
-      <p className="mt-2 px-1 text-body-xs text-muted">
+      <p className="mt-2 px-1 text-body-sm text-muted">
         New here?{" "}
         <Link
           href="https://wiki.ahousedividedgame.com/getting-started"

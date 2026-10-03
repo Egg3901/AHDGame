@@ -18,7 +18,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { useTheaterState } from "./useTheaterState";
 
 const mono = MIL_FONT.mono;
-const serif = MIL_FONT.serif;
+const headingFont = MIL_FONT.heading;
 const FR = "#3b82f6"; // friendly
 const FRS = "#7ba3ec";
 const FRL = "#9cc0f5";
@@ -134,7 +134,7 @@ export function SituationBoardClient({
               <h1
                 style={{
                   margin: "6px 0 0",
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontSize: 34,
                   fontWeight: 700,
                   color: C.acc,
@@ -183,7 +183,7 @@ export function SituationBoardClient({
               </div>
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontSize: 28,
                   fontWeight: 700,
                   color: "#fff",
@@ -310,7 +310,7 @@ export function SituationBoardClient({
             >
               <div
                 style={{
-                  fontFamily: serif,
+                  fontFamily: headingFont,
                   fontSize: 20,
                   fontWeight: 700,
                   color: "#f3f1ea",
@@ -366,7 +366,7 @@ export function SituationBoardClient({
                       <div>
                         <Link
                           href={`/world/conflicts/${conflict.conflictId}`}
-                          style={{ color: "#f3f1ea", fontFamily: serif, fontWeight: 700 }}
+                          style={{ color: "#f3f1ea", fontFamily: headingFont, fontWeight: 700 }}
                         >
                           {conflict.name}
                         </Link>

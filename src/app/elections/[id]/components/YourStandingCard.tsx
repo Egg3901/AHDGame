@@ -55,20 +55,22 @@ export function YourStandingCard({ activeParties, advancingCount }: YourStanding
       : "Not advancing";
 
   const statusTone = guaranteed || isAdvancing ? "text-success" : "text-error";
-  const accent = me.campaignColor ?? group.partyColor;
 
   return (
-    <Card title="Your standing" accentColor={accent} className="mb-4">
+    <Card title="Your standing" className="mb-4">
       <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
         <div>
-          <div className="text-[10px] font-medium uppercase tracking-wider text-muted">Share</div>
-          <div className="text-3xl font-bold tabular-nums" style={{ color: accent }}>
-            {share.toFixed(1)}%
-          </div>
+          <div className="text-xs text-muted">Share</div>
+          <div className="text-3xl font-bold tabular-nums">{share.toFixed(1)}%</div>
         </div>
 
         <div>
-          <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
+          <div className="flex items-center gap-1.5 text-xs text-muted">
+            <span
+              aria-hidden
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: group.partyColor }}
+            />
             Rank in {group.partyName}
           </div>
           <div className="text-3xl font-bold tabular-nums">
@@ -78,7 +80,7 @@ export function YourStandingCard({ activeParties, advancingCount }: YourStanding
         </div>
 
         <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase tracking-wider text-muted">Status</div>
+          <div className="text-xs text-muted">Status</div>
           <div className={`text-lg font-semibold ${statusTone}`}>{statusLabel}</div>
         </div>
       </div>

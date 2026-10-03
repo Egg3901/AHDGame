@@ -197,9 +197,7 @@ export function PersuasionDrivers({
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          {t("persuasion.title")}
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">{t("persuasion.title")}</h3>
         <span className="text-[10px] uppercase tracking-wider text-muted">{stateId}</span>
       </div>
 

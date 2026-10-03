@@ -139,7 +139,7 @@ export function GermanQuestionManager() {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h3 className="font-serif text-lg text-foreground">The German Question</h3>
+        <h3 className="text-lg text-foreground">The German Question</h3>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           The settlement crisis over whether West Germany stays sovereign in NATO or reunifies into
           the Warsaw Pact. It is started from here and nowhere else — the turn loop advances a live

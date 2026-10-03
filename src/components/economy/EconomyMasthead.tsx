@@ -58,7 +58,7 @@ export function EconomyMasthead({
           {/* chop */}
           <div
             aria-hidden
-            className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "font-serif" : "font-mono"}`}
+            className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "" : "font-mono"}`}
             style={{
               width: 76,
               height: 76,
@@ -76,13 +76,13 @@ export function EconomyMasthead({
 
           <div className="min-w-0 flex-1">
             <div
-              className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em]"
+              className="whitespace-nowrap text-body-sm font-medium"
               style={{ color: "color-mix(in srgb, var(--stat-soft) 80%, transparent)" }}
             >
               {identity.registry}
             </div>
             <h1
-              className={`mt-1.5 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl ${isCjk ? "font-serif" : ""}`}
+              className={`mt-1.5 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl`}
             >
               {identity.title}
               {identity.titleEn && (
@@ -139,9 +139,7 @@ export function EconomyMasthead({
         {/* control bar: verdict reasoning */}
         {verdict && reasoning && (
           <div className="relative mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-white/10 pt-3.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-              Verdict
-            </span>
+            <span className="text-body-sm font-medium text-white/45">Verdict</span>
             <span className="text-[11.5px] text-white/65">{reasoning}</span>
           </div>
         )}

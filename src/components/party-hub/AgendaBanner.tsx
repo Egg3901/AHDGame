@@ -29,16 +29,18 @@ export function AgendaBanner({
 }) {
   if (!headline) return null;
 
-  const accentColor = partyColor ?? "var(--primary)";
-
   return (
-    <div
-      className="rounded-xl border border-card-border bg-card p-4 shadow-sm flex items-start gap-3"
-      style={{ borderLeftColor: accentColor, borderLeftWidth: 4 }}
-    >
+    <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm flex items-start gap-3">
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
-          {partyAbbreviation ? `${partyAbbreviation} National Agenda` : "National Agenda"}
+        <div className="flex items-center gap-1.5 mb-1 text-xs font-medium text-muted">
+          {partyColor ? (
+            <span
+              aria-hidden
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: partyColor }}
+            />
+          ) : null}
+          {partyAbbreviation ? `${partyAbbreviation} national agenda` : "National agenda"}
         </div>
         <p className="text-sm font-semibold leading-snug truncate">{headline}</p>
         {detail ? <p className="mt-1 text-xs text-muted leading-snug">{detail}</p> : null}
@@ -47,7 +49,7 @@ export function AgendaBanner({
         <button
           type="button"
           onClick={onEdit}
-          className="ml-2 shrink-0 rounded-md border border-card-border px-2 py-1 text-[10px] font-medium uppercase tracking-wider hover:bg-[var(--card-muted)]"
+          className="ml-2 shrink-0 rounded-md border border-card-border px-2 py-1 text-xs font-medium hover:bg-[var(--card-muted)]"
         >
           Edit
         </button>

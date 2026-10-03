@@ -132,7 +132,7 @@ export function StatuteBook({
               aria-expanded={!isCollapsed}
               className="flex w-full items-baseline justify-between gap-3 bg-card-muted px-5 py-3 text-left transition-colors hover:bg-card-elevated/40"
             >
-              <span className="font-serif text-heading-sm font-semibold">
+              <span className="text-heading-sm font-semibold">
                 Title {romanNumeral(index)} — {getDomainLabel(domain)}
               </span>
               <span className="shrink-0 font-mono text-[11px]">
@@ -164,7 +164,7 @@ export function StatuteBook({
                     className="grid grid-cols-1 gap-x-4 gap-y-2 border-t border-card-border/50 px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-baseline"
                   >
                     <div className="min-w-0">
-                      <div className="font-serif text-body-lg font-semibold text-foreground">
+                      <div className="text-body-lg font-semibold text-foreground">
                         {row.name}
                         {row.policyOptionName && (
                           <span className="text-muted"> — {row.policyOptionName}</span>

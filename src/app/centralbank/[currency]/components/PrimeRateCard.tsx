@@ -133,9 +133,7 @@ export function PrimeRateCard({
 
   return (
     <div className="min-w-0 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted">
-        Prime Rate
-      </h2>
+      <h2 className="mb-3 text-sm font-semibold text-muted">Prime rate</h2>
       <p className="text-4xl font-bold text-foreground">{(primeRate ?? 0).toFixed(2)}%</p>
 
       <div className="mt-4 rounded-lg border border-card-border bg-card-elevated px-3 py-2 text-xs text-muted space-y-1">

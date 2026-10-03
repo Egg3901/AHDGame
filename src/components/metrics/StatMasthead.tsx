@@ -80,7 +80,7 @@ export function StatMasthead({
           {/* seal / chop */}
           <div
             aria-hidden
-            className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "font-serif" : "font-mono"}`}
+            className={`flex shrink-0 items-center justify-center rounded-lg font-black ${isCjk ? "" : "font-mono"}`}
             style={{
               width: 76,
               height: 76,
@@ -98,13 +98,13 @@ export function StatMasthead({
 
           <div className="min-w-0 flex-1">
             <div
-              className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em]"
+              className="whitespace-nowrap text-body-sm font-medium"
               style={{ color: "color-mix(in srgb, var(--stat-soft) 80%, transparent)" }}
             >
               {identity.registry}
             </div>
             <h1
-              className={`mt-1.5 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl ${isCjk ? "font-serif" : ""}`}
+              className={`mt-1.5 text-2xl font-bold leading-[1.1] tracking-tight text-white sm:text-3xl`}
             >
               {title}
             </h1>
@@ -149,9 +149,7 @@ export function StatMasthead({
             key={i}
             className="flex min-w-[120px] flex-1 flex-col justify-between gap-1 px-4 py-3.5"
           >
-            <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-              {t.label}
-            </span>
+            <span className="whitespace-nowrap text-body-sm font-medium text-muted">{t.label}</span>
             <div className="flex flex-col">
               <span
                 className={`text-lg font-bold leading-tight tabular-nums ${t.tone === "accent" ? "" : toneClass(t.tone) || "text-foreground"}`}

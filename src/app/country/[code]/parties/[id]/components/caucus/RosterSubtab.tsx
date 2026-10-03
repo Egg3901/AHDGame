@@ -17,7 +17,7 @@ export function RosterSubtab({
   return (
     <div className="rounded-lg border border-card-border bg-card p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted">Roster</h3>
+        <h3 className="text-sm font-semibold text-muted">Roster</h3>
         <div className="flex gap-1">
           {(
             [

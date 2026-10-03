@@ -17,7 +17,7 @@ export default function StateError({
 
   return (
     <div className="min-h-[50vh] flex flex-col items-center justify-center px-6 py-12">
-      <div className="rounded-2xl border border-card-border bg-card/80 backdrop-blur-sm p-8 max-w-md text-center space-y-4 shadow-sm">
+      <div className="rounded-2xl border border-card-border bg-card p-8 max-w-md text-center space-y-4 shadow-sm">
         <h1 className="text-lg font-semibold text-foreground">Couldn&apos;t load state</h1>
         <p className="text-sm text-muted">
           This state page failed to load. There may be a temporary issue.

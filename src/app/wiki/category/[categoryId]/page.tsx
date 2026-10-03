@@ -50,7 +50,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
       <div className="mb-8">
         <p className="section-label mb-3">Category</p>
-        <h1 className="mb-2 font-serif text-3xl font-bold text-foreground">{category.name}</h1>
+        <h1 className="mb-2 text-3xl font-bold text-foreground">{category.name}</h1>
         <p className="text-lg text-muted">{category.description}</p>
       </div>
 

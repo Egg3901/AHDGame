@@ -106,9 +106,7 @@ export function ScoringConfigPanel({ config, cluster, onSaved, notify }: Scoring
     <div className="space-y-5 rounded-xl border border-card-border bg-card p-4 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-            Scoring config
-          </h3>
+          <h3 className="text-sm font-semibold text-muted">Scoring config</h3>
           <p className="mt-1 text-xs text-muted">
             Admin only. Weights feed the noisy-OR aggregate; guards are not editable.
           </p>

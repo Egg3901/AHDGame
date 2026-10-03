@@ -119,7 +119,7 @@ function TicketRows({ vm }: { vm: ResultsBlendVM }) {
               style={{
                 flex: 1,
                 minWidth: 0,
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 15,
                 fontWeight: 600,
               }}
@@ -175,7 +175,7 @@ function ClosestRows({ vm }: { vm: ResultsBlendVM }) {
             borderBottom: "1px solid rgba(34,34,47,.7)",
           }}
         >
-          <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{s.name}</span>
+          <span style={{ fontFamily: FONT.sans, fontSize: 14 }}>{s.name}</span>
           <span style={{ fontFamily: FONT.mono, fontSize: 11, color: s.color }}>{s.margin}</span>
         </div>
       ))}
@@ -255,7 +255,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
             borderBottom: "1px solid rgba(42,42,61,.6)",
           }}
         >
-          <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600 }}>{s.name}</span>
+          <span style={{ fontFamily: FONT.sans, fontSize: 16, fontWeight: 600 }}>{s.name}</span>
           <span
             style={{ textAlign: "right", fontFamily: FONT.mono, fontSize: 13, color: BLEND.muted }}
           >
@@ -266,7 +266,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 13.5,
               color: BLEND.muted,
             }}
@@ -320,7 +320,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
       >
         <div
           style={{
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12,
             letterSpacing: ".22em",
             textTransform: "uppercase",
@@ -348,7 +348,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
       <h1
         style={{
           margin: "10px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 52,
           lineHeight: 1,
           fontWeight: 600,
@@ -360,8 +360,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
       <div
         style={{
           marginTop: 11,
-          fontFamily: FONT.serif,
-          fontStyle: "italic",
+          fontFamily: FONT.sans,
           fontSize: 16,
           color: BLEND.muted,
         }}
@@ -391,7 +390,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
               justifyContent: "space-between",
               paddingBottom: 9,
               borderBottom: `1px solid ${BLEND.hairline}`,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 10,
               letterSpacing: ".2em",
               textTransform: "uppercase",
@@ -418,7 +417,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
           <div
             style={{
               marginTop: 7,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 30,
               lineHeight: 1,
               fontWeight: 600,
@@ -430,8 +429,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
           <div
             style={{
               marginTop: 8,
-              fontFamily: FONT.serif,
-              fontStyle: "italic",
+              fontFamily: FONT.sans,
               fontSize: 13.5,
               color: BLEND.muted,
             }}
@@ -455,7 +453,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
               <h2
                 style={{
                   margin: "22px 0 12px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -470,9 +468,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
               which is `hidden lg:block`. On a phone that left the board and a
               winner line with no per-ticket result at all. */}
           <div style={{ marginBottom: 22 }}>
-            <h2
-              style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
-            >
+            <h2 style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}>
               {route === "concluded" ? "The final tickets" : "The tickets"}
             </h2>
             <TicketRows vm={vm} />
@@ -481,7 +477,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
           {vm.closest.length > 0 ? (
             <div style={{ marginBottom: 22 }}>
               <h2
-                style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+                style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
               >
                 Closest states
               </h2>
@@ -492,7 +488,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
           {vm.showStates ? (
             <div>
               <h2
-                style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+                style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
               >
                 {route === "concluded" ? "State by state" : "Returns"}
               </h2>
@@ -510,7 +506,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
                 >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                     <i style={{ width: 8, height: 8, display: "block", background: s.dot }} />
-                    <span style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600 }}>
+                    <span style={{ fontFamily: FONT.sans, fontSize: 15, fontWeight: 600 }}>
                       {s.name}
                     </span>
                   </span>

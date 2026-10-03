@@ -119,7 +119,7 @@ export default function GlobeMetricPanel({
 
   return (
     <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none flex justify-center">
-      <div className="pointer-events-auto max-w-3xl w-full bg-card/95 backdrop-blur-md rounded-xl border border-card-border shadow-lg overflow-hidden">
+      <div className="pointer-events-auto max-w-3xl w-full bg-card rounded-xl border border-card-border shadow-lg overflow-hidden">
         {/* Top row: quick filters */}
         <div className="flex items-center gap-1 px-3 py-2 border-b border-card-border overflow-x-auto scrollbar-none">
           {blocsAvailable && (

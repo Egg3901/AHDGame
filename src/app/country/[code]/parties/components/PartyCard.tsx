@@ -47,7 +47,7 @@ export function PartyCard({
               countryId={party.countryId}
             />
             <div className="min-w-0">
-              <h3 className="truncate text-heading-sm font-bold transition-colors group-hover:text-primary">
+              <h3 className="line-clamp-2 break-words text-heading-sm font-bold transition-colors group-hover:text-primary">
                 {party.name}
               </h3>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">

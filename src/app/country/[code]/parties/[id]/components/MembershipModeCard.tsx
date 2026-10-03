@@ -131,8 +131,8 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
       {/* Pending requests */}
       {(mode === "approval" || pending.length > 0) && (
         <div className="mt-6 border-t border-card-border pt-6">
-          <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">
-            Pending Requests {pending.length > 0 && `(${pending.length})`}
+          <h3 className="text-sm font-semibold text-muted mb-3">
+            Pending requests {pending.length > 0 && `(${pending.length})`}
           </h3>
           {pending.length === 0 ? (
             <p className="text-sm text-muted italic">No pending join requests.</p>

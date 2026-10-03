@@ -2,8 +2,8 @@
 
 /**
  * One race card in the "Blend" region display: broadcast chrome (phase chip,
- * dark card, share bar) wrapped around an editorial count (serif verdict
- * headline, standfirst, per-seat serif rows).
+ * dark card, share bar) wrapped around an editorial count (verdict
+ * headline, standfirst, per-seat rows).
  *
  * The mockup is authored against this app's dark palette (#14141c / #1d1d2a /
  * #2a2a3d / #8f8f9d are the dark-theme values of `--background`, `--card`,
@@ -75,12 +75,12 @@ function CandidateRow({
   return (
     <div className="flex items-baseline gap-2 border-b border-dotted border-card-border/90 py-2.5">
       <span
-        className="w-[3px] shrink-0 self-stretch rounded-sm"
+        className="h-2 w-2 shrink-0 self-center rounded-full"
         style={{ background: row.color }}
         aria-hidden
       />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="min-w-0 truncate font-serif text-base text-foreground">
+        <span className="min-w-0 truncate text-base text-foreground">
           {row.name}
           {row.isYou && <span className="text-muted"> (you)</span>}
         </span>
@@ -93,14 +93,11 @@ function CandidateRow({
       <span className="w-9 shrink-0 text-right text-[10px] font-extrabold tracking-widest text-muted">
         {row.partyAbbr}
       </span>
-      <span
-        className="w-14 shrink-0 text-right font-serif text-lg font-bold tabular-nums"
-        style={{ color: row.color }}
-      >
+      <span className="w-14 shrink-0 text-right text-lg font-bold tabular-nums text-foreground">
         {row.pctStr}%
       </span>
       {showSeats && (
-        <span className="w-10 shrink-0 text-right font-serif text-[17px] font-bold tabular-nums text-foreground">
+        <span className="w-10 shrink-0 text-right text-[17px] font-bold tabular-nums text-foreground">
           {row.seatsCell}
         </span>
       )}
@@ -161,12 +158,10 @@ export function BlendRaceCard({
         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted">
           {card.kicker}
         </div>
-        <h3 className="mt-1.5 font-serif text-2xl font-bold leading-[1.18] tracking-tight text-foreground">
+        <h3 className="mt-1.5 text-2xl font-bold leading-[1.18] tracking-tight text-foreground">
           {card.verdict}
         </h3>
-        <p className="mt-2.5 font-serif text-[15px] leading-relaxed text-muted">
-          {card.standfirst}
-        </p>
+        <p className="mt-2.5 text-[15px] leading-relaxed text-muted">{card.standfirst}</p>
 
         {card.meta.length > 0 && (
           <div className="mt-4 flex flex-wrap items-baseline gap-x-[18px] gap-y-1.5 border-b border-card-border/80 pb-2.5">
@@ -191,16 +186,13 @@ export function BlendRaceCard({
           <div className="mt-4 flex flex-col gap-4">
             {card.primaryGroups.map((group) => (
               <div key={group.partyId}>
-                <div
-                  className="mb-2 flex items-baseline gap-2 border-b pb-1.5"
-                  style={{ borderColor: group.color }}
-                >
+                <div className="mb-2 flex items-center gap-2 border-b border-card-border pb-1.5">
                   <span
-                    className="text-[10px] font-extrabold uppercase tracking-[0.18em]"
-                    style={{ color: group.color }}
-                  >
-                    {group.label}
-                  </span>
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: group.color }}
+                    aria-hidden
+                  />
+                  <span className="text-xs font-semibold text-foreground">{group.label}</span>
                   <div className="flex-1" />
                   {/* Ballots accrue only over the primary's closing window and
                       only where the region has registration data, so the count
@@ -217,11 +209,11 @@ export function BlendRaceCard({
                     className="flex items-baseline gap-2.5 border-b border-dotted border-card-border/90 py-[7px]"
                   >
                     <span
-                      className="w-[3px] shrink-0 self-stretch rounded-sm"
+                      className="h-2 w-2 shrink-0 self-center rounded-full"
                       style={{ background: row.color }}
                       aria-hidden
                     />
-                    <span className="min-w-0 flex-1 truncate font-serif text-base text-foreground">
+                    <span className="min-w-0 flex-1 truncate text-base text-foreground">
                       {row.name}
                       {row.isYou && <span className="text-muted"> (you)</span>}
                     </span>
@@ -230,17 +222,14 @@ export function BlendRaceCard({
                         {row.votesStr}
                       </span>
                     )}
-                    <span
-                      className="w-[66px] shrink-0 text-right font-serif text-[19px] font-bold tabular-nums"
-                      style={{ color: row.color }}
-                    >
+                    <span className="w-[66px] shrink-0 text-right text-[19px] font-bold tabular-nums text-foreground">
                       {row.pctStr}%
                     </span>
                   </div>
                 ))}
               </div>
             ))}
-            <p className="text-[11px] italic leading-snug text-muted/70">
+            <p className="text-[11px] leading-snug text-muted/70">
               Each figure is a share of that party&apos;s own primary vote, not of the regional
               total.
             </p>
@@ -259,16 +248,17 @@ export function BlendRaceCard({
                   <span
                     key={row.candidateId}
                     className="inline-flex items-center gap-[7px] whitespace-nowrap rounded-lg border border-card-border bg-background px-2.5 py-1.5"
-                    style={{ borderLeft: `3px solid ${row.color}` }}
                   >
-                    <span className="font-serif text-sm font-bold text-foreground">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: row.color }}
+                      aria-hidden
+                    />
+                    <span className="text-sm font-bold text-foreground">
                       {row.name}
                       {row.isYou && <span className="text-muted"> (you)</span>}
                     </span>
-                    <span
-                      className="text-[10px] font-extrabold tracking-wider"
-                      style={{ color: row.color }}
-                    >
+                    <span className="text-[10px] font-extrabold tracking-wider text-muted">
                       {row.partyAbbr}
                     </span>
                   </span>
@@ -281,7 +271,7 @@ export function BlendRaceCard({
           </div>
         )}
 
-        {/* ── The count: share bar, then the serif per-candidate rows ── */}
+        {/* ── The count: share bar, then the per-candidate rows ── */}
         {card.showTally && (
           <>
             {card.segments.length > 0 && (
@@ -300,7 +290,7 @@ export function BlendRaceCard({
             )}
 
             <div className="mt-0.5 flex items-baseline gap-2 border-b border-card-border px-0 pb-1.5 pt-3.5 text-[9px] uppercase tracking-[0.14em] text-muted">
-              <span className="w-[3px] shrink-0" aria-hidden />
+              <span className="w-2 shrink-0" aria-hidden />
               <span className="min-w-0 flex-1">Candidate</span>
               <span className="w-9 shrink-0 text-right">Party</span>
               <span className="w-14 shrink-0 text-right">Share</span>
@@ -371,7 +361,7 @@ export function BlendRaceCard({
         )}
         <Link
           href={card.href}
-          className="border-b border-primary pb-0.5 font-serif text-sm italic text-primary transition-colors hover:border-primary/60 hover:text-primary/80"
+          className="border-b border-primary pb-0.5 text-sm text-primary transition-colors hover:border-primary/60 hover:text-primary/80"
         >
           Read the full count &rarr;
         </Link>

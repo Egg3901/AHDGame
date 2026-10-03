@@ -55,7 +55,7 @@ export function NationalMasthead({
 
           <div className="min-w-0 flex-1">
             <div
-              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              className="text-body-sm font-medium"
               style={{ color: hexToRgba(id.accentSoft, 0.8) }}
             >
               {id.registry}

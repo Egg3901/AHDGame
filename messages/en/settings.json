@@ -508,12 +508,12 @@
       "submitted": "Request submitted. A moderator will review it soon."
     },
     "achievements": {
-      "title": "Achievement Highlights",
+      "title": "Achievement highlights",
       "empty": "Earn achievements in the game to highlight them on your profile.",
       "intro": "Choose up to 5 achievements to display prominently on your profile. Leave empty for default display.",
       "selectedCount": "{count} / {max} selected",
       "saved": "Achievement highlights saved.",
-      "save": "Save Highlights"
+      "save": "Save highlights"
     },
     "notifications": {
       "title": "Notifications",
