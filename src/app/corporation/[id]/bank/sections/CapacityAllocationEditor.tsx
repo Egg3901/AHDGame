@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Slider } from "@/components/ui";
+import { Slider } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ShowToast } from "../types";
-import { Eyebrow } from "../components/BankSection";
+import { SmallButton } from "@/components/corporation/dense/DenseKit";
+import { BankPanel } from "../components/BankSection";
 
 export function CapacityAllocationEditor({
   corporationId,
@@ -84,61 +85,68 @@ export function CapacityAllocationEditor({
   };
 
   return (
-    <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
-      <div>
-        <Eyebrow kind="ceoControl" />
-        <h3 className="text-base font-semibold text-foreground">Deposit network share</h3>
-        <p className="text-sm text-muted">
-          Share of your financial-sector capacity running the branch network that holds deposits.
-          The rest produces financial services for the commodity market. Range 10% to 90%.
-        </p>
-      </div>
-      <p className="text-sm font-mono tabular-nums text-foreground">
-        Ceiling {formatBankMoney(depositCeiling, currency)}
-        {depositCeilingBinds && (
-          <span className="text-muted">
-            {" "}
-            · binds on {depositCeilingBinds === "equity" ? "12x equity" : "deposit network"}
-          </span>
-        )}
-      </p>
-      <label className="block space-y-2">
-        <div className="flex justify-between text-xs text-muted">
-          <span>Deposit network share</span>
-          <span className="font-mono tabular-nums">{(share * 100).toFixed(0)}%</span>
+    <BankPanel
+      kind="ceoControl"
+      title="Deposit network share"
+      actions={
+        canMutate ? (
+          <SmallButton tone="primary" onClick={() => void save()} disabled={busy}>
+            {busy ? "Saving..." : "Save allocation"}
+          </SmallButton>
+        ) : undefined
+      }
+    >
+      <div className="grid gap-x-8 gap-y-3 py-1.5 md:grid-cols-2">
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted">
+            Share of your financial-sector capacity running the branch network that holds deposits.
+            The rest produces financial services for the commodity market. Range 10% to 90%.
+          </p>
+          <p className="text-xs text-muted">
+            Ceiling{" "}
+            <span className="font-mono tabular-nums text-foreground">
+              {formatBankMoney(depositCeiling, currency)}
+            </span>
+            {depositCeilingBinds && (
+              <>, binds on {depositCeilingBinds === "equity" ? "12x equity" : "deposit network"}</>
+            )}
+          </p>
         </div>
-        <Slider
-          min={0.1}
-          max={0.9}
-          step={0.05}
-          value={share}
-          disabled={!canMutate}
-          onChange={(e) => setShare(parseFloat(e.target.value))}
-          aria-label="Deposit network share"
-        />
-        <p className="text-[10px] text-muted font-mono">
-          commodity {(100 - share * 100).toFixed(0)}% · branches {(share * 100).toFixed(0)}%
-        </p>
-        {previewCeiling != null && previewBinds != null ? (
-          <p className="text-[11px] text-muted">
-            At {(share * 100).toFixed(0)}% the ceiling would be{" "}
-            {formatBankMoney(previewCeiling, currency)}, binding on{" "}
-            {previewBinds === "equity" ? "12x book equity" : "deposit network"}. Every point moved
-            to branches is a point not producing financial-services output.
-          </p>
-        ) : (
-          <p className="text-[11px] text-muted">
-            Moving share to branches raises the branch-capacity half of the ceiling; the 12x-equity
-            half does not move. Every point moved to branches is a point not producing
-            financial-services output.
-          </p>
-        )}
-      </label>
-      {canMutate && (
-        <Button type="button" onClick={() => void save()} disabled={busy}>
-          {busy ? "Saving..." : "Save allocation"}
-        </Button>
-      )}
-    </section>
+        <label className="block min-w-0 space-y-1.5">
+          <span className="flex justify-between text-xs text-muted">
+            <span>Deposit network share</span>
+            <span className="font-mono tabular-nums text-foreground">
+              {(share * 100).toFixed(0)}%
+            </span>
+          </span>
+          <Slider
+            min={0.1}
+            max={0.9}
+            step={0.05}
+            value={share}
+            disabled={!canMutate}
+            onChange={(e) => setShare(parseFloat(e.target.value))}
+            aria-label="Deposit network share"
+          />
+          <span className="block font-mono text-[11px] text-muted">
+            commodity {(100 - share * 100).toFixed(0)}%, branches {(share * 100).toFixed(0)}%
+          </span>
+          {previewCeiling != null && previewBinds != null ? (
+            <span className="block text-[11px] text-muted">
+              At {(share * 100).toFixed(0)}% the ceiling would be{" "}
+              {formatBankMoney(previewCeiling, currency)}, binding on{" "}
+              {previewBinds === "equity" ? "12x book equity" : "deposit network"}. Every point moved
+              to branches is a point not producing financial-services output.
+            </span>
+          ) : (
+            <span className="block text-[11px] text-muted">
+              Moving share to branches raises the branch-capacity half of the ceiling; the
+              12x-equity half does not move. Every point moved to branches is a point not producing
+              financial-services output.
+            </span>
+          )}
+        </label>
+      </div>
+    </BankPanel>
   );
 }

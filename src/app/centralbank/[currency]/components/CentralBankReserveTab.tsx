@@ -105,7 +105,7 @@ export function CentralBankReserveTab({ currency }: Props) {
         </p>
       </div>
       <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-        <p className="text-3xl font-display font-bold tabular-nums text-foreground">
+        <p className="text-3xl font-bold tabular-nums text-foreground">
           {(data.reserveRatio * 100).toFixed(1)}%
         </p>
         <p className="text-xs text-muted font-mono">

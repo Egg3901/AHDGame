@@ -151,7 +151,7 @@ export function PositionMapView() {
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
       <div className="flex flex-col gap-3 border-b border-card-border py-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-serif text-2xl text-foreground">Position Editor</h1>
+          <h1 className="text-2xl text-foreground">Position Editor</h1>
           <p className="mt-0.5 text-sm text-muted">
             Author Layer-1 demographic positions, turnout, and archetype composition by state.
           </p>
@@ -214,7 +214,7 @@ export function PositionMapView() {
           <div>
             {selected ? (
               <div className="sticky top-4 rounded-xl border border-card-border bg-card p-4 shadow-card">
-                <h2 className="font-serif text-lg text-foreground">{selected.stateId}</h2>
+                <h2 className="text-lg text-foreground">{selected.stateId}</h2>
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted">Economic</span>

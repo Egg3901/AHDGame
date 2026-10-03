@@ -36,7 +36,7 @@ export const STAT_META: Record<StatKey, { label: string; blurb: string }> = {
   businessAcumen: {
     label: "Business Acumen",
     blurb:
-      "Lowers the growth cost of sectors in any corporation you run as CEO and softens the bite of high interest rates on that cost. Grows while you hold a CEO seat — faster when the corp is more profitable — and slips when you don't.",
+      "Lowers the growth cost of sectors in any corporation you run as CEO and softens the bite of high interest rates on that cost. Grows while you hold a CEO seat, faster when the corporation is more profitable, and slips when you don't.",
   },
   statecraft: {
     label: "Statecraft",

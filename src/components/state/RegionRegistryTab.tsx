@@ -103,9 +103,7 @@ export function RegionRegistryTab({
         <span className="inline-block -rotate-1 rounded border border-error px-2.5 py-0.5 font-mono text-body-xs uppercase tracking-widest text-error">
           Transmission interrupted
         </span>
-        <h2 className="mt-4 font-display text-heading-lg text-foreground">
-          Registry data unavailable
-        </h2>
+        <h2 className="mt-4 text-heading-lg text-foreground">Registry data unavailable</h2>
         <p className="mt-2 text-body text-muted">
           The {regionName} situation registry could not be reached. Figures shown elsewhere may be
           out of date. This does not affect stored historical series.

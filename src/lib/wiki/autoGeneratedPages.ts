@@ -8,8 +8,8 @@ import { resolveElectionYear } from "@/lib/utils/formatters";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
 import { getAllSeatSlugs } from "@/lib/wiki/seatData";
 import { getAllPartySlugs } from "@/lib/wiki/partyData";
-import { getEnabledCountryIds } from "@/lib/countryAccess";
-import type { GameIteration } from "@/lib/db/types/gameState";
+import { getEnabledCountryIds, getEnabledCountryIdsFromDb } from "@/lib/countryAccess";
+import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { getGameState } from "@/lib/gameState";
 import {
   realDateToTurn,
@@ -25,6 +25,11 @@ import {
   weekYearFromTurn,
 } from "@/lib/wiki/officeIteration";
 import { loadManualOfficeHistory, manualEntryToTenure } from "@/lib/wiki/manualOfficeHistory";
+import {
+  loadArchivedOfficeHistory,
+  mergeArchivedTenures,
+  writeArchivedOfficeHistory,
+} from "@/lib/wiki/officeHistoryArchive";
 import type {
   CabinetNomination,
   CongressLeader,
@@ -133,8 +138,8 @@ export interface GeneratedOfficePageData {
 // dynamically from `getEnabledCountryIds()` (DB-driven admin panel toggles).
 // The US is always included even when not explicitly enabled (it has no
 // `countryGameStates` document by default but should always have wiki pages).
-async function getOfficeCountries(): Promise<CountryId[]> {
-  const enabled = await getEnabledCountryIds();
+async function getOfficeCountries(db?: Db): Promise<CountryId[]> {
+  const enabled = db ? await getEnabledCountryIdsFromDb(db) : await getEnabledCountryIds();
   if (!enabled.includes("US" as CountryId)) enabled.push("US" as CountryId);
   return enabled;
 }
@@ -171,8 +176,9 @@ function officeSlug(title: string, countryId: CountryId): string {
   return slugify(fullTitle);
 }
 
-export async function getGeneratedOfficeDefinitions(): Promise<GeneratedOfficeDefinition[]> {
-  const officeCountries = await getOfficeCountries();
+/** Pass `db` to read enabled countries from that database instead of the app's. */
+export async function getGeneratedOfficeDefinitions(db?: Db): Promise<GeneratedOfficeDefinition[]> {
+  const officeCountries = await getOfficeCountries(db);
   const definitions: GeneratedOfficeDefinition[] = [];
 
   for (const countryId of officeCountries) {
@@ -573,7 +579,7 @@ function applyPartyLabels(
   }));
 }
 
-interface IterationContext {
+export interface IterationContext {
   current: GameIteration;
   startingYear: number;
   anchor: GameDateAnchor;
@@ -932,6 +938,104 @@ export function generatedOfficeDefaultContent(definition: GeneratedOfficeDefinit
   return `${definition.title} is the senior executive office of ${country.name}.${termText}${actionText}\n\nThis generated article records the office's incumbent and known tenure history. Leader transitions are pulled from country history events where available, with current office records used as a fallback until a full transition history accumulates.`;
 }
 
+type OfficeClockState = Pick<
+  GameState,
+  | "iteration"
+  | "startingYear"
+  | "currentTurn"
+  | "lastTurnProcessed"
+  | "preIteration"
+  | "preIterationTurns"
+> | null;
+
+export function iterationContextFor(gameState: OfficeClockState): IterationContext {
+  const startingYear = gameState?.startingYear ?? STARTING_YEAR;
+  return {
+    current: gameState?.iteration ?? { type: "Beta", number: 2 },
+    startingYear,
+    anchor: {
+      currentTurn: gameState?.currentTurn ?? 1,
+      lastTurnProcessed: gameState?.lastTurnProcessed ?? new Date(),
+      startingYear,
+      // The founding-phase clock. Office turns are stored raw, so without it
+      // every tenure date reads a game year ahead of the status bar (#1208).
+      preIterationActive: gameState?.preIteration?.active === true,
+      preIterationTurns: gameState?.preIterationTurns ?? 0,
+    },
+  };
+}
+
+function getOfficeHistory(
+  db: Db,
+  definition: GeneratedOfficeDefinition,
+  ctx: IterationContext
+): Promise<OfficeTenureEntry[]> {
+  return definition.kind === "cabinet"
+    ? getCabinetHistory(db, definition, ctx)
+    : definition.kind === "leadership"
+      ? getLeadershipHistory(db, definition, ctx)
+      : getExecutiveHistory(db, definition, ctx);
+}
+
+/**
+ * The finishing world's tenures for one office, ready to outlive it: only the
+ * outgoing iteration's rows, every open tenure closed at the final turn, and
+ * no profile link. Retired characters have no public page and NPPs are wiped,
+ * so a kept link would 404.
+ */
+export function closeOutgoingTenures(
+  entries: OfficeTenureEntry[],
+  ctx: IterationContext
+): OfficeTenureEntry[] {
+  const outgoing = iterationKey(ctx.current);
+  const finalTurn = ctx.anchor.currentTurn;
+  const finalWeekYear = weekYearFromTurn(finalTurn, ctx.startingYear, ctx.anchor);
+  return entries
+    .filter((entry) => entry.iteration && iterationKey(entry.iteration) === outgoing)
+    .map((entry) => {
+      const open = entry.endWeekYear == null;
+      return {
+        ...entry,
+        endWeekYear: open ? finalWeekYear : entry.endWeekYear,
+        endTurn: open ? finalTurn : entry.endTurn,
+        isCurrent: false,
+        profileHref: null,
+      };
+    });
+}
+
+/**
+ * Archive every generated office page's tenures before a reset wipes the
+ * office tables they are computed from. Runs against the OUTGOING world, after
+ * `freezeOfficeHistoryIterations` has stamped its rows, so party names and
+ * Week/Year resolve against the world that produced them. Returns rows written.
+ */
+export async function archiveOutgoingOfficeHistory(
+  db: Db,
+  outgoing: OfficeClockState,
+  archivedAt: Date
+): Promise<number> {
+  if (!outgoing?.iteration) return 0;
+  const ctx = iterationContextFor(outgoing);
+  const partyLabelsByCountry = new Map<CountryId, Map<string, string>>();
+  let written = 0;
+  for (const definition of await getGeneratedOfficeDefinitions(db)) {
+    let partyLabels = partyLabelsByCountry.get(definition.countryId);
+    if (!partyLabels) {
+      partyLabels = await loadPartyLabels(db, definition.countryId);
+      partyLabelsByCountry.set(definition.countryId, partyLabels);
+    }
+    const history = applyPartyLabels(await getOfficeHistory(db, definition, ctx), partyLabels);
+    written += await writeArchivedOfficeHistory(
+      db,
+      definition.slug,
+      closeOutgoingTenures(history, ctx),
+      archivedAt
+    );
+  }
+  return written;
+}
+
 export async function getGeneratedOfficePageData(
   slug: string
 ): Promise<GeneratedOfficePageData | null> {
@@ -945,36 +1049,27 @@ export async function getGeneratedOfficePageData(
 
   const db = await getDb();
   const gameState = await getGameState(db);
-  const currentIteration: GameIteration = gameState?.iteration ?? { type: "Beta", number: 2 };
-  const startingYear = gameState?.startingYear ?? STARTING_YEAR;
-  const ctx: IterationContext = {
-    current: currentIteration,
-    startingYear,
-    anchor: {
-      currentTurn: gameState?.currentTurn ?? 1,
-      lastTurnProcessed: gameState?.lastTurnProcessed ?? new Date(),
-      startingYear,
-    },
-  };
+  const ctx = iterationContextFor(gameState);
+  const currentIteration = ctx.current;
   const registry = gameState?.iterationHistory ?? [currentIteration];
 
-  const [editablePage, partyLabels, history, manual] = await Promise.all([
+  const [editablePage, partyLabels, history, manual, archived] = await Promise.all([
     db
       .collection<WikiPage>("wikiPages")
       .findOne({ slug, status: "published", private: { $ne: true } }, { projection: { _id: 1 } }),
     loadPartyLabels(db, definition.countryId),
-    definition.kind === "cabinet"
-      ? getCabinetHistory(db, definition, ctx)
-      : definition.kind === "leadership"
-        ? getLeadershipHistory(db, definition, ctx)
-        : getExecutiveHistory(db, definition, ctx),
+    getOfficeHistory(db, definition, ctx),
     loadManualOfficeHistory(db, definition),
+    loadArchivedOfficeHistory(db, definition.slug),
   ]);
 
   const labeledHistory = applyPartyLabels(history, partyLabels);
   const currentHolder = labeledHistory.find((entry) => entry.isCurrent) ?? null;
   const labeledManual = applyPartyLabels(manual.map(manualEntryToTenure), partyLabels);
-  const allEntries = [...labeledHistory, ...labeledManual];
+  // Archived rows were labelled by the world that produced them; this world's
+  // party ids mean something else, so they are not relabelled.
+  const earlierWorlds = mergeArchivedTenures(definition.slug, labeledHistory, archived);
+  const allEntries = [...labeledHistory, ...labeledManual, ...earlierWorlds];
 
   return {
     definition,

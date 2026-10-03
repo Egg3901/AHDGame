@@ -224,9 +224,7 @@ export function StatePartyHubBody({
     return (
       <div className="space-y-6">
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">
-            Party Resources
-          </h2>
+          <h2 className="text-sm font-semibold text-muted mb-4">Party resources</h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted">Treasury</span>

@@ -35,7 +35,7 @@ export function FourPowerWire({ lines }: { lines: DossierWireLine[] }) {
       </div>
 
       {lines.length === 0 ? (
-        <p className="py-3 font-mono text-body-xs text-muted">
+        <p className="py-3 font-mono text-body-sm text-muted">
           Nothing on the wire yet. The first play of the turn appears here.
         </p>
       ) : (

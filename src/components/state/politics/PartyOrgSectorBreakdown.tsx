@@ -25,9 +25,7 @@ export function PartyOrgSectorBreakdown({ partyOrg }: { partyOrg: PartyOrgDispla
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Party Organization
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Party organization</h3>
         <span className="text-[10px] italic opacity-60">
           Hover slices for detail · Contest preview Phase 3
         </span>

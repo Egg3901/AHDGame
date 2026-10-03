@@ -44,9 +44,7 @@ export function InstitutionCard({
     <section className="flex flex-col overflow-hidden rounded-lg border border-card-border bg-background">
       <header className="border-b border-card-border px-4 pb-3 pt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-serif text-heading-sm font-bold text-foreground">
-            {institution.name}
-          </h2>
+          <h2 className="text-heading-sm font-bold text-foreground">{institution.name}</h2>
           <span className="rounded border border-gold/35 px-1.5 py-0.5 font-mono text-body-xs font-bold tracking-widest text-gold">
             {institution.weightTag}
           </span>
@@ -97,7 +95,7 @@ export function InstitutionCard({
               </span>
             </div>
             {cap.maxed && (
-              <p className="mt-1 font-mono text-body-xs leading-relaxed text-warning">
+              <p className="mt-1 font-mono text-body-sm leading-relaxed text-warning">
                 The open floor has reached its limit on this category for this turn. Further
                 personal plays cost their action point but move nothing here until the next tick.
               </p>
@@ -111,8 +109,8 @@ export function InstitutionCard({
           <PlayButton key={play.id} play={play} onCommitted={onCommitted} />
         ))}
         {plays.length === 0 && (
-          <p className="rounded-md border border-dashed border-card-border p-3 font-mono text-body-xs leading-relaxed text-muted">
-            No play here from this seat — {institution.gateNote}
+          <p className="rounded-md border border-dashed border-card-border p-3 font-mono text-body-sm leading-relaxed text-muted">
+            No play here from this seat: {institution.gateNote}
           </p>
         )}
       </div>

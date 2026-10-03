@@ -96,11 +96,7 @@ export function CabinetOfficeLayout({
             {registry && (
               <div className="dossier-label whitespace-nowrap text-gov-soft/80">{registry}</div>
             )}
-            <h1
-              className={`mt-1.5 text-[22px] font-bold leading-[1.1] tracking-tight text-white sm:text-[26px] ${
-                identitySerif === "cjk" ? "font-serif" : ""
-              }`}
-            >
+            <h1 className="mt-1.5 text-[22px] font-bold leading-[1.1] tracking-tight text-white sm:text-[26px]">
               {positionName}
             </h1>
             <div className="mt-0.5 text-[13px] text-gov-soft/90">{department}</div>

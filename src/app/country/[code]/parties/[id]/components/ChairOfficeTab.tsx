@@ -237,9 +237,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Party Logo */}
           <div className="space-y-4 mb-8">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-              Party Logo
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Party logo</h3>
             <div className="flex items-center gap-6">
               <div className="shrink-0">
                 <PartyLogo
@@ -278,9 +276,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Party Color */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-              Party Color
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Party color</h3>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 <input
@@ -318,9 +314,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Discord Link */}
           <div className="mt-8 space-y-4 border-t border-card-border pt-6">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-              Party Discord
-            </h3>
+            <h3 className="text-sm font-semibold text-muted">Party Discord</h3>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <input
                 type="url"
@@ -357,9 +351,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
 
           {/* Preview */}
           <div className="mt-8 pt-6 border-t border-card-border">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4">
-              Preview
-            </h3>
+            <h3 className="text-sm font-semibold text-muted mb-4">Preview</h3>
             <div className="flex items-center gap-4 p-4 rounded-lg bg-background border border-card-border">
               <PartyLogo
                 partyId={party.id}
@@ -385,9 +377,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
           {/* Purge Member */}
           {PARTY_PURGE_ENABLED && (
             <div className="mt-8 pt-6 border-t border-card-border">
-              <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-2">
-                Purge Member
-              </h3>
+              <h3 className="text-sm font-semibold text-muted mb-2">Purge member</h3>
               <p className="text-xs text-muted mb-4">
                 Expel a member from the party. Costs you 25 infamy and half of their party
                 influence. 6-turn cooldown per expulsion.

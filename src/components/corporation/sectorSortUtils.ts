@@ -114,7 +114,7 @@ export function compareSectors(
       // the ordering contradicts the visible numbers.
       return (sectorDisplayRevenue(a) - sectorDisplayRevenue(b)) * sign;
     case "margin":
-      // The margin column shows the unsold-adjusted figure under plants and
+      // The margin column shows the net margin under plants and
       // the effective margin otherwise; sort on whichever the row shows.
       return (
         ((a.fillAdjustedMarginPct ?? a.effectiveProfitMargin) -

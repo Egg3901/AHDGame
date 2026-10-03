@@ -12,9 +12,7 @@ export function RegistrationLedgerCard({ regLedger }: { regLedger: StateRegLedge
   if (!regLedger.seeded || !regLedger.headline) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm opacity-90">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-          Registration Ledger
-        </h3>
+        <h3 className="text-sm font-semibold text-muted">Registration ledger</h3>
         <div className="mt-3 flex items-center gap-3">
           <div className="text-2xl font-bold tabular-nums opacity-50">—</div>
           <p className="text-xs leading-snug">
@@ -28,9 +26,7 @@ export function RegistrationLedgerCard({ regLedger }: { regLedger: StateRegLedge
   const { headline, movement } = regLedger;
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-        Registration Ledger
-      </h3>
+      <h3 className="text-sm font-semibold text-muted">Registration ledger</h3>
       <div className="mt-3 flex items-center gap-2">
         <span
           className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tracking-wide"

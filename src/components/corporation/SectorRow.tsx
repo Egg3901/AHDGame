@@ -218,7 +218,7 @@ export function SectorRow({
         </div>
         {fillAdjusted != null && (
           <div className="flex justify-between gap-3">
-            <span>After unsold output</span>
+            <span>Net margin</span>
             <span className={`tabular-nums ${fillAdjusted >= 0 ? "text-success" : "text-error"}`}>
               {fillAdjusted}%
             </span>
@@ -227,8 +227,8 @@ export function SectorRow({
       </div>
       {fillAdjusted != null && (
         <p className="mt-1.5 text-[10px] leading-snug text-muted">
-          The effective margin counts only units that sold. &quot;After unsold output&quot; is
-          profit over the cost of everything made, so it reflects unsold units too.
+          The effective margin counts only units that sold. Net margin is profit over revenue after
+          paying for everything made, so unsold units pull it down.
         </p>
       )}
       {deliveryLimitedShown && (
@@ -482,9 +482,9 @@ export function SectorRow({
   );
 
   const profitTone = sector.profit > 0 ? "text-success" : sector.profit < 0 ? "text-error" : "";
-  // Profit over the full cost bill can run to four figures when upkeep is
-  // tiny; past that the exact figure is in the title, not the column.
-  const unsoldAdjusted =
+  // The net margin is floored at -999.9 for a sector that sold nothing; past
+  // three figures the exact value is in the title, not the column.
+  const netMargin =
     fillAdjusted == null
       ? null
       : Math.abs(fillAdjusted) > 999
@@ -559,11 +559,11 @@ export function SectorRow({
             }`}
             title={
               fillAdjusted != null
-                ? `Profit over the cost of everything made, unsold units included: ${fillAdjusted}%. Effective margin on sold units only: ${sector.effectiveProfitMargin}%.`
+                ? `Net margin, profit over revenue after paying for everything made: ${fillAdjusted}%. Effective margin on sold units only: ${sector.effectiveProfitMargin}%.`
                 : `Effective margin applied to this sector's revenue: ${sector.effectiveProfitMargin}%.`
             }
           >
-            {unsoldAdjusted ?? `${sector.effectiveProfitMargin}%`}
+            {netMargin ?? `${sector.effectiveProfitMargin}%`}
           </div>
 
           <div className={`${cellNum} text-right ${profitTone}`}>
@@ -752,12 +752,12 @@ export function SectorRow({
               className="font-mono text-[11px] tabular-nums text-muted"
               title={
                 fillAdjusted != null
-                  ? `Profit over the cost of everything made, unsold units included. Effective margin on sold units only: ${sector.effectiveProfitMargin}%.`
+                  ? `Net margin: profit over revenue after paying for everything made. Effective margin on sold units only: ${sector.effectiveProfitMargin}%.`
                   : undefined
               }
             >
-              {unsoldAdjusted != null
-                ? `${unsoldAdjusted} after unsold`
+              {netMargin != null
+                ? `${netMargin} net margin`
                 : `${sector.effectiveProfitMargin}% margin`}
             </dd>
           </div>

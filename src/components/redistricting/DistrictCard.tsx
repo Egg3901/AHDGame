@@ -51,7 +51,6 @@ export function DistrictCard({
   return (
     <div
       className="rounded-lg border border-card-border bg-card overflow-hidden"
-      style={{ borderLeftWidth: 3, borderLeftColor: lean.color }}
       aria-label={`${district.cd}: ${composition}, ${
         district.netLean === 0
           ? "even"

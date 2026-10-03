@@ -256,7 +256,7 @@ export async function processSettlementTurn(
   // Charged on the heat the crisis is at AFTER this tick's decay, so a bloc that
   // let the ladder fall pays nothing for the turn it stepped back.
   const armed = isArmed(heat);
-  const mobilisation = await levyMobilisation(db, { armed });
+  const mobilisation = await levyMobilisation(db, { armed, turn: currentTurn });
   // The stamp survives only while the ladder is actually at the top; letting it
   // linger would leave a disarmed crisis looking armed to the declare route.
   const armedTurn = armed ? (crisis.ladder.armedTurn ?? currentTurn) : null;

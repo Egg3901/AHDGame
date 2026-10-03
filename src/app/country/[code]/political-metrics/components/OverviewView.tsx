@@ -138,7 +138,7 @@ export function OverviewView({
               <div className="font-mono text-body-xs uppercase tracking-widest text-muted">
                 Overall condition
               </div>
-              <div className="mt-0.5 font-display text-heading font-semibold text-foreground">
+              <div className="mt-0.5 text-heading font-semibold text-foreground">
                 {data.overallStatus}
               </div>
               <div className="text-body-xs text-muted">mean of nine category scores</div>

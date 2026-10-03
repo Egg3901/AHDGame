@@ -81,7 +81,7 @@ export function InstitutionMasthead({
 
           <div className="min-w-0 flex-1">
             <div
-              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              className="text-body-sm font-medium"
               style={{ color: hexToRgba(id.accentSoft, 0.8) }}
             >
               {id.registry}
@@ -144,10 +144,7 @@ export function MastheadStat({
 }) {
   return (
     <div>
-      <div
-        className="text-[9px] font-semibold uppercase tracking-[0.14em]"
-        style={{ color: hexToRgba(accentSoft, 0.6) }}
-      >
+      <div className="text-body-sm font-semibold" style={{ color: hexToRgba(accentSoft, 0.6) }}>
         {label}
       </div>
       <div className="font-mono text-2xl font-bold text-white">{value}</div>

@@ -88,22 +88,18 @@ function EvBar({
       <div
         style={{
           marginTop: 7,
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 12.5,
-          fontStyle: "italic",
           color: BLEND.mutedDim,
         }}
       >
-        {vm.projectionNote}{" "}
-        <Tip hint={vm.voteWeightHint}>
-          <span style={{ fontStyle: "normal" }}>Turn weighting.</span>
-        </Tip>
+        {vm.projectionNote} <Tip hint={vm.voteWeightHint}>Turn weighting.</Tip>
       </div>
       {error ? (
         <div
           style={{
             marginTop: 6,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 13,
             color: BLEND.negative,
           }}
@@ -154,7 +150,7 @@ function DriverRows({ rows }: { rows: DriverRowVM[] }) {
               gap: 10,
             }}
           >
-            <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>
+            <span style={{ fontFamily: FONT.sans, fontSize: 13.5 }}>
               <Tip hint={d.hint}>{d.label}</Tip>
             </span>
             <span style={{ fontFamily: FONT.mono, fontSize: 12, color: d.color }}>
@@ -237,7 +233,7 @@ function YourTicketBlock({ vm, campaignLink }: { vm: GeneralBlendVM; campaignLin
   if (!vm.yourTicket) return null;
   return (
     <>
-      <div style={{ marginTop: 9, fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
+      <div style={{ marginTop: 9, fontFamily: FONT.sans, fontSize: 17, fontWeight: 600 }}>
         {vm.yourTicket.name}
       </div>
       <div
@@ -265,7 +261,7 @@ function YourTicketBlock({ vm, campaignLink }: { vm: GeneralBlendVM; campaignLin
         </span>
         <span
           style={{
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 14,
             color: vm.yourTicket.leadText.startsWith("+") ? BLEND.positive : BLEND.caution,
           }}
@@ -298,14 +294,14 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
         <span style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500 }}>
           {mood.signedApproval}
         </span>
-        <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
+        <span style={{ fontFamily: FONT.sans, fontSize: 14, color: BLEND.muted }}>
           <Tip hint={mood.pointsHint}>referendum points</Tip>
         </span>
       </div>
       <p
         style={{
           margin: "9px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 13.5,
           lineHeight: 1.5,
           color: BLEND.muted,
@@ -316,7 +312,7 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
       <p
         style={{
           margin: "9px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 13.5,
           lineHeight: 1.5,
           color: BLEND.muted,
@@ -357,7 +353,7 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
                 borderBottom: "1px solid rgba(34,34,47,.7)",
               }}
             >
-              <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>
+              <span style={{ fontFamily: FONT.sans, fontSize: 13.5 }}>
                 <Tip hint={c.hint}>{c.label}</Tip>
               </span>
               <span
@@ -377,7 +373,7 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
         <p
           style={{
             margin: "8px 0 0",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12.5,
             lineHeight: 1.45,
             color: BLEND.mutedDim,
@@ -390,7 +386,7 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
         <p
           style={{
             margin: "8px 0 0",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12.5,
             lineHeight: 1.45,
             color: BLEND.mutedDim,
@@ -402,7 +398,7 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
       <p
         style={{
           margin: "8px 0 0",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 12.5,
           lineHeight: 1.45,
           color: BLEND.mutedDim,
@@ -425,7 +421,7 @@ function WhyItMovedBlock({ vm }: { vm: GeneralBlendVM }) {
         <p
           style={{
             margin: "10px 0 0",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 12.5,
             lineHeight: 1.45,
             color: BLEND.mutedDim,
@@ -747,7 +743,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           c,
           i,
           "name",
-          { fontFamily: FONT.serif, fontSize: scale.name, fontWeight: 600 },
+          { fontFamily: FONT.sans, fontSize: scale.name, fontWeight: 600 },
           <span
             style={{
               display: "inline-flex",
@@ -820,8 +816,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               "mate",
               {
                 marginTop: 2,
-                fontFamily: FONT.serif,
-                fontStyle: "italic",
+                fontFamily: FONT.sans,
                 fontSize: scale.mate,
                 color: BLEND.mutedDim,
                 minHeight: 18,
@@ -919,7 +914,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             display: "flex",
             alignItems: "center",
             gap: 10,
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 17,
             fontWeight: 600,
           }}
@@ -941,8 +936,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           style={{
             display: "block",
             marginTop: 1,
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
+            fontFamily: FONT.sans,
             fontSize: 13,
             color: BLEND.muted,
           }}
@@ -983,7 +977,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               justifyContent: "space-between",
               paddingBottom: 9,
               borderBottom: `1px solid ${BLEND.hairline}`,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 10,
               letterSpacing: ".2em",
               textTransform: "uppercase",
@@ -998,7 +992,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           <div
             style={{
               marginTop: 11,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 24,
               lineHeight: 1.1,
               fontWeight: 600,
@@ -1051,7 +1045,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               <h2
                 style={{
                   margin: "0 0 4px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -1067,7 +1061,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               <h2
                 style={{
                   margin: "0 0 12px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -1082,7 +1076,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           {vm.showTickets && vm.showTicketsTable ? (
             <div>
               <h2
-                style={{ margin: "0 0 2px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+                style={{ margin: "0 0 2px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
               >
                 The tickets
               </h2>
@@ -1116,7 +1110,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 8,
-                        fontFamily: FONT.serif,
+                        fontFamily: FONT.sans,
                         fontSize: 16,
                         fontWeight: 600,
                       }}
@@ -1148,8 +1142,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                   >
                     <span
                       style={{
-                        fontFamily: FONT.serif,
-                        fontStyle: "italic",
+                        fontFamily: FONT.sans,
                         fontSize: 13,
                         color: BLEND.muted,
                       }}
@@ -1175,7 +1168,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               <h2
                 style={{
                   margin: "0 0 4px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -1191,7 +1184,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               <h2
                 style={{
                   margin: "0 0 4px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}
@@ -1207,7 +1200,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               <h2
                 style={{
                   margin: "0 0 4px",
-                  fontFamily: FONT.serif,
+                  fontFamily: FONT.sans,
                   fontSize: 20,
                   fontWeight: 600,
                 }}

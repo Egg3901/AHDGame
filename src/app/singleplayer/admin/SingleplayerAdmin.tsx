@@ -211,9 +211,7 @@ export function SingleplayerAdmin({
 
         {status.setup ? (
           <section className="mt-6 rounded border border-card-border bg-card p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-              World rules
-            </h2>
+            <h2 className="text-sm font-semibold text-muted">World rules</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="grid gap-2 text-sm">
                 Difficulty
@@ -286,9 +284,7 @@ export function SingleplayerAdmin({
         ) : null}
 
         <section className="mt-6 rounded border border-card-border bg-card p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Turn briefing
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">Turn briefing</h2>
           {briefing.length ? (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {briefing.map((item) => (
@@ -317,9 +313,7 @@ export function SingleplayerAdmin({
         </section>
 
         <section className="mt-6 rounded border border-card-border bg-card p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Local diagnostics
-          </h2>
+          <h2 className="text-sm font-semibold text-muted">Local diagnostics</h2>
           <p className="mt-2 text-sm text-muted">
             Counts and engine health only. No names, messages, credentials or save documents.
           </p>

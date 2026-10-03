@@ -84,9 +84,7 @@ export default function GlobalError({
 
             {/* Help text */}
             <div className="mt-4 rounded-xl border border-card-border bg-card p-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
-                What To Do
-              </h2>
+              <h2 className="text-sm font-semibold text-muted mb-2">What to do</h2>
               <ul className="space-y-1 text-xs text-muted list-disc list-inside">
                 <li>Try refreshing the page or clicking &quot;Try Again&quot;</li>
                 <li>Clear your browser cache and cookies</li>

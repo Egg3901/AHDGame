@@ -110,9 +110,7 @@ export function CurrencyHolders({ currency }: { currency: CurrencyCode }) {
   return (
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-card-border">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-          Largest Holders of {currency}
-        </h2>
+        <h2 className="text-sm font-bold text-foreground">Largest holders of {currency}</h2>
         <p className="text-xs text-muted mt-0.5">
           Who holds {currency} across the world — player wallets, corporate treasuries, and national
           central-bank reserves. {data.total.toLocaleString("en-US")} holders ·{" "}

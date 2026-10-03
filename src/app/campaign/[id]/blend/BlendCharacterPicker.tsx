@@ -81,7 +81,7 @@ export function BlendCharacterPicker({
           background: BLEND.field,
           padding: "8px 10px",
           font: "inherit",
-          fontFamily: FONT.serif,
+          fontFamily: FONT.sans,
           fontSize: 13,
           color: BLEND.ink,
         }}
@@ -111,7 +111,7 @@ export function BlendCharacterPicker({
             color: BLEND.ink,
           }}
         >
-          <span style={{ fontFamily: FONT.serif, fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
+          <span style={{ fontFamily: FONT.sans, fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
           <span style={{ fontFamily: FONT.mono, fontSize: 9.5, color: BLEND.mutedDim }}>
             {r.officeLabel ?? r.party ?? ""}
           </span>
@@ -124,8 +124,7 @@ export function BlendCharacterPicker({
             borderTop: 0,
             background: BLEND.inset,
             padding: "8px 10px",
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
+            fontFamily: FONT.sans,
             fontSize: 12.5,
             color: BLEND.mutedDim,
           }}

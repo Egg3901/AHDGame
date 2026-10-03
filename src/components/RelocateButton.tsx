@@ -243,7 +243,7 @@ export function RelocateButton({
           setConfirming(true);
         }}
         aria-label={cooldownActive ? `${cooldownLabel}. ${cooldownWaitCopy}` : "Relocate here"}
-        className="h-9 min-w-0 shrink-0 border-card-border/80 bg-card/80 text-foreground shadow-panel backdrop-blur-sm hover:bg-card-elevated"
+        className="h-9 min-w-0 shrink-0 border-card-border/80 bg-card text-foreground shadow-panel hover:bg-card-elevated"
       >
         {cooldownLabel}
       </Button>

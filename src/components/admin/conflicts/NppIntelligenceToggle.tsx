@@ -86,7 +86,7 @@ export function NppIntelligenceToggle() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <h3 className="font-serif text-lg text-foreground">NPP Intelligence Operations</h3>
+      <h3 className="text-lg text-foreground">NPP Intelligence Operations</h3>
       <p className="mt-0.5 max-w-xl text-sm text-muted">
         Whether countries run by the NPP engine build intelligence networks and run operations of
         their own. Counter-intelligence is automatic for every country either way, so a country

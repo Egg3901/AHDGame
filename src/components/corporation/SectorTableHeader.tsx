@@ -15,8 +15,8 @@ export const SECTOR_TABLE_GRID =
 
 /**
  * Plants-tier grid: capacity, sites and fill replace the growth columns (the
- * slider does not build capacity under plants), and the margin after unsold
- * output gets its own column instead of a second line under profit.
+ * slider does not build capacity under plants), and the net margin gets its
+ * own column instead of a second line under profit.
  */
 export const PLANTS_SECTOR_TABLE_GRID =
   "grid-cols-[minmax(220px,1.8fr)_minmax(120px,1fr)_minmax(72px,0.6fr)_80px_56px_64px_88px_88px_88px_64px_44px]";
@@ -98,8 +98,8 @@ function columnsFor(plantsMode: boolean, timeScale: MoneyPeriod): Column[] {
         align: "right",
       },
       {
-        label: "After unsold",
-        help: "Profit over the cost of everything made, unsold units included. The effective margin counts only units that sold.",
+        label: "Net margin",
+        help: "Profit over revenue, after paying for everything made, unsold units included. The effective margin counts only units that sold.",
         sortKey: "margin",
         align: "right",
       },

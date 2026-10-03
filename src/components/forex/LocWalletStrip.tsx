@@ -53,12 +53,10 @@ export function LocWalletStrip({ countryId }: { countryId: CountryId }) {
   const policySpread = data.policySpreadAdjustmentPercentPoints;
 
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary/[0.06] p-3 text-sm">
+    <div className="rounded-lg border border-card-border p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-            Line of credit ({ccy})
-          </div>
+          <div className="text-sm font-semibold text-foreground">Line of credit ({ccy})</div>
           <div className="text-xs text-muted">
             {primeLabel ? <>Home policy prime {primeLabel} · </> : null}
             Composite {(data.composite ?? 0).toFixed(0)} · spread{" "}
@@ -78,7 +76,7 @@ export function LocWalletStrip({ countryId }: { countryId: CountryId }) {
         </div>
         <Link
           href={href}
-          className="shrink-0 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/15"
+          className="shrink-0 rounded-md border border-card-border px-3 py-1.5 text-xs font-semibold text-foreground hover:border-muted/40 hover:bg-card"
         >
           Manage loan
         </Link>

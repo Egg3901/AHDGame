@@ -443,9 +443,7 @@ export default async function ReferendumDetailPage({
               </>
             ) : (
               <>
-                <h2 className="mb-2 text-sm font-semibold uppercase tracking-widest text-muted">
-                  Result
-                </h2>
+                <h2 className="mb-2 text-sm font-semibold text-muted">Result</h2>
                 <p className="text-sm text-foreground">{statusSummary(ref, regionName)}</p>
                 {ref.result && (
                   <p className="mt-2 text-xs text-muted">

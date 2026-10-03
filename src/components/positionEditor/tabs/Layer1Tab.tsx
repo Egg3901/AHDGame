@@ -41,7 +41,7 @@ export function Layer1Tab({
             className={`rounded-xl border bg-card p-4 shadow-card ${ok ? "border-card-border" : "border-error"}`}
           >
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">{dim}</h3>
+              <h3 className="text-sm font-semibold text-muted">{dim}</h3>
               <div className="flex items-center gap-2">
                 {!ok && (
                   <button

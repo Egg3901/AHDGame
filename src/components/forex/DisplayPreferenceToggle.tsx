@@ -89,9 +89,7 @@ export function DisplayPreferenceToggle() {
             }`}
             aria-hidden
           />
-          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-            Display Currency
-          </h3>
+          <h3 className="text-sm font-bold text-foreground">Display currency</h3>
           {showReviewFlag && (
             <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">
               Review

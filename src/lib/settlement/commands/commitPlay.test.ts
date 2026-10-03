@@ -171,7 +171,9 @@ describe("commitSettlementPlay", () => {
     // `spendFromTreasury` splits the spend into fromSurplus/addedToDebt itself,
     // so borrowing is modelled rather than refused.
     const { spendFromTreasury } = await import("@/lib/budget/treasurySpend");
-    expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(expect.anything(), "DD", 45_000_000);
+    expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(expect.anything(), "DD", 45_000_000, {
+      witness: { flow: "settlement_play", site: "settlement/commitPlay" },
+    });
     expect(prime(db, "settlementCrises").updateOne).toHaveBeenCalled();
     expect(prime(db, "settlementPlays").insertOne).toHaveBeenCalled();
   });
@@ -550,7 +552,8 @@ describe("commitSettlementPlay", () => {
       expect(vi.mocked(spendFromTreasury)).toHaveBeenCalledWith(
         expect.anything(),
         "DD",
-        45_000_000
+        45_000_000,
+        { witness: { flow: "settlement_play", site: "settlement/commitPlay" } }
       );
     });
 

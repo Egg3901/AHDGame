@@ -61,9 +61,7 @@ export function NominationsPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-        Executive Nominations
-      </h2>
+      <h2 className="mb-2 text-sm font-semibold text-muted">Executive nominations</h2>
       <p className="mb-3 text-xs text-muted italic">
         The {executiveLabel} may nominate up to three candidates during the final year of the
         chair&apos;s term. Each nomination costs one action point.

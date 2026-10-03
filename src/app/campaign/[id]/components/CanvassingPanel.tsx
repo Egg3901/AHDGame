@@ -277,7 +277,7 @@ export function CanvassingPanel({
   const shellClass = blend ? "" : "rounded-lg border border-card-border bg-card p-6";
 
   const heading = blend ? (
-    <h3 style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
+    <h3 style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 17, fontWeight: 600 }}>
       Voter canvassing
     </h3>
   ) : (
@@ -307,7 +307,7 @@ export function CanvassingPanel({
       <div className={shellClass} style={shellStyle}>
         {heading}
         {blend ? (
-          <p style={{ margin: 0, fontFamily: FONT.serif, fontSize: 13.5, color: BLEND.muted }}>
+          <p style={{ margin: 0, fontFamily: FONT.sans, fontSize: 13.5, color: BLEND.muted }}>
             {eligibility.message}
           </p>
         ) : (
@@ -342,7 +342,7 @@ export function CanvassingPanel({
         <p
           style={{
             margin: "0 0 14px",
-            fontFamily: FONT.serif,
+            fontFamily: FONT.sans,
             fontSize: 13.5,
             lineHeight: 1.55,
             color: BLEND.muted,
@@ -451,7 +451,7 @@ export function CanvassingPanel({
                 padding: "11px 14px",
                 borderLeft: `2px solid ${BLEND.hairlineStrong}`,
                 background: "rgba(255,255,255,.02)",
-                fontFamily: FONT.serif,
+                fontFamily: FONT.sans,
                 fontSize: 13,
                 lineHeight: 1.55,
                 color: BLEND.ink,
@@ -485,7 +485,7 @@ export function CanvassingPanel({
             style={{
               margin: "8px 0 0",
               paddingLeft: 18,
-              fontFamily: FONT.serif,
+              fontFamily: FONT.sans,
               fontSize: 13,
               lineHeight: 1.6,
               color: BLEND.muted,

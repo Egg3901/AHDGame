@@ -51,9 +51,7 @@ export function DismissChairPanel({
 
   return (
     <div className="min-w-0 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="mb-3 break-words text-xs font-semibold uppercase tracking-widest text-muted">
-        Independence
-      </h2>
+      <h2 className="mb-3 break-words text-sm font-semibold text-muted">Independence</h2>
 
       <p className="text-sm text-foreground">
         You can remove {chairName} as {chairTitle}. The bank keeps every point of scrutiny it has

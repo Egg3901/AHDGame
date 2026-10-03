@@ -74,7 +74,7 @@ export function TreasuryMasthead({
 
           <div className="min-w-0 flex-1">
             <div
-              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              className="text-body-sm font-medium"
               style={{ color: hexToRgba(id.accentSoft, 0.8) }}
             >
               {id.registry}
@@ -131,9 +131,7 @@ export function TreasuryMasthead({
         <div className="relative mt-4 flex flex-wrap items-center gap-x-4 gap-y-2.5 border-t border-white/10 pt-3.5">
           {/* Lens toggle */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-              Lens
-            </span>
+            <span className="text-body-sm font-medium text-white/45">Lens</span>
             <div className="inline-flex rounded-lg border border-white/15 bg-black/30 p-0.5">
               <button
                 type="button"
@@ -171,9 +169,7 @@ export function TreasuryMasthead({
 
           {/* FY scrubber */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
-              FY
-            </span>
+            <span className="text-body-sm font-medium text-white/45">FY</span>
             <input
               type="range"
               min={fyMin}

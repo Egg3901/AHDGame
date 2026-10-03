@@ -74,7 +74,7 @@ export function AdminWorldTab({ activeSub, onSubChange }: AdminWorldTabProps) {
             <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h3 className="font-serif text-lg text-foreground">Position Editor</h3>
+                  <h3 className="text-lg text-foreground">Position Editor</h3>
                   <p className="mt-0.5 max-w-xl text-sm text-muted">
                     Author Layer-1 demographic positions, turnout, and archetype composition by
                     state, then apply them as global seed defaults. The toggle below gates whether a

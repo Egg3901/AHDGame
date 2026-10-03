@@ -17,6 +17,10 @@ import type { PeaceTerm } from "./peaceTerm";
 import { reunifyByPeaceTerm } from "@/lib/settlement/reunifyByPeaceTerm";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  resolveTreasuryCashOptions,
+  witnessTreasuryCash,
+} from "@/lib/nationalization/treasuryLedger";
 
 export interface ApplyTermContext {
   /** The country imposing or offering. Receives an indemnity it is not paying. */
@@ -200,8 +204,15 @@ async function moveIndemnity(
   if (ctx.peaceOfferId) {
     const receiptId = String(ctx.peaceOfferId);
     const applyNegotiatedIndemnity = async (session?: ClientSession) => {
-      await applyIndemnityLeg(budgets, payer, -amount, receiptId, now, session);
-      await applyIndemnityLeg(budgets, recipient, credited, receiptId, now, session);
+      const paid = await applyIndemnityLeg(budgets, payer, -amount, receiptId, now, session);
+      const received = await applyIndemnityLeg(
+        budgets,
+        recipient,
+        credited,
+        receiptId,
+        now,
+        session
+      );
       await getPeaceOffersCollection(db).updateOne(
         {
           _id: ctx.peaceOfferId,
@@ -211,22 +222,72 @@ async function moveIndemnity(
         { $set: { "application.phase": "term_applied" } },
         session ? { session } : undefined
       );
+      return { paid, received };
     };
-    await runWithOptionalTransaction(
+    // Witness after the commit, and only the legs this attempt applied: a resumed
+    // transfer applies the missing leg alone.
+    const landed = await runWithOptionalTransaction(
       (session) => applyNegotiatedIndemnity(session),
       () => applyNegotiatedIndemnity()
+    );
+    await witnessIndemnity(
+      db,
+      payer,
+      recipient,
+      landed.paid ? -amount : 0,
+      landed.received ? credited : 0,
+      now
     );
     return;
   }
 
-  await budgets.updateOne(
+  const paid = await budgets.updateOne(
     { countryId: payer },
     { $inc: { treasuryBalance: -amount }, $set: { updatedAt: now } }
   );
-  await budgets.updateOne(
+  const received = await budgets.updateOne(
     { countryId: recipient },
     { $inc: { treasuryBalance: credited }, $set: { updatedAt: now } }
   );
+  await witnessIndemnity(
+    db,
+    payer,
+    recipient,
+    (paid?.matchedCount ?? 0) > 0 ? -amount : 0,
+    (received?.matchedCount ?? 0) > 0 ? credited : 0,
+    now
+  );
+}
+
+/**
+ * Witness both treasury legs under one reason. Each is in its own treasury's
+ * currency, so the money-supply check shows the pair per currency.
+ */
+async function witnessIndemnity(
+  db: Db,
+  payer: CountryId,
+  recipient: CountryId,
+  paid: number,
+  received: number,
+  now: Date
+): Promise<void> {
+  if (paid === 0 && received === 0) return;
+  const ledger = await resolveTreasuryCashOptions(db);
+  const site = "military/applyPeaceTerm";
+  await witnessTreasuryCash(db, ledger, {
+    flow: "peace_indemnity",
+    account: { kind: "government", countryId: payer },
+    amount: paid,
+    now,
+    site,
+  });
+  await witnessTreasuryCash(db, ledger, {
+    flow: "peace_indemnity",
+    account: { kind: "government", countryId: recipient },
+    amount: received,
+    now,
+    site,
+  });
 }
 
 /** Apply one treasury leg at most once, even without multi-document transactions. */
@@ -237,8 +298,8 @@ async function applyIndemnityLeg(
   receiptId: string,
   now: Date,
   session?: ClientSession
-): Promise<void> {
-  await budgets.updateOne(
+): Promise<boolean> {
+  const result = await budgets.updateOne(
     { countryId, appliedPeaceIndemnityOfferIds: { $ne: receiptId } },
     {
       $inc: { treasuryBalance: delta },
@@ -247,4 +308,5 @@ async function applyIndemnityLeg(
     },
     session ? { session } : undefined
   );
+  return (result?.modifiedCount ?? 0) > 0;
 }

@@ -24,7 +24,7 @@ import {
 } from "@/lib/financialTxLog/atomicCashGuard";
 import { creditTreasuryProceedsFromAnchor } from "@/lib/nationalization/treasury";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import type { CurrencyCode } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { applyListingStandards, isMateriallyInsolvent } from "../listingStandards";
 import type { IndexFundCandidate } from "../constituents";
 import { isEligibleIndexFundConstituent } from "../constituents";
@@ -164,6 +164,9 @@ export async function fileListingPetition(opts: {
   // Credit through the same helpers every other money movement uses, so the
   // forex-aware balance field and the treasury account stay single-sourced.
   const feeCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
+  // What the treasury actually received, in its own currency, when nobody holds
+  // the seat. Witnessed by the treasury writer; the row below keeps the record.
+  let treasuryCredit: { amount: number; currencyCode: CurrencyCode } | null = null;
   if (authority.holderCharacterId) {
     await refundCharacterCash(
       db,
@@ -176,12 +179,20 @@ export async function fileListingPetition(opts: {
     // `contributionAnchor` is in ₳; `creditTreasuryProceeds` expects the
     // country's own units, so crediting it raw banked an unconverted figure
     // for every non-anchor currency (#808, same unit confusion).
-    await creditTreasuryProceedsFromAnchor(
+    const countryId = corporation.countryId as CountryId;
+    const credited = await creditTreasuryProceedsFromAnchor(
       db,
-      corporation.countryId as CountryId,
+      countryId,
       contributionAnchor,
-      now
+      now,
+      {
+        flow: "index_listing_lobbying",
+      }
     );
+    treasuryCredit = {
+      amount: credited,
+      currencyCode: (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode,
+    };
   }
 
   // Both legs, so the ledger nets to zero: the corporation pays and either the
@@ -220,8 +231,9 @@ export async function fileListingPetition(opts: {
           countryId: corporation.countryId as string,
           subjectName: `${corporation.countryId} Treasury`,
         }),
-    amount: contributionAnchor,
-    currencyCode: feeCurrency,
+    // The treasury row records what the treasury received, in its own currency.
+    amount: treasuryCredit?.amount ?? contributionAnchor,
+    currencyCode: treasuryCredit?.currencyCode ?? feeCurrency,
     counterpartyType: "corporation",
     counterpartyId: corporation._id,
     counterpartyName: corporation.name,
@@ -229,6 +241,7 @@ export async function fileListingPetition(opts: {
       petitionId: petition._id.toString(),
       seatId: authority.seatId,
       seatName: authority.seatName,
+      ...(treasuryCredit ? { ledgerOwnedByWitness: true } : {}),
     },
   });
 

@@ -301,9 +301,7 @@ export default async function NppProfilePage({ params }: PageProps) {
         {/* Political Standing + Details */}
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-4">
-              Political Standing
-            </h2>
+            <h2 className="text-sm font-semibold text-zinc-500 mb-4">Political standing</h2>
 
             <div className="space-y-5">
               <div>
@@ -335,9 +333,7 @@ export default async function NppProfilePage({ params }: PageProps) {
           </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-4">
-              Details
-            </h2>
+            <h2 className="text-sm font-semibold text-zinc-500 mb-4">Details</h2>
             <table className="w-full text-sm">
               <tbody>
                 <tr>
@@ -388,9 +384,7 @@ export default async function NppProfilePage({ params }: PageProps) {
 
         {/* Economic Data */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-4">
-            Economic Data
-          </h2>
+          <h2 className="text-sm font-semibold text-zinc-500 mb-4">Economic data</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
               <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">
@@ -425,9 +419,7 @@ export default async function NppProfilePage({ params }: PageProps) {
 
         {/* Personality Traits */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-4">
-            Personality Traits
-          </h2>
+          <h2 className="text-sm font-semibold text-zinc-500 mb-4">Personality traits</h2>
           <div className="space-y-5">
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -457,9 +449,7 @@ export default async function NppProfilePage({ params }: PageProps) {
 
         {/* Policy Positions */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 mb-4">
-            Policy Positions
-          </h2>
+          <h2 className="text-sm font-semibold text-zinc-500 mb-4">Policy positions</h2>
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="rounded-lg bg-zinc-950/40 p-4">
               <PolicyDisplay label="Economic" axis="economic" value={npp.policies?.economic ?? 0} />

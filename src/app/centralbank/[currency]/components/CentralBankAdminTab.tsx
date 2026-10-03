@@ -362,9 +362,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
     <div className="space-y-8 pb-16">
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Prime rate (admin)
-          </h2>
+          <h2 className="mb-1 text-sm font-semibold text-muted">Prime rate (admin)</h2>
           <p className="mb-4 text-xs text-muted">
             Same effect as the chair control, and logged on the central bank history. You do not
             need to hold the chair seat.
@@ -436,9 +434,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         </div>
 
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <h2 className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">
-            Chair controls
-          </h2>
+          <h2 className="mb-1 text-sm font-semibold text-muted">Chair controls</h2>
           <p className="mb-4 text-xs text-muted">
             When locked, the seated chair cannot change the prime rate from the Overview tab (you
             can still adjust it here).

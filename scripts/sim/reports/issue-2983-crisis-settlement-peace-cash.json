@@ -1,0 +1,37 @@
+{
+  "issue": 2983,
+  "part": 3,
+  "runtimeSource": "f4400a191eb485d133e99a8b727d078666f0d49d",
+  "flows": {
+    "crisis_response": [
+      "livingConflict/globalResponse",
+      "crises/interactionEngine (option debit and collective contribution)",
+      "crises/optionActions",
+      "crises/unionBanStrike"
+    ],
+    "crisis_aid": ["crises/aidPledge", "crises/aidFinalize clawback"],
+    "settlement_play": ["settlement/commitPlay"],
+    "settlement_mobilisation": ["settlement/mobilisation (one batch per turn)"],
+    "peace_indemnity": ["military/applyPeaceTerm imposed and negotiated, after commit"],
+    "world_event": ["world_event_payout reason mapping"]
+  },
+  "behaviorFix": "a crisis choice checks approval before charging the treasury",
+  "qualification": {
+    "memoryCases": 7,
+    "nativeCases": 8,
+    "redWithBaseWriters": "all 6 reconciled memory cases fail; shadow-off passes",
+    "approvalOrderRed": "fails against the old engine",
+    "nativeOnHeadIncludingEarlierParts": { "passed": 49, "native": 25 },
+    "focusedSuites": { "files": 376, "passed": 4257, "skipped": 26, "failed": 0 },
+    "changedTypeScriptFiles": 20,
+    "scopedLint": "pass",
+    "scopedSemanticDiagnostics": "pass",
+    "formatting": "pass",
+    "architectureAuditBlocking": 0
+  },
+  "limits": [
+    "Request-path transaction log rows still stamp the game clock as their turn; tracked separately.",
+    "Fixtures qualify flow boundaries, not the whole world; #968 and the #2159 cash gate stay open.",
+    "No production database was reset or repaired."
+  ]
+}

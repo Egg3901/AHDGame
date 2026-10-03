@@ -127,9 +127,7 @@ export function PrivatizeWizard({
 
   return (
     <div className="rounded-xl border border-gold/30 bg-gold/5 p-5">
-      <h3 className="text-body-sm font-semibold uppercase tracking-wide text-gold">
-        Privatize a holding
-      </h3>
+      <h3 className="text-body-sm font-semibold text-gold">Privatize a holding</h3>
       <p className="mt-1 text-body-xs text-muted">
         Sell part of a state holding back to the private market. Tick one or more held sectors and
         set, per sector, how much of that holding to carve into a single brand-new private
@@ -187,7 +185,7 @@ export function PrivatizeWizard({
                     aria-label={`Carve fraction for ${s.sectorType} in ${s.stateName}`}
                     className="w-full"
                   />
-                  <div className="text-body-xs text-muted">
+                  <div className="text-body-sm text-muted">
                     Spinning out ≈{" "}
                     <span className="font-medium text-foreground">
                       {money(Math.round(frac * s.revenue), vm.currency)}/turn
@@ -204,7 +202,7 @@ export function PrivatizeWizard({
           );
         })}
       </div>
-      <p className="mt-2 text-body-xs text-muted">
+      <p className="mt-2 text-body-sm text-muted">
         A spin-out may not end up controlling more than 30% of a region&apos;s sector market, so
         each slider caps there. A small holding (≤30% of its market) can be carved out in full;
         breaking up a dominant holding takes several separate spin-outs.

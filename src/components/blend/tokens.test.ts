@@ -41,8 +41,8 @@ describe("FONT stacks", () => {
   });
 
   it("sets headings and prose in the app sans, with no serif face", () => {
-    expect(FONT.serif).toBe(FONT.sans);
-    expect(Object.values(FONT).join(" ")).not.toMatch(/lora|fraunces|georgia/i);
+    expect(Object.keys(FONT).sort()).toEqual(["mono", "sans"]);
+    expect(Object.values(FONT).join(" ")).not.toMatch(/lora|fraunces|playfair|georgia/i);
   });
 
   it("keeps a real fallback face on every stack", () => {

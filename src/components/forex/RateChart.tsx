@@ -192,9 +192,7 @@ export function RateChart({ rates, defaultCurrencyCodes }: Props) {
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-card-border flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2 min-w-0">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-            Rate History
-          </h2>
+          <h2 className="text-sm font-bold text-foreground">Rate history</h2>
           <ForexChartTimeframeTabs
             value={timeframe}
             onChange={(tf: ForexChartTimeframe) => {

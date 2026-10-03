@@ -92,7 +92,7 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
 
   if (achievements.length === 0) {
     return (
-      <section className="scroll-mt-24 rounded-2xl border border-card-border bg-card/80 backdrop-blur-sm p-6 md:p-8 shadow-card">
+      <section className="scroll-mt-24 rounded-2xl border border-card-border bg-card p-6 md:p-8 shadow-card">
         <SectionLabel>{t("achievements.title")}</SectionLabel>
         <p className="text-sm text-muted">{t("achievements.empty")}</p>
       </section>
@@ -100,7 +100,7 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
   }
 
   return (
-    <section className="scroll-mt-24 rounded-2xl border border-card-border bg-card/80 backdrop-blur-sm p-6 md:p-8 shadow-card">
+    <section className="scroll-mt-24 rounded-2xl border border-card-border bg-card p-6 md:p-8 shadow-card">
       <SectionLabel className="mb-1">{t("achievements.title")}</SectionLabel>
       <p className="mb-4 text-sm text-muted">{t("achievements.intro")}</p>
       <form onSubmit={handleSave} className="space-y-3">

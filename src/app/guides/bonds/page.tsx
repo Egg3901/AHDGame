@@ -45,7 +45,7 @@ export default function BondsGuidePage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Bonds</h1>
           <p className="mt-2 text-sm text-muted">
-            How bonds work - from the basics through credit ratings, defaults, and strategy
+            How bonds work, from the basics through credit ratings, defaults, and strategy
           </p>
         </div>
 
@@ -96,7 +96,7 @@ export default function BondsGuidePage() {
             <SectionHeader id="sovereign-bonds">2. Sovereign bonds</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Sovereign bonds are issued by national governments to finance their budget deficit.
-              They are the safest bonds in the game - governments cannot default.
+              They are the safest bonds in the game: governments cannot default.
             </p>
             <SubHeader>How they are issued</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
@@ -118,7 +118,7 @@ export default function BondsGuidePage() {
                     ["Face value", "$1,000 per unit"],
                     ["Coupon rate", "Equal to the country's central bank prime rate at issuance"],
                     ["Maturity", "48 turns (1 game year)"],
-                    ["Default risk", "None - sovereign bonds are guaranteed"],
+                    ["Default risk", "None. Sovereign bonds are guaranteed"],
                     ["Issuance schedule", "Quarterly (every 12 turns), only when deficit > 0"],
                   ].map(([p, v]) => (
                     <tr key={p}>
@@ -131,7 +131,7 @@ export default function BondsGuidePage() {
             </div>
             <SubHeader>What the coupon pays you</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              A bond issued when the prime rate is 5% pays a 5% annual coupon - that is{" "}
+              A bond issued when the prime rate is 5% pays a 5% annual coupon, which is{" "}
               <strong className="text-foreground">$50 per year per $1,000 bond</strong>, paid
               proportionally each turn. The coupon is fixed at issuance and never changes for the
               life of that bond, even if the prime rate moves later.
@@ -149,7 +149,7 @@ export default function BondsGuidePage() {
             <SectionHeader id="corporate-bonds">3. Corporate bonds</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
               Corporate bonds are issued by player-founded corporations to raise capital. They work
-              the same as sovereign bonds - fixed coupon, fixed maturity, tradeable on the market -
+              the same as sovereign bonds (fixed coupon, fixed maturity, tradeable on the market),
               but they carry <strong className="text-foreground">default risk</strong>. A
               corporation that runs out of cash cannot pay its bondholders.
             </p>
@@ -269,9 +269,9 @@ Key insight: prices and rates still move in opposite directions.
 When rates rise, existing bonds lose value. When rates fall, they gain.
 As maturity approaches, price always pulls back toward $1,000 (face value).
 
-Example - sovereign bond, coupon locked at 5%, 1 year remaining:
-  Prime rate rises to 8%:   price ≈ $972   (modest loss - near maturity)
-  Prime rate falls to 2.5%: price ≈ $1,024  (modest gain - near maturity)
+Example: sovereign bond, coupon locked at 5%, 1 year remaining:
+  Prime rate rises to 8%:   price ≈ $972   (modest loss, near maturity)
+  Prime rate falls to 2.5%: price ≈ $1,024  (modest gain, near maturity)
 
 The further from maturity, the bigger the price swing for the same rate change.`}</FormulaBlock>
             <div className="overflow-x-auto rounded-xl border border-card-border">
@@ -294,7 +294,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                       <Tag key="r" variant="negative">
                         Prices fall
                       </Tag>,
-                      "Wait. Buy when rates peak - you lock in high coupons before cuts begin.",
+                      "Wait. Buy when rates peak, so you lock in high coupons before cuts begin.",
                     ],
                     [
                       "Rates at peak",
@@ -357,7 +357,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
                   {[
                     ["≤ 60%", "AAA", "2%", "Low coupons, but safest value store"],
                     ["≤ 80%", "AA", "2.5%", "Near-best; minimal premium"],
-                    ["≤ 100%", "A", "3.5%", "Solid - most healthy economies sit here"],
+                    ["≤ 100%", "A", "3.5%", "Solid; most healthy economies sit here"],
                     ["≤ 120%", "BBB", "5%", "Notable risk premium; decent income"],
                     ["≤ 150%", "BB", "7%", "Elevated risk; high coupons but fiscal strain"],
                     ["> 150%", "B", "10%", "Distressed; very high coupons but severe fiscal risk"],
@@ -386,7 +386,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
             <p className="text-sm text-muted leading-relaxed">
               Corporate credit ratings are calculated from four financial components. The score
               updates every turn, so a corporation&apos;s rating can improve or deteriorate over
-              time - and so can the market price of its bonds.
+              time, and so can the market price of its bonds.
             </p>
             <div className="overflow-x-auto rounded-xl border border-card-border">
               <table className="w-full text-sm">
@@ -461,7 +461,7 @@ The further from maturity, the bigger the price swing for the same rate change.`
               <strong className="text-foreground">cash (liquid capital) goes negative</strong> after
               paying its coupon obligations{" "}
               <strong className="text-foreground">and any face value falling due that turn</strong>,
-              and its assets could not cover the debt. This is the only trigger - a company can have
+              and its assets could not cover the debt. This is the only trigger: a company can have
               a bad credit rating without defaulting as long as it can still make payments. Maturity
               is the dangerous one: the coupon is a trickle, and the face value lands in a single
               turn.

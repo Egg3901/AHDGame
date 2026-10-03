@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { NET_MARGIN_FLOOR_PCT } from "@/lib/corporations/rules/netMargin";
 import { ObjectId } from "mongodb";
 import { buildSectorPlantsSection } from "./sectorDetailSections";
 import type { CorporateSector } from "@/lib/db/types";
@@ -343,8 +344,8 @@ describe("buildSectorPlantsSection", () => {
       // the full operating bill (maintenanceNet 600 + labour 200) over 150.
       expect(s.truth.receivedPerUnitAnchor).toBeCloseTo(1000 / 150, 6);
       expect(s.truth.costPerUnitAnchor).toBeCloseTo(800 / 150, 6);
-      // Fill-adjusted margin: profit 150 over the total bill 850 (opex + growth).
-      expect(s.truth.fillAdjustedMarginPct).toBeCloseTo((150 / 850) * 100, 6);
+      // Net margin: profit 150 over realized revenue 1000.
+      expect(s.truth.fillAdjustedMarginPct).toBeCloseTo((150 / 1000) * 100, 6);
     });
 
     it("falls back to the units ratio when the engine wrote no soldFraction", () => {
@@ -366,9 +367,9 @@ describe("buildSectorPlantsSection", () => {
       });
       expect(s.truth.receivedPerUnitAnchor).toBeNull();
       expect(s.truth.costPerUnitAnchor).toBeNull();
-      // Costs still exist, so the fill-adjusted margin is a real (deeply
-      // negative) number, and there is no path to profit at this fill.
-      expect(s.truth.fillAdjustedMarginPct).toBeCloseTo(-100, 6);
+      // Nothing sold but costs still exist: the net margin reads as the floor
+      // rather than null, and there is no path to profit at this fill.
+      expect(s.truth.fillAdjustedMarginPct).toBe(NET_MARGIN_FLOOR_PCT);
       expect(s.truth.breakEven).toEqual({ status: "not_at_current_fills", turns: null });
     });
 

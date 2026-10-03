@@ -18,9 +18,7 @@ export function CentralBankPolicyStrip({ rates, currentTurn }: Props) {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-      <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-foreground">
-        Central Bank Policy
-      </h2>
+      <h2 className="mb-3 text-sm font-bold text-foreground">Central bank policy</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {withBands.map((r) => {
           const band = r.interventionBand!;

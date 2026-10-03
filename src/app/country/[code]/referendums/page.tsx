@@ -103,9 +103,7 @@ export default async function ReferendumsIndexPage({
       )}
 
       <section className="mt-10">
-        <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted">
-          Past referendums
-        </h2>
+        <h2 className="mb-3 text-sm font-bold text-muted">Past referendums</h2>
         {past.length > 0 ? (
           <ul className="space-y-2">
             {past

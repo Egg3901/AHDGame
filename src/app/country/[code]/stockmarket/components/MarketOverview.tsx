@@ -557,8 +557,8 @@ export function MarketOverview({
       <div className="px-4 pt-4 pb-3 border-b border-card-border">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
-              {exchangeLabel} · Listed market cap
+            <h3 className="text-sm font-semibold text-muted">
+              {exchangeLabel} · listed market cap
             </h3>
             {!loading && last && (
               <div className="text-sm tabular-nums">
