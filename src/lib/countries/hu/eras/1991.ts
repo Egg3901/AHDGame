@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * Hungary after the 1990 multiparty election. The National Election Office
@@ -16,6 +17,8 @@ import type { CountryEraOverride } from "../../contract";
 export const HU_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Regional GDP is stored in original local currency, not the accounting unit.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.HU!,
     executiveTitle: "Prime Minister",
     headOfStateTitle: "President",
     governmentType: "parliamentaryRepublic",

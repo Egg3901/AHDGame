@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * Poland at the start of 1991: Wałęsa's presidency, a parliamentary cabinet,
@@ -12,6 +13,8 @@ import type { CountryEraOverride } from "../../contract";
 export const PL_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Regional GDP is stored in original local currency, not the accounting unit.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.PL!,
     executiveTitle: "Prime Minister",
     headOfStateTitle: "President",
     governmentType: "parliamentaryRepublic",

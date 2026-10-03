@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * January 1991 Romania still used the institutions elected in May 1990 under
@@ -19,6 +20,8 @@ import type { CountryEraOverride } from "../../contract";
 export const RO_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
+    // Regional GDP is stored in original local currency, not the accounting unit.
+    usdExchangeRate: 1 / INITIAL_RATES_1991.RO!,
     executiveTitle: "Prime Minister",
     headOfStateTitle: "President",
     governmentType: "presidential",

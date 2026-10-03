@@ -25,13 +25,12 @@
  * bug this module closes; it is the single place the rule is written down.
  *
  * ERA AWARENESS. `getCountryConfig(id, preset)` layers
- * `ERA_COUNTRY_CONFIG_OVERRIDES[preset]` over the base config. Only the
- * `1953-default` table carries `usdExchangeRate` entries (pinned by
- * `era1953ExchangeRates.test.ts`), so passing a preset is a strict no-op for
- * every modern preset, for 1979/1991, for preset aliases, and for callers that
- * pass nothing. Passing the WRONG preset is therefore never worse than passing
- * none — but passing the right one is what makes a 1953 world read as a 1953
- * world.
+ * `ERA_COUNTRY_CONFIG_OVERRIDES[preset]` over the base config. The
+ * authored era tables carry `usdExchangeRate` entries, including original
+ * local-currency successor GDP in 1991. Era tests protect the distinct seed
+ * denominations; passing a preset selects its authored basis. Callers without
+ * a preset retain the base config. Readers must pass the active world preset
+ * so stored local GDP is not scaled with another era's denomination basis.
  *
  * @see src/lib/constants/countries.ts — the 1953 override table and its sources
  * @see src/lib/constants/sectorSeedEra.ts — the seed-time sibling of this module
