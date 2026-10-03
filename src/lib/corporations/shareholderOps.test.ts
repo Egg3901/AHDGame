@@ -272,7 +272,7 @@ describe("debitShares", () => {
         $set: { ceoVacant: true },
         $unset: { ceoId: "", userId: "", pendingCeoCharacterId: "" },
       }),
-      { returnDocument: "after" }
+      { returnDocument: "after", projection: { shareholders: 1 } }
     );
   });
 
