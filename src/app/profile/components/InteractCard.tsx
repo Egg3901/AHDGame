@@ -35,19 +35,17 @@ interface InteractCardProps {
 
 // ─── Inline bar ──────────────────────────────────────────────────────────────
 
-function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
+function StatBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="grid grid-cols-[100px_1fr_52px] items-center gap-3">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
-        {label}
-      </span>
-      <div className="h-[5px] w-full rounded-full bg-card-elevated overflow-hidden">
+      <span className="text-body-sm text-muted">{label}</span>
+      <div className="h-1 w-full overflow-hidden bg-card-border/60">
         <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(100, Math.max(0, value))}%`, backgroundColor: color }}
+          className="h-full bg-foreground/60"
+          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
         />
       </div>
-      <span className="text-right text-xs font-bold tabular-nums" style={{ color }}>
+      <span className="text-right text-body-sm font-semibold tabular-nums text-foreground">
         {value.toFixed(1)}%
       </span>
     </div>
@@ -139,7 +137,7 @@ function ActionsTab({
     );
   }
 
-  if (!info) return <p className="text-xs text-muted">{t("loadError")}</p>;
+  if (!info) return <p className="text-body-sm text-muted">{t("loadError")}</p>;
 
   const canAction = info.myActions >= info.actionCost;
   const favorabilityMaxed = favorability >= 100;
@@ -156,21 +154,21 @@ function ActionsTab({
         : t("distantState");
 
   const btnBase =
-    "rounded-lg px-3 py-2.5 text-xs font-semibold transition-all flex flex-col items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed";
+    "flex flex-col items-center gap-0.5 rounded-md border px-3 py-2.5 text-body-sm font-semibold text-foreground transition-colors hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40";
 
   return (
     <div className="space-y-4">
       {/* Target stats */}
       <div className="space-y-2.5">
-        <StatBar label={t("influence")} value={influence} color="var(--primary)" />
-        <StatBar label={t("favorability")} value={favorability} color="var(--info)" />
+        <StatBar label={t("influence")} value={influence} />
+        <StatBar label={t("favorability")} value={favorability} />
       </div>
 
       {/* Resources & location */}
-      <div className="rounded-lg bg-card-elevated/40 border border-card-border/50 px-3 py-2 text-xs space-y-1">
+      <div className="space-y-1 border-y border-card-border/60 py-2 text-body-sm">
         <div className="flex justify-between text-muted">
           <span>{t("location")}</span>
-          <span className={info.multiplier > 1 ? "text-warning" : "text-success"}>
+          <span className="text-foreground">
             {locationLabel} · {t("actionCost", { count: info.actionCost })}
           </span>
         </div>
@@ -194,14 +192,12 @@ function ActionsTab({
                 ? t("supportTitleMaxed")
                 : undefined
           }
-          className={`${btnBase} ${
-            flash === "raise"
-              ? "bg-success/20 border-2 border-success text-success"
-              : "bg-success/10 border border-success/30 hover:bg-success/20 text-success"
-          }`}
+          className={`${btnBase} ${flash === "raise" ? "border-success" : "border-card-border"}`}
         >
           <span>{flash === "raise" ? t("supported") : t("support")}</span>
-          <span className="text-[10px] font-normal opacity-70">
+          <span
+            className={`text-body-xs font-normal ${favorabilityMaxed ? "text-muted" : "text-success"}`}
+          >
             {favorabilityMaxed
               ? info.targetMediaSustainedAtCap
                 ? t("pinnedByMedia")
@@ -215,21 +211,23 @@ function ActionsTab({
           disabled={!canAction || favorabilityFloored || executing || flash !== null}
           className={`${btnBase} ${
             flash === "failed"
-              ? "bg-warning/20 border-2 border-warning text-warning"
+              ? "border-warning"
               : flash === "lower"
-                ? "bg-error/20 border-2 border-error text-error"
-                : "bg-error/10 border border-error/30 hover:bg-error/20 text-error"
+                ? "border-error"
+                : "border-card-border"
           }`}
         >
           {flash === "failed" ? (
             <>
               <span>{t("blocked")}</span>
-              <span className="text-[10px] font-normal opacity-70">{t("infamyBlocked")}</span>
+              <span className="text-body-xs font-normal text-warning">{t("infamyBlocked")}</span>
             </>
           ) : (
             <>
               <span>{flash === "lower" ? t("attacked") : t("attack")}</span>
-              <span className="text-[10px] font-normal opacity-70">
+              <span
+                className={`text-body-xs font-normal ${favorabilityFloored ? "text-muted" : "text-error"}`}
+              >
                 {favorabilityFloored
                   ? t("atFloor")
                   : info.attackFailureChance > 0
@@ -246,13 +244,11 @@ function ActionsTab({
         onClick={() => execute("barnstorm")}
         disabled={!canBarnstorm || executing || flash !== null}
         className={`w-full ${btnBase} ${
-          flash === "barnstorm"
-            ? "bg-primary/20 border-2 border-primary text-primary"
-            : "bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary"
+          flash === "barnstorm" ? "border-foreground" : "border-card-border"
         }`}
       >
         <span>{flash === "barnstorm" ? t("barnstormed") : t("barnstorm")}</span>
-        <span className="text-[10px] font-normal opacity-70">
+        <span className="text-body-xs font-normal text-muted">
           {influenceMaxed
             ? t("influenceMaxed")
             : t("barnstormEffect", {
@@ -262,8 +258,8 @@ function ActionsTab({
         </span>
       </button>
 
-      {!canAction && <p className="text-center text-[10px] text-error">{t("notEnoughActions")}</p>}
-      {actionError && <p className="text-center text-[10px] text-error">{actionError}</p>}
+      {!canAction && <p className="text-center text-body-xs text-error">{t("notEnoughActions")}</p>}
+      {actionError && <p className="text-center text-body-xs text-error">{actionError}</p>}
     </div>
   );
 }
@@ -342,16 +338,14 @@ function FundsTab({
   };
 
   const modeBtn = (m: "campaign" | "cash", _label: string) =>
-    `flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-      mode === m
-        ? "bg-primary text-primary-foreground shadow-sm"
-        : "text-muted hover:text-foreground"
+    `flex-1 rounded px-2 py-1 text-body-sm font-medium transition-colors ${
+      mode === m ? "bg-card-elevated text-foreground" : "text-muted hover:text-foreground"
     }`;
 
   return (
     <div className="space-y-3">
       {/* Campaign / Cash toggle */}
-      <div className="inline-flex w-full rounded-lg border border-card-border bg-card-muted/40 p-0.5">
+      <div className="inline-flex w-full rounded-md border border-card-border p-0.5">
         <button
           type="button"
           className={modeBtn("campaign", "Campaign")}
@@ -368,7 +362,7 @@ function FundsTab({
         </button>
       </div>
 
-      <div className="rounded-lg border border-card-border/50 bg-card-elevated/40 px-3 py-2 flex justify-between text-xs text-muted">
+      <div className="flex justify-between border-y border-card-border/60 py-2 text-body-sm text-muted">
         <span>{mode === "campaign" ? t("yourCampaignFunds") : t("yourCashOnHand")}</span>
         <span className="font-semibold text-foreground tabular-nums">
           {inputSymbol}
@@ -377,7 +371,7 @@ function FundsTab({
       </div>
 
       <div className="space-y-1.5">
-        <label htmlFor="interact-transfer-amount" className="text-xs text-muted">
+        <label htmlFor="interact-transfer-amount" className="text-body-sm text-muted">
           {t("amountLabel", { symbol: inputSymbol })}
         </label>
         <input
@@ -388,7 +382,7 @@ function FundsTab({
           step={1}
           value={displayAmount}
           onChange={(e) => setDisplayAmount(Number(e.target.value))}
-          className="w-full rounded-lg border border-card-border bg-zinc-950 px-3 py-2 text-sm text-foreground focus:border-zinc-500 focus:outline-none"
+          className="w-full rounded-md border border-card-border bg-background px-3 py-2 text-body text-foreground focus:border-foreground/40 focus:outline-none"
         />
       </div>
 
@@ -396,7 +390,7 @@ function FundsTab({
         type="button"
         onClick={submit}
         disabled={submitting || displayAmount <= 0 || displayAmount > maxDisplayTransfer}
-        className="w-full rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm font-medium text-success transition-colors hover:bg-success/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full rounded-md bg-primary px-3 py-2 text-body font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {submitting
           ? t("sending")
@@ -405,8 +399,8 @@ function FundsTab({
             })}
       </button>
 
-      {message && <p className="text-xs text-success">{message}</p>}
-      {error && <p className="text-xs text-error">{error}</p>}
+      {message && <p className="text-body-sm text-foreground">{message}</p>}
+      {error && <p className="text-body-sm text-error">{error}</p>}
     </div>
   );
 }
@@ -427,7 +421,7 @@ function MailTab({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-info/40 bg-info/10 px-3 py-2.5 text-sm font-medium text-info transition-colors hover:bg-info/20"
+        className="w-full rounded-md bg-primary px-3 py-2.5 text-body font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         {t("composeMail", { name: toCharacterName })}
       </button>
@@ -456,18 +450,16 @@ export function InteractCard({
   const [tab, setTab] = useState<Tab>("actions");
 
   const tabClass = (active: boolean) =>
-    `rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-      active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted hover:text-foreground"
+    `rounded px-2.5 py-1 text-body-sm font-medium transition-colors ${
+      active ? "bg-card-elevated text-foreground" : "text-muted hover:text-foreground"
     }`;
 
   return (
-    <div className="rounded-2xl border border-card-border bg-card p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          {t("title")}
-        </h2>
+    <div className="rounded-md border border-card-border p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-heading-sm font-semibold text-foreground">{t("title")}</h2>
         <div
-          className="inline-flex rounded-lg border border-card-border bg-card-muted/40 p-0.5"
+          className="inline-flex rounded-md border border-card-border p-0.5"
           role="tablist"
           aria-label={t("tablistAria")}
         >

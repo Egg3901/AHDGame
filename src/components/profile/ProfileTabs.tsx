@@ -24,6 +24,7 @@ export function ProfileTabs({
   isCommandingGeneral = false,
   militaryService,
   business = null,
+  actions,
   children,
 }: {
   conflictsEnabled: boolean;
@@ -36,6 +37,8 @@ export function ProfileTabs({
   isCommandingGeneral?: boolean;
   militaryService?: MilitaryService;
   business?: BusinessProfileView | null;
+  /** Shown at the right end of the tab row, outside the tab list. */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const t = useTranslations("profile.views");
@@ -67,53 +70,52 @@ export function ProfileTabs({
     { id: "business", locked: business ? null : t("businessLocked") },
   ];
   return (
-    <div className="space-y-4">
-      <div
-        role="tablist"
-        aria-label={t("label")}
-        className="flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1"
-      >
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            id={`${id}-${item.id}`}
-            role="tab"
-            aria-selected={tab === item.id}
-            aria-controls={`${id}-panel`}
-            aria-disabled={!!item.locked}
-            aria-describedby={item.locked ? `${id}-${item.id}-reason` : undefined}
-            tabIndex={tab === item.id ? 0 : -1}
-            onClick={() => {
-              if (!item.locked) setSelection({ subjectId: subject.id, view: item.id });
-            }}
-            onKeyDown={(e) => {
-              if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
-              e.preventDefault();
-              const available = tabs.filter((x) => !x.locked);
-              const current = available.findIndex((x) => x.id === item.id);
-              const next =
-                e.key === "Home"
-                  ? available[0]
-                  : e.key === "End"
-                    ? available[available.length - 1]
-                    : available[
-                        (current + (e.key === "ArrowRight" ? 1 : -1) + available.length) %
-                          available.length
-                      ];
-              if (next) {
-                setSelection({ subjectId: subject.id, view: next.id });
-                document.getElementById(`${id}-${next.id}`)?.focus();
-              }
-            }}
-            className={`min-w-0 rounded-md px-3 py-2 text-sm font-semibold ${item.locked ? "cursor-not-allowed text-muted opacity-60" : tab === item.id ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"}`}
-            title={item.locked ?? undefined}
-          >
-            {t(item.id)}
-            {item.locked && <span className="ml-2 text-xs">{t("locked")}</span>}
-          </button>
-        ))}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 border-b border-card-border">
+        <div role="tablist" aria-label={t("label")} className="flex flex-wrap gap-x-6">
+          {tabs.map((item) => (
+            <button
+              key={item.id}
+              id={`${id}-${item.id}`}
+              role="tab"
+              aria-selected={tab === item.id}
+              aria-controls={`${id}-panel`}
+              aria-disabled={!!item.locked}
+              aria-describedby={item.locked ? `${id}-${item.id}-reason` : undefined}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => {
+                if (!item.locked) setSelection({ subjectId: subject.id, view: item.id });
+              }}
+              onKeyDown={(e) => {
+                if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+                e.preventDefault();
+                const available = tabs.filter((x) => !x.locked);
+                const current = available.findIndex((x) => x.id === item.id);
+                const next =
+                  e.key === "Home"
+                    ? available[0]
+                    : e.key === "End"
+                      ? available[available.length - 1]
+                      : available[
+                          (current + (e.key === "ArrowRight" ? 1 : -1) + available.length) %
+                            available.length
+                        ];
+                if (next) {
+                  setSelection({ subjectId: subject.id, view: next.id });
+                  document.getElementById(`${id}-${next.id}`)?.focus();
+                }
+              }}
+              className={`-mb-px min-w-0 border-b-2 py-2 text-body font-medium transition-colors ${item.locked ? "cursor-not-allowed border-transparent text-muted opacity-60" : tab === item.id ? "border-foreground text-foreground" : "border-transparent text-muted hover:text-foreground"}`}
+              title={item.locked ?? undefined}
+            >
+              {t(item.id)}
+              {item.locked && <span className="ml-2 text-body-sm">{t("locked")}</span>}
+            </button>
+          ))}
+        </div>
+        {actions && <div className="ml-auto pb-2">{actions}</div>}
       </div>
-      <div className="text-xs text-muted space-y-1">
+      <div className="space-y-1 text-body-sm text-muted">
         {tabs
           .filter((item) => item.locked)
           .map((item) => (
@@ -126,7 +128,7 @@ export function ProfileTabs({
         role="tabpanel"
         id={`${id}-panel`}
         aria-labelledby={`${id}-${tab}`}
-        className="space-y-5"
+        className="space-y-10"
       >
         {tab === "political" && children}
         {tab === "business" && business && <BusinessProfile data={business} />}
@@ -146,7 +148,7 @@ export function ProfileTabs({
                 serviceRecord={<MilitaryServiceRecord service={service} posting={posting} />}
               />
             ) : (
-              <p className="text-sm text-muted">{t("awaiting")}</p>
+              <p className="text-body text-muted">{t("awaiting")}</p>
             )}
           </>
         )}

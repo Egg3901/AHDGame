@@ -54,13 +54,11 @@ import { InteractCard } from "@/app/profile/components/InteractCard";
 import { PlayerSafetyActions } from "@/components/profile/PlayerSafetyActions";
 import { hasBlocked } from "@/lib/safety/playerSafety";
 import { ProfileAchievements } from "@/components/ProfileAchievements";
-import { CampaignSongPlayer } from "@/components/CampaignSongPlayer";
 import { ProfileHeader } from "@/app/profile/components/ProfileHeader";
 import { PoliticalStanding } from "@/app/profile/components/PoliticalStanding";
 import { FinancialStrip } from "@/app/profile/components/FinancialStrip";
 import { CareerHistory } from "@/app/profile/components/CareerHistory";
-import { DiscordBadge } from "@/app/profile/DiscordBadge";
-import { getOnlineStatus } from "@/lib/utils/onlineStatus";
+import { ProfileSocial } from "@/app/profile/components/ProfileSocial";
 import {
   fetchPartyHistory,
   fetchPartyNameChanges,
@@ -69,7 +67,7 @@ import {
 } from "@/lib/parties/historyQuery";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { getOfficeLabel, getPartyHex } from "@/lib/utils/politics";
+import { getOfficeLabel } from "@/lib/utils/politics";
 import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 import {
   calculateFavorabilityAboveThresholdPenalty,
@@ -89,6 +87,13 @@ import { buildCharacterHref, parseCharacterId } from "@/lib/utils/profileUrls";
 import { playerWikiSlug } from "@/lib/wiki/playerPages";
 import type { CountryId } from "@/lib/constants/countries";
 import { SectionHeader } from "@/app/profile/components/ProfileMeters";
+import { PROFILE_LINK_CLASS } from "@/app/profile/components/profileStyles";
+import {
+  COMPASS_PARTY_MARKER,
+  COMPASS_SELF_DOT,
+  COMPASS_STATE_MARKER,
+} from "@/app/profile/components/compassColors";
+import { getTranslations } from "next-intl/server";
 import { CeoCorporationCard } from "@/app/profile/components/CeoCorporationCard";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { isRpgStatsEnabled } from "@/lib/stats/featureFlag";
@@ -609,8 +614,7 @@ export default async function CharacterPage({ params }: PageProps) {
       : false;
   const canInfluence = userData?.hasCharacter && !isOwnProfile && !isBanned;
 
-  const partyHex = getPartyHex(character.party, party?.color ?? undefined);
-  const accentHex = patreonHighlightColor ?? partyHex;
+  const t = await getTranslations("profile");
   const officeLabel = getOfficeLabel(character.currentOffice, character.countryId);
   const publicPartyName =
     party?.name ?? (character.party === "independent" ? "Independent" : character.party);
@@ -622,8 +626,6 @@ export default async function CharacterPage({ params }: PageProps) {
   const infamyPenalty = infamy > 20 ? ((infamy - 20) * 0.05).toFixed(2) : null;
   const favAboveThresholdPenalty = calculateFavorabilityAboveThresholdPenalty(favorability);
   const favDecayDisplay = favAboveThresholdPenalty > 0 ? favAboveThresholdPenalty.toFixed(1) : null;
-  const favColor =
-    favorability >= 60 ? "var(--success)" : favorability >= 40 ? "var(--warning)" : "var(--error)";
   const baseActionsPerTurn = Math.max(
     gameConfig?.baseActionsPerTurn ?? 0,
     MIN_BASE_ACTIONS_PER_TURN
@@ -903,7 +905,7 @@ export default async function CharacterPage({ params }: PageProps) {
     focusItems.push({ label: "Running", value: currentRaceLabel });
   }
   if (nationalPartyRole || statePartyRole) {
-    focusItems.push({ label: "Party Role", value: nationalPartyRole ?? statePartyRole! });
+    focusItems.push({ label: "Party role", value: nationalPartyRole ?? statePartyRole! });
   }
   if (chairBankRow) {
     focusItems.push({ label: "Role", value: "Central Bank Chair" });
@@ -912,21 +914,21 @@ export default async function CharacterPage({ params }: PageProps) {
     focusItems.push({ label: "Leading", value: ceoCorporation.name });
   }
   focusItems.push({ label: "Affiliation", value: publicPartyName });
-  focusItems.push({ label: "Home Base", value: stateName });
+  focusItems.push({ label: "Home base", value: stateName });
   const heroFocusItems = focusItems.slice(0, 4);
   const overviewStats: OverviewStatItem[] = [
     {
-      label: character.currentOffice ? "Current Office" : "Office",
+      label: character.currentOffice ? "Current office" : "Office",
       value: officeLabel,
     },
     { label: "State", value: stateName },
-    { label: "Election Wins", value: electionWins },
+    { label: "Election wins", value: electionWins },
   ];
   if (appointments > 0) {
     overviewStats.push({ label: "Appointments", value: appointments });
   }
   if (candidateElections.length > 0) {
-    overviewStats.push({ label: "Active Races", value: candidateElections.length });
+    overviewStats.push({ label: "Active races", value: candidateElections.length });
   }
   const relatedLinks = [
     {
@@ -967,14 +969,14 @@ export default async function CharacterPage({ params }: PageProps) {
     });
   }
 
-  // Compass markers — party position and home-state lean, matching self-profile
+  // Compass markers: party position and home-state lean, matching the own profile.
   const compassMarkers: CompassMarker[] = [];
   if (party?.economicPosition !== undefined && party?.socialPosition !== undefined) {
     compassMarkers.push({
       economic: party.economicPosition,
       social: party.socialPosition,
       label: "Party",
-      color: accentHex,
+      color: COMPASS_PARTY_MARKER,
     });
   }
   if (homeState?.cachedEconomicLean !== undefined && homeState?.cachedSocialLean !== undefined) {
@@ -982,23 +984,23 @@ export default async function CharacterPage({ params }: PageProps) {
       economic: homeState.cachedEconomicLean,
       social: homeState.cachedSocialLean,
       label: "State",
-      color: "#38bdf8",
+      color: COMPASS_STATE_MARKER,
     });
   }
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-8 overflow-x-hidden">
-        <nav className="flex items-center gap-2 text-sm text-muted">
-          <span>Public Profile</span>
+      <main className="mx-auto max-w-7xl space-y-10 overflow-x-hidden px-4 py-8 sm:px-6">
+        <nav className="flex items-center gap-2 text-body-sm text-muted">
+          <span>Public profile</span>
           <span aria-hidden>/</span>
           <span className="text-foreground">{character.name}</span>
         </nav>
 
         {isBanned && (
-          <div className="rounded-xl border border-red-500/50 bg-red-500/10 p-4">
-            <h2 className="font-semibold text-red-500">Account Banned</h2>
-            <p className="mt-1 text-sm text-red-400/90">
+          <div className="rounded-md border border-error/40 px-4 py-3">
+            <h2 className="text-body font-semibold text-error">Account banned</h2>
+            <p className="mt-1 text-body-sm text-muted">
               This user has been banned for violating the rules.
             </p>
           </div>
@@ -1012,6 +1014,7 @@ export default async function CharacterPage({ params }: PageProps) {
           memberSinceIsApproximate={data.membership.isApproximate}
           officeLabels={profileOfficeLabels}
           stateLabel={stateName}
+          campaignSongUrl={viewerHasBlocked ? null : character.campaignSongUrl}
           countrySlug={countrySlug}
           patreonHighlightColor={patreonHighlightColor}
           patreonTier={patreonTier}
@@ -1024,6 +1027,7 @@ export default async function CharacterPage({ params }: PageProps) {
               ? `/wiki/${playerWikiSlug(character.sequentialId)}`
               : undefined
           }
+          bioHidden={viewerHasBlocked}
         />
 
         <ProfileTabs
@@ -1042,36 +1046,30 @@ export default async function CharacterPage({ params }: PageProps) {
             countryCode: character.countryId.toLowerCase(),
           }}
         >
-          <section className="rounded-xl border border-card-border bg-card p-5 shadow-card">
-            <p className="text-body-lg font-medium text-foreground">{heroStatusLine}</p>
-            <div className="mt-4 flex flex-wrap gap-3">
+          <section>
+            <p className="text-body-lg text-foreground">{heroStatusLine}</p>
+            <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3">
               {heroFocusItems.map((item) => (
-                <div
-                  key={`${item.label}:${item.value}`}
-                  className="rounded-lg border border-card-border bg-card-muted/40 px-4 py-3"
-                >
-                  <p className="text-[11px] uppercase tracking-wide text-muted">{item.label}</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">{item.value}</p>
+                <div key={`${item.label}:${item.value}`}>
+                  <dt className="text-body-sm text-muted">{item.label}</dt>
+                  <dd className="text-body font-medium text-foreground">{item.value}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </section>
 
-          <div className="grid gap-8 lg:grid-cols-3 max-w-full">
-            {/* Left column: stats + finances */}
-            <div className="lg:col-span-2 space-y-8 min-w-0">
+          <div className="grid max-w-full gap-x-12 gap-y-10 lg:grid-cols-3">
+            {/* Left: standing, finances and stats (2/3) */}
+            <div className="min-w-0 space-y-10 lg:col-span-2">
               <PoliticalStanding
                 character={character}
-                nationalNpiLeaderRank={
-                  nationalNpiOrdinalRank <= 3 ? (nationalNpiOrdinalRank as 1 | 2 | 3) : undefined
-                }
+                nationalRank={nationalNpiOrdinalRank}
                 homeState={homeState}
                 influence={influence}
                 nationalInfluence={nationalInfluence}
                 influenceDecay={influenceDecay}
                 nationalGainPerTurn={nationalGainPerTurn}
                 favorability={favorability}
-                favColor={favColor}
                 favDecayDisplay={favDecayDisplay}
                 infamy={infamy}
                 infamyPenalty={infamyPenalty}
@@ -1089,13 +1087,9 @@ export default async function CharacterPage({ params }: PageProps) {
                 isOwnProfile={isOwnProfile}
               />
 
-              <section className="rounded-xl border border-card-border bg-card shadow-card overflow-hidden">
-                <div className="px-6 pt-5 pb-0">
-                  <SectionHeader>Finances</SectionHeader>
-                  <p className="-mt-2 mb-4 text-xs text-muted">
-                    Campaign resources and personal wealth, kept separate from political standing.
-                  </p>
-                </div>
+              <section>
+                <SectionHeader>{t("finances.title")}</SectionHeader>
+                <p className="-mt-2 mb-3 text-body-sm text-muted">{t("finances.subtitle")}</p>
                 <FinancialStrip
                   donorLevel={character.donorBaseLevel}
                   maxDonorLevel={maxDonorLevel}
@@ -1147,12 +1141,12 @@ export default async function CharacterPage({ params }: PageProps) {
               ) : null}
             </div>
 
-            {/* Right column: policy compass, music, career + interactions */}
-            <div className="space-y-8 min-w-0">
+            {/* Right: positions, roles, history and interactions (1/3) */}
+            <div className="min-w-0 space-y-10">
               <PolicyDemographicsCard
                 economic={character.policies.economic}
                 social={character.policies.social}
-                dotColor={accentHex}
+                dotColor={patreonHighlightColor ?? COMPASS_SELF_DOT}
                 markers={compassMarkers.length > 0 ? compassMarkers : undefined}
                 demographics={character.demographics}
                 startingCountryId={resolveStartingCountryId(character)}
@@ -1166,98 +1160,52 @@ export default async function CharacterPage({ params }: PageProps) {
                     ceoCorporation.sequentialId ?? ceoCorporation._id.toString()
                   )}
                   logoUrl={ceoCorporation.logoUrl}
-                  brandColor={ceoCorporation.brandColor}
                   isNationalEnterprise={
                     Boolean(ceoCorporation.countryOwnerId) || Boolean(ceoCorporation.isNationalized)
                   }
                 />
               )}
 
-              {(discordId || lastActivity) && (
-                <section className="rounded-xl border border-card-border bg-card p-5 shadow-card">
-                  <SectionHeader>Social</SectionHeader>
-                  <div className="flex flex-wrap items-center gap-3">
-                    {discordId && (
-                      <DiscordBadge
-                        discordId={discordId}
-                        discordUsername={discordUsername}
-                        discordAvatar={discordAvatar}
-                      />
-                    )}
-                    {lastActivity &&
-                      (() => {
-                        const online = getOnlineStatus(lastActivity);
-                        return (
-                          <span className="inline-flex items-center gap-2 text-xs text-muted">
-                            <span
-                              className={`h-2 w-2 rounded-full ${online.isOnline ? "bg-success" : "bg-muted"}`}
-                              aria-hidden
-                            />
-                            {online.text}
-                          </span>
-                        );
-                      })()}
-                  </div>
-                </section>
-              )}
-
-              {character.campaignSongUrl && !viewerHasBlocked && (
-                <div className="store-app-hidden rounded-xl border border-card-border bg-card p-4 shadow-card">
-                  <CampaignSongPlayer
-                    videoId={character.campaignSongUrl}
-                    characterName={character.name}
-                  />
-                </div>
-              )}
+              <ProfileSocial
+                discordId={discordId}
+                discordUsername={discordUsername}
+                discordAvatar={discordAvatar}
+                lastActivity={lastActivity}
+              />
 
               <CareerHistory
-                character={character}
+                character={{
+                  careerHistory: character.careerHistory,
+                  currentOffice: character.currentOffice,
+                  countryId: character.countryId,
+                }}
                 partyNames={partyNames}
                 gameDateAnchor={gameDateAnchor}
                 partyHistory={partyHistory}
               />
 
               {candidateElections.length > 0 && (
-                <div className="rounded-2xl border border-card-border bg-card p-6">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-4">
-                    Current Elections
-                  </h2>
-                  <div className="space-y-3">
+                <section>
+                  <SectionHeader>Current elections</SectionHeader>
+                  <ul className="divide-y divide-card-border/60">
                     {candidateElections.map(({ election, candidacy }) => (
-                      <Link
-                        key={candidacy._id.toString()}
-                        href={`/elections/${election._id.toString()}`}
-                        className="block rounded-lg border border-card-border bg-card-muted/40 p-3 hover:border-primary/20 transition-colors"
-                      >
-                        <p className="font-medium text-sm text-foreground">
+                      <li key={candidacy._id.toString()} className="py-2.5">
+                        <Link
+                          href={`/elections/${election._id.toString()}`}
+                          className={`text-body ${PROFILE_LINK_CLASS}`}
+                        >
                           {formatElectionTypeLabel(election.electionType, character.countryId)}
                           {election.electionType === "senate" && election.senateClass
                             ? ` (Class ${election.senateClass})`
                             : ""}
-                        </p>
-                        <p className="mt-1 text-xs text-muted">
+                        </Link>
+                        <p className="mt-0.5 text-body-sm text-muted">
                           {election.state} · {election.cycle} · {election.status}
                         </p>
-                      </Link>
+                      </li>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {userData && !isOwnProfile && (
-                <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-                  {viewerHasBlocked && (
-                    <p className="mb-3 text-xs text-muted">
-                      You blocked this player. Their bio, campaign song and mail are hidden from
-                      you.
-                    </p>
-                  )}
-                  <PlayerSafetyActions
-                    characterId={character._id.toString()}
-                    characterName={character.name}
-                    initiallyBlocked={viewerHasBlocked}
-                  />
-                </div>
+                  </ul>
+                </section>
               )}
 
               {!isOwnProfile && !isBanned && userData?.hasCharacter && (
@@ -1281,66 +1229,80 @@ export default async function CharacterPage({ params }: PageProps) {
                   canInfluence={!!canInfluence}
                 />
               )}
+
+              {userData && !isOwnProfile && (
+                <div>
+                  {viewerHasBlocked && (
+                    <p className="mb-3 text-body-sm text-muted">
+                      You blocked this player. Their bio, campaign song and mail are hidden from
+                      you.
+                    </p>
+                  )}
+                  <PlayerSafetyActions
+                    characterId={character._id.toString()}
+                    characterName={character.name}
+                    initiallyBlocked={viewerHasBlocked}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Full-width achievements at the bottom, matching self-profile */}
-          <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-            <SectionHeader>Achievements</SectionHeader>
-            <ProfileAchievements
-              characterId={character._id.toString()}
-              characterHref={buildCharacterHref(character)}
-              isOwnProfile={isOwnProfile}
-            />
-          </div>
+          <ProfileAchievements
+            characterId={character._id.toString()}
+            characterHref={buildCharacterHref(character)}
+            isOwnProfile={isOwnProfile}
+          />
 
-          <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-                Public Overview
-              </h2>
-              <p className="mt-4 text-[15px] leading-relaxed text-foreground">{publicOverview}</p>
+          <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <section>
+              <SectionHeader>Public overview</SectionHeader>
+              <p className="max-w-prose text-body leading-relaxed text-foreground">
+                {publicOverview}
+              </p>
               {!viewerHasBlocked &&
                 character.bio?.trim() &&
                 character.bio.trim() !== publicSummary && (
-                  <p className="mt-3 text-sm leading-relaxed text-muted">{publicSummary}</p>
+                  <p className="mt-3 max-w-prose text-body-sm leading-relaxed text-muted">
+                    {publicSummary}
+                  </p>
                 )}
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
                 {overviewStats.map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-lg border border-card-border bg-card-muted/40 p-3"
-                  >
-                    <p className="text-[11px] uppercase tracking-wide text-muted">{stat.label}</p>
-                    <p className="mt-1 text-sm font-medium text-foreground">{stat.value}</p>
+                  <div key={stat.label}>
+                    <dt className="text-body-sm text-muted">{stat.label}</dt>
+                    <dd className="text-body font-medium tabular-nums text-foreground">
+                      {stat.value}
+                    </dd>
                   </div>
                 ))}
-              </div>
-            </div>
+              </dl>
+            </section>
 
-            <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-                Related Pages
-              </h2>
-              <div className="mt-4 space-y-3">
+            <section>
+              <SectionHeader>Related pages</SectionHeader>
+              <ul className="divide-y divide-card-border/60">
                 {relatedLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="block rounded-lg border border-card-border bg-card-muted/40 p-3 transition-colors hover:border-primary/20"
-                  >
-                    <p className="text-sm font-medium text-foreground">{link.label}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted">{link.description}</p>
-                  </Link>
+                  <li key={link.href} className="py-2.5">
+                    <Link href={link.href} className={`text-body ${PROFILE_LINK_CLASS}`}>
+                      {link.label}
+                    </Link>
+                    <p className="mt-0.5 text-body-sm leading-relaxed text-muted">
+                      {link.description}
+                    </p>
+                  </li>
                 ))}
-              </div>
-            </div>
-          </section>
+              </ul>
+            </section>
+          </div>
         </ProfileTabs>
 
         <div>
-          <Link href="/map" className="text-sm text-muted hover:text-foreground transition-colors">
-            ← Back to Map
+          <Link
+            href="/map"
+            className="text-body-sm text-muted transition-colors hover:text-foreground"
+          >
+            ← Back to map
           </Link>
         </div>
       </main>

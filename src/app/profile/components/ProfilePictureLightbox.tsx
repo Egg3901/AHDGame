@@ -7,11 +7,26 @@ import type { ProfileBorderKey } from "@/lib/db/types";
 import { ProfileBorder } from "@/components/patreon/ProfileBorder";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 
+const THUMBNAIL_CLASSES = {
+  hero: {
+    frame:
+      "rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 font-bold ring-2 ring-card-border shadow-xl h-24 w-24 text-4xl sm:h-36 sm:w-36 sm:text-6xl md:h-40 md:w-40 md:text-7xl lg:h-44 lg:w-44",
+    sizes: "(max-width: 640px) 96px, (max-width: 768px) 144px, 176px",
+  },
+  /** Profile identity block: neutral placeholder, hairline ring, no shadow. */
+  header: {
+    frame:
+      "rounded-lg bg-card-elevated font-bold text-muted ring-1 ring-card-border h-20 w-20 text-3xl sm:h-24 sm:w-24 sm:text-4xl",
+    sizes: "(max-width: 640px) 80px, 96px",
+  },
+} as const;
+
 interface ProfilePictureLightboxProps {
   avatarUrl?: string | null;
   characterName: string;
   borderKey?: ProfileBorderKey | null;
   tintColor?: string | null;
+  size?: keyof typeof THUMBNAIL_CLASSES;
 }
 
 export function ProfilePictureLightbox({
@@ -19,6 +34,7 @@ export function ProfilePictureLightbox({
   characterName,
   borderKey,
   tintColor,
+  size = "hero",
 }: ProfilePictureLightboxProps) {
   const t = useTranslations("profile.lightbox");
   const [open, setOpen] = useState(false);
@@ -66,14 +82,16 @@ export function ProfilePictureLightbox({
         title={t("viewPicture")}
       >
         <ProfileBorder borderKey={borderKey} tintColor={tintColor}>
-          <div className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 font-bold ring-2 ring-card-border shadow-xl h-24 w-24 text-4xl sm:h-36 sm:w-36 sm:text-6xl md:h-40 md:w-40 md:text-7xl lg:h-44 lg:w-44">
+          <div
+            className={`relative flex items-center justify-center overflow-hidden ${THUMBNAIL_CLASSES[size].frame}`}
+          >
             {avatarUrl ? (
               <Image
                 src={avatarUrl}
                 alt={characterName}
                 fill
                 className="object-cover"
-                sizes="(max-width: 640px) 96px, (max-width: 768px) 144px, 176px"
+                sizes={THUMBNAIL_CLASSES[size].sizes}
                 unoptimized={bypassNextImageOptimization(avatarUrl)}
               />
             ) : (

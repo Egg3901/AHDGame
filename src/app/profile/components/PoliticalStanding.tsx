@@ -1,27 +1,13 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import type { Character, State } from "@/lib/db/types";
 import { SectionHeader } from "./ProfileMeters";
+import { PROFILE_LINK_CLASS } from "./profileStyles";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { ACTION_HOARDING_PENALTY } from "@/lib/actions/recommendationsConstants";
 import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
-
-const INFO_ICON = (
-  <svg
-    className="inline-block h-3 w-3 ml-1 text-muted/50 pointer-events-none"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-    />
-  </svg>
-);
 
 interface PoliticalStandingProps {
   character: Character;
@@ -31,11 +17,12 @@ interface PoliticalStandingProps {
   influenceDecay: string;
   nationalGainPerTurn: string;
   favorability: number;
-  favColor: string;
   favDecayDisplay: string | null;
   infamy: number;
   infamyPenalty: string | null;
   maxNPI: number;
+  /** Ordinal rank on the country's national influence board; 0 or absent when unknown. */
+  nationalRank?: number;
   baseActionsPerTurn?: number;
   officeActionBonus?: number;
   chairActionBonus?: number;
@@ -51,62 +38,42 @@ interface PoliticalStandingProps {
   partyInfluenceNetGain?: number;
   /** Character's share of total party influence (0-100%) */
   partyInfluenceShare?: number;
-  /** Whether this is the viewer's own profile — controls Campaign Office link visibility */
+  /** Whether this is the viewer's own profile; controls Campaign Office link visibility */
   isOwnProfile?: boolean;
-  /** 1–3 when this character is that high on the national NPI leaderboard for their country */
-  nationalNpiLeaderRank?: 1 | 2 | 3;
 }
 
-/** Compute the heat-gradient color (green → yellow → red) for 0-100% */
-function heatColor(pct: number): string {
-  const t = Math.min(1, Math.max(0, pct / 100));
-  let r: number, g: number, b: number;
-  if (t < 0.5) {
-    const s = t * 2;
-    r = Math.round(34 + s * 221);
-    g = Math.round(197);
-    b = Math.round(94 - s * 94);
-  } else {
-    const s = (t - 0.5) * 2;
-    r = 255;
-    g = Math.round(197 - s * 197);
-    b = 0;
-  }
-  return `rgb(${r},${g},${b})`;
+type Tone = "neutral" | "gain" | "loss";
+
+interface StandingRow {
+  key: string;
+  label: string;
+  tooltip: ReactNode;
+  value: string;
+  perTurn: string | null;
+  perTurnTone: Tone;
+  note: ReactNode;
+  noteTone: Tone;
 }
 
-/** Inline progress bar used in each stat row */
-function InlineBar({ pct, color }: { pct: number; color: string }) {
-  const clamped = Math.min(100, Math.max(0, pct));
-  return (
-    <div className="h-[6px] w-full bg-card-elevated rounded-full overflow-hidden">
-      <div
-        className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${clamped}%`, backgroundColor: color }}
-      />
-    </div>
-  );
+const TONE_CLASS: Record<Tone, string> = {
+  neutral: "text-muted",
+  gain: "text-success",
+  loss: "text-error",
+};
+
+const MINUS = "−";
+
+/** Signed per-turn change, coloured by direction; zero reads as neutral. */
+function signedChange(value: number, digits: number): { text: string; tone: Tone } {
+  const magnitude = Math.abs(value).toFixed(digits);
+  if (Number(magnitude) === 0) return { text: magnitude, tone: "neutral" };
+  return value > 0
+    ? { text: `+${magnitude}`, tone: "gain" }
+    : { text: `${MINUS}${magnitude}`, tone: "loss" };
 }
 
-/** Inline gradient bar (green → yellow → red) */
-function InlineHeatBar({ pct }: { pct: number }) {
-  const clamped = Math.min(100, Math.max(0, pct));
-  return (
-    <div className="h-[6px] w-full bg-card-elevated rounded-full overflow-hidden">
-      <div
-        className="h-full rounded-full transition-all duration-500"
-        style={{
-          width: `${clamped}%`,
-          background:
-            clamped > 0 ? `linear-gradient(90deg, #22c55e, ${heatColor(clamped)})` : "#22c55e",
-        }}
-      />
-    </div>
-  );
-}
-
-/** Per-source action breakdown, shared by the control and dossier layouts. */
-export function ActionsTooltipBody({
+/** Per-source action breakdown shown in the Actions tooltip. */
+function ActionsTooltipBody({
   baseActionsPerTurn,
   officeActionBonus,
   chairActionBonus,
@@ -129,7 +96,7 @@ export function ActionsTooltipBody({
 }) {
   const t = useTranslations("profile.standing");
   return (
-    <div className="text-muted space-y-1">
+    <>
       <p>
         {baseActionsPerTurn != null && officeActionBonus != null ? (
           <>
@@ -148,7 +115,7 @@ export function ActionsTooltipBody({
         )}
       </p>
       {actionBreakdown && actionBreakdown.length > 0 && (
-        <div className="border-t border-card-border/30 pt-1 space-y-0.5">
+        <div className="space-y-0.5 border-t border-card-border/30 pt-1">
           {actionBreakdown.map((item) => (
             <div key={item.label} className="flex justify-between gap-3 tabular-nums">
               <span>{item.label}</span>
@@ -164,10 +131,15 @@ export function ActionsTooltipBody({
           penalty: ACTION_HOARDING_PENALTY,
         })}
       </p>
-    </div>
+    </>
   );
 }
 
+/**
+ * Political standing as a table: one row per measure with its value, its
+ * change per turn and what it means. Colour appears only on gains, losses
+ * and penalties; everything else is neutral.
+ */
 export function PoliticalStanding({
   character,
   homeState,
@@ -176,11 +148,11 @@ export function PoliticalStanding({
   influenceDecay,
   nationalGainPerTurn,
   favorability,
-  favColor,
   favDecayDisplay,
   infamy,
   infamyPenalty,
   maxNPI,
+  nationalRank = 0,
   baseActionsPerTurn,
   officeActionBonus,
   chairActionBonus,
@@ -192,264 +164,191 @@ export function PoliticalStanding({
   partyInfluenceNetGain,
   partyInfluenceShare,
   isOwnProfile = true,
-  nationalNpiLeaderRank,
 }: PoliticalStandingProps) {
   const t = useTranslations("profile.standing");
   // Action cap and hoard threshold scale with the character's Energy stat
-  // (engine: actionRefresh.ts → energyActionLimits). Unmigrated characters with
+  // (engine: actionRefresh.ts -> energyActionLimits). Unmigrated characters with
   // no Energy stat fall back to the baseline via STAT_MIN, matching the engine.
   const { cap: actionCap, threshold: hoardThreshold } = energyActionLimits(
     character.stats?.energy ?? STAT_MIN
   );
-  const actionPct = Math.min(100, (character.actions / actionCap) * 100);
-  const actionColor = heatColor(actionPct);
   const actionsPerTurn = totalActionsPerTurn + (bonusActionsFromParty ?? 0);
   const showParty = character.party && character.party !== "independent";
 
+  const actionsChange = signedChange(actionsPerTurn, 0);
+  const influenceChange = signedChange(-Number(influenceDecay), 2);
+  const nationalChange = signedChange(Number(nationalGainPerTurn), 2);
+  const favorabilityChange = favDecayDisplay ? signedChange(-Number(favDecayDisplay), 1) : null;
+  const partyChange = partyInfluenceNetGain != null ? signedChange(partyInfluenceNetGain, 1) : null;
+  const nationalTop = maxNPI.toFixed(1);
+
+  const rows: StandingRow[] = [
+    {
+      key: "actions",
+      label: t("actions"),
+      tooltip: (
+        <ActionsTooltipBody
+          baseActionsPerTurn={baseActionsPerTurn}
+          officeActionBonus={officeActionBonus}
+          chairActionBonus={chairActionBonus}
+          bonusActionsFromParty={bonusActionsFromParty}
+          actionsPerTurn={actionsPerTurn}
+          totalActionsPerTurn={totalActionsPerTurn}
+          actionBreakdown={actionBreakdown}
+          actionCap={actionCap}
+          hoardThreshold={hoardThreshold}
+        />
+      ),
+      value: `${character.actions} / ${actionCap}`,
+      perTurn: actionsChange.text,
+      perTurnTone: actionsChange.tone,
+      note: actionHoarding
+        ? t("hoarding", { penalty: ACTION_HOARDING_PENALTY })
+        : t("hoardAbove", { threshold: hoardThreshold }),
+      noteTone: actionHoarding ? "loss" : "neutral",
+    },
+    {
+      key: "influence",
+      label: t("stateInfluence"),
+      tooltip: <p>{t("influenceTooltip")}</p>,
+      value: `${influence.toFixed(1)}%`,
+      perTurn: influenceChange.text,
+      perTurnTone: influenceChange.tone,
+      note: homeState?.name ?? null,
+      noteTone: "neutral",
+    },
+    {
+      key: "national",
+      label: t("nationalInfluence"),
+      tooltip: <p>{t("nationalTooltip")}</p>,
+      value: nationalInfluence.toFixed(1),
+      perTurn: nationalChange.text,
+      perTurnTone: nationalChange.tone,
+      note:
+        nationalRank > 0
+          ? t("nationalRankTop", { rank: nationalRank, top: nationalTop })
+          : t("nationalTop", { top: nationalTop }),
+      noteTone: "neutral",
+    },
+    {
+      key: "favorability",
+      label: t("favorability"),
+      tooltip: <p>{t("favorabilityTooltip")}</p>,
+      value: `${favorability.toFixed(1)}%`,
+      perTurn: favorabilityChange?.text ?? null,
+      perTurnTone: favorabilityChange?.tone ?? "neutral",
+      note: favDecayDisplay ? t("favorabilityCooling") : t("favorabilityStable"),
+      noteTone: "neutral",
+    },
+    {
+      key: "infamy",
+      label: t("infamy"),
+      tooltip: <p>{t("infamyTooltip")}</p>,
+      value: `${infamy.toFixed(1)}%`,
+      perTurn: null,
+      perTurnTone: "neutral",
+      note: infamyPenalty ? t("infamyCost", { value: infamyPenalty }) : t("infamySafe"),
+      noteTone: infamyPenalty ? "loss" : "neutral",
+    },
+  ];
+
+  if (showParty) {
+    rows.push({
+      key: "party",
+      label: t("partyInfluence"),
+      tooltip: (
+        <>
+          <p>{t("partyInfluenceTooltip")}</p>
+          {bonusActionsFromParty != null && (
+            <p>
+              {t("partyBonusEarning", {
+                count: bonusActionsFromParty,
+                max: partyInfluenceMaxBonus ?? 6,
+              })}
+            </p>
+          )}
+          {partyInfluenceShare != null && <p>{t("partyShare", { share: partyInfluenceShare })}</p>}
+        </>
+      ),
+      value: (character.partyInfluence ?? 0).toFixed(1),
+      perTurn: partyChange?.text ?? null,
+      perTurnTone: partyChange?.tone ?? "neutral",
+      note:
+        bonusActionsFromParty != null
+          ? t("partyBonus", { count: bonusActionsFromParty, max: partyInfluenceMaxBonus ?? 6 })
+          : t("withinPartyStanding"),
+      noteTone: "neutral",
+    });
+  }
+
   return (
-    <div className="rounded-xl border border-card-border bg-card shadow-card overflow-hidden">
-      {/* Header */}
-      <div className="px-6 pt-5 pb-0">
-        <SectionHeader>{t("title")}</SectionHeader>
-      </div>
-
-      {/* Stat rows */}
-      <div>
-        {/* Actions */}
-        <div className="grid grid-cols-[130px_1fr_90px] items-center gap-4 px-6 py-3.5 border-b border-card-border/20 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60">
-          <div>
-            <InfoTooltip
-              trigger={
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  {t("actions")}
-                  {INFO_ICON}
-                </span>
-              }
-            >
-              <ActionsTooltipBody
-                baseActionsPerTurn={baseActionsPerTurn}
-                officeActionBonus={officeActionBonus}
-                chairActionBonus={chairActionBonus}
-                bonusActionsFromParty={bonusActionsFromParty}
-                actionsPerTurn={actionsPerTurn}
-                totalActionsPerTurn={totalActionsPerTurn}
-                actionBreakdown={actionBreakdown}
-                actionCap={actionCap}
-                hoardThreshold={hoardThreshold}
-              />
-            </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-              {t("perTurn", { count: actionsPerTurn })}
-              {actionHoarding && (
-                <span className="text-error ml-1">
-                  {t("hoardTag", { penalty: ACTION_HOARDING_PENALTY })}
-                </span>
-              )}
-            </div>
-          </div>
-          <InlineHeatBar pct={actionPct} />
-          <div className="text-right">
-            <span className="text-sm font-bold tabular-nums" style={{ color: actionColor }}>
-              {character.actions}
-            </span>
-            <span className="text-xs text-muted font-normal ml-0.5">/ {actionCap}</span>
-            {isOwnProfile && (
-              <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-                <Link
-                  href="/actions"
-                  className="text-primary/80 hover:text-primary hover:underline"
+    <section>
+      <SectionHeader
+        action={
+          isOwnProfile ? (
+            <Link href="/actions" className={`text-body-sm ${PROFILE_LINK_CLASS}`}>
+              {t("campaignOffice")}
+            </Link>
+          ) : undefined
+        }
+      >
+        {t("title")}
+      </SectionHeader>
+      <table className="w-full border-collapse text-body">
+        <thead>
+          <tr className="border-b border-card-border text-body-sm text-muted">
+            <th scope="col" className="py-2 pr-3 text-left font-medium">
+              {t("colMeasure")}
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
+              {t("colValue")}
+            </th>
+            <th scope="col" className="py-2 pl-3 text-right font-medium md:pr-3">
+              {t("colPerTurn")}
+            </th>
+            <th scope="col" className="hidden w-2/5 py-2 pl-6 text-left font-medium md:table-cell">
+              {t("colNotes")}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-b border-card-border/60 last:border-b-0">
+              <th scope="row" className="py-3 pr-3 text-left align-baseline font-medium">
+                <InfoTooltip
+                  trigger={
+                    <span className="text-foreground underline decoration-muted/50 decoration-dotted underline-offset-4">
+                      {row.label}
+                    </span>
+                  }
                 >
-                  {t("campaignOffice")}
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Influence (State) */}
-        <div className="grid grid-cols-[130px_1fr_90px] items-center gap-4 px-6 py-3.5 border-b border-card-border/20 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60">
-          <div>
-            <InfoTooltip
-              trigger={
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  {t("influence")}
-                  {INFO_ICON}
-                </span>
-              }
-            >
-              <p className="text-muted">{t("influenceTooltip")}</p>
-            </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">{homeState?.name}</div>
-          </div>
-          <InlineBar pct={influence} color="var(--primary)" />
-          <div className="text-right">
-            <span className="text-sm font-bold tabular-nums text-primary">
-              {influence.toFixed(1)}%
-            </span>
-            <div className="text-[10px] text-error/80 font-medium mt-0.5">
-              {t("decay", { value: influenceDecay })}
-            </div>
-          </div>
-        </div>
-
-        {/* National Influence */}
-        <div className="grid grid-cols-[130px_1fr_90px] items-center gap-4 px-6 py-3.5 border-b border-card-border/20 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60">
-          <div>
-            <InfoTooltip
-              trigger={
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  {t("national")}
-                  {INFO_ICON}
-                </span>
-              }
-            >
-              <p className="text-muted">{t("nationalTooltip")}</p>
-            </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-              {t("nationalTop", { value: maxNPI.toFixed(1) })}
-            </div>
-          </div>
-          <div
-            className={`min-w-0 rounded-full p-[3px] transition-shadow duration-300 ${
-              nationalNpiLeaderRank === 1
-                ? "shadow-[0_0_16px_rgba(234,179,8,0.55)]"
-                : nationalNpiLeaderRank === 2
-                  ? "shadow-[0_0_14px_rgba(148,163,184,0.55)]"
-                  : nationalNpiLeaderRank === 3
-                    ? "shadow-[0_0_14px_rgba(217,119,6,0.48)]"
-                    : ""
-            }`}
-          >
-            <InlineBar
-              pct={maxNPI > 0 ? (nationalInfluence / maxNPI) * 100 : 0}
-              color="var(--info)"
-            />
-          </div>
-          <div className="text-right">
-            <span className="text-sm font-bold tabular-nums text-info">
-              {nationalInfluence.toFixed(1)}
-            </span>
-            <div className="text-[10px] text-success/80 font-medium mt-0.5">
-              {t("gain", { value: nationalGainPerTurn })}
-            </div>
-          </div>
-        </div>
-
-        {/* Favorability */}
-        <div className="grid grid-cols-[130px_1fr_90px] items-center gap-4 px-6 py-3.5 border-b border-card-border/20 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60">
-          <div>
-            <InfoTooltip
-              trigger={
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  {t("favorability")}
-                  {INFO_ICON}
-                </span>
-              }
-            >
-              <p className="text-muted">{t("favorabilityTooltip")}</p>
-            </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-              {t("publicApproval")}
-            </div>
-          </div>
-          <InlineBar pct={favorability} color={favColor} />
-          <div className="text-right">
-            <span className="text-sm font-bold tabular-nums" style={{ color: favColor }}>
-              {favorability.toFixed(1)}%
-            </span>
-            {favDecayDisplay && (
-              <div className="text-[10px] text-error/80 font-medium mt-0.5">
-                {t("decay", { value: favDecayDisplay })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Infamy */}
-        <div className="grid grid-cols-[130px_1fr_90px] items-center gap-4 px-6 py-3.5 border-b border-card-border/20 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60">
-          <div>
-            <InfoTooltip
-              trigger={
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                  {t("infamy")}
-                  {INFO_ICON}
-                </span>
-              }
-            >
-              <p className="text-muted">{t("infamyTooltip")}</p>
-            </InfoTooltip>
-            <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-              {t("publicNotoriety")}
-            </div>
-          </div>
-          <InlineHeatBar pct={infamy} />
-          <div className="text-right">
-            <span
-              className={`text-sm font-bold tabular-nums ${infamy > 20 ? "text-error" : "text-muted"}`}
-            >
-              {infamy.toFixed(1)}%
-            </span>
-            <div className="text-[10px] font-medium mt-0.5">
-              {infamyPenalty ? (
-                <span className="text-error/80">
-                  {t("infamyFavPenalty", { value: infamyPenalty })}
-                </span>
-              ) : (
-                <span className="text-success/80">{t("safe")}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Party Influence */}
-        {showParty && (
-          <div className="grid grid-cols-[130px_1fr_90px] items-center gap-4 px-6 py-3.5 border-b border-card-border/20 transition-colors duration-150 hover:bg-card-elevated/40 active:bg-card-elevated/60">
-            <div>
-              <InfoTooltip
-                trigger={
-                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                    {t("partyInfluence")}
-                    {INFO_ICON}
+                  <div className="space-y-1 text-muted">{row.tooltip}</div>
+                </InfoTooltip>
+                {row.note && (
+                  <span
+                    className={`mt-0.5 block text-body-sm font-normal md:hidden ${TONE_CLASS[row.noteTone]}`}
+                  >
+                    {row.note}
                   </span>
-                }
+                )}
+              </th>
+              <td className="whitespace-nowrap px-3 py-3 text-right align-baseline font-semibold tabular-nums text-foreground">
+                {row.value}
+              </td>
+              <td
+                className={`whitespace-nowrap py-3 pl-3 text-right align-baseline tabular-nums md:pr-3 ${TONE_CLASS[row.perTurnTone]}`}
               >
-                <div className="text-muted space-y-1">
-                  <p>{t("partyInfluenceTooltip")}</p>
-                  {bonusActionsFromParty != null && (
-                    <p>
-                      {t("partyBonusEarning", {
-                        count: bonusActionsFromParty,
-                        max: partyInfluenceMaxBonus ?? 6,
-                      })}
-                    </p>
-                  )}
-                  {partyInfluenceShare != null && (
-                    <p>{t("partyShare", { share: partyInfluenceShare })}</p>
-                  )}
-                </div>
-              </InfoTooltip>
-              <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-                {partyInfluenceNetGain != null
-                  ? t("netPerTurn", {
-                      value: `${partyInfluenceNetGain >= 0 ? "+" : ""}${partyInfluenceNetGain.toFixed(1)}`,
-                    })
-                  : t("withinPartyStanding")}
-              </div>
-            </div>
-            <InlineBar pct={character.partyInfluence ?? 0} color="var(--primary)" />
-            <div className="text-right">
-              <span className="text-sm font-bold tabular-nums text-primary">
-                {(character.partyInfluence ?? 0).toFixed(1)}
-              </span>
-              <div className="text-[10px] text-muted/70 font-medium mt-0.5">
-                {bonusActionsFromParty != null
-                  ? t("bonusActCount", { count: bonusActionsFromParty })
-                  : t("bonusActions")}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+                {row.perTurn}
+              </td>
+              <td
+                className={`hidden py-3 pl-6 align-baseline text-body-sm md:table-cell ${TONE_CLASS[row.noteTone]}`}
+              >
+                {row.note}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }

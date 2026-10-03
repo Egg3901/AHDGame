@@ -3,15 +3,18 @@
     "header": {
       "admin": "Admin",
       "moderator": "Moderator",
-      "independent": "PL",
+      "independent": "Parteilos",
       "memberSince": "Mitglied seit {date}",
       "editProfile": "Profil bearbeiten",
       "viewWikiProfile": "Wiki-Profil ansehen →",
-      "biography": "Biografie",
       "noBio": "Dieser Spieler hat noch keine öffentliche Biografie veröffentlicht."
     },
     "standing": {
       "title": "Politisches Ansehen",
+      "colMeasure": "Kennzahl",
+      "colValue": "Wert",
+      "colPerTurn": "Pro Zug",
+      "colNotes": "Hinweise",
       "actions": "Aktionen",
       "actionsBase": "{count} Basis",
       "actionsOffice": "{count} Amt",
@@ -21,32 +24,29 @@
       "actionsSimple": "{count} Aktionen pro Zug (Basis + Amtsboni).",
       "turnExplainer": "1 Zug = 1 echte Stunde. 48 Züge = 1 Spieljahr. Limit: {cap}.",
       "hoardWarning": "Ab {threshold} Aktionen gilt eine Hortungsstrafe von {penalty}/Zug.",
-      "perTurn": "+{count}/Zug",
-      "hoardTag": "-{penalty} Hortung",
-      "campaignOffice": "Wahlkampfbüro →",
-      "influence": "Einfluss",
+      "hoarding": "Hortung: −{penalty} pro Zug",
+      "hoardAbove": "Hortungsstrafe ab {threshold}",
+      "campaignOffice": "Wahlkampfbüro",
+      "stateInfluence": "Einfluss im Staat",
       "influenceTooltip": "Politischer Rückhalt im Heimatstaat. Gib Aktionen aus, um ihn auszubauen; er nimmt jeden Zug ab. Höherer Einfluss verbessert deine Chancen bei Staatswahlen und schaltet lokale Macht frei.",
-      "decay": "Verfall -{value}%",
-      "national": "National",
-      "nationalTooltip": "Ansehen auf nationaler Bühne. Wächst jeden Zug passiv auf Basis des Staatseinflusses. Der Balken zeigt den Rang relativ zum besten Spieler des Landes. Die nationalen Top drei erhalten ein dezentes Leuchten auf diesem Balken.",
-      "nationalTop": "#1: {value}",
-      "gain": "Zuwachs +{value}",
+      "nationalInfluence": "Nationaler Einfluss",
+      "nationalTooltip": "Ansehen auf nationaler Bühne. Wächst jeden Zug passiv auf Basis des Staatseinflusses. Der Hinweis zeigt deinen Rang im Land und den Wert des Spitzenreiters.",
+      "nationalRankTop": "Platz {rank} landesweit, Spitze bei {top}",
+      "nationalTop": "Spitze bei {top}",
       "favorability": "Beliebtheit",
       "favorabilityTooltip": "Öffentliche Zustimmung. Stabil bei 60% oder darunter, sofern Angriffe, Verruf oder andere feindliche Effekte sie nicht drücken. Über 60% kühlt sie von selbst wieder auf diesen Wert ab.",
-      "publicApproval": "Öffentliche Zustimmung",
+      "favorabilityCooling": "Über 60%, kühlt jeden Zug ab",
+      "favorabilityStable": "Bleibt bei 60% oder darunter stabil",
       "infamy": "Verruf",
       "infamyTooltip": "Schlechter Ruf durch feindliche Aktionen. Über 20% senkt er jeden Zug deine Beliebtheit. Halte ihn niedrig, um für Wähler attraktiv zu bleiben.",
-      "publicNotoriety": "Öffentlicher Verruf",
-      "infamyFavPenalty": "-{value}% Bel.",
-      "safe": "Sicher",
-      "partyInfluence": "Parteieinfl.",
+      "infamyCost": "Kostet {value}% Beliebtheit pro Zug",
+      "infamySafe": "Keine Strafe unter 20%",
+      "partyInfluence": "Parteieinfluss",
       "partyInfluenceTooltip": "Ansehen innerhalb der Partei. Wächst jeden Zug auf Basis von Politiknähe, Führungsrollen und Verruf.",
       "partyBonusEarning": "Bringt derzeit +{count, plural, one {# Bonusaktion} other {# Bonusaktionen}} pro Zug (max. {max}).",
       "partyShare": "{share}% des gesamten Einflusspools der Partei.",
-      "netPerTurn": "{value}/Zug",
-      "withinPartyStanding": "Ansehen in der Partei",
-      "bonusActions": "Bonusaktionen",
-      "bonusActCount": "+{count} Bonusakt."
+      "partyBonus": "{count} von {max} Bonusaktionen",
+      "withinPartyStanding": "Ansehen in der Partei"
     },
     "finances": {
       "title": "Finanzen",
@@ -205,9 +205,8 @@
       "tabDetail": "Detail",
       "tabDemographics": "Demografie",
       "undisclosed": "Nicht angegeben",
-      "nationality": "Nationalität",
-      "starting": "Anfangs",
-      "current": "Aktuell",
+      "startingNationality": "Nationalität zu Beginn",
+      "currentNationality": "Aktuelle Nationalität",
       "unrecorded": "Nicht erfasst",
       "markerParty": "Partei",
       "markerState": "Staat"
@@ -221,7 +220,13 @@
       "title": "Sozial"
     },
     "achievements": {
-      "title": "Erfolge"
+      "title": "Erfolge",
+      "editHighlights": "Highlights bearbeiten",
+      "none": "Noch keine Erfolge.",
+      "noneEarned": "Noch keine Erfolge errungen.",
+      "viewAll": "Alle Erfolge ansehen",
+      "quickPeek": "Kurzer Blick",
+      "showLess": "Weniger anzeigen"
     },
     "lightbox": {
       "viewPicture": "Profilbild ansehen",
@@ -236,15 +241,8 @@
     },
     "copyLink": {
       "title": "Profillink kopieren",
-      "copied": "Kopiert!",
+      "copied": "Kopiert",
       "share": "Teilen"
-    },
-    "dossier": {
-      "file": "Akte",
-      "noOffice": "Privatperson",
-      "independent": "Parteilos",
-      "nationalRank": "Platz {rank} landesweit",
-      "partyInfluence": "Parteieinfluss"
     }
   }
 }

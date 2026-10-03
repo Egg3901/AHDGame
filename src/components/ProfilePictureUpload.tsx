@@ -9,11 +9,15 @@ import { UPLOAD_IMAGE_HINTS } from "@/lib/constants/uploadImageHints";
 import { ProfileBorder } from "@/components/patreon/ProfileBorder";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 
+const PLACEHOLDER_GRADIENT = "bg-gradient-to-br from-primary/20 to-secondary/20";
+
 const SIZE_CLASSES = {
-  default: "h-32 w-32 text-5xl rounded-2xl hover:ring-2 hover:ring-primary/50",
-  compact:
-    "h-20 w-20 text-2xl rounded-xl hover:ring-2 hover:ring-primary/50 sm:h-24 sm:w-24 sm:text-3xl",
-  hero: "h-24 w-24 text-4xl rounded-2xl ring-2 ring-card-border shadow-xl hover:ring-primary/50 sm:h-36 sm:w-36 sm:text-6xl md:h-40 md:w-40 md:text-7xl lg:h-44 lg:w-44",
+  default: `h-32 w-32 text-5xl rounded-2xl hover:ring-2 hover:ring-primary/50 ${PLACEHOLDER_GRADIENT}`,
+  compact: `h-20 w-20 text-2xl rounded-xl hover:ring-2 hover:ring-primary/50 sm:h-24 sm:w-24 sm:text-3xl ${PLACEHOLDER_GRADIENT}`,
+  hero: `h-24 w-24 text-4xl rounded-2xl ring-2 ring-card-border shadow-xl hover:ring-primary/50 sm:h-36 sm:w-36 sm:text-6xl md:h-40 md:w-40 md:text-7xl lg:h-44 lg:w-44 ${PLACEHOLDER_GRADIENT}`,
+  /** Profile identity block: neutral placeholder, hairline ring, no shadow. */
+  header:
+    "h-20 w-20 text-3xl rounded-lg bg-card-elevated text-muted ring-1 ring-card-border hover:ring-foreground/40 sm:h-24 sm:w-24 sm:text-4xl",
 } as const;
 
 export function ProfilePictureUpload({
@@ -67,7 +71,7 @@ export function ProfilePictureUpload({
 
   const initial = characterName.charAt(0).toUpperCase();
   const hintId = useId();
-  const showVisibleHint = size !== "hero";
+  const showVisibleHint = size !== "hero" && size !== "header";
 
   return (
     <div className="group relative">
@@ -80,7 +84,7 @@ export function ProfilePictureUpload({
           onClick={triggerUpload}
           disabled={uploading}
           aria-describedby={hintId}
-          className={`relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-primary/20 to-secondary/20 font-bold transition-all disabled:opacity-60 ${SIZE_CLASSES[size]}`}
+          className={`relative flex items-center justify-center overflow-hidden font-bold transition-all disabled:opacity-60 ${SIZE_CLASSES[size]}`}
           title="Upload profile picture"
         >
           {avatarUrl ? (
