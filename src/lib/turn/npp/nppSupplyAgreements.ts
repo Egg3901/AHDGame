@@ -198,37 +198,36 @@ function buyerStarved(
   return priceRatio != null && priceRatio >= NPP_CONTRACT_INPUT_SHORTAGE;
 }
 
-function committedVolume(
-  agreements: readonly ExistingNppAgreement[],
-  supplierCorpId: string,
-  commodity: CommodityType,
-  stateId?: string
-): number {
-  let sum = 0;
-  for (const a of agreements) {
-    if (a.supplierCorpId !== supplierCorpId || a.commodity !== commodity) continue;
-    if ((a.stateId ?? undefined) !== stateId) continue;
-    if (!liveStatuses(a.status)) continue;
-    sum += a.volumeCap;
-  }
-  return sum;
-}
+/** Distinguishes an absent state from any real state id in index keys. */
+const NO_STATE = "\u0000";
 
-function pairExists(
-  agreements: readonly ExistingNppAgreement[],
-  supplierCorpId: string,
-  buyerCorpId: string,
-  commodity: CommodityType,
-  stateId?: string
-): boolean {
-  return agreements.some(
-    (a) =>
-      a.supplierCorpId === supplierCorpId &&
-      a.buyerCorpId === buyerCorpId &&
-      a.commodity === commodity &&
-      (a.stateId ?? undefined) === stateId &&
-      liveStatuses(a.status)
-  );
+/**
+ * `committedVolume` and `pairExists` answered from one pass over the live
+ * agreements. The proposal step asks them for every supplier output and every
+ * candidate buyer; scanning all ~26,000 agreements per question made the
+ * matcher the costliest CPU step of the corporation turn. Sums accumulate in
+ * the agreements' own order, so totals match the scanning versions exactly.
+ */
+export function indexLiveAgreements(agreements: readonly ExistingNppAgreement[]) {
+  const committed = new Map<string, number>();
+  const pairs = new Set<string>();
+  for (const a of agreements) {
+    if (!liveStatuses(a.status)) continue;
+    const state = a.stateId ?? NO_STATE;
+    const volumeKey = `${a.supplierCorpId}|${a.commodity}|${state}`;
+    committed.set(volumeKey, (committed.get(volumeKey) ?? 0) + a.volumeCap);
+    pairs.add(`${a.supplierCorpId}|${a.buyerCorpId}|${a.commodity}|${state}`);
+  }
+  return {
+    committedVolume: (supplierCorpId: string, commodity: CommodityType, stateId?: string) =>
+      committed.get(`${supplierCorpId}|${commodity}|${stateId ?? NO_STATE}`) ?? 0,
+    pairExists: (
+      supplierCorpId: string,
+      buyerCorpId: string,
+      commodity: CommodityType,
+      stateId?: string
+    ) => pairs.has(`${supplierCorpId}|${buyerCorpId}|${commodity}|${stateId ?? NO_STATE}`),
+  };
 }
 
 export function nppContractPremium(fill: number | null, priceRatio: number | null): number {
@@ -331,6 +330,7 @@ export function decideNppSupplyAgreements(args: {
   }
 
   if (!plantsEnabled) return out;
+  const live = indexLiveAgreements(agreements);
 
   // 3. Propose NPP-NPP same-country contracts into starved buyers.
   for (const supplier of parties) {
@@ -384,7 +384,7 @@ export function decideNppSupplyAgreements(args: {
       const uncommitted = Math.max(
         0,
         capacity * CONTRACT_OVERCOMMIT_TOLERANCE -
-          committedVolume(agreements, supplier.corpId, commodity, stateId)
+          live.committedVolume(supplier.corpId, commodity, stateId)
       );
       const volumeCap = uncommitted * NPP_CONTRACT_CAPACITY_SHARE;
       if (!(volumeCap > 0)) continue;
@@ -399,7 +399,7 @@ export function decideNppSupplyAgreements(args: {
         if (buyer.isPlayer) continue;
         if (buyer.countryId !== supplier.countryId) continue;
         if (proposedBuyer.has(buyer.corpId) || acceptedBuyer.has(buyer.corpId)) continue;
-        if (pairExists(agreements, supplier.corpId, buyer.corpId, commodity, stateId)) continue;
+        if (live.pairExists(supplier.corpId, buyer.corpId, commodity, stateId)) continue;
         const buyerRatio = priceRatioOf(commodity, buyer.countryId);
         if (!buyerStarved(buyer, commodity, turn, buyerRatio, stateId)) continue;
         const score = (fill == null ? 0.5 : 1 - fill) + Math.max(0, (buyerRatio ?? 1) - 1);

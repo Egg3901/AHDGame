@@ -412,7 +412,7 @@ function rebalanceDeliveriesProRata(args: {
  * agreement cap or the buyer's physical demand. This is a small max-flow graph
  * per commodity: source -> supplier -> agreement -> buyer -> sink.
  */
-function allocateDeliveriesToBuyers(args: {
+export function allocateDeliveriesToBuyers(args: {
   agreements: readonly SettleableSupplyAgreement[];
   contractSettlementByCorp: ByCorpScope;
   buyerDemandByCorpCommodity: ByCorpScope;
@@ -489,42 +489,48 @@ function allocateDeliveriesToBuyers(args: {
       addEdge(buyerNode.get(buyer)!, sink, Math.max(0, demand));
     }
 
+    // Edmonds-Karp. The search order (edges in insertion order, stop at the
+    // sink) decides WHICH maximum flow is found, so it is part of the result
+    // and must not change. Reusing typed arrays across searches keeps that
+    // order while dropping a fresh node-sized array of objects per augmenting
+    // path, which dominated this step on a book of thousands of agreements.
+    const parentNode = new Int32Array(nextNode);
+    const parentEdge = new Int32Array(nextNode);
+    const queue = new Int32Array(nextNode);
     for (;;) {
-      const parent = Array.from(
-        { length: nextNode },
-        () =>
-          null as null | {
-            node: number;
-            edgeIndex: number;
-          }
-      );
-      const queue = [source];
-      parent[source] = { node: source, edgeIndex: -1 };
-      for (let cursor = 0; cursor < queue.length && parent[sink] === null; cursor++) {
-        const node = queue[cursor]!;
-        for (let edgeIndex = 0; edgeIndex < graph[node]!.length; edgeIndex++) {
-          const edge = graph[node]![edgeIndex]!;
-          if (edge.capacity <= 1e-9 || parent[edge.to] !== null) continue;
-          parent[edge.to] = { node, edgeIndex };
-          queue.push(edge.to);
+      parentNode.fill(-1);
+      parentNode[source] = source;
+      parentEdge[source] = -1;
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = source;
+      while (head < tail && parentNode[sink] === -1) {
+        const node = queue[head++]!;
+        const edges = graph[node]!;
+        for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+          const edge = edges[edgeIndex]!;
+          if (edge.capacity <= 1e-9 || parentNode[edge.to] !== -1) continue;
+          parentNode[edge.to] = node;
+          parentEdge[edge.to] = edgeIndex;
+          queue[tail++] = edge.to;
           if (edge.to === sink) break;
         }
       }
-      if (parent[sink] === null) break;
+      if (parentNode[sink] === -1) break;
 
       let amount = Number.POSITIVE_INFINITY;
       for (let node = sink; node !== source;) {
-        const step = parent[node]!;
-        amount = Math.min(amount, graph[step.node]![step.edgeIndex]!.capacity);
-        node = step.node;
+        const from = parentNode[node]!;
+        amount = Math.min(amount, graph[from]![parentEdge[node]!]!.capacity);
+        node = from;
       }
       if (!(amount > 1e-9) || !Number.isFinite(amount)) break;
       for (let node = sink; node !== source;) {
-        const step = parent[node]!;
-        const edge = graph[step.node]![step.edgeIndex]!;
+        const from = parentNode[node]!;
+        const edge = graph[from]![parentEdge[node]!]!;
         edge.capacity -= amount;
         graph[node]![edge.reverseIndex]!.capacity += amount;
-        node = step.node;
+        node = from;
       }
     }
 

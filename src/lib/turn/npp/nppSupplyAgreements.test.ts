@@ -8,6 +8,7 @@ import {
   toExistingNppAgreement,
   toParty,
   decideNppSupplyAgreements,
+  indexLiveAgreements,
   nppContractPremium,
   NPP_CONTRACT_GLUT_PREMIUM,
   NPP_CONTRACT_SHORTAGE_PREMIUM,
@@ -504,5 +505,77 @@ describe("NPP supply pass projections", () => {
         ) as unknown as SupplyAgreement
       )
     ).toEqual(toExistingNppAgreement(agreement));
+  });
+});
+
+describe("indexLiveAgreements", () => {
+  // The scanning definitions the proposal step used before the index.
+  const live = (status: string) =>
+    status === "pending" || status === "active" || status === "cancelling";
+  const scanCommitted = (
+    agreements: ExistingNppAgreement[],
+    supplier: string,
+    commodity: CommodityType,
+    stateId?: string
+  ) => {
+    let sum = 0;
+    for (const a of agreements) {
+      if (a.supplierCorpId !== supplier || a.commodity !== commodity) continue;
+      if ((a.stateId ?? undefined) !== stateId) continue;
+      if (!live(a.status)) continue;
+      sum += a.volumeCap;
+    }
+    return sum;
+  };
+  const scanPair = (
+    agreements: ExistingNppAgreement[],
+    supplier: string,
+    buyer: string,
+    commodity: CommodityType,
+    stateId?: string
+  ) =>
+    agreements.some(
+      (a) =>
+        a.supplierCorpId === supplier &&
+        a.buyerCorpId === buyer &&
+        a.commodity === commodity &&
+        (a.stateId ?? undefined) === stateId &&
+        live(a.status)
+    );
+
+  it("answers every committed-volume and pair question exactly as a full scan", () => {
+    let seed = 7;
+    const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const pick = <T>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)]!;
+    const corps = ["c1", "c2", "c3", "c4"];
+    const commodities = ["steel", "freight", "coal"] as CommodityType[];
+    const states = [undefined, "US_PA", "US_OH", ""];
+    const statuses = ["pending", "active", "cancelling", "cancelled"];
+    const agreements: ExistingNppAgreement[] = Array.from({ length: 400 }, (_, i) => {
+      const stateId = pick(states);
+      return {
+        id: `a${i}`,
+        supplierCorpId: pick(corps),
+        buyerCorpId: pick(corps),
+        commodity: pick(commodities),
+        ...(stateId !== undefined ? { stateId } : {}),
+        volumeCap: Math.round(rand() * 1000) / 7,
+        pricePremium: 0,
+        status: pick(statuses) as ExistingNppAgreement["status"],
+      };
+    });
+    const index = indexLiveAgreements(agreements);
+    for (const supplier of corps)
+      for (const commodity of commodities)
+        for (const stateId of states) {
+          expect(index.committedVolume(supplier, commodity, stateId)).toBe(
+            scanCommitted(agreements, supplier, commodity, stateId)
+          );
+          for (const buyer of corps) {
+            expect(index.pairExists(supplier, buyer, commodity, stateId)).toBe(
+              scanPair(agreements, supplier, buyer, commodity, stateId)
+            );
+          }
+        }
   });
 });

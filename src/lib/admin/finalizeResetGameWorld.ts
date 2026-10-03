@@ -34,7 +34,8 @@ import {
 import type { Db, ObjectId } from "mongodb";
 import type { PoliticalParty, StateDemographics, StatePartyOrg } from "@/lib/db/types";
 import { getPresetById } from "@/lib/constants/historicalSeats";
-import { ensureDefaultParties } from "@/lib/seeds/ensureDefaultParties";
+import { ensureDefaultParties, presetMismatchedPartyNames } from "@/lib/seeds/ensureDefaultParties";
+import { getAllCountryAccess } from "@/lib/countryAccess";
 import { realignPartyCountersToExisting, resetPartyCounters } from "@/lib/db/sequentialId";
 import { ensureImfInstitutionPlaceholder } from "@/lib/imf/ensureImfInstitutionPlaceholder";
 import type { ResetGameWorldResult } from "@/lib/admin/resetGameWorld";
@@ -243,32 +244,40 @@ export async function finalizeResetGameWorld(
     const { bgParties } = await import("@/lib/seeds/bg/bgParties");
     const { blrParties } = await import("@/lib/seeds/blr/blrParties");
     const { balParties } = await import("@/lib/seeds/bal/balParties");
-    const presetMismatchedNames = [
-      ...usParties,
-      ...ukParties,
-      ...deParties,
-      ...jpParties,
-      ...brParties,
-      ...ieParties,
-      ...frParties,
-      ...itParties,
-      ...esParties,
-      ...seParties,
-      ...trParties,
-      ...huParties,
-      ...roParties,
-      ...ngParties,
-      ...ruParties,
-      ...ddParties,
-      ...plParties,
-      ...yuParties,
-      ...csParties,
-      ...bgParties,
-      ...blrParties,
-      ...balParties,
-    ]
-      .filter((seed) => seed.validForPresets && !seed.validForPresets.includes(preset))
-      .map((seed) => ({ countryId: seed.countryId, name: seed.name }));
+    const countryAccess = await getAllCountryAccess(db);
+    const fallbackCountries = new Set(
+      Object.entries(countryAccess)
+        .filter(([, access]) => access.registered)
+        .map(([id]) => id)
+    );
+    const presetMismatchedNames = presetMismatchedPartyNames(
+      [
+        ...usParties,
+        ...ukParties,
+        ...deParties,
+        ...jpParties,
+        ...brParties,
+        ...ieParties,
+        ...frParties,
+        ...itParties,
+        ...esParties,
+        ...seParties,
+        ...trParties,
+        ...huParties,
+        ...roParties,
+        ...ngParties,
+        ...ruParties,
+        ...ddParties,
+        ...plParties,
+        ...yuParties,
+        ...csParties,
+        ...bgParties,
+        ...blrParties,
+        ...balParties,
+      ],
+      preset,
+      fallbackCountries
+    );
     if (presetMismatchedNames.length > 0) {
       const orFilter = presetMismatchedNames.map(({ countryId, name }) => ({
         countryId,

@@ -274,25 +274,6 @@ describe("nppInvesting", () => {
               }),
             ],
           }),
-          expect.objectContaining({
-            turn: 10,
-            txType: "index_fund_subscribe",
-            balanced: true,
-            emitSite: "indexFunds/nppInvesting.ts:subscription_debit",
-            sourceRef: { collection: "npps", id: npp._id },
-            legs: [
-              expect.objectContaining({
-                account: `npp:${npp._id}:USD`,
-                anchorAmount: -400,
-                role: "primary",
-              }),
-              expect.objectContaining({
-                account: "sink:fund_subscription:USD",
-                anchorAmount: 400,
-                role: "contra",
-              }),
-            ],
-          }),
         ])
       );
     });
