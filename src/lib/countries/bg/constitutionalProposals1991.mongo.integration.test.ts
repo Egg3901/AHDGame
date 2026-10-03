@@ -427,32 +427,55 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
     }
   );
 
-  it.each([false, true])(
-    "introduces once only for a sufficient NPC government, human=%s",
-    async (human) => {
+  it.each([
+    [267, false, false, true],
+    [267, true, false, true],
+    [100, true, false, true],
+    [1, false, false, true],
+    [0, true, false, true],
+    [267, false, true, false],
+  ] as const)(
+    "introduces once with own-party seats%d, player deputy%s, player PM%s",
+    async (support, human, playerPM, introduced) => {
       const { db, ids } = await fixture();
       try {
         const leader = new ObjectId();
         await db.collection("npps").insertOne({ _id: leader, party: "1", balance: 777 });
         await db
           .collection<Row>("governmentFormations")
-          .updateOne({ _id: "BG" }, { $set: { pmNppId: leader } });
+          .updateOne(
+            { _id: "BG" },
+            { $set: { pmNppId: leader, ...(playerPM ? { pmCharacterId: new ObjectId() } : {}) } }
+          );
         await db.collection("electedOfficials").updateMany({}, { $set: { party: "2" } });
-        await db
-          .collection("electedOfficials")
-          .updateMany({ nppId: { $in: ids.slice(0, 267) } }, { $set: { party: "1" } });
+        if (support)
+          await db
+            .collection("electedOfficials")
+            .updateMany({ nppId: { $in: ids.slice(0, support) } }, { $set: { party: "1" } });
         if (human)
           await db
             .collection("electedOfficials")
             .updateOne({ nppId: ids[0] }, { $set: { characterId: new ObjectId() } });
+        const officesBefore = await db.collection("electedOfficials").find().toArray();
+        commands = requestBytes = replyBytes = 0;
         expect(
           await processBg1991ConstitutionalNpcProposal(db, { ...GAME } as never, 25, NOW)
-        ).toBe(!human);
+        ).toBe(introduced);
+        process.stdout.write(
+          `BGNPC_DRAFT ${JSON.stringify({ support, human, playerPM, commands, requestBytes, replyBytes })}\n`
+        );
         expect(
           await processBg1991ConstitutionalNpcProposal(db, { ...GAME } as never, 26, NOW)
         ).toBe(false);
-        expect(await db.collection("bills").countDocuments()).toBe(human ? 0 : 1);
-        if (!human) {
+        expect(await db.collection("bills").countDocuments()).toBe(introduced ? 1 : 0);
+        if (introduced) {
+          const proposal = await db.collection(BG_1991_PROPOSALS_COLLECTION).findOne({});
+          expect(proposal?.disposition).toBe("dissolve");
+          expect(proposal?.reason).toBe("npc_government_constituent_mandate");
+          expect(
+            (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
+              ?.bgConstitution1991SinceTurn
+          ).toBeUndefined();
           await db
             .collection("bills")
             .updateOne({ countryId: "BG" }, { $set: { status: "failed" } });
@@ -460,7 +483,120 @@ describe.skipIf(!uri)("Bulgarian constituent consent on isolated Mongo", () => {
             await processBg1991ConstitutionalNpcProposal(db, { ...GAME } as never, 27, NOW)
           ).toBe(false);
         }
+        expect(await db.collection("electedOfficials").find().toArray()).toEqual(officesBefore);
         expect((await db.collection("npps").findOne({ _id: leader }))?.balance).toBe(777);
+      } finally {
+        await db.dropDatabase();
+      }
+    }
+  );
+  it.each([266, 267])(
+    "minority government draft still needs actual%d constituent votes",
+    async (support) => {
+      const { db, ids } = await fixture();
+      try {
+        const leader = new ObjectId();
+        await db.collection("npps").insertOne({ _id: leader, party: "1", balance: 777 });
+        await db
+          .collection<Row>("governmentFormations")
+          .updateOne({ _id: "BG" }, { $set: { pmNppId: leader } });
+        await db
+          .collection("electedOfficials")
+          .updateMany({ nppId: { $in: ids.slice(100) } }, { $set: { party: "2" } });
+        expect(
+          await processBg1991ConstitutionalNpcProposal(db, { ...GAME } as never, 25, NOW)
+        ).toBe(true);
+        const proposal = await db.collection(BG_1991_PROPOSALS_COLLECTION).findOne({});
+        await processOnePartyBillLifecycleForCountry("BG", NOW);
+        await db.collection("bills").updateOne(
+          { _id: proposal!.billId },
+          {
+            $set: {
+              votes: Object.fromEntries(
+                ids.map((id, i) => [`npp_${id}`, i < support ? "for" : "against"])
+              ),
+              votingEndsOnTurn: 26,
+            },
+          }
+        );
+        await clock(26);
+        await processOnePartyBillLifecycleForCountry("BG", NOW);
+        expect((await db.collection("bills").findOne({ _id: proposal!.billId }))?.status).toBe(
+          support === 267 ? "signed" : "failed"
+        );
+        expect(await processBg1991ConstitutionalMandate(db, GAME, 26, NOW)).toBe(support === 267);
+        expect((await db.collection("npps").findOne({ _id: leader }))?.balance).toBe(777);
+      } finally {
+        await db.dropDatabase();
+      }
+    }
+  );
+  it.each(["player_pm", "caretaker", "party_changed", "owner_removed"])(
+    "rechecks NPC executive custody in the opening transaction after %s",
+    async (mode) => {
+      const { db } = await fixture();
+      try {
+        const leader = new ObjectId();
+        await db.collection("npps").insertOne({ _id: leader, party: "1", balance: 777 });
+        await db
+          .collection<Row>("governmentFormations")
+          .updateOne({ _id: "BG" }, { $set: { pmNppId: leader } });
+        let changed = false;
+        const source = new Proxy(db, {
+          get(target, key) {
+            if (key !== "collection") {
+              const value = Reflect.get(target, key);
+              return typeof value === "function" ? value.bind(target) : value;
+            }
+            return (name: string) => {
+              const collection = target.collection(name);
+              const watched = ["player_pm", "caretaker"].includes(mode)
+                ? "governmentFormations"
+                : "npps";
+              if (name !== watched) return collection;
+              return new Proxy(collection, {
+                get(inner, member) {
+                  if (member === "findOne")
+                    return async (...args: Parameters<typeof inner.findOne>) => {
+                      const result = await inner.findOne(...args);
+                      if (!changed && !args[1]?.session) {
+                        changed = true;
+                        if (mode === "owner_removed")
+                          await db.collection("npps").deleteOne({ _id: leader });
+                        else if (mode === "party_changed")
+                          await db
+                            .collection("npps")
+                            .updateOne({ _id: leader }, { $set: { party: "2" } });
+                        else
+                          await db.collection<Row>("governmentFormations").updateOne(
+                            { _id: "BG" },
+                            {
+                              $set:
+                                mode === "player_pm"
+                                  ? { pmCharacterId: new ObjectId() }
+                                  : { status: "caretaker" },
+                            }
+                          );
+                      }
+                      return result;
+                    };
+                  const value = Reflect.get(inner, member);
+                  return typeof value === "function" ? value.bind(inner) : value;
+                },
+              });
+            };
+          },
+        });
+        expect(
+          await processBg1991ConstitutionalNpcProposal(source, { ...GAME } as never, 25, NOW)
+        ).toBe(false);
+        expect(changed).toBe(true);
+        expect(await db.collection("bills").countDocuments()).toBe(0);
+        expect(await db.collection(BG_1991_PROPOSALS_COLLECTION).countDocuments()).toBe(0);
+        expect(
+          (await db.collection<Row>("countryGameStates").findOne({ _id: "BG" }))
+            ?.bgConstitution1991SinceTurn
+        ).toBeUndefined();
       } finally {
         await db.dropDatabase();
       }
